@@ -1,8 +1,10 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import React, { useRef, useState } from 'react';
-import { FlatList, View, Text, Dimensions } from 'react-native';
+import { FlatList, Dimensions } from 'react-native';
 import RoundedButton from '../../components/RoundedButton';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ThemedView } from '@/components/ThemedView';
+import { ThemedText } from '@/components/ThemedText';
 
 type FeatureCarouselProps = {
     onNext: () => void;
@@ -42,12 +44,12 @@ export default function FeatureCarousel({ onNext, onBack }: FeatureCarouselProps
     };
 
     return (
-        <View className="flex-1 bg-white">
+        <ThemedView className="flex-1 bg-white dark:bg-slate-900">
             {/* Tracking dots at the very top, in safe area */}
             <SafeAreaView edges={["top"]}>
-                <View className="flex-row justify-center items-center mt-8 mb-4">
+                <ThemedView className="flex-row justify-center items-center mt-8 mb-4">
                     {features.map((_, idx) => (
-                        <View
+                        <ThemedView
                             key={idx}
                             className={
                                 `mx-1 w-2 h-2 rounded-full ` +
@@ -56,11 +58,11 @@ export default function FeatureCarousel({ onNext, onBack }: FeatureCarouselProps
                             style={{ opacity: currentIndex === idx ? 1 : 0.5 }}
                         />
                     ))}
-                </View>
+                </ThemedView>
             </SafeAreaView>
             {/* Centered feature card in available space */}
-            <View className="flex-1 items-center justify-center">
-                <View className="items-center w-full">
+            <ThemedView className="flex-1 items-center justify-center">
+                <ThemedView className="items-center w-full">
                     <FlatList
                         ref={flatListRef}
                         data={features}
@@ -69,52 +71,52 @@ export default function FeatureCarousel({ onNext, onBack }: FeatureCarouselProps
                         showsHorizontalScrollIndicator={false}
                         keyExtractor={item => item.title}
                         renderItem={({ item }) => (
-                            <View style={{ width: Dimensions.get('window').width }} className="flex-1 items-center justify-center p-8">
-                                <View className="bg-white rounded-3xl py-10 px-6 shadow-md items-center mb-8 w-full max-w-xl justify-center">
+                            <ThemedView style={{ width: Dimensions.get('window').width }} className="flex-1 items-center justify-center p-8">
+                                <ThemedView className="bg-white dark:bg-slate-900 rounded-3xl py-10 px-6 shadow-md items-center mb-8 w-full max-w-xl justify-center">
                                     <MaterialCommunityIcons name={item.icon.name} size={96} color={item.icon.color} style={{ marginBottom: 24 }} />
-                                    <Text className="text-4xl font-extrabold text-[#1a365d] mb-6 text-center">{item.title}</Text>
-                                    <Text className="text-xl text-[#4a5568] text-center leading-8">{item.description}</Text>
-                                </View>
-                            </View>
+                                    <ThemedText className="text-4xl font-extrabold text-slate-900 dark:text-slate-100 mb-6 text-center">{item.title}</ThemedText>
+                                    <ThemedText className="text-xl text-[#4a5568] dark:text-slate-300 text-center leading-8">{item.description}</ThemedText>
+                                </ThemedView>
+                            </ThemedView>
                         )}
                         onViewableItemsChanged={handleViewableItemsChanged.current}
                         viewabilityConfig={{ viewAreaCoveragePercentThreshold: 60 }}
                     />
-                </View>
-            </View>
+                </ThemedView>
+            </ThemedView>
 
             {/* Navigation/CTA pinned to very bottom, spaced left/right, icon and text, balanced size */}
-            <View className="flex-row justify-between items-end px-12 mb-12">
-                <View className="flex-1 items-start">
+            <ThemedView className="flex-row justify-between items-end px-12 mb-12">
+                <ThemedView className="flex-1 items-start">
                     {currentIndex > 0 ? (
-                        <RoundedButton onPress={() => scrollToIndex(currentIndex - 1)} color="bg-white" rippleColor="#e2e8f0" className="py-2 px-2 flex-row items-center">
+                        <RoundedButton onPress={() => scrollToIndex(currentIndex - 1)} color="bg-white dark:bg-slate-900" rippleColor="#e2e8f0" className="py-2 px-2 flex-row items-center">
                             <MaterialCommunityIcons name="chevron-left" size={28} color="#2563eb" style={{ marginRight: 4 }} />
-                            <Text className="text-blue-600 font-extrabold text-lg">Back</Text>
+                            <ThemedText className="text-blue-600 font-extrabold text-lg">Back</ThemedText>
                         </RoundedButton>
                     ) : (
                         onBack && (
-                            <RoundedButton onPress={onBack} color="bg-white" rippleColor="#e2e8f0" className="py-2 px-2 flex-row items-center">
+                            <RoundedButton onPress={onBack} color="bg-white dark:bg-slate-900 " rippleColor="#e2e8f0" className="py-2 px-2 flex-row items-center">
                                 <MaterialCommunityIcons name="close-circle" size={24} color="#ef4444" style={{ marginRight: 4 }} />
-                                <Text className="text-red-500 font-extrabold text-lg">Exit</Text>
+                                <ThemedText className="text-red-500 font-extrabold text-lg">Exit</ThemedText>
                             </RoundedButton>
                         )
                     )}
-                </View>
-                <View className="flex-1 items-end">
+                </ThemedView>
+                <ThemedView className="flex-1 items-end">
                     {currentIndex < features.length - 1 ? (
-                        <RoundedButton onPress={() => scrollToIndex(currentIndex + 1)} color="bg-white" rippleColor="#e2e8f0" className="py-2 px-2 flex-row items-center">
-                            <Text className="text-blue-600 font-extrabold text-lg">Next</Text>
+                        <RoundedButton onPress={() => scrollToIndex(currentIndex + 1)} color="bg-white dark:bg-slate-900" rippleColor="#e2e8f0" className="py-2 px-2 flex-row items-center">
+                            <ThemedText className="text-blue-600 font-extrabold text-lg">Next</ThemedText>
                             <MaterialCommunityIcons name="chevron-right" size={28} color="#2563eb" style={{ marginLeft: 4 }} />
                         </RoundedButton>
                     ) : (
-                        <RoundedButton onPress={onNext} color="bg-white" rippleColor="#e2e8f0" className="py-2 px-2 flex-row items-center">
-                            <Text className="text-cyan-600 font-extrabold text-lg">Get Started</Text>
+                        <RoundedButton onPress={onNext} color="bg-white dark:bg-slate-900" rippleColor="#e2e8f0" className="py-2 px-2 flex-row items-center">
+                            <ThemedText className="text-cyan-600 font-extrabold text-lg">Get Started</ThemedText>
                             <MaterialCommunityIcons name="check-circle" size={24} color="#06b6d4" style={{ marginLeft: 4 }} />
                         </RoundedButton>
                     )}
-                </View>
-            </View>
-        </View>
+                </ThemedView>
+            </ThemedView>
+        </ThemedView>
     );
 }
 

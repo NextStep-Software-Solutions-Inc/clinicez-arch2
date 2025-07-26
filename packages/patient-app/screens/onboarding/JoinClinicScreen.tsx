@@ -13,7 +13,7 @@ type JoinClinicScreenProps = {
 export default function JoinClinicScreen({ onJoin, onBack, onExit }: JoinClinicScreenProps) {
     const [code, setCode] = useState('');
     return (
-        <View className="flex-1 bg-[#f7fafd] p-0">
+        <View className="flex-1 bg-white dark:bg-slate-900 p-0">
             {/* Top bar for navigation */}
             {(onBack || onExit) && (
                 <View className="flex-row w-full justify-between items-center px-6 pt-10 pb-2">
@@ -32,8 +32,8 @@ export default function JoinClinicScreen({ onJoin, onBack, onExit }: JoinClinicS
             {/* Main content distributed vertically */}
             <View className="flex-1 w-full flex-col justify-between items-center px-6 pb-10">
                 <View className="flex-1 w-full justify-center items-center">
-                    <Text className="text-3xl font-extrabold text-[#1a365d] mb-3 text-center">Join Your Clinic</Text>
-                    <Text className="text-base text-[#4a5568] text-center mb-8 max-w-xl">
+                    <Text className="text-3xl font-extrabold text-slate-900 dark:text-slate-100 mb-3 text-center">Join Your Clinic</Text>
+                    <Text className="text-base text-[#4a5568] dark:text-slate-300 text-center mb-8 max-w-xl">
                         Enter your invitation code or search for your clinic to get started.
                     </Text>
                     <TextInput
