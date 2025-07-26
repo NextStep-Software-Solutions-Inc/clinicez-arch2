@@ -1,3 +1,6 @@
+## Component Usage
+
+- Always use `ThemedView` and `ThemedText` components instead of the default `View` and `Text` for all UI code, to ensure a unified component view across the project.
 # Copilot Instructions for ClinicEZ Monorepo
 
 ## Big Picture Architecture
