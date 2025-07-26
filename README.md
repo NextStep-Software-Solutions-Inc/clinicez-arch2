@@ -1,16 +1,56 @@
+
 # ClinicEZ New Architecture Monorepo
 
-This system represents the new architecture of ClinicEZ, designed as a modern monorepo to support web, mobile, and backend development in a unified codebase.
+This repository contains the next-generation architecture for ClinicEZ, a comprehensive platform for modern clinics. The monorepo structure enables unified development, deployment, and management of all core components:
 
-This is a large-scale project, structured as a monorepo that brings together:
+- **Patient Mobile App:** The official app for patients to manage appointments, view health records, and communicate with clinics. Built with Expo and React Native.
+- **Clinic Staff Mobile App:** (Planned) The app for clinic staff to manage schedules, patient records, and clinic operations. Built with Expo and React Native.
+- **Web Frontend:** (Planned) The official ClinicEZ website for marketing, onboarding, and tenant management. Cross-platform, supporting mobile and desktop browsers.
+- **Backend for Mobile:** (Planned) Containerized backend services for each clinic tenant, deployed on-premise or in the cloud, supporting the mobile apps.
+- **Backend for Web:** (Planned) Backend services for the web frontend and onboarding portal.
 
-- Two mobile applications (built with Expo) for patients and clinic staff
-- A backend system supporting all business logic, APIs, and multi-tenant capabilities
-- Frontend and backend code for marketing and tenant management features
+All code for backend and frontend (including marketing and tenant creation) is managed in this single repository, enabling seamless collaboration and deployment.
 
-All code for backend and frontend (including marketing and tenant creation) is managed in this single repository, enabling unified development and deployment for the entire ClinicEZ platform.
+## Key Features
 
-ClinicEZ's new architecture is a composition of backend, web, and mobile frontend projects, all managed in a single repository for seamless development and deployment.
+- Local-first/offline-first mobile apps with WatermelonDB
+- Per-clinic backend deployment (on-premise or cloud, containerized)
+- Multi-tenant onboarding and management via the web portal
+- Unified codebase for all core ClinicEZ components
+
+## Getting Started
+
+Each package contains its own README with setup instructions. Below are the basics for the main applications:
+
+### Patient Mobile App
+
+```bash
+cd packages/patient-app
+npm install
+npx expo start
+```
+
+### Clinic Staff Mobile App (Planned)
+
+```bash
+cd packages/clinic-staff-app
+npm install
+npx expo start
+```
+
+### Web Frontend (Planned)
+
+```bash
+cd packages/web-frontend
+npm install
+npm run dev
+```
+
+### Backend for Mobile (Planned)
+
+See onboarding instructions in the web portal to download and deploy the containerized backend for your clinic.
+
+For more details, see the individual package directories and documentation.
 
 **Key components:**
 
