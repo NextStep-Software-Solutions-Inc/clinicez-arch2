@@ -1,6 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import React, { useRef, useState } from 'react';
-import { FlatList, View, Text, Pressable, Dimensions } from 'react-native';
+import { FlatList, View, Text, Dimensions } from 'react-native';
+import RoundedButton from '../../components/RoundedButton';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type FeatureCarouselProps = {
@@ -86,33 +87,30 @@ export default function FeatureCarousel({ onNext, onBack }: FeatureCarouselProps
             <View className="flex-row justify-between items-end px-12 mb-12">
                 <View className="flex-1 items-start">
                     {currentIndex > 0 ? (
-                        <Pressable
-                            onPress={() => scrollToIndex(currentIndex - 1)}
-                            className="py-2 px-2 flex-row items-center"
-                        >
+                        <RoundedButton onPress={() => scrollToIndex(currentIndex - 1)} color="bg-white" rippleColor="#e2e8f0" className="py-2 px-2 flex-row items-center">
                             <MaterialCommunityIcons name="chevron-left" size={28} color="#2563eb" style={{ marginRight: 4 }} />
                             <Text className="text-blue-600 font-extrabold text-lg">Back</Text>
-                        </Pressable>
+                        </RoundedButton>
                     ) : (
                         onBack && (
-                            <Pressable onPress={onBack} className="py-2 px-2 flex-row items-center">
+                            <RoundedButton onPress={onBack} color="bg-white" rippleColor="#e2e8f0" className="py-2 px-2 flex-row items-center">
                                 <MaterialCommunityIcons name="close-circle" size={24} color="#ef4444" style={{ marginRight: 4 }} />
                                 <Text className="text-red-500 font-extrabold text-lg">Exit</Text>
-                            </Pressable>
+                            </RoundedButton>
                         )
                     )}
                 </View>
                 <View className="flex-1 items-end">
                     {currentIndex < features.length - 1 ? (
-                        <Pressable onPress={() => scrollToIndex(currentIndex + 1)} className="py-2 px-2 flex-row items-center">
+                        <RoundedButton onPress={() => scrollToIndex(currentIndex + 1)} color="bg-white" rippleColor="#e2e8f0" className="py-2 px-2 flex-row items-center">
                             <Text className="text-blue-600 font-extrabold text-lg">Next</Text>
                             <MaterialCommunityIcons name="chevron-right" size={28} color="#2563eb" style={{ marginLeft: 4 }} />
-                        </Pressable>
+                        </RoundedButton>
                     ) : (
-                        <Pressable onPress={onNext} className="py-2 px-2 flex-row items-center">
+                        <RoundedButton onPress={onNext} color="bg-white" rippleColor="#e2e8f0" className="py-2 px-2 flex-row items-center">
                             <Text className="text-cyan-600 font-extrabold text-lg">Get Started</Text>
                             <MaterialCommunityIcons name="check-circle" size={24} color="#06b6d4" style={{ marginLeft: 4 }} />
-                        </Pressable>
+                        </RoundedButton>
                     )}
                 </View>
             </View>

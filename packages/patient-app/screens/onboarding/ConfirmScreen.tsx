@@ -1,35 +1,30 @@
 
 import '../../global.css';
-import { View, Text, Pressable } from 'react-native';
+import { View, Text } from 'react-native';
+import React from 'react';
+import RoundedButton from '../../components/RoundedButton';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 type ConfirmScreenProps = {
     onContinue: () => void;
     onBack?: () => void;
 };
 
-export default function ConfirmScreen({ onContinue, onBack }: ConfirmScreenProps) {
+export default function ConfirmScreen({ onContinue }: ConfirmScreenProps) {
     return (
-        <View className="flex-1 justify-center items-center p-6 bg-[#f7fafd]">
-            <View className="bg-white rounded-3xl p-8 shadow-md items-center w-full max-w-[400px]">
-                {onBack && (
-                    <View className="flex-row w-full justify-start mb-2">
-                        <Pressable onPress={onBack} className="py-1 px-2" android_ripple={{ color: '#e2e8f0' }}>
-                            <Text className="text-blue-600 font-semibold">Back</Text>
-                        </Pressable>
-                    </View>
-                )}
-                <Text className="text-5xl mb-5">🎉</Text>
-                <Text className="text-2xl font-bold text-[#1a365d] mb-3">You're All Set!</Text>
-                <Text className="text-base text-[#4a5568] text-center mb-8 leading-6">
-                    You have successfully joined your clinic. You can now access all features of ClinicEZ.
-                </Text>
-                <Pressable
-                    onPress={onContinue}
-                    className="bg-blue-600 rounded-2xl py-3 px-12 shadow-md shadow-blue-600/20"
-                    android_ripple={{ color: '#2b6cb0' }}
-                >
-                    <Text className="text-white font-bold text-lg tracking-wide">Continue to App</Text>
-                </Pressable>
+        <View className="flex-1 bg-[#f7fafd] p-0">
+            {/* Main content distributed vertically */}
+            <View className="flex-1 w-full flex-col justify-between items-center px-6 pb-10">
+                <View className="flex-1 w-full justify-center items-center">
+                    <MaterialCommunityIcons name="check-circle" size={100} color="#22c55e" style={{ marginBottom: 24 }} />
+                    <Text className="text-3xl font-extrabold text-green-600 mb-4 text-center">You're All Set!</Text>
+                    <Text className="text-base text-[#4a5568] text-center mb-10 leading-7 max-w-xl">
+                        You have successfully joined your clinic. You can now access all features of ClinicEZ.
+                    </Text>
+                    <RoundedButton onPress={onContinue}>
+                        <Text className="text-white font-bold text-lg tracking-wide text-center">Continue to App</Text>
+                    </RoundedButton>
+                </View>
             </View>
         </View>
     );

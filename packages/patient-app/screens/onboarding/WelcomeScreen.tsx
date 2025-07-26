@@ -1,5 +1,8 @@
 import '../../global.css';
-import { View, Text, Image, Pressable } from 'react-native';
+import { View, Text, Image } from 'react-native';
+
+import RoundedButton from '../../components/RoundedButton';
+import Constants from 'expo-constants';
 
 
 type WelcomeScreenProps = {
@@ -10,42 +13,42 @@ type WelcomeScreenProps = {
 
 export default function WelcomeScreen({ onNext, onBack, onExit }: WelcomeScreenProps) {
 
+    const version = Constants.expoConfig?.version || '1.0.0';
     return (
-        <View className="flex-1 justify-center items-center w-full min-h-screen bg-white dark:bg-slate-950">
-            <View className="w-full max-w-[380px] px-4">
-                <View className="items-center">
+        <View className="flex-1 w-full min-h-screen bg-white dark:bg-slate-950">
+            <View className="flex-1 w-full max-w-[420px] mx-auto px-4 py-10 justify-between">
+                <View className="flex-1 items-center justify-center">
                     <Image
                         source={require('../../assets/images/icon.png')}
-                        className="w-[72px] h-[72px] mb-8 mt-2"
+                        className="w-[96px] h-[96px] mb-10 mt-2"
                         style={{ resizeMode: 'contain' }}
                     />
-                    <Text className="text-3xl font-bold text-blue-900 dark:text-blue-200 mb-3 text-center tracking-tight">Welcome to ClinicEZ</Text>
-                    <Text className="text-base text-slate-500 dark:text-slate-300 text-center mb-10 leading-6">
+                    <Text className="text-4xl font-bold text-blue-900 dark:text-blue-200 mb-4 text-center tracking-tight">Welcome to ClinicEZ</Text>
+                    <Text className="text-lg text-slate-500 dark:text-slate-300 text-center mb-12 leading-7">
                         Manage your health, appointments, and clinics — all in one place.
                     </Text>
-                    <Pressable
-                        onPress={onNext}
-                        className="bg-blue-600 rounded-xl py-3 px-10 w-full items-center mb-2 active:scale-95"
-                        android_ripple={{ color: '#2b6cb0' }}
-                        style={{ elevation: 2 }}
-                    >
+                </View>
+                <View className="w-full items-center">
+                    <RoundedButton onPress={onNext} className="mb-2">
                         <Text className="text-white font-semibold text-lg tracking-wide">Get Started</Text>
-                    </Pressable>
+                    </RoundedButton>
                     {(onBack || onExit) && (
                         <View className="flex-row w-full justify-between mt-2">
                             {onBack ? (
-                                <Pressable onPress={onBack} className="py-1 px-2" android_ripple={{ color: '#e2e8f0' }}>
+                                <RoundedButton onPress={onBack} color="bg-white" rippleColor="#e2e8f0" className="py-1 px-2">
                                     <Text className="text-blue-600 font-medium">Back</Text>
-                                </Pressable>
+                                </RoundedButton>
                             ) : <View />}
                             {onExit ? (
-                                <Pressable onPress={onExit} className="py-1 px-2" android_ripple={{ color: '#e2e8f0' }}>
+                                <RoundedButton onPress={onExit} color="bg-white" rippleColor="#e2e8f0" className="py-1 px-2">
                                     <Text className="text-slate-500 font-medium">Exit</Text>
-                                </Pressable>
+                                </RoundedButton>
                             ) : <View />}
                         </View>
                     )}
                 </View>
+                {/* App version at the very bottom */}
+                <Text className="text-xs text-slate-400 text-center mt-8">v{version}</Text>
             </View>
         </View>
     );
