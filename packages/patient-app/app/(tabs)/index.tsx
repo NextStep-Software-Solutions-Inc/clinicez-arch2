@@ -7,8 +7,10 @@ import { ThemedView } from '@/components/ThemedView';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useColorScheme } from '@/hooks/useColorScheme';
 
 export default function HomeScreen() {
+  const colorScheme = useColorScheme();
   // Notification count
   const notificationCount = 3;
   // Current clinic context (mocked for now)
@@ -111,21 +113,21 @@ export default function HomeScreen() {
           </ThemedView>
 
           {/* Health Overview Card - Modernized */}
-          <ThemedView className="mx-4 flex-1 rounded-3xl shadow-xl p-0 mb-7 overflow-hidden" style={{ elevation: 4, shadowColor: '#2563eb', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.13, shadowRadius: 12 }}>
-            <ThemedView className="w-full h-full absolute left-0 top-0" style={{ zIndex: 0 }}>
-              <MaterialCommunityIcons name="heart-pulse" size={120} color="#bae6fd22" style={{ position: 'absolute', right: -30, top: -30, zIndex: 0 }} />
+          <ThemedView className="mx-4  flex-1  rounded-3xl shadow-xl shadow-blue-200 p-0 mb-7 overflow-hidden bg-white/90 dark:bg-slate-800" style={{ elevation: 4, shadowColor: "#2563eb", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.13, shadowRadius: 12 }}>
+            <ThemedView className=" w-full h-full absolute left-0 top-0" style={{ zIndex: 0 }}>
+              <MaterialCommunityIcons name="heart-pulse" size={120} color="#bae5fd83" style={{ position: 'absolute', right: -30, top: -30, zIndex: 0 }} />
               <LinearGradient
-                colors={["#f0f9ff", "#e0e7ff"]}
+                colors={colorScheme === 'dark' ? ["#1e293b", "#334155"] : ["#f0f9ff", "#e0e7ff"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
-                style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, opacity: 0.95 }}
+                style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, opacity: 0.70 }}
               />
             </ThemedView>
             <ThemedView className="flex-row items-center mb-4 px-6 pt-6" style={{ zIndex: 1 }}>
-              <MaterialCommunityIcons name="heart-pulse" size={28} color="#06b6d4" style={{ marginRight: 12 }} />
+              <MaterialCommunityIcons name="heart-pulse" size={28} color="#649199ff" style={{ marginRight: 12 }} />
               <ThemedText className="text-2xl font-extrabold text-blue-900 dark:text-blue-100">Health Overview</ThemedText>
             </ThemedView>
-            <ThemedView className="flex-row justify-between gap-4 px-6 pb-6" style={{ zIndex: 1 }}>
+            <ThemedView className="flex-row justify-between gap-4 px-6 pb-6 " style={{ zIndex: 1 }}>
               {healthOverview.map(item => (
                 <ThemedView key={item.id} className="items-center flex-1">
                   <ThemedView className={`mb-2 px-4 py-2 rounded-full bg-white/80 dark:bg-slate-800/80 shadow-sm`} style={{ minWidth: 70 }}>

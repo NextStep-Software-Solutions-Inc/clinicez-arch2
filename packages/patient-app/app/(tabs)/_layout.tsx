@@ -25,6 +25,7 @@ export default function TabLayout() {
           },
           default: {
             height: 72,
+            backgroundColor: Colors[colorScheme ?? 'light'].background,
             paddingBottom: 8,
             paddingTop: 8,
           },
