@@ -1,27 +1,4 @@
-# Node modules
-node_modules/
-**/node_modules/
-
-# Logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# OS
+# Global ignores for the entire repository
 .DS_Store
 Thumbs.db
-
-# Build output
-dist/
-build/
-
-# Misc
-.env
-.env.*
-
-# Expo
-.expo/
-.expo-shared/
-
-# VSCode
 .vscode/

@@ -1,0 +1,6 @@
+
+# Expo-specific ignores for patient-app
+expo-env.d.ts
+.expo/
+.expo-shared/
+node_modules/
