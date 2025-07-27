@@ -79,7 +79,6 @@ export default function HomeScreen() {
         <SafeAreaView
             edges={['top', 'left', 'right']}
             className="flex-1 px-0 py-0"
-
         >
             <ScrollView contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
                 <ThemedView className="flex-1 w-full">

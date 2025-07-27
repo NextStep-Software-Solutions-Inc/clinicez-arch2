@@ -2,8 +2,7 @@
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import Feather from '@expo/vector-icons/Feather';
-import { SymbolWeight, SymbolViewProps } from 'expo-symbols';
-import { ComponentProps } from 'react';
+import { SymbolWeight } from 'expo-symbols';
 import { OpaqueColorValue, type StyleProp, type TextStyle } from 'react-native';
 
 
@@ -16,7 +15,7 @@ const MAPPING = {
   'chevron.right': { type: 'material', name: 'chevron-right' },
   'calendar': { type: 'feather', name: 'calendar' },
   'heart': { type: 'feather', name: 'heart' },
-  'user': { type: 'feather', name: 'user' },
+  'person': { type: 'material', name: 'person' },
 } as const;
 type IconSymbolName = keyof typeof MAPPING;
 
