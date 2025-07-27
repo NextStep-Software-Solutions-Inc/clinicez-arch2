@@ -44,7 +44,6 @@ export default function TabLayout() {
         name="index"
         options={{
           tabBarLabel: 'Home',
-          title: '',
           tabBarIcon: ({ color }) => <Feather size={28} name="home" color={color} />,
         }}
       />
@@ -52,7 +51,6 @@ export default function TabLayout() {
         name="appointments"
         options={{
           tabBarLabel: 'Appointments',
-          title: '',
           tabBarIcon: ({ color }) => <Feather size={28} name="calendar" color={color} />,
         }}
       />
@@ -60,7 +58,6 @@ export default function TabLayout() {
         name="health"
         options={{
           tabBarLabel: 'Health',
-          title: '',
           tabBarIcon: ({ color }) => <Feather size={28} name="heart" color={color} />,
         }}
       />
@@ -68,7 +65,6 @@ export default function TabLayout() {
         name="profile"
         options={{
           tabBarLabel: 'Profile',
-          title: '',
           tabBarIcon: ({ color }) => <Feather size={28} name="user" color={color} />,
         }}
       />
