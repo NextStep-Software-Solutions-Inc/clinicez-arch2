@@ -1,6 +1,6 @@
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import { ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -8,14 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
     const colorScheme = useColorScheme();
-    // Notification count
-    const notificationCount = 3;
-    // Current clinic context (mocked for now)
-    const currentClinic = {
-        name: 'Downtown Medical Center',
-        address: '123 Main St, Cityville',
-        // logo: '...' // could add logo uri here
-    };
+
     // Mock data for multiple appointments
     const appointments = [
         {
@@ -60,7 +53,7 @@ export default function HomeScreen() {
         },
         {
             key: 'health',
-            icon: { name: 'file-document', color: '#059669' },
+            icon: { name: 'heart', color: '#059669' },
             bg: 'bg-green-100 dark:bg-green-900/60',
             title: 'Health',
             titleClass: 'text-green-900 dark:text-green-100',
@@ -68,7 +61,7 @@ export default function HomeScreen() {
         },
         {
             key: 'profile',
-            icon: { name: 'account-circle', color: '#334155' },
+            icon: { name: 'user', color: '#334155' },
             bg: 'bg-slate-100 dark:bg-slate-800/60',
             title: 'Profile',
             titleClass: 'text-slate-900 dark:text-slate-100',
@@ -77,45 +70,26 @@ export default function HomeScreen() {
     ];
     return (
         <SafeAreaView
-            edges={['top', 'left', 'right']}
+            edges={['left', 'right']}
             className="flex-1 px-0 py-0"
         >
             <ScrollView contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
                 <ThemedView className="flex-1 w-full">
                     {/* Greeting */}
-                    <ThemedView className='px-4'>
-                        <ThemedView className="flex-row items-center mb-4 w-full justify-between">
-                            <ThemedView className="flex-row items-center">
-                                <MaterialCommunityIcons name="hand-wave" size={36} color="#2563eb" style={{ marginRight: 12 }} />
-                                <ThemedText className="text-4xl font-black text-blue-700 dark:text-blue-300 leading-tight">Wave</ThemedText>
-                            </ThemedView>
-                            <ThemedView className="relative">
-                                <MaterialCommunityIcons name="bell-outline" size={30} color="#2563eb" />
-                                {notificationCount > 0 && (
-                                    <ThemedView className="absolute -top-1 -right-1 rounded-full w-6 h-6 px-1 items-center justify-center border-2 border-white dark:border-slate-900" style={{ backgroundColor: '#ef4444' }}>
-                                        <ThemedText className="text-sm font-bold" style={{ color: '#fff' }}>{notificationCount}</ThemedText>
-                                    </ThemedView>
-                                )}
-                            </ThemedView>
+                    <ThemedView className='px-4 mt-4'>
+                        <ThemedView className="flex-row items-center w-full">
+                            <ThemedText className="text-4xl font-black text-blue-700 dark:text-blue-300 leading-tight">Hi, Wave!</ThemedText>
                         </ThemedView>
-                        <ThemedText className="text-2xl font-extrabold text-blue-900 dark:text-blue-200 mb-2 text-left w-full leading-tight">
-                            Good morning
-                        </ThemedText>
-                        <ThemedText className="text-lg text-slate-600 dark:text-slate-300 mb-4 text-left w-full">
+                        <ThemedText className="text-xl text-slate-600 dark:text-slate-300 mb-4 text-left w-full">
                             Here’s what’s happening with your health today.
                         </ThemedText>
-                        {/* Current Clinic Context */}
-                        <ThemedView className="flex-row items-center gap-2 mb-6 mt-1">
-                            <MaterialCommunityIcons name="hospital-building" size={22} color="#2563eb" style={{ marginRight: 4 }} />
-                            <ThemedText className="text-base font-bold text-blue-800 dark:text-blue-200 mr-2">{currentClinic.name}</ThemedText>
-                            {/* <ThemedText className="text-xs text-slate-500 dark:text-slate-400">{currentClinic.address}</ThemedText> */}
-                        </ThemedView>
+                        {/* Current Clinic Context moved to header */}
                     </ThemedView>
 
                     {/* Health Overview Card - Modernized */}
-                    <ThemedView className="mx-4  flex-1  rounded-3xl shadow-xl shadow-blue-200 p-0 mb-7 overflow-hidden bg-white/90 dark:bg-slate-800" style={{ elevation: 4, shadowColor: "#2563eb", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.13, shadowRadius: 12 }}>
+                    <ThemedView className="mx-4 flex-1 rounded-3xl shadow-xl shadow-blue-200 p-0 mb-7 overflow-hidden bg-white/90 dark:bg-slate-800" style={{ elevation: 4, shadowColor: "#2563eb", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.13, shadowRadius: 12 }}>
                         <ThemedView className=" w-full h-full absolute left-0 top-0" style={{ zIndex: 0 }}>
-                            <MaterialCommunityIcons name="heart-pulse" size={120} color="#bae5fd83" style={{ position: 'absolute', right: -30, top: -30, zIndex: 0 }} />
+                            <Feather name="activity" size={120} color="#bae5fd83" style={{ position: 'absolute', right: -30, top: -30, zIndex: 0 }} />
                             <LinearGradient
                                 colors={colorScheme === 'dark' ? ["#1e293b", "#334155"] : ["#f0f9ff", "#e0e7ff"]}
                                 start={{ x: 0, y: 0 }}
@@ -124,7 +98,7 @@ export default function HomeScreen() {
                             />
                         </ThemedView>
                         <ThemedView className="flex-row items-center mb-4 px-6 pt-6" style={{ zIndex: 1 }}>
-                            <MaterialCommunityIcons name="heart-pulse" size={28} color="#649199ff" style={{ marginRight: 12 }} />
+                            <Feather name="activity" size={28} color="#649199ff" style={{ marginRight: 12 }} />
                             <ThemedText className="font-extrabold text-blue-900 dark:text-blue-100">Health Overview</ThemedText>
                         </ThemedView>
                         <ThemedView className="flex-row justify-between gap-4 px-6 pb-6 " style={{ zIndex: 1 }}>
@@ -157,14 +131,14 @@ export default function HomeScreen() {
                         {appointments.length === 0 ? (
                             <ThemedView
                                 className="min-w-[270px] max-w-[320px] rounded-2xl overflow-hidden shadow-md bg-white/90 dark:bg-slate-900/80 items-center justify-center p-8"
-                                style={{ elevation: 2, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.10, shadowRadius: 8 }}
+                                style={{ minHeight: 220, elevation: 2, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.10, shadowRadius: 8 }}
                             >
-                                <MaterialCommunityIcons name="calendar-remove" size={48} color="#2563eb" style={{ marginBottom: 12 }} />
+                                <Feather name="calendar" size={48} color="#2563eb" style={{ marginBottom: 12 }} />
                                 <ThemedText className="text-lg font-bold text-blue-900 dark:text-blue-100 mb-2 text-center">No upcoming appointments</ThemedText>
                                 <ThemedText className="text-base text-slate-500 dark:text-slate-400 text-center mb-4">You're all caught up! Schedule your next visit when you're ready.</ThemedText>
                                 <ThemedView className="flex-row justify-center">
                                     <ThemedText className="text-base font-semibold text-blue-700 dark:text-blue-300 mr-1">Book Now</ThemedText>
-                                    <MaterialCommunityIcons name="chevron-right" size={20} color="#2563eb" />
+                                    <Feather name="chevron-right" size={20} color="#2563eb" />
                                 </ThemedView>
                             </ThemedView>
                         ) : (
@@ -178,7 +152,7 @@ export default function HomeScreen() {
                                         {/* Avatar and info row */}
                                         <ThemedView className="flex-row items-center mb-2">
                                             <ThemedView className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900 items-center justify-center mr-3 shadow-md" style={{ elevation: 2 }}>
-                                                <MaterialCommunityIcons name="account-circle" size={32} color="#2563eb" />
+                                                <Feather name="user" size={24} color="#2563eb" />
                                             </ThemedView>
                                             <ThemedView className="flex-1">
                                                 <ThemedText className="font-extrabold text-blue-900 dark:text-blue-100 mb-0.5" numberOfLines={1}>{appt.doctor}</ThemedText>
@@ -194,7 +168,7 @@ export default function HomeScreen() {
                                             <ThemedText className="font-semibold text-blue-800 dark:text-blue-200 mb-1">{appt.type}</ThemedText>
                                             <ThemedView className="flex-row items-center">
                                                 <ThemedText className="text-xs text-blue-700 dark:text-blue-300 mr-1">Details</ThemedText>
-                                                <MaterialCommunityIcons name="chevron-right" size={20} color="#2563eb" />
+                                                <Feather name="chevron-right" size={20} color="#2563eb" />
                                             </ThemedView>
                                         </ThemedView>
                                     </ThemedView>
@@ -216,7 +190,7 @@ export default function HomeScreen() {
                                 className={`min-w-[130px] max-w-[150px] h-40 ${link.bg} rounded-xl p-4 items-center justify-center shadow-md`}
                                 style={{ elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.10, shadowRadius: 3, height: 160 }}
                             >
-                                <MaterialCommunityIcons name={link.icon.name as any} size={20} color={link.icon.color} style={{ marginBottom: 4 }} />
+                                <Feather name={link.icon.name as any} size={20} color={link.icon.color} style={{ marginBottom: 4 }} />
                                 <ThemedText className={`text-lg font-extrabold mb-1 text-center ${link.titleClass}`}>{link.title}</ThemedText>
                                 <ThemedText className="text-sm text-slate-500 dark:text-slate-400 text-center">{link.desc}</ThemedText>
                             </ThemedView>
