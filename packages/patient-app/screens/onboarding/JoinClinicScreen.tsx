@@ -40,7 +40,7 @@ export default function JoinClinicScreen({ onJoin, onBack, onExit }: JoinClinicS
                         placeholder="Invitation Code"
                         value={code}
                         onChangeText={setCode}
-                        className="border border-slate-300 rounded-xl p-4 w-full max-w-xl mb-6 text-base bg-[#f7fafc]"
+                        className="border border-slate-300 rounded-xl p-4 w-full max-w-xl mb-6  bg-[#f7fafc]"
                         placeholderTextColor="#94a3b8"
                     />
                     <RoundedButton onPress={() => onJoin(code)}>

@@ -111,7 +111,7 @@ export default function FeatureCarousel({ onNext, onBack }: FeatureCarouselProps
                     ) : (
                         <RoundedButton onPress={onNext} color="bg-white dark:bg-slate-900" rippleColor="#e2e8f0" className="py-2 px-2 flex-row items-center">
                             <ThemedText className="text-cyan-600 font-extrabold text-lg">Get Started</ThemedText>
-                            <MaterialCommunityIcons name="check-circle" size={24} color="#06b6d4" style={{ marginLeft: 4 }} />
+                            <MaterialCommunityIcons name="check-circle" size={28} color="#06b6d4" style={{ marginLeft: 4 }} />
                         </RoundedButton>
                     )}
                 </ThemedView>
