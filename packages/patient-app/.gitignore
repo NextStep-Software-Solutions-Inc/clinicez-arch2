@@ -4,3 +4,5 @@ expo-env.d.ts
 .expo/
 .expo-shared/
 node_modules/
+
+dist/
