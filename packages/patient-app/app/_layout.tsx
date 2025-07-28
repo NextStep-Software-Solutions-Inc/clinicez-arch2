@@ -14,14 +14,10 @@ const DEBUG_ALWAYS_SHOW_ONBOARDING = false; // set to true for debugging
 const ONBOARDED = 'ONBOARDED'; // Key for onboarding state in SecureStore
 export default function RootLayout() {
   const colorScheme = useColorScheme();
-  // No custom font loading needed for SF Pro (system font)
+  const [onboarded, setOnboarded] = useState(false);
   const [loaded] = useFonts({
     'SF-Pro': require('../assets/fonts/SF-Pro.ttf'),
-
   });
-  // Debug override: set to true to always show onboarding
-
-  const [onboarded, setOnboarded] = useState(false);
 
   useEffect(() => {
     if (DEBUG_ALWAYS_SHOW_ONBOARDING) {
