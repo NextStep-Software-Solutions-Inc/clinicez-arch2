@@ -8,6 +8,7 @@ import { Colors } from '@/constants/Colors';
 import EditProfileModal from '@/components/EditProfileModal';
 import EditSheet from '@/components/EditSheet';
 import ProfileCard from '@/components/ProfileCard';
+import { SignOutButton } from '@/components/SignOutButton';
 
 
 export default function ProfileScreen() {
@@ -225,26 +226,7 @@ export default function ProfileScreen() {
                     </ThemedText>
                 </ThemedView>
                 {/* Actions */}
-                <TouchableOpacity
-                    style={{
-                        backgroundColor: '#fff',
-                        borderRadius: 8,
-                        paddingVertical: 12,
-                        paddingHorizontal: 32,
-                        marginTop: 12,
-                        borderWidth: 1,
-                        borderColor: Colors.light.tint,
-                        shadowColor: Colors.light.tint,
-                        shadowOpacity: 0.08,
-                        shadowRadius: 4,
-                        elevation: 1,
-                    }}
-                    onPress={() => {/* TODO: Implement logout */ }}
-                >
-                    <ThemedText style={{ color: Colors.light.tint, fontWeight: 'bold', fontSize: 16 }}>
-                        Log Out
-                    </ThemedText>
-                </TouchableOpacity>
+                <SignOutButton />
             </ScrollView>
 
         </>

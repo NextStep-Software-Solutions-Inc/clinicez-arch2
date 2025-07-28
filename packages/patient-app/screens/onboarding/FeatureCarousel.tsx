@@ -7,7 +7,7 @@ import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 
 type FeatureCarouselProps = {
-    onNext: () => void;
+    onContinue: () => void;
     onBack?: () => void;
 };
 
@@ -29,7 +29,7 @@ const features = [
     }
 ];
 
-export default function FeatureCarousel({ onNext, onBack }: FeatureCarouselProps) {
+export default function FeatureCarousel({ onContinue, onBack }: FeatureCarouselProps) {
     const [currentIndex, setCurrentIndex] = useState(0);
     const flatListRef = useRef<FlatList>(null);
 
@@ -109,7 +109,7 @@ export default function FeatureCarousel({ onNext, onBack }: FeatureCarouselProps
                             <MaterialCommunityIcons name="chevron-right" size={28} color="#2563eb" style={{ marginLeft: 4 }} />
                         </RoundedButton>
                     ) : (
-                        <RoundedButton onPress={onNext} color="bg-white dark:bg-slate-900" rippleColor="#e2e8f0" className="py-2 px-2 flex-row items-center">
+                        <RoundedButton onPress={onContinue} color="bg-white dark:bg-slate-900" rippleColor="#e2e8f0" className="py-2 px-2 flex-row items-center">
                             <ThemedText className="text-cyan-600 font-extrabold text-lg">Get Started</ThemedText>
                             <MaterialCommunityIcons name="check-circle" size={28} color="#06b6d4" style={{ marginLeft: 4 }} />
                         </RoundedButton>

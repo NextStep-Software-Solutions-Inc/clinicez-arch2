@@ -9,8 +9,11 @@ import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 import OnboardingFlow from '../screens/onboarding/OnboardingFlow';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { ClerkProvider } from '@clerk/clerk-expo';
+import { tokenCache } from '@clerk/clerk-expo/token-cache'
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
-const DEBUG_ALWAYS_SHOW_ONBOARDING = false; // set to true for debugging
+const DEBUG_ALWAYS_SHOW_ONBOARDING = true; // set to true for debugging
 const ONBOARDED = 'ONBOARDED'; // Key for onboarding state in SecureStore
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -38,25 +41,26 @@ export default function RootLayout() {
     return null;
   }
 
-  if (!onboarded) {
-    return <OnboardingFlow onFinish={handleOnboardingFinish} />;
-  }
-
-  // --- GestureHandlerRootView required for gesture handler v2+ ---
-  // Import here to avoid breaking SSR/static analysis
-  const { GestureHandlerRootView } = require('react-native-gesture-handler');
-
+  // Always wrap everything in ClerkProvider
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <ClinicProvider>
-        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <Stack>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="+not-found" />
-          </Stack>
-          <StatusBar style="auto" />
-        </ThemeProvider>
-      </ClinicProvider>
-    </GestureHandlerRootView>
+    <ClerkProvider tokenCache={tokenCache}>
+      {/* Show onboarding/auth flow first, only show tabs after onboarding is finished */}
+      {onboarded ? (
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <ClinicProvider>
+            <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+              <Stack>
+                <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                <Stack.Screen name="+not-found" />
+              </Stack>
+              <StatusBar style="auto" />
+            </ThemeProvider>
+          </ClinicProvider>
+        </GestureHandlerRootView>
+      ) : (
+        <OnboardingFlow onFinish={handleOnboardingFinish} />
+      )}
+    </ClerkProvider>
   );
 }
