@@ -36,6 +36,36 @@ export default function ProfileScreen() {
         },
     };
 
+    // Disabilities and Illnesses (previously in HealthScreen)
+    const disabilities = [
+        {
+            name: 'Hearing Impairment',
+            diagnosed: '2020-06-15',
+            doctor: 'Dr. Carter',
+            notes: 'Uses hearing aid, regular audiology checkups.'
+        },
+        {
+            name: 'Mobility Limitation',
+            diagnosed: '2022-11-01',
+            doctor: 'Dr. Lee',
+            notes: 'Uses cane for walking, physical therapy ongoing.'
+        }
+    ];
+    const illnesses = [
+        {
+            name: 'Diabetes Type 2',
+            diagnosed: '2021-07-22',
+            doctor: 'Dr. Patel',
+            notes: 'Managed with medication and diet.'
+        },
+        {
+            name: 'Asthma',
+            diagnosed: '2023-01-28',
+            doctor: 'Dr. Patel',
+            notes: 'Prescribed inhaler.'
+        }
+    ];
+
 
     return (
         <>
@@ -92,6 +122,35 @@ export default function ProfileScreen() {
                     <ThemedText style={{ fontSize: 15, marginBottom: 4 }}>
                         Phone: {user.phone_number}
                     </ThemedText>
+                </ProfileCard>
+
+                {/* Disabilities & Illnesses Card */}
+                <ProfileCard
+                    title="Disabilities & Illnesses"
+                    editTitle="Edit Disabilities & Illnesses"
+                >
+                    <ThemedText style={{ fontSize: 17, fontWeight: 'bold', color: Colors.light.tint, marginBottom: 8 }}>
+                        Disabilities
+                    </ThemedText>
+                    {disabilities.map((dis, i) => (
+                        <ThemedView key={i} style={{ marginBottom: 8, padding: 8, backgroundColor: '#f8fafc', borderRadius: 10 }}>
+                            <ThemedText style={{ fontSize: 16, color: Colors.light.tint, fontWeight: 'bold' }}>{dis.name}</ThemedText>
+                            <ThemedText style={{ fontSize: 14, color: '#666' }}>Diagnosed: {dis.diagnosed}</ThemedText>
+                            <ThemedText style={{ fontSize: 14, color: '#666' }}>By: {dis.doctor}</ThemedText>
+                            <ThemedText style={{ fontSize: 13, color: '#888' }}>{dis.notes}</ThemedText>
+                        </ThemedView>
+                    ))}
+                    <ThemedText style={{ fontSize: 17, fontWeight: 'bold', color: Colors.light.tint, marginTop: 12, marginBottom: 8 }}>
+                        Illnesses
+                    </ThemedText>
+                    {illnesses.map((ill, i) => (
+                        <ThemedView key={i} style={{ marginBottom: 8, padding: 8, backgroundColor: '#f8fafc', borderRadius: 10 }}>
+                            <ThemedText style={{ fontSize: 16, color: Colors.light.tint, fontWeight: 'bold' }}>{ill.name}</ThemedText>
+                            <ThemedText style={{ fontSize: 14, color: '#666' }}>Diagnosed: {ill.diagnosed}</ThemedText>
+                            <ThemedText style={{ fontSize: 14, color: '#666' }}>By: {ill.doctor}</ThemedText>
+                            <ThemedText style={{ fontSize: 13, color: '#888' }}>{ill.notes}</ThemedText>
+                        </ThemedView>
+                    ))}
                 </ProfileCard>
                 <ProfileCard
                     title="Address"
