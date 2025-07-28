@@ -1,8 +1,4 @@
 {
-  "updates": {
-    "fallbackToCacheTimeout": 0,
-    "enabled": true
-  },
   "expo": {
     "name": "clinicez-patient-app",
     "slug": "clinicez-patient-app",
@@ -53,6 +49,8 @@
       "policy": "appVersion"
     },
     "updates": {
+      "fallbackToCacheTimeout": 0,
+      "enabled": true,
       "url": "https://u.expo.dev/972b1787-7d02-4820-ae35-9a11457d2b8a"
     }
   }
