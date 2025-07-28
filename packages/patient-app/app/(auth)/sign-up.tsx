@@ -27,7 +27,6 @@ export default function SignUpScreen() {
                 strategy: 'oauth_google', redirectUrl: '/(tabs)'
             });
         } catch (err) {
-            console.error(JSON.stringify(err, null, 2));
             let msg = 'Google sign up failed.';
             const errorObj = err as any;
             if (errorObj?.errors && Array.isArray(errorObj.errors) && errorObj.errors.length > 0) {
@@ -46,7 +45,6 @@ export default function SignUpScreen() {
         try {
             await signUp.create({ strategy: 'oauth_github' });
         } catch (err) {
-            console.error(JSON.stringify(err, null, 2));
             let msg = 'GitHub sign up failed.';
             const errorObj = err as any;
             if (errorObj?.errors && Array.isArray(errorObj.errors) && errorObj.errors.length > 0) {
@@ -61,8 +59,6 @@ export default function SignUpScreen() {
     // Handle submission of sign-up form
     const onSignUpPress = async () => {
         if (!isLoaded) return
-
-        console.log(emailAddress, password)
 
         // Start sign-up process using email and password provided
         try {
@@ -83,7 +79,6 @@ export default function SignUpScreen() {
                 msg = errorObj.data.errors[0].message;
             }
             setErrorMsg(msg);
-            console.error(JSON.stringify(err, null, 2))
         }
     }
 
@@ -103,14 +98,11 @@ export default function SignUpScreen() {
             setErrorMsg('');
             const signUpAttempt = await signUp.attemptEmailAddressVerification({ code });
 
-            console.log(signUpAttempt.status)
             if (signUpAttempt.status === 'complete') {
                 await setActive({ session: signUpAttempt.createdSessionId })
                 router.replace('/(tabs)')
             } else {
                 setErrorMsg('Verification incomplete. Please check your code or try again.');
-                console.log({ signUpAttempt })
-                console.error(JSON.stringify(signUpAttempt, null, 2))
             }
         } catch (err) {
             let msg = 'Verification failed. Please check your code.';
@@ -121,7 +113,6 @@ export default function SignUpScreen() {
                 msg = errorObj.data.errors[0].longMessage || errorObj.data.errors[0].message;
             }
             setErrorMsg(msg);
-            console.error(JSON.stringify(err, null, 2))
         }
     }
 

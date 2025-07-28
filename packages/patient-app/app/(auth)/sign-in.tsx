@@ -27,7 +27,6 @@ export default function Page() {
                 router.replace('/join-clinic')
             } else {
                 setErrorMsg('Sign in incomplete. Please check your credentials or complete additional steps.');
-                console.error(JSON.stringify(signInAttempt, null, 2))
             }
         } catch (err) {
             let msg = 'Sign in failed. Please check your credentials.';
@@ -41,7 +40,6 @@ export default function Page() {
                 msg = (err as any).errors[0].message;
             }
             setErrorMsg(msg);
-            console.error(JSON.stringify(err, null, 2))
         }
     }
 

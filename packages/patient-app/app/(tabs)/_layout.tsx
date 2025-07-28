@@ -16,7 +16,6 @@ import { useClinicContext } from '@/components/ClinicContext';
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const { currentClinicId, setCurrentClinicId } = useClinicContext();
-  console.log('TabLayout mounted, currentClinicId:', currentClinicId);
 
   if (!currentClinicId) {
     return (

@@ -14,7 +14,7 @@ export const SignOutButton = () => {
         try {
             await signOut()
             // Redirect to your desired page
-            // router.replace('/(auth)/sign-in')
+            router.replace('/')
             setCurrentClinicId(null) // Clear the current clinic ID
         } catch (err) {
             // See https://clerk.com/docs/custom-flows/error-handling
