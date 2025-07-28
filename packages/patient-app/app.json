@@ -37,7 +37,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true
@@ -48,7 +49,6 @@
         "projectId": "972b1787-7d02-4820-ae35-9a11457d2b8a"
       }
     },
-    "owner": "wacanam",
     "runtimeVersion": {
       "policy": "appVersion"
     },

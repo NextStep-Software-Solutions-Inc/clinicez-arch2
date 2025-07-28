@@ -3,11 +3,18 @@ import React from 'react';
 import { Platform } from 'react-native';
 
 import { HapticTab } from '@/components/HapticTab';
-import { IconSymbol } from '@/components/ui/IconSymbol';
 import TabBarBackground from '@/components/ui/TabBarBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 
+import { Feather } from '@expo/vector-icons';
+import { GlobalHeader } from '@/components/GlobalHeader';
+
+const currentClinic = {
+  name: 'Downtown Medical Center',
+  address: '123 Main St, Cityville',
+  // logo: '...' // could add logo uri here
+};
 export default function TabLayout() {
   const colorScheme = useColorScheme();
 
@@ -15,48 +22,50 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
-        headerShown: false,
+        headerShown: true,
+
+        header: () => (
+          <GlobalHeader />
+        ),
         tabBarButton: HapticTab,
         tabBarBackground: TabBarBackground,
         tabBarStyle: Platform.select({
           ios: {
             // Use a transparent background on iOS to show the blur effect
-            position: 'absolute',
+            // position: 'absolute',
+            backgroundColor: Colors[colorScheme ?? 'light'].background,
           },
           default: {
-            height: 72,
             backgroundColor: Colors[colorScheme ?? 'light'].background,
-            paddingBottom: 8,
-            paddingTop: 8,
           },
         }),
       }}>
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house" color={color} />,
+          tabBarLabel: 'Home',
+          tabBarIcon: ({ color }) => <Feather size={28} name="home" color={color} />,
         }}
       />
       <Tabs.Screen
         name="appointments"
         options={{
-          title: 'Appointments',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="calendar" color={color} />,
+          tabBarLabel: 'Appointments',
+          tabBarIcon: ({ color }) => <Feather size={28} name="calendar" color={color} />,
         }}
       />
       <Tabs.Screen
         name="health"
         options={{
-          title: 'Health',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="heart" color={color} />,
+          tabBarLabel: 'Health',
+          tabBarIcon: ({ color }) => <Feather size={28} name="heart" color={color} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Profile',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="user" color={color} />,
+          tabBarLabel: 'Profile',
+          tabBarIcon: ({ color }) => <Feather size={28} name="user" color={color} />,
         }}
       />
     </Tabs>
