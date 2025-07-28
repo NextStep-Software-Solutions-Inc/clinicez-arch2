@@ -269,13 +269,13 @@ export default function HealthScreen() {
                 </ThemedView>
 
                 {/* Chronic Conditions - Card with Vertical List (clickable) */}
-                <ThemedView style={{ backgroundColor: Colors.light.tint + '09', borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14, marginBottom: 12, width: '96%', alignSelf: 'center', shadowColor: Colors.light.tint, shadowOpacity: 0.07, shadowRadius: 3, elevation: 1 }}>
+                <ThemedView style={{ backgroundColor: '#fff', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 14, marginBottom: 14, width: '96%', alignSelf: 'center', shadowColor: Colors.light.tint, shadowOpacity: 0.09, shadowRadius: 6, elevation: 2 }}>
                     <ThemedText style={{ fontSize: 16, fontWeight: 'bold', color: Colors.light.tint, marginBottom: 8, letterSpacing: 0.2 }}>
                         <Feather name="alert-circle" size={15} color={Colors.light.tint} /> Chronic Conditions
                     </ThemedText>
                     {dummyHealth.chronicConditions.map((cond, i) => (
                         <TouchableOpacity key={i} onPress={() => { setSelectedItem(cond); setSelectedType('chronicCondition'); }}>
-                            <ThemedView style={{ backgroundColor: '#fff', borderRadius: 8, paddingVertical: 7, paddingHorizontal: 10, marginBottom: 8, shadowColor: Colors.light.tint, shadowOpacity: 0.03, shadowRadius: 1, elevation: 1 }}>
+                            <ThemedView style={{ marginBottom: 8, backgroundColor: Colors.light.tint + '11', borderRadius: 8, padding: 8 }}>
                                 <ThemedText style={{ fontSize: 14, color: Colors.light.tint, fontWeight: 'bold', marginBottom: 2 }}>
                                     <Feather name="check-circle" size={12} color={Colors.light.tint} style={{ marginRight: 4 }} /> {cond.name}
                                 </ThemedText>
