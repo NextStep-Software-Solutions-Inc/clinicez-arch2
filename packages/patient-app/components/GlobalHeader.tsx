@@ -58,7 +58,7 @@ export function GlobalHeader() {
                     backgroundColor: Colors[colorScheme ?? 'light'].background,
                     borderRadius: 8,
                     paddingVertical: 2,
-                    maxWidth: 160,
+                    // maxWidth: 220,
                 }}
             >
                 <Feather name="home" size={18} color={Colors[colorScheme ?? 'light'].tint} style={{ marginRight: 4 }} />
@@ -72,7 +72,7 @@ export function GlobalHeader() {
             </ThemedView>
             {/* No app name in center for cleaner look */}
             {/* Actions */}
-            <ThemedView style={{ flexDirection: 'row', alignItems: 'baseline', gap: 16 }}>
+            <ThemedView style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
                 {/* Notification Bell with Badge */}
                 <ThemedView style={{ position: 'relative', marginRight: 8 }}>
                     <Feather name="bell" size={24} color={Colors[colorScheme ?? 'light'].tint} />
