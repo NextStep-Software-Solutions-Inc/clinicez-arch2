@@ -14,7 +14,7 @@ export default function ProceduresSection() {
 
     return (
         <>
-            <ThemedView className="bg-white dark:bg-neutral-900 rounded-lg p-4 mb-4 self-center shadow-md" style={{ shadowColor: Colors.light.tint, shadowOpacity: 0.10, shadowRadius: 8, elevation: 3 }}>
+            <ThemedView className="bg-white dark:bg-neutral-900 rounded-lg p-4 mb-4 self-center shadow-md w-full" style={{ shadowColor: Colors.light.tint, shadowOpacity: 0.10, shadowRadius: 8, elevation: 1 }}>
                 <ThemedText className="text-base font-bold mb-2 tracking-tight" style={{ color: Colors.light.tint }}>
                     <Feather name="tool" size={16} color={Colors.light.tint} /> Procedures
                 </ThemedText>

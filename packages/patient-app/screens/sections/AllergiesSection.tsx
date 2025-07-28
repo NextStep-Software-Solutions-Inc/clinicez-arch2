@@ -14,7 +14,7 @@ export default function AllergiesSection() {
 
     return (
         <>
-            <ThemedView className="bg-white dark:bg-neutral-900 rounded-lg py-2 px-3 mb-3 self-center shadow-md" style={{ shadowColor: Colors.light.tint, shadowOpacity: 0.10, shadowRadius: 8, elevation: 3 }}>
+            <ThemedView className="bg-white dark:bg-neutral-900 rounded-lg py-2 px-3 mb-3 self-center shadow-md w-full" style={{ shadowColor: Colors.light.tint, shadowOpacity: 0.10, shadowRadius: 8, elevation: 1 }}>
                 <ThemedText style={{ fontSize: 17, fontWeight: 'bold', color: Colors.light.tint, marginBottom: 6, letterSpacing: 0.2 }}>
                     <Feather name="alert-circle" size={16} color={Colors.light.tint} /> Allergies
                 </ThemedText>

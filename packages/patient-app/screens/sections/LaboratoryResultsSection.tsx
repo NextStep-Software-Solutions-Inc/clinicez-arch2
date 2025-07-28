@@ -15,7 +15,7 @@ export default function LaboratoryResultsSection() {
 
   return (
     <>
-      <ThemedView className="bg-white dark:bg-neutral-900 rounded-lg py-4 px-3 mb-4 self-center shadow-lg" style={{ shadowColor: Colors.light.tint, shadowOpacity: 0.10, shadowRadius: 8, elevation: 3 }}>
+      <ThemedView className="bg-white dark:bg-neutral-900 rounded-lg py-4 px-3 mb-4 self-center shadow-lg w-full" style={{ shadowColor: Colors.light.tint, shadowOpacity: 0.10, shadowRadius: 8, elevation: 1 }}>
         <ThemedText style={{ fontSize: 14, fontWeight: 'bold', color: Colors.light.tint, marginBottom: 8, letterSpacing: 0.2 }}>
           <Feather name="activity" size={16} color={Colors.light.tint} /> Laboratory Results
         </ThemedText>

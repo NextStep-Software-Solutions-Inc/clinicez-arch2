@@ -96,7 +96,7 @@ export default function AppointmentsScreen() {
     };
 
     return (
-        <ThemedView className="flex-1 bg-slate-200 dark:bg-neutral-900">
+        <ThemedView className="flex-1">
             <ScrollView
                 className="flex-1"
                 contentContainerStyle={{ padding: 16, paddingBottom: 90 }}

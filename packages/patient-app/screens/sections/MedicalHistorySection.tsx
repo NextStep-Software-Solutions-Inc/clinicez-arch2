@@ -15,7 +15,7 @@ export default function MedicalHistorySection() {
 
     return (
         <>
-            <ThemedView className="bg-white dark:bg-neutral-900 rounded-xl py-4 px-3 mb-3 mt-2  self-center shadow-md" style={{ shadowColor: Colors.light.tint, shadowOpacity: 0.10, shadowRadius: 8, elevation: 3 }}>
+            <ThemedView className="bg-white dark:bg-neutral-900 rounded-xl py-4 px-3 mb-3 mt-2  self-center shadow-md w-full" style={{ shadowColor: Colors.light.tint, shadowOpacity: 0.10, shadowRadius: 8, elevation: 1 }}>
                 <ThemedText className="text-base font-bold mb-2 tracking-tight" style={{ color: Colors.light.tint }}>
                     <Feather name="book" size={16} color={Colors.light.tint} /> Medical History
                 </ThemedText>

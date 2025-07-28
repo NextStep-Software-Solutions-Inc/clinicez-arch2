@@ -70,7 +70,7 @@ export default function ProfileScreen() {
     return (
         <>
             <ScrollView
-                className='flex-1 bg-white dark:bg-neutral-900'
+                className='flex-1'
                 contentContainerStyle={{ alignItems: 'center', padding: 14 }}>
                 {/* Avatar with shadow and ring */}
                 <View style={{

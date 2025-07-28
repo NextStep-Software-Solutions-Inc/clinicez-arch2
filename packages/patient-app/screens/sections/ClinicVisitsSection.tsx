@@ -15,7 +15,7 @@ export default function ClinicVisitsSection() {
 
     return (
         <>
-            <ThemedView className="bg-white dark:bg-neutral-900 rounded-lg py-4 px-3 mb-4 self-center shadow-lg" style={{ shadowColor: Colors.light.tint, shadowOpacity: 0.10, shadowRadius: 8, elevation: 3 }}>
+            <ThemedView className="bg-white dark:bg-neutral-900 rounded-lg py-4 px-3 mb-4 self-center shadow-lg w-full" style={{ shadowColor: Colors.light.tint, shadowOpacity: 0.10, shadowRadius: 8, elevation: 1 }}>
                 <ThemedText className="text-base font-bold mb-2 tracking-tight" style={{ color: Colors.light.tint }}>
                     <Feather name="map-pin" size={16} color={Colors.light.tint} /> Clinic Visits
                 </ThemedText>

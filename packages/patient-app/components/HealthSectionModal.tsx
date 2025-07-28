@@ -18,21 +18,30 @@ export function HealthSectionModal({ visible, onClose, children }: HealthSection
             transparent
             onRequestClose={onClose}
         >
-            <ThemedView
-                style={styles.overlay}
-                className='flex-1 bg-black/25 justify-end'
+            <TouchableOpacity
+                activeOpacity={1}
+                style={[styles.overlay, { flex: 1 }]}
+                className="flex-1 bg-black/25 justify-end"
+                onPress={onClose}
             >
                 <ThemedView
                     style={styles.modalContent}
-                    className='bg-white dark:bg-neutral-900 shadow-lg '
-
+                    className="bg-white dark:bg-neutral-900 shadow-lg"
+                    // Prevent modal content from closing when tapped
+                    pointerEvents="box-none"
                 >
-                    {children}
-                    <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                        <ThemedText style={styles.closeText}>Close</ThemedText>
+                    <TouchableOpacity
+                        activeOpacity={1}
+                        style={{ flex: 1 }}
+                        onPress={() => { }}
+                    >
+                        {children}
+                        <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                            <ThemedText style={styles.closeText}>Close</ThemedText>
+                        </TouchableOpacity>
                     </TouchableOpacity>
                 </ThemedView>
-            </ThemedView>
+            </TouchableOpacity>
         </Modal>
     );
 }
