@@ -13,7 +13,7 @@ import { ClerkProvider } from '@clerk/clerk-expo';
 import { tokenCache } from '@clerk/clerk-expo/token-cache'
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
-const DEBUG_ALWAYS_SHOW_ONBOARDING = true; // set to true for debugging
+const DEBUG_ALWAYS_SHOW_ONBOARDING = false; // set to true for debugging
 const ONBOARDED = 'ONBOARDED'; // Key for onboarding state in SecureStore
 export default function RootLayout() {
   const colorScheme = useColorScheme();
