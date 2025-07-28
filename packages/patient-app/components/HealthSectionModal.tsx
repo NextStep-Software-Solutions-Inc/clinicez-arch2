@@ -2,6 +2,7 @@ import React from 'react';
 import { Modal, View, TouchableOpacity, StyleSheet } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { Colors } from '@/constants/Colors';
+import { ThemedView } from './ThemedView';
 
 export interface HealthSectionModalProps {
     visible: boolean;
@@ -17,26 +18,30 @@ export function HealthSectionModal({ visible, onClose, children }: HealthSection
             transparent
             onRequestClose={onClose}
         >
-            <View style={styles.overlay}>
-                <View style={styles.modalContent}>
+            <ThemedView
+                style={styles.overlay}
+                className='flex-1 bg-black/25 justify-end'
+            >
+                <ThemedView
+                    style={styles.modalContent}
+                    className='bg-white dark:bg-neutral-900 shadow-lg '
+
+                >
                     {children}
                     <TouchableOpacity onPress={onClose} style={styles.closeButton}>
                         <ThemedText style={styles.closeText}>Close</ThemedText>
                     </TouchableOpacity>
-                </View>
-            </View>
+                </ThemedView>
+            </ThemedView>
         </Modal>
     );
 }
 
 const styles = StyleSheet.create({
     overlay: {
-        flex: 1,
         justifyContent: 'flex-end',
-        backgroundColor: 'rgba(0,0,0,0.25)',
     },
     modalContent: {
-        backgroundColor: '#fff',
         borderTopLeftRadius: 14,
         borderTopRightRadius: 14,
         padding: 18,

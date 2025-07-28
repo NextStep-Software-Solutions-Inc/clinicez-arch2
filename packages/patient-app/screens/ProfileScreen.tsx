@@ -69,7 +69,9 @@ export default function ProfileScreen() {
 
     return (
         <>
-            <ScrollView style={{ flex: 1, backgroundColor: '#fff' }} contentContainerStyle={{ alignItems: 'center', padding: 14 }}>
+            <ScrollView
+                className='flex-1 bg-white dark:bg-neutral-900'
+                contentContainerStyle={{ alignItems: 'center', padding: 14 }}>
                 {/* Avatar with shadow and ring */}
                 <View style={{
                     shadowColor: Colors.light.tint,
@@ -104,22 +106,34 @@ export default function ProfileScreen() {
                     editTitle="Edit Basic Information"
                     user={user}
                 >
-                    <ThemedText style={{ fontSize: 15, marginBottom: 4 }}>
+                    <ThemedText style={{ fontSize: 14, marginBottom: 4 }}
+                        className='dark:text-slate-500'
+                    >
                         Gender: {user.gender}
                     </ThemedText>
-                    <ThemedText style={{ fontSize: 15, marginBottom: 4 }}>
+                    <ThemedText style={{ fontSize: 15, marginBottom: 4 }}
+                        className='dark:text-slate-500'
+                    >
                         Birthdate: {user.birthdate}
                     </ThemedText>
-                    <ThemedText style={{ fontSize: 15, marginBottom: 4 }}>
+                    <ThemedText style={{ fontSize: 15, marginBottom: 4 }}
+                        className='dark:text-slate-500'
+                    >
                         Blood Type: {user.blood_type}
                     </ThemedText>
-                    <ThemedText style={{ fontSize: 15, marginBottom: 4 }}>
+                    <ThemedText style={{ fontSize: 15, marginBottom: 4 }}
+                        className='dark:text-slate-500'
+                    >
                         Religion: {user.religion}
                     </ThemedText>
-                    <ThemedText style={{ fontSize: 15, marginBottom: 4 }}>
+                    <ThemedText style={{ fontSize: 15, marginBottom: 4 }}
+                        className='dark:text-slate-500'
+                    >
                         Email: {user.email_address}
                     </ThemedText>
-                    <ThemedText style={{ fontSize: 15, marginBottom: 4 }}>
+                    <ThemedText style={{ fontSize: 15, marginBottom: 4 }}
+                        className='dark:text-slate-500'
+                    >
                         Phone: {user.phone_number}
                     </ThemedText>
                 </ProfileCard>
@@ -133,7 +147,9 @@ export default function ProfileScreen() {
                         Disabilities
                     </ThemedText>
                     {disabilities.map((dis, i) => (
-                        <ThemedView key={i} style={{ marginBottom: 8, padding: 8, backgroundColor: '#f8fafc', borderRadius: 10 }}>
+                        <ThemedView key={i}
+                            className='mb-4 p-4 bg-slate-200 dark:bg-slate-900 rounded-lg shadow-sm'
+                        >
                             <ThemedText style={{ fontSize: 16, color: Colors.light.tint, fontWeight: 'bold' }}>{dis.name}</ThemedText>
                             <ThemedText style={{ fontSize: 14, color: '#666' }}>Diagnosed: {dis.diagnosed}</ThemedText>
                             <ThemedText style={{ fontSize: 14, color: '#666' }}>By: {dis.doctor}</ThemedText>
@@ -144,7 +160,7 @@ export default function ProfileScreen() {
                         Illnesses
                     </ThemedText>
                     {illnesses.map((ill, i) => (
-                        <ThemedView key={i} style={{ marginBottom: 8, padding: 8, backgroundColor: '#f8fafc', borderRadius: 10 }}>
+                        <ThemedView key={i} className='mb-4 p-4 bg-slate-200 dark:bg-slate-900 rounded-lg shadow-sm'>
                             <ThemedText style={{ fontSize: 16, color: Colors.light.tint, fontWeight: 'bold' }}>{ill.name}</ThemedText>
                             <ThemedText style={{ fontSize: 14, color: '#666' }}>Diagnosed: {ill.diagnosed}</ThemedText>
                             <ThemedText style={{ fontSize: 14, color: '#666' }}>By: {ill.doctor}</ThemedText>
@@ -187,19 +203,18 @@ export default function ProfileScreen() {
                         Contact: {user.emergency_contacts.secondary.contact}
                     </ThemedText>
                 </ProfileCard>
-                <ThemedView style={{
-                    backgroundColor: '#fff',
-                    borderRadius: 14,
-                    padding: 18,
-                    marginBottom: 24,
-                    width: '100%',
-                    shadowColor: Colors.light.tint,
-                    shadowOpacity: 0.12,
-                    shadowRadius: 8,
-                    elevation: 2,
-                    alignItems: 'center',
-                }}>
-                    <ThemedText style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 2 }}>
+                <ThemedView
+                    style={{
+                        shadowColor: Colors.light.tint,
+                        shadowOpacity: 0.12,
+                        shadowRadius: 8,
+                        elevation: 2,
+                    }}
+                    className="bg-slate-100 dark:bg-slate-800  rounded-lg p-4 mb-4 self-center shadow-md"
+                >
+                    <ThemedText style={{ fontSize: 16, fontWeight: 'bold', marginBottom: 2 }}
+                        className='dark:text-slate-500'
+                    >
                         Active Clinic
                     </ThemedText>
                     <ThemedText style={{ fontSize: 18, fontWeight: 'bold', color: Colors.light.tint }}>

@@ -4,6 +4,9 @@ import { ThemedText } from '@/components/ThemedText';
 import { Colors } from '@/constants/Colors';
 import { Feather } from '@expo/vector-icons';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetView } from '@gorhom/bottom-sheet';
+import { ThemedView } from './ThemedView';
+import { useColorScheme } from '@/hooks/useColorScheme';
+import { Gesture, GestureHandlerRootView } from 'react-native-gesture-handler';
 
 export type EditSheetProps = {
     visible: boolean;
@@ -14,6 +17,7 @@ export type EditSheetProps = {
 
 export default function EditSheet({ visible, onClose, title, children }: EditSheetProps) {
     const sheetRef = useRef<BottomSheet>(null);
+    const scheme = useColorScheme()
     const snapPoints = [320, '70%'];
 
     // Open/close sheet based on visible prop
@@ -36,41 +40,46 @@ export default function EditSheet({ visible, onClose, title, children }: EditShe
 
     return (
         <Modal visible={visible} transparent >
-            <BottomSheet
-                ref={sheetRef}
-                index={1}
-                snapPoints={snapPoints}
-                enablePanDownToClose
-                onChange={handleSheetChange}
-                backdropComponent={props => (
-                    <BottomSheetBackdrop
-                        {...props}
-                        disappearsOnIndex={-1}
-                        appearsOnIndex={0}
-                        pressBehavior="close"
-                    />
-                )}
-                backgroundStyle={styles.sheetBg}
-            >
-                <BottomSheetView style={styles.contentContainer}>
-                    <View style={styles.headerRow}>
-                        <ThemedText style={styles.title}>{title}</ThemedText>
-                        <TouchableOpacity onPress={onClose}>
-                            <Feather name="x" size={24} color={Colors.light.tint} />
-                        </TouchableOpacity>
-                    </View>
-                    <View style={styles.scrollArea}>
-                        {children}
-                    </View>
-                </BottomSheetView>
-            </BottomSheet>
+            <GestureHandlerRootView>
+                <BottomSheet
+                    ref={sheetRef}
+                    index={1}
+                    snapPoints={snapPoints}
+                    enablePanDownToClose
+                    onChange={handleSheetChange}
+                    backdropComponent={props => (
+                        <BottomSheetBackdrop
+                            {...props}
+                            disappearsOnIndex={-1}
+                            appearsOnIndex={0}
+                            pressBehavior="close"
+                        />
+                    )}
+                    backgroundStyle={{ ...styles.sheetBg, backgroundColor: scheme === 'dark' ? Colors.dark.background : Colors.light.background }}
+                >
+                    <BottomSheetView style={styles.contentContainer}>
+                        <ThemedView
+                            style={styles.headerRow}
+
+                        >
+                            <ThemedText style={styles.title}>{title}</ThemedText>
+                            <TouchableOpacity onPress={onClose}>
+                                <Feather name="x" size={24} color={Colors.light.tint} />
+                            </TouchableOpacity>
+                        </ThemedView>
+                        <View style={styles.scrollArea}>
+                            {children}
+                        </View>
+                    </BottomSheetView>
+                </BottomSheet>
+            </GestureHandlerRootView>
         </Modal>
     );
 }
 
 const styles = StyleSheet.create({
     sheetBg: {
-        backgroundColor: '#fff',
+        backgroundColor: 'transparent',
         borderTopLeftRadius: 18,
         borderTopRightRadius: 18,
         shadowColor: '#000',
@@ -89,6 +98,7 @@ const styles = StyleSheet.create({
         marginBottom: 12,
     },
     title: {
+        color: Colors.light.tint,
         fontSize: 20,
         fontWeight: 'bold',
     },

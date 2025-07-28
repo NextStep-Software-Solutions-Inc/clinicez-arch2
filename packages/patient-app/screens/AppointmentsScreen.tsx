@@ -51,16 +51,13 @@ export default function AppointmentsScreen() {
     const clinicName = clinic?.name || 'Current Clinic';
     const dummyAppointments = useDummyAppointments(clinicName);
 
-    // Track scroll state with debounced timer
     const [isScrolling, setIsScrolling] = useState(false);
     const scrollTimeout = useRef<number | null>(null);
 
-    // Show button if not scrolling, or always if few appointments
     const alwaysShowButton = dummyAppointments.length <= 8;
     const showButton = alwaysShowButton || !isScrolling;
 
-    // Animation for button slide
-    const slideAnim = useRef(new Animated.Value(0)).current; // 0: visible, 1: hidden
+    const slideAnim = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
         if (alwaysShowButton) {
@@ -87,78 +84,76 @@ export default function AppointmentsScreen() {
         }
     }, [isScrolling, alwaysShowButton, slideAnim]);
 
-    // Improved scroll handler: hide button on scroll, show immediately when scroll stops
     const handleScroll = () => {
-        setIsScrolling(true); // Hide button immediately on scroll
+        setIsScrolling(true);
         if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
     };
     const handleScrollEndDrag = () => {
-        setIsScrolling(false); // Show button immediately when drag ends
+        setIsScrolling(false);
     };
     const handleMomentumScrollEnd = () => {
-        setIsScrolling(false); // Show button immediately when momentum ends
+        setIsScrolling(false);
     };
 
     return (
-        <ThemedView style={{ flex: 1, backgroundColor: '#fff' }}>
+        <ThemedView className="flex-1 bg-slate-200 dark:bg-neutral-900">
             <ScrollView
-                style={{ flex: 1 }}
+                className="flex-1"
                 contentContainerStyle={{ padding: 16, paddingBottom: 90 }}
                 onScroll={handleScroll}
                 onScrollEndDrag={handleScrollEndDrag}
                 onMomentumScrollEnd={handleMomentumScrollEnd}
+                showsVerticalScrollIndicator={false}
                 scrollEventThrottle={16}
             >
-                <ThemedView style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 18, justifyContent: 'space-between' }}>
-                    <ThemedText style={{ fontSize: 32, fontWeight: 'bold', color: Colors.light.tint, letterSpacing: 0.5 }}>
+                <ThemedView className="flex-row items-center mb-4 justify-between">
+                    <ThemedText className="text-2xl font-bold tracking-wide" style={{ color: Colors.light.tint }}>
                         Appointments
                     </ThemedText>
-                    <Feather name="calendar" size={32} color={Colors.light.tint} style={{ marginLeft: 8 }} />
+                    <Feather name="calendar" size={24} color={Colors.light.tint} style={{ marginLeft: 8 }} />
                 </ThemedView>
                 {dummyAppointments.map(appt => (
                     <ThemedView
                         key={appt.id}
-                        style={{
-                            backgroundColor: '#fff',
-                            borderRadius: 18,
-                            padding: 0,
-                            marginBottom: 22,
-                            shadowColor: Colors.light.tint,
-                            shadowOpacity: 0.12,
-                            shadowRadius: 12,
-                            elevation: 4,
-                            overflow: 'hidden',
-                        }}
+                        className="bg-white dark:bg-neutral-800 rounded-2xl mb-5 shadow"
+                        style={{ padding: 0, overflow: 'hidden' }}
                     >
-                        <ThemedView style={{
-                            backgroundColor: appt.status === 'Confirmed' ? Colors.light.tint : appt.status === 'Pending' ? '#fbbf24' : '#ef4444',
-                            paddingVertical: 10,
-                            paddingHorizontal: 18,
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                        }}>
+                        <ThemedView
+                            className={`flex-row items-center py-2.5 px-4 ${appt.status === 'Confirmed'
+                                ? 'bg-green-600 dark:bg-green-700'
+                                : appt.status === 'Pending'
+                                    ? 'bg-yellow-600 dark:bg-yellow-700'
+                                    : 'bg-red-600 dark:bg-red-700'
+                                }`}
+                        >
                             <Feather
-                                name={appt.status === 'Confirmed' ? 'check-circle' : appt.status === 'Pending' ? 'clock' : 'x-circle'}
+                                name={
+                                    appt.status === 'Confirmed'
+                                        ? 'check-circle'
+                                        : appt.status === 'Pending'
+                                            ? 'clock'
+                                            : 'x-circle'
+                                }
                                 size={28}
                                 color={'#fff'}
                                 style={{ marginRight: 10 }}
                             />
-                            <ThemedText style={{ color: '#fff', fontWeight: 'bold', fontSize: 16, flex: 1 }} numberOfLines={1}>
+                            <ThemedText className="font-bold text-base flex-1 text-white" numberOfLines={1}>
                                 {appt.status}
                             </ThemedText>
-                            <ThemedText style={{ color: '#fff', fontWeight: 'bold', fontSize: 13, opacity: 0.7 }}>
+                            <ThemedText className="font-bold text-sm text-white opacity-70">
                                 #{appt.id}
                             </ThemedText>
                         </ThemedView>
-                        <ThemedView style={{ padding: 18 }}>
-                            <ThemedText style={{ fontSize: 20, fontWeight: 'bold', marginBottom: 4, color: Colors.light.tint }}>
+                        <ThemedView className="p-4">
+                            <ThemedText className="text-xl font-bold mb-1" style={{ color: Colors.light.tint }}>
                                 {appt.about}
                             </ThemedText>
-                            <ThemedText style={{ fontSize: 16, color: '#444', marginBottom: 2 }}>
+                            <ThemedText className="text-base text-neutral-700 dark:text-neutral-300 mb-0.5 flex-row items-center">
                                 <Feather name="user" size={16} color={Colors.light.tint} />{' '}
                                 {appt.doctor}
                             </ThemedText>
-                            <ThemedText style={{ fontSize: 16, color: '#444', marginBottom: 2 }}>
+                            <ThemedText className="text-base text-neutral-700 dark:text-neutral-300 mb-0.5 flex-row items-center">
                                 <Feather name="calendar" size={16} color={Colors.light.tint} />{' '}
                                 {appt.date}
                                 {'  '}
@@ -171,47 +166,30 @@ export default function AppointmentsScreen() {
             </ScrollView>
             <Animated.View
                 style={{
-                    position: 'absolute',
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    padding: 16,
-                    backgroundColor: 'rgba(255,255,255,0.95)',
-                    borderTopLeftRadius: 18,
-                    borderTopRightRadius: 18,
-                    shadowColor: Colors.light.tint,
-                    shadowOpacity: 0.10,
-                    shadowRadius: 8,
                     elevation: 8,
                     transform: [
                         {
                             translateY: slideAnim.interpolate({
                                 inputRange: [0, 1],
-                                outputRange: [0, 120], // Slide up by 120px when hidden
+                                outputRange: [0, 120],
                             }),
                         },
                     ],
                     opacity: slideAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.2] }),
                 }}
                 pointerEvents={showButton ? 'auto' : 'none'}
+                className="p-4 rounded-t-2xl absolute bottom-0 left-0 right-0 shadow-lg shadow-slate-800/90 "
             >
-                <TouchableOpacity
-                    style={{
-                        backgroundColor: Colors.light.tint,
-                        borderRadius: 8,
-                        paddingVertical: 16,
-                        alignItems: 'center',
-                        shadowColor: Colors.light.tint,
-                        shadowOpacity: 0.12,
-                        shadowRadius: 4,
-                        elevation: 2,
-                    }}
-                    onPress={() => {/* TODO: Add appointment logic */ }}
-                >
-                    <ThemedText style={{ color: '#fff', fontWeight: 'bold', fontSize: 18, letterSpacing: 0.5 }}>
-                        Book New Appointment
-                    </ThemedText>
-                </TouchableOpacity>
+                <ThemedView className="bg-white dark:bg-neutral-900 rounded-xl">
+                    <TouchableOpacity
+                        className="rounded-xl py-4 flex items-center bg-blue-600 dark:bg-slate-700"
+                        onPress={() => {/* TODO: Add appointment logic */ }}
+                    >
+                        <ThemedText className="text-white font-bold text-lg tracking-wide">
+                            Book New Appointment
+                        </ThemedText>
+                    </TouchableOpacity>
+                </ThemedView>
             </Animated.View>
         </ThemedView>
     );

@@ -5,6 +5,7 @@ import { ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { HelloWave } from '@/components/HelloWave';
 
 export default function HomeScreen() {
     const colorScheme = useColorScheme();
@@ -78,7 +79,8 @@ export default function HomeScreen() {
                     {/* Greeting */}
                     <ThemedView className='px-4 mt-4'>
                         <ThemedView className="flex-row items-center w-full">
-                            <ThemedText className="text-4xl font-black text-blue-700 dark:text-blue-300 leading-tight">Hi, Wave!</ThemedText>
+                            <HelloWave />
+                            <ThemedText className="text-4xl font-black text-blue-700 dark:text-blue-300 leading-tight"> Hi, Wave!</ThemedText>
                         </ThemedView>
                         <ThemedText className="text-xl text-slate-600 dark:text-slate-300 mb-4 text-left w-full">
                             Here’s what’s happening with your health today.

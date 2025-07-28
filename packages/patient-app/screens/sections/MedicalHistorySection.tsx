@@ -1,32 +1,59 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { TouchableOpacity } from 'react-native';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { Feather } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
 import dummyHealth from '@/screens/HealthScreenData';
+import { HealthSectionModal } from '../../components/HealthSectionModal';
+import { format } from 'date-fns/format';
 
-export default function MedicalHistorySection({ onSelect }: { onSelect?: (item: any) => void }) {
+type MedicalHistoryItem = typeof dummyHealth.medicalHistory[number];
+
+export default function MedicalHistorySection() {
+    const [selectedItem, setSelectedItem] = useState<MedicalHistoryItem | null>(null);
+
     return (
-        <ThemedView style={{ backgroundColor: '#fff', borderRadius: 14, paddingVertical: 16, paddingHorizontal: 12, marginBottom: 14, marginTop: 10, width: '96%', alignSelf: 'center', shadowColor: Colors.light.tint, shadowOpacity: 0.10, shadowRadius: 8, elevation: 3 }}>
-            <ThemedText style={{ fontSize: 16, fontWeight: 'bold', color: Colors.light.tint, marginBottom: 8, letterSpacing: 0.2 }}>
-                <Feather name="book" size={16} color={Colors.light.tint} /> Medical History
-            </ThemedText>
-            {dummyHealth.medicalHistory.map((item, i) => (
-                <TouchableOpacity key={i} onPress={() => onSelect && onSelect(item)}>
-                    <ThemedView style={{ marginBottom: 8, backgroundColor: Colors.light.tint + '11', borderRadius: 8, padding: 8 }}>
-                        <ThemedText style={{ fontSize: 13, color: Colors.light.tint, fontWeight: 'bold', marginBottom: 2 }}>
-                            <Feather name="calendar" size={12} color={Colors.light.tint} /> {item.date}: {item.event}
+        <>
+            <ThemedView className="bg-white dark:bg-neutral-900 rounded-xl py-4 px-3 mb-3 mt-2  self-center shadow-md" style={{ shadowColor: Colors.light.tint, shadowOpacity: 0.10, shadowRadius: 8, elevation: 3 }}>
+                <ThemedText className="text-base font-bold mb-2 tracking-tight" style={{ color: Colors.light.tint }}>
+                    <Feather name="book" size={16} color={Colors.light.tint} /> Medical History
+                </ThemedText>
+                {dummyHealth.medicalHistory.map((item: MedicalHistoryItem, i: number) => (
+                    <TouchableOpacity key={i} onPress={() => setSelectedItem(item)}>
+                        <ThemedView className="mb-2 bg-slate-100 dark:bg-neutral-800 rounded-lg py-2 px-2">
+                            <ThemedText className="text-sm font-bold mb-0.5" style={{ color: Colors.light.tint }}>
+                                <Feather name="calendar" size={12} color={Colors.light.tint} /> {format(item.date, 'MMMM d, yyyy')}: {item.event}
+                            </ThemedText>
+                            <ThemedText className="text-sm mb-0.5 text-neutral-700 dark:text-neutral-300">
+                                <Feather name="user" size={10} color={Colors.light.tint} /> {item.doctor}
+                            </ThemedText>
+                            <ThemedText className="text-sm text-neutral-500 dark:text-neutral-300">
+                                <Feather name="info" size={10} color={Colors.light.tint} /> {item.notes}
+                            </ThemedText>
+                        </ThemedView>
+                    </TouchableOpacity>
+                ))}
+            </ThemedView>
+            <HealthSectionModal
+                visible={!!selectedItem}
+                onClose={() => setSelectedItem(null)}
+            >
+                {selectedItem ? (
+                    <>
+                        <ThemedText style={{ fontSize: 18, fontWeight: 'bold', color: Colors.light.tint, marginBottom: 8 }}>{selectedItem.event}</ThemedText>
+                        <ThemedText style={{ fontSize: 15, color: '#444', marginBottom: 4 }}>
+                            <Feather name="calendar" size={14} color={Colors.light.tint} /> {format(selectedItem.date, 'MMMM d, yyyy')}
                         </ThemedText>
-                        <ThemedText style={{ fontSize: 12, color: '#444', marginBottom: 2 }}>
-                            <Feather name="user" size={10} color={Colors.light.tint} /> {item.doctor}
+                        <ThemedText style={{ fontSize: 15, color: '#444', marginBottom: 4 }}>
+                            <Feather name="user" size={14} color={Colors.light.tint} /> {selectedItem.doctor}
                         </ThemedText>
-                        <ThemedText style={{ fontSize: 12, color: '#888' }}>
-                            <Feather name="info" size={10} color={Colors.light.tint} /> {item.notes}
+                        <ThemedText style={{ fontSize: 14, color: '#888', marginBottom: 10 }}>
+                            <Feather name="info" size={14} color={Colors.light.tint} /> {selectedItem.notes}
                         </ThemedText>
-                    </ThemedView>
-                </TouchableOpacity>
-            ))}
-        </ThemedView>
+                    </>
+                ) : null}
+            </HealthSectionModal>
+        </>
     );
 }

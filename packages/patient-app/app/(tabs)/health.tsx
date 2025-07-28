@@ -1,4 +1,4 @@
 
-import HealthScreen from '../../screens/HealthScreen';
+import HealthScreen from '@/screens/HealthScreen';
 export default HealthScreen;
 

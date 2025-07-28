@@ -55,27 +55,28 @@ export default function ProfileCard({ title, children, editTitle, user }: Profil
     };
 
     return (
-        <ThemedView style={{
-            backgroundColor: '#f7f7f7',
-            borderRadius: 14,
-            padding: 18,
-            marginBottom: 18,
-            width: '100%',
-            shadowColor: Colors.light.tint,
-            shadowOpacity: 0.08,
-            shadowRadius: 6,
-            elevation: 1,
-            position: 'relative',
-        }}>
-            <View style={{ position: 'absolute', top: 18, right: 18, zIndex: 10 }}>
+        <ThemedView
+
+            style={{
+                shadowColor: Colors.light.tint,
+                shadowOpacity: 0.08,
+                shadowRadius: 6,
+                elevation: 1,
+            }}
+            className='bg-slate-100 dark:bg-slate-800 rounded-xl p-4 mb-4 relative w-full'
+
+        >
+            <ThemedView style={{ position: 'absolute', top: 18, right: 18, zIndex: 10 }}>
                 <TouchableOpacity
                     onPress={handleEditOpen}
                     hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                 >
                     <Feather name="edit" size={24} color={Colors.light.tint} />
                 </TouchableOpacity>
-            </View>
-            <ThemedText style={{ fontSize: 17, fontWeight: 'bold', marginBottom: 8 }}>
+            </ThemedView>
+            <ThemedText
+                className='dark:text-slate-500 text-xl mb-1'
+            >
                 {title}
             </ThemedText>
             {children}
@@ -92,49 +93,50 @@ export default function ProfileCard({ title, children, editTitle, user }: Profil
                             keyboardShouldPersistTaps="handled"
                             showsVerticalScrollIndicator={true}
                         >
-                            <View style={{ marginBottom: 10 }}>
-                                <ThemedText>Full Name</ThemedText>
-                                <Input value={form.full_name} onChangeText={v => handleChange('full_name', v)} placeholder="Full Name"
+                            <ThemedView className='mb-2'>
+                                <Input value={form.full_name} onChangeText={v => handleChange('full_name', v)}
+
+                                    placeholder="Full Name"
                                     onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })}
                                 />
-                            </View>
-                            <View style={{ marginBottom: 10 }}>
-                                <ThemedText>Gender</ThemedText>
+                            </ThemedView>
+                            <ThemedView className='mb-2'>
+                                <ThemedText className='dark:text-slate-500'>Gender</ThemedText>
                                 <Input value={form.gender} onChangeText={v => handleChange('gender', v)} placeholder="Gender"
                                     onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })}
                                 />
-                            </View>
-                            <View style={{ marginBottom: 10 }}>
-                                <ThemedText>Birthdate</ThemedText>
+                            </ThemedView>
+                            <ThemedView className='mb-2'>
+                                <ThemedText className='dark:text-slate-500'>Birthdate</ThemedText>
                                 <Input value={form.birthdate} onChangeText={v => handleChange('birthdate', v)} placeholder="YYYY-MM-DD"
                                     onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })}
                                 />
-                            </View>
-                            <View style={{ marginBottom: 10 }}>
-                                <ThemedText>Blood Type</ThemedText>
+                            </ThemedView>
+                            <ThemedView className='mb-2'>
+                                <ThemedText className='dark:text-slate-500'>Blood Type</ThemedText>
                                 <Input value={form.blood_type} onChangeText={v => handleChange('blood_type', v)} placeholder="Blood Type"
                                     onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })}
                                 />
-                            </View>
-                            <View style={{ marginBottom: 10 }}>
-                                <ThemedText>Religion</ThemedText>
+                            </ThemedView>
+                            <ThemedView className='mb-2'>
+                                <ThemedText className='dark:text-slate-500'>Religion</ThemedText>
                                 <Input value={form.religion} onChangeText={v => handleChange('religion', v)} placeholder="Religion"
                                     onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })}
                                 />
-                            </View>
-                            <View style={{ marginBottom: 10 }}>
-                                <ThemedText>Email</ThemedText>
+                            </ThemedView>
+                            <ThemedView className='mb-2'>
+                                <ThemedText className='dark:text-slate-500'>Email</ThemedText>
                                 <Input value={form.email_address} onChangeText={v => handleChange('email_address', v)} placeholder="Email"
                                     onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })}
                                 />
-                            </View>
-                            <View style={{ marginBottom: 10 }}>
-                                <ThemedText>Phone</ThemedText>
+                            </ThemedView>
+                            <ThemedView className='mb-2'>
+                                <ThemedText className='dark:text-slate-500'>Phone</ThemedText>
                                 <Input value={form.phone_number} onChangeText={v => handleChange('phone_number', v)} placeholder="Phone"
                                     onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })}
                                 />
-                            </View>
-                            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 18 }}>
+                            </ThemedView>
+                            <ThemedView style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 18 }}>
                                 <TouchableOpacity
                                     style={{ marginRight: 12, paddingVertical: 8, paddingHorizontal: 18, backgroundColor: '#eee', borderRadius: 8 }}
                                     onPress={() => setEditVisible(false)}
@@ -147,7 +149,7 @@ export default function ProfileCard({ title, children, editTitle, user }: Profil
                                 >
                                     <ThemedText style={{ color: '#fff', fontWeight: 'bold' }}>Save</ThemedText>
                                 </TouchableOpacity>
-                            </View>
+                            </ThemedView>
                         </ScrollView>
                     </KeyboardAvoidingView>
                 ) : (
@@ -160,15 +162,17 @@ export default function ProfileCard({ title, children, editTitle, user }: Profil
 
 // Simple input component using ThemedView and TextInput
 import { TextInput } from 'react-native';
+import { useColorScheme } from '@/hooks/useColorScheme';
 // Removed incorrect ScrollView import
 function Input({ value, onChangeText, placeholder, onFocus }: { value: string; onChangeText: (v: string) => void; placeholder?: string; onFocus?: () => void }) {
+    const colorScheme = useColorScheme();
     return (
         <ThemedView style={{ borderWidth: 1, borderColor: Colors.light.tint, borderRadius: 8, marginTop: 4, marginBottom: 2 }}>
             <TextInput
                 value={value}
                 onChangeText={onChangeText}
                 placeholder={placeholder}
-                style={{ padding: 10, fontSize: 15 }}
+                style={{ padding: 10, fontSize: 15, color: colorScheme === 'dark' ? '#aaa' : Colors.light.text }}
                 placeholderTextColor="#999"
                 onFocus={onFocus}
             />
