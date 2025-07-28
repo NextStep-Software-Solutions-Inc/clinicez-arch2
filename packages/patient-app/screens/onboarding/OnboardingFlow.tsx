@@ -1,23 +1,25 @@
 
 import { use, useEffect, useState } from 'react';
 import { SignedIn, SignedOut, useSignIn, useSignUp } from '@clerk/clerk-expo';
+import { useRouter } from 'expo-router';
 import WelcomeScreen from './WelcomeScreen';
 import FeatureCarousel from './FeatureCarousel';
-import JoinClinicScreen from './JoinClinicScreen';
-import ConfirmScreen from './ConfirmScreen';
-import { SignInScreen } from './ClerkAuthScreens';
 
 export default function OnboardingFlow({ onFinish }: { onFinish: () => void }) {
-    // Call onFinish when signed in
-    // Clerk hooks for authentication
-    const { signIn } = useSignIn();
-    const { signUp } = useSignUp();
     const [step, setStep] = useState(0);
+    const router = useRouter();
 
     // Handler to exit onboarding (calls onFinish)
     const handleExit = () => {
         onFinish();
     };
+    // When signed in, check if patient has a clinic and route accordingly
+    function FinishedOnboarding({ onFinish }: { onFinish: () => void }) {
+        useEffect(() => {
+            onFinish();
+        }, [onFinish]);
+        return null;
+    }
 
     return (
         <>
@@ -35,19 +37,7 @@ export default function OnboardingFlow({ onFinish }: { onFinish: () => void }) {
                         onContinue={onFinish}
                     />
                 )}
-                {/* {step === 2 && (
-                    <JoinClinicScreen
-                        onJoin={() => setStep(3)}
-                        onBack={() => setStep(1)}
-                        onExit={handleExit}
-                    />
-                )}
-                {step === 3 && (
-                    <ConfirmScreen
-                        onContinue={onFinish}
-                        onBack={() => setStep(2)}
-                    />
-                )} */}
+                {/* Joining Clinic and Confirming have been moved to a separate route and will only show when patient has no clinic. */}
             </SignedOut>
             <SignedIn>
                 <FinishedOnboarding onFinish={onFinish} />
@@ -55,14 +45,4 @@ export default function OnboardingFlow({ onFinish }: { onFinish: () => void }) {
         </>
     );
 }
-
-interface FinishedOnboardingProps {
-    onFinish: () => void;
-}
-function FinishedOnboarding({ onFinish }: FinishedOnboardingProps) {
-    useEffect(() => {
-        // This component is just a placeholder to call onFinish
-        onFinish();
-    }, [onFinish]);
-    return null; // No UI, just a side effect
-}
+// FinishedOnboarding is now defined inline above

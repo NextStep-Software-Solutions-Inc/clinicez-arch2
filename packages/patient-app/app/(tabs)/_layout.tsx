@@ -9,14 +9,30 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 
 import { Feather } from '@expo/vector-icons';
 import { GlobalHeader } from '@/components/GlobalHeader';
+import JoinClinicScreen from '@/screens/onboarding/JoinClinicScreen';
+import { useClinicContext } from '@/components/ClinicContext';
 
-const currentClinic = {
-  name: 'Downtown Medical Center',
-  address: '123 Main St, Cityville',
-  // logo: '...' // could add logo uri here
-};
+
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const { currentClinicId, setCurrentClinicId } = useClinicContext();
+  console.log('TabLayout mounted, currentClinicId:', currentClinicId);
+
+  if (!currentClinicId) {
+    return (
+      <JoinClinicScreen
+        onJoin={(clinicId) => {
+          setCurrentClinicId(clinicId);
+        }}
+        onBack={() => {
+          // Handle back navigation if needed
+        }}
+        onExit={() => {
+          // Handle exit action, e.g., redirect to home or sign-in
+        }}
+      />
+    );
+  }
 
   return (
     <Tabs

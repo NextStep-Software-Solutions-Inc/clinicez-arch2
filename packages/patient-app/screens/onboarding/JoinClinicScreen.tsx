@@ -17,11 +17,7 @@ export default function JoinClinicScreen({ onJoin, onBack, onExit }: JoinClinicS
             {/* Top bar for navigation */}
             {(onBack || onExit) && (
                 <View className="flex-row w-full justify-between items-center px-6 pt-10 pb-2">
-                    {onBack ? (
-                        <Pressable onPress={onBack} className="py-1 px-2" android_ripple={{ color: '#e2e8f0' }}>
-                            <Text className="text-blue-600 font-semibold">Back</Text>
-                        </Pressable>
-                    ) : <View />}
+
                     {onExit ? (
                         <Pressable onPress={onExit} className="py-1 px-2" android_ripple={{ color: '#e2e8f0' }}>
                             <Text className="text-slate-500 font-semibold">Exit</Text>

@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import * as SecureStore from 'expo-secure-store';
+import JoinClinicScreen from '@/screens/onboarding/JoinClinicScreen';
+import JoinClinicRoute from '@/app/join-clinic';
 const CURRENT_CLINIC_ID = 'CURRENT_CLINIC_ID';
 
 export type Clinic = {
@@ -23,32 +25,38 @@ const defaultClinics: Clinic[] = [
 
 export type ClinicContextType = {
     clinics: Clinic[];
-    currentClinicId: string;
-    setCurrentClinicId: (id: string) => void;
+    currentClinicId: string | null;
+    setCurrentClinicId: (id: string | null) => void;
 };
 
 const ClinicContext = createContext<ClinicContextType | undefined>(undefined);
 
 export function ClinicProvider({ children }: { children: ReactNode }) {
-    const [currentClinicId, setCurrentClinicIdState] = useState(defaultClinics[0].id);
+    const [currentClinicId, setCurrentClinicId] = useState<string | null>(defaultClinics[0].id);
 
     // Load persisted clinic id on mount
     useEffect(() => {
         SecureStore.getItemAsync(CURRENT_CLINIC_ID).then(val => {
             if (val && defaultClinics.some(c => c.id === val)) {
-                setCurrentClinicIdState(val);
+                setCurrentClinicId(val);
             }
         });
     }, []);
 
     // Persist clinic id on change
-    const setCurrentClinicId = (id: string) => {
-        setCurrentClinicIdState(id);
-        SecureStore.setItemAsync(CURRENT_CLINIC_ID, id);
+    const setCurrentClinicIdState = (id: string | null) => {
+
+        setCurrentClinicId(id);
+        if (id) {
+            SecureStore.setItemAsync(CURRENT_CLINIC_ID, id);
+        } else {
+            SecureStore.deleteItemAsync(CURRENT_CLINIC_ID);
+        }
     };
 
+
     return (
-        <ClinicContext.Provider value={{ clinics: defaultClinics, currentClinicId, setCurrentClinicId }}>
+        <ClinicContext.Provider value={{ clinics: defaultClinics, currentClinicId, setCurrentClinicId: setCurrentClinicIdState }}>
             {children}
         </ClinicContext.Provider>
     );

@@ -3,17 +3,19 @@ import { useRouter } from 'expo-router'
 import { Text, TouchableOpacity } from 'react-native'
 import { ThemedText } from './ThemedText'
 import { Colors } from '@/constants/Colors'
+import { useClinicContext } from './ClinicContext'
 
 export const SignOutButton = () => {
-    // Use `useClerk()` to access the `signOut()` function
     const { signOut } = useClerk()
+    const { setCurrentClinicId } = useClinicContext()
     const router = useRouter()
 
     const handleSignOut = async () => {
         try {
             await signOut()
             // Redirect to your desired page
-            router.replace('/(auth)/sign-in')
+            // router.replace('/(auth)/sign-in')
+            setCurrentClinicId(null) // Clear the current clinic ID
         } catch (err) {
             // See https://clerk.com/docs/custom-flows/error-handling
             // for more info on error handling

@@ -24,7 +24,7 @@ export default function Page() {
             })
             if (signInAttempt.status === 'complete') {
                 await setActive({ session: signInAttempt.createdSessionId })
-                router.replace('/')
+                router.replace('/join-clinic')
             } else {
                 setErrorMsg('Sign in incomplete. Please check your credentials or complete additional steps.');
                 console.error(JSON.stringify(signInAttempt, null, 2))
