@@ -42,15 +42,21 @@ export default function RootLayout() {
     return <OnboardingFlow onFinish={handleOnboardingFinish} />;
   }
 
+  // --- GestureHandlerRootView required for gesture handler v2+ ---
+  // Import here to avoid breaking SSR/static analysis
+  const { GestureHandlerRootView } = require('react-native-gesture-handler');
+
   return (
-    <ClinicProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="+not-found" />
-        </Stack>
-        <StatusBar style="auto" />
-      </ThemeProvider>
-    </ClinicProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ClinicProvider>
+        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+          <Stack>
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="+not-found" />
+          </Stack>
+          <StatusBar style="auto" />
+        </ThemeProvider>
+      </ClinicProvider>
+    </GestureHandlerRootView>
   );
 }
