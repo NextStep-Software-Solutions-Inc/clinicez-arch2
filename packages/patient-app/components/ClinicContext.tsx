@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import * as SecureStore from 'expo-secure-store';
+const CURRENT_CLINIC_ID = 'CURRENT_CLINIC_ID';
 
 export type Clinic = {
     id: string; // generated UUID
@@ -33,7 +34,7 @@ export function ClinicProvider({ children }: { children: ReactNode }) {
 
     // Load persisted clinic id on mount
     useEffect(() => {
-        SecureStore.getItemAsync('currentClinicId').then(val => {
+        SecureStore.getItemAsync(CURRENT_CLINIC_ID).then(val => {
             if (val && defaultClinics.some(c => c.id === val)) {
                 setCurrentClinicIdState(val);
             }
@@ -43,7 +44,7 @@ export function ClinicProvider({ children }: { children: ReactNode }) {
     // Persist clinic id on change
     const setCurrentClinicId = (id: string) => {
         setCurrentClinicIdState(id);
-        SecureStore.setItemAsync('currentClinicId', id);
+        SecureStore.setItemAsync(CURRENT_CLINIC_ID, id);
     };
 
     return (
