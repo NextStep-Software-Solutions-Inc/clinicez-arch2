@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { ScrollView, TouchableOpacity } from 'react-native';
+import React, { useRef, useState, useEffect } from 'react';
+import { ScrollView, TouchableOpacity, Animated, Easing } from 'react-native';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { Feather } from '@expo/vector-icons';
@@ -51,7 +51,7 @@ export default function AppointmentsScreen() {
     const clinicName = clinic?.name || 'Current Clinic';
     const dummyAppointments = useDummyAppointments(clinicName);
 
-    // Track scroll state
+    // Track scroll state with debounced timer
     const [isScrolling, setIsScrolling] = useState(false);
     const scrollTimeout = useRef<number | null>(null);
 
@@ -59,19 +59,44 @@ export default function AppointmentsScreen() {
     const alwaysShowButton = dummyAppointments.length <= 8;
     const showButton = alwaysShowButton || !isScrolling;
 
-    // Handlers for scroll events
-    const handleScrollBeginDrag = () => {
-        setIsScrolling(true);
+    // Animation for button slide
+    const slideAnim = useRef(new Animated.Value(0)).current; // 0: visible, 1: hidden
+
+    useEffect(() => {
+        if (alwaysShowButton) {
+            Animated.timing(slideAnim, {
+                toValue: 0,
+                duration: 220,
+                useNativeDriver: true,
+                easing: Easing.out(Easing.ease),
+            }).start();
+        } else if (isScrolling) {
+            Animated.timing(slideAnim, {
+                toValue: 1,
+                duration: 220,
+                useNativeDriver: true,
+                easing: Easing.in(Easing.ease),
+            }).start();
+        } else {
+            Animated.timing(slideAnim, {
+                toValue: 0,
+                duration: 220,
+                useNativeDriver: true,
+                easing: Easing.out(Easing.ease),
+            }).start();
+        }
+    }, [isScrolling, alwaysShowButton, slideAnim]);
+
+    // Improved scroll handler: hide button on scroll, show immediately when scroll stops
+    const handleScroll = () => {
+        setIsScrolling(true); // Hide button immediately on scroll
         if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
     };
     const handleScrollEndDrag = () => {
-        // Wait for momentum to finish
-        if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
-        scrollTimeout.current = window.setTimeout(() => setIsScrolling(false), 200);
+        setIsScrolling(false); // Show button immediately when drag ends
     };
     const handleMomentumScrollEnd = () => {
-        setIsScrolling(false);
-        if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
+        setIsScrolling(false); // Show button immediately when momentum ends
     };
 
     return (
@@ -79,7 +104,7 @@ export default function AppointmentsScreen() {
             <ScrollView
                 style={{ flex: 1 }}
                 contentContainerStyle={{ padding: 16, paddingBottom: 90 }}
-                onScrollBeginDrag={handleScrollBeginDrag}
+                onScroll={handleScroll}
                 onScrollEndDrag={handleScrollEndDrag}
                 onMomentumScrollEnd={handleMomentumScrollEnd}
                 scrollEventThrottle={16}
@@ -144,8 +169,8 @@ export default function AppointmentsScreen() {
                     </ThemedView>
                 ))}
             </ScrollView>
-            {showButton && (
-                <ThemedView style={{
+            <Animated.View
+                style={{
                     position: 'absolute',
                     left: 0,
                     right: 0,
@@ -158,26 +183,36 @@ export default function AppointmentsScreen() {
                     shadowOpacity: 0.10,
                     shadowRadius: 8,
                     elevation: 8,
-                }}>
-                    <TouchableOpacity
-                        style={{
-                            backgroundColor: Colors.light.tint,
-                            borderRadius: 8,
-                            paddingVertical: 16,
-                            alignItems: 'center',
-                            shadowColor: Colors.light.tint,
-                            shadowOpacity: 0.12,
-                            shadowRadius: 4,
-                            elevation: 2,
-                        }}
-                        onPress={() => {/* TODO: Add appointment logic */ }}
-                    >
-                        <ThemedText style={{ color: '#fff', fontWeight: 'bold', fontSize: 18, letterSpacing: 0.5 }}>
-                            Book New Appointment
-                        </ThemedText>
-                    </TouchableOpacity>
-                </ThemedView>
-            )}
+                    transform: [
+                        {
+                            translateY: slideAnim.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [0, 120], // Slide up by 120px when hidden
+                            }),
+                        },
+                    ],
+                    opacity: slideAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0.2] }),
+                }}
+                pointerEvents={showButton ? 'auto' : 'none'}
+            >
+                <TouchableOpacity
+                    style={{
+                        backgroundColor: Colors.light.tint,
+                        borderRadius: 8,
+                        paddingVertical: 16,
+                        alignItems: 'center',
+                        shadowColor: Colors.light.tint,
+                        shadowOpacity: 0.12,
+                        shadowRadius: 4,
+                        elevation: 2,
+                    }}
+                    onPress={() => {/* TODO: Add appointment logic */ }}
+                >
+                    <ThemedText style={{ color: '#fff', fontWeight: 'bold', fontSize: 18, letterSpacing: 0.5 }}>
+                        Book New Appointment
+                    </ThemedText>
+                </TouchableOpacity>
+            </Animated.View>
         </ThemedView>
     );
 }
