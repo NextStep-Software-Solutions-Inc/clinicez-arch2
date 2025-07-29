@@ -37,9 +37,9 @@ export default function RootLayout() {
     loadOnboardingState();
   }, []);
 
-  const handleOnboardingFinish = () => {
+  const handleOnboardingFinish = async () => {
     setOnboarded(true);
-    SecureStore.setItemAsync(ONBOARDED, 'true');
+    await SecureStore.setItemAsync(ONBOARDED, 'true');
   };
 
   if (!onboarded) {
