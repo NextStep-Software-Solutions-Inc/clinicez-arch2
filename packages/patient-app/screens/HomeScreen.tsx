@@ -7,7 +7,6 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { HelloWave } from '@/components/HelloWave';
 import { useClerk } from '@clerk/clerk-expo';
-import { use } from 'react';
 
 // Mock data for multiple appointments
 const appointments = [
