@@ -28,7 +28,7 @@ function useDummyAppointments(clinicName: string) {
         'Chronic Care',
         'Minor Procedure',
     ];
-    return Array.from({ length: 100 }, (_, i) => {
+    return Array.from({ length: 10 }, (_, i) => {
         const doctor = doctors[i % doctors.length];
         const status = statuses[i % statuses.length];
         const dateObj = new Date(2025, 7, 1 + i); // August 2025
@@ -104,7 +104,7 @@ export default function AppointmentsScreen() {
         if (now - lastPressRef.current < 500) return;
         lastPressRef.current = now;
         router.push({
-            pathname: '/(tabs)/appointments/[appointmentId]',
+            pathname: '/[appointmentId]',
             params: { appointmentId: appt.id },
         });
     }
@@ -202,7 +202,7 @@ export default function AppointmentsScreen() {
                 <ThemedView className="bg-white dark:bg-neutral-900 rounded-xl">
                     <TouchableOpacity
                         className="rounded-xl py-4 flex items-center bg-blue-600 dark:bg-slate-700"
-                        onPress={() => {/* TODO: Add appointment logic */ }}
+                        onPress={() => router.push('/(appointments)/create')}
                     >
                         <ThemedText className="text-white font-bold text-lg tracking-wide">
                             Book New Appointment

@@ -1,2 +1,0 @@
-
-export { default } from '@/screens/appointment/AppointmentsScreen';
