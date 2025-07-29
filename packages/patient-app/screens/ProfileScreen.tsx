@@ -15,8 +15,6 @@ export default function ProfileScreen() {
     const { user } = useClerk();
     const clinic = clinics.find(c => c.id === currentClinicId);
 
-    console.log(JSON.stringify(user, null, 2));
-
     // Mock user data (replace with Clerk data when available)
     const mockUser = {
         first_name: 'Jane',
@@ -97,7 +95,10 @@ export default function ProfileScreen() {
                     />
                 </View>
                 {/* Full Name */}
-                <ThemedText style={{ fontSize: 30, fontWeight: 'bold', marginBottom: 2, color: Colors.light.tint }}>
+                <ThemedText
+                    numberOfLines={2}
+                    className='text-3xl font-bold mb-2 text-center text-slate-500 dark:text-slate-300'
+                >
                     {user?.fullName}
                 </ThemedText>
                 {/* Role */}

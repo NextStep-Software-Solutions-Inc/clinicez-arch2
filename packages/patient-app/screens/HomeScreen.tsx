@@ -82,7 +82,9 @@ export default function HomeScreen() {
                     <ThemedView className='px-4 mt-4'>
                         <ThemedView className="flex-row items-center w-full">
                             <HelloWave />
-                            <ThemedText className="text-4xl font-black text-blue-700 dark:text-blue-300 leading-tight"> Hi, {user?.username}!</ThemedText>
+                            <ThemedText className="text-4xl font-black text-blue-700 max-w-[60%] dark:text-blue-300 leading-tight capitalize"
+                                numberOfLines={1} ellipsizeMode='tail'
+                            > Hi, {user?.username}!</ThemedText>
                         </ThemedView>
                         <ThemedText className="text-xl text-slate-600 dark:text-slate-300 mb-4 text-left w-full">
                             Here’s what’s happening with your health today.
