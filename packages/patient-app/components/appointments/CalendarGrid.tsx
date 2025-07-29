@@ -9,9 +9,10 @@ interface CalendarGridProps {
     selectedDate: string;
     onSelect: (date: string) => void;
     minDate?: string; // yyyy-mm-dd
+    fullWidth?: boolean;
 }
 
-export function CalendarGrid({ year, month, selectedDate, onSelect, minDate }: CalendarGridProps) {
+export function CalendarGrid({ year, month, selectedDate, onSelect, minDate, fullWidth }: CalendarGridProps) {
     // Calculate previous and next month
     const prevMonth = month === 0 ? 11 : month - 1;
     const prevYear = month === 0 ? year - 1 : year;
@@ -70,10 +71,10 @@ export function CalendarGrid({ year, month, selectedDate, onSelect, minDate }: C
     }
 
     return (
-        <ThemedView className="mb-2">
+        <ThemedView className={`mb-2 ${fullWidth ? 'w-full px-1' : ''}`} style={fullWidth ? { maxWidth: 420, alignSelf: 'center' } : {}}>
             <ThemedView className="flex-row justify-center gap-1 mb-1">
                 {weekdayLabels.map((label, idx) => (
-                    <ThemedText key={label + idx} className="w-10 text-center text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    <ThemedText key={label + idx} className={`text-center font-semibold text-slate-500 dark:text-slate-400 ${fullWidth ? 'w-[44px] text-base' : 'w-10 text-xs'}`}>
                         {label}
                     </ThemedText>
                 ))}
@@ -89,26 +90,25 @@ export function CalendarGrid({ year, month, selectedDate, onSelect, minDate }: C
                         return (
                             <TouchableOpacity
                                 key={dateStr}
-                                className={`w-10 h-10 rounded-full items-center justify-center border ${
-                                    isSelected
+                                className={`${fullWidth ? 'w-[44px] h-[44px]' : 'w-10 h-10'} rounded-full items-center justify-center border ${isSelected
                                         ? 'bg-blue-600 border-blue-600'
                                         : isToday
-                                        ? 'border-blue-400'
-                                        : d.isCurrent
-                                        ? 'bg-white dark:bg-neutral-800 border-slate-300 dark:border-slate-700'
-                                        : 'bg-slate-100 dark:bg-neutral-900 border-slate-200 dark:border-slate-800 opacity-60'
-                                } ${isDisabled ? 'opacity-40' : ''}`}
+                                            ? 'border-blue-400'
+                                            : d.isCurrent
+                                                ? 'bg-white dark:bg-neutral-800 border-slate-300 dark:border-slate-700'
+                                                : 'bg-slate-100 dark:bg-neutral-900 border-slate-200 dark:border-slate-800 opacity-60'
+                                    } ${isDisabled ? 'opacity-40' : ''}`}
                                 onPress={() => !isDisabled && onSelect(dateStr)}
                                 disabled={isDisabled}
                             >
                                 <ThemedText className={
                                     isSelected
-                                        ? 'text-white font-bold'
+                                        ? 'text-white font-bold text-lg'
                                         : isToday
-                                        ? 'text-blue-600 font-bold'
-                                        : d.isCurrent
-                                        ? 'text-slate-700 dark:text-slate-200'
-                                        : 'text-slate-400 dark:text-slate-500'
+                                            ? 'text-blue-600 font-bold text-lg'
+                                            : d.isCurrent
+                                                ? 'text-slate-700 dark:text-slate-200 text-lg'
+                                                : 'text-slate-400 dark:text-slate-500 text-lg'
                                 }>
                                     {d.day}
                                 </ThemedText>

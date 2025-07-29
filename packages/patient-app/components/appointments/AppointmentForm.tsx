@@ -105,10 +105,10 @@ export default function AppointmentForm({ onSuccess }: AppointmentFormProps) {
                 />
             </ThemedView>
             <ThemedView>
-                <ThemedText className="font-semibold mb-2">Reason / About</ThemedText>
+                <ThemedText className="font-semibold mb-2 text-lg">Chief Complaint</ThemedText>
                 <TextInput
-                    className="border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-base bg-transparent min-h-[80px]"
-                    placeholder="Describe your reason for the appointment..."
+                    className="border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-lg bg-transparent min-h-[80px]"
+                    placeholder="Describe your chief complaint for the appointment..."
                     value={about}
                     onChangeText={setAbout}
                     placeholderTextColor="#94a3b8"
@@ -197,6 +197,7 @@ export default function AppointmentForm({ onSuccess }: AppointmentFormProps) {
                     selectedDate={date}
                     onSelect={handleDateSelect}
                     minDate={`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`}
+                    fullWidth
                 />
             </ThemedView>
             {date && (
