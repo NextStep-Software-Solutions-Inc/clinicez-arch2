@@ -15,7 +15,6 @@ export default function AppointmentsStack() {
       screenOptions={{
         headerShown: false,
         animation: 'fade_from_bottom',
-        // contentStyle: { backgroundColor: '#18181b' }, // Tailwind dark:bg-neutral-900
       }}
     >
       <Stack.Screen
