@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { ScrollView, TouchableOpacity, Animated, Easing } from 'react-native';
+import { FlatList, TouchableOpacity, Animated, Easing } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
@@ -28,7 +28,7 @@ function useDummyAppointments(clinicName: string) {
         'Chronic Care',
         'Minor Procedure',
     ];
-    return Array.from({ length: 10 }, (_, i) => {
+    return Array.from({ length: 100 }, (_, i) => {
         const doctor = doctors[i % doctors.length];
         const status = statuses[i % statuses.length];
         const dateObj = new Date(2025, 7, 1 + i); // August 2025
@@ -111,24 +111,25 @@ export default function AppointmentsScreen() {
 
     return (
         <ThemedView className="flex-1">
-            <ScrollView
-                className="flex-1"
-                contentContainerStyle={{ padding: 16, paddingBottom: 90 }}
+            <FlatList
+                data={dummyAppointments}
+                keyExtractor={item => item.id}
+                contentContainerStyle={{ padding: 12, paddingBottom: 70 }}
+                showsVerticalScrollIndicator={false}
                 onScroll={handleScroll}
                 onScrollEndDrag={handleScrollEndDrag}
                 onMomentumScrollEnd={handleMomentumScrollEnd}
-                showsVerticalScrollIndicator={false}
                 scrollEventThrottle={16}
-            >
-                <ThemedView className="flex-row items-center mb-4 justify-between">
-                    <ThemedText className="text-2xl font-bold tracking-wide" style={{ color: Colors.light.tint }}>
-                        Appointments
-                    </ThemedText>
-                    <Feather name="calendar" size={24} color={Colors.light.tint} style={{ marginLeft: 8 }} />
-                </ThemedView>
-                {dummyAppointments.map(appt => (
+                ListHeaderComponent={
+                    <ThemedView className="flex-row items-center mb-4 justify-between">
+                        <ThemedText className="text-2xl font-bold tracking-wide" style={{ color: Colors.light.tint }}>
+                            Appointments
+                        </ThemedText>
+                        <Feather name="calendar" size={24} color={Colors.light.tint} style={{ marginLeft: 8 }} />
+                    </ThemedView>
+                }
+                renderItem={({ item: appt }) => (
                     <TouchableOpacity
-                        key={appt.id}
                         activeOpacity={0.85}
                         onPress={() => handleAppointmentPress(appt)}
                     >
@@ -181,8 +182,12 @@ export default function AppointmentsScreen() {
                             </ThemedView>
                         </ThemedView>
                     </TouchableOpacity>
-                ))}
-            </ScrollView>
+                )}
+                initialNumToRender={10}
+                maxToRenderPerBatch={15}
+                windowSize={10}
+                removeClippedSubviews={true}
+            />
             <Animated.View
                 style={{
                     elevation: 8,
