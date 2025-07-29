@@ -1,4 +1,4 @@
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import React, { useRef, useState } from 'react';
 import { FlatList, Dimensions } from 'react-native';
 import RoundedButton from '../../components/RoundedButton';
@@ -96,7 +96,7 @@ export default function FeatureCarousel({ onContinue, onBack }: FeatureCarouselP
                     ) : (
                         onBack && (
                             <RoundedButton onPress={onBack} color="bg-white dark:bg-slate-900 " rippleColor="#e2e8f0" className="py-2 px-2 flex-row items-center">
-                                <MaterialCommunityIcons name="close-circle" size={24} color="#ef4444" style={{ marginRight: 4 }} />
+                                <Feather name="x" size={24} color="#ef4444" style={{ marginRight: 4 }} />
                                 <ThemedText className="text-red-500 font-extrabold text-lg">Exit</ThemedText>
                             </RoundedButton>
                         )

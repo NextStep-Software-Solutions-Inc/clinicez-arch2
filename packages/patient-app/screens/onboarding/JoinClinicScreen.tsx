@@ -5,12 +5,14 @@ import { View, Text, TextInput, Pressable } from 'react-native';
 import RoundedButton from '../../components/RoundedButton';
 
 type JoinClinicScreenProps = {
+    error?: boolean;
+    message?: string;
     onJoin: (code: string) => void;
     onBack?: () => void;
     onExit?: () => void;
 };
 
-export default function JoinClinicScreen({ onJoin, onBack, onExit }: JoinClinicScreenProps) {
+export default function JoinClinicScreen({ onJoin, onBack, onExit, error, message }: JoinClinicScreenProps) {
     const [code, setCode] = useState('');
     return (
         <View className="flex-1 bg-white dark:bg-slate-900 p-0">
@@ -36,9 +38,12 @@ export default function JoinClinicScreen({ onJoin, onBack, onExit }: JoinClinicS
                         placeholder="Invitation Code"
                         value={code}
                         onChangeText={setCode}
-                        className="border border-slate-300 rounded-xl p-4 w-full max-w-xl mb-6  bg-[#f7fafc]"
+                        className="border border-slate-300 rounded-xl p-4 w-full max-w-xl mb-2 bg-[#f7fafc]"
                         placeholderTextColor="#94a3b8"
                     />
+                    {message ? (
+                        <Text className={`mb-4 text-base text-center font-semibold ${error ? 'text-red-600' : 'text-slate-500'}`}>{message}</Text>
+                    ) : null}
                     <RoundedButton onPress={() => onJoin(code)}>
                         <Text className="text-white font-bold text-lg tracking-wide text-center">Join Clinic</Text>
                     </RoundedButton>

@@ -1,7 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import * as SecureStore from 'expo-secure-store';
-import JoinClinicScreen from '@/screens/onboarding/JoinClinicScreen';
-import JoinClinicRoute from '@/app/join-clinic';
 const CURRENT_CLINIC_ID = 'CURRENT_CLINIC_ID';
 
 export type Clinic = {
@@ -32,20 +30,23 @@ export type ClinicContextType = {
 const ClinicContext = createContext<ClinicContextType | undefined>(undefined);
 
 export function ClinicProvider({ children }: { children: ReactNode }) {
-    const [currentClinicId, setCurrentClinicId] = useState<string | null>(defaultClinics[0].id);
+    const [currentClinicId, setCurrentClinicId] = useState<string | null>(null);
+    const [loading, setLoading] = useState(true);
 
     // Load persisted clinic id on mount
     useEffect(() => {
         SecureStore.getItemAsync(CURRENT_CLINIC_ID).then(val => {
             if (val && defaultClinics.some(c => c.id === val)) {
                 setCurrentClinicId(val);
+            } else {
+                setCurrentClinicId(defaultClinics[0].id);
             }
+            setLoading(false);
         });
     }, []);
 
     // Persist clinic id on change
     const setCurrentClinicIdState = (id: string | null) => {
-
         setCurrentClinicId(id);
         if (id) {
             SecureStore.setItemAsync(CURRENT_CLINIC_ID, id);
@@ -54,6 +55,10 @@ export function ClinicProvider({ children }: { children: ReactNode }) {
         }
     };
 
+    if (loading || !currentClinicId) {
+        // Optionally, show a loading spinner here
+        return null;
+    }
 
     return (
         <ClinicContext.Provider value={{ clinics: defaultClinics, currentClinicId, setCurrentClinicId: setCurrentClinicIdState }}>
