@@ -55,7 +55,11 @@ export default function RootLayout() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <ClinicProvider>
           <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-            <Stack>
+            <Stack
+              screenOptions={{
+                animation: 'fade_from_bottom'
+              }}
+            >
               <Stack.Screen name="(auth)" options={{ headerShown: false }} />
               <Stack.Screen name="(appointments)" options={{ headerShown: false }} />
               <Stack.Screen name="join-clinic" options={{ headerShown: false }} />

@@ -44,6 +44,7 @@ export default function TabLayout() {
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: true,
+        animation: 'shift',
         header: () => (
           <GlobalHeader />
         ),
