@@ -72,7 +72,7 @@ export function CalendarGrid({ year, month, selectedDate, onSelect, minDate, ful
 
     return (
         <ThemedView className={`mb-2 ${fullWidth ? 'w-full px-1' : ''}`} style={fullWidth ? { maxWidth: 420, alignSelf: 'center' } : {}}>
-            <ThemedView className="flex-row justify-center gap-1 mb-1">
+            <ThemedView className="flex-row justify-center gap-2 mb-2">
                 {weekdayLabels.map((label, idx) => (
                     <ThemedText key={label + idx} className={`text-center font-semibold text-slate-500 dark:text-slate-400 ${fullWidth ? 'w-[44px] text-base' : 'w-10 text-xs'}`}>
                         {label}
@@ -80,7 +80,7 @@ export function CalendarGrid({ year, month, selectedDate, onSelect, minDate, ful
                 ))}
             </ThemedView>
             {rows.map((week, rowIdx) => (
-                <ThemedView key={rowIdx} className="flex-row justify-center gap-1 mb-0.5">
+                <ThemedView key={rowIdx} className="flex-row justify-center gap-2 mb-2">
                     {week.map((d, colIdx) => {
                         const dateStr = `${d.year}-${String(d.month + 1).padStart(2, '0')}-${String(d.day).padStart(2, '0')}`;
                         const isSelected = selectedDate === dateStr;
@@ -90,13 +90,13 @@ export function CalendarGrid({ year, month, selectedDate, onSelect, minDate, ful
                         return (
                             <TouchableOpacity
                                 key={dateStr}
-                                className={`${fullWidth ? 'w-[44px] h-[44px]' : 'w-10 h-10'} rounded-full items-center justify-center border ${isSelected
-                                        ? 'bg-blue-600 border-blue-600'
-                                        : isToday
-                                            ? 'border-blue-400'
-                                            : d.isCurrent
-                                                ? 'bg-white dark:bg-neutral-800 border-slate-300 dark:border-slate-700'
-                                                : 'bg-slate-100 dark:bg-neutral-900 border-slate-200 dark:border-slate-800 opacity-60'
+                                className={`${fullWidth ? 'w-[44px] h-[44px]' : 'w-10 h-10'} rounded-xl items-center justify-center border ${isSelected
+                                    ? 'bg-blue-600 border-blue-600'
+                                    : isToday
+                                        ? 'border-blue-400'
+                                        : d.isCurrent
+                                            ? 'bg-white dark:bg-neutral-800 border-slate-300 dark:border-slate-700'
+                                            : 'bg-slate-100 dark:bg-neutral-900 border-slate-200 dark:border-slate-800 opacity-60'
                                     } ${isDisabled ? 'opacity-40' : ''}`}
                                 onPress={() => !isDisabled && onSelect(dateStr)}
                                 disabled={isDisabled}

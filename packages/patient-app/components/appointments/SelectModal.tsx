@@ -29,7 +29,7 @@ export default function SelectModal({ visible, onClose, options, value, onSelect
                 />
                 <ThemedView className="bg-white dark:bg-neutral-900 rounded-t-3xl p-6 pb-10">
                     <ThemedView className="flex-row items-center justify-between mb-4">
-                        <ThemedText className="text-lg font-bold">
+                        <ThemedText className="text-lg font-bold text-slate-700 dark:text-slate-100">
                             {title || 'Select'}
                         </ThemedText>
                         <TouchableOpacity onPress={onClose}>
@@ -47,7 +47,7 @@ export default function SelectModal({ visible, onClose, options, value, onSelect
                                     onClose();
                                 }}
                             >
-                                <ThemedText className={`text-base flex-1 ${value === item.value ? 'font-bold text-blue-600' : ''}`}>
+                                <ThemedText className={`text-base flex-1 ${value === item.value ? 'font-bold text-blue-600 dark:text-blue-400' : 'text-slate-700 dark:text-slate-100'}`}>
                                     {item.label}
                                 </ThemedText>
                                 {value === item.value && <Feather name="check" size={18} color="#2563eb" />}

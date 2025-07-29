@@ -75,7 +75,7 @@ export default function AppointmentForm({ onSuccess }: AppointmentFormProps) {
     return (
         <ThemedView className="gap-5">
             <ThemedView>
-                <ThemedText className="font-semibold mb-2">Department / Service</ThemedText>
+                <ThemedText className="font-semibold mb-2 text-slate-700 dark:text-slate-100">Department / Service</ThemedText>
                 <TouchableOpacity
                     className="border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 bg-transparent flex-row items-center justify-between"
                     onPress={() => setShowDeptModal(true)}
@@ -101,11 +101,11 @@ export default function AppointmentForm({ onSuccess }: AppointmentFormProps) {
                     ]}
                     value={department}
                     onSelect={setDepartment}
-                    title="Select Department / Service"
+                    title="Select Department or Service"
                 />
             </ThemedView>
             <ThemedView>
-                <ThemedText className="font-semibold mb-2 text-lg">Chief Complaint</ThemedText>
+                <ThemedText className="font-semibold mb-2 text-lg text-slate-700 dark:text-slate-100">Chief Complaint</ThemedText>
                 <TextInput
                     className="border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 text-lg bg-transparent min-h-[80px]"
                     placeholder="Describe your chief complaint for the appointment..."
@@ -120,7 +120,7 @@ export default function AppointmentForm({ onSuccess }: AppointmentFormProps) {
                 />
             </ThemedView>
             <ThemedView>
-                <ThemedText className="font-semibold mb-2">Doctor (optional)</ThemedText>
+                <ThemedText className="font-semibold mb-2 text-slate-700 dark:text-slate-100">Doctor (optional)</ThemedText>
                 <TouchableOpacity
                     className="border border-slate-300 dark:border-slate-700 rounded-xl px-4 py-3 bg-transparent flex-row items-center justify-between"
                     onPress={() => setShowDoctorModal(true)}
@@ -155,8 +155,8 @@ export default function AppointmentForm({ onSuccess }: AppointmentFormProps) {
                 )}
             </ThemedView>
             <ThemedView>
-                <ThemedText className="font-semibold mb-2">Date</ThemedText>
-                <ThemedView className="flex-row items-center justify-between mb-2">
+                <ThemedText className="font-semibold mb-2 text-slate-700 dark:text-slate-100">Date</ThemedText>
+                <ThemedView className="flex-row items-center justify-between mb-4 px-2 gap-2">
                     <TouchableOpacity
                         onPress={() => {
                             if (calendarMonth === 0) {
@@ -171,11 +171,11 @@ export default function AppointmentForm({ onSuccess }: AppointmentFormProps) {
                             }
                         }}
                         disabled={isPastMonth(calendarMonth === 0 ? calendarYear - 1 : calendarYear, calendarMonth === 0 ? 11 : calendarMonth - 1)}
-                        style={{ opacity: isPastMonth(calendarMonth === 0 ? calendarYear - 1 : calendarYear, calendarMonth === 0 ? 11 : calendarMonth - 1) ? 0.3 : 1 }}
+                        style={{ opacity: isPastMonth(calendarMonth === 0 ? calendarYear - 1 : calendarYear, calendarMonth === 0 ? 11 : calendarMonth - 1) ? 0.3 : 1, padding: 6 }}
                     >
-                        <Feather name="chevron-left" size={20} color="#334155" />
+                        <Feather name="chevron-left" size={28} color="#334155" />
                     </TouchableOpacity>
-                    <ThemedText className="font-semibold text-base">
+                    <ThemedText className="font-semibold text-lg mx-2 text-slate-700 dark:text-slate-100">
                         {new Date(calendarYear, calendarMonth).toLocaleString('default', { month: 'long' })} {calendarYear}
                     </ThemedText>
                     <TouchableOpacity
@@ -187,8 +187,9 @@ export default function AppointmentForm({ onSuccess }: AppointmentFormProps) {
                                 setCalendarMonth(m => m + 1);
                             }
                         }}
+                        style={{ padding: 6 }}
                     >
-                        <Feather name="chevron-right" size={20} color="#334155" />
+                        <Feather name="chevron-right" size={28} color="#334155" />
                     </TouchableOpacity>
                 </ThemedView>
                 <CalendarGrid
@@ -202,7 +203,7 @@ export default function AppointmentForm({ onSuccess }: AppointmentFormProps) {
             </ThemedView>
             {date && (
                 <ThemedView>
-                    <ThemedText className="font-semibold mb-2">Time Slot</ThemedText>
+                    <ThemedText className="font-semibold mb-2 text-slate-700 dark:text-slate-100">Time Slot</ThemedText>
                     <TimeSlotGrid slots={availableSlots} selectedTime={time} onSelect={setTime} />
                 </ThemedView>
             )}
