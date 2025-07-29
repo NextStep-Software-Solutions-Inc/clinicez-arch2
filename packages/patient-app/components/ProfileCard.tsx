@@ -11,25 +11,27 @@ export type ProfileCardProps = {
     title: string;
     children: React.ReactNode;
     editTitle: string;
-    user?: any;
 };
 
-export default function ProfileCard({ title, children, editTitle, user }: ProfileCardProps) {
+export default function ProfileCard({ title, children, editTitle }: ProfileCardProps) {
     const scrollRef = useRef<ScrollView>(null);
     const [editVisible, setEditVisible] = useState(false);
+    const { user } = useClerk();
 
     // Only show the form for Basic Information
     const isBasicInfo = editTitle === 'Edit Basic Information';
     const initialForm = user ? {
-        full_name: user.full_name || '',
-        gender: user.gender || '',
-        birthdate: user.birthdate || '',
-        blood_type: user.blood_type || '',
-        religion: user.religion || '',
-        email_address: user.email_address || '',
-        phone_number: user.phone_number || '',
+        first_name: user.firstName || '',
+        last_name: user.lastName || '',
+        gender: 'Male',
+        birthdate: '08-01-2025', // Default date for demo purposes
+        blood_type: 'O+',
+        religion: 'Christian',
+        email_address: user.emailAddresses?.[0]?.emailAddress || '',
+        phone_number: user.phoneNumbers?.[0]?.phoneNumber || '',
     } : {
-        full_name: '',
+        first_name: '',
+        last_name: '',
         gender: '',
         birthdate: '',
         blood_type: '',
@@ -49,8 +51,16 @@ export default function ProfileCard({ title, children, editTitle, user }: Profil
         setEditVisible(true);
     };
 
-    const handleSave = () => {
-        // TODO: Save logic (call backend or update context)
+    const handleSave = async () => {
+        if (!user) return;
+        try {
+            await user.update({
+                firstName: form.first_name,
+                lastName: form.last_name,
+            })
+        } catch (error) {
+            console.error('Error saving profile:', JSON.stringify(error, null, 2));
+        }
         setEditVisible(false);
     };
 
@@ -94,9 +104,20 @@ export default function ProfileCard({ title, children, editTitle, user }: Profil
                             showsVerticalScrollIndicator={true}
                         >
                             <ThemedView className='mb-2'>
-                                <Input value={form.full_name} onChangeText={v => handleChange('full_name', v)}
+                                <ThemedText className='dark:text-slate-500'>First name</ThemedText>
 
-                                    placeholder="Full Name"
+                                <Input value={form.first_name} onChangeText={v => handleChange('first_name', v)}
+
+                                    placeholder="First Name"
+                                    onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })}
+                                />
+                            </ThemedView>
+                            <ThemedView className='mb-2'>
+                                <ThemedText className='dark:text-slate-500'>Last name</ThemedText>
+
+                                <Input value={form.last_name} onChangeText={v => handleChange('last_name', v)}
+
+                                    placeholder="Last Name"
                                     onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })}
                                 />
                             </ThemedView>
@@ -163,6 +184,7 @@ export default function ProfileCard({ title, children, editTitle, user }: Profil
 // Simple input component using ThemedView and TextInput
 import { TextInput } from 'react-native';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { useClerk } from '@clerk/clerk-expo';
 // Removed incorrect ScrollView import
 function Input({ value, onChangeText, placeholder, onFocus }: { value: string; onChangeText: (v: string) => void; placeholder?: string; onFocus?: () => void }) {
     const colorScheme = useColorScheme();

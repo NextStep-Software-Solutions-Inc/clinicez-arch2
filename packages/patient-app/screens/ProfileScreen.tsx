@@ -1,22 +1,24 @@
-import React, { useState, useRef } from 'react';
-import { Image, TouchableOpacity, View, ScrollView } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import React from 'react';
+import { Image, View, ScrollView } from 'react-native';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { useClinicContext } from '@/components/ClinicContext';
 import { Colors } from '@/constants/Colors';
-import EditProfileModal from '@/components/EditProfileModal';
-import EditSheet from '@/components/EditSheet';
 import ProfileCard from '@/components/ProfileCard';
 import { SignOutButton } from '@/components/SignOutButton';
+import { useClerk } from '@clerk/clerk-expo';
+import { format } from 'date-fns/format';
 
 
 export default function ProfileScreen() {
     const { clinics, currentClinicId } = useClinicContext();
+    const { user } = useClerk();
     const clinic = clinics.find(c => c.id === currentClinicId);
 
+    console.log(JSON.stringify(user, null, 2));
+
     // Mock user data (replace with Clerk data when available)
-    const user = {
+    const mockUser = {
         first_name: 'Jane',
         last_name: 'Doe',
         full_name: 'Jane Marie Doe',
@@ -83,7 +85,7 @@ export default function ProfileScreen() {
                     marginBottom: 16,
                 }}>
                     <Image
-                        source={{ uri: "https://reactjs.org/logo-og.png" }}
+                        source={{ uri: user?.imageUrl }}
                         style={{
                             width: 110,
                             height: 110,
@@ -96,46 +98,45 @@ export default function ProfileScreen() {
                 </View>
                 {/* Full Name */}
                 <ThemedText style={{ fontSize: 30, fontWeight: 'bold', marginBottom: 2, color: Colors.light.tint }}>
-                    {user.full_name}
+                    {user?.fullName}
                 </ThemedText>
                 {/* Role */}
                 <ThemedText style={{ fontSize: 15, color: Colors.light.tint, marginBottom: 8 }}>
-                    {user.role}
+                    {mockUser.role}
                 </ThemedText>
                 <ProfileCard
                     title="Basic Information"
                     editTitle="Edit Basic Information"
-                    user={user}
                 >
                     <ThemedText style={{ fontSize: 14, marginBottom: 4 }}
                         className='dark:text-slate-500'
                     >
-                        Gender: {user.gender}
+                        Gender: {mockUser.gender}
                     </ThemedText>
                     <ThemedText style={{ fontSize: 15, marginBottom: 4 }}
                         className='dark:text-slate-500'
                     >
-                        Birthdate: {user.birthdate}
+                        Birthdate: {format(mockUser.birthdate, 'MMMM d, yyyy')}
                     </ThemedText>
                     <ThemedText style={{ fontSize: 15, marginBottom: 4 }}
                         className='dark:text-slate-500'
                     >
-                        Blood Type: {user.blood_type}
+                        Blood Type: {mockUser.blood_type}
                     </ThemedText>
                     <ThemedText style={{ fontSize: 15, marginBottom: 4 }}
                         className='dark:text-slate-500'
                     >
-                        Religion: {user.religion}
+                        Religion: {mockUser.religion}
                     </ThemedText>
                     <ThemedText style={{ fontSize: 15, marginBottom: 4 }}
                         className='dark:text-slate-500'
                     >
-                        Email: {user.email_address}
+                        Email: {user?.emailAddresses[0]?.emailAddress}
                     </ThemedText>
                     <ThemedText style={{ fontSize: 15, marginBottom: 4 }}
                         className='dark:text-slate-500'
                     >
-                        Phone: {user.phone_number}
+                        Phone: {user?.phoneNumbers[0]?.phoneNumber}
                     </ThemedText>
                 </ProfileCard>
 
@@ -175,10 +176,10 @@ export default function ProfileScreen() {
 
                 >
                     <ThemedText style={{ fontSize: 15, marginBottom: 4 }}>
-                        Primary: {user.primary_address}
+                        Primary: {mockUser.primary_address}
                     </ThemedText>
                     <ThemedText style={{ fontSize: 15, marginBottom: 4 }}>
-                        Secondary: {user.secondary_address}
+                        Secondary: {mockUser.secondary_address}
                     </ThemedText>
                 </ProfileCard>
                 <ProfileCard
@@ -189,19 +190,19 @@ export default function ProfileScreen() {
                         Primary
                     </ThemedText>
                     <ThemedText style={{ fontSize: 15 }}>
-                        {user.emergency_contacts.primary.name} ({user.emergency_contacts.primary.relation})
+                        {mockUser.emergency_contacts.primary.name} ({mockUser.emergency_contacts.primary.relation})
                     </ThemedText>
                     <ThemedText style={{ fontSize: 14, marginBottom: 8 }}>
-                        Contact: {user.emergency_contacts.primary.contact}
+                        Contact: {mockUser.emergency_contacts.primary.contact}
                     </ThemedText>
                     <ThemedText style={{ fontSize: 15, fontWeight: 'bold', marginBottom: 4 }}>
                         Secondary
                     </ThemedText>
                     <ThemedText style={{ fontSize: 15 }}>
-                        {user.emergency_contacts.secondary.name} ({user.emergency_contacts.secondary.relation})
+                        {mockUser.emergency_contacts.secondary.name} ({mockUser.emergency_contacts.secondary.relation})
                     </ThemedText>
                     <ThemedText style={{ fontSize: 14 }}>
-                        Contact: {user.emergency_contacts.secondary.contact}
+                        Contact: {mockUser.emergency_contacts.secondary.contact}
                     </ThemedText>
                 </ProfileCard>
                 <ThemedView

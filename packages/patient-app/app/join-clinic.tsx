@@ -9,7 +9,6 @@ export default function JoinClinicRoute() {
     const [joined, setJoined] = useState(currentClinicId !== null);
     const [errorJoining, setErrorJoining] = useState(false);
     const [message, setMessage] = useState<string>();
-    const [clinicId, setClinicId] = useState<string | null>(null);
     const router = useRouter();
 
     const handleJoinClinic = (code: string) => {
@@ -19,12 +18,11 @@ export default function JoinClinicRoute() {
             setMessage('Please enter a valid clinic ID');
             return;
         }
-        setClinicId(clinicId);
+        setCurrentClinicId(clinicId); // Set to the clinic ID you want to use
         setJoined(true);
     }
 
     const handleConfirm = () => {
-        setCurrentClinicId(clinicId); // Set to the clinic ID you want to use
         router.replace('/(tabs)');
     }
 

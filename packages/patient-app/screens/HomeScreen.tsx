@@ -6,69 +6,72 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { HelloWave } from '@/components/HelloWave';
+import { useClerk } from '@clerk/clerk-expo';
+import { use } from 'react';
 
+// Mock data for multiple appointments
+const appointments = [
+    {
+        id: 1,
+        date: 'Mon, July 28, 2025',
+        time: '10:30 AM',
+        doctor: 'Dr. Jane Smith',
+        specialization: 'General Practitioner',
+        type: 'General Checkup',
+    },
+    {
+        id: 2,
+        date: 'Wed, July 30, 2025',
+        time: '2:00 PM',
+        doctor: 'Dr. John Doe',
+        specialization: 'Dentist',
+        type: 'Dental Cleaning',
+    },
+    {
+        id: 3,
+        date: 'Fri, Aug 1, 2025',
+        time: '9:00 AM',
+        doctor: 'Dr. Emily Lee',
+        specialization: 'Ophthalmologist',
+        type: 'Eye Exam',
+    },
+];
+const healthOverview = [
+    { id: 1, label: 'Lab Results', value: '2 New', color: 'text-green-600 dark:text-green-400' },
+    { id: 2, label: 'Prescriptions', value: '1 Update', color: 'text-blue-600 dark:text-blue-300' },
+    { id: 3, label: 'Alerts', value: 'None', color: 'text-slate-500 dark:text-slate-400' },
+];
+
+const quickLinks = [
+    {
+        key: 'appointments',
+        icon: { name: 'calendar', color: '#2563eb' },
+        bg: 'bg-blue-100 dark:bg-blue-900/60',
+        title: 'Appointments',
+        titleClass: 'text-blue-900 dark:text-blue-100',
+        desc: 'See and manage your upcoming visits',
+    },
+    {
+        key: 'health',
+        icon: { name: 'heart', color: '#059669' },
+        bg: 'bg-green-100 dark:bg-green-900/60',
+        title: 'Health',
+        titleClass: 'text-green-900 dark:text-green-100',
+        desc: 'View your records and results',
+    },
+    {
+        key: 'profile',
+        icon: { name: 'user', color: '#334155' },
+        bg: 'bg-slate-100 dark:bg-slate-800/60',
+        title: 'Profile',
+        titleClass: 'text-slate-900 dark:text-slate-100',
+        desc: 'Manage your account',
+    },
+];
 export default function HomeScreen() {
     const colorScheme = useColorScheme();
+    const { user } = useClerk();
 
-    // Mock data for multiple appointments
-    const appointments = [
-        {
-            id: 1,
-            date: 'Mon, July 28, 2025',
-            time: '10:30 AM',
-            doctor: 'Dr. Jane Smith',
-            specialization: 'General Practitioner',
-            type: 'General Checkup',
-        },
-        {
-            id: 2,
-            date: 'Wed, July 30, 2025',
-            time: '2:00 PM',
-            doctor: 'Dr. John Doe',
-            specialization: 'Dentist',
-            type: 'Dental Cleaning',
-        },
-        {
-            id: 3,
-            date: 'Fri, Aug 1, 2025',
-            time: '9:00 AM',
-            doctor: 'Dr. Emily Lee',
-            specialization: 'Ophthalmologist',
-            type: 'Eye Exam',
-        },
-    ];
-    const healthOverview = [
-        { id: 1, label: 'Lab Results', value: '2 New', color: 'text-green-600 dark:text-green-400' },
-        { id: 2, label: 'Prescriptions', value: '1 Update', color: 'text-blue-600 dark:text-blue-300' },
-        { id: 3, label: 'Alerts', value: 'None', color: 'text-slate-500 dark:text-slate-400' },
-    ];
-
-    const quickLinks = [
-        {
-            key: 'appointments',
-            icon: { name: 'calendar', color: '#2563eb' },
-            bg: 'bg-blue-100 dark:bg-blue-900/60',
-            title: 'Appointments',
-            titleClass: 'text-blue-900 dark:text-blue-100',
-            desc: 'See and manage your upcoming visits',
-        },
-        {
-            key: 'health',
-            icon: { name: 'heart', color: '#059669' },
-            bg: 'bg-green-100 dark:bg-green-900/60',
-            title: 'Health',
-            titleClass: 'text-green-900 dark:text-green-100',
-            desc: 'View your records and results',
-        },
-        {
-            key: 'profile',
-            icon: { name: 'user', color: '#334155' },
-            bg: 'bg-slate-100 dark:bg-slate-800/60',
-            title: 'Profile',
-            titleClass: 'text-slate-900 dark:text-slate-100',
-            desc: 'Manage your account',
-        },
-    ];
     return (
         <SafeAreaView
             edges={['left', 'right']}
@@ -80,7 +83,7 @@ export default function HomeScreen() {
                     <ThemedView className='px-4 mt-4'>
                         <ThemedView className="flex-row items-center w-full">
                             <HelloWave />
-                            <ThemedText className="text-4xl font-black text-blue-700 dark:text-blue-300 leading-tight"> Hi, Wave!</ThemedText>
+                            <ThemedText className="text-4xl font-black text-blue-700 dark:text-blue-300 leading-tight"> Hi, {user?.username}!</ThemedText>
                         </ThemedView>
                         <ThemedText className="text-xl text-slate-600 dark:text-slate-300 mb-4 text-left w-full">
                             Here’s what’s happening with your health today.
