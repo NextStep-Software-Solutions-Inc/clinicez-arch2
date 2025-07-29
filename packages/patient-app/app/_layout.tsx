@@ -14,6 +14,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 const DEBUG_ALWAYS_SHOW_ONBOARDING = true; // set to true for debugging
 const ONBOARDED = 'ONBOARDED'; // Key for onboarding state in SecureStore
+const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "";
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const [onboarded, setOnboarded] = useState(false);
@@ -42,14 +44,14 @@ export default function RootLayout() {
 
   if (!onboarded) {
     return (
-      <ClerkProvider tokenCache={tokenCache}>
+      <ClerkProvider tokenCache={tokenCache} publishableKey={publishableKey}>
         <OnboardingFlow onFinish={handleOnboardingFinish} />
       </ClerkProvider>
     );
   }
 
   return (
-    <ClerkProvider tokenCache={tokenCache}>
+    <ClerkProvider tokenCache={tokenCache} publishableKey={publishableKey}>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <ClinicProvider>
           <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
