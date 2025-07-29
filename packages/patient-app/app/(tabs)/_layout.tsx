@@ -1,4 +1,4 @@
-import { Tabs } from 'expo-router';
+import { router, Tabs } from 'expo-router';
 import React from 'react';
 import { Platform } from 'react-native';
 
@@ -11,11 +11,17 @@ import { Feather } from '@expo/vector-icons';
 import { GlobalHeader } from '@/components/GlobalHeader';
 import JoinClinicScreen from '@/screens/onboarding/JoinClinicScreen';
 import { useClinicContext } from '@/components/ClinicContext';
-
+import { useClerk } from '@clerk/clerk-expo';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const { isSignedIn } = useClerk();
   const { currentClinicId, setCurrentClinicId } = useClinicContext();
+
+  if (!isSignedIn) {
+    router.replace('/(auth)/sign-in');
+    return null;
+  }
 
   if (!currentClinicId) {
     return (
@@ -32,6 +38,7 @@ export default function TabLayout() {
       />
     );
   }
+
 
   return (
     <Tabs

@@ -66,7 +66,9 @@ export default function SignUpScreen() {
             await signUp.create({
                 emailAddress,
                 password,
-                username: emailAddress.split('@')[0],
+                username: emailAddress
+                    .split('@')[0]
+                    .replace(/[^a-zA-Z0-9]/g, '_'),
             })
             await signUp.prepareEmailAddressVerification({ strategy: 'email_code' })
             setPendingVerification(true)
