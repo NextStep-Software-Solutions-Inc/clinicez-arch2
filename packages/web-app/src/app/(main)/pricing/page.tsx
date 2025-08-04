@@ -3,15 +3,13 @@ import { Metadata } from "next"
 import MainBackgroundImage from "../../../../public/assets/main-background.png"
 import HeroFeatured from "@/components/Hero"
 import FeaturedItems from "@/components/FeaturedItems"
-// import HeroFeatured from "@/components/Hero"
 
 export const metadata: Metadata = {
-  title: "Healthcare Providers | Clinic EZ V2",
-  description: "ClinicEZ has multiple connections to healthcare providers, allowing for seamless integration and management of healthcare operations.",
+  title: "Pricing | Clinic EZ V2",
+  description: "ClinicEZ offers competitive pricing plans for healthcare providers, ensuring value and quality.",
 }
 
-// Healthcare provider page
-export default function HPPage() {
+export default function PricingPage() {
   return (
     <main>
       <section className="flex flex-col items-center justify-center min-h-screen">

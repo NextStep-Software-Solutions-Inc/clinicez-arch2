@@ -12,7 +12,7 @@ type HeroFeaturedProps = {
     breakLine?: boolean
   }[]
   description?: string
-  button: {
+  button?: {
     text: string
     href: string
     variant?: "default" | "outline" | "ghost" | "link" | "secondary" | "destructive"
@@ -20,7 +20,7 @@ type HeroFeaturedProps = {
   }[]
 }
 
-type HeroPageType = 'hero' | 'pricing'
+type HeroPageType = 'hero' | 'pricing' | 'hp' | 'organization' | 'contact' | 'clinics'
 
 export interface HeroFeaturedComponentProps {
   page: HeroPageType
@@ -63,6 +63,26 @@ const heroFeaturedItems: Record<string, HeroFeaturedProps> = {
       },
     ],
   },
+  hp: {
+    title: [{ text: "Meet Our Healthcare Providers", className: "text-primary" }],
+    description: "Our Healthcare Providers are equipped with the latest technology to provide you with the best care possible.",
+  },
+  organization: {
+    title: [{ text: "Organizations", className: "text-primary" }],
+    description: "Browse our list of organizations that you can join and find clinics/hospitals affiliations.",
+  },
+  contact: {
+    title: [
+      { text: "Let's build something", className: "text-primary", breakLine: true },
+      { text: "better for healthcare", breakLine: true },
+      { text: "together" },
+    ],
+    description: "Have questions or ready to get started with Clinic EZ?",
+  },
+  clinics: {
+    title: [{ text: "Clinics", className: "text-primary" }],
+    description: "Find a clinic near you. View their services, providers.",
+  }
 }
 
 export default function HeroFeatured({ page }: HeroFeaturedComponentProps) {
@@ -88,7 +108,7 @@ export default function HeroFeatured({ page }: HeroFeaturedComponentProps) {
       />
 
       <div className="flex flex-col sm:flex-row gap-4 mt-6 justify-center items-center max-w-md sm:max-w-none mx-auto">
-        {pageFeatures.button.map((item, index) => (
+        {pageFeatures.button && pageFeatures.button.map((item, index) => (
           <Button
             key={index}
             size="sm"
