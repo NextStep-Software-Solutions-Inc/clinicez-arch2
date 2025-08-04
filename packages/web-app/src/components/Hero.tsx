@@ -105,6 +105,7 @@ export default function HeroFeatured({ page }: HeroFeaturedComponentProps) {
       <HeroHeader
         header={pageFeatures.title}
         description={pageFeatures.description}
+        textAlign={page === 'contact' ? 'left' : 'center'}
       />
 
       <div className="flex flex-col sm:flex-row gap-4 mt-6 justify-center items-center max-w-md sm:max-w-none mx-auto">
@@ -138,11 +139,12 @@ interface HeroHeaderProps {
   header?: Array<{ text: string; className?: string; breakLine?: boolean }>
   description?: string
   className?: string
+  textAlign?: 'center' | 'left'
 }
 
-export const HeroHeader: React.FC<HeroHeaderProps> = ({ header, description }) => {
+export const HeroHeader: React.FC<HeroHeaderProps> = ({ header, description, textAlign = 'center' }) => {
   return (
-    <div className="text-center">
+    <div className={textAlign === 'center' ? 'text-center' : 'text-left'}>
       {header && (
         <div className="text-3xl md:text-4xl lg:text-5xl font-semibold tracking-normal">
           <div className="mb-2">
@@ -151,7 +153,7 @@ export const HeroHeader: React.FC<HeroHeaderProps> = ({ header, description }) =
         </div>
       )}
       {description && (
-        <div className="text-gray-500 md:text-lg lg:text-xl mt-4 mx-auto text-base max-w-5xl">
+        <div className={`text-gray-500 md:text-lg lg:text-xl mt-4 text-base max-w-5xl ${textAlign === 'center' ? 'mx-auto' : ''}`}>
           <span>{description}</span>
         </div>
       )}
