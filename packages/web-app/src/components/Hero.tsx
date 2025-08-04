@@ -22,7 +22,7 @@ type HeroFeaturedProps = {
 
 type HeroPageType = 'hero' | 'pricing'
 
-interface HeroFeaturedComponentProps {
+export interface HeroFeaturedComponentProps {
   page: HeroPageType
 }
 
@@ -93,8 +93,8 @@ export default function HeroFeatured({ page }: HeroFeaturedComponentProps) {
             key={index}
             size="sm"
             className={`text-sm h-10 flex items-center justify-center gap-2 px-4 py-5 w-full sm:w-auto cursor-pointer ${item.variant === "outline"
-                ? "border border-primary/20 hover:border-primary/40 hover:bg-primary/5"
-                : ""
+              ? "border border-primary/20 hover:border-primary/40 hover:bg-primary/5"
+              : ""
               }`}
             variant={item.variant === "outline" ? "ghost" : (item.variant || "default")}
             asChild

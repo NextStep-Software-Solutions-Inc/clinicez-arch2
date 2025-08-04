@@ -16,7 +16,7 @@ export default function MainPage() {
         <HeroBackground path={MainBackgroundImage} opacity={0.3} />
         <HeroFeatured page="hero" />
       </section>
-      <FeaturedItems />
+      <FeaturedItems page="hero" />
     </main>
   );
 }
