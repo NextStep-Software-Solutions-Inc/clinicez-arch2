@@ -1,6 +1,6 @@
 import HeroBackground from "@/components/HeroBackground"
 import { Metadata } from "next"
-import SecondaryBackgroundImage from "../../../../public/assets/secondary-background.png"
+import SecondaryBackgroundImage from "@public/assets/secondary-background.png"
 import HeroFeatured from "@/components/Hero"
 import Shell, { mockHpData } from "@/components/Shell"
 import Suspend from "@/components/Suspend"

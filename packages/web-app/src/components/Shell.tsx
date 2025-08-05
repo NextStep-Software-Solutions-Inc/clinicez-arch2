@@ -41,7 +41,7 @@ export const mockClinicsData: ClinicItem[] = [
     title: "City Medical Center",
     description: "Comprehensive healthcare services with state-of-the-art facilities",
     image: {
-      src: "/placeholder.svg",
+      src: "https://images.unsplash.com/photo-1695059963363-01b3b528433c?q=80&w=774&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D", // hospital hallway
       alt: "City Medical Center"
     },
     count: 15
@@ -52,7 +52,7 @@ export const mockClinicsData: ClinicItem[] = [
     title: "Downtown Health Clinic",
     description: "Primary care and preventive medicine specialists",
     image: {
-      src: "/placeholder.svg",
+      src: "https://images.unsplash.com/photo-1561647186-de5cc448cae3?q=80&w=820&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D", // clinic reception
       alt: "Downtown Health Clinic"
     },
     count: 8
@@ -63,7 +63,7 @@ export const mockClinicsData: ClinicItem[] = [
     title: "Westside Family Practice",
     description: "Family medicine and pediatric care",
     image: {
-      src: "/placeholder.svg",
+      src: "https://images.unsplash.com/photo-1607838720191-0d8eba3e9040?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mjg5fHxob3NwaXRhbHxlbnwwfHwwfHx8MA%3D%3D", // family practice confirmed
       alt: "Westside Family Practice"
     },
     count: 12
@@ -74,7 +74,7 @@ export const mockClinicsData: ClinicItem[] = [
     title: "Advanced Cardiology Center",
     description: "Specialized cardiac care and interventional procedures",
     image: {
-      src: "/placeholder.svg",
+      src: "https://images.unsplash.com/photo-1630444151121-e0816967ab32?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MjIyfHxob3NwaXRhbHxlbnwwfHwwfHx8MA%3D%3D", // cardiology center
       alt: "Advanced Cardiology Center"
     },
     count: 6
@@ -85,7 +85,7 @@ export const mockClinicsData: ClinicItem[] = [
     title: "Women's Health Clinic",
     description: "Comprehensive women's healthcare and reproductive services",
     image: {
-      src: "/placeholder.svg",
+      src: "https://images.unsplash.com/photo-1654762549297-2a145fcb9924?q=80&w=2942&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D", // women's health confirmed
       alt: "Women's Health Clinic"
     },
     count: 10
@@ -96,7 +96,7 @@ export const mockClinicsData: ClinicItem[] = [
     title: "Pediatric Care Center",
     description: "Specialized care for children and adolescents",
     image: {
-      src: "/placeholder.svg",
+      src: "https://images.unsplash.com/photo-1578991624414-276ef23a534f?q=80&w=2054&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D", // pediatric care confirmed
       alt: "Pediatric Care Center"
     },
     count: 9
@@ -110,7 +110,7 @@ export const mockOrganizationsData: OrganizationItem[] = [
     title: "Regional Health Network",
     description: "Connecting healthcare providers across the region",
     image: {
-      src: "/placeholder.svg",
+      src: "https://images.unsplash.com/photo-1586773860418-d37222d8fce3?q=80&w=2946&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D", // hospital team
       alt: "Regional Health Network"
     },
     count: 45
@@ -121,7 +121,7 @@ export const mockOrganizationsData: OrganizationItem[] = [
     title: "Healthcare Innovation Hub",
     description: "Advancing medical technology and patient care",
     image: {
-      src: "/placeholder.svg",
+      src: "https://images.unsplash.com/photo-1596541223130-5d31a73fb6c6?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8NDB8fGhvc3BpdGFsfGVufDB8fDB8fHww", // innovation hub
       alt: "Healthcare Innovation Hub"
     },
     count: 28
@@ -132,7 +132,7 @@ export const mockOrganizationsData: OrganizationItem[] = [
     title: "Community Health Alliance",
     description: "Promoting community wellness and preventive care",
     image: {
-      src: "/placeholder.svg",
+      src: "https://images.unsplash.com/photo-1578991624414-276ef23a534f?q=80&w=2054&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D", // community health
       alt: "Community Health Alliance"
     },
     count: 67
@@ -143,7 +143,7 @@ export const mockOrganizationsData: OrganizationItem[] = [
     title: "Medical Research Institute",
     description: "Leading research in medical breakthroughs",
     image: {
-      src: "/placeholder.svg",
+      src: "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8NHx8aG9zcGl0YWx8ZW58MHx8MHx8fDA%3D", // research institute
       alt: "Medical Research Institute"
     },
     count: 23
@@ -157,7 +157,7 @@ export const mockHpData: HpItem[] = [
     title: "Dr. Sarah Johnson",
     description: "Internal Medicine Specialist with 15 years of experience",
     image: {
-      src: "/placeholder.svg",
+      src: "https://images.unsplash.com/photo-1651008376811-b90baee60c1f?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Nnx8ZG9jdG9yfGVufDB8fDB8fHww", // female doctor portrait
       alt: "Dr. Sarah Johnson"
     },
     count: 1200
@@ -168,7 +168,7 @@ export const mockHpData: HpItem[] = [
     title: "Dr. Michael Chen",
     description: "Cardiologist specializing in interventional procedures",
     image: {
-      src: "/placeholder.svg",
+      src: "https://images.unsplash.com/photo-1582750433449-648ed127bb54?w=900&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8NHx8ZG9jdG9yfGVufDB8fDB8fHww", // male doctor portrait
       alt: "Dr. Michael Chen"
     },
     count: 850
@@ -179,7 +179,7 @@ export const mockHpData: HpItem[] = [
     title: "Dr. Emily Rodriguez",
     description: "Pediatrician with expertise in child development",
     image: {
-      src: "/placeholder.svg",
+      src: "https://images.unsplash.com/photo-1527613426441-4da17471b66d?auto=format&fit=crop&w=600&q=80", // female pediatrician
       alt: "Dr. Emily Rodriguez"
     },
     count: 950
@@ -190,7 +190,7 @@ export const mockHpData: HpItem[] = [
     title: "Dr. David Thompson",
     description: "Orthopedic surgeon specializing in sports medicine",
     image: {
-      src: "/placeholder.svg",
+      src: "https://images.unsplash.com/photo-1609188076864-c35269136b09?q=80&w=2940&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D", // male surgeon portrait
       alt: "Dr. David Thompson"
     },
     count: 750
@@ -201,7 +201,7 @@ export const mockHpData: HpItem[] = [
     title: "Dr. Lisa Park",
     description: "Dermatologist with focus on cosmetic procedures",
     image: {
-      src: "/placeholder.svg",
+      src: "https://images.unsplash.com/photo-1594824476967-48c8b964273f?q=80&w=774&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D", // female doctor in clinic
       alt: "Dr. Lisa Park"
     },
     count: 680
@@ -212,7 +212,7 @@ export const mockHpData: HpItem[] = [
     title: "Dr. Robert Wilson",
     description: "Emergency medicine physician with trauma expertise",
     image: {
-      src: "/placeholder.svg",
+      src: "https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&w=600&q=80", // male doctor in ER
       alt: "Dr. Robert Wilson"
     },
     count: 1100
