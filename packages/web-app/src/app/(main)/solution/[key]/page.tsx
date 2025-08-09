@@ -225,7 +225,7 @@ const solutionIcons = {
     bed: "🛏️",
     laboratory: "🧪",
     prescription: "📄",
-    medcert: "📑"
+    medcert: "📄"
 };
 
 const benefitIcons = ["⚡", "✅", "🔒", "📈", "🕒", "💡", "🔗", "💬", "🧑‍⚕️", "🏥"];
