@@ -1,5 +1,6 @@
 import React from "react";
 import Link from "next/link";
+import { findEmojiByPartialKey } from "@/lib/find-emoji";
 
 const solutions = [
     {
@@ -43,6 +44,12 @@ const solutions = [
         title: "Medcert Builder",
         description: "Medical certificate builder for generating and managing medcerts.",
         link: "/solution/medcert"
+    },
+    {
+        key: "philhealth",
+        title: "PhilHealth eKonsulta integration",
+        description: "Integration with PhilHealth eKonsulta, claims processing, and eligibility verification.",
+        link: "/solution/philhealth"
     }
 ];
 
@@ -52,6 +59,7 @@ export default function SolutionList() {
             {solutions.map((sol) => (
                 <Link href={sol.link} key={sol.key} className="group">
                     <div className="p-7 rounded-2xl bg-white shadow-lg border border-slate-100 transition-transform hover:-translate-y-1 hover:shadow-xl flex flex-col h-full">
+                        <span className="text-3xl mb-2">{findEmojiByPartialKey(sol.title)}</span>
                         <span className="text-2xl font-bold mb-2 text-gray-900 group-hover:text-primary transition-colors">{sol.title}</span>
                         <span className="mb-4 text-base text-gray-600 font-normal">{sol.description}</span>
                         <span className="mt-auto text-primary font-semibold text-sm group-hover:underline">View Details &rarr;</span>
