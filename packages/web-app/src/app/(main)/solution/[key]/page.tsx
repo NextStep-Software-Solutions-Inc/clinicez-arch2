@@ -218,9 +218,14 @@ const solutionContexts = {
     }
 };
 
-export default function SolutionDetailPage({ params }: { params: { key: string } }) {
-    const details = solutionDetails[params.key as keyof typeof solutionDetails];
-    const context = solutionContexts[params.key as keyof typeof solutionContexts];
+interface SolutionDetailProps {
+    params: Promise<{ key: string }>;
+}
+
+export default async function SolutionDetailPage({ params }: SolutionDetailProps) {
+    const { key } = await params;
+    const details = solutionDetails[key as keyof typeof solutionDetails];
+    const context = solutionContexts[key as keyof typeof solutionContexts];
     if (!details || !context) return notFound();
     return (
         <main className="relative min-h-[70vh] flex flex-col items-center justify-start py-0 px-0 overflow-hidden">
