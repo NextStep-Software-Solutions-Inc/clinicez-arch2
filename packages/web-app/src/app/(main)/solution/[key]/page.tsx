@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import HeroBackground from "@/components/HeroBackground";
 import MainBackgroundImage from "@/../public/assets/main-background.png";
+import { findEmojiByPartialKey } from "@/lib/find-emoji";
 
 const solutionDetails = {
     opd: {
@@ -78,6 +79,19 @@ const solutionDetails = {
             "Patient linking",
             "Export/print",
             "Validity tracking"
+        ]
+    },
+    philhealth: {
+        title: "PhilHealth integration",
+        description: "Integration with PhilHealth for claims, eligibility, and electronic submission.",
+        features: [
+            "eClaims submission",
+            "Eligibility verification",
+            "Electronic benefit claim (EBC) integration",
+            "Member search",
+            "Real-time status updates"
+            ,
+            "eKonsulta telemedicine integration"
         ]
     }
 };
@@ -215,14 +229,36 @@ const solutionContexts = {
             "Doctor signature",
             "Export tools"
         ]
+    },
+    philhealth: {
+        overview: "PhilHealth integration enables clinics to electronically submit claims, verify member eligibility, and streamline benefit processing with the national health insurance system.",
+        benefits: [
+            "Automate PhilHealth claims and eligibility checks.",
+            "Reduce manual paperwork and errors.",
+            "Real-time claim status updates.",
+            "Improve compliance with national standards."
+        ],
+        useCases: [
+            "PhilHealth-accredited clinics",
+            "Insurance processing",
+            "Multi-branch clinics"
+            ,
+            "Telemedicine via eKonsulta"
+        ],
+        integrations: [
+            "EMR/EHR systems",
+            "Accounting & billing",
+            "Patient records"
+        ]
     }
 };
-
+// ...existing code...
 interface SolutionDetailProps {
     params: Promise<{ key: string }>;
 }
 
 export default async function SolutionDetailPage({ params }: SolutionDetailProps) {
+
     const { key } = await params;
     const details = solutionDetails[key as keyof typeof solutionDetails];
     const context = solutionContexts[key as keyof typeof solutionContexts];
@@ -232,7 +268,11 @@ export default async function SolutionDetailPage({ params }: SolutionDetailProps
             <HeroBackground path={MainBackgroundImage} opacity={0.3} />
             <section className="w-full pt-20 pb-12 px-4">
                 <div className="max-w-3xl w-full mx-auto text-center my-10">
-                    <h1 className="font-geist-sans text-5xl md:text-6xl font-normal tracking-tight text-primary my-4 drop-shadow-sm">{details.title}</h1>
+                    <h1 className="font-geist-sans text-5xl md:text-6xl font-normal tracking-tight text-primary my-4 drop-shadow-sm">
+                        {/* Use first matching emoji for title, fallback to ✨ */}
+                        <span className="mr-2">{findEmojiByPartialKey(details.title, "✨")}</span>
+                        {details.title}
+                    </h1>
                     <p className="font-geist-sans text-xl md:text-2xl text-gray-700 mb-8">{details.description}</p>
                 </div>
                 <div className="max-w-2xl w-full mx-auto mb-10">
@@ -272,7 +312,7 @@ export default async function SolutionDetailPage({ params }: SolutionDetailProps
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {details.features.map((f, i) => (
                             <div key={i} className="bg-white/80 backdrop-blur-md rounded-xl shadow-lg p-6 flex items-center gap-3 border border-slate-100">
-                                <span className="inline-block w-3 h-3 rounded-full bg-primary"></span>
+                                <span className="text-xl">{findEmojiByPartialKey(f, "✨")}</span>
                                 <span className="font-geist-sans text-base text-gray-900">{f}</span>
                             </div>
                         ))}
