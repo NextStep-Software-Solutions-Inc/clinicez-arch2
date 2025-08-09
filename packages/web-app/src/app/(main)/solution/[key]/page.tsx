@@ -80,6 +80,19 @@ const solutionDetails = {
             "Export/print",
             "Validity tracking"
         ]
+    },
+    philhealth: {
+        title: "PhilHealth integration",
+        description: "Integration with PhilHealth for claims, eligibility, and electronic submission.",
+        features: [
+            "eClaims submission",
+            "Eligibility verification",
+            "Electronic benefit claim (EBC) integration",
+            "Member search",
+            "Real-time status updates"
+            ,
+            "eKonsulta telemedicine integration"
+        ]
     }
 };
 
@@ -215,6 +228,27 @@ const solutionContexts = {
             "Patient records",
             "Doctor signature",
             "Export tools"
+        ]
+    },
+    philhealth: {
+        overview: "PhilHealth integration enables clinics to electronically submit claims, verify member eligibility, and streamline benefit processing with the national health insurance system.",
+        benefits: [
+            "Automate PhilHealth claims and eligibility checks.",
+            "Reduce manual paperwork and errors.",
+            "Real-time claim status updates.",
+            "Improve compliance with national standards."
+        ],
+        useCases: [
+            "PhilHealth-accredited clinics",
+            "Insurance processing",
+            "Multi-branch clinics"
+            ,
+            "Telemedicine via eKonsulta"
+        ],
+        integrations: [
+            "EMR/EHR systems",
+            "Accounting & billing",
+            "Patient records"
         ]
     }
 };
