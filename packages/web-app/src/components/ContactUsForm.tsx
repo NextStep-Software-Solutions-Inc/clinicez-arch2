@@ -70,7 +70,7 @@ export const ContactUsForm = () => {
           setPrevName(data.name)
           return "Message sent successfully"
         },
-        error: "An error occured while sending message",
+        error: "An error occurred while sending message",
       })
     })()
   }

@@ -61,9 +61,6 @@ export default function SearchPaginatedList<T>({
             <div key={i}>{render(item, i)}</div>
           )}
         />
-        {/* {visibleData.map((item, i) => (
-          <div key={i}>{render(item, i)}</div>
-        ))} */}
       </div>
 
       {/* Load More */}

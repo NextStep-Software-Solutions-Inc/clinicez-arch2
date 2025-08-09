@@ -3,6 +3,9 @@
 import { sendMail } from "./email.action";
 
 export const sendContactUsMessage = async (data: { name: string, email: string, message: string }) => {
+  if (!process.env.REPLY_TO_EMAIL) {
+    throw new Error("REPLY_TO_EMAIL environment variable is not defined.");
+  }
   await sendMail({
     to: process.env.REPLY_TO_EMAIL,
     subject: "Contact Us Message",

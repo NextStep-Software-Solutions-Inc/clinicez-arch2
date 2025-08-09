@@ -10,8 +10,10 @@ interface Props {
   children: React.ReactNode;
 }
 
+const noop = () => { };
+
 const defaultErrorFallback = ({ error, reset }: { error: Error, reset?: () => void }) => {
-  return <GlobalError error={error} reset={reset ?? (() => { })} />;
+  return <GlobalError error={error} reset={reset ?? noop} />;
 };
 
 export default function Suspend({ children, errorFallback = defaultErrorFallback, loadingFallback = <div>Loading resources...</div> }: Props) {

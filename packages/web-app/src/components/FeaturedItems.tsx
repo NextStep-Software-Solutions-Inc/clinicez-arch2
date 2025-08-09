@@ -108,7 +108,7 @@ const topFeatures: Record<string, FeaturedItemProps[]> = {
     },
     {
       title: "Built by Healthcare Technology Experts",
-      description: "Our team combines deep healthcare knowledge with modern technology expertise to create solutions that actually works in real healhcare environments.",
+      description: "Our team combines deep healthcare knowledge with modern technology expertise to create solutions that actually work in real healthcare environments.",
       button: {
         text: "Get Started",
         href: "#",

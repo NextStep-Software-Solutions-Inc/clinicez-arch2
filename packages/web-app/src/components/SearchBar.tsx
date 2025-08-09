@@ -19,11 +19,14 @@ export default function SearchBar({ placeholder, className }: SearchBarProps) {
   const isMountedRef = useRef(false);
 
   useEffect(() => {
-    if (isMountedRef.current || debounceValue) {
-      isMountedRef.current = true;
+    if (isMountedRef.current) {
       const searchParams = new URLSearchParams();
-      searchParams.set("search", debounceValue);
+      if (debounceValue) {
+        searchParams.set("search", debounceValue);
+      }
       router.push(`?${searchParams.toString()}`);
+    } else {
+      isMountedRef.current = true;
     }
   }, [debounceValue, router]);
 
