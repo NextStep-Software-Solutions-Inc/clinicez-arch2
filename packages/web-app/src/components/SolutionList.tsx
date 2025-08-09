@@ -47,22 +47,11 @@ const solutions = [
 ];
 
 export default function SolutionList() {
-    // Map solution keys to emoji/icons
-    const solutionIcons: Record<string, string> = {
-        opd: "🩺",
-        pharmacy: "💊",
-        accounting: "💰",
-        bed: "🛏️",
-        laboratory: "🧪",
-        prescription: "📝",
-        medcert: "📄"
-    };
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {solutions.map((sol) => (
                 <Link href={sol.link} key={sol.key} className="group">
                     <div className="p-7 rounded-2xl bg-white shadow-lg border border-slate-100 transition-transform hover:-translate-y-1 hover:shadow-xl flex flex-col h-full">
-                        <span className="text-4xl mb-3" aria-label="icon" role="img">{solutionIcons[sol.key]}</span>
                         <span className="text-2xl font-bold mb-2 text-gray-900 group-hover:text-primary transition-colors">{sol.title}</span>
                         <span className="mb-4 text-base text-gray-600 font-normal">{sol.description}</span>
                         <span className="mt-auto text-primary font-semibold text-sm group-hover:underline">View Details &rarr;</span>

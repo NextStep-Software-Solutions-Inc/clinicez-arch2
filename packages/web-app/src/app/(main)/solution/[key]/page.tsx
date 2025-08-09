@@ -218,74 +218,56 @@ const solutionContexts = {
     }
 };
 
-const solutionIcons = {
-    opd: "🩺",
-    pharmacy: "💊",
-    accounting: "💰",
-    bed: "🛏️",
-    laboratory: "🧪",
-    prescription: "📄",
-    medcert: "📄"
-};
-
-const benefitIcons = ["⚡", "✅", "🔒", "📈", "🕒", "💡", "🔗", "💬", "🧑‍⚕️", "🏥"];
-const useCaseIcons = ["🏥", "👨‍⚕️", "👩‍⚕️", "🧑‍⚕️", "🗓️", "💼", "🌐", "📱", "🧑‍💻"];
-const integrationIcons = ["🔗", "💻", "📊", "🧾", "🧪", "💊", "🩺", "📄", "📑"];
-
 export default function SolutionDetailPage({ params }: { params: { key: string } }) {
     const details = solutionDetails[params.key as keyof typeof solutionDetails];
     const context = solutionContexts[params.key as keyof typeof solutionContexts];
-    const icon = solutionIcons[params.key as keyof typeof solutionIcons] || "💡";
     if (!details || !context) return notFound();
     return (
         <main className="relative min-h-[70vh] flex flex-col items-center justify-start py-0 px-0 overflow-hidden">
             <HeroBackground path={MainBackgroundImage} opacity={0.3} />
             <section className="w-full pt-20 pb-12 px-4">
                 <div className="max-w-3xl w-full mx-auto text-center my-10">
-                    <h1 className="font-geist-sans text-5xl md:text-6xl font-normal tracking-tight text-primary my-4 drop-shadow-sm flex items-center justify-center gap-3">
-                        <span>{icon}</span>
-                        {details.title}
-                    </h1>
+                    <h1 className="font-geist-sans text-5xl md:text-6xl font-normal tracking-tight text-primary my-4 drop-shadow-sm">{details.title}</h1>
                     <p className="font-geist-sans text-xl md:text-2xl text-gray-700 mb-8">{details.description}</p>
                 </div>
                 <div className="max-w-2xl w-full mx-auto mb-10">
                     <div className="bg-white/80 backdrop-blur-md rounded-xl shadow-lg p-8 border border-slate-100">
-                        <h2 className="text-xl font-bold text-primary mb-2 flex items-center gap-2">Overview <span>📝</span></h2>
+                        <h2 className="text-xl font-bold text-primary mb-2">Overview</h2>
                         <p className="text-base text-gray-700 mb-4">{context.overview}</p>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
                             <div>
-                                <h3 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2">Benefits <span>🎯</span></h3>
+                                <h3 className="text-lg font-semibold text-gray-900 mb-2">Benefits</h3>
                                 <ul className="list-disc pl-6 text-gray-700 space-y-1">
                                     {context.benefits.map((b, i) => (
-                                        <li key={i} className="text-base flex items-center gap-2"><span>{benefitIcons[i % benefitIcons.length]}</span>{b}</li>
+                                        <li key={i} className="text-base">{b}</li>
                                     ))}
                                 </ul>
                             </div>
                             <div>
-                                <h3 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2">Use Cases <span>🧩</span></h3>
+                                <h3 className="text-lg font-semibold text-gray-900 mb-2">Use Cases</h3>
                                 <ul className="list-disc pl-6 text-gray-700 space-y-1">
                                     {context.useCases.map((u, i) => (
-                                        <li key={i} className="text-base flex items-center gap-2"><span>{useCaseIcons[i % useCaseIcons.length]}</span>{u}</li>
+                                        <li key={i} className="text-base">{u}</li>
                                     ))}
                                 </ul>
                             </div>
                         </div>
                         <div>
-                            <h3 className="text-lg font-semibold text-gray-900 mb-2 flex items-center gap-2">Integrations <span>🔗</span></h3>
+                            <h3 className="text-lg font-semibold text-gray-900 mb-2">Integrations</h3>
                             <ul className="list-disc pl-6 text-gray-700 space-y-1">
                                 {context.integrations.map((int, i) => (
-                                    <li key={i} className="text-base flex items-center gap-2"><span>{integrationIcons[i % integrationIcons.length]}</span>{int}</li>
+                                    <li key={i} className="text-base">{int}</li>
                                 ))}
                             </ul>
                         </div>
                     </div>
                 </div>
                 <div className="max-w-2xl w-full mx-auto">
-                    <h2 className="text-2xl font-bold text-primary mb-6 text-center flex items-center gap-2">Key Features <span>⭐</span></h2>
+                    <h2 className="text-2xl font-bold text-primary mb-6 text-center">Key Features</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {details.features.map((f, i) => (
                             <div key={i} className="bg-white/80 backdrop-blur-md rounded-xl shadow-lg p-6 flex items-center gap-3 border border-slate-100">
-                                <span className="inline-block w-7 h-7 text-2xl flex items-center justify-center">✨</span>
+                                <span className="inline-block w-3 h-3 rounded-full bg-primary"></span>
                                 <span className="font-geist-sans text-base text-gray-900">{f}</span>
                             </div>
                         ))}
