@@ -1,36 +1,90 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ClinicEZ Web App
 
-## Getting Started
+Next.js application for ClinicEZ marketing, onboarding, and tenant management. This package lives inside the ClinicEZ monorepo under `packages/web-app`.
 
-First, run the development server:
+- Framework: Next.js (App Router)
+- Styling: Tailwind CSS v4
+- Language: TypeScript
+
+For overall architecture and workflows, see the root README at `../../README.md`.
+
+## Prerequisites
+
+- Node.js 18+ (20+ recommended)
+- Package manager: pnpm (recommended) or npm/yarn
+
+## Quick Start
+
+From the monorepo root:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+cd packages/web-app
+pnpm install
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open <http://localhost:3000> in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `pnpm dev` – Start the dev server (Turbopack)
+- `pnpm build` – Build for production
+- `pnpm start` – Start the production server
+- `pnpm lint` – Run linting
 
-## Learn More
+If you prefer npm or yarn:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm run dev   # or
+yarn dev
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Project Structure
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```text
+packages/web-app/
+  app/          # Next.js App Router routes, layouts, metadata
+  public/       # Static assets
+  src/
+    components/ # UI components (e.g., Shell, SearchPaginatedList)
+    lib/        # Utilities and helpers
+    hooks/      # React hooks
+    actions/    # Server/actions modules
+  next.config.ts
+  tsconfig.json
+  postcss.config.mjs
+  tailwind config files
+```
 
-## Deploy on Vercel
+## Development Notes
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- This app is part of a monorepo. Keep shared logic inside package-local folders unless a true shared package is introduced.
+- Follow TypeScript and ESLint rules defined in this package.
+- UI images used in mock data (Unsplash) should be production-safe, royalty-free links.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Deploying to Vercel (Monorepo)
+
+When deploying with Vercel, make sure the project root is set to this package folder.
+
+- Root Directory: `packages/web-app`
+- Install Command: `pnpm install` (or your preferred manager)
+- Build Command: `pnpm build`
+- Output Directory: `.next` (default for Next.js)
+
+Tips:
+
+- Using the CLI from the repo root: `vercel --cwd packages/web-app`
+- Or `cd packages/web-app && vercel`
+- In the Vercel dashboard: Project Settings → General → Root Directory → `packages/web-app`
+
+### Troubleshooting
+
+Error: "The specified Root Directory \"packages\\web-app\" does not exist."
+
+- Ensure your Vercel project is linked to the monorepo and the Root Directory is exactly `packages/web-app`.
+- If using the CLI, run it from `packages/web-app` or pass `--cwd packages/web-app`.
+- Verify the folder exists in the deployed branch and is not excluded by `.vercelignore`/`.gitignore`.
+
+## Contributing
+
+See `../../CONTRIBUTING.md` for contribution guidelines.

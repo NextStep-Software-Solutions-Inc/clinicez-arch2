@@ -20,6 +20,10 @@ const footerLinks = [
     link: "#",
   },
   {
+    title: "Solution",
+    link: "/solution",
+  },
+  {
     title: "Support",
     link: "#",
   },
