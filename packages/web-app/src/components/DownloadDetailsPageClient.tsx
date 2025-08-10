@@ -24,8 +24,8 @@ import {
     Apple,
     Package,
 } from "lucide-react";
-import { DownloadOption as DownloadOptionComponent } from "../app/(main)/downloads/components/DownloadOption";
 import { Downloadable, DownloadableOption, installationManual } from "../app/(main)/downloads/data/downloadData";
+import { DownloadOption } from "@/app/(main)/downloads/components/DownloadOption";
 
 interface DownloadDetailsPageClientProps {
     category: Downloadable;
@@ -223,15 +223,10 @@ export function DownloadDetailsPageClient({ category }: DownloadDetailsPageClien
 
                             <div className="grid gap-6 max-w-4xl mx-auto">
                                 {category.options.map((option) => {
-                                    // Create a full option object with icon for the component
-                                    const fullOption = {
-                                        ...option,
-                                        icon: getOptionIcon(option.label)
-                                    };
                                     return (
                                         <Card key={option.id} className="overflow-hidden">
                                             <CardContent className="p-6">
-                                                <DownloadOptionComponent
+                                                <DownloadOption
                                                     option={option}
                                                     onDownload={handleDownload}
                                                     isDownloading={downloadingItems.has(option.id)}
@@ -324,7 +319,7 @@ export function DownloadDetailsPageClient({ category }: DownloadDetailsPageClien
                                                 <div>
                                                     <p className="font-medium">Configure Settings</p>
                                                     <p className="text-sm text-muted-foreground">
-                                                        Customize the app settings according to your clinic's needs.
+                                                        {"Customize the app settings according to your clinic's needs."}
                                                     </p>
                                                 </div>
                                             </div>

@@ -25,8 +25,8 @@ import {
     Package,
 } from "lucide-react";
 import { Downloadable, DownloadableOption, installationManual } from "../data/downloadData";
-import { DownloadOption } from "../components/DownloadOption";
 import Icon from "@/components/Icon";
+import { DownloadOption } from "../components/DownloadOption";
 
 interface DownloadDetailsPageClientProps {
     downloadable: Downloadable;
@@ -53,16 +53,6 @@ const itemVariants = {
             ease: [0.6, -0.05, 0.01, 0.99] as const,
         },
     },
-};
-
-// Icon mapping
-const iconMap = {
-    User,
-    Building2,
-    Server,
-    Smartphone,
-    Apple,
-    Package,
 };
 
 export function DownloadDetailsPageClient({ downloadable }: DownloadDetailsPageClientProps) {
@@ -235,11 +225,10 @@ export function DownloadDetailsPageClient({ downloadable }: DownloadDetailsPageC
                                     <h3 className="text-lg font-semibold mb-4">System Requirements</h3>
                                     <div className="grid md:grid-cols-2 gap-6">
                                         {downloadable.options.map((option) => {
-                                            const OptionIconComponent = iconMap[option.icon as keyof typeof iconMap] || Package;
                                             return (
                                                 <div key={option.id} className="space-y-2">
                                                     <div className="flex items-center gap-2">
-                                                        <OptionIconComponent className="h-5 w-5 text-primary" />
+                                                        <Icon name={option.icon} className="h-5 w-5 text-primary" />
                                                         <span className="font-medium">{option.label}</span>
                                                     </div>
                                                     <ul className="text-sm text-muted-foreground space-y-1 ml-7">
