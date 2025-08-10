@@ -91,7 +91,7 @@ export default function DownloadPage() {
                     {/* Patient App */}
                     <div
                         onClick={() => openModal("patient")}
-                        className="rounded-lg border border-gray-200 p-6 flex flex-col items-center gap-2 bg-white hover:shadow transition"
+                        className="cursor-pointer rounded-lg border border-gray-200 p-6 flex flex-col items-center gap-2 bg-white hover:shadow transition"
                         aria-label="Open Patient App download options"
                     >
                         <span className="text-3xl mb-1">🧑‍⚕️</span>
@@ -100,7 +100,7 @@ export default function DownloadPage() {
                     {/* Clinic App */}
                     <div
                         onClick={() => openModal("clinic")}
-                        className="rounded-lg border border-gray-200 p-6 flex flex-col items-center gap-2 bg-white hover:shadow transition"
+                        className="cursor-pointer rounded-lg border border-gray-200 p-6 flex flex-col items-center gap-2 bg-white hover:shadow transition"
                         aria-label="Open Clinic App download options"
                     >
                         <span className="text-3xl mb-1">🏥</span>
@@ -109,7 +109,7 @@ export default function DownloadPage() {
                     {/* Server */}
                     <div
                         onClick={() => openModal("server")}
-                        className="rounded-lg border border-gray-200 p-6 flex flex-col items-center gap-2 bg-white hover:shadow transition"
+                        className="cursor-pointer rounded-lg border border-gray-200 p-6 flex flex-col items-center gap-2 bg-white hover:shadow transition"
                         aria-label="Open Server download options"
                     >
                         <span className="text-3xl mb-1">🖥️</span>
@@ -146,7 +146,7 @@ export default function DownloadPage() {
                                             <a key={idx} href={opt.url} target="_blank" rel="noopener noreferrer" className="group w-full flex items-center justify-between rounded-xl border border-primary/10 bg-primary/5 px-6 py-5 hover:bg-primary/10 transition shadow-sm">
                                                 <div className="flex items-center gap-4">
                                                     <span className="text-3xl">{opt.icon}</span>
-                                                    <div>
+                                                    <div className="text-left">
                                                         <p className="font-semibold text-primary text-lg group-hover:underline">{opt.label}</p>
                                                         <p className="text-xs text-gray-400">Latest: {opt.version}</p>
                                                     </div>
@@ -157,7 +157,7 @@ export default function DownloadPage() {
                                         <a key={idx} href={opt.url} target="_blank" rel="noopener" className="group w-full flex items-center justify-between rounded-xl border border-primary/10 bg-primary/5 px-6 py-5 hover:bg-primary/10 transition shadow-sm">
                                             <div className="flex items-center gap-4">
                                                 <span className="text-3xl">{opt.icon}</span>
-                                                <div>
+                                                <div className="text-left">
                                                     <p className="font-semibold text-primary text-lg group-hover:underline">{opt.label}</p>
                                                     <p className="text-xs text-gray-400">Latest: {opt.version}</p>
                                                 </div>
