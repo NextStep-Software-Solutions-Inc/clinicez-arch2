@@ -7,31 +7,13 @@ import Image from "next/image";
 import ClinicEzLogo from "../../public/clinic-ez_logo.svg";
 
 const footerLinks = [
-  {
-    title: "About",
-    link: "#",
-  },
-  {
-    title: "Features",
-    link: "#",
-  },
-  {
-    title: "Works",
-    link: "#",
-  },
-  {
-    title: "Solution",
-    link: "/solution",
-  },
+  { title: "About", link: "#" },
+  { title: "Features", link: "#" },
+  { title: "Works", link: "#" },
+  { title: "Solution", link: "/solution" },
   { title: "Downloads", link: "/downloads" },
-  {
-    title: "Support",
-    link: "#",
-  },
-  {
-    title: "Help",
-    link: "#",
-  },
+  { title: "Support", link: "#" },
+  { title: "Help", link: "#" },
 ];
 
 const socialIcons = [
