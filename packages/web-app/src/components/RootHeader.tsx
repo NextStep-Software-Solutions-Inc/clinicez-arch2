@@ -1,15 +1,14 @@
-"use client";
-
 import { cn } from "@/lib/utils";
 import { DetailedHTMLProps } from "react";
 import AnimatedLogo from "./AnimatedLogo";
 import Link from "next/link";
-import Navigation from "./Navigation";
-import HeaderEffects from "./HeaderEffects";
-import { Button } from "./ui/button";
-import RootDrawer from "./RootDrawer";
+import Navigation from "@/components/Navigation";
+import HeaderEffects from "@/components/HeaderEffects";
+import { Button } from "@/components/ui/button";
+import RootDrawer from "@/components/RootDrawer";
 import { Star } from "lucide-react";
-import { UserButton, SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
+import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
+import ClerkUserButton from "@/components/ClerkUserButton";
 
 type IRootHeaderProps = DetailedHTMLProps<React.HTMLAttributes<HTMLDivElement>, HTMLDivElement>
 export default function RootHeader({ className, ...props }: IRootHeaderProps) {
@@ -59,15 +58,7 @@ export default function RootHeader({ className, ...props }: IRootHeaderProps) {
             </Link>
             <div className="mx-2">
               <SignedIn>
-                <UserButton>
-                  <UserButton.MenuItems>
-                    <UserButton.Link
-                      label="Tenant Dashboard"
-                      labelIcon={<Star size={14} />}
-                      href="/tenants/dashboard"
-                    />
-                  </UserButton.MenuItems>
-                </UserButton>
+                <ClerkUserButton />
               </SignedIn>
               <SignedOut>
                 <SignInButton mode="modal">
