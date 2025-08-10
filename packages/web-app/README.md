@@ -43,9 +43,9 @@ yarn dev
 
 ```text
 packages/web-app/
-  app/          # Next.js App Router routes, layouts, metadata
   public/       # Static assets
   src/
+    app/          # Next.js App Router routes, layouts, metadata
     components/ # UI components (e.g., Shell, SearchPaginatedList)
     lib/        # Utilities and helpers
     hooks/      # React hooks
