@@ -24,9 +24,9 @@ import {
     Apple,
     Package,
 } from "lucide-react";
-import { SerializableDownloadCategoryInfo, SerializableDownloadOption } from "../types/downloads";
-import { DownloadOption as DownloadOptionComponent } from "../components/DownloadOption";
-import { installationManual } from "../data/downloadData";
+import { SerializableDownloadCategoryInfo, SerializableDownloadOption } from "../app/(main)/downloads/types/downloads";
+import { DownloadOption as DownloadOptionComponent } from "../app/(main)/downloads/components/DownloadOption";
+import { installationManual } from "../app/(main)/downloads/data/downloadData";
 
 interface DownloadDetailsPageClientProps {
     category: SerializableDownloadCategoryInfo;

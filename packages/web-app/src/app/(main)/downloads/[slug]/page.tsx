@@ -1,7 +1,7 @@
 import React from "react";
 import { notFound } from "next/navigation";
 import { downloadCategories } from "../data/downloadData";
-import { DownloadDetailsPageClient } from "./DownloadDetailsPageClient";
+import { DownloadDetailsPageClient } from "../../../../components/DownloadDetailsPageClient";
 import { SerializableDownloadCategoryInfo } from "../types/downloads";
 
 interface DownloadDetailsPageProps {
