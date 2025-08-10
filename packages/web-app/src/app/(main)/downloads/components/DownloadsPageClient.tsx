@@ -7,8 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Download, Sparkles, Shield, Zap } from "lucide-react";
 import { DownloadGrid } from "./DownloadGrid";
-import { downloadCategories } from "../data/downloadData";
-import { DownloadCategoryInfo } from "../types/downloads";
+import { Downloadable, downloadables } from "../data/downloadData";
 
 const containerVariants = {
     hidden: { opacity: 0 },
@@ -64,8 +63,8 @@ export function DownloadsPageClient() {
         return () => clearTimeout(timer);
     }, []);
 
-    const handleCategoryClick = (category: DownloadCategoryInfo) => {
-        router.push(`/downloads/${category.slug}`);
+    const handleCategoryClick = (downloadable: Downloadable) => {
+        router.push(`/downloads/${downloadable.slug}`);
     };
 
     return (
@@ -153,7 +152,7 @@ export function DownloadsPageClient() {
                     </div>
 
                     <DownloadGrid
-                        categories={downloadCategories}
+                        categories={downloadables}
                         onCategoryClick={handleCategoryClick}
                         isLoading={isLoading}
                     />

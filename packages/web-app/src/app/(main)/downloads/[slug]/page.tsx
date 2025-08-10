@@ -1,8 +1,7 @@
 import React from "react";
 import { notFound } from "next/navigation";
-import { downloadCategories } from "../data/downloadData";
-import { DownloadDetailsPageClient } from "../../../../components/DownloadDetailsPageClient";
-import { SerializableDownloadCategoryInfo } from "../types/downloads";
+import { downloadables } from "../data/downloadData";
+import { DownloadDetailsPageClient } from "./DownloadDetailsPageClient";
 
 interface DownloadDetailsPageProps {
     params: Promise<{ slug: string }>;
@@ -10,46 +9,28 @@ interface DownloadDetailsPageProps {
 
 export default async function DownloadDetailsPage({ params }: DownloadDetailsPageProps) {
     const { slug } = await params;
-    const category = downloadCategories.find(cat => cat.slug === slug);
+    const downloadable = downloadables.find(item => item.slug === slug);
 
-    if (!category) {
+    if (!downloadable) {
         notFound();
     }
 
-    // Create a serializable version of the category without the icon component
-    const serializableCategory: SerializableDownloadCategoryInfo = {
-        id: category.id,
-        slug: category.slug,
-        title: category.title,
-        description: category.description,
-        primaryColor: category.primaryColor,
-        options: category.options.map(option => ({
-            id: option.id,
-            url: option.url,
-            label: option.label,
-            version: option.version,
-            description: option.description,
-            size: option.size,
-            platform: option.platform,
-            isExternal: option.isExternal,
-        }))
-    };
-
-    return <DownloadDetailsPageClient category={serializableCategory} />;
+    return <DownloadDetailsPageClient downloadable={downloadable} />;
 }
+
 
 export async function generateMetadata({ params }: DownloadDetailsPageProps) {
     const { slug } = await params;
-    const category = downloadCategories.find(cat => cat.slug === slug);
+    const downloadable = downloadables.find(item => item.slug === slug);
 
-    if (!category) {
+    if (!downloadable) {
         return {
             title: "Download Not Found - ClinicEZ",
         };
     }
 
     return {
-        title: `Download ${category.title} - ClinicEZ`,
-        description: category.description,
+        title: `Download ${downloadable.title} - ClinicEZ`,
+        description: downloadable.description,
     };
 }

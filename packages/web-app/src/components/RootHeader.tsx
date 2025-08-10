@@ -26,7 +26,7 @@ export default function RootHeader({ className, ...props }: IRootHeaderProps) {
       <div className="container mx-auto">
         <div className="flex items-center justify-between h-16 lg:h-20">
           <div className="hidden lg:flex flex-shrink-0">
-            <Link href="/" className="flex h-40">
+            <Link href="/" className="flex">
               <Image src={ClinicEzLogo}
                 width={100}
                 height={40}

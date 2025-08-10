@@ -1,27 +1,41 @@
-import {
-    User,
-    Building2,
-    Server,
-    Smartphone,
-    Apple,
-    Package,
-} from "lucide-react";
-import { DownloadCategoryInfo } from "../types/downloads";
+import dynamicIconImports from "lucide-react/dynamicIconImports";
 
-export const downloadCategories: DownloadCategoryInfo[] = [
+export type Downloadable = {
+    id: string;
+    slug: string;
+    title: string;
+    description: string;
+    icon: keyof typeof dynamicIconImports;
+    primaryColor: string;
+    options: DownloadableOption[];
+};
+
+export type DownloadableOption = {
+    id: string;
+    url: string;
+    label: string;
+    icon: keyof typeof dynamicIconImports;
+    version: string;
+    description: string;
+    size: string;
+    platform: string;
+    isExternal: boolean;
+};
+
+export const downloadables: Downloadable[] = [
     {
         id: "patient",
         slug: "patient-app",
         title: "Patient App",
         description: "For patients to manage appointments, health records, and clinic visits with ease.",
-        icon: User,
+        icon: "user",
         primaryColor: "emerald",
         options: [
             {
                 id: "patient-android",
                 url: "https://play.google.com/store/apps/details?id=com.clinicez.patient",
                 label: "Android",
-                icon: Smartphone,
+                icon: "smartphone",
                 version: "v2.3.1",
                 description: "Download from Google Play Store",
                 size: "25.4 MB",
@@ -32,7 +46,7 @@ export const downloadCategories: DownloadCategoryInfo[] = [
                 id: "patient-ios",
                 url: "https://apps.apple.com/ph/app/clinicez-patient/id6478954321",
                 label: "iOS",
-                icon: Apple,
+                icon: "apple",
                 version: "v2.3.1",
                 description: "Download from App Store",
                 size: "28.7 MB",
@@ -46,14 +60,14 @@ export const downloadCategories: DownloadCategoryInfo[] = [
         slug: "clinic-app",
         title: "Clinic App",
         description: "Comprehensive clinic management system for healthcare providers and staff.",
-        icon: Building2,
+        icon: "building-2",
         primaryColor: "blue",
         options: [
             {
                 id: "clinic-android",
                 url: "https://play.google.com/store/apps/details?id=com.clinicez.clinic",
                 label: "Android",
-                icon: Smartphone,
+                icon: "smartphone",
                 version: "v1.8.0",
                 description: "Download from Google Play Store",
                 size: "45.2 MB",
@@ -64,7 +78,7 @@ export const downloadCategories: DownloadCategoryInfo[] = [
                 id: "clinic-ios",
                 url: "https://apps.apple.com/ph/app/clinicez-clinic/id6478954322",
                 label: "iOS",
-                icon: Apple,
+                icon: "apple",
                 version: "v1.8.0",
                 description: "Download from App Store",
                 size: "52.1 MB",
@@ -78,14 +92,14 @@ export const downloadCategories: DownloadCategoryInfo[] = [
         slug: "server-package",
         title: "Server Package",
         description: "Deploy your own secure server for complete data control and privacy compliance.",
-        icon: Server,
+        icon: "server",
         primaryColor: "purple",
         options: [
             {
                 id: "server-docker",
                 url: "/downloads/clinicez-backend-v4.0.2.zip",
                 label: "Docker Container",
-                icon: Package,
+                icon: "package",
                 version: "v4.0.2",
                 description: "Complete Docker setup with all dependencies",
                 size: "125.8 MB",
