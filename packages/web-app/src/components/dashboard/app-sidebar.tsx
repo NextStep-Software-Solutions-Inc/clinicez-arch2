@@ -3,10 +3,12 @@
 import * as React from "react"
 import {
   IconBuilding,
+  IconCreditCard,
   IconDashboard,
   IconHospital,
   IconInnerShadowTop,
   IconPill,
+  IconSettings,
   IconTestPipe,
 } from "@tabler/icons-react"
 
@@ -21,6 +23,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
+import { NavSecondary } from "./nav-secondary"
 
 const data = {
   user: {
@@ -55,6 +58,18 @@ const data = {
       icon: IconPill,
     },
   ],
+  navSecondary: [
+    {
+      title: "Settings",
+      url: "/dashboard/settings",
+      icon: IconSettings,
+    },
+    {
+      title: "Billing",
+      url: "/dashboard/billing",
+      icon: IconCreditCard,
+    },
+  ],
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -77,6 +92,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={data.navMain} />
+        <NavSecondary items={data.navSecondary} />
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={data.user} />

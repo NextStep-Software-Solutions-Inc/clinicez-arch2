@@ -48,13 +48,13 @@ export default function Toolbar({ table }: ToolbarProps) {
             </DropdownMenu>
             <Button>
                 <Plus />
-                Add Clinic
+                Add Pharmacy
             </Button>
             {
                 table.getSelectedRowModel().rows.length > 0 && (
                     <Button variant="destructive" className="">
                         <Trash />
-                        Delete {table.getSelectedRowModel().rows.length} Clinics
+                        Delete {table.getSelectedRowModel().rows.length} Pharmacies
                     </Button>
                 )
             }
