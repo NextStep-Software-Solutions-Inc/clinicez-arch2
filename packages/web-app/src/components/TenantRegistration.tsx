@@ -12,7 +12,7 @@ import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter, CardDescription } from "./ui/card";
 import HeroBackground from "./HeroBackground";
-import SecondaryBackgroundImage from "@/public/assets/secondary-background.png";
+import SecondaryBackgroundImage from "@public/assets/secondary-background.png";
 
 const tenantSchema = z.object({
     displayName: z.string().min(2, "Display name is required").max(64),
