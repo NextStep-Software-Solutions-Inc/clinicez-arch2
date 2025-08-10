@@ -24,12 +24,11 @@ import {
     Apple,
     Package,
 } from "lucide-react";
-import { SerializableDownloadCategoryInfo, SerializableDownloadOption } from "../app/(main)/downloads/types/downloads";
 import { DownloadOption as DownloadOptionComponent } from "../app/(main)/downloads/components/DownloadOption";
-import { installationManual } from "../app/(main)/downloads/data/downloadData";
+import { Downloadable, DownloadableOption, installationManual } from "../app/(main)/downloads/data/downloadData";
 
 interface DownloadDetailsPageClientProps {
-    category: SerializableDownloadCategoryInfo;
+    category: Downloadable;
 }
 
 // Icon mapping based on category ID and option labels
@@ -78,7 +77,7 @@ export function DownloadDetailsPageClient({ category }: DownloadDetailsPageClien
     const [downloadingItems, setDownloadingItems] = useState<Set<string>>(new Set());
     const [activeTab, setActiveTab] = useState("downloads");
 
-    const handleDownload = async (option: SerializableDownloadOption) => {
+    const handleDownload = async (option: DownloadableOption) => {
         setDownloadingItems(prev => new Set([...prev, option.id]));
 
         if (option.isExternal) {
@@ -233,7 +232,7 @@ export function DownloadDetailsPageClient({ category }: DownloadDetailsPageClien
                                         <Card key={option.id} className="overflow-hidden">
                                             <CardContent className="p-6">
                                                 <DownloadOptionComponent
-                                                    option={fullOption}
+                                                    option={option}
                                                     onDownload={handleDownload}
                                                     isDownloading={downloadingItems.has(option.id)}
                                                 />
