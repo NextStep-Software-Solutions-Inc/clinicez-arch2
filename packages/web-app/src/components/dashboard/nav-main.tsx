@@ -55,12 +55,12 @@ export function NavMain({
             const isActive = pathname === newPath
             return (
               <SidebarMenuItem key={item.title}>
-                <Link href={newPath}>
-                  <SidebarMenuButton isActive={isActive} tooltip={item.title}>
+                <SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
+                  <Link href={newPath}>
                     {item.icon && <item.icon />}
                     <span>{item.title}</span>
-                  </SidebarMenuButton>
-                </Link>
+                  </Link>
+                </SidebarMenuButton>
               </SidebarMenuItem>
             )
           })}
