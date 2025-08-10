@@ -23,6 +23,7 @@ const footerLinks = [
     title: "Solution",
     link: "/solution",
   },
+  { title: "Downloads", link: "/downloads" },
   {
     title: "Support",
     link: "#",
