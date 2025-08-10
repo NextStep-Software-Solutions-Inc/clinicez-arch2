@@ -2,11 +2,13 @@ import { cn } from "@/lib/utils";
 import { DetailedHTMLProps } from "react";
 import AnimatedLogo from "./AnimatedLogo";
 import Link from "next/link";
-import Navigation from "./Navigation";
-import HeaderEffects from "./HeaderEffects";
-import { Button } from "./ui/button";
-import RootDrawer from "./RootDrawer";
+import Navigation from "@/components/Navigation";
+import HeaderEffects from "@/components/HeaderEffects";
+import { Button } from "@/components/ui/button";
+import RootDrawer from "@/components/RootDrawer";
 import { Star } from "lucide-react";
+import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
+import ClerkUserButton from "@/components/ClerkUserButton";
 
 type IRootHeaderProps = DetailedHTMLProps<React.HTMLAttributes<HTMLDivElement>, HTMLDivElement>
 export default function RootHeader({ className, ...props }: IRootHeaderProps) {
@@ -48,13 +50,22 @@ export default function RootHeader({ className, ...props }: IRootHeaderProps) {
             <Navigation />
           </div>
           <div className="flex items-center">
-            <Button aria-label="Start your 30-day free trial">
-              <Star />
-              <span className="text-sm font-medium">Try 30 days for free</span>
-            </Button>
-            <Button variant="link" aria-label="Login to your account">
-              <Link href="/login">Login</Link>
-            </Button>
+            <Link href="/tenants/register">
+              <Button aria-label="Start your 30-day free trial">
+                <Star />
+                <span className="text-sm font-medium">Try 30 days for free</span>
+              </Button>
+            </Link>
+            <div className="mx-2">
+              <SignedIn>
+                <ClerkUserButton />
+              </SignedIn>
+              <SignedOut>
+                <SignInButton mode="modal">
+                  <Button variant="link" aria-label="Login to your account">Login</Button>
+                </SignInButton>
+              </SignedOut>
+            </div>
           </div>
         </div>
       </div>
