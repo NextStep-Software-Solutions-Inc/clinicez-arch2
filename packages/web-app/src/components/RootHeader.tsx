@@ -3,10 +3,10 @@ import { DetailedHTMLProps } from "react";
 import AnimatedLogo from "./AnimatedLogo";
 import Link from "next/link";
 import Navigation from "./Navigation";
-import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import HeaderEffects from "./HeaderEffects";
 import { Button } from "./ui/button";
 import RootDrawer from "./RootDrawer";
+import { Star } from "lucide-react";
 
 type IRootHeaderProps = DetailedHTMLProps<React.HTMLAttributes<HTMLDivElement>, HTMLDivElement>
 export default function RootHeader({ className, ...props }: IRootHeaderProps) {
@@ -48,10 +48,13 @@ export default function RootHeader({ className, ...props }: IRootHeaderProps) {
             <Navigation />
           </div>
           <div className="flex items-center">
-            <Avatar className="size-10">
-              <AvatarImage src="https://github.com/shadcn.png" alt="User" />
-              <AvatarFallback>JS</AvatarFallback>
-            </Avatar>
+            <Button aria-label="Start your 30-day free trial">
+              <Star />
+              <span className="text-sm font-medium">Try 30 days for free</span>
+            </Button>
+            <Button variant="link" aria-label="Login to your account">
+              <Link href="/login">Login</Link>
+            </Button>
           </div>
         </div>
       </div>
