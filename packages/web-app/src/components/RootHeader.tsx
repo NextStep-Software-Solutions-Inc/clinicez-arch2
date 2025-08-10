@@ -53,7 +53,7 @@ export default function RootHeader({ className, ...props }: IRootHeaderProps) {
             <Link href="/tenants/register">
               <Button aria-label="Start your 30-day free trial">
                 <Star />
-                Try 30 days for free
+                <span className="text-sm font-medium">Try 30 days for free</span>
               </Button>
             </Link>
             <div className="mx-2">
