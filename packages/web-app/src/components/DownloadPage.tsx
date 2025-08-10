@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Button } from "./ui/button";
+import { X } from "lucide-react";
 
 const downloadLinks = {
     patient: [
@@ -12,7 +13,7 @@ const downloadLinks = {
             icon: "🤖",
             version: "v2.3.1"
         }, {
-            url: "https://apps.apple.com/ph/app/clinicez-patient/id1234567890",
+            url: "https://apps.apple.com/ph/app/clinicez-patient/id6478954321",
             label: "iOS (App Store)",
             icon: "🍎",
             version: "v2.3.1"
@@ -26,7 +27,7 @@ const downloadLinks = {
             version: "v1.8.0"
         },
         {
-            url: "https://apps.apple.com/ph/app/clinicez-clinic/id0987654321",
+            url: "https://apps.apple.com/ph/app/clinicez-clinic/id6478954322",
             label: "iOS (App Store)",
             icon: "🍎",
             version: "v1.8.0"
@@ -88,32 +89,32 @@ export default function DownloadPage() {
                 <p className="text-base mb-8 text-gray-600">Minimalist distribution page for ClinicEZ apps and server.</p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
                     {/* Patient App */}
-                    <Button
+                    <div
                         onClick={() => openModal("patient")}
                         className="rounded-lg border border-gray-200 p-6 flex flex-col items-center gap-2 bg-white hover:shadow transition"
                         aria-label="Open Patient App download options"
                     >
                         <span className="text-3xl mb-1">🧑‍⚕️</span>
                         <span className="font-semibold text-primary">Patient App</span>
-                    </Button>
+                    </div>
                     {/* Clinic App */}
-                    <Button
+                    <div
                         onClick={() => openModal("clinic")}
                         className="rounded-lg border border-gray-200 p-6 flex flex-col items-center gap-2 bg-white hover:shadow transition"
                         aria-label="Open Clinic App download options"
                     >
                         <span className="text-3xl mb-1">🏥</span>
                         <span className="font-semibold text-primary">Clinic App</span>
-                    </Button>
+                    </div>
                     {/* Server */}
-                    <Button
+                    <div
                         onClick={() => openModal("server")}
                         className="rounded-lg border border-gray-200 p-6 flex flex-col items-center gap-2 bg-white hover:shadow transition"
                         aria-label="Open Server download options"
                     >
                         <span className="text-3xl mb-1">🖥️</span>
                         <span className="font-semibold text-primary">Server</span>
-                    </Button>
+                    </div>
                 </div>
                 {/* Modal */}
                 {modalType && (
@@ -130,19 +131,19 @@ export default function DownloadPage() {
                             <div className="flex items-center justify-between px-10 py-8 bg-gradient-to-r from-primary/10 to-white border-b border-primary/10">
                                 <div className="flex items-center gap-4">
                                     <span className="text-5xl">{modalType === "patient" ? "🧑‍⚕️" : modalType === "clinic" ? "🏥" : "🖥️"}</span>
-                                    <div>
+                                    <div className="text-left">
                                         <h3 id="download-modal-title" className="text-2xl font-bold text-primary mb-1">{modalContext[modalType].title}</h3>
                                         <p className="text-base text-gray-600 max-w-xl">{modalContext[modalType].desc}</p>
                                     </div>
                                 </div>
-                                <Button onClick={closeModal} className="text-gray-400 hover:text-primary text-3xl font-bold">×</Button>
+                                <Button onClick={closeModal} className="" aria-label="Close modal"><X /></Button>
                             </div>
                             {/* Download Options - scrollable body */}
                             <div className="px-10 py-10 flex flex-col gap-6 overflow-y-auto" style={{ maxHeight: 'calc(90vh - 120px)' }}>
                                 {modalType === 'server'
                                     ? modalOptions.server
                                         .map((opt, idx) => (
-                                            <a key={idx} href={opt.url} target="_blank" rel="noopener" className="group w-full flex items-center justify-between rounded-xl border border-primary/10 bg-primary/5 px-6 py-5 hover:bg-primary/10 transition shadow-sm">
+                                            <a key={idx} href={opt.url} target="_blank" rel="noopener noreferrer" className="group w-full flex items-center justify-between rounded-xl border border-primary/10 bg-primary/5 px-6 py-5 hover:bg-primary/10 transition shadow-sm">
                                                 <div className="flex items-center gap-4">
                                                     <span className="text-3xl">{opt.icon}</span>
                                                     <div>
@@ -164,7 +165,7 @@ export default function DownloadPage() {
                                         </a>
                                     ))}
                                 {/* Installation Manual */}
-                                <a href="/downloads/clinicez-installation-manual.pdf" target="_blank" rel="noopener" className="w-full mt-2 flex items-center justify-center rounded-xl border border-primary/20 bg-primary/10 px-6 py-4 hover:bg-primary/20 transition shadow-sm text-primary font-semibold text-base">
+                                <a href="/downloads/clinicez-installation-manual.pdf" target="_blank" rel="noopener noreferrer" className="w-full mt-2 flex items-center justify-center rounded-xl border border-primary/20 bg-primary/10 px-6 py-4 hover:bg-primary/20 transition shadow-sm text-primary font-semibold text-base">
                                     📖 Download Installation Manual (PDF)
                                 </a>
                             </div>
