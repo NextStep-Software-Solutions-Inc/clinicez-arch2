@@ -124,7 +124,7 @@ export function DownloadsPageClient() {
                 {/* Features Section */}
                 <motion.div className="mb-16" variants={itemVariants}>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                        {features.map((feature, index) => {
+                        {features.map((feature) => {
                             const IconComponent = feature.icon;
                             return (
                                 <motion.div

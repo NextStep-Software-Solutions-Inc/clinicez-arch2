@@ -69,7 +69,7 @@ export default function TenantRegistration() {
         }
     }, [slugValue]);
 
-    async function onSubmit(data: TenantFormValues) {
+    async function onSubmit() {
         setIsSubmitting(true);
         // TODO: Replace with real registration API call
         await new Promise(res => setTimeout(res, MOCK_API_DELAY));

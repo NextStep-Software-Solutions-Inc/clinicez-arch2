@@ -9,7 +9,6 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileText, Download } from "lucide-react";
@@ -58,9 +57,6 @@ export function DownloadModal({ isOpen, onClose, category }: DownloadModalProps)
                                 <DialogTitle className="text-2xl font-bold">
                                     {category.title}
                                 </DialogTitle>
-                                {category.badge && (
-                                    <Badge variant="secondary">{category.badge}</Badge>
-                                )}
                             </div>
                             <DialogDescription className="text-base mt-1">
                                 {category.description}

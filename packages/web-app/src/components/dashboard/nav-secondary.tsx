@@ -6,7 +6,6 @@ import { type Icon } from "@tabler/icons-react"
 import {
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,

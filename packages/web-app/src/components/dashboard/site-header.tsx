@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { SidebarTrigger } from "@/components/ui/sidebar"
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 export function SiteHeader() {
@@ -21,14 +22,14 @@ export function SiteHeader() {
         <h1 className="text-base font-medium capitalize">{currentPage}</h1>
         <div className="ml-auto flex items-center gap-2">
           <Button variant="ghost" asChild size="sm" className="hidden sm:flex">
-            <a
+            <Link
               href="/"
               rel="noopener noreferrer"
               // target="_blank"
               className="dark:text-foreground"
             >
               Clinic EZ
-            </a>
+            </Link>
           </Button>
         </div>
       </div>

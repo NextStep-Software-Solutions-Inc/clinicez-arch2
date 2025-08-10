@@ -2,10 +2,9 @@
 
 import React, { useState } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronRight, Loader2 } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { DownloadCardProps } from "../types/downloads";
 
 export function DownloadCard({ category, onClick, isLoading = false }: DownloadCardProps) {
@@ -78,14 +77,6 @@ export function DownloadCard({ category, onClick, isLoading = false }: DownloadC
                         <IconComponent className="h-8 w-8" />
                     </div>
 
-                    {category.badge && (
-                        <Badge
-                            variant="outline"
-                            className={`text-xs font-medium ${colors.badge}`}
-                        >
-                            {category.badge}
-                        </Badge>
-                    )}
                 </div>
 
                 <div>

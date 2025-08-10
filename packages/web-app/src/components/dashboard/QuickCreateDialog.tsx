@@ -4,7 +4,6 @@ import { Icon, IconBuilding, IconFlask, IconHospital, IconPill } from "@tabler/i
 import { Card, CardHeader, CardTitle } from "../ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog";
 import Each from "../utils/Each";
-import { useSearchParams } from "next/navigation";
 import { useRef } from "react";
 
 interface QuickCreateDialogProps {
