@@ -16,13 +16,7 @@ import {
     Clock,
     Users,
     CheckCircle,
-    ExternalLink,
-    User,
-    Building2,
-    Server,
-    Smartphone,
-    Apple,
-    Package,
+    ExternalLink
 } from "lucide-react";
 import { Downloadable, DownloadableOption, installationManual } from "../data/downloadData";
 import Icon from "@/components/Icon";
