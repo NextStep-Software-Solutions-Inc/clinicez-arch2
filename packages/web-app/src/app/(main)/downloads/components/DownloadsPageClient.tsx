@@ -2,13 +2,12 @@
 
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Download, Sparkles, Shield, Zap } from "lucide-react";
 import { DownloadGrid } from "./DownloadGrid";
-import { DownloadModal } from "./DownloadModal";
-import { downloadCategories } from "../data/downloadData";
-import { DownloadCategoryInfo } from "../types/downloads";
+import { Downloadable, downloadables } from "../data/downloadData";
 
 const containerVariants = {
     hidden: { opacity: 0 },
@@ -52,9 +51,8 @@ const features = [
 ];
 
 export function DownloadsPageClient() {
-    const [selectedCategory, setSelectedCategory] = useState<DownloadCategoryInfo | null>(null);
-    const [isModalOpen, setIsModalOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
+    const router = useRouter();
 
     useEffect(() => {
         // Simulate loading for better UX
@@ -65,16 +63,8 @@ export function DownloadsPageClient() {
         return () => clearTimeout(timer);
     }, []);
 
-    const handleCategoryClick = (category: DownloadCategoryInfo) => {
-        setSelectedCategory(category);
-        setIsModalOpen(true);
-    };
-
-    const handleCloseModal = () => {
-        setIsModalOpen(false);
-        setTimeout(() => {
-            setSelectedCategory(null);
-        }, 300);
+    const handleCategoryClick = (downloadable: Downloadable) => {
+        router.push(`/downloads/${downloadable.slug}`);
     };
 
     return (
@@ -162,7 +152,7 @@ export function DownloadsPageClient() {
                     </div>
 
                     <DownloadGrid
-                        categories={downloadCategories}
+                        categories={downloadables}
                         onCategoryClick={handleCategoryClick}
                         isLoading={isLoading}
                     />
@@ -189,13 +179,6 @@ export function DownloadsPageClient() {
                     </div>
                 </motion.div>
             </motion.div>
-
-            {/* Download Modal */}
-            <DownloadModal
-                isOpen={isModalOpen}
-                onClose={handleCloseModal}
-                category={selectedCategory}
-            />
         </div>
     );
 }

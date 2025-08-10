@@ -2,11 +2,11 @@
 
 import React from "react";
 import { DownloadCard } from "./DownloadCard";
-import { DownloadCategoryInfo } from "../types/downloads";
+import { Downloadable } from "../data/downloadData";
 
 interface DownloadGridProps {
-    categories: DownloadCategoryInfo[];
-    onCategoryClick: (category: DownloadCategoryInfo) => void;
+    categories: Downloadable[];
+    onCategoryClick: (category: Downloadable) => void;
     isLoading?: boolean;
 }
 

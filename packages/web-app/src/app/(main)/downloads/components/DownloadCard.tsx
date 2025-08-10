@@ -5,11 +5,17 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronRight } from "lucide-react";
-import { DownloadCardProps } from "../types/downloads";
+import { Downloadable } from "../data/downloadData";
+import Icon from "@/components/Icon";
+
+interface DownloadCardProps {
+    category: Downloadable;
+    onClick: () => void;
+    isLoading?: boolean;
+}
 
 export function DownloadCard({ category, onClick, isLoading = false }: DownloadCardProps) {
     const [isHovered, setIsHovered] = useState(false);
-    const IconComponent = category.icon;
 
     if (isLoading) {
         return (
@@ -74,7 +80,7 @@ export function DownloadCard({ category, onClick, isLoading = false }: DownloadC
                     <div
                         className={`p-4 rounded-xl transition-all duration-300 ${colors.icon}`}
                     >
-                        <IconComponent className="h-8 w-8" />
+                        <Icon name={category.icon} className="h-8 w-8" />
                     </div>
 
                 </div>

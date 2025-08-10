@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { DetailedHTMLProps } from "react";
-import AnimatedLogo from "./AnimatedLogo";
+import ClinicEzLogo from "./../../public/clinic-ez_logo.svg";
 import Link from "next/link";
 import Navigation from "@/components/Navigation";
 import HeaderEffects from "@/components/HeaderEffects";
@@ -9,6 +9,7 @@ import RootDrawer from "@/components/RootDrawer";
 import { Star } from "lucide-react";
 import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 import ClerkUserButton from "@/components/ClerkUserButton";
+import Image from "next/image";
 
 type IRootHeaderProps = DetailedHTMLProps<React.HTMLAttributes<HTMLDivElement>, HTMLDivElement>
 export default function RootHeader({ className, ...props }: IRootHeaderProps) {
@@ -25,8 +26,12 @@ export default function RootHeader({ className, ...props }: IRootHeaderProps) {
       <div className="container mx-auto">
         <div className="flex items-center justify-between h-16 lg:h-20">
           <div className="hidden lg:flex flex-shrink-0">
-            <Link href="/" className="flex h-40">
-              <AnimatedLogo />
+            <Link href="/" className="flex">
+              <Image src={ClinicEzLogo}
+                width={100}
+                height={40}
+                className=""
+                alt="ClinicEz Logo" />
             </Link>
           </div>
 
