@@ -1,54 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { Button } from "./ui/button";
 import { X } from "lucide-react";
-
-const downloadLinks = {
-    patient: [
-        {
-            url: "https://play.google.com/store/apps/details?id=com.clinicez.patient",
-            label: "Android (Google Play)",
-            icon: "🤖",
-            version: "v2.3.1"
-        }, {
-            url: "https://apps.apple.com/ph/app/clinicez-patient/id6478954321",
-            label: "iOS (App Store)",
-            icon: "🍎",
-            version: "v2.3.1"
-        }
-    ],
-    clinic: [
-        {
-            url: "https://play.google.com/store/apps/details?id=com.clinicez.clinic",
-            label: "Android (Google Play)",
-            icon: "🤖",
-            version: "v1.8.0"
-        },
-        {
-            url: "https://apps.apple.com/ph/app/clinicez-clinic/id6478954322",
-            label: "iOS (App Store)",
-            icon: "🍎",
-            version: "v1.8.0"
-        }
-    ],
-    server: [
-        {
-            url: "/downloads/clinicez-backend-v4.0.2.zip",
-            label: "Docker Container",
-            icon: "🖥️",
-            version: "v4.0.2"
-        },
-        {
-            url: "/downloads/clinicez-backend-v4.0.2-build.zip",
-            label: "Build Files",
-            icon: "📦",
-            version: "v4.0.2"
-        }
-    ]
-};
-
 
 export default function DownloadPage() {
     const [modalType, setModalType] = useState<null | "patient" | "clinic" | "server">(null);
@@ -61,13 +15,51 @@ export default function DownloadPage() {
 
     // Modal content for each type
     const modalOptions = {
-        patient: downloadLinks.patient,
-        clinic: downloadLinks.clinic,
-        server: downloadLinks.server
+        patient: [
+            {
+                url: "https://play.google.com/store/apps/details?id=com.clinicez.patient",
+                label: "Android (Google Play)",
+                icon: "🤖",
+                version: "v2.3.1"
+            }, {
+                url: "https://apps.apple.com/ph/app/clinicez-patient/id6478954321",
+                label: "iOS (App Store)",
+                icon: "🍎",
+                version: "v2.3.1"
+            }
+        ],
+        clinic: [
+            {
+                url: "https://play.google.com/store/apps/details?id=com.clinicez.clinic",
+                label: "Android (Google Play)",
+                icon: "🤖",
+                version: "v1.8.0"
+            },
+            {
+                url: "https://apps.apple.com/ph/app/clinicez-clinic/id6478954322",
+                label: "iOS (App Store)",
+                icon: "🍎",
+                version: "v1.8.0"
+            }
+        ],
+        server: [
+            {
+                url: "/downloads/clinicez-backend-v4.0.2.zip",
+                label: "Docker Container",
+                icon: "🖥️",
+                version: "v4.0.2"
+            },
+            {
+                url: "/downloads/clinicez-backend-v4.0.2-build.zip",
+                label: "Build Files",
+                icon: "📦",
+                version: "v4.0.2"
+            }
+        ]
     };
 
     // Context/description for each platform, with version
-    const modalContext = {
+    const modalContext: Record<string, { title: string; desc: string }> = {
         patient: {
             title: "Patient App",
             desc: `For patients to manage appointments, health records, and clinic visits.`
@@ -140,30 +132,7 @@ export default function DownloadPage() {
                             </div>
                             {/* Download Options - scrollable body */}
                             <div className="px-10 py-10 flex flex-col gap-6 overflow-y-auto" style={{ maxHeight: 'calc(90vh - 120px)' }}>
-                                {modalType === 'server'
-                                    ? modalOptions.server
-                                        .map((opt, idx) => (
-                                            <a key={idx} href={opt.url} target="_blank" rel="noopener noreferrer" className="group w-full flex items-center justify-between rounded-xl border border-primary/10 bg-primary/5 px-6 py-5 hover:bg-primary/10 transition shadow-sm">
-                                                <div className="flex items-center gap-4">
-                                                    <span className="text-3xl">{opt.icon}</span>
-                                                    <div className="text-left">
-                                                        <p className="font-semibold text-primary text-lg group-hover:underline">{opt.label}</p>
-                                                        <p className="text-xs text-gray-400">Latest: {opt.version}</p>
-                                                    </div>
-                                                </div>
-                                            </a>
-                                        ))
-                                    : modalOptions[modalType].map((opt, idx) => (
-                                        <a key={idx} href={opt.url} target="_blank" rel="noopener" className="group w-full flex items-center justify-between rounded-xl border border-primary/10 bg-primary/5 px-6 py-5 hover:bg-primary/10 transition shadow-sm">
-                                            <div className="flex items-center gap-4">
-                                                <span className="text-3xl">{opt.icon}</span>
-                                                <div className="text-left">
-                                                    <p className="font-semibold text-primary text-lg group-hover:underline">{opt.label}</p>
-                                                    <p className="text-xs text-gray-400">Latest: {opt.version}</p>
-                                                </div>
-                                            </div>
-                                        </a>
-                                    ))}
+                                <DownloadOptions options={modalOptions[modalType]} />
                                 {/* Installation Manual */}
                                 <a href="/downloads/clinicez-installation-manual.pdf" target="_blank" rel="noopener noreferrer" className="w-full mt-2 flex items-center justify-center rounded-xl border border-primary/20 bg-primary/10 px-6 py-4 hover:bg-primary/20 transition shadow-sm text-primary font-semibold text-base">
                                     📖 Download Installation Manual (PDF)
@@ -174,5 +143,30 @@ export default function DownloadPage() {
                 )}
             </div>
         </div>
+    );
+}
+
+interface DownloadOptionProps {
+    url: string;
+    label: string;
+    icon: string;
+    version: string;
+}
+
+function DownloadOptions({ options }: { options: DownloadOptionProps[] }) {
+    return (
+        <>
+            {options.map((opt, idx) => (
+                <a key={idx} href={opt.url} target="_blank" rel="noopener noreferrer" className="group w-full flex items-center justify-between rounded-xl border border-primary/10 bg-primary/5 px-6 py-5 hover:bg-primary/10 transition shadow-sm">
+                    <div className="flex items-center gap-4">
+                        <span className="text-3xl">{opt.icon}</span>
+                        <div className="text-left">
+                            <p className="font-semibold text-primary text-lg group-hover:underline">{opt.label}</p>
+                            <p className="text-xs text-gray-400">Latest: {opt.version}</p>
+                        </div>
+                    </div>
+                </a>
+            ))}
+        </>
     );
 }
