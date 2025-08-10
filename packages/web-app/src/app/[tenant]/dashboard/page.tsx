@@ -6,25 +6,20 @@ function hasTenant() {
     return true;
 }
 
-import { useEffect } from "react";
-
 export default function TenantDashboardEntry() {
-    useEffect(() => {
-        if (hasTenant()) {
-            window.location.replace("/tenants/dashboard/overview");
-        } else {
-            window.location.replace("/tenants/register");
-        }
-    }, []);
-
-    // SSR redirect
-    if (typeof window === "undefined") {
+    if (typeof window !== "undefined") {
+        // Client-side redirect
         if (hasTenant()) {
             redirect("/tenants/dashboard/overview");
         } else {
             redirect("/tenants/register");
         }
+        return null;
     }
-
-    return null;
+    // SSR fallback (Next.js will handle redirect on server)
+    if (hasTenant()) {
+        redirect("/tenants/dashboard/overview");
+    } else {
+        redirect("/tenants/register");
+    }
 }
