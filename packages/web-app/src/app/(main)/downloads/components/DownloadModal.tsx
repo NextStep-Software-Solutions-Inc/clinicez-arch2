@@ -45,7 +45,7 @@ export function DownloadModal({ isOpen, onClose, category }: DownloadModalProps)
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose} >
-            <DialogContent className="sm:max-w-[70vw] w-[90vw] max-h-[90vh] h-[90vh] p-0 flex flex-col">
+            <DialogContent className="sm:max-w-[80vw] md:max-w-[50vw] max-h-[90vh] h-[90vh] p-0 flex flex-col">
                 {/* Simple Header */}
                 <DialogHeader className="p-6 border-b bg-muted/30 flex-shrink-0">
                     <div className="flex items-center gap-4">
