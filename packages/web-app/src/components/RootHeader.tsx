@@ -1,3 +1,5 @@
+"use client";
+
 import { cn } from "@/lib/utils";
 import { DetailedHTMLProps } from "react";
 import AnimatedLogo from "./AnimatedLogo";
@@ -57,7 +59,15 @@ export default function RootHeader({ className, ...props }: IRootHeaderProps) {
             </Link>
             <div className="mx-2">
               <SignedIn>
-                <UserButton />
+                <UserButton>
+                  <UserButton.MenuItems>
+                    <UserButton.Link
+                      label="Tenant Dashboard"
+                      labelIcon={<Star size={14} />}
+                      href="/tenants/dashboard"
+                    />
+                  </UserButton.MenuItems>
+                </UserButton>
               </SignedIn>
               <SignedOut>
                 <SignInButton mode="modal">
