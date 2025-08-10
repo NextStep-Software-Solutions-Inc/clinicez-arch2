@@ -1,4 +1,6 @@
-import DownloadPage from "@/components/DownloadPage";
-export default function Page() {
-  return <DownloadPage />;
+import React from "react";
+import { DownloadsPageClient } from "./components/DownloadsPageClient";
+
+export default function DownloadsPage() {
+  return <DownloadsPageClient />;
 }

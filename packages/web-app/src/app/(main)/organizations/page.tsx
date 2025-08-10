@@ -4,7 +4,6 @@ import MainBackgroundImage from "../../../../public/assets/main-background.png"
 import HeroFeatured from "@/components/Hero"
 import Shell, { mockOrganizationsData } from "@/components/Shell"
 import Suspend from "@/components/Suspend"
-import GlobalError from "@/components/GlobalError"
 
 export const metadata: Metadata = {
   title: "Organizations | Clinic EZ V2",
