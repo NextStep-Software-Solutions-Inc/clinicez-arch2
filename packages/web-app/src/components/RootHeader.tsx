@@ -3,7 +3,6 @@ import { DetailedHTMLProps } from "react";
 import AnimatedLogo from "./AnimatedLogo";
 import Link from "next/link";
 import Navigation from "./Navigation";
-import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import HeaderEffects from "./HeaderEffects";
 import { Button } from "./ui/button";
 import RootDrawer from "./RootDrawer";
@@ -49,12 +48,12 @@ export default function RootHeader({ className, ...props }: IRootHeaderProps) {
             <Navigation />
           </div>
           <div className="flex items-center">
-            <Button>
+            <Button aria-label="Start your 30-day free trial">
               <Star />
               <span className="text-sm font-medium">Try 30 days for free</span>
             </Button>
-            <Button variant="link">
-              <Link href="login">Login</Link>
+            <Button variant="link" aria-label="Login to your account">
+              <Link href="/login">Login</Link>
             </Button>
           </div>
         </div>
