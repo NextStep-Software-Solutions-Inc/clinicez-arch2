@@ -7,6 +7,7 @@ import HeaderEffects from "./HeaderEffects";
 import { Button } from "./ui/button";
 import RootDrawer from "./RootDrawer";
 import { Star } from "lucide-react";
+import { UserButton, SignedIn, SignedOut, SignInButton, SignUpButton } from "@clerk/nextjs";
 
 type IRootHeaderProps = DetailedHTMLProps<React.HTMLAttributes<HTMLDivElement>, HTMLDivElement>
 export default function RootHeader({ className, ...props }: IRootHeaderProps) {
@@ -50,11 +51,18 @@ export default function RootHeader({ className, ...props }: IRootHeaderProps) {
           <div className="flex items-center">
             <Button aria-label="Start your 30-day free trial">
               <Star />
-              <span className="text-sm font-medium">Try 30 days for free</span>
+              Try 30 days for free
             </Button>
-            <Button variant="link" aria-label="Login to your account">
-              <Link href="/login">Login</Link>
-            </Button>
+            <div className="mx-2">
+              <SignedIn>
+                <UserButton />
+              </SignedIn>
+              <SignedOut>
+                <SignInButton mode="modal">
+                  <Button variant="link" aria-label="Login to your account">Login</Button>
+                </SignInButton>
+              </SignedOut>
+            </div>
           </div>
         </div>
       </div>
