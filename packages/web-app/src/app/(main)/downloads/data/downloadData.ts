@@ -11,6 +11,7 @@ import { DownloadCategoryInfo } from "../types/downloads";
 export const downloadCategories: DownloadCategoryInfo[] = [
     {
         id: "patient",
+        slug: "patient-app",
         title: "Patient App",
         description: "For patients to manage appointments, health records, and clinic visits with ease.",
         icon: User,
@@ -42,6 +43,7 @@ export const downloadCategories: DownloadCategoryInfo[] = [
     },
     {
         id: "clinic",
+        slug: "clinic-app",
         title: "Clinic App",
         description: "Comprehensive clinic management system for healthcare providers and staff.",
         icon: Building2,
@@ -73,6 +75,7 @@ export const downloadCategories: DownloadCategoryInfo[] = [
     },
     {
         id: "server",
+        slug: "server-package",
         title: "Server Package",
         description: "Deploy your own secure server for complete data control and privacy compliance.",
         icon: Server,

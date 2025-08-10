@@ -14,12 +14,33 @@ export interface DownloadOption {
     isExternal?: boolean;
 }
 
+export interface SerializableDownloadOption {
+    id: string;
+    url: string;
+    label: string;
+    version: string;
+    description?: string;
+    size?: string;
+    platform?: string;
+    isExternal?: boolean;
+}
+
 export interface DownloadCategoryInfo {
     id: DownloadCategory;
+    slug: string;
     title: string;
     description: string;
     icon: LucideIcon;
     options: DownloadOption[];
+    primaryColor?: string;
+}
+
+export interface SerializableDownloadCategoryInfo {
+    id: DownloadCategory;
+    slug: string;
+    title: string;
+    description: string;
+    options: SerializableDownloadOption[];
     primaryColor?: string;
 }
 
