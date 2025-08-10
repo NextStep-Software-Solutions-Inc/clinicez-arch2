@@ -34,9 +34,11 @@
 - `packages/patient-app/scripts/reset-project.js`: Project reset logic.
 - `README.md` (root): Monorepo structure, architecture, and getting started for all apps.
 
-## Copilot/AI Usage
-- AI-generated code must follow package-specific style and be reviewed by a human.
-- See `CONTRIBUTING.md` and per-package `COPILOT.md` for more details.
+
+## Coding Principles
+ - All AI-generated code must always adhere to SOLID principles and the DRY (Don't Repeat Yourself) design pattern.
+ - Ensure code is modular, maintainable, and avoids duplication.
+ - See `CONTRIBUTING.md` and per-package `COPILOT.md` for more details.
 
 ---
 For new packages, follow the structure and conventions above. When in doubt, check the root and package READMEs for examples.

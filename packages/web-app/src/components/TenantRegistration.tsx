@@ -1,5 +1,7 @@
 "use client";
 
+const MOCK_API_DELAY = 1000;
+
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
@@ -10,7 +12,7 @@ import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter, CardDescription } from "./ui/card";
 import HeroBackground from "./HeroBackground";
-import SecondaryBackgroundImage from "../../public/assets/secondary-background.png";
+import SecondaryBackgroundImage from "@/public/assets/secondary-background.png";
 
 const tenantSchema = z.object({
     displayName: z.string().min(2, "Display name is required").max(64),
@@ -70,7 +72,10 @@ export default function TenantRegistration() {
     async function onSubmit(data: TenantFormValues) {
         setIsSubmitting(true);
         // TODO: Replace with real registration API call
-        await new Promise(res => setTimeout(res, 1000));
+        await new Promise(res => setTimeout(res, MOCK_API_DELAY));
+        setIsSubmitting(false);
+        setSuccess(true);
+        setCountdown(3);
         setIsSubmitting(false);
         setSuccess(true);
         setCountdown(3);
