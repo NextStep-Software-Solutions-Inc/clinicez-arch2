@@ -34,6 +34,6 @@ export async function generateMetadata({ params }: ProductDetailsPageProps) {
 
 export async function generateStaticParams() {
     return products.map(product => ({
-        slug: product.slug
+        product: product.slug
     }));
 }
