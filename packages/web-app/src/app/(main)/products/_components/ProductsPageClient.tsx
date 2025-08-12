@@ -4,7 +4,7 @@ import React from "react";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Download, Sparkles, Shield, Zap, Package } from "lucide-react";
+import { Sparkles, Shield, Zap, Package } from "lucide-react";
 import ProductGrid from "./ProductGrid";
 import { products } from "@/constants/products";
 
