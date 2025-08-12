@@ -1,16 +1,16 @@
 import dynamicIconImports from "lucide-react/dynamicIconImports";
 
-export type Downloadable = {
+export type Product = {
     id: string;
     slug: string;
     title: string;
     description: string;
     icon: keyof typeof dynamicIconImports;
     primaryColor: string;
-    options: DownloadableOption[];
+    options: ProductOption[];
 };
 
-export type DownloadableOption = {
+export type ProductOption = {
     id: string;
     url: string;
     label: string;
@@ -22,7 +22,7 @@ export type DownloadableOption = {
     isExternal: boolean;
 };
 
-export const downloadables: Downloadable[] = [
+export const products: Product[] = [
     {
         id: "patient",
         slug: "patient-app",

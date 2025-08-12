@@ -1,1 +1,0 @@
-export type DownloadCategory = "patient" | "clinic" | "server";

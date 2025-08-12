@@ -18,12 +18,12 @@ import {
     CheckCircle,
     ExternalLink
 } from "lucide-react";
-import { Downloadable, DownloadableOption, installationManual } from "../data/downloadData";
+import { Product, ProductOption as ProductOptionType, installationManual } from "@/constants/products";
 import Icon from "@/components/Icon";
-import { DownloadOption } from "../components/DownloadOption";
+import { ProductOption } from "../_components/ProductOption";
 
-interface DownloadDetailsPageClientProps {
-    downloadable: Downloadable;
+interface ProductDetailsPageClientProps {
+    product: Product;
 }
 
 const containerVariants = {
@@ -49,11 +49,11 @@ const itemVariants = {
     },
 };
 
-export function DownloadDetailsPageClient({ downloadable }: DownloadDetailsPageClientProps) {
+export function ProductDetailsPageClient({ product }: ProductDetailsPageClientProps) {
     const [downloadingItems, setDownloadingItems] = useState<Set<string>>(new Set());
     const [activeTab, setActiveTab] = useState("downloads");
 
-    const handleDownload = async (option: DownloadableOption) => {
+    const handleDownload = async (option: ProductOptionType) => {
         setDownloadingItems(prev => new Set([...prev, option.id]));
 
         if (option.isExternal) {
@@ -114,7 +114,7 @@ export function DownloadDetailsPageClient({ downloadable }: DownloadDetailsPageC
             >
                 {/* Back Navigation */}
                 <motion.div className="mb-8" variants={itemVariants}>
-                    <Link href="/downloads">
+                    <Link href="/products">
                         <Button variant="ghost" className="gap-2">
                             <ArrowLeft className="h-4 w-4" />
                             Back to Downloads
@@ -126,14 +126,14 @@ export function DownloadDetailsPageClient({ downloadable }: DownloadDetailsPageC
                 <motion.div className="mb-12" variants={itemVariants}>
                     <div className="flex items-start gap-6 mb-6">
                         <div className="p-4 rounded-2xl bg-primary/10 text-primary">
-                            <Icon name={downloadable.icon} className="h-12 w-12" />
+                            <Icon name={product.icon} className="h-12 w-12" />
                         </div>
                         <div className="flex-1">
                             <h1 className="text-4xl md:text-5xl font-bold text-foreground mb-4">
-                                {downloadable.title}
+                                {product.title}
                             </h1>
                             <p className="text-xl text-muted-foreground mb-4 leading-relaxed">
-                                {downloadable.description}
+                                {product.description}
                             </p>
                             <div className="flex items-center gap-4">
                                 <Badge variant="secondary" className="text-sm py-1">
@@ -197,12 +197,12 @@ export function DownloadDetailsPageClient({ downloadable }: DownloadDetailsPageC
                             </div>
 
                             <div className="grid gap-6 max-w-4xl mx-auto">
-                                {downloadable.options.map((option) => {
+                                {product.options.map((option) => {
 
                                     return (
                                         <Card key={option.id} className="overflow-hidden">
                                             <CardContent className="p-6">
-                                                <DownloadOption
+                                                <ProductOption
                                                     option={option}
                                                     onDownload={() => handleDownload(option)}
                                                     isDownloading={downloadingItems.has(option.id)}
@@ -218,7 +218,7 @@ export function DownloadDetailsPageClient({ downloadable }: DownloadDetailsPageC
                                 <CardContent className="p-6">
                                     <h3 className="text-lg font-semibold mb-4">System Requirements</h3>
                                     <div className="grid md:grid-cols-2 gap-6">
-                                        {downloadable.options.map((option) => {
+                                        {product.options.map((option) => {
                                             return (
                                                 <div key={option.id} className="space-y-2">
                                                     <div className="flex items-center gap-2">

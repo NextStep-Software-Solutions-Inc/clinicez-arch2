@@ -21,7 +21,7 @@ type NavLinkType = {
 
 export const navLinks: NavLinkType[] = [
   { name: "Solution", href: "/solution", icon: "layers" },
-  { name: "Downloads", href: "/downloads", icon: "download" },
+  { name: "Products", href: "/products", icon: "package" },
   { name: "Healthcare Providers", href: "/hp", icon: "users" },
   { name: "Clinics", href: "/clinics", icon: "building" },
   { name: "Organizations", href: "/organizations", icon: "building-2" },

@@ -1,13 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { motion } from "framer-motion";
-import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Download, Sparkles, Shield, Zap } from "lucide-react";
-import { DownloadGrid } from "./DownloadGrid";
-import { Downloadable, downloadables } from "../data/downloadData";
+import { Download, Sparkles, Shield, Zap, Package } from "lucide-react";
+import ProductGrid from "./ProductGrid";
+import { products } from "@/constants/products";
 
 const containerVariants = {
     hidden: { opacity: 0 },
@@ -50,27 +49,12 @@ const features = [
     },
 ];
 
-export function DownloadsPageClient() {
-    const [isLoading, setIsLoading] = useState(true);
-    const router = useRouter();
-
-    useEffect(() => {
-        // Simulate loading for better UX
-        const timer = setTimeout(() => {
-            setIsLoading(false);
-        }, 800);
-
-        return () => clearTimeout(timer);
-    }, []);
-
-    const handleCategoryClick = (downloadable: Downloadable) => {
-        router.push(`/downloads/${downloadable.slug}`);
-    };
+export function ProductsPageClient() {
 
     return (
         <div className="min-h-screen bg-gradient-to-b from-background via-background to-muted/20">
             <motion.div
-                className="container mx-auto px-4 py-16 max-w-7xl"
+                className="container mx-auto px-4 py-20 max-w-7xl"
                 variants={containerVariants}
                 initial="hidden"
                 animate="visible"
@@ -79,7 +63,7 @@ export function DownloadsPageClient() {
                 <motion.div className="text-center mb-16" variants={itemVariants}>
                     <div className="flex items-center justify-center mb-6">
                         <div className="p-4 rounded-2xl bg-primary/10 text-primary">
-                            <Download className="h-12 w-12" />
+                            <Package className="h-12 w-12" />
                         </div>
                     </div>
 
@@ -151,11 +135,7 @@ export function DownloadsPageClient() {
                         </p>
                     </div>
 
-                    <DownloadGrid
-                        categories={downloadables}
-                        onCategoryClick={handleCategoryClick}
-                        isLoading={isLoading}
-                    />
+                    <ProductGrid products={products} />
                 </motion.div>
 
                 {/* Support Section */}
