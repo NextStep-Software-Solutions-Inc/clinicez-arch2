@@ -101,7 +101,7 @@ export default function RootFooter() {
 
           <p className="text-center text-sm text-gray-600">
             <span>&copy; Copyright {fullYear} </span>
-            <span>PointersBit Inc.</span>, All rights reserved.
+            <span>Nextstep Software Solutions Inc.</span>, All rights reserved.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center items-center pt-4">
