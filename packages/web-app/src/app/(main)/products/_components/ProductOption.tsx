@@ -2,16 +2,16 @@ import React from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Download, ExternalLink } from "lucide-react";
-import { DownloadableOption } from "../data/downloadData";
+import { ProductOption as ProductOptionType } from "@/constants/products";
 import Icon from "@/components/Icon";
 
-interface DownloadOptionProps {
-    option: DownloadableOption;
-    onDownload?: (option: DownloadableOption) => void;
+interface ProductOptionProps {
+    option: ProductOptionType;
+    onDownload?: (option: ProductOptionType) => void;
     isDownloading?: boolean;
 }
 
-export function DownloadOption({ option, onDownload, isDownloading = false }: DownloadOptionProps) {
+export function ProductOption({ option, onDownload, isDownloading = false }: ProductOptionProps) {
     const handleDownload = () => {
         if (onDownload) {
             onDownload(option);
