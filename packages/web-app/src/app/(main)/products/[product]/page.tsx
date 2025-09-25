@@ -8,27 +8,27 @@ interface ProductDetailsPageProps {
 
 export default async function ProductDetailsPage({ params }: ProductDetailsPageProps) {
     const { product } = await params;
-    const productDetials = products.find(item => item.slug === product);
-    if (!productDetials) {
+    const productDetails = products.find(item => item.slug === product);
+    if (!productDetails) {
         notFound();
     }
 
-    return <ProductDetailsPageClient product={productDetials} />;
+    return <ProductDetailsPageClient product={productDetails} />;
 }
 
 export async function generateMetadata({ params }: ProductDetailsPageProps) {
     const { product } = await params;
-    const productDetials = products.find(item => item.slug === product);
+    const productDetails = products.find(item => item.slug === product);
 
-    if (!productDetials) {
+    if (!productDetails) {
         return {
             title: "Product Not Found - ClinicEZ",
         };
     }
 
     return {
-        title: `${productDetials.title} - ClinicEZ`,
-        description: productDetials.description,
+        title: `${productDetails.title} - ClinicEZ`,
+        description: productDetails.description,
     };
 }
 
