@@ -7,6 +7,12 @@
       "@env": ["./env"],
       "@lib/*": ["./src/lib/*"],
       "@utils/*": ["./src/utils/*"],
+      "@actions/*": ["./src/actions/*"],
+      "@screens/*": ["./src/screens/*"],
+      "@hooks/*": ["./src/hooks/*"],
+      "@json/*": ["./assets/public/json/*"],
+      "@images/*": ["./assets/public/image/*"],
+      "@theme/*": ["./src/theme/*"],
     }
   }
 }
