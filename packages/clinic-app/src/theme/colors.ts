@@ -27,6 +27,8 @@ export type ThemeColorToken =
   | "textDark"
   | "textSecondary"
   | "textSecondaryDark"
+  | "base"
+  | "baseDark"
   | "background"
   | "backgroundDark"
   | "surface"
@@ -69,8 +71,10 @@ const basePalette: Record<ThemeColorToken, { light: string; dark: string }> = {
   textDark: { light: "#111827", dark: "#F1F5F9" },
   textSecondary: { light: "#4B5563", dark: "#CBD5F5" },
   textSecondaryDark: { light: "#1F2937", dark: "#94A3B8" },
-  background: { light: "#FFFFFF", dark: "#0F172A" },
-  backgroundDark: { light: "#F8FAFC", dark: "#020617" },
+  base: { light: "#FFFFFF", dark: "#FFFFFF" },
+  baseDark: { light: "#F8FAFC", dark: "#0F172A" },
+  background: { light: "#F8FAFC", dark: "#0F172A" },
+  backgroundDark: { light: "#F5F5F4", dark: "#020617" },
   surface: { light: "#F9FAFB", dark: "#111827" },
   surfaceDark: { light: "#F3F4F6", dark: "#0B1120" },
   surfaceElevated: { light: "#FFFFFF", dark: "#1F2937" },
@@ -139,6 +143,10 @@ export const tailwindColorPalette = {
     dark: basePalette.text.dark,
     secondary: basePalette.textSecondary.light,
     "secondary-dark": basePalette.textSecondary.dark,
+  },
+  base: {
+    DEFAULT: basePalette.base.light,
+    dark: basePalette.base.dark,
   },
   surface: {
     DEFAULT: basePalette.surface.light,
