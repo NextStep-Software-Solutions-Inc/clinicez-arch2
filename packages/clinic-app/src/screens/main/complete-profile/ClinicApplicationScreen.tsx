@@ -119,14 +119,14 @@ const ClinicApplicationScreen: React.FC<ClinicApplicationScreenProps> = ({ initi
     await onComplete(values);
   };
 
-  const expiryMinimumDate = React.useMemo(() => {
-    if (!issuedDateValue) {
-      return undefined;
-    }
-    const minDate = new Date(issuedDateValue);
-    minDate.setHours(0, 0, 0, 0);
-    return minDate;
-  }, [issuedDateValue]);
+  // const expiryMinimumDate = React.useMemo(() => {
+  //   if (!issuedDateValue) {
+  //     return undefined;
+  //   }
+  //   const minDate = new Date(issuedDateValue);
+  //   minDate.setHours(0, 0, 0, 0);
+  //   return minDate;
+  // }, [issuedDateValue]);
 
   return (
     <Form {...methods}>
@@ -230,7 +230,7 @@ const ClinicApplicationScreen: React.FC<ClinicApplicationScreenProps> = ({ initi
                           size="md"
                           state={error ? "error" : "default"}
                           maximumDate={today}
-                          minimumDate={expiryMinimumDate}
+                        // minimumDate={expiryMinimumDate}
                         />
                       )}
                     />

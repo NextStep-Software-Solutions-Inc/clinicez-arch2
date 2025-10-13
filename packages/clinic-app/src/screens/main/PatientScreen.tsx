@@ -12,6 +12,7 @@ import ThemedIcon from "@components/ThemedIcon";
 import PatientList, { PatientData } from "@components/PatientList";
 import Drawer from "@components/Drawer";
 import AddNewPatientForm, { NewPatientFormData } from "@components/patient/AddNewPatientForm";
+import InvitePatientDialog from "@components/InvitePatientDialog";
 
 const PATIENTS: PatientData[] = [
   {
@@ -87,6 +88,7 @@ const PatientsScreen: React.FC = () => {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
 
   const handleAddPatient = async (data: NewPatientFormData) => {
     console.log("Adding new patient:", data);
@@ -95,8 +97,12 @@ const PatientsScreen: React.FC = () => {
   };
 
   const handleInvite = () => {
-    console.log("Invite patient");
-    // TODO: Implement invite functionality
+    setIsInviteDialogOpen(true);
+  };
+
+  const handleInviteComplete = () => {
+    console.log("Invite completed - patient can now use the link");
+    // TODO: Add analytics or additional tracking if needed
   };
 
   const filteredPatients = searchQuery
@@ -183,6 +189,14 @@ const PatientsScreen: React.FC = () => {
           onCancel={() => setIsDrawerOpen(false)}
         />
       </Drawer>
+
+      {/* Invite Patient Dialog */}
+      <InvitePatientDialog
+        open={isInviteDialogOpen}
+        onOpenChange={setIsInviteDialogOpen}
+        clinicLink="https://clinicez.app/invite/demo-clinic-123"
+        onInviteComplete={handleInviteComplete}
+      />
     </View>
   );
 };
