@@ -6,11 +6,11 @@ import { cn } from "@lib/utils";
 const themeVariants = cva("", {
   variants: {
     variant: {
-      default: "bg-white dark:bg-gray-900",
-      elevated: "bg-white dark:bg-gray-800 shadow-sm",
-      outlined: "bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700",
+      default: "bg-surface dark:bg-surface-dark",
+      elevated: "bg-surface-elevated dark:bg-surface-elevated-dark shadow-sm",
+      outlined: "bg-surface-elevated dark:bg-surface-elevated-dark border border-border dark:border-border-dark",
       transparent: "bg-transparent",
-      surface: "bg-gray-50 dark:bg-gray-800",
+      surface: "bg-surface dark:bg-surface-dark",
     },
   },
   defaultVariants: {

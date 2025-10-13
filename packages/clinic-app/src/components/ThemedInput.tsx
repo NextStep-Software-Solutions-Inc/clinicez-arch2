@@ -5,23 +5,23 @@ import { cn } from "../lib/utils";
 import ThemedIcon, { type IconName, type IconColor } from "./ThemedIcon";
 
 const inputVariants = cva(
-  "text-base text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2",
+  "text-base text-text dark:text-text-dark bg-surface-elevated dark:bg-surface-elevated-dark border border-border dark:border-border-dark rounded px-3 py-2",
   {
     variants: {
       variant: {
-        default: "border-gray-300 dark:border-gray-600",
-        filled: "bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700",
-        outlined: "bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600",
+        default: "border-border dark:border-border-dark",
+        filled: "bg-surface dark:bg-surface-dark border border-border dark:border-border-dark",
+        outlined: "bg-surface-elevated dark:bg-surface-elevated-dark border border-border dark:border-border-dark",
       },
       size: {
-        sm: "text-sm py-2 px-2 min-h-[40px]",
-        md: "text-base py-3 px-3 min-h-[48px]",
-        lg: "text-lg py-4 px-4 min-h-[56px]",
+        sm: "text-sm py-2 px-2 min-h-9",
+        md: "text-base py-3 px-3 min-h-12",
+        lg: "text-lg py-4 px-4 min-h-14",
       },
       state: {
         default: "",
-        error: "border-red-500 dark:border-red-400",
-        success: "border-green-500 dark:border-green-400",
+        error: "border-error dark:border-error-dark",
+        success: "border-success dark:border-success-dark",
       },
     },
     defaultVariants: {

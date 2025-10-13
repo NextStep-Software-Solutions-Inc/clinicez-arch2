@@ -1,17 +1,20 @@
 import React, { type FC } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
-import { TouchableOpacity, type TouchableOpacityProps, ActivityIndicator, Text } from "react-native";
+import { TouchableOpacity, type TouchableOpacityProps, ActivityIndicator, View } from "react-native";
+import { useColorScheme } from "nativewind";
 import { cn } from "@lib/utils";
+import { getThemeColor, type ThemeColorToken } from "@theme/colors";
 import ThemedText from "./ThemedText";
+import ThemedIcon, { type IconColor, type IconName } from "./ThemedIcon";
 
 const buttonVariants = cva(
   "items-center justify-center rounded-lg px-4 py-3 active:scale-95 transition-transform",
   {
     variants: {
       variant: {
-        default: "bg-blue-600 dark:bg-blue-500 text-white",
-        destructive: "bg-red-600 dark:bg-red-500 text-white",
-        outline: "border border-gray-300 dark:border-gray-600 bg-transparent",
+        default: "bg-primary dark:bg-primary-dark",
+        destructive: "bg-error dark:bg-error-dark",
+        outline: "border border-border dark:border-border-dark bg-transparent",
         ghost: "bg-transparent",
         link: "bg-transparent underline"
       },
@@ -38,6 +41,10 @@ export interface ThemedButtonProps
   size?: "default" | "sm" | "lg" | "icon";
   disabled?: boolean;
   loading?: boolean;
+  leftIcon?: IconName | React.ReactNode;
+  rightIcon?: IconName | React.ReactNode;
+  leftIconColor?: IconColor | string;
+  rightIconColor?: IconColor | string;
 }
 
 export const ThemedButton: FC<ThemedButtonProps> = ({
@@ -46,8 +53,85 @@ export const ThemedButton: FC<ThemedButtonProps> = ({
   className,
   loading = false,
   children,
+  leftIcon,
+  rightIcon,
+  leftIconColor,
+  rightIconColor,
   ...props
 }) => {
+  const { colorScheme } = useColorScheme();
+  const scheme = colorScheme === "dark" ? "dark" : "light";
+  const isOutlineLike = variant === "outline" || variant === "ghost" || variant === "link";
+  const textColorToken: ThemeColorToken = isOutlineLike ? "primary" : "primaryForeground";
+  const textColor = getThemeColor(textColorToken, scheme);
+  const hasIcons = Boolean(leftIcon || rightIcon);
+
+  const resolveIcon = (icon: IconName | React.ReactNode, color?: IconColor | string) => {
+    if (typeof icon === "string") {
+      const tint = color ?? (isOutlineLike ? textColorToken : "primaryForeground");
+      const iconSize = size === "sm" ? "sm" : size === "lg" ? "md" : "default";
+      return <ThemedIcon icon={icon} color={tint} size={iconSize} />;
+    }
+    return icon;
+  };
+
+  const renderLeftIcon = () => {
+    if (!leftIcon) {
+      return null;
+    }
+
+    const shouldAddSpacing = Boolean(rightIcon || children);
+    return (
+      <View className={shouldAddSpacing ? "mr-2" : undefined}>
+        {resolveIcon(leftIcon, leftIconColor)}
+      </View>
+    );
+  };
+
+  const renderRightIcon = () => {
+    if (!rightIcon) {
+      return null;
+    }
+
+    const shouldAddSpacing = Boolean(leftIcon || children);
+    return (
+      <View className={shouldAddSpacing ? "ml-2" : undefined}>
+        {resolveIcon(rightIcon, rightIconColor)}
+      </View>
+    );
+  };
+
+  const renderContent = () => {
+    const isTextPrimitive = typeof children === "string" || typeof children === "number";
+    const content = isTextPrimitive ? (
+      <ThemedText
+        variant="button"
+        className={
+          isOutlineLike
+            ? "text-primary dark:text-primary-dark"
+            : "text-primary-contrast dark:text-primary-contrast-dark"
+        }
+        style={{ color: textColor }}
+      >
+        {children}
+      </ThemedText>
+    ) : (
+      children
+    );
+
+    if (!hasIcons) {
+      return content;
+    }
+
+    return (
+      <View className="flex-row items-center justify-center">
+        {renderLeftIcon()}
+        {content}
+        {renderRightIcon()}
+      </View>
+    );
+  };
+
   return (
     <TouchableOpacity
       className={cn(buttonVariants({ variant, size }), className)}
@@ -56,12 +140,14 @@ export const ThemedButton: FC<ThemedButtonProps> = ({
     >
       {loading ? (
         <ActivityIndicator
-          color={variant === "outline" || variant === "ghost" ? "currentColor" : "#ffffff"}
+          color={
+            variant === "outline" || variant === "ghost" || variant === "link"
+              ? textColor
+              : getThemeColor("primaryForeground", scheme)
+          }
         />
       ) : (
-        <ThemedText variant="button" className={variant === 'outline' || variant === 'ghost' ? 'text-blue-600 dark:text-blue-400' : 'text-white'}>
-          {children}
-        </ThemedText>
+        renderContent()
       )}
     </TouchableOpacity>
   );

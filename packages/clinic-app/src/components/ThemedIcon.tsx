@@ -1,20 +1,12 @@
-import React, { FC } from "react";
-import {
-  HomeIcon,
-  UserIcon,
-  SettingsIcon,
-  SearchIcon,
-  BellIcon,
-  LockIcon,
-  CheckIcon,
-  XIcon
-} from "lucide-react-native";
-
+import React, { FC, useMemo } from "react";
+import * as LucideIcons from "lucide-react-native";
 import { LucideProps } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 
-export type IconName = "home" | "user" | "settings" | "search" | "bell" | "lock" | "check" | "x";
-export type IconColor = "primary" | "secondary" | "muted" | "error" | "success" | "warning" | "info" | "accent";
+import { getThemeColor, isThemeColorToken, type ThemeColorToken } from "@theme/colors";
+
+export type IconName = string;
+export type IconColor = ThemeColorToken | string;
 
 const sizeMap = {
   sm: 16,
@@ -24,37 +16,75 @@ const sizeMap = {
   xl: 40,
 } as const;
 
-const getColorValue = (colorName: IconColor, isDark: boolean): string => {
-  const colorMap = {
-    primary: isDark ? "#60A5FA" : "#3B82F6",
-    secondary: isDark ? "#C4B5FD" : "#A855F7",
-    muted: isDark ? "#9CA3AF" : "#6B7280",
-    error: isDark ? "#F87171" : "#EF4444",
-    success: isDark ? "#34D399" : "#10B981",
-    warning: isDark ? "#FBBF24" : "#F59E0B",
-    info: isDark ? "#60A5FA" : "#3B82F6",
-    accent: isDark ? "#FBBF24" : "#F59E0B",
-  };
-  return colorMap[colorName];
-};
+const FALLBACK_PRIMARY: ThemeColorToken = "primary";
 
-interface ThemedIconProps extends
-  Omit<LucideProps, "size" | "color"> {
+interface ThemedIconProps extends Omit<LucideProps, "size" | "color"> {
   icon: IconName;
   color?: IconColor;
-  size?: keyof typeof sizeMap;
+  size?: keyof typeof sizeMap | number;
   className?: string;
 }
 
-const Icons: Record<IconName, FC<LucideProps>> = {
-  home: HomeIcon,
-  user: UserIcon,
-  settings: SettingsIcon,
-  search: SearchIcon,
-  bell: BellIcon,
-  lock: LockIcon,
-  check: CheckIcon,
-  x: XIcon,
+const normalizeIconKey = (icon: IconName) => {
+  if (!icon) {
+    return null;
+  }
+
+  const trimmed = icon.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const kebab = trimmed
+    .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+    .replace(/[\s_]+/g, "-")
+    .toLowerCase();
+
+  const pascal = kebab
+    .split("-")
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join("");
+
+  const candidates = [
+    `${pascal}Icon`,
+    pascal,
+    `${pascal}icon`,
+  ];
+
+  if (/icon$/i.test(trimmed)) {
+    candidates.unshift(trimmed);
+  }
+
+  return candidates;
+};
+
+const resolveIconComponent = (icon: IconName): FC<LucideProps> | undefined => {
+  const candidates = normalizeIconKey(icon);
+  if (!candidates) {
+    return undefined;
+  }
+
+  for (const key of candidates) {
+    const component = (LucideIcons as unknown as Record<string, FC<LucideProps>>)[key];
+    if (component) {
+      return component;
+    }
+  }
+
+  return undefined;
+};
+
+const resolveColorToken = (color: IconColor | undefined, scheme: "light" | "dark"): string => {
+  if (typeof color === "string") {
+    if (isThemeColorToken(color)) {
+      return getThemeColor(color, scheme);
+    }
+
+    return color;
+  }
+
+  return getThemeColor(FALLBACK_PRIMARY, scheme);
 };
 
 const ThemedIcon: FC<ThemedIconProps> = ({
@@ -67,16 +97,23 @@ const ThemedIcon: FC<ThemedIconProps> = ({
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
 
-  const IconComponent = Icons[icon];
-  if (!IconComponent) return null;
+  const IconComponent = useMemo(() => resolveIconComponent(icon), [icon]);
+  if (!IconComponent) {
+    if (__DEV__) {
+      console.warn(`ThemedIcon: Unable to find lucide icon for "${icon}"`);
+    }
+    return null;
+  }
 
-  const iconSize = sizeMap[size];
-  const iconColor = getColorValue(color, isDark);
+  const iconSize = typeof size === "number" ? size : sizeMap[size] ?? sizeMap.default;
+
+  const scheme = isDark ? "dark" : "light";
+  const resolvedColor = resolveColorToken(color, scheme);
 
   return (
     <IconComponent
       size={iconSize}
-      color={iconColor}
+      color={resolvedColor}
       className={className}
       {...props}
     />
