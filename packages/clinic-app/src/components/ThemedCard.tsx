@@ -15,7 +15,7 @@ const Card = ({ className, ...props }: NativeViewProps) => (
   <View
     {...props}
     className={cn(
-      "rounded-2xl border border-border dark:border-border-dark bg-background dark:bg-background-dark",
+      "rounded-2xl border border-border dark:border-border-dark bg-base dark:bg-background-dark",
       "shadow-sm overflow-hidden",
       className,
     )}
