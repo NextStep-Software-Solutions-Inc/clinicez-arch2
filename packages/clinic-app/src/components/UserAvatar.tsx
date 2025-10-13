@@ -3,14 +3,19 @@
  */
 
 import React, { useMemo } from "react";
-import { Image, Pressable, Text, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
+import { Image, Pressable, Text, View, type AccessibilityRole, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
 
 import { cn } from "@lib/utils";
 
-type AvatarWrapperProps = PressableProps & {
+type AvatarWrapperProps = {
   size?: number;
   className?: string;
   style?: StyleProp<ViewStyle>;
+  children: React.ReactNode;
+  onPress?: () => void;
+  accessibilityRole?: AccessibilityRole;
+  accessibilityLabel?: string;
+  testID?: string;
 };
 
 type UserAvatarProps = {
@@ -52,20 +57,44 @@ const AvatarWrapper: React.FC<AvatarWrapperProps> = ({
   className,
   style,
   children,
-  ...pressableProps
-}) => (
-  <Pressable
-    {...pressableProps}
-    style={[{ width: size, height: size, borderRadius: size / 2 }, style]}
-    className={cn(
-      "overflow-hidden items-center justify-center",
-      "bg-surface dark:bg-surface-dark border border-border dark:border-border-dark",
-      className,
-    )}
-  >
-    {children}
-  </Pressable>
-);
+  onPress,
+  accessibilityRole,
+  accessibilityLabel,
+  testID,
+}) => {
+  const baseStyle = [{ width: size, height: size, borderRadius: size / 2 }, style];
+  const baseClassName = cn(
+    "overflow-hidden items-center justify-center",
+    "bg-surface dark:bg-surface-dark border border-border dark:border-border-dark",
+    className,
+  );
+
+  if (onPress) {
+    return (
+      <Pressable
+        onPress={onPress}
+        accessibilityRole={accessibilityRole}
+        accessibilityLabel={accessibilityLabel}
+        testID={testID}
+        style={baseStyle}
+        className={baseClassName}
+      >
+        {children}
+      </Pressable>
+    );
+  }
+
+  return (
+    <View
+      style={baseStyle}
+      className={baseClassName}
+      accessibilityLabel={accessibilityLabel}
+      testID={testID}
+    >
+      {children}
+    </View>
+  );
+};
 AvatarWrapper.displayName = "UserAvatarWrapper";
 
 const UserAvatar: React.FC<UserAvatarProps> & { Wrapper: typeof AvatarWrapper } = ({

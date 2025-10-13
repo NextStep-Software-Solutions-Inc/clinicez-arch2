@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Tabs, usePathname, useRouter } from "expo-router";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
-import { Animated, LayoutChangeEvent, Text, TouchableOpacity, View } from "react-native";
+import { Animated, LayoutChangeEvent, Pressable, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
 import { useAuth, useUser } from "@clerk/clerk-expo";
@@ -275,6 +275,18 @@ const TabLayout: React.FC = () => {
             </ThemedText>
           ) : null}
         </View>
+      </View>
+
+      {/* View Profile */}
+      <View className="mt-6">
+        <ThemedButton variant="ghost" className="w-full" onPress={() => {
+          setSidebarOpen(false);
+          router.push("/(main)/hp/hp-profile");
+        }}>
+          <ThemedText className="text-text dark:text-text-dark text-center" variant="button">
+            View Profile
+          </ThemedText>
+        </ThemedButton>
       </View>
 
       <View className="mt-auto pt-6">
