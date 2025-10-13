@@ -3,6 +3,7 @@ import { StatusBar } from "expo-status-bar";
 import { useAuth } from "@clerk/clerk-expo";
 import { Redirect } from "expo-router";
 import { ImageBackground } from "react-native";
+import Background3D from "@images/background-3d-1.png";
 
 export default function AuthLayout() {
   const { isLoaded, isSignedIn } = useAuth();
@@ -14,14 +15,14 @@ export default function AuthLayout() {
 
   // Redirect to main app if already authenticated
   if (isSignedIn) {
-    return <Redirect href="/(main)" />;
+    return <Redirect href="/(main)/(tabs)" />;
   }
 
   return (
     <>
       <StatusBar style="auto" />
       <ImageBackground
-        source={require("../../../assets/public/image/background-3d-1.png")}
+        source={Background3D}
         className="flex-1"
         resizeMode="cover"
       >
