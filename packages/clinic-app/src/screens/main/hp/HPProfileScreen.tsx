@@ -2,7 +2,6 @@ import React from "react";
 import { useUser } from "@clerk/clerk-expo";
 import { ScrollView, View, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
 
 import ThemedText from "@components/ThemedText";
 import ThemedCard from "@components/ThemedCard";
@@ -13,24 +12,7 @@ import UserAvatar from "@components/UserAvatar";
 import type {
   HealthcareProviderRole,
   FieldOfStudy,
-} from "../../../types/healthcare-provider";
-
-/**
- * HP Profile Screen
- * 
- * Displays healthcare provider profile with sections:
- * - Personal Information (avatar, name, role, specialization)
- * - Credentials and Education
- * - About (experience)
- * - Specializations
- * - License Information
- * - Contact Details
- * 
- * Principles Applied:
- * - Single Responsibility: Each component handles one section
- * - DRY: Reusable InfoRow component
- * - Composition: Built with composable UI primitives
- */
+} from "@app-types/healthcare-provider";
 
 type InfoRowProps = {
   icon: string;
@@ -84,7 +66,7 @@ const InfoRow: React.FC<InfoRowProps> = ({ icon, label, value, onPress }) => {
 };
 InfoRow.displayName = "InfoRow";
 
-// Mock data - replace with actual data from your backend
+// Mock Data
 const mockHealthcareProvider = {
   role: "doctor" as HealthcareProviderRole,
   fieldOfStudy: "internal_medicine" as FieldOfStudy,
@@ -126,7 +108,6 @@ const fieldOfStudyLabels: Record<FieldOfStudy, string> = {
 
 const HPProfileScreen: React.FC = () => {
   const { user } = useUser();
-  const router = useRouter();
 
   const handleEditProfile = () => {
     // TODO: Navigate to edit profile screen
@@ -148,7 +129,7 @@ const HPProfileScreen: React.FC = () => {
         {/* Personal Information Card */}
         <ThemedCard className="mx-4 mt-4 shadow-none bg-base dark:bg-surface-elevated-dark">
           <ThemedCard.Content>
-            {/* Avatar and Personal Details - Row Layout */}
+            {/* Avatar and Personal Details */}
             <View className="items-center gap-4">
               <UserAvatar
                 imageUrl={user?.imageUrl}
@@ -321,321 +302,3 @@ const HPProfileScreen: React.FC = () => {
 HPProfileScreen.displayName = "HPProfileScreen";
 
 export default HPProfileScreen;
-
-// import React, { useState } from "react";
-// import { ScrollView, View, Pressable, Alert } from "react-native";
-// import { useRouter } from "expo-router";
-// import { useUser, useAuth } from "@clerk/clerk-expo";
-// import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-// import ThemedView from "@components/ThemedView";
-// import ThemedText from "@components/ThemedText";
-// import ThemedCard from "@components/ThemedCard";
-// import ThemedIcon from "@components/ThemedIcon";
-// import ThemedButton from "@components/ThemedButton";
-// import ThemedBadge from "@components/ThemedBadge";
-// import UserAvatar from "@components/UserAvatar";
-// import { getThemeColor } from "@theme/colors";
-// import { useColorScheme } from "nativewind";
-
-// /**
-//  * Healthcare Provider Profile Screen
-//  * 
-//  * Displays the authenticated user's healthcare provider profile information
-//  * including personal details, professional credentials, and account settings.
-//  * 
-//  * Principles Applied:
-//  * - Single Responsibility: Each component section handles one aspect of the profile
-//  * - DRY (Don't Repeat Yourself): Reusable ProfileInfoItem and ProfileSection components
-//  * - Composition over Inheritance: Built using composable UI components
-//  */
-
-// type ProfileInfoItemProps = {
-//   label: string;
-//   value?: string | null;
-//   icon?: string;
-//   onPress?: () => void;
-// };
-
-// const ProfileInfoItem: React.FC<ProfileInfoItemProps> = ({ label, value, icon, onPress }) => {
-//   const content = (
-//     <View className="flex-row items-center justify-between py-3 border-b border-border dark:border-border-dark">
-//       <View className="flex-row items-center gap-3 flex-1">
-//         {icon && (
-//           <View className="w-10 h-10 items-center justify-center rounded-full bg-accent dark:bg-accent-dark">
-//             <ThemedIcon icon={icon} size="sm" color="primary" />
-//           </View>
-//         )}
-//         <View className="flex-1">
-//           <ThemedText variant="caption" className="text-muted-foreground dark:text-muted-foreground-dark mb-1">
-//             {label}
-//           </ThemedText>
-//           <ThemedText variant="body" className="font-medium">
-//             {value || "Not provided"}
-//           </ThemedText>
-//         </View>
-//       </View>
-//       {onPress && (
-//         <ThemedIcon icon="chevron-right" size="sm" color="muted" />
-//       )}
-//     </View>
-//   );
-
-//   if (onPress) {
-//     return (
-//       <Pressable onPress={onPress} className="active:opacity-70">
-//         {content}
-//       </Pressable>
-//     );
-//   }
-
-//   return content;
-// };
-
-// type ProfileSectionProps = {
-//   title: string;
-//   icon?: string;
-//   children: React.ReactNode;
-// };
-
-// const ProfileSection: React.FC<ProfileSectionProps> = ({ title, icon, children }) => (
-//   <ThemedCard className="mb-4">
-//     <View className="flex-row items-center gap-2 mb-4 pb-3 border-b border-border dark:border-border-dark">
-//       {icon && <ThemedIcon icon={icon} size="default" color="primary" />}
-//       <ThemedText variant="header" className="text-lg font-semibold">
-//         {title}
-//       </ThemedText>
-//     </View>
-//     <View>{children}</View>
-//   </ThemedCard>
-// );
-
-// const HPProfileScreen: React.FC = () => {
-//   const router = useRouter();
-//   const { user } = useUser();
-//   const { signOut } = useAuth();
-//   const { colorScheme } = useColorScheme();
-//   const insets = useSafeAreaInsets();
-//   const [isSigningOut, setIsSigningOut] = useState(false);
-
-//   const bottomSpacing = Math.max(insets.bottom + 16, 16);
-
-//   // Mock healthcare provider data - in production, this would come from your backend
-//   const hpData = {
-//     // Basic Information
-//     firstName: user?.firstName || "John",
-//     lastName: user?.lastName || "Doe",
-//     fullName: user?.fullName || "John Doe",
-//     email: user?.emailAddresses?.[0]?.emailAddress || "john.doe@clinic.com",
-//     phone: user?.phoneNumbers?.[0]?.phoneNumber || "+1 (555) 123-4567",
-
-//     // Professional Information
-//     role: "Doctor",
-//     specialization: "General Medicine",
-//     licenseNumber: "MD-123456",
-//     clinic: "Sunrise Health Center",
-
-//     // Professional Credentials
-//     ptrNumber: "PTR-789012",
-//     tinNumber: "123-45-6789",
-//     issuedDate: "Jan 15, 2020",
-//     expiryDate: "Jan 15, 2025",
-
-//     // Additional Information
-//     yearsOfExperience: "8 years",
-//     patientsServed: "1,204",
-//   };
-
-//   const handleEditProfile = () => {
-//     router.push("/(main)/complete-profile");
-//   };
-
-//   const handleChangePassword = () => {
-//     // TODO: Implement change password flow
-//     Alert.alert("Change Password", "This feature will be available soon.");
-//   };
-
-//   const handleNotificationSettings = () => {
-//     // TODO: Implement notification settings
-//     Alert.alert("Notification Settings", "This feature will be available soon.");
-//   };
-
-//   const handlePrivacySettings = () => {
-//     // TODO: Implement privacy settings
-//     Alert.alert("Privacy Settings", "This feature will be available soon.");
-//   };
-
-//   const handleSignOut = async () => {
-//     Alert.alert(
-//       "Sign Out",
-//       "Are you sure you want to sign out?",
-//       [
-//         {
-//           text: "Cancel",
-//           style: "cancel",
-//         },
-//         {
-//           text: "Sign Out",
-//           style: "destructive",
-//           onPress: async () => {
-//             try {
-//               setIsSigningOut(true);
-//               await signOut();
-//               router.replace("/(auth)/sign-in");
-//             } catch (error) {
-//               Alert.alert("Error", "Failed to sign out. Please try again.");
-//               setIsSigningOut(false);
-//             }
-//           },
-//         },
-//       ]
-//     );
-//   };
-
-//   const verificationBadgeColor = getThemeColor("success", colorScheme === "dark" ? "dark" : "light");
-
-//   return (
-//     <ScrollView
-//       showsVerticalScrollIndicator={false}
-//       className="flex-1 bg-background dark:bg-background-dark"
-//       contentContainerStyle={{ paddingBottom: bottomSpacing }}
-//     >
-//       <ThemedView variant="transparent" className="flex-1 px-6 pt-6">
-//         {/* Profile Header */}
-//         <View className="items-center mb-6">
-//           <View className="relative mb-4">
-//             <UserAvatar
-//               imageUrl={user?.imageUrl}
-//               name={hpData.fullName}
-//               email={hpData.email}
-//               size={100}
-//               className="border-4 border-background dark:border-background-dark shadow-lg"
-//             />
-//             {/* Verification Badge */}
-//             <View className="absolute bottom-0 right-0 w-8 h-8 items-center justify-center rounded-full bg-success dark:bg-success-dark border-2 border-background dark:border-background-dark">
-//               <ThemedIcon icon="badge-check" size={16} color={verificationBadgeColor} />
-//             </View>
-//           </View>
-
-//           <ThemedText variant="header" className="text-2xl font-bold mb-1">
-//             {hpData.fullName}
-//           </ThemedText>
-
-//           <View className="flex-row items-center gap-2 mb-3">
-//             <ThemedBadge variant="default" size="md">
-//               <ThemedText className="text-primary-foreground dark:text-primary-contrast font-semibold">
-//                 {hpData.role}
-//               </ThemedText>
-//             </ThemedBadge>
-//             <ThemedBadge variant="outline" size="md">
-//               <ThemedText className="text-primary dark:text-primary-dark font-medium">
-//                 {hpData.specialization}
-//               </ThemedText>
-//             </ThemedBadge>
-//           </View>
-
-//           <ThemedText variant="body" className="text-muted-foreground dark:text-muted-foreground-dark text-center mb-4">
-//             {hpData.clinic}
-//           </ThemedText>
-
-//           <ThemedButton
-//             variant="outline"
-//             size="default"
-//             onPress={handleEditProfile}
-//             className="w-full max-w-xs"
-//           >
-//             <View className="flex-row items-center gap-2">
-//               <ThemedIcon icon="edit" size={18} className="text-primary dark:text-primary-dark" />
-//               <ThemedText className="font-semibold">Edit Profile</ThemedText>
-//             </View>
-//           </ThemedButton>
-//         </View>
-
-//         {/* Statistics Cards */}
-//         <View className="flex-row gap-4 mb-6">
-//           <ThemedCard className="flex-1 items-center py-4">
-//             <ThemedText variant="header" className="text-2xl font-bold mb-1">
-//               {hpData.yearsOfExperience}
-//             </ThemedText>
-//             <ThemedText variant="caption" className="text-muted-foreground dark:text-muted-foreground-dark">
-//               Experience
-//             </ThemedText>
-//           </ThemedCard>
-
-//           <ThemedCard className="flex-1 items-center py-4">
-//             <ThemedText variant="header" className="text-2xl font-bold mb-1">
-//               {hpData.patientsServed}
-//             </ThemedText>
-//             <ThemedText variant="caption" className="text-muted-foreground dark:text-muted-foreground-dark">
-//               Patients
-//             </ThemedText>
-//           </ThemedCard>
-//         </View>
-
-//         {/* Personal Information */}
-//         <ProfileSection title="Personal Information" icon="user">
-//           <ProfileInfoItem label="Email Address" value={hpData.email} icon="mail" />
-//           <ProfileInfoItem label="Phone Number" value={hpData.phone} icon="phone" />
-//           <ProfileInfoItem label="License Number" value={hpData.licenseNumber} icon="file-badge" />
-//         </ProfileSection>
-
-//         {/* Professional Credentials */}
-//         <ProfileSection title="Professional Credentials" icon="shield-check">
-//           <ProfileInfoItem label="PTR Number" value={hpData.ptrNumber} icon="file-text" />
-//           <ProfileInfoItem label="TIN Number" value={hpData.tinNumber} icon="hash" />
-//           <ProfileInfoItem label="License Issued" value={hpData.issuedDate} icon="calendar" />
-//           <ProfileInfoItem label="License Expiry" value={hpData.expiryDate} icon="calendar-clock" />
-//         </ProfileSection>
-
-//         {/* Account Settings */}
-//         <ProfileSection title="Account Settings" icon="settings">
-//           <ProfileInfoItem
-//             label="Change Password"
-//             value="Update your password"
-//             icon="lock"
-//             onPress={handleChangePassword}
-//           />
-//           <ProfileInfoItem
-//             label="Notification Settings"
-//             value="Manage your notifications"
-//             icon="bell"
-//             onPress={handleNotificationSettings}
-//           />
-//           <ProfileInfoItem
-//             label="Privacy & Security"
-//             value="Control your privacy settings"
-//             icon="shield"
-//             onPress={handlePrivacySettings}
-//           />
-//         </ProfileSection>
-
-//         {/* Sign Out Button */}
-//         <ThemedButton
-//           variant="destructive"
-//           size="lg"
-//           onPress={handleSignOut}
-//           disabled={isSigningOut}
-//           className="mb-6"
-//         >
-//           <View className="flex-row items-center gap-2">
-//             <ThemedIcon icon="log-out" size={20} color="white" />
-//             <ThemedText variant="button" className="text-white font-semibold">
-//               {isSigningOut ? "Signing Out..." : "Sign Out"}
-//             </ThemedText>
-//           </View>
-//         </ThemedButton>
-
-//         {/* App Version */}
-//         <View className="items-center py-4">
-//           <ThemedText variant="caption" className="text-muted-foreground dark:text-muted-foreground-dark">
-//             ClinicEZ v1.0.0
-//           </ThemedText>
-//         </View>
-//       </ThemedView>
-//     </ScrollView>
-//   );
-// };
-
-// HPProfileScreen.displayName = "HPProfileScreen";
-
-// export default HPProfileScreen;
