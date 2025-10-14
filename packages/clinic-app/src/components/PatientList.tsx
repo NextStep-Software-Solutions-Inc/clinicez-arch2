@@ -1,51 +1,19 @@
-/**
- * This is a reusable patient list component that displays a list of patients with their details.
- * It uses FlatList for efficient rendering and supports theming for light and dark modes.
- * The component is designed to be used in various screens where patient information needs to be displayed.
- */
-
 import { FlatList, type FlatListProps, Image, Pressable, View, useColorScheme, useWindowDimensions } from "react-native";
 import { ThemedText } from "./ThemedText";
-import { cn, getGenderInitial } from "@lib/utils";
+import { cn, getInitials } from "@lib/utils";
 import ThemedBadge from "./ThemedBadge";
 import ThemedIcon from "./ThemedIcon";
 import { formatDate } from "date-fns";
 import { ChevronRight } from "lucide-react-native";
 import { getThemeColor } from "@theme/colors";
+import type { PatientSummary } from "@app-types/patient";
 
-// Mock patient list data for development purposes
-export type PatientData = {
-  id: number;
-  name: string;
-  profile?: {
-    uri: string;
-    alt?: string;
-  }
-  age: number;
-  gender: string;
-  // Healthcare Provider
-  hp?: {
-    name: string;
-    specialization?: string;
-  }
-  diagnosis?: string;
-  lastVisit: string; // ISO date string
-  nextAppointment?: string; // ISO date string
-}
-
-const getPatientInitials = (fullName: string) =>
-  fullName
-    .split(" ")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase())
-    .join("")
-    .slice(0, 2);
-
-type PatientListProps = Omit<FlatListProps<PatientData>, "data" | "renderItem" | "keyExtractor"> & {
-  patients: PatientData[];
+type PatientListProps = Omit<FlatListProps<PatientSummary>, "data" | "renderItem" | "keyExtractor"> & {
+  patients: PatientSummary[];
+  onPatientPress?: (patient: PatientSummary) => void;
 };
 
-const PatientList = ({ patients, contentContainerStyle, ...props }: PatientListProps) => {
+const PatientList = ({ patients, contentContainerStyle, onPatientPress, ...props }: PatientListProps) => {
   const colorScheme = useColorScheme();
   const chevronColor = getThemeColor("muted", colorScheme === "dark" ? "dark" : "light");
   const { width } = useWindowDimensions();
@@ -60,14 +28,19 @@ const PatientList = ({ patients, contentContainerStyle, ...props }: PatientListP
       data={patients}
       keyExtractor={(item) => item.id.toString()}
       renderItem={({ item }) => (
-        <Pressable className="mb-4 last:mb-4 w-full flex-row items-center gap-4 rounded-2xl border border-border bg-surface-elevated p-4 dark:border-border-dark dark:bg-surface-elevated-dark">
+        <Pressable
+          className="mb-4 last:mb-4 w-full flex-row items-center gap-4 rounded-2xl border border-border bg-surface-elevated p-4 dark:border-border-dark dark:bg-surface-elevated-dark"
+          onPress={() => onPatientPress?.(item)}
+          accessibilityRole="button"
+          accessibilityLabel={`View patient ${item.name}`}
+        >
           <View className="items-center justify-center">
             <View className="h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-accent dark:bg-accent-dark">
               {item.profile?.uri ? (
                 <Image source={{ uri: item.profile.uri }} className="h-16 w-16" />
               ) : (
                 <ThemedText variant="header" className="text-2xl text-primary dark:text-primary-dark">
-                  {getPatientInitials(item.name)}
+                  {getInitials(item.name)}
                 </ThemedText>
               )}
             </View>
@@ -99,7 +72,7 @@ const PatientList = ({ patients, contentContainerStyle, ...props }: PatientListP
                         className="flex-row items-center gap-1 border border-error dark:border-error-dark"
                       >
                         <ThemedText className="text-sm text-error dark:text-error-dark">
-                          {item.diagnosis}
+                          {item.diagnosis.name}
                         </ThemedText>
                       </ThemedBadge>
                     )}
