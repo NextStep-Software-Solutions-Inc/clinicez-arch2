@@ -1,1 +1,1 @@
-export { default } from "@screens/main/PatientScreen";
+export { default } from "@screens/main/patient/PatientScreen";
