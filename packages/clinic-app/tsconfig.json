@@ -6,6 +6,7 @@
       "@components/*": ["./src/components/*"],
       "@env": ["./env"],
       "@lib/*": ["./src/lib/*"],
+      "@app-types/*": ["./src/types/*"],
       "@utils/*": ["./src/utils/*"],
       "@actions/*": ["./src/actions/*"],
       "@screens/*": ["./src/screens/*"],
@@ -13,6 +14,7 @@
       "@json/*": ["./assets/public/json/*"],
       "@images/*": ["./assets/public/image/*"],
       "@theme/*": ["./src/theme/*"],
+      "@data/*": ["./src/data/*"],
     }
   }
 }
