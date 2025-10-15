@@ -40,7 +40,23 @@ export type ThemeColorToken =
   | "input"
   | "inputDark"
   | "ring"
-  | "ringDark";
+  | "ringDark"
+  | "pastelGreen"
+  | "pastelGreenDark"
+  | "pastelGreenBorder"
+  | "pastelGreenBorderDark"
+  | "pastelPink"
+  | "pastelPinkDark"
+  | "pastelPinkBorder"
+  | "pastelPinkBorderDark"
+  | "lightGray"
+  | "lightGrayDark"
+  | "lightGrayBorder"
+  | "lightGrayBorderDark"
+  | "orange"
+  | "orangeDark"
+  | "pink"
+  | "pinkDark";
 
 const basePalette: Record<ThemeColorToken, { light: string; dark: string }> = {
   primary: { light: "#3B71FF", dark: "#60A5FA" },
@@ -85,6 +101,22 @@ const basePalette: Record<ThemeColorToken, { light: string; dark: string }> = {
   inputDark: { light: "#E2E8F0", dark: "#0F172A" },
   ring: { light: "#3B82F6", dark: "#2563EB" },
   ringDark: { light: "#1D4ED8", dark: "#1E40AF" },
+  pastelGreen: { light: "#D1FAE5", dark: "#064E3B" },
+  pastelGreenDark: { light: "#A7F3D0", dark: "#065F46" },
+  pastelGreenBorder: { light: "#6EE7B7", dark: "#047857" },
+  pastelGreenBorderDark: { light: "#34D399", dark: "#059669" },
+  pastelPink: { light: "#FCE7F3", dark: "#831843" },
+  pastelPinkDark: { light: "#FBCFE8", dark: "#9F1239" },
+  pastelPinkBorder: { light: "#F9A8D4", dark: "#BE123C" },
+  pastelPinkBorderDark: { light: "#F472B6", dark: "#E11D48" },
+  lightGray: { light: "#F3F4F6", dark: "#374151" },
+  lightGrayDark: { light: "#E5E7EB", dark: "#4B5563" },
+  lightGrayBorder: { light: "#D1D5DB", dark: "#4B5563" },
+  lightGrayBorderDark: { light: "#9CA3AF", dark: "#6B7280" },
+  orange: { light: "#F97316", dark: "#FB923C" },
+  orangeDark: { light: "#EA580C", dark: "#FDBA74" },
+  pink: { light: "#EC4899", dark: "#F472B6" },
+  pinkDark: { light: "#DB2777", dark: "#F9A8D4" },
 };
 
 export const isThemeColorToken = (value: string): value is ThemeColorToken =>
@@ -169,6 +201,32 @@ export const tailwindColorPalette = {
   ring: {
     DEFAULT: basePalette.ring.light,
     dark: basePalette.ring.dark,
+  },
+  "pastel-green": {
+    DEFAULT: basePalette.pastelGreen.light,
+    dark: basePalette.pastelGreen.dark,
+    border: basePalette.pastelGreenBorder.light,
+    "border-dark": basePalette.pastelGreenBorder.dark,
+  },
+  "pastel-pink": {
+    DEFAULT: basePalette.pastelPink.light,
+    dark: basePalette.pastelPink.dark,
+    border: basePalette.pastelPinkBorder.light,
+    "border-dark": basePalette.pastelPinkBorder.dark,
+  },
+  "light-gray": {
+    DEFAULT: basePalette.lightGray.light,
+    dark: basePalette.lightGray.dark,
+    border: basePalette.lightGrayBorder.light,
+    "border-dark": basePalette.lightGrayBorder.dark,
+  },
+  orange: {
+    DEFAULT: basePalette.orange.light,
+    dark: basePalette.orange.dark,
+  },
+  pink: {
+    DEFAULT: basePalette.pink.light,
+    dark: basePalette.pink.dark,
   },
 } as const;
 
