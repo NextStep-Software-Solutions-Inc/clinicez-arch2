@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { useColorScheme } from "nativewind";
 import { getThemeColor } from "@theme/colors";
 import type { DayData, CalendarMarking } from "../types/calendar";
@@ -7,12 +7,16 @@ export const useCalendar = (appointmentsData: Record<string, DayData>) => {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = useMemo(() => new Date().toISOString().split('T')[0], []);
   const [selectedDate, setSelectedDate] = useState(today);
-  const initialMonth = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+  const initialMonth = useMemo(
+    () => new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+    []
+  );
   const [currentMonth, setCurrentMonth] = useState(initialMonth);
 
-  const getStatusColors = (status: DayData["status"]) => {
+  const getStatusColors = useCallback((status: DayData["status"]) => {
     const colorMap = {
       fullyBooked: {
         background: getThemeColor("pastelGreen", isDark ? "dark" : "light"),
@@ -29,9 +33,9 @@ export const useCalendar = (appointmentsData: Record<string, DayData>) => {
     };
 
     return colorMap[status];
-  };
+  }, [isDark]);
 
-  const createMarking = (
+  const createMarking = useCallback((
     color: string,
     borderColor: string,
     isSelected: boolean
@@ -57,7 +61,7 @@ export const useCalendar = (appointmentsData: Record<string, DayData>) => {
     }
 
     return baseMarking;
-  };
+  }, [isDark]);
 
   const markedDates = useMemo(() => {
     const marked: Record<string, CalendarMarking> = {};
@@ -74,7 +78,7 @@ export const useCalendar = (appointmentsData: Record<string, DayData>) => {
     }
 
     return marked;
-  }, [isDark, appointmentsData, selectedDate]);
+  }, [isDark, appointmentsData, selectedDate, getStatusColors, createMarking]);
 
   const calendarTheme = useMemo(() => {
     const bgColor = isDark ? '#0F172A' : '#F8FAFC';
