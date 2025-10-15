@@ -14,7 +14,9 @@ type TextColor =
   | "warning"
   | "error"
   | "info"
-  | "accent";
+  | "accent"
+  | "text"
+  | "textSecondary";
 
 const textVariants = cva("text-text dark:text-text-dark", {
   variants: {
@@ -38,6 +40,8 @@ const textVariants = cva("text-text dark:text-text-dark", {
       warning: "text-warning dark:text-warning-dark",
       info: "text-info dark:text-info-dark",
       accent: "text-accent dark:text-accent-dark",
+      text: "text-text dark:text-text-dark",
+      textSecondary: "text-text-secondary dark:text-text-secondary-dark",
     }
   },
   defaultVariants: {
