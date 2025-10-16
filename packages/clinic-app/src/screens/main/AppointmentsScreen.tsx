@@ -1,121 +1,114 @@
-import React from "react";
-import { FlatList, Pressable, View } from "react-native";
+import React, { useMemo, useState } from "react";
+import { View } from "react-native";
 
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import ThemedIcon from "@components/ThemedIcon";
-import ThemedText from "@components/ThemedText";
 import ThemedView from "@components/ThemedView";
-import Spacer from "@components/ui/Spacer";
+import { ThemedInput } from "@components/ThemedInput";
+import ButtonGroup from "@components/ui/ButtonGroup";
+import AppointmentList from "@components/appointment/AppointmentList";
+import { mockAppointmentsData } from "@data/appointments";
+import { AppointmentData, AppointmentStatus } from "@app-types/appointment";
+import ThemedIcon from "@components/ThemedIcon";
 
-const APPOINTMENTS = [
-  {
-    id: "appt-1",
-    patient: "Maria Santos",
-    time: "09:30 AM",
-    type: "Initial Consultation",
-    room: "Room 204",
-  },
-  {
-    id: "appt-2",
-    patient: "James Lee",
-    time: "11:00 AM",
-    type: "Follow-up",
-    room: "Room 112",
-  },
-  {
-    id: "appt-3",
-    patient: "Olivia Chen",
-    time: "02:15 PM",
-    type: "Annual Checkup",
-    room: "Room 315",
-  },
-  {
-    id: "appt-4",
-    patient: "Liam Johnson",
-    time: "03:45 PM",
-    type: "Physical Therapy",
-    room: "Room 101",
-  },
-  {
-    id: "appt-5",
-    patient: "Sophia Martinez",
-    time: "04:30 PM",
-    type: "Dermatology Consultation",
-    room: "Room 220",
-  },
-  {
-    id: "appt-6",
-    patient: "Ethan Brown",
-    time: "05:15 PM",
-    type: "Cardiology Follow-up",
-    room: "Room 330",
-  },
-  {
-    id: "appt-7",
-    patient: "Ava Wilson",
-    time: "06:00 PM",
-    type: "Pediatric Checkup",
-    room: "Room 150",
-  },
-  {
-    id: "appt-8",
-    patient: "Mia Thompson",
-    time: "07:30 PM",
-    type: "Nutrition Consultation",
-    room: "Room 250",
-  }
-];
+type FilterType = "All" | AppointmentStatus;
 
 const AppointmentsScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
   const bottomSpacing = Math.max(tabBarHeight - insets.bottom - 4, 0);
 
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedFilter, setSelectedFilter] = useState<FilterType>("All");
+
+  const filteredAppointments = useMemo(() => {
+    let filtered = mockAppointmentsData;
+
+    if (selectedFilter !== "All") {
+      filtered = filtered.filter((apt) => apt.status === selectedFilter);
+    }
+
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter((apt) =>
+        `${apt.patient.name.firstName} ${apt.patient.name.lastName}`
+          .toLowerCase()
+          .includes(query) ||
+        apt.chiefComplaint.name.toLowerCase().includes(query) ||
+        apt.service.name.toLowerCase().includes(query)
+      );
+    }
+
+    return filtered;
+  }, [searchQuery, selectedFilter]);
+
+  const appointmentCounts = useMemo(() => {
+    return {
+      all: mockAppointmentsData.length,
+      pending: mockAppointmentsData.filter((a) => a.status === "Pending").length,
+      accepted: mockAppointmentsData.filter((a) => a.status === "Accepted").length,
+      rejected: mockAppointmentsData.filter((a) => a.status === "Rejected").length,
+      completed: mockAppointmentsData.filter((a) => a.status === "Completed").length,
+    };
+  }, []);
+
+  const filterOptions = [
+    { value: "All" as FilterType, label: "All", count: appointmentCounts.all },
+    { value: "Pending" as FilterType, label: "Pending", count: appointmentCounts.pending },
+    { value: "Accepted" as FilterType, label: "Accepted", count: appointmentCounts.accepted },
+    { value: "Rejected" as FilterType, label: "Rejected", count: appointmentCounts.rejected },
+    { value: "Completed" as FilterType, label: "Completed", count: appointmentCounts.completed },
+  ];
+
+  const handleReceiveAppointment = (appointment: AppointmentData) => {
+    console.log("Receive appointment:", appointment.id);
+  };
+
+  const handleRejectAppointment = (appointment: AppointmentData) => {
+    console.log("Reject appointment:", appointment.id);
+  };
+
+  const handleRescheduleAppointment = (appointment: AppointmentData) => {
+    console.log("Reschedule appointment:", appointment.id);
+  };
+
+  const handleAppointmentPress = (appointment: AppointmentData) => {
+    console.log("View appointment details:", appointment.id);
+  };
+
   return (
-    <View
-      style={{
-        paddingTop: 16,
-        paddingBottom: 0,
-      }}
-      className="flex-1 bg-background dark:bg-background-dark"
-    >
-      <ThemedView variant="transparent" className="flex-1 px-6">
-        <FlatList
-          data={APPOINTMENTS}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <Pressable className="mb-4 rounded-2xl border border-border dark:border-border-dark bg-background/90 dark:bg-background-dark/70 p-4">
-              <View className="flex-row items-center justify-between">
-                <View>
-                  <ThemedText variant="label" className="font-semibold">
-                    {item.patient}
-                  </ThemedText>
-                  <ThemedText variant="caption" className="text-muted dark:text-muted-dark">
-                    {item.type}
-                  </ThemedText>
-                </View>
-                <View className="items-end">
-                  <View className="flex-row items-center">
-                    <ThemedIcon icon="clock" color="info" size="sm" className="mr-2" />
-                    <ThemedText variant="caption" className="text-muted dark:text-muted-dark">
-                      {item.time}
-                    </ThemedText>
-                  </View>
-                  <Spacer size={6} />
-                  <View className="flex-row items-center">
-                    <ThemedIcon icon="map-pin" color="muted" size="sm" className="mr-2" />
-                    <ThemedText variant="caption" className="text-muted dark:text-muted-dark">
-                      {item.room}
-                    </ThemedText>
-                  </View>
-                </View>
-              </View>
-            </Pressable>
-          )}
-          ListFooterComponent={null}
-          showsVerticalScrollIndicator={false}
+    <View className="flex-1 bg-background dark:bg-background-dark">
+      <ThemedView variant="transparent" className="flex-1 px-4">
+        <View className="gap-4 mb-4">
+          <ThemedInput
+            placeholder="Search appointments..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            className="rounded-full"
+            leftIcon={
+              <ThemedIcon
+                icon="search"
+                size="default"
+                className="text-muted dark:text-muted-dark"
+              />
+            }
+          />
+          <ButtonGroup
+            options={filterOptions}
+            value={selectedFilter}
+            onValueChange={setSelectedFilter}
+            variant="filled"
+            size="sm"
+          />
+        </View>
+
+        <AppointmentList
+          data={filteredAppointments}
+          onAppointmentPress={handleAppointmentPress}
+          onReceivePress={handleReceiveAppointment}
+          onRejectPress={handleRejectAppointment}
+          onReschedulePress={handleRescheduleAppointment}
           contentContainerStyle={{ paddingBottom: bottomSpacing }}
         />
       </ThemedView>
