@@ -88,7 +88,7 @@ export const PATIENT_SUMMARIES: PatientSummary[] = [
   },
 ];
 
-const PATIENT_PROFILES: Record<number, PatientProfile> = {
+export const PATIENT_PROFILES: Record<number, PatientProfile> = {
   1: {
     id: 1,
     userUid: "patient-1",
