@@ -1,55 +1,36 @@
-import type { DayData } from "../types/calendar";
+import type { DayData, Appointment } from "../types/calendar";
+import { mockAppointmentsData as appointments } from "./appointments";
 
-// Mock appointment data - replace with actual data fetching
-export const mockAppointmentsData: Record<string, DayData> = {
-  "2025-10-15": {
-    status: "fullyBooked",
-    appointments: [
-      {
-        id: "1",
-        patientName: "John Doe",
-        service: "General Checkup",
-        mode: "In-Person",
-        duration: "30 mins",
-        timeRange: "10:30 AM - 11:00 AM",
-      },
-      {
-        id: "2",
-        patientName: "Jane Smith",
-        service: "Follow-up",
-        mode: "Virtual",
-        duration: "1 hr",
-        timeRange: "2:00 PM - 3:00 PM",
-      },
-    ],
-  },
-  "2025-10-18": {
-    status: "fullyBooked",
-    appointments: [
-      {
-        id: "3",
-        patientName: "Mike Johnson",
-        service: "Consultation",
-        mode: "In-Person",
-        duration: "45 mins",
-        timeRange: "9:00 AM - 9:45 AM",
-      },
-    ],
-  },
-  "2025-10-20": {
-    status: "unavailable",
-  },
-  "2025-10-25": {
-    status: "fullyBooked",
-    appointments: [
-      {
-        id: "4",
-        patientName: "Sarah Williams",
-        service: "Lab Review",
-        mode: "Virtual",
-        duration: "30 mins",
-        timeRange: "11:00 AM - 11:30 AM",
-      },
-    ],
-  },
+const convertToCalendarAppointment = (apt: typeof appointments[0]): Appointment => {
+  const patientName = `${apt.patient.name.firstName} ${apt.patient.name.lastName}`;
+  const timeRange = `${apt.startTime} - ${apt.endTime}`;
+
+  return {
+    id: apt.id.toString(),
+    patientName,
+    service: apt.service.name,
+    mode: apt.mode.name as "In-Person" | "Virtual",
+    duration: "",
+    timeRange,
+  };
+};
+
+export const mockCalendarData: Record<string, DayData> = appointments.reduce((acc, apt) => {
+  const date = apt.appointmentDate;
+
+  if (!acc[date]) {
+    acc[date] = {
+      status: "fullyBooked",
+      appointments: [],
+    };
+  }
+
+  acc[date].appointments = acc[date].appointments || [];
+  acc[date].appointments.push(convertToCalendarAppointment(apt));
+
+  return acc;
+}, {} as Record<string, DayData>);
+
+mockCalendarData["2025-10-20"] = {
+  status: "unavailable",
 };

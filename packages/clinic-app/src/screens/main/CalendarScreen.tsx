@@ -2,14 +2,14 @@ import React, { useMemo } from "react";
 import { View, StyleSheet } from "react-native";
 import { CalendarList, DateData } from "react-native-calendars";
 import { useCalendar } from "@hooks/useCalendar";
-import { mockAppointmentsData } from "@data/calendar";
+import { mockCalendarData } from "@data/calendar";
 import { CalendarHeader } from "@components/calendar/CalendarHeader";
 import { CalendarLegend } from "@components/calendar/CalendarLegend";
 import { EventDisplay } from "@components/calendar/EventDisplay";
 
 const CalendarScreen: React.FC = () => {
   // Use mock data - replace with actual data fetching later
-  const appointmentsData = useMemo(() => mockAppointmentsData, []);
+  const appointmentsData = useMemo(() => mockCalendarData, []);
 
   const {
     isDark,
