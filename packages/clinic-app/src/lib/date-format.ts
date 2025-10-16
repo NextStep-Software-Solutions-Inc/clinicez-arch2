@@ -1,4 +1,4 @@
-import { format, isValid, parseISO } from "date-fns";
+import { format, isValid, parseISO, isToday } from "date-fns";
 
 /**
  * Formats an ISO date string to YYYY-MM-DD format
@@ -35,4 +35,27 @@ export const formatDate = (dateString: string, formatString: string = "yyyy-MM-d
   const parsed = parseISO(dateString);
   if (!isValid(parsed)) return dateString;
   return format(parsed, formatString);
+};
+
+/**
+ * Formats an appointment date string with "Today" for current date
+ * @param dateString - ISO date string to format
+ * @returns "Today" if date is today, otherwise formatted as "MMM. dd, yyyy"
+ */
+export const formatAppointmentDate = (dateString: string): string => {
+  try {
+    const date = parseISO(dateString);
+
+    if (!isValid(date)) {
+      return dateString;
+    }
+
+    if (isToday(date)) {
+      return "Today";
+    }
+
+    return format(date, "MMM. dd, yyyy");
+  } catch (error) {
+    return dateString;
+  }
 };
