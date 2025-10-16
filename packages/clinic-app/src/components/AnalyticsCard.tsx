@@ -21,7 +21,7 @@ export interface AnalyticsCardProps extends React.ComponentProps<typeof ThemedCa
 
 const AnalyticsCard = ({ analytics, className, ...cardProps }: AnalyticsCardProps) => {
   return (
-    <View className="mt-4 gap-3">
+    <View className="mt-4 gap-4">
       <Each
         items={analytics}
         render={(item, index) => {
