@@ -135,7 +135,7 @@ const HPProfileScreen: React.FC = () => {
                 imageUrl={user?.imageUrl}
                 name={user?.fullName || ""}
                 size={80}
-                className="border-2 border-border dark:border-border-dark"
+                className="mt-4 border-2 border-border dark:border-border-dark"
               />
               <View className="flex-1">
                 <ThemedText variant="header" className="text-xl font-bold text-left">
@@ -160,7 +160,9 @@ const HPProfileScreen: React.FC = () => {
             <ThemedButton
               variant="default"
               size="sm"
-              leftIcon="edit"
+              leftIcon={
+                <ThemedIcon icon="edit" size={16} color={"base"} />
+              }
               onPress={handleEditProfile}
             >
               <ThemedText className="font-semibold text-primary-foreground dark:text-primary-foreground-dark">

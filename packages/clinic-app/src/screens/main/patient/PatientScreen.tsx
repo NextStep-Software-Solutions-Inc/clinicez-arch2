@@ -98,7 +98,7 @@ const PatientsScreen: React.FC = () => {
                 <ThemedIcon
                   icon="plus"
                   size={18}
-                  color="white"
+                  color="primaryForeground"
                 />
                 <ThemedText variant="button" className="text-primary-foreground dark:text-primary-contrast font-semibold">
                   Add Patient
@@ -115,7 +115,7 @@ const PatientsScreen: React.FC = () => {
                 <ThemedIcon
                   icon="mail"
                   size={18}
-                  className="text-primary dark:text-primary-dark"
+                  color="primary"
                 />
                 <ThemedText className="font-semibold">Invite</ThemedText>
               </View>

@@ -1,5 +1,5 @@
 import React from "react";
-import { ScrollView, View } from "react-native";
+import { ScrollView, useColorScheme, View } from "react-native";
 import { useUser } from "@clerk/clerk-expo";
 
 import ThemedCard from "@components/ThemedCard";
@@ -38,6 +38,7 @@ const analyticsData: AnalyticsCardProps["analytics"] = [
 
 const DashboardScreen: React.FC = () => {
   const { user } = useUser();
+  const colorScheme = useColorScheme();
 
   const nextAppointment = {
     patient: "Maria Santos",
@@ -62,17 +63,17 @@ const DashboardScreen: React.FC = () => {
               Today&apos;s Overview
             </ThemedText>
 
-            <ThemedCard className="shadow-sm bg-primary dark:bg-background-dark">
+            <ThemedCard className="mt-2 shadow-sm dark:shadow-none bg-primary dark:border-border-dark dark:bg-surface-elevated-dark">
               <ThemedCard.Header className="flex-row items-center justify-between gap-3 pt-5 pb-3">
-                <ThemedCard.Title className="text-accent dark:text-accent-dark">
+                <ThemedCard.Title className="text-primary-soft dark:text-primary-dark">
                   Upcoming Appointment
                 </ThemedCard.Title>
-                <ThemedIcon icon="clipboard-clock" color="accent" />
+                <ThemedIcon icon="clipboard-clock" color={colorScheme === "dark" ? "info" : "primarySoft"} />
               </ThemedCard.Header>
               <ThemedCard.Content>
                 <View className="flex-row items-center">
-                  <View className="mr-4 h-12 w-12 items-center justify-center rounded-full dark:border dark:border-primary/40 bg-background dark:bg-primary/20">
-                    <ThemedText variant="label" className="text-lg text-text dark:text-primary-foreground">
+                  <View className="mr-4 h-12 w-12 items-center justify-center rounded-full border border-primary-soft dark:border-accent-dark dark:bg-accent-dark">
+                    <ThemedText variant="label" className="text-lg text-primary-soft dark:text-primary-dark">
                       {patientInitial}
                     </ThemedText>
                   </View>
@@ -89,9 +90,9 @@ const DashboardScreen: React.FC = () => {
               <ThemedCard.Footer>
                 <ThemedButton
                   leftIcon="command"
-                  leftIconColor="#3B71FF"
+                  leftIconColor="primary"
                   size="sm"
-                  className="rounded-full bg-background dark:bg-background-dark"
+                  className="rounded-full border border-primary-soft dark:border-primary-dark bg-background dark:bg-transparent"
                 >
                   <ThemedText
                     className="text-primary dark:text-primary-dark"

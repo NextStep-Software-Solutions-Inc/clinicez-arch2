@@ -14,7 +14,7 @@ const buttonVariants = cva(
       variant: {
         default: "bg-primary dark:bg-primary-dark",
         destructive: "bg-error dark:bg-error-dark",
-        outline: "border border-border dark:border-border-dark bg-transparent",
+        outline: "border border-border dark:border-primary-dark bg-transparent",
         ghost: "bg-transparent",
         link: "bg-transparent underline"
       },
