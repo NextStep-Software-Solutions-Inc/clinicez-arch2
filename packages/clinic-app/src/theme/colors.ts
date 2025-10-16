@@ -15,8 +15,14 @@ export type ThemeColorToken =
   | "successDark"
   | "warning"
   | "warningDark"
+  | "warningForeground"
+  | "warningForegroundDark"
   | "error"
   | "errorDark"
+  | "destructive"
+  | "destructiveDark"
+  | "destructiveForeground"
+  | "destructiveForegroundDark"
   | "info"
   | "infoDark"
   | "muted"
@@ -75,8 +81,14 @@ const basePalette: Record<ThemeColorToken, { light: string; dark: string }> = {
   successDark: { light: "#059669", dark: "#22C55E" },
   warning: { light: "#E4C34A", dark: "#FACC15" },
   warningDark: { light: "#CA8A04", dark: "#FBBF24" },
+  warningForeground: { light: "#FFFFFF", dark: "#F8FAFC" },
+  warningForegroundDark: { light: "#1E293B", dark: "#F1F5F9" },
   error: { light: "#BF3532", dark: "#F87171" },
   errorDark: { light: "#991B1B", dark: "#EF4444" },
+  destructive: { light: "#BF3532", dark: "#F87171" },
+  destructiveDark: { light: "#991B1B", dark: "#EF4444" },
+  destructiveForeground: { light: "#FFFFFF", dark: "#0F172A" },
+  destructiveForegroundDark: { light: "#F8FAFC", dark: "#111827" },
   info: { light: "#2563EB", dark: "#60A5FA" },
   infoDark: { light: "#1D4ED8", dark: "#3B82F6" },
   muted: { light: "#6B7280", dark: "#9CA3AF" },
@@ -155,10 +167,18 @@ export const tailwindColorPalette = {
   warning: {
     DEFAULT: basePalette.warning.light,
     dark: basePalette.warning.dark,
+    foreground: basePalette.warningForeground.light,
+    "foreground-dark": basePalette.warningForeground.dark,
   },
   error: {
     DEFAULT: basePalette.error.light,
     dark: basePalette.error.dark,
+  },
+  destructive: {
+    DEFAULT: basePalette.destructive.light,
+    dark: basePalette.destructive.dark,
+    foreground: basePalette.destructiveForeground.light,
+    "foreground-dark": basePalette.destructiveForeground.dark,
   },
   info: {
     DEFAULT: basePalette.info.light,
