@@ -98,17 +98,21 @@ const ThemedIcon: FC<ThemedIconProps> = ({
   const isDark = colorScheme === "dark";
 
   const IconComponent = useMemo(() => resolveIconComponent(icon), [icon]);
+
+  const iconSize = typeof size === "number" ? size : sizeMap[size] ?? sizeMap.default;
+
+  const scheme = isDark ? "dark" : "light";
+  const resolvedColor = useMemo(
+    () => resolveColorToken(color, scheme),
+    [color, scheme]
+  );
+
   if (!IconComponent) {
     if (__DEV__) {
       console.warn(`ThemedIcon: Unable to find lucide icon for "${icon}"`);
     }
     return null;
   }
-
-  const iconSize = typeof size === "number" ? size : sizeMap[size] ?? sizeMap.default;
-
-  const scheme = isDark ? "dark" : "light";
-  const resolvedColor = resolveColorToken(color, scheme);
 
   return (
     <IconComponent
