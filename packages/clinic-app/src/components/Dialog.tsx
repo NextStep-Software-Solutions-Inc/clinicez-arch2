@@ -151,8 +151,8 @@ const DialogContent: React.FC<DialogContentProps> = ({
   const { colorScheme } = useColorScheme();
 
   const backdropColor = useMemo(
-    () => getThemeColor("backgroundDark", colorScheme === "dark" ? "light" : "dark"),
-    [colorScheme]
+    () => "rgba(0, 0, 0, 0.5)",
+    []
   );
 
   const animateIn = useCallback(() => {
@@ -262,7 +262,7 @@ const DialogContent: React.FC<DialogContentProps> = ({
             backgroundColor: backdropColor,
             opacity: fadeAnim.interpolate({
               inputRange: [0, 1],
-              outputRange: [0, 0.65],
+              outputRange: [0, 1],
             }),
           }}
         >
@@ -275,7 +275,7 @@ const DialogContent: React.FC<DialogContentProps> = ({
 
         <Animated.View
           className={cn(
-            "w-full shadow-2xl border border-border dark:border-border-dark bg-base dark:bg-background-dark",
+            "w-full shadow-2xl border border-border dark:border-border-dark bg-base dark:bg-baseDark",
             contentVariants({ size })
           )}
           style={{
