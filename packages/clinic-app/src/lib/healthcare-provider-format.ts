@@ -1,12 +1,6 @@
-/**
- * Healthcare provider type with optional prefix and postfix
- */
-export interface HealthcareProvider {
-  prefix?: string | null; // Dr., RN, etc.
-  name: string;
-  postfix?: string | null; // MD, PhD, etc.
-  specialization?: string;
-}
+import { HealthcareProviderReference } from "@app-types/healthcare-provider-common";
+
+export type HealthcareProvider = HealthcareProviderReference;
 
 /**
  * Formats a healthcare provider's name with optional prefix and postfix

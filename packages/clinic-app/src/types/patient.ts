@@ -1,4 +1,5 @@
 import type { PersonalDetails } from "./personal-details";
+import type { HealthcareProviderReference } from "./healthcare-provider-common";
 
 export type Diagnosis = {
   id: number;
@@ -49,12 +50,7 @@ export type Medications = {
 export type ConsultationHistory = {
   id: number;
   diagnosis: Diagnosis;
-  // Healthcare Provider or Doctor
-  hp: {
-    prefix?: string | null;
-    name: string;
-    specialization?: string;
-  };
+  hp: HealthcareProviderReference;
   chiefComplaint: string;
   createdAt: string;
 }
@@ -62,12 +58,7 @@ export type ConsultationHistory = {
 export type DiagnosisHistory = {
   id: number;
   diagnosis: Diagnosis;
-  // Healthcare Provider or Doctor
-  hp: {
-    prefix?: string | null;
-    name: string;
-    // no need for specialization
-  };
+  hp: HealthcareProviderReference;
   createdAt: string;
 }
 
@@ -84,24 +75,14 @@ export type LaboratoryRequest = {
   id: number;
   testName: string;
   requestedAt: string;
-  // Healthcare Provider or Doctor
-  requestedBy: {
-    prefix?: string | null;
-    name: string;
-    postfix?: string | null;
-  };
+  requestedBy: HealthcareProviderReference;
 };
 
 export type ImagingRequest = {
   id: number;
   imagingType: string;
   requestedAt: string;
-  // Healthcare Provider or Doctor
-  requestedBy: {
-    prefix?: string | null;
-    name: string;
-    postfix?: string | null;
-  };
+  requestedBy: HealthcareProviderReference;
 };
 
 export type Disability = {
@@ -116,12 +97,7 @@ export type PrescriptionHistory = {
   dosage: string;
   frequency: string;
   createdAt: string;
-  // Healthcare Provider or Doctor
-  hp: {
-    prefix?: string | null;
-    name: string;
-    postfix?: string | null;
-  };
+  hp: HealthcareProviderReference;
 };
 
 export type FamilyHistory = {
@@ -135,14 +111,9 @@ export type PatientBilling = {
   id: number;
   service: string;
   amount: number;
-  currency: string; // e.g., "PHP", "USD"
+  currency: string;
   createdAt: string;
-  // Healthcare Provider or Doctor who provided the service
-  hp: {
-    prefix?: string | null;
-    name: string;
-    postfix?: string | null;
-  };
+  hp: HealthcareProviderReference;
   status?: "paid" | "pending" | "overdue" | null;
 };
 
