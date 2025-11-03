@@ -1,0 +1,13 @@
+**/bin/
+**/obj/
+**/out/
+**/.vs/
+**/.vscode/
+**/node_modules/
+**/*.log
+**/Dockerfile*
+**/docker-compose*.yml
+**/.git/
+**/.gitignore
+**/README.md
+**/ERPEZ.TenantManagement.Api.http
