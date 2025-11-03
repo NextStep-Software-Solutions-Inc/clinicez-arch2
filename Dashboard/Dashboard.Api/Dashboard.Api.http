@@ -1,6 +1,0 @@
-@CLINICEZ.Api_HostAddress = http://localhost:5136
-
-GET {{CLINICEZ.Api_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###
