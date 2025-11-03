@@ -1,0 +1,17 @@
+F:\projects\github\CLINICEZ\Portal\CLINICEZ.Portal.Application\bin\Debug\net9.0\CLINICEZ.Portal.Application.deps.json
+F:\projects\github\CLINICEZ\Portal\CLINICEZ.Portal.Application\bin\Debug\net9.0\CLINICEZ.Portal.Application.dll
+F:\projects\github\CLINICEZ\Portal\CLINICEZ.Portal.Application\bin\Debug\net9.0\CLINICEZ.Portal.Application.pdb
+F:\projects\github\CLINICEZ\Portal\CLINICEZ.Portal.Application\bin\Debug\net9.0\CLINICEZ.Portal.Domain.dll
+F:\projects\github\CLINICEZ\Portal\CLINICEZ.Portal.Application\bin\Debug\net9.0\CLINICEZ.Shared.dll
+F:\projects\github\CLINICEZ\Portal\CLINICEZ.Portal.Application\bin\Debug\net9.0\CLINICEZ.Portal.Domain.pdb
+F:\projects\github\CLINICEZ\Portal\CLINICEZ.Portal.Application\bin\Debug\net9.0\CLINICEZ.Shared.pdb
+F:\projects\github\CLINICEZ\Portal\CLINICEZ.Portal.Application\obj\Debug\net9.0\CLINICEZ.Portal.Application.csproj.AssemblyReference.cache
+F:\projects\github\CLINICEZ\Portal\CLINICEZ.Portal.Application\obj\Debug\net9.0\CLINICEZ.Portal.Application.GeneratedMSBuildEditorConfig.editorconfig
+F:\projects\github\CLINICEZ\Portal\CLINICEZ.Portal.Application\obj\Debug\net9.0\CLINICEZ.Portal.Application.AssemblyInfoInputs.cache
+F:\projects\github\CLINICEZ\Portal\CLINICEZ.Portal.Application\obj\Debug\net9.0\CLINICEZ.Portal.Application.AssemblyInfo.cs
+F:\projects\github\CLINICEZ\Portal\CLINICEZ.Portal.Application\obj\Debug\net9.0\CLINICEZ.Portal.Application.csproj.CoreCompileInputs.cache
+F:\projects\github\CLINICEZ\Portal\CLINICEZ.Portal.Application\obj\Debug\net9.0\CLINICEZ.5AAD9912.Up2Date
+F:\projects\github\CLINICEZ\Portal\CLINICEZ.Portal.Application\obj\Debug\net9.0\CLINICEZ.Portal.Application.dll
+F:\projects\github\CLINICEZ\Portal\CLINICEZ.Portal.Application\obj\Debug\net9.0\refint\CLINICEZ.Portal.Application.dll
+F:\projects\github\CLINICEZ\Portal\CLINICEZ.Portal.Application\obj\Debug\net9.0\CLINICEZ.Portal.Application.pdb
+F:\projects\github\CLINICEZ\Portal\CLINICEZ.Portal.Application\obj\Debug\net9.0\ref\CLINICEZ.Portal.Application.dll

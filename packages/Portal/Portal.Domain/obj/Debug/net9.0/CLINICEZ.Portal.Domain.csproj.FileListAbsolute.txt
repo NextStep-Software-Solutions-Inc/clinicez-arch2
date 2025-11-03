@@ -1,0 +1,12 @@
+F:\projects\github\CLINICEZ\Portal\CLINICEZ.Portal.Domain\bin\Debug\net9.0\CLINICEZ.Portal.Domain.deps.json
+F:\projects\github\CLINICEZ\Portal\CLINICEZ.Portal.Domain\bin\Debug\net9.0\CLINICEZ.Portal.Domain.dll
+F:\projects\github\CLINICEZ\Portal\CLINICEZ.Portal.Domain\bin\Debug\net9.0\CLINICEZ.Portal.Domain.pdb
+F:\projects\github\CLINICEZ\Portal\CLINICEZ.Portal.Domain\obj\Debug\net9.0\CLINICEZ.Portal.Domain.csproj.AssemblyReference.cache
+F:\projects\github\CLINICEZ\Portal\CLINICEZ.Portal.Domain\obj\Debug\net9.0\CLINICEZ.Portal.Domain.GeneratedMSBuildEditorConfig.editorconfig
+F:\projects\github\CLINICEZ\Portal\CLINICEZ.Portal.Domain\obj\Debug\net9.0\CLINICEZ.Portal.Domain.AssemblyInfoInputs.cache
+F:\projects\github\CLINICEZ\Portal\CLINICEZ.Portal.Domain\obj\Debug\net9.0\CLINICEZ.Portal.Domain.AssemblyInfo.cs
+F:\projects\github\CLINICEZ\Portal\CLINICEZ.Portal.Domain\obj\Debug\net9.0\CLINICEZ.Portal.Domain.csproj.CoreCompileInputs.cache
+F:\projects\github\CLINICEZ\Portal\CLINICEZ.Portal.Domain\obj\Debug\net9.0\CLINICEZ.Portal.Domain.dll
+F:\projects\github\CLINICEZ\Portal\CLINICEZ.Portal.Domain\obj\Debug\net9.0\refint\CLINICEZ.Portal.Domain.dll
+F:\projects\github\CLINICEZ\Portal\CLINICEZ.Portal.Domain\obj\Debug\net9.0\CLINICEZ.Portal.Domain.pdb
+F:\projects\github\CLINICEZ\Portal\CLINICEZ.Portal.Domain\obj\Debug\net9.0\ref\CLINICEZ.Portal.Domain.dll

@@ -1,0 +1,12 @@
+F:\projects\github\CLINICEZ\CLINICEZ.Shared\bin\Debug\net9.0\CLINICEZ.Shared.deps.json
+F:\projects\github\CLINICEZ\CLINICEZ.Shared\bin\Debug\net9.0\CLINICEZ.Shared.dll
+F:\projects\github\CLINICEZ\CLINICEZ.Shared\bin\Debug\net9.0\CLINICEZ.Shared.pdb
+F:\projects\github\CLINICEZ\CLINICEZ.Shared\obj\Debug\net9.0\CLINICEZ.Shared.csproj.AssemblyReference.cache
+F:\projects\github\CLINICEZ\CLINICEZ.Shared\obj\Debug\net9.0\CLINICEZ.Shared.GeneratedMSBuildEditorConfig.editorconfig
+F:\projects\github\CLINICEZ\CLINICEZ.Shared\obj\Debug\net9.0\CLINICEZ.Shared.AssemblyInfoInputs.cache
+F:\projects\github\CLINICEZ\CLINICEZ.Shared\obj\Debug\net9.0\CLINICEZ.Shared.AssemblyInfo.cs
+F:\projects\github\CLINICEZ\CLINICEZ.Shared\obj\Debug\net9.0\CLINICEZ.Shared.csproj.CoreCompileInputs.cache
+F:\projects\github\CLINICEZ\CLINICEZ.Shared\obj\Debug\net9.0\CLINICEZ.Shared.dll
+F:\projects\github\CLINICEZ\CLINICEZ.Shared\obj\Debug\net9.0\refint\CLINICEZ.Shared.dll
+F:\projects\github\CLINICEZ\CLINICEZ.Shared\obj\Debug\net9.0\CLINICEZ.Shared.pdb
+F:\projects\github\CLINICEZ\CLINICEZ.Shared\obj\Debug\net9.0\ref\CLINICEZ.Shared.dll
