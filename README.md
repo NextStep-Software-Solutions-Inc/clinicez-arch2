@@ -6,8 +6,8 @@ A comprehensive, multi-tenant Enterprise Resource Planning (ERP) platform design
 
 This repository contains two primary services organized into subdirectories:
 
-- **`CLINICEZ/`**: This subdirectory contains the core codebase for the main ERP application logic.
-- **`TenantManagement/`**: This subdirectory contains a separate service responsible for creating and configuring new tenants and managing all tenancy-related settings.
+- **`Dashboard/`**: This subdirectory contains the core codebase for the main application logic.
+- **`Portal/`**: This subdirectory contains a separate service responsible for creating and configuring new tenants and managing all tenancy-related settings.
 
 ---
 
@@ -48,7 +48,7 @@ Ensure you have the following installed on your machine:
 
 This project uses User Secrets to store the database connection string during development.
 
-1.  Navigate to the `CLINICEZ/CLINICEZ.Api` directory in your terminal.
+1.  Navigate to the `Dashboard/Dashboard.Api` directory in your terminal.
 2.  Initialize user secrets for the project:
     ```bash
     dotnet user-secrets init
@@ -57,7 +57,7 @@ This project uses User Secrets to store the database connection string during de
     ```bash
     dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Database=CLINICEZ_Db;Username=postgres;Password=your_password"
     ```
-4.  Repeat the process for the `TenantManagement/CLINICEZ.TenantManagement.Api` project.
+4.  Repeat the process for the `Portal/CLINICEZ.Portal.Api` project.
 
 ### 3. Database Migrations
 
@@ -70,10 +70,10 @@ When adding a migration for a new table, you **must** specify which schema it be
 To apply the existing migrations, run the following command from the solution root:
 
 ```bash
-dotnet ef database update --startup-project CLINICEZ/CLINICEZ.Api
+dotnet ef database update --startup-project Dashboard/Dashboard.Api
 ```
 
-Repeat for the TenantManagement service as needed.
+Repeat for the Portal service as needed.
 
 ### 4. Running the Application
 
