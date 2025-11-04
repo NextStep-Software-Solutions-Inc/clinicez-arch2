@@ -13,10 +13,13 @@ First, create an `.env` file for development (e.g., `env.development.local`) and
 ```bash
 # .env.example
 # CLERK
-EXPO_CLERK_PUBLISHABLE_KEY=<your-publishable-key-here>
+EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=<your-publishable-key-here>
+
+# DATABASE
+EXPO_PUBLIC_DATABASE_NAME=<your-database-name-here>
 ```
 
-Where your `EXPO_CLERK_PUBLISHABLE_KEY` is the key from your Clerk application. Visit your [Clerk Dashboard](https://www.dashboard.clerk.com) for more information.
+Where your `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` is the key from your Clerk application. Visit your [Clerk Dashboard](https://www.dashboard.clerk.com) for more information.
 
 > [!IMPORTANT]
-> There are two deployments available when dealing with Clerk: `production` and `environment`. Make sure to specify the appropriate environment for your `EXPO_CLERK_PUBLISHABLE_KEY`!
+> There are two deployments available when dealing with Clerk: `production` and `environment`. Make sure to specify the appropriate environment for your `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`!
