@@ -15,6 +15,7 @@
       "@images/*": ["./assets/public/image/*"],
       "@theme/*": ["./src/theme/*"],
       "@data/*": ["./src/data/*"],
+      "@drizzle/*": ["./drizzle/*"],
     }
   }
 }
