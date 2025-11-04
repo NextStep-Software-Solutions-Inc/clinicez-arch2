@@ -142,26 +142,26 @@ const VerifyScreen: React.FC = () => {
     <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <ThemedView className="flex-1 justify-center items-center px-6 py-8 bg-transparent">
-          <View className="w-full max-w-md mx-auto bg-background/80 dark:bg-background-dark/80 rounded-2xl p-6 backdrop-blur-sm">
+          <View className="w-full max-w-md md:max-w-lg mx-auto bg-background/80 dark:bg-background-dark/80 rounded-2xl p-6 backdrop-blur-sm">
             <View className="items-center mb-6">
-              <Image source={Nurse3D} className="w-32 h-32" resizeMode="contain" />
+              <Image source={Nurse3D} className="w-32 h-32 md:w-64 md:h-64" resizeMode="contain" />
             </View>
 
             <View className="items-center mb-8">
               <ThemedText variant="header" className="text-center mb-3 text-primary dark:text-primary-dark">
                 Verify Your Email
               </ThemedText>
-              <ThemedText className="text-center text-muted dark:text-muted-dark">
-                We've sent a 6-digit code to <ThemedText className="font-semibold text-primary">{userEmail}</ThemedText>
+              <ThemedText variant="description" className="text-center text-muted dark:text-muted-dark">
+                We've sent a 6-digit code to <ThemedText variant="description" className="font-semibold text-primary">{userEmail}</ThemedText>
               </ThemedText>
-              <ThemedText variant="caption" className="text-center text-muted dark:text-muted-dark mt-2">
+              <ThemedText variant="description" className="text-center text-muted dark:text-muted-dark mt-2">
                 Please enter the code to continue
               </ThemedText>
             </View>
 
             {authError?.hasError && (
               <View className="mb-6 p-4 rounded-lg bg-error/10 dark:bg-error/20 border border-error/30 dark:border-error/40">
-                <ThemedText variant="body" className="text-error dark:text-error text-center">
+                <ThemedText variant="description" className="text-error dark:text-error text-center">
                   {authError.errorMessage}
                 </ThemedText>
               </View>
