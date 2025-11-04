@@ -16,6 +16,7 @@ import AddNewPatientForm, { NewPatientFormData } from "@components/patient/AddNe
 import InvitePatientDialog from "@components/InvitePatientDialog";
 import type { PatientSummary } from "@app-types/patient";
 import { PATIENT_SUMMARIES } from "@data/patients";
+import { useLiveUsers } from "@hooks/useLiveUsers";
 
 const PatientsScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
@@ -28,6 +29,8 @@ const PatientsScreen: React.FC = () => {
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
 
   const patients = useMemo<PatientSummary[]>(() => PATIENT_SUMMARIES, []);
+  const users = useLiveUsers();
+  console.log("Users in the DB: ", users.users);
 
   const handleAddPatient = async (data: NewPatientFormData) => {
     console.log("Adding new patient:", data);
