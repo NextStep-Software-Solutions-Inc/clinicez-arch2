@@ -3,7 +3,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { Text, type TextProps } from "react-native";
 import { cn } from "@lib/utils";
 
-type TextVariant = "header" | "subheader" | "body" | "label" | "caption" | "button" | "error";
+type TextVariant = "header" | "subheader" | "description" | "body" | "label" | "caption" | "button" | "error";
 type TextColor =
   | "primary"
   | "primaryContrast"
@@ -21,8 +21,9 @@ type TextColor =
 const textVariants = cva("text-text dark:text-text-dark", {
   variants: {
     variant: {
-      header: "text-2xl font-bold leading-tight text-primary dark:text-primary-dark",
-      subheader: "text-xl font-semibold leading-snug text-text-secondary dark:text-text-secondary-dark",
+      header: "text-2xl md:text-4xl font-bold leading-tight text-primary dark:text-primary-dark",
+      subheader: "text-xl md:text-2xl font-semibold leading-snug text-text-secondary dark:text-text-secondary-dark",
+      description: "text-base md:text-lg leading-relaxed text-text-secondary dark:text-text-secondary-dark",
       body: "text-base leading-relaxed",
       label: "text-md font-medium text-text dark:text-text-dark",
       caption: "text-sm leading-normal text-muted-foreground dark:text-muted-foreground-dark",

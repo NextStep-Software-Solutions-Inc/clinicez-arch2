@@ -53,7 +53,7 @@ const PatientList = ({ patients, contentContainerStyle, onPatientPress, ...props
                   <ThemedText variant="label" className="font-semibold">
                     {item.name}
                   </ThemedText>
-                  <ThemedText variant="subheader" className="text-sm text-muted dark:text-muted-dark">
+                  <ThemedText variant="description" className="text-sm text-muted dark:text-muted-dark">
                     , {item.age} years old
                   </ThemedText>
                 </View>
