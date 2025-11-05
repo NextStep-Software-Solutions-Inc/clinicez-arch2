@@ -1,0 +1,8 @@
+<Project>
+  <!-- Global MSBuild settings applied to all projects under the repository root -->
+  <PropertyGroup>
+    <!-- Treat all compiler warnings as errors. To opt-out in a specific project, set
+         <TreatWarningsAsErrors>false</TreatWarningsAsErrors> in that project's .csproj -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+</Project>
