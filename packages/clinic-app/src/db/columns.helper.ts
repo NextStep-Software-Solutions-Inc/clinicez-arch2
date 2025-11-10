@@ -1,12 +1,11 @@
-import { sqliteTable as table } from "drizzle-orm/sqlite-core";
-import * as t from "drizzle-orm/sqlite-core";
-import { sql } from "drizzle-orm";
+import { text } from "drizzle-orm/sqlite-core";
+import { v7 as uuidv7 } from "uuid";
+import { tenants } from "./schema";
 
-export const timestamps = {
-  createdAt: t.text().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: t.text().default(sql`CURRENT_TIMESTAMP`),
+export const baseEntity = {
+  id: text().$defaultFn(() => uuidv7()).primaryKey(),
+  tenantId: text().notNull().references(() => tenants.id),
+  createdAt: text().$defaultFn(() => new Date().toISOString()),
+  updatedAt: text().$defaultFn(() => new Date().toISOString()),
+  deletedAt: text(),
 };
-
-export const softDelete = {
-  deletedAt: t.text(),
-}
