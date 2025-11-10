@@ -1,0 +1,4149 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "27283d7f-9a35-4df5-8e5b-ed82e7657cb7",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "tables": {
+    "appointment_types": {
+      "name": "appointment_types",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenantId": {
+          "name": "tenantId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deletedAt": {
+          "name": "deletedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "duration": {
+          "name": "duration",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "appointment_types_tenant_name_uidx": {
+          "name": "appointment_types_tenant_name_uidx",
+          "columns": [
+            "tenantId",
+            "name"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "appointment_types_tenantId_tenants_id_fk": {
+          "name": "appointment_types_tenantId_tenants_id_fk",
+          "tableFrom": "appointment_types",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "appointments": {
+      "name": "appointments",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenantId": {
+          "name": "tenantId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deletedAt": {
+          "name": "deletedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "patientId": {
+          "name": "patientId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "providerId": {
+          "name": "providerId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "serviceId": {
+          "name": "serviceId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "appointmentTypeId": {
+          "name": "appointmentTypeId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "subject": {
+          "name": "subject",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "startTime": {
+          "name": "startTime",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "endTime": {
+          "name": "endTime",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "recurring": {
+          "name": "recurring",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": false
+        },
+        "receivedAt": {
+          "name": "receivedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "receivedByStaffId": {
+          "name": "receivedByStaffId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "rejectedAt": {
+          "name": "rejectedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "rejectedByStaffId": {
+          "name": "rejectedByStaffId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "rejectedReason": {
+          "name": "rejectedReason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "completedAt": {
+          "name": "completedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "completedByStaffId": {
+          "name": "completedByStaffId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "rescheduledAt": {
+          "name": "rescheduledAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "rescheduledByStaffId": {
+          "name": "rescheduledByStaffId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "rescheduledReason": {
+          "name": "rescheduledReason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "appointments_tenantId_tenants_id_fk": {
+          "name": "appointments_tenantId_tenants_id_fk",
+          "tableFrom": "appointments",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "appointments_patientId_tenantId_patients_id_tenantId_fk": {
+          "name": "appointments_patientId_tenantId_patients_id_tenantId_fk",
+          "tableFrom": "appointments",
+          "tableTo": "patients",
+          "columnsFrom": [
+            "patientId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "appointments_providerId_tenantId_healthcare_providers_id_tenantId_fk": {
+          "name": "appointments_providerId_tenantId_healthcare_providers_id_tenantId_fk",
+          "tableFrom": "appointments",
+          "tableTo": "healthcare_providers",
+          "columnsFrom": [
+            "providerId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "appointments_serviceId_tenantId_services_id_tenantId_fk": {
+          "name": "appointments_serviceId_tenantId_services_id_tenantId_fk",
+          "tableFrom": "appointments",
+          "tableTo": "services",
+          "columnsFrom": [
+            "serviceId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "appointments_appointmentTypeId_tenantId_appointment_types_id_tenantId_fk": {
+          "name": "appointments_appointmentTypeId_tenantId_appointment_types_id_tenantId_fk",
+          "tableFrom": "appointments",
+          "tableTo": "appointment_types",
+          "columnsFrom": [
+            "appointmentTypeId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "appointments_receivedByStaffId_tenantId_healthcare_providers_id_tenantId_fk": {
+          "name": "appointments_receivedByStaffId_tenantId_healthcare_providers_id_tenantId_fk",
+          "tableFrom": "appointments",
+          "tableTo": "healthcare_providers",
+          "columnsFrom": [
+            "receivedByStaffId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "appointments_rejectedByStaffId_tenantId_healthcare_providers_id_tenantId_fk": {
+          "name": "appointments_rejectedByStaffId_tenantId_healthcare_providers_id_tenantId_fk",
+          "tableFrom": "appointments",
+          "tableTo": "healthcare_providers",
+          "columnsFrom": [
+            "rejectedByStaffId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "appointments_completedByStaffId_tenantId_healthcare_providers_id_tenantId_fk": {
+          "name": "appointments_completedByStaffId_tenantId_healthcare_providers_id_tenantId_fk",
+          "tableFrom": "appointments",
+          "tableTo": "healthcare_providers",
+          "columnsFrom": [
+            "completedByStaffId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "appointments_rescheduledByStaffId_tenantId_healthcare_providers_id_tenantId_fk": {
+          "name": "appointments_rescheduledByStaffId_tenantId_healthcare_providers_id_tenantId_fk",
+          "tableFrom": "appointments",
+          "tableTo": "healthcare_providers",
+          "columnsFrom": [
+            "rescheduledByStaffId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "check_start_time": {
+          "name": "check_start_time",
+          "value": "\"appointments\".\"startTime\" LIKE '____-__-__T__:__:__%'"
+        },
+        "check_end_time": {
+          "name": "check_end_time",
+          "value": "\"appointments\".\"endTime\" LIKE '____-__-__T__:__:__%'"
+        },
+        "check_received_at": {
+          "name": "check_received_at",
+          "value": "\"appointments\".\"receivedAt\" LIKE '____-__-__T__:__:__%'"
+        },
+        "check_rejected_at": {
+          "name": "check_rejected_at",
+          "value": "\"appointments\".\"rejectedAt\" LIKE '____-__-__T__:__:__%' OR \"appointments\".\"rejectedAt\" IS NULL"
+        },
+        "check_completed_at": {
+          "name": "check_completed_at",
+          "value": "\"appointments\".\"completedAt\" LIKE '____-__-__T__:__:__%' OR \"appointments\".\"completedAt\" IS NULL"
+        },
+        "check_rescheduled_at": {
+          "name": "check_rescheduled_at",
+          "value": "\"appointments\".\"rescheduledAt\" LIKE '____-__-__T__:__:__%' OR \"appointments\".\"rescheduledAt\" IS NULL"
+        }
+      }
+    },
+    "basic_info": {
+      "name": "basic_info",
+      "columns": {
+        "firstName": {
+          "name": "firstName",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "middleName": {
+          "name": "middleName",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "lastName": {
+          "name": "lastName",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "suffix": {
+          "name": "suffix",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "nickname": {
+          "name": "nickname",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "phoneNumber": {
+          "name": "phoneNumber",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "gender": {
+          "name": "gender",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "civilStatus": {
+          "name": "civilStatus",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "dateOfBirth": {
+          "name": "dateOfBirth",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "nationality": {
+          "name": "nationality",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "religion": {
+          "name": "religion",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "bloodType": {
+          "name": "bloodType",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenantId": {
+          "name": "tenantId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deletedAt": {
+          "name": "deletedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "basic_info_tenant_email_uidx": {
+          "name": "basic_info_tenant_email_uidx",
+          "columns": [
+            "tenantId",
+            "email"
+          ],
+          "isUnique": true
+        },
+        "basic_info_tenant_phone_uidx": {
+          "name": "basic_info_tenant_phone_uidx",
+          "columns": [
+            "tenantId",
+            "phoneNumber"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "basic_info_tenantId_tenants_id_fk": {
+          "name": "basic_info_tenantId_tenants_id_fk",
+          "tableFrom": "basic_info",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "check_date_of_birth": {
+          "name": "check_date_of_birth",
+          "value": "\"basic_info\".\"dateOfBirth\" LIKE '____-__-__' OR \"basic_info\".\"dateOfBirth\" IS NULL"
+        }
+      }
+    },
+    "billers": {
+      "name": "billers",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenantId": {
+          "name": "tenantId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deletedAt": {
+          "name": "deletedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "billers_tenant_name_uidx": {
+          "name": "billers_tenant_name_uidx",
+          "columns": [
+            "tenantId",
+            "name"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "billers_tenantId_tenants_id_fk": {
+          "name": "billers_tenantId_tenants_id_fk",
+          "tableFrom": "billers",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "clinics": {
+      "name": "clinics",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenantId": {
+          "name": "tenantId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deletedAt": {
+          "name": "deletedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "address": {
+          "name": "address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "phoneNumber": {
+          "name": "phoneNumber",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "logoUrl": {
+          "name": "logoUrl",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "clinics_tenant_name_uidx": {
+          "name": "clinics_tenant_name_uidx",
+          "columns": [
+            "tenantId",
+            "name"
+          ],
+          "isUnique": true
+        },
+        "clinics_tenant_email_uidx": {
+          "name": "clinics_tenant_email_uidx",
+          "columns": [
+            "tenantId",
+            "email"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "clinics_tenantId_tenants_id_fk": {
+          "name": "clinics_tenantId_tenants_id_fk",
+          "tableFrom": "clinics",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "conditions": {
+      "name": "conditions",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenantId": {
+          "name": "tenantId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deletedAt": {
+          "name": "deletedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "conditions_tenant_name_uidx": {
+          "name": "conditions_tenant_name_uidx",
+          "columns": [
+            "tenantId",
+            "name"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "conditions_tenantId_tenants_id_fk": {
+          "name": "conditions_tenantId_tenants_id_fk",
+          "tableFrom": "conditions",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "consultation_hp": {
+      "name": "consultation_hp",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenantId": {
+          "name": "tenantId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deletedAt": {
+          "name": "deletedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "consultationId": {
+          "name": "consultationId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "providerId": {
+          "name": "providerId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "consultation_hp_tenant_consultation_provider_uidx": {
+          "name": "consultation_hp_tenant_consultation_provider_uidx",
+          "columns": [
+            "tenantId",
+            "consultationId",
+            "providerId"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "consultation_hp_tenantId_tenants_id_fk": {
+          "name": "consultation_hp_tenantId_tenants_id_fk",
+          "tableFrom": "consultation_hp",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "consultation_hp_consultationId_tenantId_consultations_id_tenantId_fk": {
+          "name": "consultation_hp_consultationId_tenantId_consultations_id_tenantId_fk",
+          "tableFrom": "consultation_hp",
+          "tableTo": "consultations",
+          "columnsFrom": [
+            "consultationId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "consultation_hp_providerId_tenantId_healthcare_providers_id_tenantId_fk": {
+          "name": "consultation_hp_providerId_tenantId_healthcare_providers_id_tenantId_fk",
+          "tableFrom": "consultation_hp",
+          "tableTo": "healthcare_providers",
+          "columnsFrom": [
+            "providerId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "consultations": {
+      "name": "consultations",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenantId": {
+          "name": "tenantId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deletedAt": {
+          "name": "deletedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "appointmentId": {
+          "name": "appointmentId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "patientId": {
+          "name": "patientId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "patientVitalRecordId": {
+          "name": "patientVitalRecordId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "consultationDate": {
+          "name": "consultationDate",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reasonForVisit": {
+          "name": "reasonForVisit",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "initialDiagnosis": {
+          "name": "initialDiagnosis",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "consultations_tenantId_tenants_id_fk": {
+          "name": "consultations_tenantId_tenants_id_fk",
+          "tableFrom": "consultations",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "consultations_appointmentId_tenantId_appointments_id_tenantId_fk": {
+          "name": "consultations_appointmentId_tenantId_appointments_id_tenantId_fk",
+          "tableFrom": "consultations",
+          "tableTo": "appointments",
+          "columnsFrom": [
+            "appointmentId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "consultations_patientId_tenantId_patients_id_tenantId_fk": {
+          "name": "consultations_patientId_tenantId_patients_id_tenantId_fk",
+          "tableFrom": "consultations",
+          "tableTo": "patients",
+          "columnsFrom": [
+            "patientId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "consultations_patientVitalRecordId_tenantId_patient_vital_records_id_tenantId_fk": {
+          "name": "consultations_patientVitalRecordId_tenantId_patient_vital_records_id_tenantId_fk",
+          "tableFrom": "consultations",
+          "tableTo": "patient_vital_records",
+          "columnsFrom": [
+            "patientVitalRecordId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "check_consultation_date": {
+          "name": "check_consultation_date",
+          "value": "\"consultations\".\"consultationDate\" LIKE '____-__-__T__:__:__%'"
+        }
+      }
+    },
+    "emergency_contacts": {
+      "name": "emergency_contacts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenantId": {
+          "name": "tenantId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deletedAt": {
+          "name": "deletedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "patientId": {
+          "name": "patientId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "relationship": {
+          "name": "relationship",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "phoneNumber": {
+          "name": "phoneNumber",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "emergency_contacts_tenantId_tenants_id_fk": {
+          "name": "emergency_contacts_tenantId_tenants_id_fk",
+          "tableFrom": "emergency_contacts",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "emergency_contacts_patientId_tenantId_patients_id_tenantId_fk": {
+          "name": "emergency_contacts_patientId_tenantId_patients_id_tenantId_fk",
+          "tableFrom": "emergency_contacts",
+          "tableTo": "patients",
+          "columnsFrom": [
+            "patientId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "file_types": {
+      "name": "file_types",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenantId": {
+          "name": "tenantId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deletedAt": {
+          "name": "deletedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "file_types_tenant_name_uidx": {
+          "name": "file_types_tenant_name_uidx",
+          "columns": [
+            "tenantId",
+            "name"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "file_types_tenantId_tenants_id_fk": {
+          "name": "file_types_tenantId_tenants_id_fk",
+          "tableFrom": "file_types",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "files": {
+      "name": "files",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenantId": {
+          "name": "tenantId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deletedAt": {
+          "name": "deletedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "folderId": {
+          "name": "folderId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fileTypeId": {
+          "name": "fileTypeId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "url": {
+          "name": "url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "files_tenantId_tenants_id_fk": {
+          "name": "files_tenantId_tenants_id_fk",
+          "tableFrom": "files",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "files_folderId_tenantId_folders_id_tenantId_fk": {
+          "name": "files_folderId_tenantId_folders_id_tenantId_fk",
+          "tableFrom": "files",
+          "tableTo": "folders",
+          "columnsFrom": [
+            "folderId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "files_fileTypeId_tenantId_file_types_id_tenantId_fk": {
+          "name": "files_fileTypeId_tenantId_file_types_id_tenantId_fk",
+          "tableFrom": "files",
+          "tableTo": "file_types",
+          "columnsFrom": [
+            "fileTypeId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "folders": {
+      "name": "folders",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenantId": {
+          "name": "tenantId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deletedAt": {
+          "name": "deletedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "folders_tenantId_tenants_id_fk": {
+          "name": "folders_tenantId_tenants_id_fk",
+          "tableFrom": "folders",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "healthcare_providers": {
+      "name": "healthcare_providers",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenantId": {
+          "name": "tenantId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deletedAt": {
+          "name": "deletedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "userId": {
+          "name": "userId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "about": {
+          "name": "about",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "specialties": {
+          "name": "specialties",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "licenseNumber": {
+          "name": "licenseNumber",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "licenseIssuedDate": {
+          "name": "licenseIssuedDate",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "licenseExpiryDate": {
+          "name": "licenseExpiryDate",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ptrNumber": {
+          "name": "ptrNumber",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "taxNumber": {
+          "name": "taxNumber",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fieldOfStudy": {
+          "name": "fieldOfStudy",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": "'ACTIVE'"
+        },
+        "fileUrl": {
+          "name": "fileUrl",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "healthcare_providers_tenant_license_uidx": {
+          "name": "healthcare_providers_tenant_license_uidx",
+          "columns": [
+            "tenantId",
+            "licenseNumber"
+          ],
+          "isUnique": true
+        },
+        "healthcare_providers_tenant_ptr_uidx": {
+          "name": "healthcare_providers_tenant_ptr_uidx",
+          "columns": [
+            "tenantId",
+            "ptrNumber"
+          ],
+          "isUnique": true
+        },
+        "healthcare_providers_tenant_tax_uidx": {
+          "name": "healthcare_providers_tenant_tax_uidx",
+          "columns": [
+            "tenantId",
+            "taxNumber"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "healthcare_providers_tenantId_tenants_id_fk": {
+          "name": "healthcare_providers_tenantId_tenants_id_fk",
+          "tableFrom": "healthcare_providers",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "healthcare_providers_userId_users_id_fk": {
+          "name": "healthcare_providers_userId_users_id_fk",
+          "tableFrom": "healthcare_providers",
+          "tableTo": "users",
+          "columnsFrom": [
+            "userId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "check_license_issued_date": {
+          "name": "check_license_issued_date",
+          "value": "\"healthcare_providers\".\"licenseIssuedDate\" LIKE '____-__-__'"
+        },
+        "check_license_expiry_date": {
+          "name": "check_license_expiry_date",
+          "value": "\"healthcare_providers\".\"licenseExpiryDate\" LIKE '____-__-__'"
+        }
+      }
+    },
+    "hp_availabilities": {
+      "name": "hp_availabilities",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenantId": {
+          "name": "tenantId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deletedAt": {
+          "name": "deletedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "providerId": {
+          "name": "providerId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "date": {
+          "name": "date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "day": {
+          "name": "day",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "startTime": {
+          "name": "startTime",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "endTime": {
+          "name": "endTime",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "breakStartTime": {
+          "name": "breakStartTime",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "breakEndTime": {
+          "name": "breakEndTime",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "hp_availabilities_tenantId_tenants_id_fk": {
+          "name": "hp_availabilities_tenantId_tenants_id_fk",
+          "tableFrom": "hp_availabilities",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "hp_availabilities_providerId_tenantId_healthcare_providers_id_tenantId_fk": {
+          "name": "hp_availabilities_providerId_tenantId_healthcare_providers_id_tenantId_fk",
+          "tableFrom": "hp_availabilities",
+          "tableTo": "healthcare_providers",
+          "columnsFrom": [
+            "providerId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "check_date": {
+          "name": "check_date",
+          "value": "\"hp_availabilities\".\"date\" LIKE '____-__-__'"
+        },
+        "check_start_time": {
+          "name": "check_start_time",
+          "value": "\"hp_availabilities\".\"startTime\" LIKE '__:__'"
+        },
+        "check_end_time": {
+          "name": "check_end_time",
+          "value": "\"hp_availabilities\".\"endTime\" LIKE '__:__'"
+        },
+        "check_break_start_time": {
+          "name": "check_break_start_time",
+          "value": "\"hp_availabilities\".\"breakStartTime\" LIKE '__:__' OR \"hp_availabilities\".\"breakStartTime\" IS NULL"
+        },
+        "check_break_end_time": {
+          "name": "check_break_end_time",
+          "value": "\"hp_availabilities\".\"breakEndTime\" LIKE '__:__' OR \"hp_availabilities\".\"breakEndTime\" IS NULL"
+        }
+      }
+    },
+    "imaging_requests": {
+      "name": "imaging_requests",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenantId": {
+          "name": "tenantId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deletedAt": {
+          "name": "deletedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "providerId": {
+          "name": "providerId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "patientId": {
+          "name": "patientId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "consultationId": {
+          "name": "consultationId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "clinicId": {
+          "name": "clinicId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "templateId": {
+          "name": "templateId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "issuedDate": {
+          "name": "issuedDate",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bodyPart": {
+          "name": "bodyPart",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "indication": {
+          "name": "indication",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "imaging_requests_tenantId_tenants_id_fk": {
+          "name": "imaging_requests_tenantId_tenants_id_fk",
+          "tableFrom": "imaging_requests",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "imaging_requests_providerId_tenantId_healthcare_providers_id_tenantId_fk": {
+          "name": "imaging_requests_providerId_tenantId_healthcare_providers_id_tenantId_fk",
+          "tableFrom": "imaging_requests",
+          "tableTo": "healthcare_providers",
+          "columnsFrom": [
+            "providerId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "imaging_requests_patientId_tenantId_patients_id_tenantId_fk": {
+          "name": "imaging_requests_patientId_tenantId_patients_id_tenantId_fk",
+          "tableFrom": "imaging_requests",
+          "tableTo": "patients",
+          "columnsFrom": [
+            "patientId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "imaging_requests_consultationId_tenantId_consultations_id_tenantId_fk": {
+          "name": "imaging_requests_consultationId_tenantId_consultations_id_tenantId_fk",
+          "tableFrom": "imaging_requests",
+          "tableTo": "consultations",
+          "columnsFrom": [
+            "consultationId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "imaging_requests_clinicId_tenantId_clinics_id_tenantId_fk": {
+          "name": "imaging_requests_clinicId_tenantId_clinics_id_tenantId_fk",
+          "tableFrom": "imaging_requests",
+          "tableTo": "clinics",
+          "columnsFrom": [
+            "clinicId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "imaging_requests_templateId_tenantId_templates_id_tenantId_fk": {
+          "name": "imaging_requests_templateId_tenantId_templates_id_tenantId_fk",
+          "tableFrom": "imaging_requests",
+          "tableTo": "templates",
+          "columnsFrom": [
+            "templateId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "check_issued_date": {
+          "name": "check_issued_date",
+          "value": "\"imaging_requests\".\"issuedDate\" LIKE '____-__-__'"
+        }
+      }
+    },
+    "laboratory_request_items": {
+      "name": "laboratory_request_items",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenantId": {
+          "name": "tenantId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deletedAt": {
+          "name": "deletedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "laboratoryRequestId": {
+          "name": "laboratoryRequestId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "testCatalogId": {
+          "name": "testCatalogId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "results": {
+          "name": "results",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "remarks": {
+          "name": "remarks",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "laboratory_request_items_tenantId_tenants_id_fk": {
+          "name": "laboratory_request_items_tenantId_tenants_id_fk",
+          "tableFrom": "laboratory_request_items",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "laboratory_request_items_laboratoryRequestId_tenantId_laboratory_requests_id_tenantId_fk": {
+          "name": "laboratory_request_items_laboratoryRequestId_tenantId_laboratory_requests_id_tenantId_fk",
+          "tableFrom": "laboratory_request_items",
+          "tableTo": "laboratory_requests",
+          "columnsFrom": [
+            "laboratoryRequestId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "laboratory_request_items_testCatalogId_tenantId_laboratory_test_catalogs_id_tenantId_fk": {
+          "name": "laboratory_request_items_testCatalogId_tenantId_laboratory_test_catalogs_id_tenantId_fk",
+          "tableFrom": "laboratory_request_items",
+          "tableTo": "laboratory_test_catalogs",
+          "columnsFrom": [
+            "testCatalogId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "laboratory_requests": {
+      "name": "laboratory_requests",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenantId": {
+          "name": "tenantId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deletedAt": {
+          "name": "deletedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "providerId": {
+          "name": "providerId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "patientId": {
+          "name": "patientId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "consultationId": {
+          "name": "consultationId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "clinicId": {
+          "name": "clinicId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "templateId": {
+          "name": "templateId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "issuedDate": {
+          "name": "issuedDate",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "laboratory_requests_tenantId_tenants_id_fk": {
+          "name": "laboratory_requests_tenantId_tenants_id_fk",
+          "tableFrom": "laboratory_requests",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "laboratory_requests_providerId_tenantId_healthcare_providers_id_tenantId_fk": {
+          "name": "laboratory_requests_providerId_tenantId_healthcare_providers_id_tenantId_fk",
+          "tableFrom": "laboratory_requests",
+          "tableTo": "healthcare_providers",
+          "columnsFrom": [
+            "providerId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "laboratory_requests_patientId_tenantId_patients_id_tenantId_fk": {
+          "name": "laboratory_requests_patientId_tenantId_patients_id_tenantId_fk",
+          "tableFrom": "laboratory_requests",
+          "tableTo": "patients",
+          "columnsFrom": [
+            "patientId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "laboratory_requests_consultationId_tenantId_consultations_id_tenantId_fk": {
+          "name": "laboratory_requests_consultationId_tenantId_consultations_id_tenantId_fk",
+          "tableFrom": "laboratory_requests",
+          "tableTo": "consultations",
+          "columnsFrom": [
+            "consultationId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "laboratory_requests_clinicId_tenantId_clinics_id_tenantId_fk": {
+          "name": "laboratory_requests_clinicId_tenantId_clinics_id_tenantId_fk",
+          "tableFrom": "laboratory_requests",
+          "tableTo": "clinics",
+          "columnsFrom": [
+            "clinicId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "laboratory_requests_templateId_tenantId_templates_id_tenantId_fk": {
+          "name": "laboratory_requests_templateId_tenantId_templates_id_tenantId_fk",
+          "tableFrom": "laboratory_requests",
+          "tableTo": "templates",
+          "columnsFrom": [
+            "templateId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "check_issued_date": {
+          "name": "check_issued_date",
+          "value": "\"laboratory_requests\".\"issuedDate\" LIKE '____-__-__'"
+        }
+      }
+    },
+    "laboratory_test_catalogs": {
+      "name": "laboratory_test_catalogs",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenantId": {
+          "name": "tenantId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deletedAt": {
+          "name": "deletedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sampleType": {
+          "name": "sampleType",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "laboratory_test_catalogs_tenantId_tenants_id_fk": {
+          "name": "laboratory_test_catalogs_tenantId_tenants_id_fk",
+          "tableFrom": "laboratory_test_catalogs",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "medical_certificates": {
+      "name": "medical_certificates",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenantId": {
+          "name": "tenantId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deletedAt": {
+          "name": "deletedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "providerId": {
+          "name": "providerId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "patientId": {
+          "name": "patientId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "consultationId": {
+          "name": "consultationId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "clinicId": {
+          "name": "clinicId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "templateId": {
+          "name": "templateId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "classification": {
+          "name": "classification",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "purpose": {
+          "name": "purpose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "issuedDate": {
+          "name": "issuedDate",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "diagnosis": {
+          "name": "diagnosis",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "remarks": {
+          "name": "remarks",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "medical_certificates_tenantId_tenants_id_fk": {
+          "name": "medical_certificates_tenantId_tenants_id_fk",
+          "tableFrom": "medical_certificates",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "medical_certificates_providerId_tenantId_healthcare_providers_id_tenantId_fk": {
+          "name": "medical_certificates_providerId_tenantId_healthcare_providers_id_tenantId_fk",
+          "tableFrom": "medical_certificates",
+          "tableTo": "healthcare_providers",
+          "columnsFrom": [
+            "providerId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "medical_certificates_patientId_tenantId_patients_id_tenantId_fk": {
+          "name": "medical_certificates_patientId_tenantId_patients_id_tenantId_fk",
+          "tableFrom": "medical_certificates",
+          "tableTo": "patients",
+          "columnsFrom": [
+            "patientId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "medical_certificates_consultationId_tenantId_consultations_id_tenantId_fk": {
+          "name": "medical_certificates_consultationId_tenantId_consultations_id_tenantId_fk",
+          "tableFrom": "medical_certificates",
+          "tableTo": "consultations",
+          "columnsFrom": [
+            "consultationId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "medical_certificates_clinicId_tenantId_clinics_id_tenantId_fk": {
+          "name": "medical_certificates_clinicId_tenantId_clinics_id_tenantId_fk",
+          "tableFrom": "medical_certificates",
+          "tableTo": "clinics",
+          "columnsFrom": [
+            "clinicId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "medical_certificates_templateId_tenantId_templates_id_tenantId_fk": {
+          "name": "medical_certificates_templateId_tenantId_templates_id_tenantId_fk",
+          "tableFrom": "medical_certificates",
+          "tableTo": "templates",
+          "columnsFrom": [
+            "templateId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "check_issued_date": {
+          "name": "check_issued_date",
+          "value": "\"medical_certificates\".\"issuedDate\" LIKE '____-__-__'"
+        }
+      }
+    },
+    "medical_record_histories": {
+      "name": "medical_record_histories",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenantId": {
+          "name": "tenantId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deletedAt": {
+          "name": "deletedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "patientId": {
+          "name": "patientId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "conditionId": {
+          "name": "conditionId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "relationToPatient": {
+          "name": "relationToPatient",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "medical_record_histories_tenantId_tenants_id_fk": {
+          "name": "medical_record_histories_tenantId_tenants_id_fk",
+          "tableFrom": "medical_record_histories",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "medical_record_histories_patientId_tenantId_patients_id_tenantId_fk": {
+          "name": "medical_record_histories_patientId_tenantId_patients_id_tenantId_fk",
+          "tableFrom": "medical_record_histories",
+          "tableTo": "patients",
+          "columnsFrom": [
+            "patientId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "medical_record_histories_conditionId_tenantId_conditions_id_tenantId_fk": {
+          "name": "medical_record_histories_conditionId_tenantId_conditions_id_tenantId_fk",
+          "tableFrom": "medical_record_histories",
+          "tableTo": "conditions",
+          "columnsFrom": [
+            "conditionId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "medications": {
+      "name": "medications",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenantId": {
+          "name": "tenantId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deletedAt": {
+          "name": "deletedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "patientId": {
+          "name": "patientId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "dosage": {
+          "name": "dosage",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "form": {
+          "name": "form",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "frequency": {
+          "name": "frequency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "startDate": {
+          "name": "startDate",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "endDate": {
+          "name": "endDate",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "medications_tenantId_tenants_id_fk": {
+          "name": "medications_tenantId_tenants_id_fk",
+          "tableFrom": "medications",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "medications_patientId_tenantId_patients_id_tenantId_fk": {
+          "name": "medications_patientId_tenantId_patients_id_tenantId_fk",
+          "tableFrom": "medications",
+          "tableTo": "patients",
+          "columnsFrom": [
+            "patientId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "check_start_date": {
+          "name": "check_start_date",
+          "value": "\"medications\".\"startDate\" LIKE '____-__-__'"
+        },
+        "check_end_date": {
+          "name": "check_end_date",
+          "value": "\"medications\".\"endDate\" LIKE '____-__-__' OR \"medications\".\"endDate\" IS NULL"
+        }
+      }
+    },
+    "patient_conditions": {
+      "name": "patient_conditions",
+      "columns": {
+        "tenantId": {
+          "name": "tenantId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "patientId": {
+          "name": "patientId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "conditionId": {
+          "name": "conditionId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "diagnosedDate": {
+          "name": "diagnosedDate",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "diagnosedBy": {
+          "name": "diagnosedBy",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "severity": {
+          "name": "severity",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "isInborn": {
+          "name": "isInborn",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deletedAt": {
+          "name": "deletedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "patient_conditions_tenantId_tenants_id_fk": {
+          "name": "patient_conditions_tenantId_tenants_id_fk",
+          "tableFrom": "patient_conditions",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "patient_conditions_patientId_tenantId_patients_id_tenantId_fk": {
+          "name": "patient_conditions_patientId_tenantId_patients_id_tenantId_fk",
+          "tableFrom": "patient_conditions",
+          "tableTo": "patients",
+          "columnsFrom": [
+            "patientId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "patient_conditions_conditionId_tenantId_conditions_id_tenantId_fk": {
+          "name": "patient_conditions_conditionId_tenantId_conditions_id_tenantId_fk",
+          "tableFrom": "patient_conditions",
+          "tableTo": "conditions",
+          "columnsFrom": [
+            "conditionId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "pk_patient_conditions": {
+          "columns": [
+            "tenantId",
+            "patientId",
+            "conditionId"
+          ],
+          "name": "pk_patient_conditions"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "check_diagnosed_date": {
+          "name": "check_diagnosed_date",
+          "value": "\"patient_conditions\".\"diagnosedDate\" LIKE '____-__-__'"
+        },
+        "deleted_at_check": {
+          "name": "deleted_at_check",
+          "value": "\"patient_conditions\".\"deletedAt\" LIKE '____-__-__T__:__:__%' OR \"patient_conditions\".\"deletedAt\" IS NULL"
+        }
+      }
+    },
+    "patient_vital_records": {
+      "name": "patient_vital_records",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenantId": {
+          "name": "tenantId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deletedAt": {
+          "name": "deletedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "patientId": {
+          "name": "patientId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "providerId": {
+          "name": "providerId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "recordedAt": {
+          "name": "recordedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "temperature": {
+          "name": "temperature",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "height": {
+          "name": "height",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "weight": {
+          "name": "weight",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bmi": {
+          "name": "bmi",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "heartRate": {
+          "name": "heartRate",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "respiratoryRate": {
+          "name": "respiratoryRate",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "oxygenSaturation": {
+          "name": "oxygenSaturation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "patient_vital_records_tenantId_tenants_id_fk": {
+          "name": "patient_vital_records_tenantId_tenants_id_fk",
+          "tableFrom": "patient_vital_records",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "patient_vital_records_patientId_tenantId_patients_id_tenantId_fk": {
+          "name": "patient_vital_records_patientId_tenantId_patients_id_tenantId_fk",
+          "tableFrom": "patient_vital_records",
+          "tableTo": "patients",
+          "columnsFrom": [
+            "patientId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "patient_vital_records_providerId_tenantId_healthcare_providers_id_tenantId_fk": {
+          "name": "patient_vital_records_providerId_tenantId_healthcare_providers_id_tenantId_fk",
+          "tableFrom": "patient_vital_records",
+          "tableTo": "healthcare_providers",
+          "columnsFrom": [
+            "providerId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "check_recorded_at": {
+          "name": "check_recorded_at",
+          "value": "\"patient_vital_records\".\"recordedAt\" LIKE '____-__-__T__:__:__%'"
+        }
+      }
+    },
+    "patients": {
+      "name": "patients",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenantId": {
+          "name": "tenantId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deletedAt": {
+          "name": "deletedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "basicInfo": {
+          "name": "basicInfo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "patients_tenantId_tenants_id_fk": {
+          "name": "patients_tenantId_tenants_id_fk",
+          "tableFrom": "patients",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "patients_basicInfo_tenantId_basic_info_id_tenantId_fk": {
+          "name": "patients_basicInfo_tenantId_basic_info_id_tenantId_fk",
+          "tableFrom": "patients",
+          "tableTo": "basic_info",
+          "columnsFrom": [
+            "basicInfo",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "prescription_items": {
+      "name": "prescription_items",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenantId": {
+          "name": "tenantId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deletedAt": {
+          "name": "deletedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "prescriptionId": {
+          "name": "prescriptionId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "drugName": {
+          "name": "drugName",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "dosage": {
+          "name": "dosage",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "frequency": {
+          "name": "frequency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "duration": {
+          "name": "duration",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "unit": {
+          "name": "unit",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "instructions": {
+          "name": "instructions",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "isGenericAllowed": {
+          "name": "isGenericAllowed",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "prescription_items_tenantId_tenants_id_fk": {
+          "name": "prescription_items_tenantId_tenants_id_fk",
+          "tableFrom": "prescription_items",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "prescription_items_prescriptionId_tenantId_prescriptions_id_tenantId_fk": {
+          "name": "prescription_items_prescriptionId_tenantId_prescriptions_id_tenantId_fk",
+          "tableFrom": "prescription_items",
+          "tableTo": "prescriptions",
+          "columnsFrom": [
+            "prescriptionId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "prescriptions": {
+      "name": "prescriptions",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenantId": {
+          "name": "tenantId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deletedAt": {
+          "name": "deletedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "providerId": {
+          "name": "providerId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "patientId": {
+          "name": "patientId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "consultationId": {
+          "name": "consultationId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "clinicId": {
+          "name": "clinicId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "templateId": {
+          "name": "templateId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "remarks": {
+          "name": "remarks",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "issuedDate": {
+          "name": "issuedDate",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "instructions": {
+          "name": "instructions",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "prescriptions_tenantId_tenants_id_fk": {
+          "name": "prescriptions_tenantId_tenants_id_fk",
+          "tableFrom": "prescriptions",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "prescriptions_providerId_tenantId_healthcare_providers_id_tenantId_fk": {
+          "name": "prescriptions_providerId_tenantId_healthcare_providers_id_tenantId_fk",
+          "tableFrom": "prescriptions",
+          "tableTo": "healthcare_providers",
+          "columnsFrom": [
+            "providerId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "prescriptions_patientId_tenantId_patients_id_tenantId_fk": {
+          "name": "prescriptions_patientId_tenantId_patients_id_tenantId_fk",
+          "tableFrom": "prescriptions",
+          "tableTo": "patients",
+          "columnsFrom": [
+            "patientId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "prescriptions_consultationId_tenantId_consultations_id_tenantId_fk": {
+          "name": "prescriptions_consultationId_tenantId_consultations_id_tenantId_fk",
+          "tableFrom": "prescriptions",
+          "tableTo": "consultations",
+          "columnsFrom": [
+            "consultationId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "prescriptions_clinicId_tenantId_clinics_id_tenantId_fk": {
+          "name": "prescriptions_clinicId_tenantId_clinics_id_tenantId_fk",
+          "tableFrom": "prescriptions",
+          "tableTo": "clinics",
+          "columnsFrom": [
+            "clinicId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "prescriptions_templateId_tenantId_templates_id_tenantId_fk": {
+          "name": "prescriptions_templateId_tenantId_templates_id_tenantId_fk",
+          "tableFrom": "prescriptions",
+          "tableTo": "templates",
+          "columnsFrom": [
+            "templateId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "check_issued_date": {
+          "name": "check_issued_date",
+          "value": "\"prescriptions\".\"issuedDate\" LIKE '____-__-__'"
+        }
+      }
+    },
+    "referral_requests": {
+      "name": "referral_requests",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenantId": {
+          "name": "tenantId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deletedAt": {
+          "name": "deletedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "providerId": {
+          "name": "providerId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "patientId": {
+          "name": "patientId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "consultationId": {
+          "name": "consultationId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "clinicId": {
+          "name": "clinicId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "templateId": {
+          "name": "templateId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "issuedDate": {
+          "name": "issuedDate",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "referredTo": {
+          "name": "referredTo",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "briefHistory": {
+          "name": "briefHistory",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "referral_requests_tenantId_tenants_id_fk": {
+          "name": "referral_requests_tenantId_tenants_id_fk",
+          "tableFrom": "referral_requests",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "referral_requests_providerId_tenantId_healthcare_providers_id_tenantId_fk": {
+          "name": "referral_requests_providerId_tenantId_healthcare_providers_id_tenantId_fk",
+          "tableFrom": "referral_requests",
+          "tableTo": "healthcare_providers",
+          "columnsFrom": [
+            "providerId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "referral_requests_patientId_tenantId_patients_id_tenantId_fk": {
+          "name": "referral_requests_patientId_tenantId_patients_id_tenantId_fk",
+          "tableFrom": "referral_requests",
+          "tableTo": "patients",
+          "columnsFrom": [
+            "patientId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "referral_requests_consultationId_tenantId_consultations_id_tenantId_fk": {
+          "name": "referral_requests_consultationId_tenantId_consultations_id_tenantId_fk",
+          "tableFrom": "referral_requests",
+          "tableTo": "consultations",
+          "columnsFrom": [
+            "consultationId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "referral_requests_clinicId_tenantId_clinics_id_tenantId_fk": {
+          "name": "referral_requests_clinicId_tenantId_clinics_id_tenantId_fk",
+          "tableFrom": "referral_requests",
+          "tableTo": "clinics",
+          "columnsFrom": [
+            "clinicId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "referral_requests_templateId_tenantId_templates_id_tenantId_fk": {
+          "name": "referral_requests_templateId_tenantId_templates_id_tenantId_fk",
+          "tableFrom": "referral_requests",
+          "tableTo": "templates",
+          "columnsFrom": [
+            "templateId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "check_issued_date": {
+          "name": "check_issued_date",
+          "value": "\"referral_requests\".\"issuedDate\" LIKE '____-__-__'"
+        }
+      }
+    },
+    "services": {
+      "name": "services",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenantId": {
+          "name": "tenantId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deletedAt": {
+          "name": "deletedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "billerId": {
+          "name": "billerId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "cost": {
+          "name": "cost",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "duration": {
+          "name": "duration",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "isActive": {
+          "name": "isActive",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": true
+        }
+      },
+      "indexes": {
+        "services_tenant_name_uidx": {
+          "name": "services_tenant_name_uidx",
+          "columns": [
+            "tenantId",
+            "name"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "services_tenantId_tenants_id_fk": {
+          "name": "services_tenantId_tenants_id_fk",
+          "tableFrom": "services",
+          "tableTo": "tenants",
+          "columnsFrom": [
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "services_billerId_tenantId_billers_id_tenantId_fk": {
+          "name": "services_billerId_tenantId_billers_id_tenantId_fk",
+          "tableFrom": "services",
+          "tableTo": "billers",
+          "columnsFrom": [
+            "billerId",
+            "tenantId"
+          ],
+          "columnsTo": [
+            "id",
+            "tenantId"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "tenants": {
+      "name": "tenants",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "tenants_name_unique": {
+          "name": "tenants_name_unique",
+          "columns": [
+            "name"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "users": {
+      "name": "users",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "authUserId": {
+          "name": "authUserId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "users_authUserId_unique": {
+          "name": "users_authUserId_unique",
+          "columns": [
+            "authUserId"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}
