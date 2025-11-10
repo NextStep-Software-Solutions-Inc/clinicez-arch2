@@ -119,20 +119,21 @@ const Drawer: React.FC<DrawerProps> = ({
     outputRange: [maxHeight, 0],
   });
 
-  const panResponder = useMemo(() => {
+  /**
+   * PanResponder for the drag handle area only (not the entire modal content)
+   * This prevents accidental modal dismissal when scrolling form content.
+   * Only the top drag indicator responds to swipe-to-dismiss gestures.
+   */
+  const handlePanResponder = useMemo(() => {
     return PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onStartShouldSetPanResponderCapture: () => false,
       onMoveShouldSetPanResponder: (_, gestureState) => {
-        const isVerticalSwipe = Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
-        const isDownwardSwipe = gestureState.dy > 5;
-        return isVerticalSwipe && isDownwardSwipe;
+        // Only respond to significant vertical movement
+        const isVerticalSwipe = Math.abs(gestureState.dy) > Math.abs(gestureState.dx) * 1.5;
+        return isVerticalSwipe && Math.abs(gestureState.dy) > 5;
       },
-      onMoveShouldSetPanResponderCapture: (_, gestureState) => {
-        const isVerticalSwipe = Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
-        const isDownwardSwipe = gestureState.dy > 5;
-        return isVerticalSwipe && isDownwardSwipe;
-      },
+      onMoveShouldSetPanResponderCapture: () => false,
       onPanResponderGrant: () => {
         dragPositionRef.current = 0;
         slideAnim.stopAnimation();
@@ -209,9 +210,12 @@ const Drawer: React.FC<DrawerProps> = ({
             shadowRadius: 12,
             elevation: 8,
           }}
-          {...panResponder.panHandlers}
         >
-          <View className="items-center py-3">
+          {/* Drag Handle - Only this area can close the modal via swipe */}
+          <View
+            className="items-center py-3"
+            {...handlePanResponder.panHandlers}
+          >
             <View
               className="h-1.5 w-12 rounded-full bg-muted dark:bg-muted-dark"
             />
@@ -233,7 +237,7 @@ const Drawer: React.FC<DrawerProps> = ({
           )}
 
           <View
-            className="flex-1 px-6"
+            className="flex-1"
             style={{ paddingBottom: insets.bottom + 24 }}
           >
             {children}
