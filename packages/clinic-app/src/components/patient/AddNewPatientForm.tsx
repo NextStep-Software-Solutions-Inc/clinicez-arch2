@@ -76,6 +76,7 @@ const AddNewPatientForm: React.FC<AddNewPatientFormProps> = ({ onSubmit, onCance
           showsVerticalScrollIndicator={false}
           className="flex-1"
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
         >
           <View className="gap-4 pb-4">
             <FormField
