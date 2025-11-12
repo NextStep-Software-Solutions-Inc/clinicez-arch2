@@ -17,20 +17,14 @@ export type ContactInfo = {
   mobile: string;
 }
 
-export type Profile = {
-  imageUrl?: string;
-}
-
 export type PersonalDetails = {
   id: number;
   userUid: string;
-  profile: Profile;
-  name: {
-    firstName: string;
-    middleName?: string;
-    lastName: string;
-    suffix?: string;
-  };
+  firstName: string;
+  middleName?: string;
+  lastName: string;
+  suffix?: string;
+  imageUrl?: string;
   civilStatus: CivilStatus;
   gender: Gender;
   dateOfBirth: string; // ISO date string

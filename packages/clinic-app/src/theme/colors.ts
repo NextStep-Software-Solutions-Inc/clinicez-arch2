@@ -10,6 +10,7 @@ export type ThemeColorToken =
   | "secondarySoft"
   | "secondarySoftDark"
   | "accent"
+  | "accentForeground"
   | "accentDark"
   | "success"
   | "successDark"
@@ -76,6 +77,7 @@ const basePalette: Record<ThemeColorToken, { light: string; dark: string }> = {
   secondarySoft: { light: "#F3E8FF", dark: "#2D1B4B" },
   secondarySoftDark: { light: "#E9D5FF", dark: "#24123D" },
   accent: { light: "#DFEAFC", dark: "#243152" },
+  accentForeground: { light: "#3B71FF", dark: "#60A5FA" },
   accentDark: { light: "#BFD2F6", dark: "#1B253F" },
   success: { light: "#10B981", dark: "#34D399" },
   successDark: { light: "#059669", dark: "#22C55E" },
