@@ -9,7 +9,7 @@ import EmptyState from "./EmptyState";
 import PatientRecordCard from "./PatientRecordCard";
 
 interface EmergencyContactsViewProps {
-  contacts: EmergencyContact[];
+  contacts?: EmergencyContact[];
   className?: string;
 }
 

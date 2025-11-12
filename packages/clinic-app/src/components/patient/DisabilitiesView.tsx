@@ -10,7 +10,7 @@ import PatientRecordCard from "./PatientRecordCard";
 import { formatToYYYYMMDD } from "@lib/date-format";
 
 interface DisabilitiesViewProps {
-  disabilities: Disability[];
+  disabilities?: Disability[];
   className?: string;
 }
 

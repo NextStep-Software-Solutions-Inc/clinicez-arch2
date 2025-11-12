@@ -11,7 +11,7 @@ import { formatHealthcareProvider } from "@lib/healthcare-provider-format";
 import type { ConsultationHistory } from "@app-types/patient";
 
 interface ConsultationHistoryViewProps {
-  consultations: ConsultationHistory[];
+  consultations?: ConsultationHistory[];
   className?: string;
   onViewDetails?: (consultation: ConsultationHistory) => void;
 }

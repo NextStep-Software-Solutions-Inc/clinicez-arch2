@@ -9,7 +9,7 @@ import { cn } from "@lib/utils";
 import type { FamilyHistory } from "@app-types/patient";
 
 interface FamilyHistoryViewProps {
-  familyHistory: FamilyHistory[];
+  familyHistory?: FamilyHistory[];
   className?: string;
 }
 

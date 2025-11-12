@@ -11,7 +11,7 @@ import { formatHealthcareProvider } from "@lib/healthcare-provider-format";
 import type { PrescriptionHistory } from "@app-types/patient";
 
 interface PrescriptionHistoryViewProps {
-  prescriptions: PrescriptionHistory[];
+  prescriptions?: PrescriptionHistory[];
   className?: string;
 }
 

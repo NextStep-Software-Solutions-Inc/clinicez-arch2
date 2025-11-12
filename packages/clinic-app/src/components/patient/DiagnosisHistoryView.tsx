@@ -11,7 +11,7 @@ import { formatHealthcareProvider } from "@lib/healthcare-provider-format";
 import type { DiagnosisHistory } from "@app-types/patient";
 
 interface DiagnosisHistoryViewProps {
-  diagnoses: DiagnosisHistory[];
+  diagnoses?: DiagnosisHistory[];
   className?: string;
 }
 

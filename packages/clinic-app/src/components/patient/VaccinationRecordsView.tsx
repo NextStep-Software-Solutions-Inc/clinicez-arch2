@@ -10,7 +10,7 @@ import { formatToYYYYMMDD } from "@lib/date-format";
 import type { VaccinationRecord } from "@app-types/patient";
 
 interface VaccinationRecordsViewProps {
-  vaccinations: VaccinationRecord[];
+  vaccinations?: VaccinationRecord[];
   className?: string;
 }
 

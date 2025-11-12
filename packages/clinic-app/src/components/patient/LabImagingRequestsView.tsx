@@ -11,7 +11,7 @@ import { formatHealthcareProvider } from "@lib/healthcare-provider-format";
 import type { LabImagingRequest } from "@app-types/patient";
 
 interface LabImagingRequestsViewProps {
-  requests: LabImagingRequest[];
+  requests?: LabImagingRequest[];
   className?: string;
 }
 
