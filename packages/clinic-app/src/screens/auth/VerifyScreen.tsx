@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Alert, Image, KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
-import { useSignIn } from "@clerk/clerk-expo";
+import { useSignIn, useUser } from "@clerk/clerk-expo";
 import { useRouter } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { OtpInput } from "react-native-otp-entry";
@@ -10,19 +10,19 @@ import ThemedText from "@components/ThemedText";
 import ThemedView from "@components/ThemedView";
 import Spacer from "@components/ui/Spacer";
 import { handleAuthError, logAuthError, type AuthErrorResult } from "@utils/auth-error-handler";
+import { determinePostAuthRoute } from "@utils/post-auth-navigation";
 import Nurse3D from "@images/nurse-3d.png";
 
 const VerifyScreen: React.FC = () => {
   const { colorScheme } = useColorScheme();
   const { isLoaded, signIn, setActive } = useSignIn();
+  const { user } = useUser();
   const router = useRouter();
 
   const [code, setCode] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
   const [authError, setAuthError] = useState<AuthErrorResult | null>(null);
   const [userEmail, setUserEmail] = useState("");
-
-  const isFirstTimeUser = true;
 
   useEffect(() => {
     if (signIn?.identifier) {
@@ -75,12 +75,13 @@ const VerifyScreen: React.FC = () => {
       if (completeSignIn.status === "complete") {
         await setActive({ session: completeSignIn.createdSessionId });
 
-        if (isFirstTimeUser) {
-          router.push("/(main)/complete-profile");
-          return;
-        }
+        // Wait a brief moment for useUser hook to update with the new session
+        await new Promise(resolve => setTimeout(resolve, 100));
 
-        router.push("/(auth)/reset-password");
+        // Get the current userId from useUser hook (it should be updated now)
+        // If still not available, determinePostAuthRoute will handle it gracefully
+        const nextRoute = await determinePostAuthRoute(user?.id || undefined);
+        router.replace(nextRoute);
         return;
       }
 

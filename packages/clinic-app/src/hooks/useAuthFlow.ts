@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback } from "react";
-import { useSignIn } from "@clerk/clerk-expo";
+import { useSignIn, useAuth } from "@clerk/clerk-expo";
 import { useRouter } from "expo-router";
 import { AuthFlowManager, type AuthFlowResult } from "@utils/auth-flow-manager";
 import { handleAuthError, type AuthErrorResult } from "@utils/auth-error-handler";
@@ -46,6 +46,7 @@ export const useAuthFlow = ({
 }: UseAuthFlowProps = {}): UseAuthFlowReturn => {
 
   const { isLoaded, signIn, setActive } = useSignIn();
+  const { userId: currentUserId } = useAuth();
   const router = useRouter();
 
   // Local state
@@ -66,7 +67,8 @@ export const useAuthFlow = ({
 
     try {
       await setActive({ session: sessionId });
-      const nextRoute = await determinePostAuthRoute();
+      // Use currentUserId from useAuth hook
+      const nextRoute = await determinePostAuthRoute(currentUserId || undefined);
       router.replace(nextRoute);
       onSuccess?.();
     } catch (error) {
@@ -74,7 +76,7 @@ export const useAuthFlow = ({
       setAuthError(errorResult);
       onError?.(errorResult);
     }
-  }, [setActive, onSuccess, onError, router]);
+  }, [setActive, currentUserId, onSuccess, onError, router]);
 
   // Handle flow navigation
   const handleFlowNavigation = useCallback(async (flowResult: AuthFlowResult) => {
