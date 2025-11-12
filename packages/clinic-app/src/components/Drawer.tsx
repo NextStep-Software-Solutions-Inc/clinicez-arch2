@@ -13,7 +13,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
 
 import { cn } from "@lib/utils";
-import ThemedIcon from "@components/ThemedIcon";
 import ThemedText from "@components/ThemedText";
 import { getThemeColor } from "@theme/colors";
 
@@ -36,7 +35,6 @@ const Drawer: React.FC<DrawerProps> = ({
   children,
   title,
   description,
-  showCloseButton = false,
   maxHeight = SCREEN_HEIGHT * 0.9,
   className,
 }) => {
@@ -238,7 +236,7 @@ const Drawer: React.FC<DrawerProps> = ({
 
           <View
             className="flex-1"
-            style={{ paddingBottom: insets.bottom + 24 }}
+            style={{ paddingBottom: insets.bottom }}
           >
             {children}
           </View>

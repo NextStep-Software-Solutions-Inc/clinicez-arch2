@@ -116,7 +116,7 @@ const UserAvatar: React.FC<UserAvatarProps> & { Wrapper: typeof AvatarWrapper } 
           accessibilityIgnoresInvertColors
         />
       ) : (
-        <Text className="text-sm font-semibold text-text dark:text-text-dark">
+        <Text className="text-xl font-semibold text-text dark:text-text-dark">
           {fallback}
         </Text>
       )}

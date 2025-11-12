@@ -18,17 +18,17 @@ const themeVariants = cva("", {
   },
 });
 
-export interface ThemedViewProps
-  extends Omit<ViewProps, "style">,
+export interface ThemedViewProps extends ViewProps,
   VariantProps<typeof themeVariants> { }
 
 export const ThemedView = forwardRef<View, ThemedViewProps>(
-  ({ variant, className, ...props }, ref) => {
+  ({ variant, className, style, ...props }, ref) => {
     return (
       <View
         ref={ref}
         className={cn(themeVariants({ variant }), className)}
         {...props}
+        style={style}
       />
     );
   }

@@ -8,12 +8,16 @@ import { View } from "react-native";
 import ThemedText from "./ThemedText";
 
 interface EachProps<T> {
-  items: T[];
+  items?: T[];
   render: (item: T, index: number) => React.ReactNode;
   fallback?: React.ReactNode;
 }
 
 const Each = <T,>({ items, render, fallback = <Fallback /> }: EachProps<T>) => {
+  if (!items || items.length === 0) {
+    return <>{fallback}</>;
+  }
+
   return (
     <>
       {items.map((item, index) => (
