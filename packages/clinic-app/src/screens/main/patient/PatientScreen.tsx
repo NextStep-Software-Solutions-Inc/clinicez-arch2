@@ -125,7 +125,7 @@ const PatientsScreen: React.FC = () => {
   const handlePatientPress = (patient: PatientSummary) => {
     router.push({
       pathname: "/(main)/patients/[patientId]",
-      params: { patientId: patient.id.toString() },
+      params: { patientId: patient.id },
     });
   };
 
@@ -228,8 +228,6 @@ const PatientsScreen: React.FC = () => {
       <Drawer
         isOpen={isDrawerOpen}
         onClose={() => !isCreating && setIsDrawerOpen(false)}
-        title="Add New Patient"
-        description="Complete the form to add a new patient"
       >
         <AddPatientForm
           onComplete={handleAddPatient}
