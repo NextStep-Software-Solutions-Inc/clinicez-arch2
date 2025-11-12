@@ -242,3 +242,63 @@ export async function getPatientsWithBasicInfo(tenantId: string): Promise<DbActi
     };
   }
 }
+
+/**
+ * Fetch a single patient with basic info by patient ID and tenant ID
+ */
+export async function getPatientWithBasicInfo(patientId: string, tenantId: string): Promise<DbActionResult<PatientWithBasicInfo | null>> {
+  try {
+    const result = await db
+      .select({
+        id: patients.id,
+        firstName: basicInfo.firstName,
+        middleName: basicInfo.middleName,
+        lastName: basicInfo.lastName,
+        suffix: basicInfo.suffix,
+        nickname: basicInfo.nickname,
+        email: basicInfo.email,
+        phoneNumber: basicInfo.phoneNumber,
+        gender: basicInfo.gender,
+        civilStatus: basicInfo.civilStatus,
+        dateOfBirth: basicInfo.dateOfBirth,
+        nationality: basicInfo.nationality,
+        religion: basicInfo.religion,
+        bloodType: basicInfo.bloodType,
+        createdAt: patients.createdAt,
+        updatedAt: patients.updatedAt,
+      })
+      .from(patients)
+      .innerJoin(
+        basicInfo,
+        and(
+          eq(patients.basicInfo, basicInfo.id),
+          eq(patients.tenantId, basicInfo.tenantId)
+        )
+      )
+      .where(
+        and(
+          eq(patients.id, patientId),
+          eq(patients.tenantId, tenantId)
+        )
+      )
+      .limit(1);
+
+    const patient = result[0] || null;
+
+    return {
+      ok: true,
+      data: patient,
+      message: patient ? "Patient found" : "Patient not found",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: {
+        kind: { type: "unknown" },
+        message: error instanceof Error ? error.message : "Unknown error",
+        userMessage: "Failed to fetch patient. Please try again.",
+        original: error,
+      },
+    };
+  }
+}

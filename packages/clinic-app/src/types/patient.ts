@@ -9,7 +9,7 @@ export type Diagnosis = {
 };
 
 export type PatientSummary = {
-  id: number;
+  id: string; // UUIDv7 from database
   name: string;
   profile?: {
     uri: string;
@@ -130,6 +130,15 @@ export type EmergencyContact = {
 // called "Lab & Imaging Requests"
 export type LabImagingRequest = LaboratoryRequest | ImagingRequest;
 export type PatientProfile = PersonalDetails & {
+  profile?: {
+    imageUrl?: string | null;
+  } | null;
+  name?: {
+    firstName: string;
+    middleName?: string | null;
+    lastName: string;
+    suffix?: string | null;
+  };
   allergy?: {
     id: number;
     name: string;

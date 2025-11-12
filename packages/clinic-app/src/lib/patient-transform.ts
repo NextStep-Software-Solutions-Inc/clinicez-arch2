@@ -1,71 +1,69 @@
 import type { PatientWithBasicInfo } from "../actions/patient.action";
-import type { PatientSummary } from "../types/patient";
+import type { PatientSummary, PatientProfile } from "../types/patient";
+import type { BloodType } from "../types/personal-details";
+import { calculateAge } from "../utils/date-helpers";
 
-/**
- * Calculate age from date of birth string
- * @param dateOfBirth - Date string in YYYY-MM-DD format
- * @returns Age in years
- */
-function calculateAge(dateOfBirth: string | null): number {
-  if (!dateOfBirth) return 0;
-
-  const today = new Date();
-  const birthDate = new Date(dateOfBirth);
-  let age = today.getFullYear() - birthDate.getFullYear();
-  const monthDiff = today.getMonth() - birthDate.getMonth();
-
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-    age--;
-  }
-
-  return age;
-}
-
-/**
- * Format gender from database enum to display format
- */
-function formatGender(gender: "MALE" | "FEMALE" | null): string {
-  if (!gender) return "Unknown";
-  return gender.toLowerCase();
-}
-
-/**
- * Transform database patient record to PatientSummary format
- * 
- * @param dbPatient - Patient data from database
- * @returns PatientSummary object for UI display
- */
 export function transformToPatientSummary(dbPatient: PatientWithBasicInfo): PatientSummary {
-  const fullName = [
-    dbPatient.firstName,
-    dbPatient.middleName,
-    dbPatient.lastName,
-    dbPatient.suffix,
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const age = dbPatient.dateOfBirth ? calculateAge(new Date(dbPatient.dateOfBirth)) : 0;
 
   return {
-    id: parseInt(dbPatient.id.slice(0, 8), 16), // Convert UUID prefix to number for compatibility
-    name: fullName,
-    profile: null,
-    age: calculateAge(dbPatient.dateOfBirth),
-    gender: formatGender(dbPatient.gender),
-    hp: null, // TODO: Join with healthcare provider when available
-    diagnosis: null, // TODO: Join with diagnosis when available
-    lastVisit: dbPatient.createdAt || new Date().toISOString().split("T")[0],
-    nextAppointment: null, // TODO: Join with appointments when available
+    id: dbPatient.id,
+    name: `${dbPatient.firstName} ${dbPatient.lastName}`,
+    age,
+    gender: dbPatient.gender?.toLowerCase() || "Unknown",
+    lastVisit: dbPatient.updatedAt || dbPatient.createdAt || new Date().toISOString(),
+    nextAppointment: null,
   };
 }
 
-/**
- * Transform array of database patients to PatientSummary array
- * 
- * @param dbPatients - Array of patient data from database
- * @returns Array of PatientSummary objects
- */
-export function transformPatientsToSummaries(
-  dbPatients: PatientWithBasicInfo[]
-): PatientSummary[] {
+export function transformPatientsToSummaries(dbPatients: PatientWithBasicInfo[]): PatientSummary[] {
   return dbPatients.map(transformToPatientSummary);
+}
+
+export function transformPatientToProfile(dbPatient: PatientWithBasicInfo): PatientProfile {
+  const bloodTypeMap: Record<string, BloodType> = {
+    "A+": "a_positive", "A-": "a_negative",
+    "B+": "b_positive", "B-": "b_negative",
+    "O+": "o_positive", "O-": "o_negative",
+    "AB+": "ab_positive", "AB-": "ab_negative",
+  };
+
+  return {
+    id: parseInt(dbPatient.id.slice(0, 8), 16),
+    userUid: dbPatient.id,
+    firstName: dbPatient.firstName,
+    middleName: dbPatient.middleName ?? undefined,
+    lastName: dbPatient.lastName,
+    suffix: dbPatient.suffix ?? undefined,
+    imageUrl: undefined,
+    profile: { imageUrl: undefined },
+    name: {
+      firstName: dbPatient.firstName,
+      middleName: dbPatient.middleName ?? undefined,
+      lastName: dbPatient.lastName,
+      suffix: dbPatient.suffix ?? undefined,
+    },
+    gender: (dbPatient.gender?.toLowerCase() || "other") as "male" | "female" | "other",
+    civilStatus: (dbPatient.civilStatus?.toLowerCase() || "single") as "single" | "married" | "divorced" | "widowed" | "separated",
+    dateOfBirth: dbPatient.dateOfBirth || "",
+    nationality: dbPatient.nationality || "",
+    religion: dbPatient.religion || "",
+    bloodType: (dbPatient.bloodType && bloodTypeMap[dbPatient.bloodType]) || "o_positive",
+    contactInfo: {
+      email: dbPatient.email || "",
+      mobile: dbPatient.phoneNumber || "",
+    },
+    allergy: [],
+    medication: [],
+    vitalSigns: [],
+    consultationHistory: [],
+    diagnosisHistory: [],
+    vaccinationRecords: [],
+    labImagingRequests: [],
+    disabilities: [],
+    prescriptionHistory: [],
+    familyHistory: [],
+    billingHistory: [],
+    emergencyContacts: [],
+  };
 }
