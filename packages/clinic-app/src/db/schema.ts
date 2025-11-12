@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { sqliteTable, text, check, primaryKey, integer, uniqueIndex, foreignKey } from "drizzle-orm/sqlite-core";
 import { v7 as uuidv7 } from "uuid";
-import { baseEntity } from "./columns.helper";
+import { baseEntity, tenants } from "./columns.helper";
 
 export const users = sqliteTable("users", {
   id: text().$defaultFn(() => uuidv7()).primaryKey(),
@@ -9,11 +9,8 @@ export const users = sqliteTable("users", {
   // TODO: Need clarification if users table should also have basic info fields.
 });
 
-export const tenants = sqliteTable("tenants", {
-  id: text().$defaultFn(() => uuidv7()).primaryKey(),
-  name: text().notNull().unique(),
-  description: text(),
-});
+// Re-export tenants from columns.helper for backwards compatibility
+export { tenants };
 
 export const basicInfo = sqliteTable("basic_info", {
   firstName: text().notNull(),

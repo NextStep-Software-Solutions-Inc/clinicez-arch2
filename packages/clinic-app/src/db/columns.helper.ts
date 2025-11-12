@@ -1,6 +1,12 @@
-import { text } from "drizzle-orm/sqlite-core";
+import { text, sqliteTable } from "drizzle-orm/sqlite-core";
 import { v7 as uuidv7 } from "uuid";
-import { tenants } from "./schema";
+
+// Define tenants table here to avoid circular dependency
+export const tenants = sqliteTable("tenants", {
+  id: text().$defaultFn(() => uuidv7()).primaryKey(),
+  name: text().notNull().unique(),
+  description: text(),
+});
 
 export const baseEntity = {
   id: text().$defaultFn(() => uuidv7()).primaryKey(),
