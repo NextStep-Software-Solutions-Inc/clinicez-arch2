@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Tabs, usePathname, useRouter } from "expo-router";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
-import { Animated, LayoutChangeEvent, Pressable, Text, TouchableOpacity, View } from "react-native";
+import { Animated, LayoutChangeEvent, Pressable, Text, TouchableOpacity, View, Dimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
 import { useAuth, useUser } from "@clerk/clerk-expo";
+import { GestureDetector, Gesture, GestureHandlerRootView } from "react-native-gesture-handler";
 
 import SlidingSidebar from "@components/SlidingSidebar";
 import TabHeader from "@components/TabHeader";
@@ -243,6 +244,18 @@ const TabLayout: React.FC = () => {
   const fallbackTab = TAB_CONFIG[0];
   const headerTitle = (activeSegment && TAB_CONFIG_MAP[activeSegment]?.title) ?? fallbackTab?.title ?? "Overview";
 
+  const currentTabIndex = TAB_CONFIG.findIndex((tab) => tab.name === activeSegment);
+
+  const navigateToTab = (direction: "next" | "prev") => {
+    const newIndex = direction === "next" ? currentTabIndex + 1 : currentTabIndex - 1;
+    if (newIndex >= 0 && newIndex < TAB_CONFIG.length) {
+      const targetTab = TAB_CONFIG[newIndex];
+      if (targetTab) {
+        router.push(`/(main)/(tabs)/${targetTab.name}` as never);
+      }
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await signOut();
@@ -298,20 +311,20 @@ const TabLayout: React.FC = () => {
   );
 
   return (
-    <SlidingSidebar
-      isOpen={isSidebarOpen}
-      onClose={() => setSidebarOpen(false)}
-      onOpen={() => setSidebarOpen(true)}
-      sidebar={sidebarContent}
-      width={sidebarWidth}
-      position="right"
-      contentContainerProps={{
-        style: { backgroundColor },
-      }}
-    >
-      <View className="flex-1">
-        <TabHeader title={headerTitle} onAvatarPress={() => setSidebarOpen(true)} />
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SlidingSidebar
+        isOpen={isSidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        onOpen={() => setSidebarOpen(true)}
+        sidebar={sidebarContent}
+        width={sidebarWidth}
+        position="right"
+        contentContainerProps={{
+          style: { backgroundColor },
+        }}
+      >
         <View className="flex-1">
+          <TabHeader title={headerTitle} onAvatarPress={() => setSidebarOpen(true)} />
           <Tabs
             initialRouteName="dashboard"
             screenOptions={{
@@ -342,8 +355,8 @@ const TabLayout: React.FC = () => {
             ))}
           </Tabs>
         </View>
-      </View>
-    </SlidingSidebar>
+      </SlidingSidebar>
+    </GestureHandlerRootView>
   );
 };
 
