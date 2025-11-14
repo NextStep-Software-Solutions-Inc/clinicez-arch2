@@ -22,7 +22,6 @@ const MainLayout = () => {
       }}
     >
       <Stack.Screen name="(tabs)" />
-      <Stack.Screen name="hp/hp-profile" />
       <Stack.Screen name="complete-profile" />
       <Stack.Screen name="patients/[patientId]" />
     </Stack>

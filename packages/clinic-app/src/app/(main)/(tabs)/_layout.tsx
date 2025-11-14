@@ -294,7 +294,7 @@ const TabLayout: React.FC = () => {
       <View className="mt-6">
         <ThemedButton variant="ghost" className="w-full" onPress={() => {
           setSidebarOpen(false);
-          router.push("/(main)/hp/hp-profile");
+          router.push("/(main)/hp/profile");
         }}>
           <ThemedText className="text-text dark:text-text-dark text-center" variant="button">
             View Profile

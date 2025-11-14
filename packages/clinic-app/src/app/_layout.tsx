@@ -14,6 +14,7 @@ import migrations from "@drizzle/migrations";
 import { db } from "../db/client";
 import { Provider as JotaiProvider } from "jotai";
 import Toast from "react-native-toast-message";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 
 export default function RootLayout() {
   const { success, error } = useMigrations(db, migrations);
@@ -40,7 +41,9 @@ export default function RootLayout() {
             >
               <SafeAreaProvider>
                 <ThemeProvider>
-                  <Slot />
+                  <KeyboardProvider>
+                    <Slot />
+                  </KeyboardProvider>
                 </ThemeProvider>
               </SafeAreaProvider>
             </SQLiteProvider>
