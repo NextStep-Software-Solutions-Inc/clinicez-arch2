@@ -9,6 +9,7 @@ import {
   StyleSheet,
   Platform,
   type GestureResponderEvent,
+  KeyboardAvoidingView,
 } from "react-native";
 import {
   createContext,
@@ -153,11 +154,15 @@ const DialogContent = ({
       presentationStyle={transparent ? "overFullScreen" : "pageSheet"}
       {...props}
     >
-      <View style={styles.modalContainer}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.modalContainer}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+      >
         {showOverlay && <DialogOverlay visible={isVisible} onPress={handleBackdropPress} />}
         <View style={[styles.dialogWrapper]} pointerEvents="box-none">
           <View
-            className={cn("bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-lg w-full mx-4 overflow-hidden", className)}
+            className={cn("bg-white dark:bg-gray-800 rounded-2xl max-w-3xl w-full mx-4", className)}
             style={[styles.dialog, style]}
             accessible
             accessibilityViewIsModal
@@ -165,7 +170,7 @@ const DialogContent = ({
             {children}
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
@@ -190,7 +195,7 @@ interface DialogTitleProps extends ThemedTextProps {
 
 const DialogTitle = ({ children, className, ...props }: DialogTitleProps): ReactElement => {
   return (
-    <ThemedText className={cn("text-2xl font-bold text-gray-900 dark:text-white", className)} accessible accessibilityRole="header" {...props}>
+    <ThemedText className={cn("text-2xl font-semibold text-gray-900 dark:text-white", className)} accessible accessibilityRole="header" {...props}>
       {children}
     </ThemedText>
   );
