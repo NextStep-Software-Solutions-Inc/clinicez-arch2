@@ -44,6 +44,7 @@
     "react-native-collapsible": "^1.6.2",
     "react-native-gesture-handler": "^2.29.1",
     "react-native-get-random-values": "^2.0.0",
+    "react-native-keyboard-controller": "^1.19.5",
     "react-native-otp-entry": "^1.8.5",
     "react-native-qrcode-svg": "^6.3.15",
     "react-native-reanimated": "~4.1.0",
