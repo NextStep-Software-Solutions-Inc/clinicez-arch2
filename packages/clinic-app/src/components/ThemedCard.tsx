@@ -34,7 +34,7 @@ CardHeader.displayName = "ThemedCardHeader";
 const CardTitle = ({ className, ...props }: NativeTextProps) => (
   <Text
     {...props}
-    className={cn("text-lg font-semibold tracking-tight text-text dark:text-text-dark", className)}
+    className={cn("text-lg tracking-tight text-text dark:text-text-dark", className)}
   />
 );
 CardTitle.displayName = "ThemedCardTitle";
