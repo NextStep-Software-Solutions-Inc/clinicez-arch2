@@ -16,6 +16,8 @@
       "@theme/*": ["./src/theme/*"],
       "@data/*": ["./src/data/*"],
       "@drizzle/*": ["./drizzle/*"],
+      "@constants/*": ["./src/constants/*"],
+      "@schemas/*": ["./src/schemas/*"]
     }
   }
 }
