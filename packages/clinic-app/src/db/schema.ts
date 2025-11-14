@@ -80,6 +80,7 @@ export const healthcareProviders = sqliteTable("healthcare_providers", {
   userId: text().notNull().references(() => users.id),
   // TODO: Need clarification as well for the basic info fields.
   type: text().notNull(), // e.g., Doctor, Nurse, Therapist
+  experience: text(), // e.g., 15+ years
   about: text(),
   specialties: text(), // comma-separated list of specialties
   // TODO: Need clarification if the credential field is a file upload or text so I can set it as text or blob.

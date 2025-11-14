@@ -8,31 +8,77 @@ import {
   meetsMinimumAge,
 } from "@utils/date-helpers";
 
+export const personalInformationSchema = z.object({
+  firstName: z.string({ error: "First name is required" })
+    .min(2, "First name must be at least 2 characters"),
+  middleName: z.string().optional(),
+  lastName: z.string({ error: "Last name is required" })
+    .min(2, "Last name must be at least 2 characters"),
+  suffix: z.string().optional(),
+  nickname: z.string().optional(),
+  email: z.email({ error: "Invalid email address" }),
+  phoneNumber: z.string({ error: "Mobile number is required" })
+    .min(1, "Mobile number is required")
+    .refine((value) => {
+      const validation = validatePhoneNumber(value, defaultCountry.code);
+      return validation.isValid;
+    }
+      , {
+        message: "Please enter a valid mobile number",
+      }),
+  gender: z.enum(["MALE", "FEMALE"]).optional(),
+  civilStatus: z.enum(
+    ["SINGLE", "MARRIED", "DIVORCED", "WIDOWED", "SEPARATED"],
+  ).optional(),
+  religion: z.string().optional(),
+  nationality: z.string().optional(),
+  bloodType: z.string().optional(),
+  dateOfBirth: z
+    .custom<Date>((value) => value instanceof Date, {
+      message: "Date of birth is required",
+    })
+    .refine(isPastOrToday, "Date of birth cannot be in the future")
+    .refine(
+      (value) => meetsMinimumAge(value, 0),
+      "Date of birth indicates invalid age",
+    )
+    .optional(),
+})
+
+export type PersonalInformationInput = z.input<typeof personalInformationSchema>;
+export type PersonalInformationData = z.output<typeof personalInformationSchema>;
+
 /**
  * Schema for Basic Information step
  */
-export const basicInformationSchema = z
-  .object({
-    firstName: z.string().min(2, "First name must be at least 2 characters"),
-    lastName: z.string().min(2, "Last name must be at least 2 characters"),
-    suffix: z.string().default(""),
-    nickname: z
-      .string()
-      .optional()
-      .transform((value) => (value === "" ? undefined : value)),
-    countryCode: z.string().default(defaultCountry.code),
-    mobile: z.string().min(1, "Mobile number is required"),
-  })
-  .refine(
-    (data) => {
-      const validation = validatePhoneNumber(data.mobile, data.countryCode);
-      return validation.isValid;
-    },
-    {
-      message: "Please enter a valid mobile number",
-      path: ["mobile"],
-    }
-  );
+export const basicInformationSchema = personalInformationSchema.pick({
+  "firstName": true,
+  "lastName": true,
+  "suffix": true,
+  "nickname": true,
+  "phoneNumber": true,
+});
+// .object({
+//   firstName: z.string().min(2, "First name must be at least 2 characters"),
+//   lastName: z.string().min(2, "Last name must be at least 2 characters"),
+//   suffix: z.string().default(""),
+//   nickname: z
+//     .string()
+//     .optional()
+//     .transform((value) => (value === "" ? undefined : value)),
+//   countryCode: z.string().default(defaultCountry.code),
+//   mobile: z.string().min(1, "Mobile number is required"),
+// })
+// .refine(
+//   (data) => {
+//     const validation = validatePhoneNumber(data.mobile, data.countryCode);
+//     return validation.isValid;
+//   },
+//   {
+//     message: "Please enter a valid mobile number",
+//     path: ["mobile"],
+//   }
+// );
 
 export type BasicInformationInput = z.input<typeof basicInformationSchema>;
 export type BasicInformationData = z.output<typeof basicInformationSchema>;
@@ -52,22 +98,18 @@ const dateOfBirthSchema = z
     `You must be at least ${MINIMUM_AGE_YEARS} years old`
   );
 
-export const personalDetailsSchema = z.object({
-  gender: z.enum(["MALE", "FEMALE"], {
-    message: "Gender is required",
-  }),
-  civilStatus: z.enum(
-    ["SINGLE", "MARRIED", "DIVORCED", "WIDOWED", "SEPARATED"],
-    {
-      message: "Civil status is required",
-    }
-  ),
-  religion: z.string().min(1, "Religion is required"),
-  nationality: z.string().min(1, "Nationality is required"),
-  dateOfBirth: dateOfBirthSchema,
-  bloodType: z.string().min(1, "Blood type is required"),
-});
+export const personalDetailsSchema = personalInformationSchema.pick({
+  "gender": true,
+  "civilStatus": true,
+  "religion": true,
+  "nationality": true,
+  "bloodType": true,
+})
+  .extend({
+    dateOfBirth: dateOfBirthSchema,
+  });
 
+export type PersonalDetailsInput = z.input<typeof personalDetailsSchema>;
 export type PersonalDetailsData = z.infer<typeof personalDetailsSchema>;
 
 /**
