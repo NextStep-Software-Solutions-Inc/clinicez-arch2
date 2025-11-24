@@ -22,7 +22,9 @@ Thumbs.db
 .vscode/
 
 # NuGet
-/packages/
+# The legacy `packages/` folder for NuGet is not ignored at the repository root because
+# this monorepo stores actual packages in the top-level `packages/` directory. Instead,
+# ignore only the common build output locations for packages.
 /*.nupkg
 /**/*.nupkg
 /project.lock.json
