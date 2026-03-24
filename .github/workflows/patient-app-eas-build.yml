@@ -68,13 +68,25 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
+      - name: Compute short SHA
+        id: vars
+        run: echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
       - name: Publish OTA update (development branch → preview channel)
         if: github.ref == 'refs/heads/development'
-        run: eas update --auto --branch preview --message "CI update from ${{ github.sha }}"
+        run: |
+          eas update \
+            --auto \
+            --branch preview \
+            --message "${{ github.event.head_commit.message }} (${{ github.ref_name }}@${{ steps.vars.outputs.short_sha }})"
 
       - name: Publish OTA update (main branch → production channel)
         if: github.ref == 'refs/heads/main'
-        run: eas update --auto --branch production --message "CI update from ${{ github.sha }}"
+        run: |
+          eas update \
+            --auto \
+            --branch production \
+            --message "${{ github.event.head_commit.message }} (${{ github.ref_name }}@${{ steps.vars.outputs.short_sha }})"
 
   # ── EAS Native Build ────────────────────────────────────────────────────────
   # Triggers a full native build on Expo's build infrastructure.
