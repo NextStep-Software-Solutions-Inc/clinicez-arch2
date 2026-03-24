@@ -16,10 +16,9 @@ export function ThemedText({
   className,
   ...rest
 }: ThemedTextProps & { className?: string }) {
+  const themeColor = useThemeColor({ light: lightColor, dark: darkColor }, 'text');
   // Only set color in style if lightColor or darkColor is provided
-  const color = (lightColor || darkColor)
-    ? useThemeColor({ light: lightColor, dark: darkColor }, 'text')
-    : undefined;
+  const color = (lightColor || darkColor) ? themeColor : undefined;
 
   return (
     <Text

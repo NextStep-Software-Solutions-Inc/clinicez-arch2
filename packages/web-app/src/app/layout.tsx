@@ -1,16 +1,9 @@
-import { Geist, Geist_Mono } from "next/font/google";
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
 import { ClerkProvider } from '@clerk/nextjs'
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+export const dynamic = 'force-dynamic';
 
 export default function RootLayout({
   children,
@@ -21,7 +14,7 @@ export default function RootLayout({
     <ClerkProvider>
       <html lang="en">
         <body
-          className={`${geistSans.variable} ${geistMono.variable} overscroll-none antialiased`}
+          className={`${GeistSans.variable} ${GeistMono.variable} overscroll-none antialiased`}
         >
           {children}
         </body>
