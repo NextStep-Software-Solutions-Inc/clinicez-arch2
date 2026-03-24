@@ -1,0 +1,124 @@
+name: Patient App EAS Build & Update
+
+on:
+  push:
+    branches:
+      - development
+      - main
+    paths:
+      - 'packages/patient-app/**'
+      - '.github/workflows/patient-app-eas-build.yml'
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: 'EAS build profile to use'
+        required: true
+        default: 'preview'
+        type: choice
+        options:
+          - development
+          - preview
+          - production
+      platform:
+        description: 'Platform to build for'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - android
+          - ios
+
+defaults:
+  run:
+    working-directory: packages/patient-app
+
+env:
+  EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+jobs:
+  # ── OTA Update ──────────────────────────────────────────────────────────────
+  # Publishes an over-the-air update whenever code is pushed to development or
+  # main. No native rebuild is required for JS-only changes.
+  ota-update:
+    name: EAS OTA Update
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    # Skip for manual dispatch — manual runs go straight to build
+    if: github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'yarn'
+          cache-dependency-path: packages/patient-app/yarn.lock
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Setup Expo + EAS CLI
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Publish OTA update (development branch → preview channel)
+        if: github.ref == 'refs/heads/development'
+        run: eas update --auto --branch preview --message "CI update from ${{ github.sha }}"
+
+      - name: Publish OTA update (main branch → production channel)
+        if: github.ref == 'refs/heads/main'
+        run: eas update --auto --branch production --message "CI update from ${{ github.sha }}"
+
+  # ── EAS Native Build ────────────────────────────────────────────────────────
+  # Triggers a full native build on Expo's build infrastructure.
+  # Runs automatically on main (production profile) and on manual dispatch.
+  eas-build:
+    name: EAS Native Build (${{ inputs.profile || 'production' }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    # Run on main push or manual workflow_dispatch
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'yarn'
+          cache-dependency-path: packages/patient-app/yarn.lock
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Setup Expo + EAS CLI
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build with EAS (manual dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          eas build \
+            --profile ${{ inputs.profile }} \
+            --platform ${{ inputs.platform }} \
+            --non-interactive
+
+      - name: Build with EAS (main branch → production)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          eas build \
+            --profile production \
+            --platform all \
+            --non-interactive
