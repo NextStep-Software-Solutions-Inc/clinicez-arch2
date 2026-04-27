@@ -34,6 +34,9 @@ public static class DependencyInjection
             client.Timeout = TimeSpan.FromSeconds(30);
         });
 
+        // Singleton token cache — holds per-tenant access tokens across HTTP requests.
+        services.AddSingleton<IPhilHealthTokenCache, PhilHealthTokenCache>();
+
         services.AddDataProtection()
             .SetApplicationName("CLINICEZ.PhilHealthProxy");
 

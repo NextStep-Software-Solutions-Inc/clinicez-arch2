@@ -29,3 +29,6 @@ app.UseMiddleware<TenantResolutionMiddleware>();
 app.MapControllers();
 
 app.Run();
+
+// Exposed for WebApplicationFactory<Program> in integration-test projects.
+public partial class Program { }

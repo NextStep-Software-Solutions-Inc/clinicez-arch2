@@ -1,12 +1,13 @@
 using CLINICEZ.Shared.Common;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using PhilHealthProxy.Application.Common;
 using PhilHealthProxy.Application.Features.UploadStatus.Queries.CheckUploadStatus;
 
 namespace PhilHealthProxy.Api.Controllers;
 
 [ApiController]
-[Route("api/konsulta/[controller]")]
+[Route("api/konsulta/upload-status")]
 public sealed class UploadStatusController(IMediator mediator) : ControllerBase
 {
     /// <summary>
@@ -14,10 +15,10 @@ public sealed class UploadStatusController(IMediator mediator) : ControllerBase
     /// Requires the <c>X-Tenant-Id</c> header to identify the HCI (clinic).
     /// </summary>
     [HttpGet]
-    [ProducesResponseType(typeof(ApiResponse<CheckUploadStatusResponse>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status503ServiceUnavailable)]
+    [ProducesResponseType<ApiResponse<KonsultaOperationResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> CheckUploadStatus(
         [FromQuery] string? startDate,
         [FromQuery] string? endDate,

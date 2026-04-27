@@ -1,6 +1,7 @@
 using CLINICEZ.Shared.Common;
 using CLINICEZ.Shared.Exceptions;
 using MediatR;
+using PhilHealthProxy.Application.Common;
 using PhilHealthProxy.Domain.Interfaces;
 
 namespace PhilHealthProxy.Application.Features.UploadStatus.Queries.CheckUploadStatus;
@@ -8,9 +9,9 @@ namespace PhilHealthProxy.Application.Features.UploadStatus.Queries.CheckUploadS
 public sealed class CheckUploadStatusQueryHandler(
     IPhilHealthSoapClient soapClient,
     ICurrentTenant currentTenant)
-    : IRequestHandler<CheckUploadStatusQuery, ApiResponse<CheckUploadStatusResponse>>
+    : IRequestHandler<CheckUploadStatusQuery, ApiResponse<KonsultaOperationResponse>>
 {
-    public async Task<ApiResponse<CheckUploadStatusResponse>> Handle(
+    public async Task<ApiResponse<KonsultaOperationResponse>> Handle(
         CheckUploadStatusQuery request,
         CancellationToken cancellationToken)
     {
@@ -28,12 +29,7 @@ public sealed class CheckUploadStatusQueryHandler(
             throw new ServiceUnavailableException(
                 $"PhilHealth SOAP service returned an error: [{result.ErrorCode}] {result.ErrorMessage}");
 
-        var response = new CheckUploadStatusResponse(
-            IsSuccess: result.IsSuccess,
-            RawXml: result.ResponseXml,
-            ErrorCode: result.ErrorCode,
-            ErrorMessage: result.ErrorMessage);
-
-        return ApiResponse<CheckUploadStatusResponse>.Success(response);
+        return ApiResponse<KonsultaOperationResponse>.Success(
+            new KonsultaOperationResponse(true, result.ResponseXml, null, null));
     }
 }
