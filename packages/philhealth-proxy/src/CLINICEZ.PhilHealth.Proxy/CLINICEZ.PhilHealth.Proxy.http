@@ -1,0 +1,36 @@
+@PhilHealthProxy_HostAddress = http://localhost:5107
+
+### Get member information by PhilHealth Identification Number
+GET {{PhilHealthProxy_HostAddress}}/api/members/12-345678901-2
+Accept: application/json
+
+###
+
+### Verify a member
+POST {{PhilHealthProxy_HostAddress}}/api/members/verify
+Content-Type: application/json
+Accept: application/json
+
+{
+  "philHealthNumber": "12-345678901-2",
+  "lastName": "Dela Cruz",
+  "firstName": "Juan",
+  "dateOfBirth": "1990-01-15"
+}
+
+###
+
+### Check Konsulta eligibility
+POST {{PhilHealthProxy_HostAddress}}/api/eligibility/check
+Content-Type: application/json
+Accept: application/json
+
+{
+  "philHealthNumber": "12-345678901-2",
+  "facilityAccreditationNumber": "ZFF00000000001",
+  "consultationDate": "2026-04-27",
+  "diagnosisCodes": ["J00", "A09"]
+}
+
+###
+
