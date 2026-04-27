@@ -25,6 +25,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dashboard.Domain", "Dashboa
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dashboard.Infrastructure", "Dashboard\Dashboard.Infrastructure\Dashboard.Infrastructure.csproj", "{7F733A0B-A925-5F1E-1A8A-1A44056777F4}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PhilHealthProxy", "PhilHealthProxy\PhilHealthProxy.csproj", "{1A4E6775-9E38-43A0-BB0E-0DFC88B7D2C3}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -143,6 +145,18 @@ Global
 		{7F733A0B-A925-5F1E-1A8A-1A44056777F4}.Release|x64.Build.0 = Release|Any CPU
 		{7F733A0B-A925-5F1E-1A8A-1A44056777F4}.Release|x86.ActiveCfg = Release|Any CPU
 		{7F733A0B-A925-5F1E-1A8A-1A44056777F4}.Release|x86.Build.0 = Release|Any CPU
+		{1A4E6775-9E38-43A0-BB0E-0DFC88B7D2C3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1A4E6775-9E38-43A0-BB0E-0DFC88B7D2C3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1A4E6775-9E38-43A0-BB0E-0DFC88B7D2C3}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{1A4E6775-9E38-43A0-BB0E-0DFC88B7D2C3}.Debug|x64.Build.0 = Debug|Any CPU
+		{1A4E6775-9E38-43A0-BB0E-0DFC88B7D2C3}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{1A4E6775-9E38-43A0-BB0E-0DFC88B7D2C3}.Debug|x86.Build.0 = Debug|Any CPU
+		{1A4E6775-9E38-43A0-BB0E-0DFC88B7D2C3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1A4E6775-9E38-43A0-BB0E-0DFC88B7D2C3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1A4E6775-9E38-43A0-BB0E-0DFC88B7D2C3}.Release|x64.ActiveCfg = Release|Any CPU
+		{1A4E6775-9E38-43A0-BB0E-0DFC88B7D2C3}.Release|x64.Build.0 = Release|Any CPU
+		{1A4E6775-9E38-43A0-BB0E-0DFC88B7D2C3}.Release|x86.ActiveCfg = Release|Any CPU
+		{1A4E6775-9E38-43A0-BB0E-0DFC88B7D2C3}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
