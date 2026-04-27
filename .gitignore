@@ -21,8 +21,8 @@ Thumbs.db
 # Visual Studio Code
 .vscode/
 
-# NuGet
-/packages/
+# NuGet (old-style package restore folders beside .sln — NOT the workspace packages/ folder)
+# /packages/ intentionally omitted — our monorepo root IS named packages/
 /*.nupkg
 /**/*.nupkg
 /project.lock.json
