@@ -1,61 +1,42 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import * as SecureStore from 'expo-secure-store';
-const CURRENT_CLINIC_ID = 'CURRENT_CLINIC_ID';
+import {
+	createContext,
+	type ReactNode,
+	useContext,
+	useEffect,
+	useState,
+} from "react";
+import { db } from "@/db";
+import { clinics as clinicsTable } from "@/db/schema/clinics";
 
-export type Clinic = {
-    id: string; // generated UUID
-    name: string;
-    address: string;
-};
+// Re-export the canonical DB type so consumers always use the same definition.
+export type { Clinic } from "@/db/schema/clinics";
 
-const defaultClinics: Clinic[] = [
-    {
-        id: "uuid-1",
-        name: 'Downtown Medical Center',
-        address: '123 Main St, Cityville',
-    },
-    {
-        id: "uuid-2",
-        name: 'Uptown Health Clinic',
-        address: '456 Elm St, Cityville',
-    },
-];
+import type { Clinic } from "@/db/schema/clinics";
 
 export type ClinicContextType = {
-    clinics: Clinic[];
-    currentClinicId: string;
-    setCurrentClinicId: (id: string) => void;
+	/** All clinics the patient has joined. No "current clinic" concept. */
+	clinics: Clinic[];
 };
 
 const ClinicContext = createContext<ClinicContextType | undefined>(undefined);
 
 export function ClinicProvider({ children }: { children: ReactNode }) {
-    const [currentClinicId, setCurrentClinicIdState] = useState(defaultClinics[0].id);
+	const [clinics, setClinics] = useState<Clinic[]>([]);
 
-    // Load persisted clinic id on mount
-    useEffect(() => {
-        SecureStore.getItemAsync(CURRENT_CLINIC_ID).then(val => {
-            if (val && defaultClinics.some(c => c.id === val)) {
-                setCurrentClinicIdState(val);
-            }
-        });
-    }, []);
+	useEffect(() => {
+		db.select().from(clinicsTable).then(setClinics).catch(console.error);
+	}, []);
 
-    // Persist clinic id on change
-    const setCurrentClinicId = (id: string) => {
-        setCurrentClinicIdState(id);
-        SecureStore.setItemAsync(CURRENT_CLINIC_ID, id);
-    };
-
-    return (
-        <ClinicContext.Provider value={{ clinics: defaultClinics, currentClinicId, setCurrentClinicId }}>
-            {children}
-        </ClinicContext.Provider>
-    );
+	return (
+		<ClinicContext.Provider value={{ clinics }}>
+			{children}
+		</ClinicContext.Provider>
+	);
 }
 
 export function useClinicContext() {
-    const ctx = useContext(ClinicContext);
-    if (!ctx) throw new Error('useClinicContext must be used within a ClinicProvider');
-    return ctx;
+	const ctx = useContext(ClinicContext);
+	if (!ctx)
+		throw new Error("useClinicContext must be used within a ClinicProvider");
+	return ctx;
 }

@@ -13,7 +13,7 @@ All code for backend and frontend (including marketing and tenant creation) is m
 
 ## Key Features
 
-- Local-first/offline-first mobile apps with WatermelonDB
+- Local-first/offline-first mobile apps with Expo SQLite + Drizzle ORM
 - Per-clinic backend deployment (on-premise or cloud, containerized)
 - Multi-tenant onboarding and management via the web portal
 - Unified codebase for all core ClinicEZ components
@@ -54,7 +54,7 @@ For more details, see the individual package directories and documentation.
 
 **Key components:**
 
-The mobile applications are designed with a local-first (offline-first) architecture, utilizing WatermelonDB for efficient local data storage and management. Each app instance maintains its own local database, allowing users to operate fully offline. Data is synchronized with a backend specific to each clinic—this backend can be deployed either on-premise or in the cloud, depending on the clinic's preference. This approach ensures that every clinic has its own isolated backend, providing flexibility, security, and reliability for a variety of deployment scenarios.
+The mobile applications are designed with a local-first (offline-first) architecture, utilizing Expo SQLite + Drizzle ORM for efficient local data storage and management. Each app instance maintains its own local database, allowing users to operate fully offline. Data is synchronized with a backend specific to each clinic—this backend can be deployed either on-premise or in the cloud, depending on the clinic's preference. This approach ensures that every clinic has its own isolated backend, providing flexibility, security, and reliability for a variety of deployment scenarios.
 
 **Onboarding and Deployment Flow:**
 

@@ -1,2 +1,1 @@
-
-export { default } from '@/screens/AppointmentsScreen';
+export { default } from "@/screens/AppointmentsScreen";

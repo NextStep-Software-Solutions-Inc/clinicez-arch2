@@ -1,8 +1,7 @@
-import React from "react";
-import { ScrollView } from "react-native";
-import { ThemedView } from "@/components/ThemedView";
-import { ThemedText } from "@/components/ThemedText";
 import { Feather } from "@expo/vector-icons";
+import { ScrollView } from "react-native";
+import { ThemedText } from "@/components/ThemedText";
+import { ThemedView } from "@/components/ThemedView";
 import { Colors } from "@/constants/Colors";
 
 export default function FilesScreen() {

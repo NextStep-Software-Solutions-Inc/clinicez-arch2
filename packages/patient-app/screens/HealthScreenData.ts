@@ -1,173 +1,200 @@
 const dummyHealth = {
-    allergies: [
-        { allergen: 'Peanuts', reaction: 'Anaphylaxis' },
-        { allergen: 'Penicillin', reaction: 'Rash' },
-        { allergen: 'Latex', reaction: 'Hives' },
-        { allergen: 'Shellfish', reaction: 'Swelling' },
-        { allergen: 'Dust Mites', reaction: 'Sneezing' },
-        { allergen: 'Ibuprofen', reaction: 'Stomach pain' },
-    ],
-    medicalHistory: [
-        {
-            date: '2018-04-12',
-            event: 'Diagnosed with Hypertension',
-            doctor: 'Dr. Lee',
-            location: 'City Clinic',
-            notes: 'Patient presented with elevated blood pressure during routine checkup.'
-        },
-        {
-            date: '2019-09-03',
-            event: 'Hospitalized for Pneumonia',
-            doctor: 'Dr. Smith',
-            location: 'General Hospital',
-            notes: 'Admitted for 5 days, treated with antibiotics.'
-        },
-        {
-            date: '2020-02-18',
-            event: 'Gallbladder Removal Surgery',
-            doctor: 'Dr. Carter',
-            location: 'Surgical Center',
-            notes: 'Laparoscopic cholecystectomy, no complications.'
-        },
-        {
-            date: '2021-07-22',
-            event: 'Diabetes Type 2 Diagnosis',
-            doctor: 'Dr. Patel',
-            location: 'Endocrine Clinic',
-            notes: 'Diagnosed after abnormal HbA1c results.'
-        },
-        {
-            date: '2022-03-10',
-            event: 'Appendectomy',
-            doctor: 'Dr. Gomez',
-            location: 'General Hospital',
-            notes: 'Emergency surgery, recovered well.'
-        },
-        {
-            date: '2022-08-15',
-            event: 'Routine Cardiology Checkup',
-            doctor: 'Dr. Lee',
-            location: 'City Clinic',
-            notes: 'No new findings.'
-        },
-        {
-            date: '2023-01-28',
-            event: 'Asthma Diagnosis',
-            doctor: 'Dr. Patel',
-            location: 'Pulmonary Center',
-            notes: 'Prescribed inhaler.'
-        },
-        {
-            date: '2023-03-12',
-            event: 'ER Visit for Migraine',
-            doctor: 'Dr. Smith',
-            location: 'General Hospital',
-            notes: 'Treated with IV fluids and pain relief.'
-        },
-        {
-            date: '2023-05-05',
-            event: 'Physical Therapy for Back Pain',
-            doctor: 'Dr. Carter',
-            location: 'Rehab Center',
-            notes: 'Attended 8 sessions.'
-        },
-        {
-            date: '2024-02-14',
-            event: 'Fractured Wrist',
-            doctor: 'Dr. Gomez',
-            location: 'General Hospital',
-            notes: 'Cast for 6 weeks.'
-        },
-        {
-            date: '2024-07-18',
-            event: 'Hospitalized for Severe Allergic Reaction',
-            doctor: 'Dr. Lee',
-            location: 'General Hospital',
-            notes: 'Treated with epinephrine and steroids.'
-        },
-        {
-            date: '2025-01-05',
-            event: 'Annual Physical Exam',
-            doctor: 'Dr. Carter',
-            location: 'City Clinic',
-            notes: 'All labs normal.'
-        },
-        {
-            date: '2025-03-20',
-            event: 'Routine Blood Pressure Monitoring',
-            doctor: 'Dr. Lee',
-            location: 'City Clinic',
-            notes: 'Stable readings.'
-        },
-        {
-            date: '2025-06-02',
-            event: 'Specialist Consultation: Endocrinology',
-            doctor: 'Dr. Patel',
-            location: 'Endocrine Clinic',
-            notes: 'Reviewed diabetes management.'
-        },
-    ],
-    chronicConditions: [
-        {
-            name: 'Hypertension',
-            diagnosed: '2018-04-12',
-            doctor: 'Dr. Lee',
-            notes: 'Elevated blood pressure during routine checkup.'
-        },
-        {
-            name: 'Diabetes Type 2',
-            diagnosed: '2021-07-22',
-            doctor: 'Dr. Patel',
-            notes: 'Abnormal HbA1c results.'
-        },
-        {
-            name: 'Asthma',
-            diagnosed: '2023-01-28',
-            doctor: 'Dr. Patel',
-            notes: 'Prescribed inhaler.'
-        },
-        {
-            name: 'Chronic Back Pain',
-            diagnosed: '2023-05-05',
-            doctor: 'Dr. Carter',
-            notes: 'Attended 8 physical therapy sessions.'
-        },
-    ],
-    procedures: [
-        {
-            year: 2020,
-            procedure: 'Gallbladder Removal',
-            doctor: 'Dr. Carter',
-            location: 'Surgical Center',
-            notes: 'Laparoscopic cholecystectomy, no complications.'
-        },
-        {
-            year: 2022,
-            procedure: 'Appendectomy',
-            doctor: 'Dr. Gomez',
-            location: 'General Hospital',
-            notes: 'Emergency surgery, recovered well.'
-        },
-        {
-            year: 2023,
-            procedure: 'Physical Therapy',
-            doctor: 'Dr. Carter',
-            location: 'Rehab Center',
-            notes: 'Attended 8 sessions.'
-        },
-    ],
-    hospitalVisits: [
-        { date: '2023-03-12', reason: 'Migraine' },
-        { date: '2024-07-18', reason: 'Allergic Reaction' },
-        { date: '2025-01-05', reason: 'Routine Checkup' },
-    ],
-    labs: [
-        { date: '2025-06-10', test: 'CBC', result: 'Normal' },
-        { date: '2025-05-22', test: 'Lipid Panel', result: 'High Cholesterol' },
-        { date: '2025-04-15', test: 'Blood Sugar', result: 'Normal' },
-        { date: '2025-03-10', test: 'HbA1c', result: '7.2%' },
-        { date: '2025-02-20', test: 'Chest X-Ray', result: 'Clear' },
-    ],
+	allergies: [
+		{ id: "allergy-1", allergen: "Peanuts", reaction: "Anaphylaxis" },
+		{ id: "allergy-2", allergen: "Penicillin", reaction: "Rash" },
+		{ id: "allergy-3", allergen: "Latex", reaction: "Hives" },
+		{ id: "allergy-4", allergen: "Shellfish", reaction: "Swelling" },
+		{ id: "allergy-5", allergen: "Dust Mites", reaction: "Sneezing" },
+		{ id: "allergy-6", allergen: "Ibuprofen", reaction: "Stomach pain" },
+	],
+	medicalHistory: [
+		{
+			id: "med-1",
+			date: "2018-04-12",
+			event: "Diagnosed with Hypertension",
+			doctor: "Dr. Lee",
+			location: "City Clinic",
+			notes:
+				"Patient presented with elevated blood pressure during routine checkup.",
+		},
+		{
+			id: "med-2",
+			date: "2019-09-03",
+			event: "Hospitalized for Pneumonia",
+			doctor: "Dr. Smith",
+			location: "General Hospital",
+			notes: "Admitted for 5 days, treated with antibiotics.",
+		},
+		{
+			id: "med-3",
+			date: "2020-02-18",
+			event: "Gallbladder Removal Surgery",
+			doctor: "Dr. Carter",
+			location: "Surgical Center",
+			notes: "Laparoscopic cholecystectomy, no complications.",
+		},
+		{
+			id: "med-4",
+			date: "2021-07-22",
+			event: "Diabetes Type 2 Diagnosis",
+			doctor: "Dr. Patel",
+			location: "Endocrine Clinic",
+			notes: "Diagnosed after abnormal HbA1c results.",
+		},
+		{
+			id: "med-5",
+			date: "2022-03-10",
+			event: "Appendectomy",
+			doctor: "Dr. Gomez",
+			location: "General Hospital",
+			notes: "Emergency surgery, recovered well.",
+		},
+		{
+			id: "med-6",
+			date: "2022-08-15",
+			event: "Routine Cardiology Checkup",
+			doctor: "Dr. Lee",
+			location: "City Clinic",
+			notes: "No new findings.",
+		},
+		{
+			id: "med-7",
+			date: "2023-01-28",
+			event: "Asthma Diagnosis",
+			doctor: "Dr. Patel",
+			location: "Pulmonary Center",
+			notes: "Prescribed inhaler.",
+		},
+		{
+			id: "med-8",
+			date: "2023-03-12",
+			event: "ER Visit for Migraine",
+			doctor: "Dr. Smith",
+			location: "General Hospital",
+			notes: "Treated with IV fluids and pain relief.",
+		},
+		{
+			id: "med-9",
+			date: "2023-05-05",
+			event: "Physical Therapy for Back Pain",
+			doctor: "Dr. Carter",
+			location: "Rehab Center",
+			notes: "Attended 8 sessions.",
+		},
+		{
+			id: "med-10",
+			date: "2024-02-14",
+			event: "Fractured Wrist",
+			doctor: "Dr. Gomez",
+			location: "General Hospital",
+			notes: "Cast for 6 weeks.",
+		},
+		{
+			id: "med-11",
+			date: "2024-07-18",
+			event: "Hospitalized for Severe Allergic Reaction",
+			doctor: "Dr. Lee",
+			location: "General Hospital",
+			notes: "Treated with epinephrine and steroids.",
+		},
+		{
+			id: "med-12",
+			date: "2025-01-05",
+			event: "Annual Physical Exam",
+			doctor: "Dr. Carter",
+			location: "City Clinic",
+			notes: "All labs normal.",
+		},
+		{
+			id: "med-13",
+			date: "2025-03-20",
+			event: "Routine Blood Pressure Monitoring",
+			doctor: "Dr. Lee",
+			location: "City Clinic",
+			notes: "Stable readings.",
+		},
+		{
+			id: "med-14",
+			date: "2025-06-02",
+			event: "Specialist Consultation: Endocrinology",
+			doctor: "Dr. Patel",
+			location: "Endocrine Clinic",
+			notes: "Reviewed diabetes management.",
+		},
+	],
+	chronicConditions: [
+		{
+			id: "chronic-1",
+			name: "Hypertension",
+			diagnosed: "2018-04-12",
+			doctor: "Dr. Lee",
+			notes: "Elevated blood pressure during routine checkup.",
+		},
+		{
+			id: "chronic-2",
+			name: "Diabetes Type 2",
+			diagnosed: "2021-07-22",
+			doctor: "Dr. Patel",
+			notes: "Abnormal HbA1c results.",
+		},
+		{
+			id: "chronic-3",
+			name: "Asthma",
+			diagnosed: "2023-01-28",
+			doctor: "Dr. Patel",
+			notes: "Prescribed inhaler.",
+		},
+		{
+			id: "chronic-4",
+			name: "Chronic Back Pain",
+			diagnosed: "2023-05-05",
+			doctor: "Dr. Carter",
+			notes: "Attended 8 physical therapy sessions.",
+		},
+	],
+	procedures: [
+		{
+			id: "proc-1",
+			year: 2020,
+			procedure: "Gallbladder Removal",
+			doctor: "Dr. Carter",
+			location: "Surgical Center",
+			notes: "Laparoscopic cholecystectomy, no complications.",
+		},
+		{
+			id: "proc-2",
+			year: 2022,
+			procedure: "Appendectomy",
+			doctor: "Dr. Gomez",
+			location: "General Hospital",
+			notes: "Emergency surgery, recovered well.",
+		},
+		{
+			id: "proc-3",
+			year: 2023,
+			procedure: "Physical Therapy",
+			doctor: "Dr. Carter",
+			location: "Rehab Center",
+			notes: "Attended 8 sessions.",
+		},
+	],
+	hospitalVisits: [
+		{ id: "visit-1", date: "2023-03-12", reason: "Migraine" },
+		{ id: "visit-2", date: "2024-07-18", reason: "Allergic Reaction" },
+		{ id: "visit-3", date: "2025-01-05", reason: "Routine Checkup" },
+	],
+	labs: [
+		{ id: "lab-1", date: "2025-06-10", test: "CBC", result: "Normal" },
+		{
+			id: "lab-2",
+			date: "2025-05-22",
+			test: "Lipid Panel",
+			result: "High Cholesterol",
+		},
+		{ id: "lab-3", date: "2025-04-15", test: "Blood Sugar", result: "Normal" },
+		{ id: "lab-4", date: "2025-03-10", test: "HbA1c", result: "7.2%" },
+		{ id: "lab-5", date: "2025-02-20", test: "Chest X-Ray", result: "Clear" },
+	],
 };
 
 export default dummyHealth;

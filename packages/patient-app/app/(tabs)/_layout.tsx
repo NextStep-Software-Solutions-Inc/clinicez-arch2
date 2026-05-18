@@ -8,7 +8,7 @@ import TabBarBackground from "@/components/ui/TabBarBackground";
 import { Colors } from "@/constants/Colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
 
-const currentClinic = {
+const _currentClinic = {
 	name: "Downtown Medical Center",
 	address: "123 Main St, Cityville",
 	// logo: '...' // could add logo uri here

@@ -1,3 +1,7 @@
+# ClinicEZ Patient App
+
+This is the official patient-facing mobile application for ClinicEZ. Built with Expo and React Native, it allows patients to manage appointments, view health records, communicate with clinics, and more—all from their mobile
+
 ## Onboarding Process
 
 When a patient first opens the ClinicEZ Patient App, they are guided through a short onboarding tutorial that introduces the app's features and navigation.
@@ -9,12 +13,10 @@ After the tutorial, patients must find and join their clinic. This can be done i
 
 Patients cannot use the app's core features until they are associated with at least one clinic. This ensures that all health records, appointments, and communications are securely linked to the correct clinic.
 
-# ClinicEZ Patient App
-
-This is the official patient-facing mobile application for ClinicEZ. Built with Expo and React Native, it allows patients to manage appointments, view health records, communicate with clinics, and more—all from their mobile device.
+device.
 
 > **Architecture Note:**
-> The ClinicEZ Patient App is designed as a local-first (offline-first) application. All patient data is stored securely in a local database on the device using WatermelonDB. When the device has internet connectivity, the app automatically synchronizes data with the backend of the respective clinic, ensuring that records and updates are always up to date both locally and on the clinic's server.
+> The ClinicEZ Patient App is designed as a local-first (offline-first) application. All patient data is stored securely in a local database on the device using Expo SQLite + Drizzle ORM. When the device has internet connectivity, the app automatically synchronizes data with the backend of the respective clinic, ensuring that records and updates are always up to date both locally and on the clinic's server.
 
 ## Features
 
@@ -22,7 +24,7 @@ This is the official patient-facing mobile application for ClinicEZ. Built with 
 - View personal health records
 - Receive notifications and reminders
 - Communicate securely with clinic staff
-- Offline-first experience with local data storage (WatermelonDB)
+- Offline-first experience with local data storage (Expo SQLite + Drizzle ORM)
 - Join and manage multiple clinics as a patient
 - Switch between different clinics within the app session
 
@@ -44,12 +46,10 @@ To run the ClinicEZ Patient App locally:
 
 3. Follow the Expo CLI instructions to open the app on an emulator, simulator, or physical device using Expo Go.
 
-
 > **Note:**
 > The ClinicEZ Patient App allows users to be members of multiple clinics. Patients can easily switch between different clinics during a session, accessing appointments, records, and communications for each clinic as needed.
 
 For more information about the overall architecture and backend setup, see the root README in the repository.
-
 
 ## Development Notes
 
@@ -63,7 +63,6 @@ In the output, you'll find options to open the app in a:
 - [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
 
 ## Get a fresh project
-
 
 When you're ready, run:
 
