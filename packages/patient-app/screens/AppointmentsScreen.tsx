@@ -4,54 +4,10 @@ import { Animated, Easing, ScrollView, TouchableOpacity } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Colors } from "@/constants/Colors";
-
-const doctors = [
-	"Dr. Smith",
-	"Dr. Lee",
-	"Dr. Patel",
-	"Dr. Gomez",
-	"Dr. Carter",
-];
-const statuses = ["Confirmed", "Pending", "Cancelled"];
-
-function useDummyAppointments(_clinicName: string) {
-	const reasons = [
-		"General Checkup",
-		"Follow-up Visit",
-		"Lab Results Discussion",
-		"Prescription Renewal",
-		"Vaccination",
-		"Consultation",
-		"Physical Therapy",
-		"Specialist Referral",
-		"Annual Physical",
-		"Blood Test",
-		"Imaging Review",
-		"Mental Health",
-		"Nutrition Advice",
-		"Chronic Care",
-		"Minor Procedure",
-	];
-	return Array.from({ length: 100 }, (_, i) => {
-		const doctor = doctors[i % doctors.length];
-		const status = statuses[i % statuses.length];
-		const dateObj = new Date(2025, 7, 1 + i); // August 2025
-		const date = dateObj.toISOString().slice(0, 10);
-		const time = `${8 + (i % 10)}:${i % 2 === 0 ? "00" : "30"} AM`;
-		const about = reasons[i % reasons.length];
-		return {
-			id: String(i + 1),
-			about,
-			doctor,
-			date,
-			time,
-			status,
-		};
-	});
-}
+import { getMockAppointments } from "@/services/mockData";
 
 export default function AppointmentsScreen() {
-	const dummyAppointments = useDummyAppointments("Your Clinics");
+	const dummyAppointments = getMockAppointments();
 
 	const [isScrolling, setIsScrolling] = useState(false);
 	const scrollTimeout = useRef<number | null>(null);

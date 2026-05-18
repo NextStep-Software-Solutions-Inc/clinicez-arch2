@@ -1,3 +1,5 @@
+import { ClerkProvider, useAuth, useUser } from "@clerk/expo";
+import { tokenCache } from "@clerk/expo/token-cache";
 import {
 	DarkTheme,
 	DefaultTheme,
@@ -13,16 +15,22 @@ import { migrate } from "drizzle-orm/expo-sqlite/migrator";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { db, pruneAuditLogs } from "@/db";
 import { useColorScheme } from "@/hooks/useColorScheme";
+import { seedPatientFromClerk } from "@/services/patientService";
 import { useAuthStore } from "@/stores/authStore";
 import migrations from "../drizzle/migrations";
+import ClerkSignInScreen from "../screens/auth/ClerkSignInScreen";
 import OnboardingFlow from "../screens/onboarding/OnboardingFlow";
 import PinScreen from "../screens/PinScreen";
 
-const DEBUG_ALWAYS_SHOW_ONBOARDING = false;
+const CLERK_PUBLISHABLE_KEY = process.env
+	.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY as string;
 
-export default function RootLayout() {
+function AppContent() {
 	const colorScheme = useColorScheme();
-	const { status, bootstrap, completeOnboarding } = useAuthStore();
+	const { isSignedIn, isLoaded: clerkLoaded } = useAuth();
+	const { user: clerkUser } = useUser();
+	const { status, bootstrap, completeOnboarding, storeUserIdentity } =
+		useAuthStore();
 	const [dbReady, setDbReady] = useState(false);
 
 	const [loaded] = useFonts({
@@ -33,67 +41,86 @@ export default function RootLayout() {
 		async function init() {
 			await migrate(db, migrations);
 			await pruneAuditLogs();
-			if (DEBUG_ALWAYS_SHOW_ONBOARDING) {
-				useAuthStore.setState({ status: "onboarding" });
-				setDbReady(true);
-				return;
-			}
 			await bootstrap();
 			setDbReady(true);
 		}
 		init().catch(console.error);
 	}, [bootstrap]);
 
-	if (!loaded || !dbReady || status === "loading") {
+	// Seed patient row and persist identity as soon as Clerk user is available and DB is ready
+	useEffect(() => {
+		if (dbReady && isSignedIn && clerkUser) {
+			seedPatientFromClerk({
+				id: clerkUser.id,
+				firstName: clerkUser.firstName,
+				lastName: clerkUser.lastName,
+				primaryEmailAddress: clerkUser.primaryEmailAddress ?? null,
+				imageUrl: clerkUser.imageUrl ?? null,
+			}).catch(console.error);
+
+			const name =
+				[clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") ||
+				null;
+			const email = clerkUser.primaryEmailAddress?.emailAddress ?? null;
+			const avatarUrl = clerkUser.imageUrl ?? null;
+			storeUserIdentity({
+				clerkId: clerkUser.id,
+				name,
+				email,
+				avatarUrl,
+			}).catch(console.error);
+		}
+	}, [dbReady, isSignedIn, clerkUser, storeUserIdentity]);
+
+	if (!loaded || !dbReady || status === "loading" || !clerkLoaded) {
 		return null;
 	}
 
-	// Onboarding — rendered outside the Stack (same pattern as before)
 	if (status === "onboarding") {
 		return (
-			<GestureHandlerRootView style={{ flex: 1 }}>
-				<ThemeProvider
-					value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
-				>
-					<OnboardingFlow onFinish={completeOnboarding} />
-					<StatusBar style="auto" />
-				</ThemeProvider>
-			</GestureHandlerRootView>
+			<ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+				<OnboardingFlow onFinish={completeOnboarding} />
+				<StatusBar style="auto" />
+			</ThemeProvider>
 		);
 	}
 
-	// Auth gate — PIN setup, locked, or biometrics offer
 	if (
 		status === "setup_pin" ||
 		status === "locked" ||
 		status === "biometrics_offer"
 	) {
 		return (
-			<GestureHandlerRootView style={{ flex: 1 }}>
-				<ThemeProvider
-					value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
-				>
-					<PinScreen />
-					<StatusBar style="auto" />
-				</ThemeProvider>
-			</GestureHandlerRootView>
+			<ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+				<PinScreen />
+				<StatusBar style="auto" />
+			</ThemeProvider>
 		);
 	}
 
-	// Authenticated — full app
 	return (
-		<GestureHandlerRootView style={{ flex: 1 }}>
-			<ClinicProvider>
-				<ThemeProvider
-					value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
-				>
-					<Stack>
-						<Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-						<Stack.Screen name="+not-found" />
-					</Stack>
-					<StatusBar style="auto" />
-				</ThemeProvider>
-			</ClinicProvider>
-		</GestureHandlerRootView>
+		<ClinicProvider>
+			<ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+				<Stack>
+					<Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+					<Stack.Screen name="+not-found" />
+					<Stack.Screen name="settings" options={{ title: "Settings" }} />
+				</Stack>
+				<StatusBar style="auto" />
+			</ThemeProvider>
+		</ClinicProvider>
+	);
+}
+
+export default function RootLayout() {
+	return (
+		<ClerkProvider
+			publishableKey={CLERK_PUBLISHABLE_KEY}
+			tokenCache={tokenCache}
+		>
+			<GestureHandlerRootView style={{ flex: 1 }}>
+				<AppContent />
+			</GestureHandlerRootView>
+		</ClerkProvider>
 	);
 }

@@ -1,16 +1,23 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRef, useState } from "react";
-import { Dimensions, FlatList, type ViewToken } from "react-native";
+import {
+	Dimensions,
+	FlatList,
+	Pressable,
+	View,
+	type ViewToken,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ThemedText } from "@/components/ThemedText";
-import { ThemedView } from "@/components/ThemedView";
 import RoundedButton from "../../components/RoundedButton";
 
 type Feature = {
 	id: string;
-	icon: { name: string; color: string };
+	icon: keyof typeof MaterialCommunityIcons.glyphMap;
 	title: string;
 	description: string;
+	gradient: readonly [string, string, string];
 };
 
 type FeatureCarouselProps = {
@@ -18,26 +25,32 @@ type FeatureCarouselProps = {
 	onBack?: () => void;
 };
 
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+
 const features: Feature[] = [
 	{
 		id: "feature-1",
-		icon: { name: "hospital-building", color: "#2563eb" },
-		title: "Your Clinic, Anywhere",
+		icon: "shield-cross",
+		title: "Your Health Hub",
 		description:
-			"Connect to your clinic, book appointments, and access care from your phone.",
+			"All your clinics, records, and care — unified in one secure place.",
+		gradient: ["#1e3a5f", "#1d4ed8", "#60a5fa"],
 	},
 	{
 		id: "feature-2",
-		icon: { name: "account-heart", color: "#059669" },
-		title: "Personal Health",
+		icon: "heart-pulse",
+		title: "Stay In the Know",
 		description:
-			"View your health records, prescriptions, and lab results securely.",
+			"View lab results, prescriptions, and health history anytime, anywhere.",
+		gradient: ["#064e3b", "#0d9488", "#34d399"],
 	},
 	{
 		id: "feature-3",
-		icon: { name: "calendar-check", color: "#f59e42" },
-		title: "Easy Scheduling",
-		description: "Book, reschedule, and get reminders for your appointments.",
+		icon: "calendar-check",
+		title: "Book in Seconds",
+		description:
+			"Schedule appointments, get reminders, and never miss your care.",
+		gradient: ["#2e1065", "#6d28d9", "#a78bfa"],
 	},
 ];
 
@@ -50,7 +63,7 @@ export default function FeatureCarousel({
 
 	const handleViewableItemsChanged = useRef(
 		(info: { viewableItems: ViewToken<Feature>[] }) => {
-			if (info.viewableItems && info.viewableItems.length > 0) {
+			if (info.viewableItems.length > 0) {
 				setCurrentIndex(info.viewableItems[0].index ?? 0);
 			}
 		},
@@ -60,142 +73,217 @@ export default function FeatureCarousel({
 		flatListRef.current?.scrollToIndex({ index, animated: true });
 	};
 
+	const isFirst = currentIndex === 0;
+	const isLast = currentIndex === features.length - 1;
+
 	return (
-		<ThemedView className="flex-1 bg-white dark:bg-slate-900">
-			{/* Tracking dots at the very top, in safe area */}
-			<SafeAreaView edges={["top"]}>
-				<ThemedView className="flex-row justify-center items-center mt-8 mb-4">
-					{features.map((feature, idx) => (
-						<ThemedView
-							key={feature.id}
-							className={
-								`mx-1 w-2 h-2 rounded-full ` +
-								(currentIndex === idx ? "bg-blue-600" : "bg-slate-300")
-							}
-							style={{ opacity: currentIndex === idx ? 1 : 0.5 }}
-						/>
-					))}
-				</ThemedView>
-			</SafeAreaView>
-			{/* Centered feature card in available space */}
-			<ThemedView className="flex-1 items-center justify-center">
-				<ThemedView className="items-center w-full">
-					<FlatList
-						ref={flatListRef}
-						data={features}
-						horizontal
-						pagingEnabled
-						showsHorizontalScrollIndicator={false}
-						keyExtractor={(item) => item.title}
-						renderItem={({ item }) => (
-							<ThemedView
-								style={{ width: Dimensions.get("window").width }}
-								className="flex-1 items-center justify-center p-8"
+		<View style={{ flex: 1 }}>
+			<FlatList
+				ref={flatListRef}
+				data={features}
+				horizontal
+				pagingEnabled
+				showsHorizontalScrollIndicator={false}
+				keyExtractor={(item) => item.id}
+				onViewableItemsChanged={handleViewableItemsChanged.current}
+				viewabilityConfig={{ viewAreaCoveragePercentThreshold: 60 }}
+				scrollEnabled
+				renderItem={({ item }) => (
+					<LinearGradient
+						colors={item.gradient}
+						start={{ x: 0.15, y: 0 }}
+						end={{ x: 0.85, y: 1 }}
+						style={{ width: SCREEN_WIDTH, flex: 1 }}
+					>
+						<SafeAreaView style={{ flex: 1 }}>
+							{/* Dots */}
+							<View
+								style={{
+									flexDirection: "row",
+									justifyContent: "center",
+									alignItems: "center",
+									marginTop: 20,
+									marginBottom: 8,
+									gap: 6,
+								}}
 							>
-								<ThemedView className="bg-white dark:bg-slate-900 rounded-3xl py-10 px-6 shadow-md items-center mb-8 w-full max-w-xl justify-center">
-									<MaterialCommunityIcons
-										name={
-											item.icon
-												.name as keyof typeof MaterialCommunityIcons.glyphMap
-										}
-										size={96}
-										color={item.icon.color}
-										style={{ marginBottom: 24 }}
+								{features.map((_, idx) => (
+									<View
+										key={`dot-${
+											// biome-ignore lint/suspicious/noArrayIndexKey: stable indices
+											idx
+										}`}
+										style={{
+											height: 8,
+											width: currentIndex === idx ? 24 : 8,
+											borderRadius: 4,
+											backgroundColor:
+												currentIndex === idx
+													? "#ffffff"
+													: "rgba(255,255,255,0.35)",
+										}}
 									/>
-									<ThemedText className="text-4xl font-extrabold text-slate-900 dark:text-slate-100 mb-6 text-center">
+								))}
+							</View>
+
+							{/* Icon + text */}
+							<View
+								style={{
+									flex: 1,
+									alignItems: "center",
+									justifyContent: "center",
+									paddingHorizontal: 32,
+									gap: 28,
+								}}
+							>
+								{/* Icon bubble */}
+								<View
+									style={{
+										width: 140,
+										height: 140,
+										borderRadius: 40,
+										backgroundColor: "rgba(255,255,255,0.15)",
+										alignItems: "center",
+										justifyContent: "center",
+										shadowColor: "#000",
+										shadowOffset: { width: 0, height: 8 },
+										shadowOpacity: 0.25,
+										shadowRadius: 20,
+										elevation: 10,
+									}}
+								>
+									<MaterialCommunityIcons
+										name={item.icon}
+										size={80}
+										color="#ffffff"
+									/>
+								</View>
+
+								{/* Text */}
+								<View style={{ alignItems: "center", gap: 14 }}>
+									<ThemedText
+										style={{
+											fontSize: 34,
+											fontWeight: "800",
+											color: "#ffffff",
+											textAlign: "center",
+											letterSpacing: -0.5,
+											lineHeight: 40,
+										}}
+									>
 										{item.title}
 									</ThemedText>
-									<ThemedText className="text-xl text-[#4a5568] dark:text-slate-300 text-center leading-8">
+									<ThemedText
+										style={{
+											fontSize: 17,
+											color: "rgba(255,255,255,0.78)",
+											textAlign: "center",
+											lineHeight: 26,
+										}}
+									>
 										{item.description}
 									</ThemedText>
-								</ThemedView>
-							</ThemedView>
-						)}
-						onViewableItemsChanged={handleViewableItemsChanged.current}
-						viewabilityConfig={{ viewAreaCoveragePercentThreshold: 60 }}
-					/>
-				</ThemedView>
-			</ThemedView>
+								</View>
+							</View>
 
-			{/* Navigation/CTA pinned to very bottom, spaced left/right, icon and text, balanced size */}
-			<ThemedView className="flex-row justify-between items-end px-12 mb-12">
-				<ThemedView className="flex-1 items-start">
-					{currentIndex > 0 ? (
-						<RoundedButton
-							onPress={() => scrollToIndex(currentIndex - 1)}
-							color="bg-white dark:bg-slate-900"
-							rippleColor="#e2e8f0"
-							className="py-2 px-2 flex-row items-center"
-						>
-							<MaterialCommunityIcons
-								name="chevron-left"
-								size={28}
-								color="#2563eb"
-								style={{ marginRight: 4 }}
-							/>
-							<ThemedText className="text-blue-600 font-extrabold text-lg">
-								Back
-							</ThemedText>
-						</RoundedButton>
-					) : (
-						onBack && (
-							<RoundedButton
-								onPress={onBack}
-								color="bg-white dark:bg-slate-900 "
-								rippleColor="#e2e8f0"
-								className="py-2 px-2 flex-row items-center"
+							{/* Navigation */}
+							<View
+								style={{
+									paddingHorizontal: 24,
+									paddingBottom: 16,
+									gap: 12,
+								}}
 							>
-								<MaterialCommunityIcons
-									name="close-circle"
-									size={24}
-									color="#ef4444"
-									style={{ marginRight: 4 }}
-								/>
-								<ThemedText className="text-red-500 font-extrabold text-lg">
-									Exit
-								</ThemedText>
-							</RoundedButton>
-						)
-					)}
-				</ThemedView>
-				<ThemedView className="flex-1 items-end">
-					{currentIndex < features.length - 1 ? (
-						<RoundedButton
-							onPress={() => scrollToIndex(currentIndex + 1)}
-							color="bg-white dark:bg-slate-900"
-							rippleColor="#e2e8f0"
-							className="py-2 px-2 flex-row items-center"
-						>
-							<ThemedText className="text-blue-600 font-extrabold text-lg">
-								Next
-							</ThemedText>
-							<MaterialCommunityIcons
-								name="chevron-right"
-								size={28}
-								color="#2563eb"
-								style={{ marginLeft: 4 }}
-							/>
-						</RoundedButton>
-					) : (
-						<RoundedButton
-							onPress={onNext}
-							color="bg-white dark:bg-slate-900"
-							rippleColor="#e2e8f0"
-							className="py-2 px-2 flex-row items-center"
-						>
-							<ThemedText className="text-cyan-600 font-extrabold text-lg">
-								Get Started
-							</ThemedText>
-							<MaterialCommunityIcons
-								name="check-circle"
-								size={28}
-								color="#06b6d4"
-								style={{ marginLeft: 4 }}
-							/>
-						</RoundedButton>
-					)}
-				</ThemedView>
-			</ThemedView>
-		</ThemedView>
+								{isLast && (
+									<RoundedButton
+										onPress={onNext}
+										color="bg-white"
+										rippleColor="rgba(255,255,255,0.4)"
+									>
+										<ThemedText
+											style={{
+												color: item.gradient[1],
+												fontWeight: "700",
+												fontSize: 17,
+											}}
+										>
+											Continue
+										</ThemedText>
+									</RoundedButton>
+								)}
+
+								<View
+									style={{
+										flexDirection: "row",
+										justifyContent: "space-between",
+										alignItems: "center",
+									}}
+								>
+									{/* Back / Exit */}
+									<Pressable
+										onPress={
+											isFirst ? onBack : () => scrollToIndex(currentIndex - 1)
+										}
+										style={({ pressed }) => ({
+											flexDirection: "row",
+											alignItems: "center",
+											gap: 4,
+											padding: 8,
+											borderRadius: 12,
+											opacity: pressed ? 0.6 : 1,
+										})}
+									>
+										<MaterialCommunityIcons
+											name={isFirst ? "close" : "chevron-left"}
+											size={24}
+											color="rgba(255,255,255,0.85)"
+										/>
+										<ThemedText
+											style={{
+												color: "rgba(255,255,255,0.85)",
+												fontWeight: "600",
+												fontSize: 15,
+											}}
+										>
+											{isFirst ? "Exit" : "Back"}
+										</ThemedText>
+									</Pressable>
+
+									{/* Next */}
+									{!isLast && (
+										<Pressable
+											onPress={() => scrollToIndex(currentIndex + 1)}
+											style={({ pressed }) => ({
+												flexDirection: "row",
+												alignItems: "center",
+												gap: 4,
+												padding: 8,
+												borderRadius: 12,
+												opacity: pressed ? 0.6 : 1,
+											})}
+										>
+											<ThemedText
+												style={{
+													color: "rgba(255,255,255,0.85)",
+													fontWeight: "600",
+													fontSize: 15,
+												}}
+											>
+												Next
+											</ThemedText>
+											<MaterialCommunityIcons
+												name="chevron-right"
+												size={24}
+												color="rgba(255,255,255,0.85)"
+											/>
+										</Pressable>
+									)}
+								</View>
+							</View>
+						</SafeAreaView>
+					</LinearGradient>
+				)}
+			/>
+		</View>
 	);
 }

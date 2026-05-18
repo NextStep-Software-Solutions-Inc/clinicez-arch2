@@ -1,89 +1,65 @@
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import type { ComponentProps } from "react";
 import { ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { HelloWave } from "@/components/HelloWave";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useColorScheme } from "@/hooks/useColorScheme";
+import { getMockAppointments, MOCK_HEALTH_OVERVIEW } from "@/services/mockData";
+
+type FeatherIconName = ComponentProps<typeof Feather>["name"];
+
+const QUICK_LINKS: {
+	key: string;
+	icon: { name: FeatherIconName; color: string };
+	bg: string;
+	title: string;
+	titleClass: string;
+	desc: string;
+}[] = [
+	{
+		key: "appointments",
+		icon: { name: "calendar", color: "#2563eb" },
+		bg: "bg-blue-100 dark:bg-blue-900/60",
+		title: "Appointments",
+		titleClass: "text-blue-900 dark:text-blue-100",
+		desc: "See and manage your upcoming visits",
+	},
+	{
+		key: "health",
+		icon: { name: "heart", color: "#059669" },
+		bg: "bg-green-100 dark:bg-green-900/60",
+		title: "Health",
+		titleClass: "text-green-900 dark:text-green-100",
+		desc: "View your records and results",
+	},
+	{
+		key: "profile",
+		icon: { name: "user", color: "#334155" },
+		bg: "bg-slate-100 dark:bg-slate-800/60",
+		title: "Profile",
+		titleClass: "text-slate-900 dark:text-slate-100",
+		desc: "Manage your account",
+	},
+];
+
+function formatApptDate(isoDate: string): string {
+	return new Intl.DateTimeFormat("en-US", {
+		weekday: "short",
+		month: "short",
+		day: "numeric",
+		year: "numeric",
+	}).format(new Date(isoDate));
+}
 
 export default function HomeScreen() {
 	const colorScheme = useColorScheme();
 
-	// Mock data for multiple appointments
-	const appointments = [
-		{
-			id: 1,
-			date: "Mon, July 28, 2025",
-			time: "10:30 AM",
-			doctor: "Dr. Jane Smith",
-			specialization: "General Practitioner",
-			type: "General Checkup",
-		},
-		{
-			id: 2,
-			date: "Wed, July 30, 2025",
-			time: "2:00 PM",
-			doctor: "Dr. John Doe",
-			specialization: "Dentist",
-			type: "Dental Cleaning",
-		},
-		{
-			id: 3,
-			date: "Fri, Aug 1, 2025",
-			time: "9:00 AM",
-			doctor: "Dr. Emily Lee",
-			specialization: "Ophthalmologist",
-			type: "Eye Exam",
-		},
-	];
-	const healthOverview = [
-		{
-			id: 1,
-			label: "Lab Results",
-			value: "2 New",
-			color: "text-green-600 dark:text-green-400",
-		},
-		{
-			id: 2,
-			label: "Prescriptions",
-			value: "1 Update",
-			color: "text-blue-600 dark:text-blue-300",
-		},
-		{
-			id: 3,
-			label: "Alerts",
-			value: "None",
-			color: "text-slate-500 dark:text-slate-400",
-		},
-	];
+	const appointments = getMockAppointments().slice(0, 5);
+	const healthOverview = MOCK_HEALTH_OVERVIEW;
 
-	const quickLinks = [
-		{
-			key: "appointments",
-			icon: { name: "calendar", color: "#2563eb" },
-			bg: "bg-blue-100 dark:bg-blue-900/60",
-			title: "Appointments",
-			titleClass: "text-blue-900 dark:text-blue-100",
-			desc: "See and manage your upcoming visits",
-		},
-		{
-			key: "health",
-			icon: { name: "heart", color: "#059669" },
-			bg: "bg-green-100 dark:bg-green-900/60",
-			title: "Health",
-			titleClass: "text-green-900 dark:text-green-100",
-			desc: "View your records and results",
-		},
-		{
-			key: "profile",
-			icon: { name: "user", color: "#334155" },
-			bg: "bg-slate-100 dark:bg-slate-800/60",
-			title: "Profile",
-			titleClass: "text-slate-900 dark:text-slate-100",
-			desc: "Manage your account",
-		},
-	];
 	return (
 		<SafeAreaView edges={["left", "right"]} className="flex-1 px-0 py-0">
 			<ScrollView
@@ -271,20 +247,20 @@ export default function HomeScreen() {
 													className="text-xs text-slate-600 dark:text-slate-300 mb-0.5"
 													numberOfLines={1}
 												>
-													{appt.specialization}
+													{appt.clinicName}
 												</ThemedText>
 											</ThemedView>
 										</ThemedView>
 										{/* Date/time pill */}
 										<ThemedView className="mb-2 px-3 py-1 rounded-full bg-blue-600/90 dark:bg-blue-700/90 self-start">
 											<ThemedText className="text-xs font-bold text-white tracking-wide">
-												{appt.date} {appt.time}
+												{formatApptDate(appt.date)} · {appt.time}
 											</ThemedText>
 										</ThemedView>
 										{/* Details section at bottom */}
 										<ThemedView className="w-full mt-2">
 											<ThemedText className="font-semibold text-blue-800 dark:text-blue-200 mb-1">
-												{appt.type}
+												{appt.about}
 											</ThemedText>
 											<ThemedView className="flex-row items-center">
 												<ThemedText className="text-xs text-blue-700 dark:text-blue-300 mr-1">
@@ -315,7 +291,7 @@ export default function HomeScreen() {
 							marginBlock: 8,
 						}}
 					>
-						{quickLinks.map((link) => (
+						{QUICK_LINKS.map((link) => (
 							<ThemedView
 								key={link.key}
 								className={`min-w-[130px] max-w-[150px] h-40 ${link.bg} rounded-xl p-4 items-center justify-center shadow-md`}

@@ -1,39 +1,96 @@
 import "../../global.css";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Text, View } from "react-native";
-import RoundedButton from "../../components/RoundedButton";
+import { LinearGradient } from "expo-linear-gradient";
+import { Pressable, SafeAreaView, View } from "react-native";
+import { ThemedText } from "@/components/ThemedText";
+import { ThemedView } from "@/components/ThemedView";
+import type { Clinic } from "@/db/schema";
+
+const GRADIENT: readonly [string, string, string] = [
+	"#0f2027",
+	"#0d3b2e",
+	"#065f46",
+];
 
 type ConfirmScreenProps = {
+	clinic: Clinic;
 	onContinue: () => void;
-	onBack?: () => void;
 };
 
-export default function ConfirmScreen({ onContinue }: ConfirmScreenProps) {
+export default function ConfirmScreen({
+	clinic,
+	onContinue,
+}: ConfirmScreenProps) {
 	return (
-		<View className="flex-1 bg-white dark:bg-slate-900 p-0">
-			{/* Main content distributed vertically */}
-			<View className="flex-1 w-full flex-col justify-between items-center px-6 pb-10">
-				<View className="flex-1 w-full justify-center items-center">
+		<LinearGradient colors={GRADIENT} style={{ flex: 1 }}>
+			<SafeAreaView style={{ flex: 1 }}>
+				<View
+					style={{
+						flex: 1,
+						alignItems: "center",
+						justifyContent: "center",
+						padding: 32,
+					}}
+				>
 					<MaterialCommunityIcons
 						name="check-circle"
-						size={100}
-						color="#22c55e"
-						style={{ marginBottom: 24 }}
+						size={96}
+						color="#4ade80"
+						style={{ marginBottom: 28 }}
 					/>
-					<Text className="text-3xl font-extrabold text-green-600 mb-4 text-center">
+
+					<ThemedText
+						style={{
+							color: "#4ade80",
+							fontSize: 30,
+							fontWeight: "800",
+							textAlign: "center",
+							marginBottom: 12,
+						}}
+					>
 						You're All Set!
-					</Text>
-					<Text className="text-base text-slate-600 dark:text-slate-300 text-center mb-10 leading-7 max-w-xl">
-						You have successfully joined your clinic. You can now access all
-						features of ClinicEZ.
-					</Text>
-					<RoundedButton onPress={onContinue}>
-						<Text className="text-white font-bold text-lg tracking-wide text-center">
+					</ThemedText>
+
+					<ThemedView className="bg-white/10 rounded-2xl px-6 py-4 mb-8 w-full items-center">
+						<ThemedText className="text-white/60 text-xs mb-1">
+							Connected to
+						</ThemedText>
+						<ThemedText
+							style={{
+								color: "#ffffff",
+								fontSize: 20,
+								fontWeight: "700",
+								textAlign: "center",
+							}}
+						>
+							{clinic.name}
+						</ThemedText>
+					</ThemedView>
+
+					<ThemedText className="text-white/60 text-sm text-center mb-10 leading-6">
+						Your clinic is connected. You can now view appointments, access
+						records, and stay in touch with your care team.
+					</ThemedText>
+
+					<Pressable
+						onPress={onContinue}
+						style={{
+							backgroundColor: "#ffffff",
+							borderRadius: 16,
+							paddingVertical: 16,
+							paddingHorizontal: 48,
+							alignItems: "center",
+							width: "100%",
+						}}
+					>
+						<ThemedText
+							style={{ color: "#065f46", fontWeight: "700", fontSize: 16 }}
+						>
 							Continue to App
-						</Text>
-					</RoundedButton>
+						</ThemedText>
+					</Pressable>
 				</View>
-			</View>
-		</View>
+			</SafeAreaView>
+		</LinearGradient>
 	);
 }

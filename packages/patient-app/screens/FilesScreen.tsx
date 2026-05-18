@@ -3,39 +3,10 @@ import { ScrollView } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Colors } from "@/constants/Colors";
+import { getMockFiles } from "@/services/mockData";
 
 export default function FilesScreen() {
-	// Dummy files data
-	const files = [
-		{
-			id: "1",
-			name: "Lab Report - Blood Work",
-			date: "2024-01-15",
-			type: "PDF",
-			size: "2.4 MB",
-		},
-		{
-			id: "2",
-			name: "X-Ray Results",
-			date: "2024-01-10",
-			type: "Image",
-			size: "5.1 MB",
-		},
-		{
-			id: "3",
-			name: "Prescription - Medication List",
-			date: "2024-01-08",
-			type: "PDF",
-			size: "1.2 MB",
-		},
-		{
-			id: "4",
-			name: "Clinic Visit Notes",
-			date: "2024-01-05",
-			type: "PDF",
-			size: "0.8 MB",
-		},
-	];
+	const files = getMockFiles();
 
 	return (
 		<ThemedView className="flex-1">

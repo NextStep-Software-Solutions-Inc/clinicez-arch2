@@ -12,6 +12,7 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
+		"@clerk/expo": "^3.2.13",
 		"@expo/vector-icons": "^15.1.1",
 		"@gorhom/bottom-sheet": "^5.2.14",
 		"@react-navigation/bottom-tabs": "^7.15.5",
@@ -50,6 +51,8 @@
 		"@types/react": "~19.2.14",
 		"babel-plugin-inline-import": "^3.0.0",
 		"drizzle-kit": "^0.31.10",
+		"eslint": "^9.0.0",
+		"eslint-config-expo": "~55.0.1",
 		"react": "19.2.0",
 		"react-dom": "19.2.0",
 		"react-native": "0.83.6",
@@ -65,5 +68,10 @@
 	"packageManager": "pnpm@9.0.0",
 	"engines": {
 		"node": ">=20"
+	},
+	"pnpm": {
+		"overrides": {
+			"@clerk/shared": "4.12.0"
+		}
 	}
 }

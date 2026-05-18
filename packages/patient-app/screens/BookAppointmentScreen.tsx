@@ -5,6 +5,7 @@ import { useClinicContext } from "@/components/ClinicContext";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Colors } from "@/constants/Colors";
+import { getMockDoctors, MOCK_AVAILABLE_TIMES } from "@/services/mockData";
 
 export default function BookAppointmentScreen() {
 	const { clinics } = useClinicContext();
@@ -13,42 +14,8 @@ export default function BookAppointmentScreen() {
 	const [selectedTime, setSelectedTime] = useState<string | null>(null);
 	const [selectedDoctorId, setSelectedDoctorId] = useState<string | null>(null);
 
-	// Dummy doctors data — will be fetched from the selected clinic's backend
-	const doctors = [
-		{
-			id: "1",
-			name: "Dr. Sarah Smith",
-			specialization: "General Practitioner",
-			available: true,
-		},
-		{
-			id: "2",
-			name: "Dr. James Lee",
-			specialization: "Cardiologist",
-			available: true,
-		},
-		{
-			id: "3",
-			name: "Dr. Maria Patel",
-			specialization: "Pediatrician",
-			available: false,
-		},
-		{
-			id: "4",
-			name: "Dr. Robert Johnson",
-			specialization: "Orthopedist",
-			available: true,
-		},
-	];
-
-	const availableTimes = [
-		"09:00 AM",
-		"10:00 AM",
-		"11:00 AM",
-		"02:00 PM",
-		"03:00 PM",
-		"04:00 PM",
-	];
+	const doctors = getMockDoctors(selectedClinicId ?? "");
+	const availableTimes = MOCK_AVAILABLE_TIMES;
 
 	return (
 		<ThemedView className="flex-1">
