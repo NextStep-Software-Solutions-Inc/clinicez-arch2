@@ -47,7 +47,7 @@ jobs:
   update_manual:
     name: 'OTA → ${{ inputs.channel }} (manual)'
     type: update
-    environment: development
+    environment: ${{ inputs.channel }}
     if: ${{ github.event_name == 'workflow_dispatch' }}
     params:
       channel: ${{ inputs.channel }}
@@ -67,7 +67,7 @@ jobs:
   update_staging:
     name: 'OTA → staging'
     type: update
-    environment: preview
+    environment: staging
     if: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
     params:
       channel: staging
@@ -87,7 +87,7 @@ jobs:
   update_preview:
     name: 'OTA → preview'
     type: update
-    environment: development
+    environment: preview
     if: ${{ github.event_name == 'push' && github.ref_type == 'branch' && github.ref_name != 'development' && github.ref_name != 'main' }}
     params:
       channel: preview

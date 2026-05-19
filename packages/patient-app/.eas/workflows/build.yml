@@ -97,7 +97,7 @@ jobs:
   build_staging_android:
     name: 'Build Android (staging)'
     type: build
-    environment: preview
+    environment: staging
     if: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
     params:
       platform: android
@@ -107,7 +107,7 @@ jobs:
   build_staging_ios:
     name: 'Build iOS (staging)'
     type: build
-    environment: preview
+    environment: staging
     if: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
     params:
       platform: ios
