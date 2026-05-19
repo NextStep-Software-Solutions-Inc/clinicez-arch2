@@ -32,18 +32,23 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'yarn'
-          cache-dependency-path: packages/patient-app/yarn.lock
+          cache: 'pnpm'
+          cache-dependency-path: packages/patient-app/pnpm-lock.yaml
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Run ESLint
-        run: yarn lint
+        run: pnpm lint
 
       - name: Run TypeScript type check
-        run: yarn typecheck
+        run: pnpm typecheck

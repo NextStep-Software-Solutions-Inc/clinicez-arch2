@@ -1,0 +1,119 @@
+# Triggers a full native EAS Build whenever a build is truly needed:
+#
+#   tag v* (from main)  →  production builds for Android + iOS (store)
+#   main                →  staging builds for Android + iOS (internal)
+#   manual              →  any profile / platform via workflow_dispatch
+#
+# OTA JS-only updates are handled separately in ota-update.yml.
+
+name: Native Build
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+    paths:
+      - packages/patient-app/**
+      - '!packages/patient-app/**/*.md'
+      - '!packages/patient-app/app/**'
+      - '!packages/patient-app/components/**'
+      - '!packages/patient-app/screens/**'
+      - '!packages/patient-app/hooks/**'
+      - '!packages/patient-app/stores/**'
+      - '!packages/patient-app/services/**'
+      - '!packages/patient-app/constants/**'
+  workflow_dispatch:
+    inputs:
+      profile:
+        type: choice
+        description: 'EAS build profile'
+        required: true
+        default: staging
+        options:
+          - development
+          - preview
+          - staging
+          - production
+      platform:
+        type: choice
+        description: 'Target platform'
+        required: true
+        default: all
+        options:
+          - all
+          - android
+          - ios
+
+concurrency:
+  cancel_in_progress: false
+  group: ${{ workflow.filename }}-${{ github.ref }}
+
+defaults:
+  tools:
+    pnpm: '9'
+  run:
+    working_directory: ./packages/patient-app
+
+jobs:
+  # ── Manual dispatch ───────────────────────────────────────────────────────
+  build_manual_android:
+    name: 'Build Android (${{ inputs.profile }})'
+    type: build
+    if: ${{ github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'android') }}
+    params:
+      platform: android
+      profile: ${{ inputs.profile }}
+      message: 'Manual build: ${{ inputs.profile }} / android'
+
+  build_manual_ios:
+    name: 'Build iOS (${{ inputs.profile }})'
+    type: build
+    if: ${{ github.event_name == 'workflow_dispatch' && (inputs.platform == 'all' || inputs.platform == 'ios') }}
+    params:
+      platform: ios
+      profile: ${{ inputs.profile }}
+      message: 'Manual build: ${{ inputs.profile }} / ios'
+
+  # ── main branch → staging builds ─────────────────────────────────────────
+  build_staging_android:
+    name: 'Build Android (staging)'
+    type: build
+    environment: preview
+    if: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
+    params:
+      platform: android
+      profile: staging
+      message: ${{ github.event.head_commit.message }}
+
+  build_staging_ios:
+    name: 'Build iOS (staging)'
+    type: build
+    environment: preview
+    if: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
+    params:
+      platform: ios
+      profile: staging
+      message: ${{ github.event.head_commit.message }}
+
+  # ── version tag from main → production builds ────────────────────────
+  build_production_android:
+    name: 'Build Android (production)'
+    type: build
+    environment: production
+    if: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+    params:
+      platform: android
+      profile: production
+      message: 'Release ${{ github.ref_name }}'
+
+  build_production_ios:
+    name: 'Build iOS (production)'
+    type: build
+    environment: production
+    if: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+    params:
+      platform: ios
+      profile: production
+      message: 'Release ${{ github.ref_name }}'

@@ -1,0 +1,77 @@
+# Publishes an OTA (over-the-air) update to the correct channel based on the
+# branch/tag that was pushed:
+#
+#   development       →  development channel  (EAS env: development)
+#   main              →  staging channel      (EAS env: preview)
+#   tag v* (from main)→  production channel   (EAS env: production)
+#   any other branch  →  preview channel      (EAS env: development)
+#
+# Native-code changes still require a full EAS Build — see build.yml.
+
+name: OTA Update
+
+on:
+  push:
+    branches:
+      - development
+      - main
+      - feature/**
+      - fix/**
+      - hotfix/**
+      - chore/**
+    tags:
+      - 'v*'
+    paths:
+      - packages/patient-app/**
+      - '!packages/patient-app/**/*.md'
+
+concurrency:
+  cancel_in_progress: true
+  group: ${{ workflow.filename }}-${{ github.ref }}
+
+defaults:
+  tools:
+    pnpm: '9'
+  run:
+    working_directory: ./packages/patient-app
+
+jobs:
+  # ── development branch → development channel ─────────────────────────────
+  update_development:
+    name: 'OTA → development'
+    type: update
+    environment: development
+    if: ${{ github.ref_name == 'development' }}
+    params:
+      channel: development
+      message: ${{ github.event.head_commit.message }}
+
+  # ── main branch → staging channel ────────────────────────────────────────
+  update_staging:
+    name: 'OTA → staging'
+    type: update
+    environment: preview
+    if: ${{ github.ref_name == 'main' }}
+    params:
+      channel: staging
+      message: ${{ github.event.head_commit.message }}
+
+  # ── version tag from main → production channel ───────────────────────────
+  update_production:
+    name: 'OTA → production'
+    type: update
+    environment: production
+    if: ${{ github.ref_type == 'tag' }}
+    params:
+      channel: production
+      message: 'Release ${{ github.ref_name }}'
+
+  # ── all other branches → preview channel ─────────────────────────────────
+  update_preview:
+    name: 'OTA → preview'
+    type: update
+    environment: development
+    if: ${{ github.ref_type == 'branch' && github.ref_name != 'development' && github.ref_name != 'main' }}
+    params:
+      channel: preview
+      message: ${{ github.event.head_commit.message }}
