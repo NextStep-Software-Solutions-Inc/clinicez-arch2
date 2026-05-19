@@ -25,44 +25,60 @@ on:
     paths:
       - packages/patient-app/**
       - '!packages/patient-app/**/*.md'
+  workflow_dispatch:
+    inputs:
+      channel:
+        type: choice
+        description: 'OTA channel to publish to'
+        required: true
+        default: preview
+        options:
+          - development
+          - preview
+          - staging
+          - production
 
 concurrency:
   cancel_in_progress: true
   group: ${{ workflow.filename }}-${{ github.ref }}
 
-defaults:
-  tools:
-    pnpm: '9'
-  run:
-    working_directory: ./packages/patient-app
-
 jobs:
+  # ── manual dispatch → selected channel ─────────────────────────────────────
+  update_manual:
+    name: 'OTA → ${{ inputs.channel }} (manual)'
+    type: update
+    environment: development
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    params:
+      channel: ${{ inputs.channel }}
+      message: 'Manual OTA update'
+
   # ── development branch → development channel ─────────────────────────────
   update_development:
     name: 'OTA → development'
     type: update
     environment: development
-    if: ${{ github.ref_name == 'development' }}
+    if: ${{ github.event_name == 'push' && github.ref_name == 'development' }}
     params:
       channel: development
-      message: ${{ github.event.head_commit.message }}
+      message: ${{ github.commit_message || '' }}
 
   # ── main branch → staging channel ────────────────────────────────────────
   update_staging:
     name: 'OTA → staging'
     type: update
     environment: preview
-    if: ${{ github.ref_name == 'main' }}
+    if: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
     params:
       channel: staging
-      message: ${{ github.event.head_commit.message }}
+      message: ${{ github.commit_message || '' }}
 
   # ── version tag from main → production channel ───────────────────────────
   update_production:
     name: 'OTA → production'
     type: update
     environment: production
-    if: ${{ github.ref_type == 'tag' }}
+    if: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
     params:
       channel: production
       message: 'Release ${{ github.ref_name }}'
@@ -72,7 +88,7 @@ jobs:
     name: 'OTA → preview'
     type: update
     environment: development
-    if: ${{ github.ref_type == 'branch' && github.ref_name != 'development' && github.ref_name != 'main' }}
+    if: ${{ github.event_name == 'push' && github.ref_type == 'branch' && github.ref_name != 'development' && github.ref_name != 'main' }}
     params:
       channel: preview
-      message: ${{ github.event.head_commit.message }}
+      message: ${{ github.commit_message || '' }}

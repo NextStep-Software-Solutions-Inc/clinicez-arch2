@@ -50,12 +50,6 @@ concurrency:
   cancel_in_progress: false
   group: ${{ workflow.filename }}-${{ github.ref }}
 
-defaults:
-  tools:
-    pnpm: '9'
-  run:
-    working_directory: ./packages/patient-app
-
 jobs:
   # ── Manual dispatch ───────────────────────────────────────────────────────
   build_manual_android:
@@ -85,7 +79,7 @@ jobs:
     params:
       platform: android
       profile: staging
-      message: ${{ github.event.head_commit.message }}
+      message: ${{ github.commit_message || '' }}
 
   build_staging_ios:
     name: 'Build iOS (staging)'
@@ -95,7 +89,7 @@ jobs:
     params:
       platform: ios
       profile: staging
-      message: ${{ github.event.head_commit.message }}
+      message: ${{ github.commit_message || '' }}
 
   # ── version tag from main → production builds ────────────────────────
   build_production_android:
