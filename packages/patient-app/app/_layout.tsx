@@ -15,6 +15,10 @@ import { migrate } from "drizzle-orm/expo-sqlite/migrator";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { db, pruneAuditLogs } from "@/db";
 import { useColorScheme } from "@/hooks/useColorScheme";
+import {
+	getAppConfigIssues,
+	getClerkPublishableKey,
+} from "@/services/appConfig";
 import { seedPatientFromClerk } from "@/services/patientService";
 import { useAuthStore } from "@/stores/authStore";
 import migrations from "../drizzle/migrations";
@@ -22,9 +26,15 @@ import ConfigErrorScreen from "@/screens/system/ConfigErrorScreen";
 import OnboardingFlow from "../screens/onboarding/OnboardingFlow";
 import PinScreen from "../screens/PinScreen";
 
-const CLERK_PUBLISHABLE_KEY = process.env
-	.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY as string;
-const HAS_CLERK_PUBLISHABLE_KEY = Boolean(CLERK_PUBLISHABLE_KEY);
+const APP_CONFIG_ISSUES = getAppConfigIssues();
+const CLERK_PUBLISHABLE_KEY = getClerkPublishableKey();
+
+function getErrorMessage(error: unknown): string {
+	if (error instanceof Error && error.message) {
+		return error.message;
+	}
+	return String(error);
+}
 
 function AppContent() {
 	const colorScheme = useColorScheme();
@@ -33,8 +43,9 @@ function AppContent() {
 	const { status, bootstrap, completeOnboarding, storeUserIdentity } =
 		useAuthStore();
 	const [dbReady, setDbReady] = useState(false);
+	const [startupError, setStartupError] = useState<string | null>(null);
 
-	const [loaded] = useFonts({
+	const [loaded, fontLoadError] = useFonts({
 		"SF-Pro": require("../assets/fonts/SF-Pro.ttf"),
 	});
 
@@ -45,7 +56,10 @@ function AppContent() {
 			await bootstrap();
 			setDbReady(true);
 		}
-		init().catch(console.error);
+		init().catch((error) => {
+			console.error(error);
+			setStartupError(getErrorMessage(error));
+		});
 	}, [bootstrap]);
 
 	// Seed patient row and persist identity as soon as Clerk user is available and DB is ready
@@ -72,6 +86,17 @@ function AppContent() {
 			}).catch(console.error);
 		}
 	}, [dbReady, isSignedIn, clerkUser, storeUserIdentity]);
+
+	if (startupError || fontLoadError) {
+		return (
+			<ConfigErrorScreen
+				runtimeErrors={[
+					...(startupError ? [startupError] : []),
+					...(fontLoadError ? [getErrorMessage(fontLoadError)] : []),
+				]}
+			/>
+		);
+	}
 
 	if (!loaded || !dbReady || status === "loading" || !clerkLoaded) {
 		return null;
@@ -114,10 +139,10 @@ function AppContent() {
 }
 
 export default function RootLayout() {
-	if (!HAS_CLERK_PUBLISHABLE_KEY) {
+	if (APP_CONFIG_ISSUES.length > 0 || !CLERK_PUBLISHABLE_KEY) {
 		return (
 			<GestureHandlerRootView style={{ flex: 1 }}>
-				<ConfigErrorScreen />
+				<ConfigErrorScreen configIssues={APP_CONFIG_ISSUES} />
 			</GestureHandlerRootView>
 		);
 	}

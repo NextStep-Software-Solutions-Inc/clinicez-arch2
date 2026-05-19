@@ -1,18 +1,47 @@
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
+import type { AppConfigIssue } from "@/services/appConfig";
 
-export default function ConfigErrorScreen() {
+type ConfigErrorScreenProps = {
+	configIssues?: AppConfigIssue[];
+	runtimeErrors?: string[];
+};
+
+export default function ConfigErrorScreen({
+	configIssues = [],
+	runtimeErrors = [],
+}: ConfigErrorScreenProps) {
+	const hasDetails = configIssues.length > 0 || runtimeErrors.length > 0;
+
 	return (
-		<SafeAreaView style={{ flex: 1 }}>
+		<SafeAreaView className="flex-1">
 			<ThemedView className="flex-1 items-center justify-center px-6">
 				<ThemedText className="text-2xl font-bold text-center mb-3">
-					Missing App Configuration
+					App Configuration Error
 				</ThemedText>
-				<ThemedText className="text-center opacity-80">
-					EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY is not available in this build.
-				</ThemedText>
-				<ThemedText className="text-center opacity-80 mt-2">
+				{hasDetails ? (
+					<ThemedView className="w-full max-w-xl rounded-xl p-4 border border-neutral-300/40">
+						{configIssues.map((issue) => (
+							<ThemedText
+								className="text-center opacity-90 mb-2"
+								key={`${issue.code}-${issue.key}`}
+							>
+								• {issue.key}: {issue.message}
+							</ThemedText>
+						))}
+						{runtimeErrors.map((message) => (
+							<ThemedText className="text-center opacity-90 mb-2" key={message}>
+								• {message}
+							</ThemedText>
+						))}
+					</ThemedView>
+				) : (
+					<ThemedText className="text-center opacity-80">
+						The app encountered a startup configuration error.
+					</ThemedText>
+				)}
+				<ThemedText className="text-center opacity-80 mt-3">
 					For EAS builds, map the profile to the correct environment or build with
 					--environment development/preview.
 				</ThemedText>
