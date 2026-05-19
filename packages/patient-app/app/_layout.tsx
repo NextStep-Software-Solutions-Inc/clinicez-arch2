@@ -13,6 +13,7 @@ import { ClinicProvider } from "../components/ClinicContext";
 import "react-native-reanimated";
 import { migrate } from "drizzle-orm/expo-sqlite/migrator";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { db, pruneAuditLogs } from "@/db";
 import { useColorScheme } from "@/hooks/useColorScheme";
 import ConfigErrorScreen from "@/screens/system/ConfigErrorScreen";
@@ -141,20 +142,24 @@ function AppContent() {
 export default function RootLayout() {
 	if (APP_CONFIG_ISSUES.length > 0) {
 		return (
-			<GestureHandlerRootView className="flex-1">
-				<ConfigErrorScreen configIssues={APP_CONFIG_ISSUES} />
-			</GestureHandlerRootView>
+			<SafeAreaProvider>
+				<GestureHandlerRootView className="flex-1">
+					<ConfigErrorScreen configIssues={APP_CONFIG_ISSUES} />
+				</GestureHandlerRootView>
+			</SafeAreaProvider>
 		);
 	}
 
 	return (
-		<ClerkProvider
-			publishableKey={CLERK_PUBLISHABLE_KEY ?? ""}
-			tokenCache={tokenCache}
-		>
-			<GestureHandlerRootView className="flex-1">
-				<AppContent />
-			</GestureHandlerRootView>
-		</ClerkProvider>
+		<SafeAreaProvider>
+			<ClerkProvider
+				publishableKey={CLERK_PUBLISHABLE_KEY ?? ""}
+				tokenCache={tokenCache}
+			>
+				<GestureHandlerRootView className="flex-1">
+					<AppContent />
+				</GestureHandlerRootView>
+			</ClerkProvider>
+		</SafeAreaProvider>
 	);
 }
