@@ -11,10 +11,14 @@ const REQUIRED_ENV_VARS = [
 	},
 ] as const;
 
-const ENV = process.env as Record<string, string | undefined>;
+type RequiredEnvKey = (typeof REQUIRED_ENV_VARS)[number]["key"];
 
-function readEnv(key: string): string | undefined {
-	return ENV[key];
+function readEnv(key: RequiredEnvKey): string | undefined {
+	const envMap: Record<RequiredEnvKey, string | undefined> = {
+		EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY:
+			process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY,
+	};
+	return envMap[key];
 }
 
 export function getAppConfigIssues(): AppConfigIssue[] {

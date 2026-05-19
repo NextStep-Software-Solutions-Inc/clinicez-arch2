@@ -141,30 +141,18 @@ function AppContent() {
 export default function RootLayout() {
 	if (APP_CONFIG_ISSUES.length > 0) {
 		return (
-			<GestureHandlerRootView style={{ flex: 1 }}>
+			<GestureHandlerRootView className="flex-1">
 				<ConfigErrorScreen configIssues={APP_CONFIG_ISSUES} />
-			</GestureHandlerRootView>
-		);
-	}
-
-	if (!CLERK_PUBLISHABLE_KEY) {
-		return (
-			<GestureHandlerRootView style={{ flex: 1 }}>
-				<ConfigErrorScreen
-					runtimeErrors={[
-						"EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY is missing from runtime configuration.",
-					]}
-				/>
 			</GestureHandlerRootView>
 		);
 	}
 
 	return (
 		<ClerkProvider
-			publishableKey={CLERK_PUBLISHABLE_KEY}
+			publishableKey={CLERK_PUBLISHABLE_KEY ?? ""}
 			tokenCache={tokenCache}
 		>
-			<GestureHandlerRootView style={{ flex: 1 }}>
+			<GestureHandlerRootView className="flex-1">
 				<AppContent />
 			</GestureHandlerRootView>
 		</ClerkProvider>
