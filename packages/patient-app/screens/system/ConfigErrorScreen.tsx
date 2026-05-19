@@ -46,7 +46,10 @@ export default function ConfigErrorScreen({
 							</ThemedText>
 						))}
 						{runtimeErrorEntries.map((entry) => (
-							<ThemedText className="text-center opacity-90 mb-2" key={entry.key}>
+							<ThemedText
+								className="text-center opacity-90 mb-2"
+								key={entry.key}
+							>
 								• {entry.message}
 							</ThemedText>
 						))}
@@ -57,8 +60,8 @@ export default function ConfigErrorScreen({
 					</ThemedText>
 				)}
 				<ThemedText className="text-center opacity-80 mt-3">
-					For EAS builds, map the profile to the correct environment or build with
-					--environment development/preview.
+					For EAS builds, map the profile to the correct environment or build
+					with --environment development/preview.
 				</ThemedText>
 			</ThemedView>
 		</SafeAreaView>

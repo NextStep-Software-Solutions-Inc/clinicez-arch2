@@ -15,6 +15,7 @@ import { migrate } from "drizzle-orm/expo-sqlite/migrator";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { db, pruneAuditLogs } from "@/db";
 import { useColorScheme } from "@/hooks/useColorScheme";
+import ConfigErrorScreen from "@/screens/system/ConfigErrorScreen";
 import {
 	getAppConfigIssues,
 	getClerkPublishableKey,
@@ -22,7 +23,6 @@ import {
 import { seedPatientFromClerk } from "@/services/patientService";
 import { useAuthStore } from "@/stores/authStore";
 import migrations from "../drizzle/migrations";
-import ConfigErrorScreen from "@/screens/system/ConfigErrorScreen";
 import OnboardingFlow from "../screens/onboarding/OnboardingFlow";
 import PinScreen from "../screens/PinScreen";
 
