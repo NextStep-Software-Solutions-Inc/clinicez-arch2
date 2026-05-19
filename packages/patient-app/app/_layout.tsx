@@ -30,7 +30,7 @@ const APP_CONFIG_ISSUES = getAppConfigIssues();
 const CLERK_PUBLISHABLE_KEY = getClerkPublishableKey();
 
 function getErrorMessage(error: unknown): string {
-	if (error instanceof Error && error.message) {
+	if (error instanceof Error) {
 		return error.message;
 	}
 	return String(error);
@@ -139,7 +139,7 @@ function AppContent() {
 }
 
 export default function RootLayout() {
-	if (APP_CONFIG_ISSUES.length > 0 || !CLERK_PUBLISHABLE_KEY) {
+	if (APP_CONFIG_ISSUES.length > 0) {
 		return (
 			<GestureHandlerRootView style={{ flex: 1 }}>
 				<ConfigErrorScreen configIssues={APP_CONFIG_ISSUES} />
@@ -149,7 +149,7 @@ export default function RootLayout() {
 
 	return (
 		<ClerkProvider
-			publishableKey={CLERK_PUBLISHABLE_KEY}
+			publishableKey={CLERK_PUBLISHABLE_KEY!}
 			tokenCache={tokenCache}
 		>
 			<GestureHandlerRootView style={{ flex: 1 }}>

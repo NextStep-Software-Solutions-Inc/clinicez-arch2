@@ -13,6 +13,21 @@ export default function ConfigErrorScreen({
 	runtimeErrors = [],
 }: ConfigErrorScreenProps) {
 	const hasDetails = configIssues.length > 0 || runtimeErrors.length > 0;
+	const runtimeErrorEntries = runtimeErrors.reduce(
+		(entries, message) => {
+			const count = (entries.counts.get(message) ?? 0) + 1;
+			entries.counts.set(message, count);
+			entries.items.push({
+				key: `${message}-${count}`,
+				message,
+			});
+			return entries;
+		},
+		{
+			counts: new Map<string, number>(),
+			items: [] as Array<{ key: string; message: string }>,
+		},
+	).items;
 
 	return (
 		<SafeAreaView className="flex-1">
@@ -30,9 +45,9 @@ export default function ConfigErrorScreen({
 								• {issue.key}: {issue.message}
 							</ThemedText>
 						))}
-						{runtimeErrors.map((message) => (
-							<ThemedText className="text-center opacity-90 mb-2" key={message}>
-								• {message}
+						{runtimeErrorEntries.map((entry) => (
+							<ThemedText className="text-center opacity-90 mb-2" key={entry.key}>
+								• {entry.message}
 							</ThemedText>
 						))}
 					</ThemedView>
