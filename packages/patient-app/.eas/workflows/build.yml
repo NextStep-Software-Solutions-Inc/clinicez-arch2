@@ -1,7 +1,8 @@
 # Triggers a full native EAS Build whenever a build is truly needed:
 #
-#   tag v* (from main)  →  production builds for Android + iOS (store)
+#   development         →  development builds for Android + iOS (internal/simulator)
 #   main                →  staging builds for Android + iOS (internal)
+#   tag v* (from main)  →  production builds for Android + iOS (store)
 #   manual              →  any profile / platform via workflow_dispatch
 #
 # OTA JS-only updates are handled separately in ota-update.yml.
@@ -11,6 +12,7 @@ name: Native Build
 on:
   push:
     branches:
+      - development
       - main
     tags:
       - 'v*'
@@ -69,6 +71,27 @@ jobs:
       platform: ios
       profile: ${{ inputs.profile }}
       message: 'Manual build: ${{ inputs.profile }} / ios'
+
+  # ── development branch → development builds ─────────────────────────────────
+  build_development_android:
+    name: 'Build Android (development)'
+    type: build
+    environment: development
+    if: ${{ github.event_name == 'push' && github.ref_name == 'development' }}
+    params:
+      platform: android
+      profile: development
+      message: ${{ github.commit_message || '' }}
+
+  build_development_ios:
+    name: 'Build iOS (development)'
+    type: build
+    environment: development
+    if: ${{ github.event_name == 'push' && github.ref_name == 'development' }}
+    params:
+      platform: ios
+      profile: development
+      message: ${{ github.commit_message || '' }}
 
   # ── main branch → staging builds ─────────────────────────────────────────
   build_staging_android:
