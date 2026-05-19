@@ -11,8 +11,10 @@ const REQUIRED_ENV_VARS = [
 	},
 ] as const;
 
+const ENV = process.env as Record<string, string | undefined>;
+
 function readEnv(key: string): string | undefined {
-	return (process.env as Record<string, string | undefined>)[key];
+	return ENV[key];
 }
 
 export function getAppConfigIssues(): AppConfigIssue[] {

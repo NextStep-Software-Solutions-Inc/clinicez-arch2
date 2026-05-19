@@ -147,9 +147,21 @@ export default function RootLayout() {
 		);
 	}
 
+	if (!CLERK_PUBLISHABLE_KEY) {
+		return (
+			<GestureHandlerRootView style={{ flex: 1 }}>
+				<ConfigErrorScreen
+					runtimeErrors={[
+						"EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY is missing from runtime configuration.",
+					]}
+				/>
+			</GestureHandlerRootView>
+		);
+	}
+
 	return (
 		<ClerkProvider
-			publishableKey={CLERK_PUBLISHABLE_KEY!}
+			publishableKey={CLERK_PUBLISHABLE_KEY}
 			tokenCache={tokenCache}
 		>
 			<GestureHandlerRootView style={{ flex: 1 }}>
