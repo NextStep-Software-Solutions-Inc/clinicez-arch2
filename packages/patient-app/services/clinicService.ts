@@ -9,20 +9,20 @@ import { resolveMockInviteCode } from "./mockData";
  * This is the primary path for development and direct-URL invitations.
  */
 export async function joinClinicManually(
-    name: string,
-    baseUrl: string,
-    inviteCode?: string,
+	name: string,
+	baseUrl: string,
+	inviteCode?: string,
 ): Promise<Clinic> {
-    const clinic: NewClinic = {
-        id: randomUUID(),
-        name: name.trim(),
-        baseUrl: baseUrl.trim().replace(/\/+$/, ""),
-        inviteCode: inviteCode?.trim() ?? null,
-        joinedAt: new Date(),
-        syncedAt: null,
-    };
-    await db.insert(clinics).values(clinic);
-    return clinic as Clinic;
+	const clinic: NewClinic = {
+		id: randomUUID(),
+		name: name.trim(),
+		baseUrl: baseUrl.trim().replace(/\/+$/, ""),
+		inviteCode: inviteCode?.trim() ?? null,
+		joinedAt: new Date(),
+		syncedAt: null,
+	};
+	await db.insert(clinics).values(clinic);
+	return clinic as Clinic;
 }
 
 /**
@@ -35,30 +35,30 @@ export async function joinClinicManually(
  * Registry response shape: { name: string; baseUrl: string }
  */
 export async function joinClinicByInviteCode(code: string): Promise<Clinic> {
-    // ── 1. Check demo / mock codes first (no network needed) ──────────────────
-    const mock = resolveMockInviteCode(code);
-    if (mock) {
-        return joinClinicManually(mock.name, mock.baseUrl, code);
-    }
+	// ── 1. Check demo / mock codes first (no network needed) ──────────────────
+	const mock = resolveMockInviteCode(code);
+	if (mock) {
+		return joinClinicManually(mock.name, mock.baseUrl, code);
+	}
 
-    // ── 2. Real registry lookup ────────────────────────────────────────────────
-    const registryUrl = `https://api.clinicez.app/v1/invite/${encodeURIComponent(code.trim())}`;
-    let data: { name: string; baseUrl: string };
-    try {
-        const res = await fetch(registryUrl);
-        if (!res.ok) {
-            throw new Error(`Registry returned ${res.status}`);
-        }
-        data = (await res.json()) as { name: string; baseUrl: string };
-    } catch {
-        throw new Error(
-            "Could not resolve the invite code. Please check the code and try again, or use manual setup.",
-        );
-    }
+	// ── 2. Real registry lookup ────────────────────────────────────────────────
+	const registryUrl = `https://api.clinicez.app/v1/invite/${encodeURIComponent(code.trim())}`;
+	let data: { name: string; baseUrl: string };
+	try {
+		const res = await fetch(registryUrl);
+		if (!res.ok) {
+			throw new Error(`Registry returned ${res.status}`);
+		}
+		data = (await res.json()) as { name: string; baseUrl: string };
+	} catch {
+		throw new Error(
+			"Could not resolve the invite code. Please check the code and try again, or use manual setup.",
+		);
+	}
 
-    if (!data.name || !data.baseUrl) {
-        throw new Error("Invalid response from clinic registry.");
-    }
+	if (!data.name || !data.baseUrl) {
+		throw new Error("Invalid response from clinic registry.");
+	}
 
-    return joinClinicManually(data.name, data.baseUrl, code);
+	return joinClinicManually(data.name, data.baseUrl, code);
 }

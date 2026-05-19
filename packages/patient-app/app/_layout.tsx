@@ -13,17 +13,29 @@ import { ClinicProvider } from "../components/ClinicContext";
 import "react-native-reanimated";
 import { migrate } from "drizzle-orm/expo-sqlite/migrator";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { db, pruneAuditLogs } from "@/db";
 import { useColorScheme } from "@/hooks/useColorScheme";
+import ConfigErrorScreen from "@/screens/system/ConfigErrorScreen";
+import {
+	getAppConfigIssues,
+	getClerkPublishableKey,
+} from "@/services/appConfig";
 import { seedPatientFromClerk } from "@/services/patientService";
 import { useAuthStore } from "@/stores/authStore";
 import migrations from "../drizzle/migrations";
-import ClerkSignInScreen from "../screens/auth/ClerkSignInScreen";
 import OnboardingFlow from "../screens/onboarding/OnboardingFlow";
 import PinScreen from "../screens/PinScreen";
 
-const CLERK_PUBLISHABLE_KEY = process.env
-	.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY as string;
+const APP_CONFIG_ISSUES = getAppConfigIssues();
+const CLERK_PUBLISHABLE_KEY = getClerkPublishableKey();
+
+function getErrorMessage(error: unknown): string {
+	if (error instanceof Error) {
+		return error.message;
+	}
+	return String(error);
+}
 
 function AppContent() {
 	const colorScheme = useColorScheme();
@@ -32,8 +44,9 @@ function AppContent() {
 	const { status, bootstrap, completeOnboarding, storeUserIdentity } =
 		useAuthStore();
 	const [dbReady, setDbReady] = useState(false);
+	const [startupError, setStartupError] = useState<string | null>(null);
 
-	const [loaded] = useFonts({
+	const [loaded, fontLoadError] = useFonts({
 		"SF-Pro": require("../assets/fonts/SF-Pro.ttf"),
 	});
 
@@ -44,7 +57,10 @@ function AppContent() {
 			await bootstrap();
 			setDbReady(true);
 		}
-		init().catch(console.error);
+		init().catch((error) => {
+			console.error(error);
+			setStartupError(getErrorMessage(error));
+		});
 	}, [bootstrap]);
 
 	// Seed patient row and persist identity as soon as Clerk user is available and DB is ready
@@ -71,6 +87,17 @@ function AppContent() {
 			}).catch(console.error);
 		}
 	}, [dbReady, isSignedIn, clerkUser, storeUserIdentity]);
+
+	if (startupError || fontLoadError) {
+		return (
+			<ConfigErrorScreen
+				runtimeErrors={[
+					...(startupError ? [startupError] : []),
+					...(fontLoadError ? [getErrorMessage(fontLoadError)] : []),
+				]}
+			/>
+		);
+	}
 
 	if (!loaded || !dbReady || status === "loading" || !clerkLoaded) {
 		return null;
@@ -113,14 +140,26 @@ function AppContent() {
 }
 
 export default function RootLayout() {
+	if (APP_CONFIG_ISSUES.length > 0) {
+		return (
+			<SafeAreaProvider>
+				<GestureHandlerRootView className="flex-1">
+					<ConfigErrorScreen configIssues={APP_CONFIG_ISSUES} />
+				</GestureHandlerRootView>
+			</SafeAreaProvider>
+		);
+	}
+
 	return (
-		<ClerkProvider
-			publishableKey={CLERK_PUBLISHABLE_KEY}
-			tokenCache={tokenCache}
-		>
-			<GestureHandlerRootView style={{ flex: 1 }}>
-				<AppContent />
-			</GestureHandlerRootView>
-		</ClerkProvider>
+		<SafeAreaProvider>
+			<ClerkProvider
+				publishableKey={CLERK_PUBLISHABLE_KEY ?? ""}
+				tokenCache={tokenCache}
+			>
+				<GestureHandlerRootView className="flex-1">
+					<AppContent />
+				</GestureHandlerRootView>
+			</ClerkProvider>
+		</SafeAreaProvider>
 	);
 }

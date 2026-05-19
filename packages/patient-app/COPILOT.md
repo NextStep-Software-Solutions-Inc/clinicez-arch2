@@ -11,7 +11,7 @@ This package is part of the ClinicEZ monorepo. In addition to the root repositor
 
 ## Code Style & Standards
 
-- Follow the linting and formatting rules defined in this package (see `eslint`, `prettier`, etc.).
+- Follow the linting and formatting rules defined in this package (Biome configuration).
 - Write clear, maintainable, and well-documented code.
 - Add or update tests for all new features and bug fixes.
 

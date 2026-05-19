@@ -1,42 +1,46 @@
 {
-  "cli": {
-    "version": ">= 16.0.0",
-    "appVersionSource": "local"
-  },
-  "build": {
-    "development": {
-      "distribution": "internal",
-      "channel": "development",
-      "android": {
-        "gradleCommand": ":app:assembleDebug",
-        "buildType": "apk"
-      },
-      "ios": {
-        "buildConfiguration": "Debug",
-        "simulator": true
-      }
-    },
-    "preview": {
-      "distribution": "internal",
-      "channel": "preview",
-      "android": {
-        "buildType": "apk"
-      }
-    },
-    "staging": {
-      "distribution": "internal",
-      "channel": "staging",
-      "android": {
-        "buildType": "apk"
-      }
-    },
-    "production": {
-      "distribution": "store",
-      "channel": "production",
-      "autoIncrement": true
-    }
-  },
-  "submit": {
-    "production": {}
-  }
+	"cli": {
+		"version": ">= 16.0.0",
+		"appVersionSource": "local"
+	},
+	"build": {
+		"development": {
+			"distribution": "internal",
+			"environment": "development",
+			"channel": "development",
+			"android": {
+				"gradleCommand": ":app:assembleDebug",
+				"buildType": "apk"
+			},
+			"ios": {
+				"buildConfiguration": "Debug",
+				"simulator": true
+			}
+		},
+		"preview": {
+			"distribution": "internal",
+			"environment": "preview",
+			"channel": "preview",
+			"android": {
+				"buildType": "apk"
+			}
+		},
+		"staging": {
+			"distribution": "internal",
+			"environment": "preview",
+			"channel": "staging",
+			"android": {
+				"buildType": "apk"
+			}
+		},
+		"production": {
+			"distribution": "store",
+			"environment": "production",
+			"channel": "production",
+			"autoIncrement": true
+		}
+	},
+	"submit": {
+		"production": {}
+	}
 }

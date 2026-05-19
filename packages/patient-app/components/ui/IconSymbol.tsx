@@ -1,13 +1,10 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import {
-	SymbolView,
-	type SymbolViewProps,
-	type SymbolWeight,
-} from "expo-symbols";
+import { SymbolView, type SymbolWeight } from "expo-symbols";
 import {
 	type OpaqueColorValue,
 	Platform,
 	type StyleProp,
+	type TextStyle,
 	type ViewStyle,
 } from "react-native";
 
@@ -15,17 +12,13 @@ import {
  * Maps SF Symbol names (iOS) to MaterialIcons names (Android/Web).
  * Extend this map as new icon names are used in the app.
  */
-const SF_TO_MATERIAL: Partial<
-	Record<
-		SymbolViewProps["name"],
-		React.ComponentProps<typeof MaterialIcons>["name"]
-	>
-> = {
+type MaterialIconName = React.ComponentProps<typeof MaterialIcons>["name"];
+const SF_TO_MATERIAL = {
 	"chevron.right": "chevron-right",
 	"house.fill": "home",
 	"paperplane.fill": "send",
 	"person.crop.circle": "person",
-};
+} as const satisfies Record<string, MaterialIconName>;
 
 export type IconSymbolName = keyof typeof SF_TO_MATERIAL;
 
@@ -48,7 +41,7 @@ export function IconSymbol({
 				weight={weight}
 				tintColor={color as string}
 				resizeMode="scaleAspectFit"
-				name={name as SymbolViewProps["name"]}
+				name={name}
 				style={[{ width: size, height: size }, style]}
 			/>
 		);
@@ -60,7 +53,7 @@ export function IconSymbol({
 			size={size}
 			name={SF_TO_MATERIAL[name] ?? "help-outline"}
 			// MaterialIcons style prop is typed as TextStyle; cast ViewStyle safely
-			style={style}
+			style={style as StyleProp<TextStyle>}
 		/>
 	);
 }
