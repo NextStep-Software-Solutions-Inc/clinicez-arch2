@@ -16,6 +16,7 @@ on:
       - development
       - main
       - feature/**
+      - features/**
       - fix/**
       - hotfix/**
       - chore/**
