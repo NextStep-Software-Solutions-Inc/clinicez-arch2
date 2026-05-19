@@ -18,12 +18,13 @@ import { useColorScheme } from "@/hooks/useColorScheme";
 import { seedPatientFromClerk } from "@/services/patientService";
 import { useAuthStore } from "@/stores/authStore";
 import migrations from "../drizzle/migrations";
-import ClerkSignInScreen from "../screens/auth/ClerkSignInScreen";
+import ConfigErrorScreen from "@/screens/system/ConfigErrorScreen";
 import OnboardingFlow from "../screens/onboarding/OnboardingFlow";
 import PinScreen from "../screens/PinScreen";
 
 const CLERK_PUBLISHABLE_KEY = process.env
 	.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY as string;
+const HAS_CLERK_PUBLISHABLE_KEY = Boolean(CLERK_PUBLISHABLE_KEY);
 
 function AppContent() {
 	const colorScheme = useColorScheme();
@@ -113,6 +114,14 @@ function AppContent() {
 }
 
 export default function RootLayout() {
+	if (!HAS_CLERK_PUBLISHABLE_KEY) {
+		return (
+			<GestureHandlerRootView style={{ flex: 1 }}>
+				<ConfigErrorScreen />
+			</GestureHandlerRootView>
+		);
+	}
+
 	return (
 		<ClerkProvider
 			publishableKey={CLERK_PUBLISHABLE_KEY}
