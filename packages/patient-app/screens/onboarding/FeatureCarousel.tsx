@@ -1,15 +1,10 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRef, useState } from "react";
-import {
-	Dimensions,
-	FlatList,
-	Pressable,
-	View,
-	type ViewToken,
-} from "react-native";
+import { Dimensions, FlatList, Pressable, type ViewToken } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ThemedText } from "@/components/ThemedText";
+import { ThemedView } from "@/components/ThemedView";
 import RoundedButton from "../../components/RoundedButton";
 
 type Feature = {
@@ -77,7 +72,7 @@ export default function FeatureCarousel({
 	const isLast = currentIndex === features.length - 1;
 
 	return (
-		<View style={{ flex: 1 }}>
+		<ThemedView style={{ flex: 1 }}>
 			<FlatList
 				ref={flatListRef}
 				data={features}
@@ -97,7 +92,7 @@ export default function FeatureCarousel({
 					>
 						<SafeAreaView style={{ flex: 1 }}>
 							{/* Dots */}
-							<View
+							<ThemedView
 								style={{
 									flexDirection: "row",
 									justifyContent: "center",
@@ -108,7 +103,7 @@ export default function FeatureCarousel({
 								}}
 							>
 								{features.map((_, idx) => (
-									<View
+									<ThemedView
 										key={`dot-${
 											// biome-ignore lint/suspicious/noArrayIndexKey: stable indices
 											idx
@@ -124,10 +119,10 @@ export default function FeatureCarousel({
 										}}
 									/>
 								))}
-							</View>
+							</ThemedView>
 
 							{/* Icon + text */}
-							<View
+							<ThemedView
 								style={{
 									flex: 1,
 									alignItems: "center",
@@ -137,12 +132,12 @@ export default function FeatureCarousel({
 								}}
 							>
 								{/* Icon bubble */}
-								<View
+								<ThemedView
 									style={{
 										width: 140,
 										height: 140,
 										borderRadius: 40,
-										backgroundColor: "rgba(255,255,255,0.15)",
+										backgroundColor: "rgba(255,255,255)",
 										alignItems: "center",
 										justifyContent: "center",
 										shadowColor: "#000",
@@ -155,12 +150,12 @@ export default function FeatureCarousel({
 									<MaterialCommunityIcons
 										name={item.icon}
 										size={80}
-										color="#ffffff"
+										color={item.gradient[1]}
 									/>
-								</View>
+								</ThemedView>
 
 								{/* Text */}
-								<View style={{ alignItems: "center", gap: 14 }}>
+								<ThemedView style={{ alignItems: "center", gap: 14 }}>
 									<ThemedText
 										style={{
 											fontSize: 34,
@@ -183,11 +178,11 @@ export default function FeatureCarousel({
 									>
 										{item.description}
 									</ThemedText>
-								</View>
-							</View>
+								</ThemedView>
+							</ThemedView>
 
 							{/* Navigation */}
-							<View
+							<ThemedView
 								style={{
 									paddingHorizontal: 24,
 									paddingBottom: 16,
@@ -211,79 +206,11 @@ export default function FeatureCarousel({
 										</ThemedText>
 									</RoundedButton>
 								)}
-
-								<View
-									style={{
-										flexDirection: "row",
-										justifyContent: "space-between",
-										alignItems: "center",
-									}}
-								>
-									{/* Back / Exit */}
-									<Pressable
-										onPress={
-											isFirst ? onBack : () => scrollToIndex(currentIndex - 1)
-										}
-										style={({ pressed }) => ({
-											flexDirection: "row",
-											alignItems: "center",
-											gap: 4,
-											padding: 8,
-											borderRadius: 12,
-											opacity: pressed ? 0.6 : 1,
-										})}
-									>
-										<MaterialCommunityIcons
-											name={isFirst ? "close" : "chevron-left"}
-											size={24}
-											color="rgba(255,255,255,0.85)"
-										/>
-										<ThemedText
-											style={{
-												color: "rgba(255,255,255,0.85)",
-												fontWeight: "600",
-												fontSize: 15,
-											}}
-										>
-											{isFirst ? "Exit" : "Back"}
-										</ThemedText>
-									</Pressable>
-
-									{/* Next */}
-									{!isLast && (
-										<Pressable
-											onPress={() => scrollToIndex(currentIndex + 1)}
-											style={({ pressed }) => ({
-												flexDirection: "row",
-												alignItems: "center",
-												gap: 4,
-												padding: 8,
-												borderRadius: 12,
-												opacity: pressed ? 0.6 : 1,
-											})}
-										>
-											<ThemedText
-												style={{
-													color: "rgba(255,255,255,0.85)",
-													fontWeight: "600",
-													fontSize: 15,
-												}}
-											>
-												Next
-											</ThemedText>
-											<MaterialCommunityIcons
-												name="chevron-right"
-												size={24}
-												color="rgba(255,255,255,0.85)"
-											/>
-										</Pressable>
-									)}
-								</View>
-							</View>
+							</ThemedView>
 						</SafeAreaView>
 					</LinearGradient>
 				)}
 			/>
-		</View>
+		</ThemedView>
 	);
 }

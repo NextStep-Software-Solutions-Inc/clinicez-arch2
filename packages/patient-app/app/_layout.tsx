@@ -51,6 +51,7 @@ function AppContent() {
 		useAuthStore();
 	const [dbReady, setDbReady] = useState(false);
 	const [startupError, setStartupError] = useState<string | null>(null);
+	const [startupTimeout, setStartupTimeout] = useState(false);
 
 	const [loaded, fontLoadError] = useFonts({
 		"SF-Pro": require("../assets/fonts/SF-Pro.ttf"),
@@ -58,16 +59,40 @@ function AppContent() {
 
 	useEffect(() => {
 		async function init() {
-			await migrate(db, migrations);
-			await pruneAuditLogs();
-			await bootstrap();
-			setDbReady(true);
+			try {
+				const timeoutId = setTimeout(() => {
+					console.warn("App startup timeout after 15 seconds");
+					setStartupTimeout(true);
+					SplashScreen.hideAsync().catch(console.error);
+				}, 15000);
+
+				await migrate(db, migrations);
+				await pruneAuditLogs();
+				await bootstrap();
+				setDbReady(true);
+				clearTimeout(timeoutId);
+			} catch (error) {
+				console.error("[STARTUP_ERROR]", error);
+				setStartupError(getErrorMessage(error));
+				SplashScreen.hideAsync().catch(console.error);
+			}
 		}
-		init().catch((error) => {
-			console.error(error);
-			setStartupError(getErrorMessage(error));
-		});
+		init();
 	}, [bootstrap]);
+
+	// Hide splash screen once DB and fonts are ready
+	useEffect(() => {
+		if (loaded && dbReady) {
+			SplashScreen.hideAsync().catch(console.error);
+		}
+	}, [loaded, dbReady]);
+
+	// Fallback: hide splash if Clerk is loaded but app state not ready
+	useEffect(() => {
+		if (clerkLoaded && startupTimeout) {
+			SplashScreen.hideAsync().catch(console.error);
+		}
+	}, [clerkLoaded, startupTimeout]);
 
 	// Seed patient row and persist identity as soon as Clerk user is available and DB is ready
 	useEffect(() => {
@@ -100,6 +125,20 @@ function AppContent() {
 				runtimeErrors={[
 					...(startupError ? [startupError] : []),
 					...(fontLoadError ? [getErrorMessage(fontLoadError)] : []),
+				]}
+			/>
+		);
+	}
+
+	if (startupTimeout) {
+		return (
+			<ConfigErrorScreen
+				runtimeErrors={[
+					"App startup timed out. This usually means:",
+					"1. Check if Metro bundler is running (pnpm start)",
+					"2. Check device logs: adb logcat or Xcode console",
+					"3. Check network connectivity to Metro",
+					`\nDebug: loaded=${loaded}, dbReady=${dbReady}, status=${status}, clerkLoaded=${clerkLoaded}`,
 				]}
 			/>
 		);

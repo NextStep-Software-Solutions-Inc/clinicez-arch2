@@ -4,16 +4,20 @@ import { LinearGradient } from "expo-linear-gradient";
 
 type ClerkError = { longMessage?: string | null; message?: string | null };
 
+import { Feather } from "@expo/vector-icons";
 import { useState } from "react";
 import {
 	ActivityIndicator,
 	KeyboardAvoidingView,
 	Platform,
 	Pressable,
-	SafeAreaView,
 	ScrollView,
 	TextInput,
 } from "react-native";
+import {
+	SafeAreaView,
+	useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 
@@ -38,6 +42,7 @@ type Step = "form" | "verify" | "forgotPassword" | "resetPassword";
 
 export default function ClerkSignInScreen() {
 	const { signIn } = useSignIn();
+	const insets = useSafeAreaInsets();
 
 	const [step, setStep] = useState<Step>("form");
 	const [email, setEmail] = useState("");
@@ -180,6 +185,19 @@ export default function ClerkSignInScreen() {
 					style={{ flex: 1 }}
 					behavior={Platform.OS === "ios" ? "padding" : "height"}
 				>
+					{(step === "forgotPassword" ||
+						step === "resetPassword" ||
+						step === "verify") && (
+						<Pressable
+							onPress={handleBackPress}
+							className="py-2 px-1"
+							hitSlop={16}
+						>
+							<ThemedText className="text-white/70 text-sm font-medium ml-4">
+								<Feather name="arrow-left" size={16} color="white" /> Back
+							</ThemedText>
+						</Pressable>
+					)}
 					<ScrollView
 						contentContainerStyle={{
 							flexGrow: 1,
@@ -188,19 +206,6 @@ export default function ClerkSignInScreen() {
 						}}
 						keyboardShouldPersistTaps="handled"
 					>
-						{(step === "forgotPassword" ||
-							step === "resetPassword" ||
-							step === "verify") && (
-							<Pressable
-								onPress={handleBackPress}
-								className="absolute top-2 left-0 py-2 px-1"
-								hitSlop={16}
-							>
-								<ThemedText className="text-white/70 text-sm font-medium">
-									← Back
-								</ThemedText>
-							</Pressable>
-						)}
 						{/* Header */}
 						<ThemedView className="bg-transparent items-center mb-8">
 							<ThemedText className="text-white text-3xl font-extrabold tracking-tight mb-2">
