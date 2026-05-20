@@ -1,7 +1,7 @@
+import { Feather } from "@expo/vector-icons";
 import { ActivityIndicator, Pressable, TextInput } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
-import { Feather } from "@expo/vector-icons";
 
 const INPUT_STYLE = {
 	backgroundColor: "rgba(255,255,255,0.12)",
@@ -59,7 +59,7 @@ export function ForgotPasswordForm({
 				)}
 			</Pressable>
 			<Pressable onPress={onBack} className="items-center mt-4">
-				<ThemedText className="text-white/60 text-sm">
+				<ThemedText className="text-white/60">
 					<Feather name="arrow-left" /> Back to sign in
 				</ThemedText>
 			</Pressable>

@@ -84,7 +84,7 @@ export function SignUpForm({
 			</Pressable>
 
 			<Pressable onPress={onSwitchToSignIn} className="items-center mt-5">
-				<ThemedText className="text-white/60 text-sm">
+				<ThemedText className="text-white/60">
 					Already have an account? Sign in <Feather name="arrow-right" />
 				</ThemedText>
 			</Pressable>

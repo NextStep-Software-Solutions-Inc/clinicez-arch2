@@ -61,9 +61,7 @@ export function SignInForm({
 			/>
 
 			<Pressable onPress={onForgotPassword} className="items-end mb-3 -mt-1">
-				<ThemedText className="text-white/60 text-sm">
-					Forgot password?
-				</ThemedText>
+				<ThemedText className="text-white/60">Forgot password?</ThemedText>
 			</Pressable>
 
 			<Pressable
@@ -85,7 +83,7 @@ export function SignInForm({
 					onPress={onSwitchToSignUp}
 					className="items-center mt-5 pt-4 border-t border-white/10"
 				>
-					<ThemedText className="text-white/60 text-sm">
+					<ThemedText className="text-white/60">
 						New to Clinic EZ? Create an account <Feather name="arrow-right" />
 					</ThemedText>
 				</Pressable>

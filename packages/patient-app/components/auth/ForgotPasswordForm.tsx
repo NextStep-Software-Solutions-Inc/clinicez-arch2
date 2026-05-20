@@ -1,7 +1,8 @@
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useEffect } from "react";
 import { ActivityIndicator, Pressable, TextInput } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
-import { Feather } from "@expo/vector-icons";
 
 const INPUT_STYLE = {
 	backgroundColor: "rgba(255,255,255,0.12)",
@@ -117,3 +118,46 @@ export function NewPasswordForm({
 	);
 }
 
+type CodeVerifiedFeedbackProps = {
+	onNext: () => void;
+	delayMs?: number;
+};
+
+export function CodeVerifiedFeedback({
+	onNext,
+	delayMs = 1800,
+}: CodeVerifiedFeedbackProps) {
+	useEffect(() => {
+		const timer = setTimeout(onNext, delayMs);
+		return () => clearTimeout(timer);
+	}, [onNext, delayMs]);
+
+	return (
+		<ThemedView className="bg-transparent items-center gap-5 py-6">
+			<ThemedView
+				style={{
+					width: 88,
+					height: 88,
+					borderRadius: 44,
+					backgroundColor: "rgba(255,255,255,0.15)",
+					alignItems: "center",
+					justifyContent: "center",
+				}}
+			>
+				<MaterialCommunityIcons
+					name="check-circle-outline"
+					size={56}
+					color="#4ade80"
+				/>
+			</ThemedView>
+			<ThemedView className="bg-transparent items-center gap-2">
+				<ThemedText className="text-white text-2xl font-bold text-center">
+					Code Verified!
+				</ThemedText>
+				<ThemedText className="text-white/65 text-sm text-center">
+					Taking you to set your new password…
+				</ThemedText>
+			</ThemedView>
+		</ThemedView>
+	);
+}
