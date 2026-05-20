@@ -9,12 +9,19 @@
 		"userInterfaceStyle": "automatic",
 		"ios": {
 			"supportsTablet": true,
-			"bundleIdentifier": "com.nextstepsoftware.clinicez.patient"
+			"bundleIdentifier": "com.nextstepsoftware.clinicez.patient",
+			"icon": {
+				"light": "./assets/images/ios-icon-default.png",
+				"dark": "./assets/images/ios-icon-dark.png",
+				"tinted": "./assets/images/ios-icon-tinted.png"
+			}
 		},
 		"android": {
 			"adaptiveIcon": {
-				"foregroundImage": "./assets/images/adaptive-icon.png",
-				"backgroundColor": "#ffffff"
+				"foregroundImage": "./assets/images/android-icon-foreground.png",
+				"backgroundColor": "#ffffff",
+				"monochromeImage": "./assets/images/android-icon-monochrome.png",
+				"backgroundImage": "./assets/images/android-icon-background.png"
 			},
 			"package": "com.nextstepsoftware.clinicez.patient"
 		},
@@ -25,18 +32,26 @@
 		},
 		"plugins": [
 			"expo-router",
+			"expo-secure-store",
+			"expo-sqlite",
+			"@clerk/expo",
 			[
 				"expo-splash-screen",
 				{
 					"image": "./assets/images/splash-icon.png",
 					"imageWidth": 200,
 					"resizeMode": "contain",
-					"backgroundColor": "#ffffff"
+					"backgroundColor": "#ffffff",
+					"ios": {
+						"image": "./assets/images/iOS.png",
+						"resizeMode": "contain"
+					},
+					"android": {
+						"image": "./assets/images/android-splash.png",
+						"resizeMode": "contain"
+					}
 				}
-			],
-			"expo-secure-store",
-			"expo-sqlite",
-			"@clerk/expo"
+			]
 		],
 		"experiments": {
 			"typedRoutes": true

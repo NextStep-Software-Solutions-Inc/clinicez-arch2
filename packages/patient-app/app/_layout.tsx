@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 import { ClinicProvider } from "../components/ClinicContext";
 import "react-native-reanimated";
 import { migrate } from "drizzle-orm/expo-sqlite/migrator";
+import * as SplashScreen from "expo-splash-screen";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { db, pruneAuditLogs } from "@/db";
@@ -26,6 +27,11 @@ import { useAuthStore } from "@/stores/authStore";
 import migrations from "../drizzle/migrations";
 import OnboardingFlow from "../screens/onboarding/OnboardingFlow";
 import PinScreen from "../screens/PinScreen";
+
+SplashScreen.setOptions({
+	duration: 500, // Minimum duration to show the splash screen (in milliseconds)
+	fade: true, // Whether to fade out the splash screen when hiding
+});
 
 const APP_CONFIG_ISSUES = getAppConfigIssues();
 const CLERK_PUBLISHABLE_KEY = getClerkPublishableKey();
