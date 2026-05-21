@@ -26,6 +26,9 @@ export function ThemedText({
 	return (
 		<Text
 			style={[
+				{
+					fontFamily: "SF-Pro",
+				},
 				color ? { color } : undefined,
 				type === "link" ? styles.link : undefined,
 				style,

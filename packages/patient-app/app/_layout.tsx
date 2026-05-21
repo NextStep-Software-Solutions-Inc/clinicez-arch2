@@ -55,6 +55,7 @@ function AppContent() {
 
 	const [loaded, fontLoadError] = useFonts({
 		"SF-Pro": require("../assets/fonts/SF-Pro.ttf"),
+		"SpaceMono-Regular": require("../assets/fonts/SpaceMono-Regular.ttf"),
 	});
 
 	useEffect(() => {

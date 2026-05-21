@@ -323,7 +323,7 @@ export default function HomeScreen() {
 					</ScrollView>
 
 					<ThemedText className="text-base text-slate-400 dark:text-slate-500 text-center mt-auto mb-2">
-						Powered by NextStep Software Solutions
+						Powered by NextStep Software Inc.
 					</ThemedText>
 				</ThemedView>
 			</ScrollView>
