@@ -5,6 +5,7 @@
 	},
 	"build": {
 		"development": {
+			"env": { "APP_VARIANT": "development" },
 			"distribution": "internal",
 			"environment": "development",
 			"channel": "development",
@@ -18,6 +19,7 @@
 			}
 		},
 		"preview": {
+			"env": { "APP_VARIANT": "preview" },
 			"distribution": "internal",
 			"environment": "preview",
 			"channel": "preview",
@@ -26,6 +28,7 @@
 			}
 		},
 		"staging": {
+			"env": { "APP_VARIANT": "staging" },
 			"distribution": "internal",
 			"environment": "preview",
 			"channel": "staging",
@@ -34,6 +37,7 @@
 			}
 		},
 		"production": {
+			"env": { "APP_VARIANT": "production" },
 			"distribution": "store",
 			"environment": "production",
 			"channel": "production",

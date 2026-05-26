@@ -4,6 +4,8 @@
 	"version": "1.0.1",
 	"scripts": {
 		"start": "expo start",
+		"start:dev": "cross-env APP_VARIANT=development expo start",
+		"start:preview": "cross-env APP_VARIANT=preview expo start",
 		"reset-project": "node ./scripts/reset-project.js",
 		"android": "expo start --android",
 		"ios": "expo start --ios",
@@ -20,24 +22,24 @@
 		"@react-navigation/native": "^7.1.33",
 		"date-fns": "^4.1.0",
 		"drizzle-orm": "^0.45.2",
-		"expo": "~55.0.24",
+		"expo": "~55.0.26",
 		"expo-blur": "~55.0.14",
 		"expo-constants": "~55.0.16",
 		"expo-crypto": "~55.0.15",
 		"expo-font": "~55.0.7",
 		"expo-haptics": "~55.0.14",
-		"expo-image": "~55.0.10",
+		"expo-image": "~55.0.11",
 		"expo-linear-gradient": "^55.0.14",
 		"expo-linking": "~55.0.15",
 		"expo-local-authentication": "~55.0.14",
-		"expo-router": "~55.0.14",
+		"expo-router": "~55.0.16",
 		"expo-secure-store": "~55.0.14",
 		"expo-splash-screen": "~55.0.21",
 		"expo-sqlite": "~55.0.16",
 		"expo-status-bar": "~55.0.6",
 		"expo-symbols": "~55.0.8",
 		"expo-system-ui": "~55.0.18",
-		"expo-updates": "~55.0.22",
+		"expo-updates": "~55.0.24",
 		"expo-web-browser": "~55.0.16",
 		"nativewind": "^4.2.4",
 		"react-native-css-interop": "^0.2.4",
@@ -46,6 +48,7 @@
 		"zustand": "^5.0.13"
 	},
 	"devDependencies": {
+		"cross-env": "^7.0.3",
 		"@babel/core": "^7.25.2",
 		"@biomejs/biome": "^2.4.15",
 		"@types/react": "~19.2.14",
@@ -69,7 +72,8 @@
 	},
 	"pnpm": {
 		"overrides": {
-			"@clerk/shared": "4.12.0"
+			"@clerk/shared": "4.12.0",
+			"react-native-reanimated": "4.2.1"
 		}
 	}
 }
