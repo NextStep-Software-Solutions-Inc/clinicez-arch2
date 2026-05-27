@@ -651,13 +651,13 @@ export default function ProfileScreen() {
 
 	return (
 		<SafeAreaView
-			edges={["left", "right", "bottom"]}
+			edges={["left", "right"]}
 			className="flex-1 bg-white dark:bg-slate-900"
 		>
 			<ScrollView
 				className="flex-1"
 				contentContainerStyle={{
-					paddingHorizontal: 16,
+					paddingHorizontal: 10,
 					paddingBottom: 40,
 					paddingTop: 16,
 				}}
