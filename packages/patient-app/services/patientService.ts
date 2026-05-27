@@ -159,6 +159,18 @@ export async function updatePatientBasicInfo(
 	audit.info("DATA", "PATIENT_UPDATED");
 }
 
+export async function updatePatientAvatarUrl(
+	patientId: string,
+	avatarUrl: string,
+): Promise<void> {
+	const now = new Date();
+	await db
+		.update(patients)
+		.set({ avatarUrl, updatedAt: now, syncedAt: null })
+		.where(eq(patients.id, patientId));
+	audit.info("DATA", "PATIENT_AVATAR_UPDATED");
+}
+
 // ---------------------------------------------------------------------------
 // Addresses
 // ---------------------------------------------------------------------------
