@@ -656,7 +656,11 @@ export default function ProfileScreen() {
 		>
 			<ScrollView
 				className="flex-1"
-				contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }}
+				contentContainerStyle={{
+					paddingHorizontal: 16,
+					paddingBottom: 40,
+					paddingTop: 16,
+				}}
 				showsVerticalScrollIndicator={false}
 			>
 				{/* ── Hero ── */}
