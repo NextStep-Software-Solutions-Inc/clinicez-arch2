@@ -17,14 +17,14 @@ export function StatChip({ label, value, icon, color }: Props) {
 	return (
 		<View
 			style={{
-				backgroundColor: isDark ? `${color}45` : `${color}12`,
+				backgroundColor: isDark ? `${color}45` : `${color}30`,
 				borderRadius: 12,
 				paddingHorizontal: 12,
 				paddingVertical: 9,
 				alignItems: "center",
 				minWidth: 78,
 				borderWidth: 1,
-				borderColor: isDark ? `${color}80` : `${color}22`,
+				borderColor: isDark ? `${color}80` : `${color}60`,
 			}}
 		>
 			<Feather

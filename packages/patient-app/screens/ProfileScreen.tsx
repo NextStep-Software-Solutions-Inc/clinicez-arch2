@@ -598,8 +598,6 @@ export default function ProfileScreen() {
 		if (!patient) return;
 		validateIsoDate(menstrualForm.lastMensPeriod, "Last Menstrual Period");
 		await upsertMenstrualHistory(patient.id, {
-			isApplicable:
-				(menstrualForm.isApplicable as "Y" | "N" | undefined) || undefined,
 			menarchePeriod: menstrualForm.menarchePeriod
 				? Number(menstrualForm.menarchePeriod)
 				: undefined,
@@ -1087,27 +1085,31 @@ export default function ProfileScreen() {
 					onSave={saveImmunization}
 				>
 					<FieldInput
-						label="Children Immunization Code"
+						label="Child Vaccines"
+						placeholder="e.g. BCG, Hepatitis B, DPT, OPV"
 						value={immForm.childImmcode}
 						onChange={(v) => setImmForm((p) => ({ ...p, childImmcode: v }))}
 					/>
 					<FieldInput
-						label="Young Woman Immunization Code"
+						label="Young Women Vaccines"
+						placeholder="e.g. HPV, Tetanus (Td)"
 						value={immForm.youngwImmcode}
 						onChange={(v) => setImmForm((p) => ({ ...p, youngwImmcode: v }))}
 					/>
 					<FieldInput
-						label="Pregnant Woman Immunization Code"
+						label="Pregnancy Vaccines"
+						placeholder="e.g. Tetanus (Td), Influenza"
 						value={immForm.pregwImmcode}
 						onChange={(v) => setImmForm((p) => ({ ...p, pregwImmcode: v }))}
 					/>
 					<FieldInput
-						label="Elderly Immunization Code"
+						label="Senior / Elderly Vaccines"
+						placeholder="e.g. Influenza, Pneumococcal"
 						value={immForm.elderlyImmcode}
 						onChange={(v) => setImmForm((p) => ({ ...p, elderlyImmcode: v }))}
 					/>
 					<FieldInput
-						label="Other Immunizations"
+						label="Other Vaccines / Immunizations"
 						value={immForm.otherImm}
 						onChange={(v) => setImmForm((p) => ({ ...p, otherImm: v }))}
 					/>
@@ -1121,15 +1123,6 @@ export default function ProfileScreen() {
 					onClose={() => setActiveModal(null)}
 					onSave={saveMenstrualHistory}
 				>
-					<SelectInput
-						label="Applicable"
-						value={menstrualForm.isApplicable}
-						options={YES_NO_OPTIONS}
-						onChange={(v) =>
-							setMenstrualForm((p) => ({ ...p, isApplicable: v }))
-						}
-						placeholder="Select"
-					/>
 					<FieldInput
 						label="Age at Menarche"
 						value={menstrualForm.menarchePeriod}
