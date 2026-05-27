@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import type { Feather } from "@expo/vector-icons";
 import { View } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { IconBadge } from "./IconBadge";

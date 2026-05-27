@@ -54,10 +54,20 @@ export function SectionCard({
 				}}
 			>
 				<View
-					style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}
+					style={{
+						flexDirection: "row",
+						alignItems: "center",
+						gap: 8,
+						flex: 1,
+					}}
 				>
 					{icon ? (
-						<IconBadge name={icon} color={accentColor} size={14} badgeSize={28} />
+						<IconBadge
+							name={icon}
+							color={accentColor}
+							size={14}
+							badgeSize={28}
+						/>
 					) : null}
 					<View style={{ flex: 1 }}>
 						<ThemedText

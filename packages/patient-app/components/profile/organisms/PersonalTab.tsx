@@ -1,4 +1,4 @@
-import type { EmergencyContact, Patient, PatientAddress } from "@/db/schema";
+import type { Patient, PatientAddress } from "@/db/schema";
 import { InfoRow } from "../atoms/InfoRow";
 import { SectionCard } from "../molecules/SectionCard";
 
@@ -31,21 +31,9 @@ export function PersonalTab({
 				accentColor="#0a7ea4"
 				onEdit={onEditBasic}
 			>
-				<InfoRow
-					label="First Name"
-					value={patient?.firstName}
-					icon="type"
-				/>
-				<InfoRow
-					label="Middle Name"
-					value={patient?.middleName}
-					icon="type"
-				/>
-				<InfoRow
-					label="Last Name"
-					value={patient?.lastName}
-					icon="type"
-				/>
+				<InfoRow label="First Name" value={patient?.firstName} icon="type" />
+				<InfoRow label="Middle Name" value={patient?.middleName} icon="type" />
+				<InfoRow label="Last Name" value={patient?.lastName} icon="type" />
 				<InfoRow label="Suffix" value={patient?.suffix} icon="tag" />
 				<InfoRow label="Sex" value={patient?.sex} icon="user" />
 				<InfoRow label="Date of Birth" value={patient?.dob} icon="calendar" />
@@ -60,11 +48,7 @@ export function PersonalTab({
 					icon="droplet"
 					iconColor="#ef4444"
 				/>
-				<InfoRow
-					label="Nationality"
-					value={patient?.nationality}
-					icon="flag"
-				/>
+				<InfoRow label="Nationality" value={patient?.nationality} icon="flag" />
 				<InfoRow label="Religion" value={patient?.religion} icon="book" />
 			</SectionCard>
 

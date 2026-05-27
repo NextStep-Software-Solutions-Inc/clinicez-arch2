@@ -94,7 +94,9 @@ export function ProfileHero({
 							paddingVertical: 3,
 						}}
 					>
-						<ThemedText style={{ fontSize: 12, color: "rgba(255,255,255,0.9)" }}>
+						<ThemedText
+							style={{ fontSize: 12, color: "rgba(255,255,255,0.9)" }}
+						>
 							Patient
 						</ThemedText>
 					</View>

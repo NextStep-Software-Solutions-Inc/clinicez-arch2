@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import type { Feather } from "@expo/vector-icons";
 import type { HealthDeclaration, HealthDeclarationCategory } from "@/db/schema";
 import { HealthCategoryCard } from "../molecules/HealthCategoryCard";
 import { SectionCard } from "../molecules/SectionCard";
@@ -101,12 +101,7 @@ export function MedicalTab({
 
 	return (
 		<>
-			{renderGroup(
-				"Medical History",
-				"activity",
-				"#0a7ea4",
-				MEDICAL_CATS,
-			)}
+			{renderGroup("Medical History", "activity", "#0a7ea4", MEDICAL_CATS)}
 			{renderGroup("Family History", "users", "#10b981", FAMILY_CATS)}
 			{renderGroup("Social History", "coffee", "#84cc16", SOCIAL_CATS)}
 		</>

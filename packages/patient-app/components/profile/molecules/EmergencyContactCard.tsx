@@ -43,31 +43,15 @@ export function EmergencyContactCard({ label, contact, onEdit }: Props) {
 
 			{contact ? (
 				<View>
-					<InfoRow
-						label="Name"
-						value={contact.name}
-						icon="user"
-					/>
+					<InfoRow label="Name" value={contact.name} icon="user" />
 					<InfoRow
 						label="Relationship"
 						value={contact.relationship}
 						icon="link"
 					/>
-					<InfoRow
-						label="Phone"
-						value={contact.phone}
-						icon="phone"
-					/>
-					<InfoRow
-						label="Email"
-						value={contact.email}
-						icon="mail"
-					/>
-					<InfoRow
-						label="Address"
-						value={contact.address}
-						icon="map-pin"
-					/>
+					<InfoRow label="Phone" value={contact.phone} icon="phone" />
+					<InfoRow label="Email" value={contact.email} icon="mail" />
+					<InfoRow label="Address" value={contact.address} icon="map-pin" />
 				</View>
 			) : (
 				<EmptyState message="Not set. Tap edit to add." />

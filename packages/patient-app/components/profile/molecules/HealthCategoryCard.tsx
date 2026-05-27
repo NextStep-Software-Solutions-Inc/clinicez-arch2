@@ -51,9 +51,7 @@ export function HealthCategoryCard({
 					borderBottomColor: "#e2e8f0",
 				}}
 			>
-				<View
-					style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
-				>
+				<View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
 					<IconBadge name={icon} color={color} size={13} badgeSize={26} />
 					<ThemedText
 						style={{ fontSize: 13, fontWeight: "600", color: "#334155" }}

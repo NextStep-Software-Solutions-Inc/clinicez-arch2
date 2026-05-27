@@ -18,11 +18,7 @@ export function EmergencyTab({
 	onEditSecondary,
 }: Props) {
 	return (
-		<SectionCard
-			title="Emergency Contacts"
-			icon="phone"
-			accentColor="#ef4444"
-		>
+		<SectionCard title="Emergency Contacts" icon="phone" accentColor="#ef4444">
 			<EmergencyContactCard
 				label="Primary Contact"
 				contact={primaryContact}

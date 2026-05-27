@@ -24,7 +24,12 @@ export function StatChip({ label, value, icon, color }: Props) {
 				borderColor: `${color}22`,
 			}}
 		>
-			<Feather name={icon} size={15} color={color} style={{ marginBottom: 3 }} />
+			<Feather
+				name={icon}
+				size={15}
+				color={color}
+				style={{ marginBottom: 3 }}
+			/>
 			<ThemedText
 				style={{
 					fontSize: 13,
@@ -36,7 +41,9 @@ export function StatChip({ label, value, icon, color }: Props) {
 			>
 				{value || "—"}
 			</ThemedText>
-			<ThemedText style={{ fontSize: 10, color: "#94a3b8", textAlign: "center" }}>
+			<ThemedText
+				style={{ fontSize: 10, color: "#94a3b8", textAlign: "center" }}
+			>
 				{label}
 			</ThemedText>
 		</View>

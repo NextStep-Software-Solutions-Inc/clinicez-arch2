@@ -31,11 +31,7 @@ export function ProfileTabButton({ label, icon, isActive, onPress }: Props) {
 				elevation: isActive ? 2 : 0,
 			}}
 		>
-			<Feather
-				name={icon}
-				size={13}
-				color={isActive ? "#0a7ea4" : "#94a3b8"}
-			/>
+			<Feather name={icon} size={13} color={isActive ? "#0a7ea4" : "#94a3b8"} />
 			<ThemedText
 				style={{
 					fontSize: 12,
