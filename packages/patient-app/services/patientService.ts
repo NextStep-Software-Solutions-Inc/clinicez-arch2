@@ -552,7 +552,6 @@ export async function getMenstrualHistory(
 export type MenstrualHistoryInput = Partial<
 	Pick<
 		PatientMenstrualHistory,
-		| "isApplicable"
 		| "menarchePeriod"
 		| "lastMensPeriod"
 		| "periodDuration"

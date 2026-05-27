@@ -344,7 +344,6 @@ export default function ProfileScreen() {
 		otherImm: "",
 	});
 	const [menstrualForm, setMenstrualForm] = useState({
-		isApplicable: "",
 		menarchePeriod: "",
 		lastMensPeriod: "",
 		periodDuration: "",
@@ -452,7 +451,6 @@ export default function ProfileScreen() {
 
 	function openMenstrualHistoryEdit() {
 		setMenstrualForm({
-			isApplicable: menstrualHistory?.isApplicable ?? "",
 			menarchePeriod: menstrualHistory?.menarchePeriod?.toString() ?? "",
 			lastMensPeriod: menstrualHistory?.lastMensPeriod ?? "",
 			periodDuration: menstrualHistory?.periodDuration?.toString() ?? "",
