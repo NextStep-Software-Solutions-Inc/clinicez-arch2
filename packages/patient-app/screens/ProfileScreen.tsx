@@ -1,5 +1,6 @@
 import { useClerk, useUser } from "@clerk/expo";
 import { Feather } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import type React from "react";
 import { useState } from "react";
 import {
@@ -37,45 +38,348 @@ import { useAuthStore } from "@/stores/authStore";
 function LabeledValue({
 	label,
 	value,
+	icon,
 }: {
 	label: string;
 	value?: string | null;
+	icon?: React.ComponentProps<typeof Feather>["name"];
 }) {
 	return (
-		<ThemedView className="mb-2 bg-transparent">
-			<ThemedText className="text-xs text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-0.5">
-				{label}
-			</ThemedText>
-			<ThemedText className="text-base text-slate-800 dark:text-slate-200">
-				{value || "—"}
-			</ThemedText>
-		</ThemedView>
+		<View
+			style={{
+				flexDirection: "row",
+				alignItems: "flex-start",
+				marginBottom: 10,
+				gap: 10,
+			}}
+		>
+			{icon ? (
+				<View
+					style={{
+						width: 32,
+						height: 32,
+						borderRadius: 8,
+						backgroundColor: "#0a7ea415",
+						alignItems: "center",
+						justifyContent: "center",
+						marginTop: 2,
+					}}
+				>
+					<Feather name={icon} size={14} color="#0a7ea4" />
+				</View>
+			) : null}
+			<View style={{ flex: 1 }}>
+				<ThemedText className="text-xs text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-0.5">
+					{label}
+				</ThemedText>
+				<ThemedText className="text-sm font-medium text-slate-800 dark:text-slate-200">
+					{value || "—"}
+				</ThemedText>
+			</View>
+		</View>
 	);
 }
 
 function SectionCard({
 	title,
+	subtitle,
 	onEdit,
+	icon,
+	accentColor,
 	children,
 }: {
 	title: string;
+	subtitle?: string;
 	onEdit?: () => void;
+	icon?: React.ComponentProps<typeof Feather>["name"];
+	accentColor?: string;
 	children: React.ReactNode;
 }) {
+	const accent = accentColor ?? "#0a7ea4";
 	return (
-		<ThemedView className="w-full rounded-2xl bg-white dark:bg-slate-800 shadow-sm mb-4 overflow-hidden">
-			<ThemedView className="flex-row items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-700 bg-transparent">
-				<ThemedText className="text-base font-bold text-slate-800 dark:text-slate-100">
-					{title}
-				</ThemedText>
+		<View
+			style={{
+				backgroundColor: "white",
+				borderRadius: 16,
+				marginBottom: 12,
+				shadowColor: "#000",
+				shadowOffset: { width: 0, height: 2 },
+				shadowOpacity: 0.06,
+				shadowRadius: 8,
+				elevation: 3,
+				overflow: "hidden",
+			}}
+		>
+			<View
+				style={{
+					flexDirection: "row",
+					alignItems: "center",
+					justifyContent: "space-between",
+					paddingHorizontal: 16,
+					paddingVertical: 12,
+					borderBottomWidth: 1,
+					borderBottomColor: "#f1f5f9",
+					borderLeftWidth: 4,
+					borderLeftColor: accent,
+				}}
+			>
+				<View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
+					{icon ? (
+						<View
+							style={{
+								width: 28,
+								height: 28,
+								borderRadius: 8,
+								backgroundColor: `${accent}18`,
+								alignItems: "center",
+								justifyContent: "center",
+							}}
+						>
+							<Feather name={icon} size={14} color={accent} />
+						</View>
+					) : null}
+					<View style={{ flex: 1 }}>
+						<ThemedText
+							style={{
+								fontSize: 14,
+								fontWeight: "700",
+								color: "#1e293b",
+							}}
+						>
+							{title}
+						</ThemedText>
+						{subtitle ? (
+							<ThemedText
+								style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}
+							>
+								{subtitle}
+							</ThemedText>
+						) : null}
+					</View>
+				</View>
 				{onEdit && (
-					<TouchableOpacity onPress={onEdit} hitSlop={10}>
-						<Feather name="edit-2" size={16} color={Colors.light.tint} />
+					<TouchableOpacity
+						onPress={onEdit}
+						hitSlop={10}
+						style={{
+							backgroundColor: `${accent}15`,
+							borderRadius: 8,
+							padding: 6,
+						}}
+					>
+						<Feather name="edit-2" size={13} color={accent} />
 					</TouchableOpacity>
 				)}
-			</ThemedView>
-			<ThemedView className="px-4 py-3 bg-transparent">{children}</ThemedView>
-		</ThemedView>
+			</View>
+			<View style={{ padding: 16 }}>{children}</View>
+		</View>
+	);
+}
+
+function SectionCardDark({
+	title,
+	subtitle,
+	onEdit,
+	icon,
+	accentColor,
+	children,
+}: {
+	title: string;
+	subtitle?: string;
+	onEdit?: () => void;
+	icon?: React.ComponentProps<typeof Feather>["name"];
+	accentColor?: string;
+	children: React.ReactNode;
+}) {
+	const scheme = useColorScheme();
+	const isDark = scheme === "dark";
+	const accent = accentColor ?? "#0a7ea4";
+	const cardBg = isDark ? "#1e293b" : "white";
+	const headerBorderColor = isDark ? "#334155" : "#f1f5f9";
+
+	return (
+		<View
+			style={{
+				backgroundColor: cardBg,
+				borderRadius: 16,
+				marginBottom: 12,
+				shadowColor: "#000",
+				shadowOffset: { width: 0, height: 2 },
+				shadowOpacity: 0.06,
+				shadowRadius: 8,
+				elevation: 3,
+				overflow: "hidden",
+			}}
+		>
+			<View
+				style={{
+					flexDirection: "row",
+					alignItems: "center",
+					justifyContent: "space-between",
+					paddingHorizontal: 16,
+					paddingVertical: 12,
+					borderBottomWidth: 1,
+					borderBottomColor: headerBorderColor,
+					borderLeftWidth: 4,
+					borderLeftColor: accent,
+				}}
+			>
+				<View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
+					{icon ? (
+						<View
+							style={{
+								width: 28,
+								height: 28,
+								borderRadius: 8,
+								backgroundColor: `${accent}20`,
+								alignItems: "center",
+								justifyContent: "center",
+							}}
+						>
+							<Feather name={icon} size={14} color={accent} />
+						</View>
+					) : null}
+					<View style={{ flex: 1 }}>
+						<ThemedText
+							style={{
+								fontSize: 14,
+								fontWeight: "700",
+								color: isDark ? "#f1f5f9" : "#1e293b",
+							}}
+						>
+							{title}
+						</ThemedText>
+						{subtitle ? (
+							<ThemedText
+								style={{
+									fontSize: 11,
+									color: isDark ? "#64748b" : "#94a3b8",
+									marginTop: 1,
+								}}
+							>
+								{subtitle}
+							</ThemedText>
+						) : null}
+					</View>
+				</View>
+				{onEdit && (
+					<TouchableOpacity
+						onPress={onEdit}
+						hitSlop={10}
+						style={{
+							backgroundColor: `${accent}20`,
+							borderRadius: 8,
+							padding: 6,
+						}}
+					>
+						<Feather name="edit-2" size={13} color={accent} />
+					</TouchableOpacity>
+				)}
+			</View>
+			<View style={{ padding: 16 }}>{children}</View>
+		</View>
+	);
+}
+
+function QuickStatChip({
+	label,
+	value,
+	icon,
+	color,
+}: {
+	label: string;
+	value?: string | null;
+	icon: React.ComponentProps<typeof Feather>["name"];
+	color: string;
+}) {
+	return (
+		<View
+			style={{
+				backgroundColor: `${color}15`,
+				borderRadius: 12,
+				paddingHorizontal: 12,
+				paddingVertical: 8,
+				alignItems: "center",
+				minWidth: 80,
+				borderWidth: 1,
+				borderColor: `${color}25`,
+			}}
+		>
+			<Feather name={icon} size={16} color={color} style={{ marginBottom: 3 }} />
+			<ThemedText
+				style={{ fontSize: 13, fontWeight: "700", color, marginBottom: 1 }}
+			>
+				{value || "—"}
+			</ThemedText>
+			<ThemedText style={{ fontSize: 10, color: "#94a3b8" }}>{label}</ThemedText>
+		</View>
+	);
+}
+
+type TabId = "personal" | "medical" | "emergency";
+
+function ProfileTabBar({
+	active,
+	onChange,
+}: {
+	active: TabId;
+	onChange: (t: TabId) => void;
+}) {
+	const tabs: { id: TabId; label: string; icon: React.ComponentProps<typeof Feather>["name"] }[] = [
+		{ id: "personal", label: "Personal", icon: "user" },
+		{ id: "medical", label: "Medical", icon: "activity" },
+		{ id: "emergency", label: "Emergency", icon: "phone" },
+	];
+	return (
+		<View
+			style={{
+				flexDirection: "row",
+				backgroundColor: "#f1f5f9",
+				borderRadius: 14,
+				padding: 4,
+				marginBottom: 16,
+			}}
+		>
+			{tabs.map((tab) => {
+				const isActive = active === tab.id;
+				return (
+					<TouchableOpacity
+						key={tab.id}
+						onPress={() => onChange(tab.id)}
+						style={{
+							flex: 1,
+							flexDirection: "row",
+							alignItems: "center",
+							justifyContent: "center",
+							gap: 4,
+							paddingVertical: 9,
+							borderRadius: 10,
+							backgroundColor: isActive ? "white" : "transparent",
+							shadowColor: isActive ? "#000" : "transparent",
+							shadowOffset: { width: 0, height: 1 },
+							shadowOpacity: isActive ? 0.08 : 0,
+							shadowRadius: 4,
+							elevation: isActive ? 2 : 0,
+						}}
+					>
+						<Feather
+							name={tab.icon}
+							size={13}
+							color={isActive ? "#0a7ea4" : "#94a3b8"}
+						/>
+						<ThemedText
+							style={{
+								fontSize: 12,
+								fontWeight: isActive ? "700" : "500",
+								color: isActive ? "#0a7ea4" : "#94a3b8",
+							}}
+						>
+							{tab.label}
+						</ThemedText>
+					</TouchableOpacity>
+				);
+			})}
+		</View>
 	);
 }
 
@@ -207,6 +511,23 @@ const CATEGORY_LABELS: Record<HealthDeclarationCategory, string> = {
 	family_history: "Family History",
 	immunization: "Immunizations",
 	lifestyle_habit: "Lifestyle & Habits",
+};
+
+type CategoryMeta = {
+	icon: React.ComponentProps<typeof Feather>["name"];
+	color: string;
+};
+
+const CATEGORY_META: Record<HealthDeclarationCategory, CategoryMeta> = {
+	allergy: { icon: "alert-circle", color: "#ef4444" },
+	disability: { icon: "shield", color: "#8b5cf6" },
+	illness: { icon: "thermometer", color: "#f59e0b" },
+	chronic_condition: { icon: "heart", color: "#dc2626" },
+	current_medication: { icon: "package", color: "#3b82f6" },
+	past_surgery: { icon: "scissors", color: "#14b8a6" },
+	family_history: { icon: "users", color: "#10b981" },
+	immunization: { icon: "check-circle", color: "#06b6d4" },
+	lifestyle_habit: { icon: "coffee", color: "#84cc16" },
 };
 
 const MEDICAL_HISTORY_CATEGORIES: HealthDeclarationCategory[] = [
