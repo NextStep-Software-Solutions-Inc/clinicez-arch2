@@ -2,6 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { TouchableOpacity, View } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import type { HealthDeclaration } from "@/db/schema";
+import { useColorScheme } from "@/hooks/useColorScheme";
 import { EmptyState } from "../atoms/EmptyState";
 import { IconBadge } from "../atoms/IconBadge";
 import { HealthDeclarationItem } from "./HealthDeclarationItem";
@@ -27,14 +28,15 @@ export function HealthCategoryCard({
 	onAdd,
 	onDelete,
 }: Props) {
+	const isDark = useColorScheme() === "dark";
 	return (
 		<View
 			style={{
 				marginBottom: 10,
 				borderRadius: 12,
-				backgroundColor: "#f8fafc",
+				backgroundColor: isDark ? "#1e293b" : "#f8fafc",
 				borderWidth: 1,
-				borderColor: "#e2e8f0",
+				borderColor: isDark ? "#334155" : "#e2e8f0",
 				overflow: "hidden",
 			}}
 		>
@@ -46,9 +48,9 @@ export function HealthCategoryCard({
 					justifyContent: "space-between",
 					paddingHorizontal: 12,
 					paddingVertical: 10,
-					backgroundColor: `${color}0d`,
+					backgroundColor: isDark ? `${color}18` : `${color}0d`,
 					borderBottomWidth: items.length > 0 ? 1 : 0,
-					borderBottomColor: "#e2e8f0",
+					borderBottomColor: isDark ? "#334155" : "#e2e8f0",
 				}}
 			>
 				<View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>

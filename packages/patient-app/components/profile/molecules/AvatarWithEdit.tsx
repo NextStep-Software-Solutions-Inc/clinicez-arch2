@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { ActivityIndicator, Image, TouchableOpacity, View } from "react-native";
+import { useColorScheme } from "@/hooks/useColorScheme";
 
 type Props = {
 	uri: string;
@@ -18,6 +19,7 @@ export function AvatarWithEdit({
 	uploading = false,
 	onPress,
 }: Props) {
+	const isDark = useColorScheme() === "dark";
 	const badgeSize = size * 0.3;
 
 	return (
@@ -29,7 +31,7 @@ export function AvatarWithEdit({
 					height: size,
 					borderRadius: size / 2,
 					borderWidth: 3,
-					borderColor: "white",
+					borderColor: isDark ? "#334155" : "white",
 					backgroundColor: "#e2e8f0",
 				}}
 			/>
@@ -65,7 +67,7 @@ export function AvatarWithEdit({
 						alignItems: "center",
 						justifyContent: "center",
 						borderWidth: 2,
-						borderColor: "white",
+						borderColor: isDark ? "#334155" : "white",
 					}}
 				>
 					<Feather name="camera" size={badgeSize * 0.45} color="white" />

@@ -1,6 +1,7 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { View } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
+import { useColorScheme } from "@/hooks/useColorScheme";
 import { StatChip } from "../atoms/StatChip";
 import { AvatarWithEdit } from "../molecules/AvatarWithEdit";
 
@@ -44,12 +45,13 @@ export function ProfileHero({
 	avatarUploading,
 	onAvatarPress,
 }: Props) {
+	const isDark = useColorScheme() === "dark";
 	const age = calcAge(dob);
 
 	return (
 		<View style={{ marginBottom: 20 }}>
 			<LinearGradient
-				colors={["#0a7ea4", "#065a78"]}
+				colors={isDark ? ["#0f2a38", "#071820"] : ["#0a7ea4", "#065a78"]}
 				start={{ x: 0, y: 0 }}
 				end={{ x: 1, y: 1 }}
 				style={{

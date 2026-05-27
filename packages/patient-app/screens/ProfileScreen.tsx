@@ -245,6 +245,7 @@ export default function ProfileScreen() {
 	const { user: clerkUser } = useUser();
 	const { signOut } = useClerk();
 	const { lock } = useAuthStore();
+	const isDark = useColorScheme() === "dark";
 
 	const {
 		patient,
@@ -649,7 +650,10 @@ export default function ProfileScreen() {
 	}
 
 	return (
-		<SafeAreaView edges={["left", "right", "bottom"]} className="flex-1">
+		<SafeAreaView
+			edges={["left", "right", "bottom"]}
+			className="flex-1 bg-white dark:bg-slate-900"
+		>
 			<ScrollView
 				className="flex-1"
 				contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }}
@@ -721,7 +725,7 @@ export default function ProfileScreen() {
 						alignItems: "center",
 						gap: 8,
 						borderWidth: 1,
-						borderColor: "#e2e8f0",
+						borderColor: isDark ? "#334155" : "#e2e8f0",
 						borderRadius: 14,
 						paddingHorizontal: 28,
 						paddingVertical: 12,

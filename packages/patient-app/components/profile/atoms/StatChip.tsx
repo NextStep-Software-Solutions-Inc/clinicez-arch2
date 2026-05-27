@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { View } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
+import { useColorScheme } from "@/hooks/useColorScheme";
 
 type Props = {
 	label: string;
@@ -11,17 +12,19 @@ type Props = {
 
 /** A compact vertical chip showing an icon, a value, and a sub-label. */
 export function StatChip({ label, value, icon, color }: Props) {
+	const scheme = useColorScheme();
+	const isDark = scheme === "dark";
 	return (
 		<View
 			style={{
-				backgroundColor: `${color}12`,
+				backgroundColor: isDark ? `${color}25` : `${color}12`,
 				borderRadius: 12,
 				paddingHorizontal: 12,
 				paddingVertical: 9,
 				alignItems: "center",
 				minWidth: 78,
 				borderWidth: 1,
-				borderColor: `${color}22`,
+				borderColor: isDark ? `${color}40` : `${color}22`,
 			}}
 		>
 			<Feather
@@ -42,7 +45,11 @@ export function StatChip({ label, value, icon, color }: Props) {
 				{value || "—"}
 			</ThemedText>
 			<ThemedText
-				style={{ fontSize: 10, color: "#94a3b8", textAlign: "center" }}
+				style={{
+					fontSize: 10,
+					color: isDark ? "#64748b" : "#94a3b8",
+					textAlign: "center",
+				}}
 			>
 				{label}
 			</ThemedText>

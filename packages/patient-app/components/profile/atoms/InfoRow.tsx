@@ -1,6 +1,7 @@
 import type { Feather } from "@expo/vector-icons";
 import { View } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
+import { useColorScheme } from "@/hooks/useColorScheme";
 import { IconBadge } from "./IconBadge";
 
 type Props = {
@@ -12,6 +13,7 @@ type Props = {
 
 /** A single labeled field row with an optional icon badge. */
 export function InfoRow({ label, value, icon, iconColor = "#0a7ea4" }: Props) {
+	const isDark = useColorScheme() === "dark";
 	return (
 		<View
 			style={{
@@ -28,7 +30,7 @@ export function InfoRow({ label, value, icon, iconColor = "#0a7ea4" }: Props) {
 				<ThemedText
 					style={{
 						fontSize: 10,
-						color: "#94a3b8",
+						color: isDark ? "#475569" : "#94a3b8",
 						textTransform: "uppercase",
 						letterSpacing: 0.6,
 						marginBottom: 1,

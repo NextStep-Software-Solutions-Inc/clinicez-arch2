@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { Alert, TouchableOpacity, View } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
+import { useColorScheme } from "@/hooks/useColorScheme";
 
 type Props = {
 	id: string;
@@ -23,6 +24,8 @@ export function HealthDeclarationItem({
 	accentColor,
 	onDelete,
 }: Props) {
+	const isDark = useColorScheme() === "dark";
+
 	function confirmDelete() {
 		Alert.alert("Remove", `Remove "${description}"?`, [
 			{ text: "Cancel", style: "cancel" },
@@ -36,7 +39,7 @@ export function HealthDeclarationItem({
 				marginBottom: 8,
 				padding: 10,
 				borderRadius: 10,
-				backgroundColor: "#f8fafc",
+				backgroundColor: isDark ? "#0f172a" : "#f8fafc",
 				borderLeftWidth: 3,
 				borderLeftColor: accentColor,
 			}}

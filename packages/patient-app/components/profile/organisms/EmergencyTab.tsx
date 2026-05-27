@@ -1,5 +1,6 @@
 import { View } from "react-native";
 import type { EmergencyContact } from "@/db/schema";
+import { useColorScheme } from "@/hooks/useColorScheme";
 import { EmergencyContactCard } from "../molecules/EmergencyContactCard";
 import { SectionCard } from "../molecules/SectionCard";
 
@@ -17,6 +18,7 @@ export function EmergencyTab({
 	onEditPrimary,
 	onEditSecondary,
 }: Props) {
+	const isDark = useColorScheme() === "dark";
 	return (
 		<SectionCard title="Emergency Contacts" icon="phone" accentColor="#ef4444">
 			<EmergencyContactCard
@@ -27,7 +29,7 @@ export function EmergencyTab({
 			<View
 				style={{
 					height: 1,
-					backgroundColor: "#e2e8f0",
+					backgroundColor: isDark ? "#334155" : "#e2e8f0",
 					marginVertical: 14,
 				}}
 			/>

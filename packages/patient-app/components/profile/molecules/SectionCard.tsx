@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { TouchableOpacity, View } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
+import { useColorScheme } from "@/hooks/useColorScheme";
 import { IconBadge } from "../atoms/IconBadge";
 
 type Props = {
@@ -25,10 +26,11 @@ export function SectionCard({
 	onEdit,
 	children,
 }: Props) {
+	const isDark = useColorScheme() === "dark";
 	return (
 		<View
 			style={{
-				backgroundColor: "white",
+				backgroundColor: isDark ? "#1e293b" : "white",
 				borderRadius: 16,
 				marginBottom: 12,
 				shadowColor: "#000",
@@ -48,7 +50,7 @@ export function SectionCard({
 					paddingHorizontal: 16,
 					paddingVertical: 12,
 					borderBottomWidth: 1,
-					borderBottomColor: "#f1f5f9",
+					borderBottomColor: isDark ? "#334155" : "#f1f5f9",
 					borderLeftWidth: 4,
 					borderLeftColor: accentColor,
 				}}
