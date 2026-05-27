@@ -219,9 +219,13 @@ const MEDICAL_HISTORY_CATEGORIES: HealthDeclarationCategory[] = [
 	"immunization",
 ];
 
-const SOCIAL_HISTORY_CATEGORIES: HealthDeclarationCategory[] = ["lifestyle_habit"];
+const SOCIAL_HISTORY_CATEGORIES: HealthDeclarationCategory[] = [
+	"lifestyle_habit",
+];
 
-const FAMILY_HISTORY_CATEGORIES: HealthDeclarationCategory[] = ["family_history"];
+const FAMILY_HISTORY_CATEGORIES: HealthDeclarationCategory[] = [
+	"family_history",
+];
 
 const SEX_OPTIONS: SelectOption[] = [
 	{ label: "Male", value: "Male" },
@@ -351,7 +355,8 @@ export default function ProfileScreen() {
 			nationality: patient?.nationality ?? "Filipino",
 			religion: patient?.religion ?? "",
 			philhealthId: patient?.philhealthId ?? "",
-			email: patient?.email ?? clerkUser?.primaryEmailAddress?.emailAddress ?? "",
+			email:
+				patient?.email ?? clerkUser?.primaryEmailAddress?.emailAddress ?? "",
 			phone: patient?.phone ?? "",
 		});
 		setActiveModal("basic");
@@ -639,7 +644,10 @@ export default function ProfileScreen() {
 					<LabeledValue label="Blood Type" value={patient?.bloodType} />
 					<LabeledValue label="Nationality" value={patient?.nationality} />
 					<LabeledValue label="Religion" value={patient?.religion} />
-					<LabeledValue label="PIN / PhilHealth ID" value={patient?.philhealthId} />
+					<LabeledValue
+						label="PIN / PhilHealth ID"
+						value={patient?.philhealthId}
+					/>
 					<LabeledValue
 						label="Email"
 						value={
