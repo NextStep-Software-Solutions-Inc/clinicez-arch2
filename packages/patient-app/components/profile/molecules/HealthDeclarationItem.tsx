@@ -68,7 +68,13 @@ export function HealthDeclarationItem({
 				</TouchableOpacity>
 			</View>
 			{detail ? (
-				<ThemedText style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
+				<ThemedText
+					style={{
+						fontSize: 11,
+						color: isDark ? "#94a3b8" : "#64748b",
+						marginTop: 2,
+					}}
+				>
 					{detail}
 				</ThemedText>
 			) : null}
