@@ -1,7 +1,7 @@
+import { Feather } from "@expo/vector-icons";
 import { ActivityIndicator, Pressable, TextInput } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
-import { Feather } from "@expo/vector-icons";
 
 const INPUT_STYLE = {
 	backgroundColor: "rgba(255,255,255,0.12)",

@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRef, useState } from "react";
-import { Dimensions, FlatList, Pressable, type ViewToken } from "react-native";
+import { Dimensions, FlatList, type ViewToken } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -64,11 +64,11 @@ export default function FeatureCarousel({
 		},
 	);
 
-	const scrollToIndex = (index: number) => {
+	const _scrollToIndex = (index: number) => {
 		flatListRef.current?.scrollToIndex({ index, animated: true });
 	};
 
-	const isFirst = currentIndex === 0;
+	const _isFirst = currentIndex === 0;
 	const isLast = currentIndex === features.length - 1;
 
 	return (

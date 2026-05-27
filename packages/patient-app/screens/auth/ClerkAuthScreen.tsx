@@ -2,6 +2,7 @@ import "../../global.css";
 import { useAuth } from "@clerk/expo";
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import {
 	KeyboardAvoidingView,
@@ -19,7 +20,6 @@ import { ForgotPasswordStep } from "./steps/ForgotPasswordStep";
 import { NewPasswordStep } from "./steps/NewPasswordStep";
 import { ResetPasswordStep } from "./steps/ResetPasswordStep";
 import { VerifyEmailStep } from "./steps/VerifyEmailStep";
-import { StatusBar } from "expo-status-bar";
 
 type Props = {
 	onNext: () => void;

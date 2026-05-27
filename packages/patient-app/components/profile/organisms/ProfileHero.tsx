@@ -24,6 +24,7 @@ function calcAge(dob: string | null | undefined): string | null {
 	const today = new Date();
 	let age = today.getFullYear() - birth.getFullYear();
 	const m = today.getMonth() - birth.getMonth();
+	// Subtract 1 if the birthday hasn't occurred yet this year
 	if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
 	return `${age} yrs`;
 }

@@ -513,8 +513,9 @@ export default function ProfileScreen() {
 	}
 
 	async function saveEmergencyContact(order: 1 | 2) {
-		if (!patient || !ecForm.name || !ecForm.phone)
+		if (!patient || !ecForm.name || !ecForm.phone) {
 			throw new Error("Name and phone are required.");
+		}
 		await upsertEmergencyContact(patient.id, {
 			sortOrder: order,
 			name: ecForm.name,

@@ -67,7 +67,12 @@ export function useAvatarPicker({ patientId, onSuccess }: Props) {
 			);
 
 			// 4. Build a Blob from the local URI and upload to Clerk
-			const response = await fetch(manipulated.uri);
+			let response: Response;
+			try {
+				response = await fetch(manipulated.uri);
+			} catch {
+				throw new Error("Failed to read image file.");
+			}
 			const blob = await response.blob();
 			const file = new File([blob], "avatar.jpg", { type: "image/jpeg" });
 

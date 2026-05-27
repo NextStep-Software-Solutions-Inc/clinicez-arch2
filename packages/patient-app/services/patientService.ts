@@ -176,6 +176,7 @@ export async function updatePatientAvatarUrl(
 		.update(patients)
 		.set({ avatarUrl, updatedAt: now, syncedAt: null })
 		.where(eq(patients.id, patientId));
+	await enqueueMutation("patient", patientId, "update", { avatarUrl });
 	audit.info("DATA", "PATIENT_AVATAR_UPDATED");
 }
 
