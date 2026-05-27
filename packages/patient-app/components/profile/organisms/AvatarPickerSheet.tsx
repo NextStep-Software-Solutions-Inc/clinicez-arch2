@@ -15,6 +15,16 @@ const MAX_DIMENSION = 512; // px — enough for a profile photo
 const JPEG_QUALITY = 0.82; // 0–1
 
 /**
+ * Builds a React Native compatible file-like object for Clerk's setProfileImage.
+ * Hermes does not support creating blobs from ArrayBuffer/ArrayBufferView, so
+ * we cannot use `new File([blob], name, opts)`. Clerk's SDK accepts a URI-based
+ * object when running in a React Native environment, so we cast it accordingly.
+ */
+function buildAvatarFile(uri: string): File {
+	return { uri, type: "image/jpeg", name: "avatar.jpg" } as unknown as File;
+}
+
+/**
  * Headless controller that launches the native image-picker (with built-in
  * crop/zoom), compresses the result to JPEG, uploads it to Clerk, and syncs
  * the new URL to the local patient record.
@@ -67,11 +77,7 @@ export function useAvatarPicker({ patientId, onSuccess }: Props) {
 			);
 
 			// 4. Build a React Native compatible file object and upload to Clerk
-			const file = {
-				uri: manipulated.uri,
-				type: "image/jpeg",
-				name: "avatar.jpg",
-			} as unknown as File;
+			const file = buildAvatarFile(manipulated.uri);
 
 			if (!clerkUser) throw new Error("Not signed in.");
 			await clerkUser.setProfileImage({ file });
@@ -171,11 +177,7 @@ export function AvatarPickerSheet({
 				},
 			);
 
-			const file = {
-				uri: manipulated.uri,
-				type: "image/jpeg",
-				name: "avatar.jpg",
-			} as unknown as File;
+			const file = buildAvatarFile(manipulated.uri);
 
 			if (!clerkUser) throw new Error("Not signed in.");
 			await clerkUser.setProfileImage({ file });

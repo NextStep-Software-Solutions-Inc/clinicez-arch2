@@ -549,6 +549,8 @@ export async function getMenstrualHistory(
 	return rows[0] ?? null;
 }
 
+// Note: `isApplicable` is intentionally excluded here — it is kept in the DB
+// for backward compatibility (PhilHealth data) but is no longer exposed in the UI.
 export type MenstrualHistoryInput = Partial<
 	Pick<
 		PatientMenstrualHistory,
