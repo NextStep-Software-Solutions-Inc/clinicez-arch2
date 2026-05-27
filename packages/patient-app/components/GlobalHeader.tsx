@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { Platform } from "react-native";
 import { Colors } from "@/constants/Colors";
 import { useColorScheme } from "@/hooks/useColorScheme";
@@ -7,8 +8,17 @@ import { ThemedView } from "./ThemedView";
 
 const notificationCount = 3;
 
-export function GlobalHeader() {
+type GlobalHeaderProps = {
+	title: string;
+	showSettings?: boolean;
+};
+
+export function GlobalHeader({
+	title,
+	showSettings = false,
+}: GlobalHeaderProps) {
 	const colorScheme = useColorScheme();
+	const router = useRouter();
 
 	return (
 		<ThemedView
@@ -29,7 +39,7 @@ export function GlobalHeader() {
 				elevation: 5,
 			}}
 		>
-			{/* App branding */}
+			{/* Screen title */}
 			<ThemedView
 				style={{
 					flexDirection: "row",
@@ -39,12 +49,6 @@ export function GlobalHeader() {
 					paddingVertical: 2,
 				}}
 			>
-				<Feather
-					name="activity"
-					size={18}
-					color={Colors[colorScheme ?? "light"].tint}
-					style={{ marginRight: 6 }}
-				/>
 				<ThemedText
 					style={{
 						fontSize: 16,
@@ -52,7 +56,7 @@ export function GlobalHeader() {
 						color: Colors[colorScheme ?? "light"].tint,
 					}}
 				>
-					ClinicEZ
+					{title}
 				</ThemedText>
 			</ThemedView>
 			{/* No app name in center for cleaner look */}
@@ -60,6 +64,14 @@ export function GlobalHeader() {
 			<ThemedView
 				style={{ flexDirection: "row", alignItems: "center", gap: 16 }}
 			>
+				{showSettings ? (
+					<Feather
+						name="settings"
+						size={22}
+						color={Colors[colorScheme ?? "light"].tint}
+						onPress={() => router.push("/settings")}
+					/>
+				) : null}
 				{/* Notification Bell with Badge */}
 				<ThemedView style={{ position: "relative", marginRight: 8 }}>
 					<Feather

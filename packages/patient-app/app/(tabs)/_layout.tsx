@@ -18,11 +18,16 @@ export default function TabLayout() {
 
 	return (
 		<Tabs
-			screenOptions={{
+			screenOptions={({ route }) => ({
 				tabBarActiveTintColor: Colors[colorScheme ?? "light"].tint,
 				tabBarInactiveTintColor: Colors[colorScheme ?? "light"].tabIconDefault,
 				headerShown: true,
-				header: () => <GlobalHeader />,
+				header: ({ options }) => (
+					<GlobalHeader
+						title={options.title || "ClinicEZ"}
+						showSettings={route.name === "profile"}
+					/>
+				),
 				tabBarButton: HapticTab,
 				tabBarBackground: TabBarBackground,
 				tabBarLabelStyle: {
@@ -53,11 +58,12 @@ export default function TabLayout() {
 						elevation: 12,
 					},
 				}),
-			}}
+			})}
 		>
 			<Tabs.Screen
 				name="index"
 				options={{
+					title: "Home",
 					tabBarLabel: "Home",
 					tabBarIcon: ({ color }) => (
 						<Feather size={24} name="home" color={color} />
@@ -67,6 +73,7 @@ export default function TabLayout() {
 			<Tabs.Screen
 				name="appointments"
 				options={{
+					title: "Appointments",
 					tabBarLabel: "Appointments",
 					tabBarIcon: ({ color }) => (
 						<Feather size={24} name="calendar" color={color} />
@@ -76,6 +83,7 @@ export default function TabLayout() {
 			<Tabs.Screen
 				name="book-appointment"
 				options={{
+					title: "Book Appointment",
 					tabBarLabel: "",
 					tabBarIcon: () => null,
 					tabBarButton: ElevatedCenterTab,
@@ -84,6 +92,7 @@ export default function TabLayout() {
 			<Tabs.Screen
 				name="files"
 				options={{
+					title: "Files",
 					tabBarLabel: "Files",
 					tabBarIcon: ({ color }) => (
 						<Feather size={24} name="file-text" color={color} />
@@ -99,6 +108,7 @@ export default function TabLayout() {
 			<Tabs.Screen
 				name="profile"
 				options={{
+					title: "Patient Profile",
 					tabBarLabel: "Profile",
 					tabBarIcon: ({ color }) => (
 						<Feather size={24} name="user" color={color} />

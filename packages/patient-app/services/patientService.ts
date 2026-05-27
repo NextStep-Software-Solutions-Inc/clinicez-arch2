@@ -46,6 +46,7 @@ export type PatientBasicInfoPatch = Partial<
 		| "nationality"
 		| "religion"
 		| "philhealthId"
+		| "email"
 		| "phone"
 	>
 >;
@@ -121,9 +122,18 @@ export async function seedPatientFromClerk(
 	return newPatient as Patient;
 }
 
-/** Returns the single local patient row, or null if not yet seeded. */
-export async function getLocalPatient(): Promise<Patient | null> {
-	return (await db.select().from(patients).limit(1).get()) ?? null;
+/** Returns the local patient row for a Clerk user, or null if not yet seeded. */
+export async function getLocalPatient(
+	clerkUserId: string,
+): Promise<Patient | null> {
+	return (
+		(await db
+			.select()
+			.from(patients)
+			.where(eq(patients.clerkUserId, clerkUserId))
+			.limit(1)
+			.get()) ?? null
+	);
 }
 
 // ---------------------------------------------------------------------------

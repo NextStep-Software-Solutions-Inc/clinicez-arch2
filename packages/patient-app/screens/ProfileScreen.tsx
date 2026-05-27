@@ -1,6 +1,5 @@
 import { useClerk, useUser } from "@clerk/expo";
 import { Feather } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 import type React from "react";
 import { useState } from "react";
 import {
@@ -14,6 +13,8 @@ import {
 	View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { DateTimeInput } from "@/components/DateTimeInput";
+import { SelectInput, type SelectOption } from "@/components/SelectInput";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Colors } from "@/constants/Colors";
@@ -208,17 +209,64 @@ const CATEGORY_LABELS: Record<HealthDeclarationCategory, string> = {
 	lifestyle_habit: "Lifestyle & Habits",
 };
 
-const HEALTH_DECLARATION_CATEGORIES: HealthDeclarationCategory[] = [
+const MEDICAL_HISTORY_CATEGORIES: HealthDeclarationCategory[] = [
 	"allergy",
 	"disability",
 	"illness",
 	"chronic_condition",
 	"current_medication",
 	"past_surgery",
-	"family_history",
 	"immunization",
-	"lifestyle_habit",
 ];
+
+const SOCIAL_HISTORY_CATEGORIES: HealthDeclarationCategory[] = ["lifestyle_habit"];
+
+const FAMILY_HISTORY_CATEGORIES: HealthDeclarationCategory[] = ["family_history"];
+
+const SEX_OPTIONS: SelectOption[] = [
+	{ label: "Male", value: "Male" },
+	{ label: "Female", value: "Female" },
+	{ label: "Other", value: "Other" },
+];
+
+const CIVIL_STATUS_OPTIONS: SelectOption[] = [
+	{ label: "Single", value: "Single" },
+	{ label: "Married", value: "Married" },
+	{ label: "Widowed", value: "Widowed" },
+	{ label: "Separated", value: "Separated" },
+	{ label: "Divorced", value: "Divorced" },
+];
+
+const BLOOD_TYPE_OPTIONS: SelectOption[] = [
+	{ label: "A+", value: "A+" },
+	{ label: "A-", value: "A-" },
+	{ label: "B+", value: "B+" },
+	{ label: "B-", value: "B-" },
+	{ label: "AB+", value: "AB+" },
+	{ label: "AB-", value: "AB-" },
+	{ label: "O+", value: "O+" },
+	{ label: "O-", value: "O-" },
+	{ label: "Unknown", value: "Unknown" },
+];
+
+function validateSelectedValue(
+	value: string,
+	allowedValues: string[],
+	label: string,
+) {
+	if (value && !allowedValues.includes(value)) {
+		throw new Error(`Invalid ${label.toLowerCase()} selected.`);
+	}
+}
+
+function validateIsoDate(value: string, label: string) {
+	if (!value) return;
+
+	const parsed = new Date(value);
+	if (Number.isNaN(parsed.getTime())) {
+		throw new Error(`${label} must be a valid date.`);
+	}
+}
 
 // ---------------------------------------------------------------------------
 // ProfileScreen
@@ -228,7 +276,6 @@ export default function ProfileScreen() {
 	const { user: clerkUser } = useUser();
 	const { signOut } = useClerk();
 	const { lock } = useAuthStore();
-	const router = useRouter();
 
 	const {
 		patient,
@@ -263,6 +310,7 @@ export default function ProfileScreen() {
 		nationality: "Filipino",
 		religion: "",
 		philhealthId: "",
+		email: "",
 		phone: "",
 	});
 	const [addressForm, setAddressForm] = useState({
@@ -279,6 +327,7 @@ export default function ProfileScreen() {
 		relationship: "",
 		phone: "",
 		email: "",
+		address: "",
 	});
 	const [hdForm, setHdForm] = useState({
 		description: "",
@@ -302,6 +351,7 @@ export default function ProfileScreen() {
 			nationality: patient?.nationality ?? "Filipino",
 			religion: patient?.religion ?? "",
 			philhealthId: patient?.philhealthId ?? "",
+			email: patient?.email ?? clerkUser?.primaryEmailAddress?.emailAddress ?? "",
 			phone: patient?.phone ?? "",
 		});
 		setActiveModal("basic");
@@ -330,6 +380,7 @@ export default function ProfileScreen() {
 			relationship: ec?.relationship ?? "",
 			phone: ec?.phone ?? "",
 			email: ec?.email ?? "",
+			address: ec?.address ?? "",
 		});
 		setActiveModal(order === 1 ? "ec_primary" : "ec_secondary");
 	}
@@ -348,6 +399,24 @@ export default function ProfileScreen() {
 	// ---- Save handlers ----
 	async function saveBasicInfo() {
 		if (!patient) return;
+
+		validateSelectedValue(
+			basicForm.sex,
+			SEX_OPTIONS.map((option) => option.value),
+			"Sex",
+		);
+		validateSelectedValue(
+			basicForm.civilStatus,
+			CIVIL_STATUS_OPTIONS.map((option) => option.value),
+			"Civil Status",
+		);
+		validateSelectedValue(
+			basicForm.bloodType,
+			BLOOD_TYPE_OPTIONS.map((option) => option.value),
+			"Blood Type",
+		);
+		validateIsoDate(basicForm.dob, "Date of Birth");
+
 		await updatePatientBasicInfo(patient.id, {
 			firstName: basicForm.firstName || undefined,
 			middleName: basicForm.middleName || undefined,
@@ -364,6 +433,7 @@ export default function ProfileScreen() {
 			nationality: basicForm.nationality || undefined,
 			religion: basicForm.religion || undefined,
 			philhealthId: basicForm.philhealthId || undefined,
+			email: basicForm.email || undefined,
 			phone: basicForm.phone || undefined,
 		});
 		await refresh();
@@ -385,6 +455,7 @@ export default function ProfileScreen() {
 			relationship: ecForm.relationship || null,
 			phone: ecForm.phone,
 			email: ecForm.email || null,
+			address: ecForm.address || null,
 		});
 		await refresh();
 	}
@@ -392,6 +463,9 @@ export default function ProfileScreen() {
 	async function saveHealthDeclaration(category: HealthDeclarationCategory) {
 		if (!patient || !hdForm.description)
 			throw new Error("Description is required.");
+
+		validateIsoDate(hdForm.onsetDate, "Onset Date");
+
 		await upsertHealthDeclaration(patient.id, {
 			category,
 			description: hdForm.description,
@@ -402,6 +476,86 @@ export default function ProfileScreen() {
 			isActive: true,
 		});
 		await refresh();
+	}
+
+	function renderHealthCategoryCards(categories: HealthDeclarationCategory[]) {
+		return categories.map((cat) => {
+			const items = healthDeclarations.filter((d) => d.category === cat);
+
+			return (
+				<ThemedView
+					key={cat}
+					className="mb-3 rounded-xl bg-slate-50 dark:bg-slate-700/40 p-3"
+				>
+					<ThemedView className="flex-row items-center justify-between mb-2 bg-transparent">
+						<ThemedText className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+							{CATEGORY_LABELS[cat]}
+						</ThemedText>
+						<TouchableOpacity onPress={() => openHealthAdd(cat)} hitSlop={10}>
+							<Feather name="plus-circle" size={15} color={Colors.light.tint} />
+						</TouchableOpacity>
+					</ThemedView>
+
+					{items.length === 0 ? (
+						<ThemedText className="text-sm text-slate-400 dark:text-slate-500">
+							No records added yet.
+						</ThemedText>
+					) : (
+						items.map((item) => (
+							<ThemedView
+								key={item.id}
+								className="mb-2 p-2 rounded-lg bg-white dark:bg-slate-700"
+							>
+								<ThemedView className="flex-row items-start justify-between bg-transparent">
+									<ThemedText className="text-sm font-semibold text-slate-800 dark:text-slate-100 flex-1 mr-2">
+										{item.description}
+									</ThemedText>
+									<TouchableOpacity
+										hitSlop={10}
+										onPress={() =>
+											Alert.alert("Remove", `Remove "${item.description}"?`, [
+												{ text: "Cancel", style: "cancel" },
+												{
+													text: "Remove",
+													style: "destructive",
+													onPress: async () => {
+														if (!patient) return;
+														await deleteHealthDeclaration(item.id, patient.id);
+														await refresh();
+													},
+												},
+											])
+										}
+									>
+										<Feather name="trash-2" size={14} color="#ef4444" />
+									</TouchableOpacity>
+								</ThemedView>
+								{item.detail ? (
+									<ThemedText className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+										{item.detail}
+									</ThemedText>
+								) : null}
+								{item.onsetDate ? (
+									<ThemedText className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+										Since {item.onsetDate}
+									</ThemedText>
+								) : null}
+								{item.treatingPhysician ? (
+									<ThemedText className="text-xs text-slate-400 dark:text-slate-500">
+										{item.treatingPhysician}
+									</ThemedText>
+								) : null}
+								{item.notes ? (
+									<ThemedText className="text-xs text-slate-400 dark:text-slate-500 italic mt-0.5">
+										{item.notes}
+									</ThemedText>
+								) : null}
+							</ThemedView>
+						))
+					)}
+				</ThemedView>
+			);
+		});
 	}
 
 	// ---- Derived values ----
@@ -434,17 +588,6 @@ export default function ProfileScreen() {
 				contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
 				showsVerticalScrollIndicator={false}
 			>
-				{/* Header */}
-				<ThemedView className="flex-row justify-end pt-2 pb-1 bg-transparent">
-					<TouchableOpacity
-						onPress={() => router.push("/settings" as never)}
-						hitSlop={12}
-						className="p-2"
-					>
-						<Feather name="settings" size={20} color={Colors.light.tint} />
-					</TouchableOpacity>
-				</ThemedView>
-
 				{/* Avatar + name */}
 				<ThemedView className="items-center mb-6 bg-transparent">
 					<View
@@ -484,8 +627,8 @@ export default function ProfileScreen() {
 					) : null}
 				</ThemedView>
 
-				{/* Basic Information */}
-				<SectionCard title="Basic Information" onEdit={openBasicEdit}>
+				{/* Personal History */}
+				<SectionCard title="Personal History" onEdit={openBasicEdit}>
 					<LabeledValue label="First Name" value={patient?.firstName} />
 					<LabeledValue label="Middle Name" value={patient?.middleName} />
 					<LabeledValue label="Last Name" value={patient?.lastName} />
@@ -496,6 +639,7 @@ export default function ProfileScreen() {
 					<LabeledValue label="Blood Type" value={patient?.bloodType} />
 					<LabeledValue label="Nationality" value={patient?.nationality} />
 					<LabeledValue label="Religion" value={patient?.religion} />
+					<LabeledValue label="PIN / PhilHealth ID" value={patient?.philhealthId} />
 					<LabeledValue
 						label="Email"
 						value={
@@ -587,6 +731,7 @@ export default function ProfileScreen() {
 								/>
 								<LabeledValue label="Phone" value={primaryEc.phone} />
 								<LabeledValue label="Email" value={primaryEc.email} />
+								<LabeledValue label="Address" value={primaryEc.address} />
 							</>
 						) : (
 							<ThemedText className="text-sm text-slate-400 dark:text-slate-500">
@@ -612,6 +757,7 @@ export default function ProfileScreen() {
 								/>
 								<LabeledValue label="Phone" value={secondaryEc.phone} />
 								<LabeledValue label="Email" value={secondaryEc.email} />
+								<LabeledValue label="Address" value={secondaryEc.address} />
 							</>
 						) : (
 							<ThemedText className="text-sm text-slate-400 dark:text-slate-500">
@@ -621,91 +767,20 @@ export default function ProfileScreen() {
 					</ThemedView>
 				</SectionCard>
 
-				{/* Health Declarations */}
-				{HEALTH_DECLARATION_CATEGORIES.map((cat) => {
-					const items = healthDeclarations.filter((d) => d.category === cat);
-					return (
-						<SectionCard key={cat} title={CATEGORY_LABELS[cat]}>
-							{items.length === 0 ? (
-								<ThemedText className="text-sm text-slate-400 dark:text-slate-500">
-									None declared.
-								</ThemedText>
-							) : (
-								items.map((item) => (
-									<ThemedView
-										key={item.id}
-										className="mb-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-700/50"
-									>
-										<ThemedView className="flex-row items-start justify-between bg-transparent">
-											<ThemedText className="text-sm font-semibold text-slate-800 dark:text-slate-100 flex-1 mr-2">
-												{item.description}
-											</ThemedText>
-											<TouchableOpacity
-												hitSlop={10}
-												onPress={() =>
-													Alert.alert(
-														"Remove",
-														`Remove "${item.description}"?`,
-														[
-															{ text: "Cancel", style: "cancel" },
-															{
-																text: "Remove",
-																style: "destructive",
-																onPress: async () => {
-																	if (!patient) return;
-																	await deleteHealthDeclaration(
-																		item.id,
-																		patient.id,
-																	);
-																	await refresh();
-																},
-															},
-														],
-													)
-												}
-											>
-												<Feather name="trash-2" size={14} color="#ef4444" />
-											</TouchableOpacity>
-										</ThemedView>
-										{item.detail ? (
-											<ThemedText className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-												{item.detail}
-											</ThemedText>
-										) : null}
-										{item.onsetDate ? (
-											<ThemedText className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-												Since {item.onsetDate}
-											</ThemedText>
-										) : null}
-										{item.treatingPhysician ? (
-											<ThemedText className="text-xs text-slate-400 dark:text-slate-500">
-												{item.treatingPhysician}
-											</ThemedText>
-										) : null}
-										{item.notes ? (
-											<ThemedText className="text-xs text-slate-400 dark:text-slate-500 italic mt-0.5">
-												{item.notes}
-											</ThemedText>
-										) : null}
-									</ThemedView>
-								))
-							)}
-							<TouchableOpacity
-								onPress={() => openHealthAdd(cat)}
-								className="flex-row items-center mt-1"
-							>
-								<Feather
-									name="plus-circle"
-									size={15}
-									color={Colors.light.tint}
-								/>
-								<ThemedText className="text-sm text-blue-600 dark:text-blue-400 ml-1">
-									Add {CATEGORY_LABELS[cat]}
-								</ThemedText>
-							</TouchableOpacity>
-						</SectionCard>
-					);
-				})}
+				{/* Medical Histories */}
+				<SectionCard title="Medical Histories">
+					{renderHealthCategoryCards(MEDICAL_HISTORY_CATEGORIES)}
+				</SectionCard>
+
+				{/* Social History */}
+				<SectionCard title="Social History">
+					{renderHealthCategoryCards(SOCIAL_HISTORY_CATEGORIES)}
+				</SectionCard>
+
+				{/* Family History */}
+				<SectionCard title="Family History">
+					{renderHealthCategoryCards(FAMILY_HISTORY_CATEGORIES)}
+				</SectionCard>
 
 				{/* Sign out */}
 				<TouchableOpacity
@@ -749,25 +824,33 @@ export default function ProfileScreen() {
 						value={basicForm.suffix}
 						onChange={(v) => setBasicForm((p) => ({ ...p, suffix: v }))}
 					/>
-					<FieldInput
-						label="Sex (Male / Female / Other)"
+					<SelectInput
+						label="Sex"
 						value={basicForm.sex}
+						options={SEX_OPTIONS}
 						onChange={(v) => setBasicForm((p) => ({ ...p, sex: v }))}
+						placeholder="Select sex"
 					/>
-					<FieldInput
-						label="Date of Birth (YYYY-MM-DD)"
+					<DateTimeInput
+						label="Date of Birth"
 						value={basicForm.dob}
 						onChange={(v) => setBasicForm((p) => ({ ...p, dob: v }))}
+						placeholder="Select date of birth"
+						maximumDate={new Date()}
 					/>
-					<FieldInput
+					<SelectInput
 						label="Civil Status"
 						value={basicForm.civilStatus}
+						options={CIVIL_STATUS_OPTIONS}
 						onChange={(v) => setBasicForm((p) => ({ ...p, civilStatus: v }))}
+						placeholder="Select civil status"
 					/>
-					<FieldInput
+					<SelectInput
 						label="Blood Type"
 						value={basicForm.bloodType}
+						options={BLOOD_TYPE_OPTIONS}
 						onChange={(v) => setBasicForm((p) => ({ ...p, bloodType: v }))}
+						placeholder="Select blood type"
 					/>
 					<FieldInput
 						label="Nationality"
@@ -783,6 +866,12 @@ export default function ProfileScreen() {
 						label="PhilHealth ID"
 						value={basicForm.philhealthId}
 						onChange={(v) => setBasicForm((p) => ({ ...p, philhealthId: v }))}
+					/>
+					<FieldInput
+						label="Email"
+						value={basicForm.email}
+						onChange={(v) => setBasicForm((p) => ({ ...p, email: v }))}
+						keyboardType="email-address"
 					/>
 					<FieldInput
 						label="Phone"
@@ -883,6 +972,11 @@ export default function ProfileScreen() {
 						onChange={(v) => setEcForm((p) => ({ ...p, email: v }))}
 						keyboardType="email-address"
 					/>
+					<FieldInput
+						label="Address"
+						value={ecForm.address}
+						onChange={(v) => setEcForm((p) => ({ ...p, address: v }))}
+					/>
 				</EditModal>
 			)}
 
@@ -904,10 +998,12 @@ export default function ProfileScreen() {
 							value={hdForm.detail}
 							onChange={(v) => setHdForm((p) => ({ ...p, detail: v }))}
 						/>
-						<FieldInput
-							label="Onset Date (YYYY-MM-DD)"
+						<DateTimeInput
+							label="Onset Date"
 							value={hdForm.onsetDate}
 							onChange={(v) => setHdForm((p) => ({ ...p, onsetDate: v }))}
+							placeholder="Select onset date"
+							maximumDate={new Date()}
 						/>
 						<FieldInput
 							label="Treating Physician"

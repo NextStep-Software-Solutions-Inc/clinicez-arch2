@@ -1,3 +1,4 @@
+import { useUser } from "@clerk/expo";
 import { useCallback, useEffect, useState } from "react";
 import type {
 	EmergencyContact,
@@ -22,6 +23,7 @@ export type PatientProfile = {
 };
 
 export function usePatientProfile(): PatientProfile {
+	const { user } = useUser();
 	const [patient, setPatient] = useState<Patient | null>(null);
 	const [addresses, setAddresses] = useState<PatientAddress[]>([]);
 	const [contacts, setContacts] = useState<EmergencyContact[]>([]);
@@ -29,9 +31,18 @@ export function usePatientProfile(): PatientProfile {
 	const [isLoading, setIsLoading] = useState(true);
 
 	const load = useCallback(async () => {
+		if (!user?.id) {
+			setPatient(null);
+			setAddresses([]);
+			setContacts([]);
+			setDeclarations([]);
+			setIsLoading(false);
+			return;
+		}
+
 		setIsLoading(true);
 		try {
-			const p = await getLocalPatient();
+			const p = await getLocalPatient(user.id);
 			setPatient(p);
 
 			if (p) {
@@ -43,11 +54,15 @@ export function usePatientProfile(): PatientProfile {
 				setAddresses(addr);
 				setContacts(ec);
 				setDeclarations(hd);
+			} else {
+				setAddresses([]);
+				setContacts([]);
+				setDeclarations([]);
 			}
 		} finally {
 			setIsLoading(false);
 		}
-	}, []);
+	}, [user?.id]);
 
 	useEffect(() => {
 		load();
