@@ -52,16 +52,13 @@ export function useAvatarPicker({ patientId, onSuccess }: Props) {
 			const asset = result.assets[0];
 
 			// 3. Compress + convert to JPEG via ImageManipulator
+			const needsResize =
+				asset.width > MAX_DIMENSION || asset.height > MAX_DIMENSION;
 			const manipulated = await ImageManipulator.manipulateAsync(
 				asset.uri,
-				[
-					{
-						resize:
-							asset.width > MAX_DIMENSION || asset.height > MAX_DIMENSION
-								? { width: MAX_DIMENSION, height: MAX_DIMENSION }
-								: {},
-					},
-				],
+				needsResize
+					? [{ resize: { width: MAX_DIMENSION, height: MAX_DIMENSION } }]
+					: [],
 				{
 					compress: JPEG_QUALITY,
 					format: ImageManipulator.SaveFormat.JPEG,
@@ -158,16 +155,13 @@ export function AvatarPickerSheet({
 		try {
 			const asset = result.assets[0];
 
+			const needsResize =
+				asset.width > MAX_DIMENSION || asset.height > MAX_DIMENSION;
 			const manipulated = await ImageManipulator.manipulateAsync(
 				asset.uri,
-				[
-					{
-						resize:
-							asset.width > MAX_DIMENSION || asset.height > MAX_DIMENSION
-								? { width: MAX_DIMENSION, height: MAX_DIMENSION }
-								: {},
-					},
-				],
+				needsResize
+					? [{ resize: { width: MAX_DIMENSION, height: MAX_DIMENSION } }]
+					: [],
 				{
 					compress: JPEG_QUALITY,
 					format: ImageManipulator.SaveFormat.JPEG,

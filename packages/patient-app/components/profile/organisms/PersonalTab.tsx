@@ -1,26 +1,40 @@
-import type { Patient, PatientAddress } from "@/db/schema";
+import type { Patient, PatientAddress, PhilhealthProfile } from "@/db/schema";
 import { InfoRow } from "../atoms/InfoRow";
 import { SectionCard } from "../molecules/SectionCard";
+
+const PATIENT_TYPE_LABELS: Record<string, string> = {
+	MM: "Member (MM)",
+	DD: "Dependent (DD)",
+};
+
+const WALKED_IN_LABELS: Record<string, string> = {
+	Y: "Yes",
+	N: "No",
+};
 
 type Props = {
 	patient: Patient | null;
 	primaryAddress?: PatientAddress | null;
 	secondaryAddress?: PatientAddress | null;
 	clerkEmail?: string | null;
+	philhealthProfile?: PhilhealthProfile | null;
 	onEditBasic: () => void;
 	onEditPrimaryAddress: () => void;
 	onEditSecondaryAddress: () => void;
+	onEditPhilhealth: () => void;
 };
 
-/** Personal tab: demographics, contact info, and both addresses. */
+/** Personal tab: demographics, contact info, both addresses, and PhilHealth profile. */
 export function PersonalTab({
 	patient,
 	primaryAddress,
 	secondaryAddress,
 	clerkEmail,
+	philhealthProfile,
 	onEditBasic,
 	onEditPrimaryAddress,
 	onEditSecondaryAddress,
+	onEditPhilhealth,
 }: Props) {
 	return (
 		<>
@@ -178,6 +192,59 @@ export function PersonalTab({
 					value={secondaryAddress?.country}
 					icon="globe"
 					iconColor="#8b5cf6"
+				/>
+			</SectionCard>
+
+			{/* PhilHealth Enrolment */}
+			<SectionCard
+				title="PhilHealth Enrolment"
+				icon="shield"
+				accentColor="#22c55e"
+				onEdit={onEditPhilhealth}
+			>
+				<InfoRow
+					label="Patient Type"
+					value={
+						philhealthProfile?.patientType
+							? PATIENT_TYPE_LABELS[philhealthProfile.patientType]
+							: undefined
+					}
+					icon="users"
+					iconColor="#22c55e"
+				/>
+				<InfoRow
+					label="PhilHealth PIN"
+					value={patient?.philhealthId}
+					icon="credit-card"
+					iconColor="#22c55e"
+				/>
+				<InfoRow
+					label="Primary Member PIN"
+					value={philhealthProfile?.memPin}
+					icon="user-check"
+					iconColor="#22c55e"
+				/>
+				<InfoRow
+					label="Effectivity Year"
+					value={philhealthProfile?.effYear}
+					icon="calendar"
+					iconColor="#22c55e"
+				/>
+				<InfoRow
+					label="Authorization Transaction Code"
+					value={philhealthProfile?.atc}
+					icon="key"
+					iconColor="#22c55e"
+				/>
+				<InfoRow
+					label="Walked In"
+					value={
+						philhealthProfile?.isWalkedIn
+							? WALKED_IN_LABELS[philhealthProfile.isWalkedIn]
+							: undefined
+					}
+					icon="log-in"
+					iconColor="#22c55e"
 				/>
 			</SectionCard>
 		</>

@@ -5,12 +5,20 @@ import type {
 	HealthDeclaration,
 	Patient,
 	PatientAddress,
+	PatientImmunization,
+	PatientMenstrualHistory,
+	PatientSocialHistory,
+	PhilhealthProfile,
 } from "@/db/schema";
 import {
 	getEmergencyContacts,
 	getHealthDeclarations,
+	getImmunizationRecord,
 	getLocalPatient,
+	getMenstrualHistory,
 	getPatientAddresses,
+	getPhilhealthProfile,
+	getSocialHistory,
 } from "@/services/patientService";
 
 export type PatientProfile = {
@@ -18,6 +26,10 @@ export type PatientProfile = {
 	addresses: PatientAddress[];
 	emergencyContacts: EmergencyContact[];
 	healthDeclarations: HealthDeclaration[];
+	philhealthProfile: PhilhealthProfile | null;
+	socialHistory: PatientSocialHistory | null;
+	immunization: PatientImmunization | null;
+	menstrualHistory: PatientMenstrualHistory | null;
 	isLoading: boolean;
 	refresh: () => Promise<void>;
 };
@@ -28,6 +40,15 @@ export function usePatientProfile(): PatientProfile {
 	const [addresses, setAddresses] = useState<PatientAddress[]>([]);
 	const [contacts, setContacts] = useState<EmergencyContact[]>([]);
 	const [declarations, setDeclarations] = useState<HealthDeclaration[]>([]);
+	const [philhealthProfile, setPhilhealthProfile] =
+		useState<PhilhealthProfile | null>(null);
+	const [socialHistory, setSocialHistory] =
+		useState<PatientSocialHistory | null>(null);
+	const [immunization, setImmunization] = useState<PatientImmunization | null>(
+		null,
+	);
+	const [menstrualHistory, setMenstrualHistory] =
+		useState<PatientMenstrualHistory | null>(null);
 	const [isLoading, setIsLoading] = useState(true);
 
 	const load = useCallback(async () => {
@@ -36,6 +57,10 @@ export function usePatientProfile(): PatientProfile {
 			setAddresses([]);
 			setContacts([]);
 			setDeclarations([]);
+			setPhilhealthProfile(null);
+			setSocialHistory(null);
+			setImmunization(null);
+			setMenstrualHistory(null);
 			setIsLoading(false);
 			return;
 		}
@@ -46,18 +71,30 @@ export function usePatientProfile(): PatientProfile {
 			setPatient(p);
 
 			if (p) {
-				const [addr, ec, hd] = await Promise.all([
+				const [addr, ec, hd, ph, sh, imm, mh] = await Promise.all([
 					getPatientAddresses(p.id),
 					getEmergencyContacts(p.id),
 					getHealthDeclarations(p.id),
+					getPhilhealthProfile(p.id),
+					getSocialHistory(p.id),
+					getImmunizationRecord(p.id),
+					getMenstrualHistory(p.id),
 				]);
 				setAddresses(addr);
 				setContacts(ec);
 				setDeclarations(hd);
+				setPhilhealthProfile(ph);
+				setSocialHistory(sh);
+				setImmunization(imm);
+				setMenstrualHistory(mh);
 			} else {
 				setAddresses([]);
 				setContacts([]);
 				setDeclarations([]);
+				setPhilhealthProfile(null);
+				setSocialHistory(null);
+				setImmunization(null);
+				setMenstrualHistory(null);
 			}
 		} finally {
 			setIsLoading(false);
@@ -73,6 +110,10 @@ export function usePatientProfile(): PatientProfile {
 		addresses,
 		emergencyContacts: contacts,
 		healthDeclarations: declarations,
+		philhealthProfile,
+		socialHistory,
+		immunization,
+		menstrualHistory,
 		isLoading,
 		refresh: load,
 	};

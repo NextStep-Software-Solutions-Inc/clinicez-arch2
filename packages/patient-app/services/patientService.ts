@@ -13,8 +13,16 @@ import {
 	type NewPatientAddress,
 	type Patient,
 	type PatientAddress,
+	type PatientImmunization,
+	type PatientMenstrualHistory,
+	type PatientSocialHistory,
+	type PhilhealthProfile,
 	patientAddresses,
+	patientImmunization,
+	patientMenstrualHistory,
+	patientSocialHistory,
 	patients,
+	philhealthProfiles,
 } from "@/db/schema";
 import { audit } from "./auditLogger";
 import { enqueueMutation } from "./syncService";
@@ -372,5 +380,211 @@ export async function deleteHealthDeclaration(
 
 	await enqueueMutation("patient", patientId, "update", {
 		deletedHealthDeclarationId: id,
+	});
+}
+
+// ---------------------------------------------------------------------------
+// PhilHealth Profile
+// ---------------------------------------------------------------------------
+
+export async function getPhilhealthProfile(
+	patientId: string,
+): Promise<PhilhealthProfile | null> {
+	const rows = await db
+		.select()
+		.from(philhealthProfiles)
+		.where(eq(philhealthProfiles.patientId, patientId))
+		.limit(1);
+	return rows[0] ?? null;
+}
+
+export type PhilhealthProfileInput = Partial<
+	Pick<
+		PhilhealthProfile,
+		"patientType" | "memPin" | "effYear" | "atc" | "isWalkedIn"
+	>
+>;
+
+export async function upsertPhilhealthProfile(
+	patientId: string,
+	input: PhilhealthProfileInput,
+): Promise<void> {
+	const now = new Date();
+	const existing = await getPhilhealthProfile(patientId);
+	if (existing) {
+		await db
+			.update(philhealthProfiles)
+			.set({ ...input, updatedAt: now, syncedAt: null })
+			.where(eq(philhealthProfiles.patientId, patientId));
+	} else {
+		await db.insert(philhealthProfiles).values({
+			id: randomUUID(),
+			patientId,
+			...input,
+			createdAt: now,
+			updatedAt: now,
+		});
+	}
+	await enqueueMutation("patient", patientId, "update", {
+		philhealthProfile: input,
+	});
+}
+
+// ---------------------------------------------------------------------------
+// Social History
+// ---------------------------------------------------------------------------
+
+export async function getSocialHistory(
+	patientId: string,
+): Promise<PatientSocialHistory | null> {
+	const rows = await db
+		.select()
+		.from(patientSocialHistory)
+		.where(eq(patientSocialHistory.patientId, patientId))
+		.limit(1);
+	return rows[0] ?? null;
+}
+
+export type SocialHistoryInput = Partial<
+	Pick<
+		PatientSocialHistory,
+		| "isSmoker"
+		| "noCigpk"
+		| "isAdrinker"
+		| "noBottles"
+		| "illDrugUser"
+		| "isSexuallyActive"
+	>
+>;
+
+export async function upsertSocialHistory(
+	patientId: string,
+	input: SocialHistoryInput,
+): Promise<void> {
+	const now = new Date();
+	const existing = await getSocialHistory(patientId);
+	if (existing) {
+		await db
+			.update(patientSocialHistory)
+			.set({ ...input, updatedAt: now, syncedAt: null })
+			.where(eq(patientSocialHistory.patientId, patientId));
+	} else {
+		await db.insert(patientSocialHistory).values({
+			id: randomUUID(),
+			patientId,
+			...input,
+			createdAt: now,
+			updatedAt: now,
+		});
+	}
+	await enqueueMutation("patient", patientId, "update", {
+		socialHistory: input,
+	});
+}
+
+// ---------------------------------------------------------------------------
+// Immunization Record
+// ---------------------------------------------------------------------------
+
+export async function getImmunizationRecord(
+	patientId: string,
+): Promise<PatientImmunization | null> {
+	const rows = await db
+		.select()
+		.from(patientImmunization)
+		.where(eq(patientImmunization.patientId, patientId))
+		.limit(1);
+	return rows[0] ?? null;
+}
+
+export type ImmunizationInput = Partial<
+	Pick<
+		PatientImmunization,
+		| "childImmcode"
+		| "youngwImmcode"
+		| "pregwImmcode"
+		| "elderlyImmcode"
+		| "otherImm"
+	>
+>;
+
+export async function upsertImmunizationRecord(
+	patientId: string,
+	input: ImmunizationInput,
+): Promise<void> {
+	const now = new Date();
+	const existing = await getImmunizationRecord(patientId);
+	if (existing) {
+		await db
+			.update(patientImmunization)
+			.set({ ...input, updatedAt: now, syncedAt: null })
+			.where(eq(patientImmunization.patientId, patientId));
+	} else {
+		await db.insert(patientImmunization).values({
+			id: randomUUID(),
+			patientId,
+			...input,
+			createdAt: now,
+			updatedAt: now,
+		});
+	}
+	await enqueueMutation("patient", patientId, "update", {
+		immunization: input,
+	});
+}
+
+// ---------------------------------------------------------------------------
+// Menstrual History
+// ---------------------------------------------------------------------------
+
+export async function getMenstrualHistory(
+	patientId: string,
+): Promise<PatientMenstrualHistory | null> {
+	const rows = await db
+		.select()
+		.from(patientMenstrualHistory)
+		.where(eq(patientMenstrualHistory.patientId, patientId))
+		.limit(1);
+	return rows[0] ?? null;
+}
+
+export type MenstrualHistoryInput = Partial<
+	Pick<
+		PatientMenstrualHistory,
+		| "isApplicable"
+		| "menarchePeriod"
+		| "lastMensPeriod"
+		| "periodDuration"
+		| "mensInterval"
+		| "padsPerDay"
+		| "onsetSexIc"
+		| "birthCtrlMethod"
+		| "isMenopause"
+		| "menopauseAge"
+	>
+>;
+
+export async function upsertMenstrualHistory(
+	patientId: string,
+	input: MenstrualHistoryInput,
+): Promise<void> {
+	const now = new Date();
+	const existing = await getMenstrualHistory(patientId);
+	if (existing) {
+		await db
+			.update(patientMenstrualHistory)
+			.set({ ...input, updatedAt: now, syncedAt: null })
+			.where(eq(patientMenstrualHistory.patientId, patientId));
+	} else {
+		await db.insert(patientMenstrualHistory).values({
+			id: randomUUID(),
+			patientId,
+			...input,
+			createdAt: now,
+			updatedAt: now,
+		});
+	}
+	await enqueueMutation("patient", patientId, "update", {
+		menstrualHistory: input,
 	});
 }

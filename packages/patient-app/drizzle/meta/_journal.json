@@ -1,20 +1,27 @@
 {
-	"version": "7",
-	"dialect": "sqlite",
-	"entries": [
-		{
-			"idx": 0,
-			"version": "6",
-			"when": 1779109187317,
-			"tag": "0000_bizarre_brother_voodoo",
-			"breakpoints": true
-		},
-		{
-			"idx": 1,
-			"version": "6",
-			"when": 1779124009555,
-			"tag": "0001_worried_mesmero",
-			"breakpoints": true
-		}
-	]
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1779109187317,
+      "tag": "0000_bizarre_brother_voodoo",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1779124009555,
+      "tag": "0001_worried_mesmero",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1779885999550,
+      "tag": "0002_crazy_thanos",
+      "breakpoints": true
+    }
+  ]
 }
