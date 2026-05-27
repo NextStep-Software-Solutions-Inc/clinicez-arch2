@@ -66,15 +66,12 @@ export function useAvatarPicker({ patientId, onSuccess }: Props) {
 				},
 			);
 
-			// 4. Build a Blob from the local URI and upload to Clerk
-			let response: Response;
-			try {
-				response = await fetch(manipulated.uri);
-			} catch {
-				throw new Error("Failed to read image file.");
-			}
-			const blob = await response.blob();
-			const file = new File([blob], "avatar.jpg", { type: "image/jpeg" });
+			// 4. Build a React Native compatible file object and upload to Clerk
+			const file = {
+				uri: manipulated.uri,
+				type: "image/jpeg",
+				name: "avatar.jpg",
+			} as unknown as File;
 
 			if (!clerkUser) throw new Error("Not signed in.");
 			await clerkUser.setProfileImage({ file });
@@ -174,9 +171,11 @@ export function AvatarPickerSheet({
 				},
 			);
 
-			const response = await fetch(manipulated.uri);
-			const blob = await response.blob();
-			const file = new File([blob], "avatar.jpg", { type: "image/jpeg" });
+			const file = {
+				uri: manipulated.uri,
+				type: "image/jpeg",
+				name: "avatar.jpg",
+			} as unknown as File;
 
 			if (!clerkUser) throw new Error("Not signed in.");
 			await clerkUser.setProfileImage({ file });

@@ -195,36 +195,37 @@ export function MedicalTab({
 			{/* Immunization Record (PhilHealth IMMUNIZATION) */}
 			<SectionCard
 				title="Immunization Record"
+				subtitle="PhilHealth vaccination program record"
 				icon="check-circle"
 				accentColor="#06b6d4"
 				onEdit={onEditImmunization}
 			>
 				<InfoRow
-					label="Children Immunization Code"
+					label="Child Vaccines"
 					value={immunization?.childImmcode}
 					icon="check-circle"
 					iconColor="#06b6d4"
 				/>
 				<InfoRow
-					label="Young Woman Immunization Code"
+					label="Young Women Vaccines"
 					value={immunization?.youngwImmcode}
 					icon="check-circle"
 					iconColor="#06b6d4"
 				/>
 				<InfoRow
-					label="Pregnant Woman Immunization Code"
+					label="Pregnancy Vaccines"
 					value={immunization?.pregwImmcode}
 					icon="check-circle"
 					iconColor="#06b6d4"
 				/>
 				<InfoRow
-					label="Elderly Immunization Code"
+					label="Senior / Elderly Vaccines"
 					value={immunization?.elderlyImmcode}
 					icon="check-circle"
 					iconColor="#06b6d4"
 				/>
 				<InfoRow
-					label="Other Immunizations"
+					label="Other Vaccines / Immunizations"
 					value={immunization?.otherImm}
 					icon="plus-circle"
 					iconColor="#06b6d4"
@@ -239,16 +240,6 @@ export function MedicalTab({
 					accentColor="#ec4899"
 					onEdit={onEditMenstrualHistory}
 				>
-					<InfoRow
-						label="Applicable"
-						value={
-							menstrualHistory?.isApplicable
-								? YN_LABELS[menstrualHistory.isApplicable]
-								: undefined
-						}
-						icon="check"
-						iconColor="#ec4899"
-					/>
 					<InfoRow
 						label="Age at Menarche"
 						value={menstrualHistory?.menarchePeriod?.toString()}
