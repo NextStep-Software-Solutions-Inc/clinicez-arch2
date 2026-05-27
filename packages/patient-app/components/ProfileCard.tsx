@@ -96,7 +96,7 @@ export default function ProfileCard({
 					<Feather name="edit" size={24} color={Colors.light.tint} />
 				</TouchableOpacity>
 			</ThemedView>
-			<ThemedText className="dark:text-slate-500 text-xl mb-1">
+			<ThemedText className="dark:text-slate-300 text-xl mb-1">
 				{title}
 			</ThemedText>
 			{children}
@@ -128,7 +128,7 @@ export default function ProfileCard({
 								/>
 							</ThemedView>
 							<ThemedView className="mb-2">
-								<ThemedText className="dark:text-slate-500">Gender</ThemedText>
+								<ThemedText className="dark:text-slate-300">Gender</ThemedText>
 								<Input
 									value={form.gender}
 									onChangeText={(v) => handleChange("gender", v)}
@@ -139,7 +139,7 @@ export default function ProfileCard({
 								/>
 							</ThemedView>
 							<ThemedView className="mb-2">
-								<ThemedText className="dark:text-slate-500">
+								<ThemedText className="dark:text-slate-300">
 									Birthdate
 								</ThemedText>
 								<Input
@@ -152,7 +152,7 @@ export default function ProfileCard({
 								/>
 							</ThemedView>
 							<ThemedView className="mb-2">
-								<ThemedText className="dark:text-slate-500">
+								<ThemedText className="dark:text-slate-300">
 									Blood Type
 								</ThemedText>
 								<Input
@@ -165,7 +165,7 @@ export default function ProfileCard({
 								/>
 							</ThemedView>
 							<ThemedView className="mb-2">
-								<ThemedText className="dark:text-slate-500">
+								<ThemedText className="dark:text-slate-300">
 									Religion
 								</ThemedText>
 								<Input
@@ -178,7 +178,7 @@ export default function ProfileCard({
 								/>
 							</ThemedView>
 							<ThemedView className="mb-2">
-								<ThemedText className="dark:text-slate-500">Email</ThemedText>
+								<ThemedText className="dark:text-slate-300">Email</ThemedText>
 								<Input
 									value={form.email_address}
 									onChangeText={(v) => handleChange("email_address", v)}
@@ -189,7 +189,7 @@ export default function ProfileCard({
 								/>
 							</ThemedView>
 							<ThemedView className="mb-2">
-								<ThemedText className="dark:text-slate-500">Phone</ThemedText>
+								<ThemedText className="dark:text-slate-300">Phone</ThemedText>
 								<Input
 									value={form.phone_number}
 									onChangeText={(v) => handleChange("phone_number", v)}
