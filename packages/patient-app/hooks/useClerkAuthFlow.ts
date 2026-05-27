@@ -5,11 +5,11 @@ type ClerkError = { longMessage?: string | null; message?: string | null };
 type Step = "form" | "verify" | "forgotPassword" | "resetPassword" | "codeVerified" | "enterNewPassword";
 type Mode = "signUp" | "signIn";
 
-export function useClerkAuthFlow(onSuccess: () => void) {
+export function useClerkAuthFlow(onSuccess: () => void, initialMode: Mode = "signUp") {
     const { signUp } = useSignUp();
     const { signIn } = useSignIn();
 
-    const [mode, setMode] = useState<Mode>("signUp");
+    const [mode, setMode] = useState<Mode>(initialMode);
     const [step, setStep] = useState<Step>("form");
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);

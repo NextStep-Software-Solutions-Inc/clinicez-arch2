@@ -1,6 +1,4 @@
-import DateTimePicker, {
-	type DateTimePickerEvent,
-} from "@react-native-community/datetimepicker";
+import DateTimePicker from "@expo/ui/community/datetime-picker";
 import { format } from "date-fns";
 import { useState } from "react";
 import { Modal, Platform, Pressable } from "react-native";
@@ -66,18 +64,18 @@ export function DateTimeInput({
 		setIsVisible(true);
 	}
 
-	function handleChange(event: DateTimePickerEvent, selectedDate?: Date) {
+	function handleValueChange(_event: unknown, selectedDate: Date) {
 		if (Platform.OS === "android") {
+			onChange(serializeValue(selectedDate, mode));
 			setIsVisible(false);
-			if (event.type === "set" && selectedDate) {
-				onChange(serializeValue(selectedDate, mode));
-			}
 			return;
 		}
 
-		if (selectedDate) {
-			setDraftValue(selectedDate);
-		}
+		setDraftValue(selectedDate);
+	}
+
+	function handleAndroidDismiss() {
+		setIsVisible(false);
 	}
 
 	function closeModal() {
@@ -119,7 +117,8 @@ export function DateTimeInput({
 					value={draftValue}
 					mode={mode}
 					display={mode === "time" ? "clock" : "calendar"}
-					onChange={handleChange}
+					onValueChange={handleValueChange}
+					onDismiss={handleAndroidDismiss}
 					maximumDate={maximumDate}
 					minimumDate={minimumDate}
 				/>
@@ -153,7 +152,7 @@ export function DateTimeInput({
 								value={draftValue}
 								mode={mode}
 								display="spinner"
-								onChange={handleChange}
+								onValueChange={handleValueChange}
 								maximumDate={maximumDate}
 								minimumDate={minimumDate}
 							/>

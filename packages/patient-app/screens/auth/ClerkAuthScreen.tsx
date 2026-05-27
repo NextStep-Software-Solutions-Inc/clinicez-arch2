@@ -39,7 +39,7 @@ export default function ClerkAuthScreen({
 	initialMode,
 }: Props) {
 	const { isSignedIn } = useAuth();
-	const auth = useClerkAuthFlow(onNext);
+	const auth = useClerkAuthFlow(onNext, initialMode);
 	const [email, setEmail] = useState("");
 	const [verifyCode, setVerifyCode] = useState("");
 

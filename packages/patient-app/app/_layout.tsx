@@ -1,12 +1,12 @@
 import { ClerkProvider, useAuth, useUser } from "@clerk/expo";
 import { tokenCache } from "@clerk/expo/token-cache";
+import { useFonts } from "expo-font";
+import { Stack } from "expo-router";
 import {
 	DarkTheme,
 	DefaultTheme,
 	ThemeProvider,
-} from "@react-navigation/native";
-import { useFonts } from "expo-font";
-import { Stack } from "expo-router";
+} from "expo-router/react-navigation";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { ClinicProvider } from "../components/ClinicContext";

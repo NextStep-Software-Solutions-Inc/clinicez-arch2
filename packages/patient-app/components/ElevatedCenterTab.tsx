@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
-import type { BottomTabBarButtonProps } from "@react-navigation/bottom-tabs";
-import { PlatformPressable } from "@react-navigation/elements";
 import * as Haptics from "expo-haptics";
+import type { BottomTabBarButtonProps } from "expo-router/js-tabs";
+import { PlatformPressable } from "expo-router/react-navigation";
 import { StyleSheet, View } from "react-native";
 
 export function ElevatedCenterTab({
