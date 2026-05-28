@@ -1,4 +1,5 @@
 import { useUser } from "@clerk/expo";
+import { Blob } from "expo-blob";
 import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { useState } from "react";
@@ -66,11 +67,15 @@ export function useAvatarPicker({ patientId, onSuccess }: Props) {
 				},
 			);
 
-			// 4. Convert local URI to Blob via Expo's built-in fetch/Blob API,
-			//    then upload to Clerk. Passing a plain { uri, type, name } object
-			//    triggers "Unsupported FormDataPart implementation" in ClerkJS;
-			//    a proper Blob is serialised correctly by React Native's FormData.
-			const blob = await fetch(manipulated.uri).then((r) => r.blob());
+			// 4. Convert the compressed JPEG to an expo-blob Blob — a web
+			//    standards-compliant implementation that works reliably across
+			//    all platforms and is serialised correctly by React Native's
+			//    FormData (unlike a plain { uri, type, name } object which
+			//    triggers "Unsupported FormDataPart implementation" in ClerkJS).
+			const arrayBuffer = await fetch(manipulated.uri).then((r) =>
+				r.arrayBuffer(),
+			);
+			const blob = new Blob([arrayBuffer], { type: "image/jpeg" });
 
 			if (!clerkUser) throw new Error("Not signed in.");
 			await clerkUser.setProfileImage({ file: blob as unknown as File });
@@ -170,10 +175,15 @@ export function AvatarPickerSheet({
 				},
 			);
 
-			// Convert local URI to Blob via Expo's built-in fetch/Blob API, then
-			// upload to Clerk. A proper Blob is serialised correctly by React
-			// Native's FormData, unlike a plain { uri, type, name } object.
-			const blob = await fetch(manipulated.uri).then((r) => r.blob());
+			// Convert the compressed JPEG to an expo-blob Blob — a web
+			// standards-compliant implementation that works reliably across
+			// all platforms and is serialised correctly by React Native's
+			// FormData (unlike a plain { uri, type, name } object which
+			// triggers "Unsupported FormDataPart implementation" in ClerkJS).
+			const arrayBuffer = await fetch(manipulated.uri).then((r) =>
+				r.arrayBuffer(),
+			);
+			const blob = new Blob([arrayBuffer], { type: "image/jpeg" });
 
 			if (!clerkUser) throw new Error("Not signed in.");
 			await clerkUser.setProfileImage({ file: blob as unknown as File });
