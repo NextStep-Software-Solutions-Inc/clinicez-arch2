@@ -1,5 +1,5 @@
 import { useUser } from "@clerk/expo";
-import { Blob } from "expo-blob";
+import { Blob as ExpoBlob } from "expo-blob";
 import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { useState } from "react";
@@ -75,10 +75,10 @@ export function useAvatarPicker({ patientId, onSuccess }: Props) {
 			const arrayBuffer = await fetch(manipulated.uri).then((r) =>
 				r.arrayBuffer(),
 			);
-			const blob = new Blob([arrayBuffer], { type: "image/jpeg" });
+			const blob = new ExpoBlob([arrayBuffer], { type: "image/jpeg" });
 
 			if (!clerkUser) throw new Error("Not signed in.");
-			await clerkUser.setProfileImage({ file: blob as unknown as File });
+			await clerkUser.setProfileImage({ file: blob as unknown as Blob });
 
 			// Clerk updates imageUrl on the user object — use it
 			const newUrl = clerkUser.imageUrl;
@@ -183,10 +183,10 @@ export function AvatarPickerSheet({
 			const arrayBuffer = await fetch(manipulated.uri).then((r) =>
 				r.arrayBuffer(),
 			);
-			const blob = new Blob([arrayBuffer], { type: "image/jpeg" });
+			const blob = new ExpoBlob([arrayBuffer], { type: "image/jpeg" });
 
 			if (!clerkUser) throw new Error("Not signed in.");
-			await clerkUser.setProfileImage({ file: blob as unknown as File });
+			await clerkUser.setProfileImage({ file: blob as unknown as Blob });
 
 			const newUrl = clerkUser.imageUrl;
 			if (patientId) {
