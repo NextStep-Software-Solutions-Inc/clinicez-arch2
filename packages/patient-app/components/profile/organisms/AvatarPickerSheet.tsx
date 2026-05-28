@@ -62,17 +62,18 @@ export function useAvatarPicker({ patientId, onSuccess }: Props) {
 				{
 					compress: JPEG_QUALITY,
 					format: ImageManipulator.SaveFormat.JPEG,
-					// base64 required: Clerk Expo's setProfileImage expects a base64
-					// string on native (the { uri, type, name } object form triggers
-					// "Unsupported FormDataPart implementation" from ClerkJS).
-					base64: true,
+					base64: false,
 				},
 			);
 
-			// 4. Upload base64 string to Clerk (supported by @clerk/expo on native)
+			// 4. Convert local URI to Blob via Expo's built-in fetch/Blob API,
+			//    then upload to Clerk. Passing a plain { uri, type, name } object
+			//    triggers "Unsupported FormDataPart implementation" in ClerkJS;
+			//    a proper Blob is serialised correctly by React Native's FormData.
+			const blob = await fetch(manipulated.uri).then((r) => r.blob());
+
 			if (!clerkUser) throw new Error("Not signed in.");
-			if (!manipulated.base64) throw new Error("Image encoding failed.");
-			await clerkUser.setProfileImage({ file: manipulated.base64 });
+			await clerkUser.setProfileImage({ file: blob as unknown as File });
 
 			// Clerk updates imageUrl on the user object — use it
 			const newUrl = clerkUser.imageUrl;
@@ -165,16 +166,17 @@ export function AvatarPickerSheet({
 				{
 					compress: JPEG_QUALITY,
 					format: ImageManipulator.SaveFormat.JPEG,
-					// base64 required: Clerk Expo's setProfileImage expects a base64
-					// string on native (the { uri, type, name } object form triggers
-					// "Unsupported FormDataPart implementation" from ClerkJS).
-					base64: true,
+					base64: false,
 				},
 			);
 
+			// Convert local URI to Blob via Expo's built-in fetch/Blob API, then
+			// upload to Clerk. A proper Blob is serialised correctly by React
+			// Native's FormData, unlike a plain { uri, type, name } object.
+			const blob = await fetch(manipulated.uri).then((r) => r.blob());
+
 			if (!clerkUser) throw new Error("Not signed in.");
-			if (!manipulated.base64) throw new Error("Image encoding failed.");
-			await clerkUser.setProfileImage({ file: manipulated.base64 });
+			await clerkUser.setProfileImage({ file: blob as unknown as File });
 
 			const newUrl = clerkUser.imageUrl;
 			if (patientId) {
