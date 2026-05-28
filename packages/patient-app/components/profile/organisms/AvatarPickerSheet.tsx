@@ -50,6 +50,7 @@ export function useAvatarPicker({ patientId, onSuccess }: Props) {
 			const asset = result.assets[0];
 
 			if (!clerkUser) throw new Error("Not signed in.");
+			// Clerk's React Native SDK accepts a local file URI string on mobile platforms
 			await clerkUser.setProfileImage({ file: asset.uri });
 
 			// Clerk updates imageUrl on the user object — use it
@@ -134,6 +135,7 @@ export function AvatarPickerSheet({
 			const asset = result.assets[0];
 
 			if (!clerkUser) throw new Error("Not signed in.");
+			// Clerk's React Native SDK accepts a local file URI string on mobile platforms
 			await clerkUser.setProfileImage({ file: asset.uri });
 
 			const newUrl = clerkUser.imageUrl;
