@@ -1,7 +1,5 @@
-import { LinearGradient } from "expo-linear-gradient";
-import { View } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
-import { useColorScheme } from "@/hooks/useColorScheme";
+import { ThemedView } from "@/components/ThemedView";
 import { StatChip } from "../atoms/StatChip";
 import { AvatarWithEdit } from "../molecules/AvatarWithEdit";
 
@@ -45,109 +43,70 @@ export function ProfileHero({
 	avatarUploading,
 	onAvatarPress,
 }: Props) {
-	const isDark = useColorScheme() === "dark";
 	const age = calcAge(dob);
 
 	return (
-		<View style={{ marginBottom: 20 }}>
-			<LinearGradient
-				colors={isDark ? ["#0f2a38", "#071820"] : ["#0a7ea4", "#065a78"]}
-				start={{ x: 0, y: 0 }}
-				end={{ x: 1, y: 1 }}
-				style={{
-					borderRadius: 20,
-					paddingTop: 28,
-					paddingBottom: 52,
-					paddingHorizontal: 20,
-					alignItems: "center",
-				}}
-			>
-				<AvatarWithEdit
-					uri={avatarUri}
-					size={96}
-					uploading={avatarUploading}
-					onPress={onAvatarPress}
-				/>
+		<ThemedView className="mb-5">
+			<ThemedView className="rounded-2xl bg-white dark:bg-slate-800 shadow-md p-4">
+				<ThemedView className="flex-row items-center">
+					<AvatarWithEdit
+						uri={avatarUri}
+						size={88}
+						uploading={avatarUploading}
+						onPress={onAvatarPress}
+					/>
 
-				<ThemedText
-					style={{
-						fontSize: 22,
-						fontWeight: "800",
-						color: "white",
-						marginTop: 12,
-						textAlign: "center",
-					}}
-				>
-					{fullName}
-				</ThemedText>
-
-				<View
-					style={{
-						flexDirection: "row",
-						alignItems: "center",
-						gap: 6,
-						marginTop: 4,
-					}}
-				>
-					<View
-						style={{
-							backgroundColor: "rgba(255,255,255,0.18)",
-							borderRadius: 20,
-							paddingHorizontal: 10,
-							paddingVertical: 3,
-						}}
-					>
-						<ThemedText
-							style={{ fontSize: 12, color: "rgba(255,255,255,0.9)" }}
-						>
-							Patient
+					<ThemedView className="ml-4 flex-1">
+						<ThemedText className="text-lg font-extrabold text-slate-900 dark:text-white">
+							{fullName}
 						</ThemedText>
-					</View>
-					{philhealthId ? (
-						<View
-							style={{
-								backgroundColor: "rgba(255,255,255,0.18)",
-								borderRadius: 20,
-								paddingHorizontal: 10,
-								paddingVertical: 3,
-							}}
-						>
-							<ThemedText
-								style={{ fontSize: 12, color: "rgba(255,255,255,0.9)" }}
-							>
-								PhilHealth: {philhealthId}
-							</ThemedText>
-						</View>
-					) : null}
-				</View>
-			</LinearGradient>
 
-			{/* Quick-stat chips — float over the gradient bottom edge */}
-			<View
-				style={{
-					flexDirection: "row",
-					justifyContent: "center",
-					flexWrap: "wrap",
-					gap: 8,
-					marginTop: -28,
-					paddingHorizontal: 16,
-				}}
-			>
-				<StatChip
-					label="Blood Type"
-					value={bloodType}
-					icon="droplet"
-					color="#ef4444"
-				/>
-				<StatChip label="Age" value={age} icon="calendar" color="#f59e0b" />
-				<StatChip label="Sex" value={sex} icon="user" color="#0a7ea4" />
-				<StatChip
-					label="Civil Status"
-					value={civilStatus}
-					icon="heart"
-					color="#8b5cf6"
-				/>
-			</View>
-		</View>
+						<ThemedView className="flex-row items-center mt-1 space-x-2">
+							<ThemedView className="px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-700">
+								<ThemedText className="text-xs text-slate-700 dark:text-slate-200">
+									Patient
+								</ThemedText>
+							</ThemedView>
+
+							{philhealthId ? (
+								<ThemedView className="px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-700">
+									<ThemedText className="text-xs text-slate-700 dark:text-slate-200">
+										PhilHealth: {philhealthId}
+									</ThemedText>
+								</ThemedView>
+							) : null}
+						</ThemedView>
+					</ThemedView>
+				</ThemedView>
+
+				<ThemedView className="flex-row mt-4 w-full">
+					<ThemedView className="flex-1 items-center px-1">
+						<StatChip
+							label="Blood Type"
+							value={bloodType}
+							icon="droplet"
+							color="#ef4444"
+						/>
+					</ThemedView>
+
+					<ThemedView className="flex-1 items-center px-1">
+						<StatChip label="Age" value={age} icon="calendar" color="#f59e0b" />
+					</ThemedView>
+
+					<ThemedView className="flex-1 items-center px-1">
+						<StatChip label="Sex" value={sex} icon="user" color="#0a7ea4" />
+					</ThemedView>
+
+					<ThemedView className="flex-1 items-center px-1">
+						<StatChip
+							label="Civil Status"
+							value={civilStatus}
+							icon="heart"
+							color="#8b5cf6"
+						/>
+					</ThemedView>
+				</ThemedView>
+			</ThemedView>
+		</ThemedView>
 	);
 }
