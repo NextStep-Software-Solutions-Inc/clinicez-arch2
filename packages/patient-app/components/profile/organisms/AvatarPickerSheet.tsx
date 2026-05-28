@@ -1,6 +1,4 @@
 import { useUser } from "@clerk/expo";
-import { Blob as ExpoBlob } from "expo-blob";
-import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { useState } from "react";
 import { Alert, TouchableOpacity, View } from "react-native";
@@ -12,13 +10,12 @@ type Props = {
 	onSuccess: (newUri: string) => void;
 };
 
-const MAX_DIMENSION = 512; // px — enough for a profile photo
 const JPEG_QUALITY = 0.82; // 0–1
 
 /**
  * Headless controller that launches the native image-picker (with built-in
- * crop/zoom), compresses the result to JPEG, uploads it to Clerk, and syncs
- * the new URL to the local patient record.
+ * crop/zoom and compression), uploads it to Clerk, and syncs the new URL to
+ * the local patient record.
  *
  * Returns a `pickAndUpload` trigger and an `uploading` flag for the caller to
  * wire up to the `AvatarWithEdit` molecule.
@@ -38,12 +35,12 @@ export function useAvatarPicker({ patientId, onSuccess }: Props) {
 			return;
 		}
 
-		// 2. Launch picker with native crop/zoom enabled
+		// 2. Launch picker with native crop/zoom and built-in compression
 		const result = await ImagePicker.launchImageLibraryAsync({
 			mediaTypes: ["images"],
 			allowsEditing: true,
 			aspect: [1, 1],
-			quality: 1, // we handle compression ourselves below
+			quality: JPEG_QUALITY,
 		});
 
 		if (result.canceled || !result.assets[0]) return;
@@ -52,38 +49,13 @@ export function useAvatarPicker({ patientId, onSuccess }: Props) {
 		try {
 			const asset = result.assets[0];
 
-			// 3. Compress + convert to JPEG via ImageManipulator
-			const needsResize =
-				asset.width > MAX_DIMENSION || asset.height > MAX_DIMENSION;
-			const manipulated = await ImageManipulator.manipulateAsync(
-				asset.uri,
-				needsResize
-					? [{ resize: { width: MAX_DIMENSION, height: MAX_DIMENSION } }]
-					: [],
-				{
-					compress: JPEG_QUALITY,
-					format: ImageManipulator.SaveFormat.JPEG,
-					base64: false,
-				},
-			);
-
-			// 4. Convert the compressed JPEG to an expo-blob Blob — a web
-			//    standards-compliant implementation that works reliably across
-			//    all platforms and is serialised correctly by React Native's
-			//    FormData (unlike a plain { uri, type, name } object which
-			//    triggers "Unsupported FormDataPart implementation" in ClerkJS).
-			const arrayBuffer = await fetch(manipulated.uri).then((r) =>
-				r.arrayBuffer(),
-			);
-			const blob = new ExpoBlob([arrayBuffer], { type: "image/jpeg" });
-
 			if (!clerkUser) throw new Error("Not signed in.");
-			await clerkUser.setProfileImage({ file: blob as unknown as Blob });
+			await clerkUser.setProfileImage({ file: asset.uri });
 
 			// Clerk updates imageUrl on the user object — use it
 			const newUrl = clerkUser.imageUrl;
 
-			// 5. Persist to local DB so it survives offline restarts
+			// 3. Persist to local DB so it survives offline restarts
 			if (patientId) {
 				await updatePatientAvatarUrl(patientId, newUrl);
 			}
@@ -152,7 +124,7 @@ export function AvatarPickerSheet({
 			mediaTypes: ["images"],
 			allowsEditing: true,
 			aspect: [1, 1],
-			quality: 1,
+			quality: JPEG_QUALITY,
 		});
 
 		if (result.canceled || !result.assets[0]) return;
@@ -161,32 +133,8 @@ export function AvatarPickerSheet({
 		try {
 			const asset = result.assets[0];
 
-			const needsResize =
-				asset.width > MAX_DIMENSION || asset.height > MAX_DIMENSION;
-			const manipulated = await ImageManipulator.manipulateAsync(
-				asset.uri,
-				needsResize
-					? [{ resize: { width: MAX_DIMENSION, height: MAX_DIMENSION } }]
-					: [],
-				{
-					compress: JPEG_QUALITY,
-					format: ImageManipulator.SaveFormat.JPEG,
-					base64: false,
-				},
-			);
-
-			// Convert the compressed JPEG to an expo-blob Blob — a web
-			// standards-compliant implementation that works reliably across
-			// all platforms and is serialised correctly by React Native's
-			// FormData (unlike a plain { uri, type, name } object which
-			// triggers "Unsupported FormDataPart implementation" in ClerkJS).
-			const arrayBuffer = await fetch(manipulated.uri).then((r) =>
-				r.arrayBuffer(),
-			);
-			const blob = new ExpoBlob([arrayBuffer], { type: "image/jpeg" });
-
 			if (!clerkUser) throw new Error("Not signed in.");
-			await clerkUser.setProfileImage({ file: blob as unknown as Blob });
+			await clerkUser.setProfileImage({ file: asset.uri });
 
 			const newUrl = clerkUser.imageUrl;
 			if (patientId) {
