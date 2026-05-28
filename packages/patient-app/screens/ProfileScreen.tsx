@@ -5,6 +5,7 @@ import {
 	Alert,
 	KeyboardAvoidingView,
 	Platform,
+	RefreshControl,
 	ScrollView,
 	TextInput,
 	TouchableOpacity,
@@ -262,6 +263,18 @@ export default function ProfileScreen() {
 
 	// ---- Tab state ----
 	const [activeTab, setActiveTab] = useState<ProfileTabId>("personal");
+
+	// ---- Pull-to-refresh state ----
+	const [refreshing, setRefreshing] = useState(false);
+
+	async function onRefresh() {
+		setRefreshing(true);
+		try {
+			await refresh();
+		} finally {
+			setRefreshing(false);
+		}
+	}
 
 	// ---- Avatar picker state ----
 	const [avatarSheetVisible, setAvatarSheetVisible] = useState(false);
@@ -658,6 +671,9 @@ export default function ProfileScreen() {
 					paddingTop: 16,
 				}}
 				showsVerticalScrollIndicator={false}
+				refreshControl={
+					<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+				}
 			>
 				{/* ── Hero ── */}
 				<ProfileHero

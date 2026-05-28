@@ -1,5 +1,6 @@
 import { useUser } from "@clerk/expo";
 import * as ImagePicker from "expo-image-picker";
+import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { useState } from "react";
 import { Alert, TouchableOpacity, View } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
@@ -10,6 +11,7 @@ type Props = {
 	onSuccess: (newUri: string) => void;
 };
 
+const MAX_DIMENSION = 512; // px — enough for a profile photo
 const JPEG_QUALITY = 0.82; // 0–1
 
 /**
@@ -26,6 +28,7 @@ export function useAvatarPicker({ patientId, onSuccess }: Props) {
 
 	async function pickAndUpload() {
 		// 1. Request permission
+		console.log("Request");
 		const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
 		if (status !== "granted") {
 			Alert.alert(
@@ -43,25 +46,46 @@ export function useAvatarPicker({ patientId, onSuccess }: Props) {
 			quality: JPEG_QUALITY,
 		});
 
+		console.log({ result });
 		if (result.canceled || !result.assets[0]) return;
 
 		setUploading(true);
 		try {
 			const asset = result.assets[0];
 
+			const needsResize =
+				asset.width > MAX_DIMENSION || asset.height > MAX_DIMENSION;
+			const ctx = ImageManipulator.manipulate(asset.uri);
+			if (needsResize)
+				ctx.resize({ width: MAX_DIMENSION, height: MAX_DIMENSION });
+			const rendered = await ctx.renderAsync();
+			const saved = await rendered.saveAsync({
+				compress: JPEG_QUALITY,
+				format: SaveFormat.JPEG,
+				base64: true,
+			});
+			console.log({ saved });
+			const dataUrl = `data:${asset.mimeType ?? asset.type ?? "image/jpeg"};base64,${saved.base64}`;
+
 			if (!clerkUser) throw new Error("Not signed in.");
-			// Clerk's React Native SDK accepts a local file URI string on mobile platforms
-			await clerkUser.setProfileImage({ file: asset.uri });
+			try {
+				await clerkUser.setProfileImage({ file: dataUrl });
+				await clerkUser.reload();
 
-			// Clerk updates imageUrl on the user object — use it
-			const newUrl = clerkUser.imageUrl;
+				// Clerk updates imageUrl on the user object — use it
+				const newUrl = clerkUser.imageUrl;
+				console.log({ newUrl });
 
-			// 3. Persist to local DB so it survives offline restarts
-			if (patientId) {
-				await updatePatientAvatarUrl(patientId, newUrl);
+				// 3. Persist to local DB so it survives offline restarts
+				if (patientId) {
+					await updatePatientAvatarUrl(patientId, newUrl);
+				}
+
+				onSuccess(newUrl);
+			} catch (e) {
+				console.log("Error setting profile image:", e);
+				throw new Error("Failed to update profile image. Please try again.");
 			}
-
-			onSuccess(newUrl);
 		} catch (err) {
 			Alert.alert(
 				"Upload failed",
@@ -98,7 +122,6 @@ export function AvatarPickerSheet({
 }: SheetProps) {
 	const { user: clerkUser } = useUser();
 	const [uploading, setUploading] = useState(false);
-
 	async function launchSource(source: "library" | "camera") {
 		onClose();
 
@@ -125,18 +148,31 @@ export function AvatarPickerSheet({
 			mediaTypes: ["images"],
 			allowsEditing: true,
 			aspect: [1, 1],
-			quality: JPEG_QUALITY,
+			quality: 1,
 		});
 
 		if (result.canceled || !result.assets[0]) return;
-
 		setUploading(true);
 		try {
 			const asset = result.assets[0];
 
+			const needsResize =
+				asset.width > MAX_DIMENSION || asset.height > MAX_DIMENSION;
+			const ctx = ImageManipulator.manipulate(asset.uri);
+			if (needsResize)
+				ctx.resize({ width: MAX_DIMENSION, height: MAX_DIMENSION });
+			const rendered = await ctx.renderAsync();
+			const saved = await rendered.saveAsync({
+				compress: JPEG_QUALITY,
+				format: SaveFormat.JPEG,
+				base64: true,
+			});
+
+			const dataUrl = `data:${asset.mimeType ?? asset.type ?? "image/jpeg"};base64,${saved.base64}`;
+
 			if (!clerkUser) throw new Error("Not signed in.");
-			// Clerk's React Native SDK accepts a local file URI string on mobile platforms
-			await clerkUser.setProfileImage({ file: asset.uri });
+			await clerkUser.setProfileImage({ file: dataUrl });
+			await clerkUser.reload();
 
 			const newUrl = clerkUser.imageUrl;
 			if (patientId) {
