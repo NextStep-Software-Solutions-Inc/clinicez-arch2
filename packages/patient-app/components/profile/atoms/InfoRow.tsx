@@ -37,7 +37,7 @@ export function InfoRow({ label, value, icon, iconColor = "#0a7ea4" }: Props) {
 					{label}
 				</ThemedText>
 				<ThemedText
-					style={{ fontSize: 14, fontWeight: "500", color: "#1e293b" }}
+					style={{ fontSize: 14, fontWeight: "500" }}
 					className="dark:text-slate-200"
 				>
 					{value || "—"}

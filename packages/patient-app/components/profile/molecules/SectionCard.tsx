@@ -73,14 +73,15 @@ export function SectionCard({
 					) : null}
 					<View style={{ flex: 1 }}>
 						<ThemedText
-							style={{ fontSize: 14, fontWeight: "700", color: "#1e293b" }}
+							style={{ fontSize: 14, fontWeight: "700" }}
 							className="dark:text-slate-100"
 						>
 							{title}
 						</ThemedText>
 						{subtitle ? (
 							<ThemedText
-								style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}
+								style={{ fontSize: 11, marginTop: 1 }}
+								className="dark:text-slate-100"
 							>
 								{subtitle}
 							</ThemedText>
