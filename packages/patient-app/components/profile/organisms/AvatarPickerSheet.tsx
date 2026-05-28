@@ -15,16 +15,6 @@ const MAX_DIMENSION = 512; // px — enough for a profile photo
 const JPEG_QUALITY = 0.82; // 0–1
 
 /**
- * Builds a React Native compatible file-like object for Clerk's setProfileImage.
- * Hermes does not support creating blobs from ArrayBuffer/ArrayBufferView, so
- * we cannot use `new File([blob], name, opts)`. Clerk's SDK accepts a URI-based
- * object when running in a React Native environment, so we cast it accordingly.
- */
-function buildAvatarFile(uri: string): File {
-	return { uri, type: "image/jpeg", name: "avatar.jpg" } as unknown as File;
-}
-
-/**
  * Headless controller that launches the native image-picker (with built-in
  * crop/zoom), compresses the result to JPEG, uploads it to Clerk, and syncs
  * the new URL to the local patient record.
@@ -72,15 +62,17 @@ export function useAvatarPicker({ patientId, onSuccess }: Props) {
 				{
 					compress: JPEG_QUALITY,
 					format: ImageManipulator.SaveFormat.JPEG,
-					base64: false,
+					// base64 required: Clerk Expo's setProfileImage expects a base64
+					// string on native (the { uri, type, name } object form triggers
+					// "Unsupported FormDataPart implementation" from ClerkJS).
+					base64: true,
 				},
 			);
 
-			// 4. Build a React Native compatible file object and upload to Clerk
-			const file = buildAvatarFile(manipulated.uri);
-
+			// 4. Upload base64 string to Clerk (supported by @clerk/expo on native)
 			if (!clerkUser) throw new Error("Not signed in.");
-			await clerkUser.setProfileImage({ file });
+			if (!manipulated.base64) throw new Error("Image encoding failed.");
+			await clerkUser.setProfileImage({ file: manipulated.base64 });
 
 			// Clerk updates imageUrl on the user object — use it
 			const newUrl = clerkUser.imageUrl;
@@ -173,14 +165,16 @@ export function AvatarPickerSheet({
 				{
 					compress: JPEG_QUALITY,
 					format: ImageManipulator.SaveFormat.JPEG,
-					base64: false,
+					// base64 required: Clerk Expo's setProfileImage expects a base64
+					// string on native (the { uri, type, name } object form triggers
+					// "Unsupported FormDataPart implementation" from ClerkJS).
+					base64: true,
 				},
 			);
 
-			const file = buildAvatarFile(manipulated.uri);
-
 			if (!clerkUser) throw new Error("Not signed in.");
-			await clerkUser.setProfileImage({ file });
+			if (!manipulated.base64) throw new Error("Image encoding failed.");
+			await clerkUser.setProfileImage({ file: manipulated.base64 });
 
 			const newUrl = clerkUser.imageUrl;
 			if (patientId) {
