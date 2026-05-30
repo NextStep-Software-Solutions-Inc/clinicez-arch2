@@ -1,331 +1,444 @@
+import { useUser } from "@clerk/expo";
 import { Feather } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
-import type { ComponentProps } from "react";
-import { ScrollView } from "react-native";
+import { Image, ScrollView, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { HelloWave } from "@/components/HelloWave";
+import { StatChip } from "@/components/profile/atoms/StatChip";
+import { SectionCard } from "@/components/profile/molecules/SectionCard";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useColorScheme } from "@/hooks/useColorScheme";
-import { getMockAppointments, MOCK_HEALTH_OVERVIEW } from "@/services/mockData";
+import { usePatientProfile } from "@/hooks/usePatientProfile";
+import { getMockAppointments } from "@/services/mockData";
 
-type FeatherIconName = ComponentProps<typeof Feather>["name"];
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-const QUICK_LINKS: {
-	key: string;
-	icon: { name: FeatherIconName; color: string };
-	bg: string;
-	title: string;
-	titleClass: string;
-	desc: string;
-}[] = [
-	{
-		key: "appointments",
-		icon: { name: "calendar", color: "#2563eb" },
-		bg: "bg-blue-100 dark:bg-blue-900/60",
-		title: "Appointments",
-		titleClass: "text-blue-900 dark:text-blue-100",
-		desc: "See and manage your upcoming visits",
-	},
-	{
-		key: "health",
-		icon: { name: "heart", color: "#059669" },
-		bg: "bg-green-100 dark:bg-green-900/60",
-		title: "Health",
-		titleClass: "text-green-900 dark:text-green-100",
-		desc: "View your records and results",
-	},
-	{
-		key: "profile",
-		icon: { name: "user", color: "#334155" },
-		bg: "bg-slate-100 dark:bg-slate-800/60",
-		title: "Profile",
-		titleClass: "text-slate-900 dark:text-slate-100",
-		desc: "Manage your account",
-	},
-];
+function getGreeting(): string {
+	const hour = new Date().getHours();
+	if (hour < 12) return "Good morning";
+	if (hour < 17) return "Good afternoon";
+	return "Good evening";
+}
 
-function formatApptDate(isoDate: string): string {
-	return new Intl.DateTimeFormat("en-US", {
+function formatApptShort(isoDate: string, time: string): string {
+	const date = new Intl.DateTimeFormat("en-US", {
 		weekday: "short",
 		month: "short",
 		day: "numeric",
-		year: "numeric",
 	}).format(new Date(isoDate));
+	return `${date} · ${time}`;
 }
 
-export default function HomeScreen() {
-	const colorScheme = useColorScheme();
+function getStatusColor(status: string): string {
+	if (status === "Confirmed") return "#10b981";
+	if (status === "Pending") return "#f59e0b";
+	return "#ef4444";
+}
 
-	const appointments = getMockAppointments().slice(0, 5);
-	const healthOverview = MOCK_HEALTH_OVERVIEW;
+// ── Quick actions definition ──────────────────────────────────────────────────
+
+type QuickAction = {
+	key: string;
+	icon: React.ComponentProps<typeof Feather>["name"];
+	label: string;
+	color: string;
+};
+
+const QUICK_ACTIONS: QuickAction[] = [
+	{
+		key: "appointments",
+		icon: "calendar",
+		label: "Appointments",
+		color: "#0a7ea4",
+	},
+	{ key: "files", icon: "file-text", label: "My Files", color: "#8b5cf6" },
+	{ key: "health", icon: "activity", label: "Health", color: "#10b981" },
+	{ key: "profile", icon: "user", label: "Profile", color: "#f59e0b" },
+];
+
+// ── Screen ────────────────────────────────────────────────────────────────────
+
+export default function HomeScreen() {
+	const { user: clerkUser } = useUser();
+	const { patient, isLoading } = usePatientProfile();
+	const isDark = useColorScheme() === "dark";
+
+	const firstName = patient?.firstName ?? clerkUser?.firstName ?? "there";
+	const avatarUri =
+		clerkUser?.imageUrl ??
+		`https://ui-avatars.com/api/?name=${encodeURIComponent(firstName)}&background=0a7ea4&color=fff`;
+
+	const allAppointments = getMockAppointments();
+	const nextAppointment = allAppointments[0] ?? null;
+	const upcomingCount = allAppointments.length;
 
 	return (
-		<SafeAreaView edges={["left", "right"]} className="flex-1 px-0 py-0">
+		<SafeAreaView edges={["left", "right"]} style={{ flex: 1 }}>
 			<ScrollView
-				contentContainerStyle={{ flexGrow: 1 }}
 				showsVerticalScrollIndicator={false}
+				contentContainerStyle={{ paddingBottom: 24 }}
 			>
-				<ThemedView className="flex-1 w-full">
-					{/* Greeting */}
-					<ThemedView className="px-4 mt-4">
-						<ThemedView className="flex-row items-center w-full">
-							<HelloWave />
-							<ThemedText className="text-4xl font-black text-blue-700 dark:text-blue-300 leading-tight">
-								{" "}
-								Hi, Wave!
-							</ThemedText>
-						</ThemedView>
-						<ThemedText className="text-xl text-slate-600 dark:text-slate-300 mb-4 text-left w-full">
-							Here’s what’s happening with your health today.
-						</ThemedText>
-						{/* Current Clinic Context moved to header */}
-					</ThemedView>
-
-					{/* Health Overview Card - Modernized */}
-					<ThemedView
-						className="mx-4 flex-1 rounded-3xl shadow-xl shadow-blue-200 p-0 mb-7 overflow-hidden bg-white/90 dark:bg-slate-800"
-						style={{
-							elevation: 4,
-							shadowColor: "#2563eb",
-							shadowOffset: { width: 0, height: 6 },
-							shadowOpacity: 0.13,
-							shadowRadius: 12,
-						}}
-					>
-						<ThemedView
-							className=" w-full h-full absolute left-0 top-0"
-							style={{ zIndex: 0 }}
-						>
-							<Feather
-								name="activity"
-								size={120}
-								color="#bae5fd83"
+				{/* ── Hero banner ──────────────────────────────────────────── */}
+				<View
+					style={{
+						backgroundColor: isDark ? "#0f172a" : "#0a7ea4",
+						paddingHorizontal: 20,
+						paddingTop: 20,
+						paddingBottom: 28,
+					}}
+				>
+					<View style={{ flexDirection: "row", alignItems: "center" }}>
+						<Image
+							source={{ uri: avatarUri }}
+							style={{
+								width: 52,
+								height: 52,
+								borderRadius: 26,
+								borderWidth: 2,
+								borderColor: "rgba(255,255,255,0.6)",
+								backgroundColor: "#e2e8f0",
+							}}
+						/>
+						<View style={{ marginLeft: 14, flex: 1 }}>
+							<ThemedText
 								style={{
-									position: "absolute",
-									right: -30,
-									top: -30,
-									zIndex: 0,
-								}}
-							/>
-							<LinearGradient
-								colors={
-									colorScheme === "dark"
-										? ["#1e293b", "#334155"]
-										: ["#f0f9ff", "#e0e7ff"]
-								}
-								start={{ x: 0, y: 0 }}
-								end={{ x: 1, y: 1 }}
-								style={{
-									position: "absolute",
-									left: 0,
-									top: 0,
-									right: 0,
-									bottom: 0,
-									opacity: 0.7,
-								}}
-							/>
-						</ThemedView>
-						<ThemedView
-							className="flex-row items-center mb-4 px-6 pt-6"
-							style={{ zIndex: 1 }}
-						>
-							<Feather
-								name="activity"
-								size={28}
-								color="#649199ff"
-								style={{ marginRight: 12 }}
-							/>
-							<ThemedText className="font-extrabold text-blue-900 dark:text-blue-100">
-								Health Overview
-							</ThemedText>
-						</ThemedView>
-						<ThemedView
-							className="flex-row justify-between gap-4 px-6 pb-6 "
-							style={{ zIndex: 1 }}
-						>
-							{healthOverview.map((item) => (
-								<ThemedView key={item.id} className="items-center flex-1">
-									<ThemedView
-										className={`mb-2 px-4 py-2 rounded-full bg-white/80 dark:bg-slate-800/80 shadow-sm`}
-										style={{ minWidth: 70, maxWidth: 90, alignItems: "center" }}
-									>
-										<ThemedText
-											className={`text-sm font-black ${item.color}`}
-											numberOfLines={1}
-											ellipsizeMode="tail"
-											style={{ textAlign: "center" }}
-										>
-											{item.value}
-										</ThemedText>
-									</ThemedView>
-									<ThemedText className="text-slate-500 dark:text-slate-400 font-semibold mt-1 text-center">
-										{item.label}
-									</ThemedText>
-								</ThemedView>
-							))}
-						</ThemedView>
-					</ThemedView>
-
-					{/* Upcoming Appointments - Modern Glassmorphism Cards */}
-					<ThemedText className="text-lg font-bold text-blue-900 dark:text-blue-200 mb-2 px-6">
-						Upcoming Appointments
-					</ThemedText>
-					<ScrollView
-						horizontal
-						showsHorizontalScrollIndicator={false}
-						contentContainerStyle={{
-							gap: 16,
-							paddingHorizontal: 16,
-							paddingBottom: 8,
-						}}
-						style={{ overflow: "visible" }}
-					>
-						{appointments.length === 0 ? (
-							<ThemedView
-								className="min-w-[270px] max-w-[320px] rounded-2xl overflow-hidden shadow-md bg-white/90 dark:bg-slate-900/80 items-center justify-center p-8"
-								style={{
-									minHeight: 220,
-									elevation: 2,
-									shadowOffset: { width: 0, height: 4 },
-									shadowOpacity: 0.1,
-									shadowRadius: 8,
+									fontSize: 13,
+									color: "rgba(255,255,255,0.75)",
+									marginBottom: 2,
 								}}
 							>
-								<Feather
-									name="calendar"
-									size={48}
-									color="#2563eb"
-									style={{ marginBottom: 12 }}
-								/>
-								<ThemedText className="text-lg font-bold text-blue-900 dark:text-blue-100 mb-2 text-center">
-									No upcoming appointments
-								</ThemedText>
-								<ThemedText className="text-base text-slate-500 dark:text-slate-400 text-center mb-4">
-									You're all caught up! Schedule your next visit when you're
-									ready.
-								</ThemedText>
-								<ThemedView className="flex-row justify-center">
-									<ThemedText className="text-base font-semibold text-blue-700 dark:text-blue-300 mr-1">
-										Book Now
-									</ThemedText>
-									<Feather name="chevron-right" size={20} color="#2563eb" />
-								</ThemedView>
-							</ThemedView>
-						) : (
-							appointments.map((appt) => (
-								<ThemedView
-									key={appt.id}
-									className="min-w-[270px] max-w-[320px] rounded-2xl overflow-hidden shadow-md bg-white dark:bg-slate-900/80"
+								{getGreeting()}
+							</ThemedText>
+							<ThemedText
+								style={{ fontSize: 20, fontWeight: "800", color: "#ffffff" }}
+								numberOfLines={1}
+							>
+								{isLoading ? "…" : firstName}
+							</ThemedText>
+						</View>
+						<View
+							style={{
+								backgroundColor: "rgba(255,255,255,0.18)",
+								borderRadius: 20,
+								padding: 8,
+							}}
+						>
+							<Feather name="bell" size={20} color="#ffffff" />
+						</View>
+					</View>
+
+					{/* Health stat chips inline with hero */}
+					<View style={{ flexDirection: "row", gap: 10, marginTop: 20 }}>
+						<StatChip
+							label="Blood Type"
+							value={patient?.bloodType ?? "—"}
+							icon="droplet"
+							color="#ef4444"
+						/>
+						<StatChip
+							label="Appointments"
+							value={`${upcomingCount}`}
+							icon="calendar"
+							color="#ffffff"
+						/>
+						<StatChip
+							label="Status"
+							value={patient ? "Active" : "—"}
+							icon="shield"
+							color="#10b981"
+						/>
+					</View>
+				</View>
+
+				<ThemedView style={{ paddingHorizontal: 16, paddingTop: 20, gap: 4 }}>
+					{/* ── Next appointment ────────────────────────────────── */}
+					<SectionCard
+						title="Next Appointment"
+						icon="calendar"
+						accentColor="#0a7ea4"
+					>
+						{nextAppointment ? (
+							<View>
+								<View
 									style={{
-										elevation: 2,
-										shadowOffset: { width: 0, height: 4 },
-										shadowOpacity: 0.1,
-										shadowRadius: 8,
+										flexDirection: "row",
+										alignItems: "center",
+										marginBottom: 12,
 									}}
 								>
-									<ThemedView
-										className="flex-1 px-5 py-5 justify-between"
-										style={{ zIndex: 1 }}
+									<View
+										style={{
+											width: 44,
+											height: 44,
+											borderRadius: 22,
+											backgroundColor: isDark ? "#1e3a5f" : "#e0f2fe",
+											alignItems: "center",
+											justifyContent: "center",
+											marginRight: 12,
+										}}
 									>
-										{/* Avatar and info row */}
-										<ThemedView className="flex-row items-center mb-2">
-											<ThemedView
-												className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900 items-center justify-center mr-3 shadow-md"
-												style={{ elevation: 2 }}
-											>
-												<Feather name="user" size={24} color="#2563eb" />
-											</ThemedView>
-											<ThemedView className="flex-1">
-												<ThemedText
-													className="font-extrabold text-blue-900 dark:text-blue-100 mb-0.5"
-													numberOfLines={1}
-												>
-													{appt.doctor}
-												</ThemedText>
-												<ThemedText
-													className="text-xs text-slate-600 dark:text-slate-300 mb-0.5"
-													numberOfLines={1}
-												>
-													{appt.clinicName}
-												</ThemedText>
-											</ThemedView>
-										</ThemedView>
-										{/* Date/time pill */}
-										<ThemedView className="mb-2 px-3 py-1 rounded-full bg-blue-600/90 dark:bg-blue-700/90 self-start">
-											<ThemedText className="text-xs font-bold text-white tracking-wide">
-												{formatApptDate(appt.date)} · {appt.time}
-											</ThemedText>
-										</ThemedView>
-										{/* Details section at bottom */}
-										<ThemedView className="w-full mt-2">
-											<ThemedText className="font-semibold text-blue-800 dark:text-blue-200 mb-1">
-												{appt.about}
-											</ThemedText>
-											<ThemedView className="flex-row items-center">
-												<ThemedText className="text-xs text-blue-700 dark:text-blue-300 mr-1">
-													Details
-												</ThemedText>
-												<Feather
-													name="chevron-right"
-													size={20}
-													color="#2563eb"
-												/>
-											</ThemedView>
-										</ThemedView>
-									</ThemedView>
-								</ThemedView>
-							))
-						)}
-					</ScrollView>
+										<Feather name="user" size={20} color="#0a7ea4" />
+									</View>
+									<View style={{ flex: 1 }}>
+										<ThemedText
+											style={{ fontSize: 15, fontWeight: "700" }}
+											className="dark:text-slate-100"
+											numberOfLines={1}
+										>
+											{nextAppointment.doctor}
+										</ThemedText>
+										<ThemedText
+											style={{ fontSize: 12, color: "#64748b", marginTop: 1 }}
+											numberOfLines={1}
+										>
+											{nextAppointment.clinicName}
+										</ThemedText>
+									</View>
+									<View
+										style={{
+											paddingHorizontal: 8,
+											paddingVertical: 3,
+											borderRadius: 20,
+											backgroundColor: `${getStatusColor(nextAppointment.status)}18`,
+										}}
+									>
+										<ThemedText
+											style={{
+												fontSize: 11,
+												fontWeight: "700",
+												color: getStatusColor(nextAppointment.status),
+											}}
+										>
+											{nextAppointment.status}
+										</ThemedText>
+									</View>
+								</View>
 
-					{/* Quick Links */}
-					{/* Quick Links - Refactored to use array and map */}
-					<ScrollView
-						horizontal
-						showsHorizontalScrollIndicator={false}
-						contentContainerStyle={{
-							gap: 16,
-							paddingHorizontal: 16,
-							alignItems: "flex-start",
-							marginBlock: 8,
-						}}
-					>
-						{QUICK_LINKS.map((link) => (
-							<ThemedView
-								key={link.key}
-								className={`min-w-[130px] max-w-[150px] h-40 ${link.bg} rounded-xl p-4 items-center justify-center shadow-md`}
-								style={{
-									elevation: 2,
-									shadowColor: "#000",
-									shadowOffset: { width: 0, height: 3 },
-									shadowOpacity: 0.1,
-									shadowRadius: 3,
-									height: 160,
-								}}
-							>
+								<View
+									style={{
+										flexDirection: "row",
+										alignItems: "center",
+										backgroundColor: isDark ? "#1e293b" : "#f8fafc",
+										borderRadius: 10,
+										padding: 10,
+										gap: 8,
+									}}
+								>
+									<Feather name="clock" size={14} color="#0a7ea4" />
+									<ThemedText
+										style={{ fontSize: 13, fontWeight: "600", flex: 1 }}
+										className="dark:text-slate-300"
+									>
+										{formatApptShort(
+											nextAppointment.date,
+											nextAppointment.time,
+										)}
+									</ThemedText>
+								</View>
+
+								<ThemedText
+									style={{ fontSize: 13, color: "#64748b", marginTop: 10 }}
+								>
+									{nextAppointment.about}
+								</ThemedText>
+							</View>
+						) : (
+							<View style={{ alignItems: "center", paddingVertical: 12 }}>
 								<Feather
-									name={link.icon.name as keyof typeof Feather.glyphMap}
-									size={20}
-									color={link.icon.color}
-									style={{ marginBottom: 4 }}
+									name="calendar"
+									size={36}
+									color={isDark ? "#475569" : "#cbd5e1"}
+									style={{ marginBottom: 8 }}
 								/>
 								<ThemedText
-									className={`text-lg font-extrabold mb-1 text-center ${link.titleClass}`}
+									style={{
+										fontSize: 14,
+										color: "#64748b",
+										textAlign: "center",
+									}}
 								>
-									{link.title}
+									No upcoming appointments.{"\n"}Schedule your next visit below.
 								</ThemedText>
-								<ThemedText className="text-sm text-slate-500 dark:text-slate-400 text-center">
-									{link.desc}
-								</ThemedText>
-							</ThemedView>
-						))}
-					</ScrollView>
+							</View>
+						)}
 
-					<ThemedText className="text-base text-slate-400 dark:text-slate-500 text-center mt-auto mb-2">
-						Powered by NextStep Software Inc.
-					</ThemedText>
+						{/* Book appointment CTA */}
+						<TouchableOpacity
+							activeOpacity={0.8}
+							style={{
+								marginTop: 14,
+								backgroundColor: "#0a7ea4",
+								borderRadius: 12,
+								paddingVertical: 11,
+								alignItems: "center",
+								flexDirection: "row",
+								justifyContent: "center",
+								gap: 8,
+							}}
+						>
+							<Feather name="plus-circle" size={16} color="#ffffff" />
+							<ThemedText
+								style={{ color: "#ffffff", fontWeight: "700", fontSize: 14 }}
+							>
+								Book Appointment
+							</ThemedText>
+						</TouchableOpacity>
+					</SectionCard>
+
+					{/* ── Quick actions ────────────────────────────────────── */}
+					<SectionCard title="Quick Access" icon="grid" accentColor="#8b5cf6">
+						<View
+							style={{
+								flexDirection: "row",
+								flexWrap: "wrap",
+								gap: 10,
+							}}
+						>
+							{QUICK_ACTIONS.map((action) => (
+								<TouchableOpacity
+									key={action.key}
+									activeOpacity={0.75}
+									style={{
+										flex: 1,
+										minWidth: "44%",
+										backgroundColor: isDark
+											? `${action.color}22`
+											: `${action.color}12`,
+										borderRadius: 14,
+										paddingVertical: 16,
+										alignItems: "center",
+										borderWidth: 1,
+										borderColor: isDark
+											? `${action.color}44`
+											: `${action.color}28`,
+									}}
+								>
+									<View
+										style={{
+											width: 40,
+											height: 40,
+											borderRadius: 20,
+											backgroundColor: `${action.color}22`,
+											alignItems: "center",
+											justifyContent: "center",
+											marginBottom: 8,
+										}}
+									>
+										<Feather
+											name={action.icon}
+											size={18}
+											color={action.color}
+										/>
+									</View>
+									<ThemedText
+										style={{
+											fontSize: 13,
+											fontWeight: "700",
+											color: action.color,
+											textAlign: "center",
+										}}
+									>
+										{action.label}
+									</ThemedText>
+								</TouchableOpacity>
+							))}
+						</View>
+					</SectionCard>
+
+					{/* ── Upcoming list ─────────────────────────────────────── */}
+					{allAppointments.length > 1 && (
+						<SectionCard
+							title="Upcoming Visits"
+							icon="list"
+							accentColor="#10b981"
+						>
+							{allAppointments.slice(1, 4).map((appt, idx) => (
+								<View key={appt.id}>
+									{idx > 0 && (
+										<View
+											style={{
+												height: 1,
+												backgroundColor: isDark ? "#1e293b" : "#f1f5f9",
+												marginVertical: 10,
+											}}
+										/>
+									)}
+									<View
+										style={{
+											flexDirection: "row",
+											alignItems: "center",
+											gap: 10,
+										}}
+									>
+										<View
+											style={{
+												width: 8,
+												height: 8,
+												borderRadius: 4,
+												backgroundColor: getStatusColor(appt.status),
+											}}
+										/>
+										<View style={{ flex: 1 }}>
+											<ThemedText
+												style={{ fontSize: 14, fontWeight: "600" }}
+												className="dark:text-slate-200"
+												numberOfLines={1}
+											>
+												{appt.doctor}
+											</ThemedText>
+											<ThemedText
+												style={{ fontSize: 12, color: "#94a3b8", marginTop: 1 }}
+											>
+												{formatApptShort(appt.date, appt.time)}
+											</ThemedText>
+										</View>
+										<ThemedText
+											style={{ fontSize: 12, color: "#64748b" }}
+											numberOfLines={1}
+										>
+											{appt.about}
+										</ThemedText>
+									</View>
+								</View>
+							))}
+
+							{allAppointments.length > 4 && (
+								<TouchableOpacity
+									activeOpacity={0.7}
+									style={{
+										marginTop: 14,
+										flexDirection: "row",
+										alignItems: "center",
+										justifyContent: "center",
+										gap: 4,
+									}}
+								>
+									<ThemedText
+										style={{
+											fontSize: 13,
+											fontWeight: "600",
+											color: "#0a7ea4",
+										}}
+									>
+										View all {allAppointments.length} appointments
+									</ThemedText>
+									<Feather name="chevron-right" size={14} color="#0a7ea4" />
+								</TouchableOpacity>
+							)}
+						</SectionCard>
+					)}
 				</ThemedView>
+
+				<ThemedText
+					style={{
+						fontSize: 11,
+						color: "#94a3b8",
+						textAlign: "center",
+						marginTop: 8,
+						marginBottom: 4,
+					}}
+				>
+					Powered by NextStep Software Inc.
+				</ThemedText>
 			</ScrollView>
 		</SafeAreaView>
 	);
