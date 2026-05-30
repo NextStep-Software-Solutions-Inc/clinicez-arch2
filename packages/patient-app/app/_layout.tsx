@@ -45,10 +45,19 @@ function getErrorMessage(error: unknown): string {
 
 function AppContent() {
 	const colorScheme = useColorScheme();
-	const { isSignedIn, isLoaded: clerkLoaded } = useAuth();
+	const {
+		isSignedIn,
+		isLoaded: clerkLoaded,
+		signOut: clerkSignOut,
+	} = useAuth();
 	const { user: clerkUser } = useUser();
-	const { status, bootstrap, completeOnboarding, storeUserIdentity } =
-		useAuthStore();
+	const {
+		status,
+		bootstrap,
+		completeOnboarding,
+		storeUserIdentity,
+		signOut: resetAuthSession,
+	} = useAuthStore();
 	const [dbReady, setDbReady] = useState(false);
 	const [startupError, setStartupError] = useState<string | null>(null);
 	const [startupTimeout, setStartupTimeout] = useState(false);
@@ -119,6 +128,15 @@ function AppContent() {
 			}).catch(console.error);
 		}
 	}, [dbReady, isSignedIn, clerkUser, storeUserIdentity]);
+
+	// If Clerk session is no longer valid, force local sign-out so the user can log in again.
+	useEffect(() => {
+		if (!clerkLoaded || isSignedIn) return;
+		if (status === "loading" || status === "onboarding") return;
+		resetAuthSession(clerkSignOut).catch((error) => {
+			console.error("[AUTH_SIGNOUT_FALLBACK]", error);
+		});
+	}, [clerkLoaded, isSignedIn, status, resetAuthSession, clerkSignOut]);
 
 	if (startupError || fontLoadError) {
 		return (

@@ -98,6 +98,13 @@ export default function PinScreen() {
 		showPinFallback,
 	]);
 
+	// In PIN-only lock mode, show PIN entry immediately when the app is locked.
+	useEffect(() => {
+		if (status === "locked" && (!biometricsEnabled || !biometricsAvailable)) {
+			setPinEntryActive(true);
+		}
+	}, [status, biometricsEnabled, biometricsAvailable]);
+
 	const handlePinInput = useCallback(
 		async (digit: string) => {
 			setError(null);

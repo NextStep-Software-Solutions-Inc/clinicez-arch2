@@ -213,7 +213,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 	},
 
 	signOut: async (clerkSignOut: () => Promise<void>) => {
-		await clerkSignOut();
+		try {
+			await clerkSignOut();
+		} catch (error) {
+			audit.warn("AUTH", "CLERK_SIGNOUT_FAILED", {
+				error: error instanceof Error ? error.message : String(error),
+			});
+		}
 		await Promise.all([
 			secureDel(StorageKey.ONBOARDED),
 			secureDel(StorageKey.USER_IDENTITY),
