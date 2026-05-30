@@ -1,6 +1,7 @@
 import { useUser } from "@clerk/expo";
 import { Feather } from "@expo/vector-icons";
-import { Image, ScrollView, TouchableOpacity, View } from "react-native";
+import { useMemo } from "react";
+import { Image, ScrollView, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatChip } from "@/components/profile/atoms/StatChip";
 import { SectionCard } from "@/components/profile/molecules/SectionCard";
@@ -20,11 +21,13 @@ function getGreeting(): string {
 }
 
 function formatApptShort(isoDate: string, time: string): string {
+	const parsed = new Date(isoDate);
+	if (Number.isNaN(parsed.getTime())) return time;
 	const date = new Intl.DateTimeFormat("en-US", {
 		weekday: "short",
 		month: "short",
 		day: "numeric",
-	}).format(new Date(isoDate));
+	}).format(parsed);
 	return `${date} · ${time}`;
 }
 
@@ -63,9 +66,12 @@ export default function HomeScreen() {
 	const isDark = useColorScheme() === "dark";
 
 	const firstName = patient?.firstName ?? clerkUser?.firstName ?? "there";
-	const avatarUri =
-		clerkUser?.imageUrl ??
-		`https://ui-avatars.com/api/?name=${encodeURIComponent(firstName)}&background=0a7ea4&color=fff`;
+	const avatarUri = useMemo(
+		() =>
+			clerkUser?.imageUrl ??
+			`https://ui-avatars.com/api/?name=${encodeURIComponent(firstName)}&background=0a7ea4&color=fff`,
+		[clerkUser?.imageUrl, firstName],
+	);
 
 	const allAppointments = getMockAppointments();
 	const nextAppointment = allAppointments[0] ?? null;
@@ -78,7 +84,7 @@ export default function HomeScreen() {
 				contentContainerStyle={{ paddingBottom: 24 }}
 			>
 				{/* ── Hero banner ──────────────────────────────────────────── */}
-				<View
+				<ThemedView
 					style={{
 						backgroundColor: isDark ? "#0f172a" : "#0a7ea4",
 						paddingHorizontal: 20,
@@ -86,7 +92,13 @@ export default function HomeScreen() {
 						paddingBottom: 28,
 					}}
 				>
-					<View style={{ flexDirection: "row", alignItems: "center" }}>
+					<ThemedView
+						style={{
+							flexDirection: "row",
+							alignItems: "center",
+							backgroundColor: "transparent",
+						}}
+					>
 						<Image
 							source={{ uri: avatarUri }}
 							style={{
@@ -98,7 +110,13 @@ export default function HomeScreen() {
 								backgroundColor: "#e2e8f0",
 							}}
 						/>
-						<View style={{ marginLeft: 14, flex: 1 }}>
+						<ThemedView
+							style={{
+								marginLeft: 14,
+								flex: 1,
+								backgroundColor: "transparent",
+							}}
+						>
 							<ThemedText
 								style={{
 									fontSize: 13,
@@ -114,8 +132,8 @@ export default function HomeScreen() {
 							>
 								{isLoading ? "…" : firstName}
 							</ThemedText>
-						</View>
-						<View
+						</ThemedView>
+						<ThemedView
 							style={{
 								backgroundColor: "rgba(255,255,255,0.18)",
 								borderRadius: 20,
@@ -123,11 +141,18 @@ export default function HomeScreen() {
 							}}
 						>
 							<Feather name="bell" size={20} color="#ffffff" />
-						</View>
-					</View>
+						</ThemedView>
+					</ThemedView>
 
 					{/* Health stat chips inline with hero */}
-					<View style={{ flexDirection: "row", gap: 10, marginTop: 20 }}>
+					<ThemedView
+						style={{
+							flexDirection: "row",
+							gap: 10,
+							marginTop: 20,
+							backgroundColor: "transparent",
+						}}
+					>
 						<StatChip
 							label="Blood Type"
 							value={patient?.bloodType ?? "—"}
@@ -146,8 +171,8 @@ export default function HomeScreen() {
 							icon="shield"
 							color="#10b981"
 						/>
-					</View>
-				</View>
+					</ThemedView>
+				</ThemedView>
 
 				<ThemedView style={{ paddingHorizontal: 16, paddingTop: 20, gap: 4 }}>
 					{/* ── Next appointment ────────────────────────────────── */}
@@ -157,15 +182,16 @@ export default function HomeScreen() {
 						accentColor="#0a7ea4"
 					>
 						{nextAppointment ? (
-							<View>
-								<View
+							<ThemedView style={{ backgroundColor: "transparent" }}>
+								<ThemedView
 									style={{
 										flexDirection: "row",
 										alignItems: "center",
 										marginBottom: 12,
+										backgroundColor: "transparent",
 									}}
 								>
-									<View
+									<ThemedView
 										style={{
 											width: 44,
 											height: 44,
@@ -177,8 +203,13 @@ export default function HomeScreen() {
 										}}
 									>
 										<Feather name="user" size={20} color="#0a7ea4" />
-									</View>
-									<View style={{ flex: 1 }}>
+									</ThemedView>
+									<ThemedView
+										style={{
+											flex: 1,
+											backgroundColor: "transparent",
+										}}
+									>
 										<ThemedText
 											style={{ fontSize: 15, fontWeight: "700" }}
 											className="dark:text-slate-100"
@@ -192,8 +223,8 @@ export default function HomeScreen() {
 										>
 											{nextAppointment.clinicName}
 										</ThemedText>
-									</View>
-									<View
+									</ThemedView>
+									<ThemedView
 										style={{
 											paddingHorizontal: 8,
 											paddingVertical: 3,
@@ -210,10 +241,10 @@ export default function HomeScreen() {
 										>
 											{nextAppointment.status}
 										</ThemedText>
-									</View>
-								</View>
+									</ThemedView>
+								</ThemedView>
 
-								<View
+								<ThemedView
 									style={{
 										flexDirection: "row",
 										alignItems: "center",
@@ -233,16 +264,22 @@ export default function HomeScreen() {
 											nextAppointment.time,
 										)}
 									</ThemedText>
-								</View>
+								</ThemedView>
 
 								<ThemedText
 									style={{ fontSize: 13, color: "#64748b", marginTop: 10 }}
 								>
 									{nextAppointment.about}
 								</ThemedText>
-							</View>
+							</ThemedView>
 						) : (
-							<View style={{ alignItems: "center", paddingVertical: 12 }}>
+							<ThemedView
+								style={{
+									alignItems: "center",
+									paddingVertical: 12,
+									backgroundColor: "transparent",
+								}}
+							>
 								<Feather
 									name="calendar"
 									size={36}
@@ -258,7 +295,7 @@ export default function HomeScreen() {
 								>
 									No upcoming appointments.{"\n"}Schedule your next visit below.
 								</ThemedText>
-							</View>
+							</ThemedView>
 						)}
 
 						{/* Book appointment CTA */}
@@ -286,11 +323,12 @@ export default function HomeScreen() {
 
 					{/* ── Quick actions ────────────────────────────────────── */}
 					<SectionCard title="Quick Access" icon="grid" accentColor="#8b5cf6">
-						<View
+						<ThemedView
 							style={{
 								flexDirection: "row",
 								flexWrap: "wrap",
 								gap: 10,
+								backgroundColor: "transparent",
 							}}
 						>
 							{QUICK_ACTIONS.map((action) => (
@@ -312,7 +350,7 @@ export default function HomeScreen() {
 											: `${action.color}28`,
 									}}
 								>
-									<View
+									<ThemedView
 										style={{
 											width: 40,
 											height: 40,
@@ -328,7 +366,7 @@ export default function HomeScreen() {
 											size={18}
 											color={action.color}
 										/>
-									</View>
+									</ThemedView>
 									<ThemedText
 										style={{
 											fontSize: 13,
@@ -341,7 +379,7 @@ export default function HomeScreen() {
 									</ThemedText>
 								</TouchableOpacity>
 							))}
-						</View>
+						</ThemedView>
 					</SectionCard>
 
 					{/* ── Upcoming list ─────────────────────────────────────── */}
@@ -352,9 +390,12 @@ export default function HomeScreen() {
 							accentColor="#10b981"
 						>
 							{allAppointments.slice(1, 4).map((appt, idx) => (
-								<View key={appt.id}>
+								<ThemedView
+									key={appt.id}
+									style={{ backgroundColor: "transparent" }}
+								>
 									{idx > 0 && (
-										<View
+										<ThemedView
 											style={{
 												height: 1,
 												backgroundColor: isDark ? "#1e293b" : "#f1f5f9",
@@ -362,14 +403,15 @@ export default function HomeScreen() {
 											}}
 										/>
 									)}
-									<View
+									<ThemedView
 										style={{
 											flexDirection: "row",
 											alignItems: "center",
 											gap: 10,
+											backgroundColor: "transparent",
 										}}
 									>
-										<View
+										<ThemedView
 											style={{
 												width: 8,
 												height: 8,
@@ -377,7 +419,12 @@ export default function HomeScreen() {
 												backgroundColor: getStatusColor(appt.status),
 											}}
 										/>
-										<View style={{ flex: 1 }}>
+										<ThemedView
+											style={{
+												flex: 1,
+												backgroundColor: "transparent",
+											}}
+										>
 											<ThemedText
 												style={{ fontSize: 14, fontWeight: "600" }}
 												className="dark:text-slate-200"
@@ -386,19 +433,23 @@ export default function HomeScreen() {
 												{appt.doctor}
 											</ThemedText>
 											<ThemedText
-												style={{ fontSize: 12, color: "#94a3b8", marginTop: 1 }}
+												style={{
+													fontSize: 12,
+													color: "#94a3b8",
+													marginTop: 1,
+												}}
 											>
 												{formatApptShort(appt.date, appt.time)}
 											</ThemedText>
-										</View>
+										</ThemedView>
 										<ThemedText
 											style={{ fontSize: 12, color: "#64748b" }}
 											numberOfLines={1}
 										>
 											{appt.about}
 										</ThemedText>
-									</View>
-								</View>
+									</ThemedView>
+								</ThemedView>
 							))}
 
 							{allAppointments.length > 4 && (
