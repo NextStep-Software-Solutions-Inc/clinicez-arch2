@@ -8,7 +8,7 @@ import {
 	ThemeProvider,
 } from "expo-router/react-navigation";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ClinicProvider } from "../components/ClinicContext";
 import "react-native-reanimated";
 import { migrate } from "drizzle-orm/expo-sqlite/migrator";
@@ -22,6 +22,7 @@ import {
 	getAppConfigIssues,
 	getClerkPublishableKey,
 } from "@/services/appConfig";
+import { audit } from "@/services/auditLogger";
 import { seedPatientFromClerk } from "@/services/patientService";
 import { useAuthStore } from "@/stores/authStore";
 import migrations from "../drizzle/migrations";
@@ -61,6 +62,7 @@ function AppContent() {
 	const [dbReady, setDbReady] = useState(false);
 	const [startupError, setStartupError] = useState<string | null>(null);
 	const [startupTimeout, setStartupTimeout] = useState(false);
+	const isSessionRecoveryInFlightRef = useRef(false);
 
 	const [loaded, fontLoadError] = useFonts({
 		"SF-Pro": require("../assets/fonts/SF-Pro.ttf"),
@@ -131,11 +133,25 @@ function AppContent() {
 
 	// If Clerk session is no longer valid, force local sign-out so the user can log in again.
 	useEffect(() => {
-		if (!clerkLoaded || isSignedIn) return;
-		if (status === "loading" || status === "onboarding") return;
-		resetAuthSession(clerkSignOut).catch((error) => {
-			console.error("[AUTH_SIGNOUT_FALLBACK]", error);
-		});
+		if (
+			!clerkLoaded ||
+			isSignedIn ||
+			status === "loading" ||
+			status === "onboarding"
+		)
+			return;
+		if (isSessionRecoveryInFlightRef.current) return;
+		isSessionRecoveryInFlightRef.current = true;
+		audit.warn("AUTH", "SESSION_RECOVERY_SIGNOUT_TRIGGERED");
+		resetAuthSession(clerkSignOut)
+			.catch((error) => {
+				audit.error("AUTH", "SESSION_RECOVERY_SIGNOUT_FAILED", {
+					error: error instanceof Error ? error.message : String(error),
+				});
+			})
+			.finally(() => {
+				isSessionRecoveryInFlightRef.current = false;
+			});
 	}, [clerkLoaded, isSignedIn, status, resetAuthSession, clerkSignOut]);
 
 	if (startupError || fontLoadError) {
