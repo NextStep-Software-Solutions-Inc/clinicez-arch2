@@ -33,6 +33,38 @@ import AboutSettingsScreen from './screens/settings/AboutSettings.screen';
 import DebugSettingsScreen from './screens/settings/DebugSettings.screen';
 import ChangePasswordScreen from './screens/settings/ChangePassword.screen';
 
+// Profile — Part A (self-entry)
+import PersonalDemographicsScreen from './screens/profile/PersonalDemographics.screen';
+import GovernmentIdsScreen from './screens/profile/GovernmentIds.screen';
+import ContactInfoScreen from './screens/profile/ContactInfo.screen';
+import AddressesScreen from './screens/profile/Addresses.screen';
+import EmergencyContactsScreen from './screens/profile/EmergencyContacts.screen';
+import HealthcareProvidersScreen from './screens/profile/HealthcareProviders.screen';
+import AllergiesScreen from './screens/profile/Allergies.screen';
+import MedicationsScreen from './screens/profile/Medications.screen';
+import SurgicalHistoryScreen from './screens/profile/SurgicalHistory.screen';
+import PastIllnessesScreen from './screens/profile/PastIllnesses.screen';
+import ChronicConditionsScreen from './screens/profile/ChronicConditions.screen';
+import DisabilitiesScreen from './screens/profile/Disabilities.screen';
+import ImmunizationsSelfScreen from './screens/profile/ImmunizationsSelf.screen';
+import SocialHistoryScreen from './screens/profile/SocialHistory.screen';
+import FamilyHistoryScreen from './screens/profile/FamilyHistory.screen';
+import OccupationScreen from './screens/profile/Occupation.screen';
+import TravelHistoryScreen from './screens/profile/TravelHistory.screen';
+import ObstetricProfileScreen from './screens/profile/ObstetricProfile.screen';
+import MaleReproductiveScreen from './screens/profile/MaleReproductive.screen';
+import DentalVisionScreen from './screens/profile/DentalVision.screen';
+import MentalHealthScreen from './screens/profile/MentalHealth.screen';
+
+// Profile — Part B (read-only, HCW-entered)
+import VitalSignsScreen from './screens/profile/VitalSigns.screen';
+import ConsultationsScreen from './screens/profile/Consultations.screen';
+import PrescriptionsScreen from './screens/profile/Prescriptions.screen';
+import LabResultsScreen from './screens/profile/LabResults.screen';
+import ImagingResultsScreen from './screens/profile/ImagingResults.screen';
+import VaccinationsAdministeredScreen from './screens/profile/VaccinationsAdministered.screen';
+import ClinicalAssessmentsScreen from './screens/profile/ClinicalAssessments.screen';
+
 // Navigation state hooks
 import {
   useIsAppLoading,
@@ -232,6 +264,120 @@ const MainStack = createNativeStackNavigator({
     ExploreOrgsScreen: createNativeStackScreen({
       screen: ExploreOrgsScreen,
       options: { headerLargeTitleEnabled: true },
+    }),
+    // ── Profile Part A ────────────────────────────────────────────────────────
+    PersonalDemographicsScreen: createNativeStackScreen({
+      screen: PersonalDemographicsScreen,
+      options: { title: 'Personal Demographics', headerLargeTitleEnabled: true },
+    }),
+    GovernmentIdsScreen: createNativeStackScreen({
+      screen: GovernmentIdsScreen,
+      options: { title: 'Government IDs', headerLargeTitleEnabled: true },
+    }),
+    ContactInfoScreen: createNativeStackScreen({
+      screen: ContactInfoScreen,
+      options: { title: 'Contact Information', headerLargeTitleEnabled: true },
+    }),
+    AddressesScreen: createNativeStackScreen({
+      screen: AddressesScreen,
+      options: { title: 'Addresses', headerLargeTitleEnabled: true },
+    }),
+    EmergencyContactsScreen: createNativeStackScreen({
+      screen: EmergencyContactsScreen,
+      options: { title: 'Emergency Contacts', headerLargeTitleEnabled: true },
+    }),
+    HealthcareProvidersScreen: createNativeStackScreen({
+      screen: HealthcareProvidersScreen,
+      options: { title: 'Healthcare Providers', headerLargeTitleEnabled: true },
+    }),
+    AllergiesScreen: createNativeStackScreen({
+      screen: AllergiesScreen,
+      options: { title: 'Allergies', headerLargeTitleEnabled: true },
+    }),
+    MedicationsScreen: createNativeStackScreen({
+      screen: MedicationsScreen,
+      options: { title: 'Medications', headerLargeTitleEnabled: true },
+    }),
+    SurgicalHistoryScreen: createNativeStackScreen({
+      screen: SurgicalHistoryScreen,
+      options: { title: 'Surgical History', headerLargeTitleEnabled: true },
+    }),
+    PastIllnessesScreen: createNativeStackScreen({
+      screen: PastIllnessesScreen,
+      options: { title: 'Past Illnesses', headerLargeTitleEnabled: true },
+    }),
+    ChronicConditionsScreen: createNativeStackScreen({
+      screen: ChronicConditionsScreen,
+      options: { title: 'Chronic Conditions', headerLargeTitleEnabled: true },
+    }),
+    DisabilitiesScreen: createNativeStackScreen({
+      screen: DisabilitiesScreen,
+      options: { title: 'Disabilities', headerLargeTitleEnabled: true },
+    }),
+    ImmunizationsSelfScreen: createNativeStackScreen({
+      screen: ImmunizationsSelfScreen,
+      options: { title: 'Immunizations (Self-Reported)', headerLargeTitleEnabled: true },
+    }),
+    SocialHistoryScreen: createNativeStackScreen({
+      screen: SocialHistoryScreen,
+      options: { title: 'Social History', headerLargeTitleEnabled: true },
+    }),
+    FamilyHistoryScreen: createNativeStackScreen({
+      screen: FamilyHistoryScreen,
+      options: { title: 'Family History', headerLargeTitleEnabled: true },
+    }),
+    OccupationScreen: createNativeStackScreen({
+      screen: OccupationScreen,
+      options: { title: 'Occupation', headerLargeTitleEnabled: true },
+    }),
+    TravelHistoryScreen: createNativeStackScreen({
+      screen: TravelHistoryScreen,
+      options: { title: 'Travel History', headerLargeTitleEnabled: true },
+    }),
+    ObstetricProfileScreen: createNativeStackScreen({
+      screen: ObstetricProfileScreen,
+      options: { title: 'Obstetric Profile', headerLargeTitleEnabled: true },
+    }),
+    MaleReproductiveScreen: createNativeStackScreen({
+      screen: MaleReproductiveScreen,
+      options: { title: 'Male Reproductive Health', headerLargeTitleEnabled: true },
+    }),
+    DentalVisionScreen: createNativeStackScreen({
+      screen: DentalVisionScreen,
+      options: { title: 'Dental & Vision', headerLargeTitleEnabled: true },
+    }),
+    MentalHealthScreen: createNativeStackScreen({
+      screen: MentalHealthScreen,
+      options: { title: 'Mental Health', headerLargeTitleEnabled: true },
+    }),
+    // ── Profile Part B (read-only) ────────────────────────────────────────────
+    VitalSignsScreen: createNativeStackScreen({
+      screen: VitalSignsScreen,
+      options: { title: 'Vital Signs', headerLargeTitleEnabled: true },
+    }),
+    ConsultationsScreen: createNativeStackScreen({
+      screen: ConsultationsScreen,
+      options: { title: 'Consultations', headerLargeTitleEnabled: true },
+    }),
+    PrescriptionsScreen: createNativeStackScreen({
+      screen: PrescriptionsScreen,
+      options: { title: 'Prescriptions', headerLargeTitleEnabled: true },
+    }),
+    LabResultsScreen: createNativeStackScreen({
+      screen: LabResultsScreen,
+      options: { title: 'Lab Results', headerLargeTitleEnabled: true },
+    }),
+    ImagingResultsScreen: createNativeStackScreen({
+      screen: ImagingResultsScreen,
+      options: { title: 'Imaging Results', headerLargeTitleEnabled: true },
+    }),
+    VaccinationsAdministeredScreen: createNativeStackScreen({
+      screen: VaccinationsAdministeredScreen,
+      options: { title: 'Vaccinations', headerLargeTitleEnabled: true },
+    }),
+    ClinicalAssessmentsScreen: createNativeStackScreen({
+      screen: ClinicalAssessmentsScreen,
+      options: { title: 'Clinical Assessments', headerLargeTitleEnabled: true },
     }),
   },
 });

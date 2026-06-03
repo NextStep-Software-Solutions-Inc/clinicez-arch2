@@ -8,10 +8,12 @@ module.exports = function(api) {
         {
           root: ['./'],
           alias: {
-            '@ui': './components/ui'
+            '@ui': './components/ui',
+            '@db': './db'
           }
         }
-      ]
+      ],
+      ['inline-import', { extensions: ['.sql'] }]
     ]
   };
 };
