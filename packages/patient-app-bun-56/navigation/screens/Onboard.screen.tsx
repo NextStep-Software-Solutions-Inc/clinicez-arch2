@@ -1,10 +1,10 @@
 import { ScrollView, View, StyleSheet, Pressable, useWindowDimensions, NativeSyntheticEvent, NativeScrollEvent, StatusBar } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+
 import { LinearGradient } from "expo-linear-gradient";
 import ThemedText from "@ui/ThemedText";
 import { useOnboarding } from "contexts/OnboardingContext";
-import { useEffect, useRef, useState } from "react";
-import { useAuth } from "contexts/AuthContext";
+import { useRef, useState } from "react";
+
 
 type Slide = {
   title: string;
@@ -40,31 +40,14 @@ const slides: Slide[] = [
 
 export default function OnboardScreen() {
     const { width, height } = useWindowDimensions();
-    const navigation = useNavigation();
-    const { isAuthenticated, unlock } = useAuth();
-    const { complete, isComplete } = useOnboarding();
+    const { complete } = useOnboarding();
     const scrollRef = useRef<ScrollView | null>(null);
     const [activeIndex, setActiveIndex] = useState(0);
 
-    const handleComplete = () => {
-        complete();
-        unlock();
+    const handleComplete = async () => {
+        await complete(); // persists to secure store → state machine handles routing
     };
 
-    useEffect(() => {
-        if (!isComplete) return; // If onboarding isn't complete, do nothing
-
-         // If onboarding is complete, check authentication status
-        if (isAuthenticated) {
-            navigation.reset({
-                index: 0,
-                routes: [{ name: "BottomTabs", params: { screen: "HomeScreen" } }],
-            });
-        }
-        else {
-            navigation.navigate("Auth", { screen: "Login" });
-        }
-    }, [isComplete, isAuthenticated]);
 
     const handleNext = () => {
         if (activeIndex < slides.length - 1) {

@@ -8,7 +8,7 @@ import {
   ScrollView,
   ActivityIndicator,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useTheme } from "@react-navigation/native";
 import { useSignIn } from "@clerk/expo";
 import ThemedText from "@ui/ThemedText";
 import { useAuth } from "contexts/AuthContext";
@@ -21,6 +21,7 @@ const STEP_LABELS = ["Email", "Code", "Password"];
 
 export default function ForgotPasswordScreen() {
   const navigation = useNavigation();
+  const { colors } = useTheme();
   const { signIn, errors, fetchStatus } = useSignIn();
   const { unlock, isAuthenticated } = useAuth();
   const [step, setStep] = useState<Step>("email");
@@ -40,7 +41,6 @@ export default function ForgotPasswordScreen() {
 
     setStep("code");
   };
-  console.log({isAuthenticated});
 
   const handleVerifyCode = async () => {
     const { error } = await signIn.resetPasswordEmailCode.verifyCode({ code });
@@ -58,10 +58,9 @@ export default function ForgotPasswordScreen() {
 
     if (signIn.status === "complete") {
       await signIn.finalize({
-        navigate: async ({ session }) => {
+        navigate: ({ session }) => {
           if (session?.currentTask) return;
-          await unlock();
-          navigation.navigate("BottomTabs", { screen: "HomeScreen" });
+          unlock(); // Let state machine route to Main or SetupPIN based on hasPIN
         },
       });
     }
@@ -144,12 +143,12 @@ export default function ForgotPasswordScreen() {
           )}
         </View>
 
-        <View style={styles.card}>
+        <View style={[styles.card, {backgroundColor: colors.card}]}>
           {step === "email" && (
             <View style={styles.field}>
               <ThemedText style={styles.label}>Email address</ThemedText>
               <TextInput
-                style={styles.input}
+                style={{...styles.input, borderColor: colors.border}}
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
@@ -273,7 +272,7 @@ export default function ForgotPasswordScreen() {
 const styles = StyleSheet.create({
   page: {
     flex: 1,
-    backgroundColor: "#FAFAFB",
+    // backgroundColor: "#FAFAFB",
   },
   scroll: {
     paddingHorizontal: 28,
@@ -350,7 +349,7 @@ const styles = StyleSheet.create({
     opacity: 0.75,
   },
   card: {
-    backgroundColor: "#FFFFFF",
+    // backgroundColor: "#FFFFFF",
     borderRadius: 24,
     padding: 24,
     gap: 16,
@@ -369,9 +368,9 @@ const styles = StyleSheet.create({
     color: "#374151",
   },
   input: {
-    backgroundColor: "#F9FAFB",
+    // backgroundColor: "#F9FAFB",
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    // borderColor: "#E5E7EB",
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,

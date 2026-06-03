@@ -20,113 +20,31 @@ export default function LoginScreen() {
   const { unlock } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [mfaCode, setMfaCode] = useState("");
   const isLoading = fetchStatus === "fetching";
-  const needsMfa = signIn.status === "needs_client_trust";
 
   const handleSignIn = async () => {
     const { error } = await signIn.password({ emailAddress: email, password });
     if (error) return;
 
     if (signIn.status === "complete") {
+      // Non-MFA login: finalize session, then unlock so state machine routes to Main or SetupPIN
       await signIn.finalize({
         navigate: async ({ session }) => {
           if (session?.currentTask) return;
-          await unlock();
-          navigation.navigate("BottomTabs", { screen: "HomeScreen" });
+          unlock();
         },
       });
     } else if (signIn.status === "needs_client_trust") {
+      // MFA required: send email code and navigate to Verify screen
       const emailFactor = signIn.supportedSecondFactors?.find(
         (f) => f.strategy === "email_code",
       );
-      if (emailFactor) await signIn.mfa.sendEmailCode();
+      if (emailFactor) {
+        await signIn.mfa.sendEmailCode();
+        navigation.navigate("Auth", { screen: "Verify" });
+      }
     }
   };
-
-  const handleVerifyMfa = async () => {
-    await signIn.mfa.verifyEmailCode({ code: mfaCode });
-    if (signIn.status === "complete") {
-      await signIn.finalize({
-        navigate: ({ session }) => {
-            if (session?.currentTask) return;
-            unlock();
-            navigation.navigate("BottomTabs", { screen: "HomeScreen" });
-        },
-      });
-    }
-  };
-
-  if (needsMfa) {
-    return (
-      <KeyboardAvoidingView
-        style={styles.page}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.header}>
-            <ThemedText style={styles.brand}>Clinic EZ</ThemedText>
-            <ThemedText style={styles.title}>Check your email</ThemedText>
-            <ThemedText style={styles.subtitle}>
-              We sent a verification code to your email. Enter it below to
-              continue.
-            </ThemedText>
-          </View>
-
-          <View style={styles.card}>
-            <View style={styles.field}>
-              <ThemedText style={styles.label}>Verification code</ThemedText>
-              <TextInput
-                style={[styles.input, styles.codeInput]}
-                value={mfaCode}
-                onChangeText={setMfaCode}
-                keyboardType="number-pad"
-                maxLength={6}
-                placeholder="000000"
-                placeholderTextColor="#9CA3AF"
-                autoFocus
-              />
-              {errors?.fields?.code && (
-                <ThemedText style={styles.error}>
-                  {errors.fields.code.message}
-                </ThemedText>
-              )}
-            </View>
-          </View>
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.cta,
-              (mfaCode.length < 6 || isLoading) && styles.ctaDisabled,
-              pressed && styles.ctaPressed,
-            ]}
-            onPress={handleVerifyMfa}
-            disabled={mfaCode.length < 6 || isLoading}
-          >
-            {isLoading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <ThemedText style={styles.ctaText}>Verify</ThemedText>
-            )}
-          </Pressable>
-
-          <View style={styles.footer}>
-            <Pressable onPress={() => signIn.mfa.sendEmailCode()}>
-              <ThemedText style={styles.link}>Resend code</ThemedText>
-            </Pressable>
-            <ThemedText style={styles.separator}> · </ThemedText>
-            <Pressable onPress={() => signIn.reset()}>
-              <ThemedText style={styles.link}>Start over</ThemedText>
-            </Pressable>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    );
-  }
 
   return (
     <KeyboardAvoidingView
