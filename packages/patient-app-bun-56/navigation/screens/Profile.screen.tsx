@@ -110,7 +110,7 @@ function plural(n: number, noun: string) {
 }
 
 export default function ProfileScreen() {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation();
   const [counts, setCounts] = useState<Counts | null>(null);
 
   useEffect(() => {
@@ -137,7 +137,7 @@ export default function ProfileScreen() {
           icon={{ android: 'person', ios: 'person.fill' }}
           iconColor="#3B82F6"
           right={{ type: 'chevron' }}
-          onPress={() => navigation.navigate('PersonalDemographicsScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'PersonalDemographicsScreen' })}
         />
         <SettingsRow
           title="Government & Insurance IDs"
@@ -145,7 +145,7 @@ export default function ProfileScreen() {
           icon={{ android: 'badge', ios: 'creditcard.fill' }}
           iconColor="#8B5CF6"
           right={{ type: 'chevron' }}
-          onPress={() => navigation.navigate('GovernmentIdsScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'GovernmentIdsScreen' })}
         />
         <SettingsRow
           title="Contact Info"
@@ -153,7 +153,7 @@ export default function ProfileScreen() {
           icon={{ android: 'call', ios: 'phone.fill' }}
           iconColor="#10B981"
           right={{ type: 'chevron' }}
-          onPress={() => navigation.navigate('ContactInfoScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'ContactInfoScreen' })}
         />
         <SettingsRow
           title="Addresses"
@@ -161,7 +161,7 @@ export default function ProfileScreen() {
           icon={{ android: 'location_on', ios: 'location.fill' }}
           iconColor="#F59E0B"
           right={c ? { type: 'value', label: plural(c.addresses, 'address') } : { type: 'loading' }}
-          onPress={() => navigation.navigate('AddressesScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'AddressesScreen' })}
         />
       </SettingsSection>
 
@@ -171,7 +171,7 @@ export default function ProfileScreen() {
           icon={{ android: 'emergency', ios: 'person.crop.circle.badge.exclamationmark.fill' }}
           iconColor="#EF4444"
           right={c ? { type: 'value', label: plural(c.emergency, 'contact') } : { type: 'loading' }}
-          onPress={() => navigation.navigate('EmergencyContactsScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'EmergencyContactsScreen' })}
         />
       </SettingsSection>
 
@@ -182,7 +182,7 @@ export default function ProfileScreen() {
           icon={{ android: 'local_hospital', ios: 'stethoscope' }}
           iconColor="#06B6D4"
           right={c ? { type: 'value', label: plural(c.providers, 'provider') } : { type: 'loading' }}
-          onPress={() => navigation.navigate('HealthcareProvidersScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'HealthcareProvidersScreen' })}
         />
       </SettingsSection>
 
@@ -192,49 +192,49 @@ export default function ProfileScreen() {
           icon={{ android: 'warning', ios: 'exclamationmark.triangle.fill' }}
           iconColor="#F97316"
           right={c ? { type: 'value', label: plural(c.allergies, 'allergy') } : { type: 'loading' }}
-          onPress={() => navigation.navigate('AllergiesScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'AllergiesScreen' })}
         />
         <SettingsRow
           title="Medications"
           icon={{ android: 'medication', ios: 'pills.fill' }}
           iconColor="#84CC16"
           right={c ? { type: 'value', label: plural(c.medications, 'medication') } : { type: 'loading' }}
-          onPress={() => navigation.navigate('MedicationsScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'MedicationsScreen' })}
         />
         <SettingsRow
           title="Surgical History"
           icon={{ android: 'content_cut', ios: 'scissors' }}
           iconColor="#EC4899"
           right={c ? { type: 'value', label: plural(c.surgeries, 'procedure') } : { type: 'loading' }}
-          onPress={() => navigation.navigate('SurgicalHistoryScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'SurgicalHistoryScreen' })}
         />
         <SettingsRow
           title="Past Illnesses"
           icon={{ android: 'sick', ios: 'thermometer.medium' }}
           iconColor="#6B7280"
           right={c ? { type: 'value', label: plural(c.illnesses, 'illness') } : { type: 'loading' }}
-          onPress={() => navigation.navigate('PastIllnessesScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'PastIllnessesScreen' })}
         />
         <SettingsRow
           title="Chronic Conditions"
           icon={{ android: 'monitor_heart', ios: 'heart.text.clipboard.fill' }}
           iconColor="#DC2626"
           right={c ? { type: 'value', label: plural(c.chronic, 'condition') } : { type: 'loading' }}
-          onPress={() => navigation.navigate('ChronicConditionsScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'ChronicConditionsScreen' })}
         />
         <SettingsRow
           title="Disabilities"
           icon={{ android: 'accessibility', ios: 'figure.roll' }}
           iconColor="#7C3AED"
           right={c ? { type: 'value', label: plural(c.disabilities, 'entry') } : { type: 'loading' }}
-          onPress={() => navigation.navigate('DisabilitiesScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'DisabilitiesScreen' })}
         />
         <SettingsRow
           title="Self-Reported Immunizations"
           icon={{ android: 'vaccines', ios: 'syringe.fill' }}
           iconColor="#2563EB"
           right={c ? { type: 'value', label: plural(c.immunizations, 'vaccine') } : { type: 'loading' }}
-          onPress={() => navigation.navigate('ImmunizationsSelfScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'ImmunizationsSelfScreen' })}
         />
       </SettingsSection>
 
@@ -245,21 +245,21 @@ export default function ProfileScreen() {
           icon={{ android: 'self_improvement', ios: 'leaf.fill' }}
           iconColor="#059669"
           right={{ type: 'chevron' }}
-          onPress={() => navigation.navigate('SocialHistoryScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'SocialHistoryScreen' })}
         />
         <SettingsRow
           title="Occupation"
           icon={{ android: 'work', ios: 'briefcase.fill' }}
           iconColor="#D97706"
           right={{ type: 'chevron' }}
-          onPress={() => navigation.navigate('OccupationScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'OccupationScreen' })}
         />
         <SettingsRow
           title="Travel History"
           icon={{ android: 'flight', ios: 'airplane' }}
           iconColor="#0EA5E9"
           right={c ? { type: 'value', label: plural(c.travel, 'trip') } : { type: 'loading' }}
-          onPress={() => navigation.navigate('TravelHistoryScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'TravelHistoryScreen' })}
         />
       </SettingsSection>
 
@@ -269,7 +269,7 @@ export default function ProfileScreen() {
           icon={{ android: 'family_restroom', ios: 'person.2.fill' }}
           iconColor="#BE185D"
           right={c ? { type: 'value', label: plural(c.family, 'entry') } : { type: 'loading' }}
-          onPress={() => navigation.navigate('FamilyHistoryScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'FamilyHistoryScreen' })}
         />
       </SettingsSection>
 
@@ -280,28 +280,28 @@ export default function ProfileScreen() {
           icon={{ android: 'pregnant_woman', ios: 'waveform.path.ecg' }}
           iconColor="#EC4899"
           right={c ? { type: 'value', label: plural(c.pregnancies, 'pregnancy') } : { type: 'loading' }}
-          onPress={() => navigation.navigate('ObstetricProfileScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'ObstetricProfileScreen' })}
         />
         <SettingsRow
           title="Male Reproductive Health"
           icon={{ android: 'male', ios: 'person.fill' }}
           iconColor="#3B82F6"
           right={{ type: 'chevron' }}
-          onPress={() => navigation.navigate('MaleReproductiveScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'MaleReproductiveScreen' })}
         />
         <SettingsRow
           title="Dental & Vision"
           icon={{ android: 'visibility', ios: 'eye.fill' }}
           iconColor="#10B981"
           right={{ type: 'chevron' }}
-          onPress={() => navigation.navigate('DentalVisionScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'DentalVisionScreen' })}
         />
         <SettingsRow
           title="Mental Health"
           icon={{ android: 'psychology', ios: 'brain.head.profile' }}
           iconColor="#8B5CF6"
           right={{ type: 'chevron' }}
-          onPress={() => navigation.navigate('MentalHealthScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'MentalHealthScreen' })}
         />
       </SettingsSection>
 
@@ -314,49 +314,49 @@ export default function ProfileScreen() {
           icon={{ android: 'monitor_heart', ios: 'waveform.path.ecg' }}
           iconColor="#EF4444"
           right={c ? { type: 'value', label: plural(c.vitals, 'record') } : { type: 'loading' }}
-          onPress={() => navigation.navigate('VitalSignsScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'VitalSignsScreen' })}
         />
         <SettingsRow
           title="Consultations"
           icon={{ android: 'chat_bubble', ios: 'stethoscope' }}
           iconColor="#3B82F6"
           right={c ? { type: 'value', label: plural(c.consults, 'consult') } : { type: 'loading' }}
-          onPress={() => navigation.navigate('ConsultationsScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'ConsultationsScreen' })}
         />
         <SettingsRow
           title="Prescriptions"
           icon={{ android: 'receipt_long', ios: 'doc.text.fill' }}
           iconColor="#7C3AED"
           right={c ? { type: 'value', label: plural(c.rxs, 'Rx') } : { type: 'loading' }}
-          onPress={() => navigation.navigate('PrescriptionsScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'PrescriptionsScreen' })}
         />
         <SettingsRow
           title="Lab Results"
           icon={{ android: 'science', ios: 'flask.fill' }}
           iconColor="#10B981"
           right={c ? { type: 'value', label: plural(c.labs, 'result') } : { type: 'loading' }}
-          onPress={() => navigation.navigate('LabResultsScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'LabResultsScreen' })}
         />
         <SettingsRow
           title="Imaging Results"
           icon={{ android: 'image', ios: 'photo.fill' }}
           iconColor="#F59E0B"
           right={c ? { type: 'value', label: plural(c.imaging, 'image') } : { type: 'loading' }}
-          onPress={() => navigation.navigate('ImagingResultsScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'ImagingResultsScreen' })}
         />
         <SettingsRow
           title="Vaccinations (Provider)"
           icon={{ android: 'vaccines', ios: 'syringe.fill' }}
           iconColor="#0EA5E9"
           right={c ? { type: 'value', label: plural(c.vaccinations, 'vaccine') } : { type: 'loading' }}
-          onPress={() => navigation.navigate('VaccinationsAdministeredScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'VaccinationsAdministeredScreen' })}
         />
         <SettingsRow
           title="Clinical Assessments"
           icon={{ android: 'assignment', ios: 'list.clipboard.fill' }}
           iconColor="#6B7280"
           right={c ? { type: 'value', label: plural(c.assessments, 'assessment') } : { type: 'loading' }}
-          onPress={() => navigation.navigate('ClinicalAssessmentsScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'ClinicalAssessmentsScreen' })}
         />
       </SettingsSection>
     </ScrollView>
