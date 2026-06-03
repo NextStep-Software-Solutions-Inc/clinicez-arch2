@@ -4,7 +4,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { db } from '@db/index';
 import { patientPastIllnesses } from '@db/schema/patientPastIllnesses';
 import { eq } from 'drizzle-orm';
-import { BottomSheetModal, BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetModalProvider, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import ProfileFormField from 'components/profile/ProfileFormField';
 import ProfileListItemCard from 'components/profile/ProfileListItemCard';
 import ProfileAddButton from 'components/profile/ProfileAddButton';
@@ -41,11 +41,12 @@ export default function PastIllnessesScreen() {
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
+    const { id, ...rest } = data;
     try {
-      if (data.id) {
-        await db.update(patientPastIllnesses).set({ ...data, updatedAt: new Date() }).where(eq(patientPastIllnesses.id, data.id));
+      if (id) {
+        await db.update(patientPastIllnesses).set({ ...rest, updatedAt: new Date() }).where(eq(patientPastIllnesses.id, id));
       } else {
-        await db.insert(patientPastIllnesses).values({ id: randomUUID(), patientId: patientId, ...data, createdAt: new Date(), updatedAt: new Date() });
+        await db.insert(patientPastIllnesses).values({ id: randomUUID(), patientId, ...rest, createdAt: new Date(), updatedAt: new Date() });
       }
       sheetRef.current?.dismiss();
       load();
@@ -63,7 +64,7 @@ export default function PastIllnessesScreen() {
       </ScrollView>
 
       <BottomSheetModal ref={sheetRef} snapPoints={['45%', '70%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
-        <ScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
+        <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title="Past Illness" />
           <Controller control={control} name="diagnosis" render={({ field }) => (
             <ProfileFormField label="Diagnosis" value={field.value} onChangeText={field.onChange} required placeholder="e.g. Typhoid Fever" />
@@ -74,7 +75,7 @@ export default function PastIllnessesScreen() {
           <Controller control={control} name="complications" render={({ field }) => (
             <ProfileFormField label="Complications" value={field.value} onChangeText={field.onChange} multiline placeholder="None, or describe" />
           )} />
-        </ScrollView>
+        </BottomSheetScrollView>
         <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} label="Save Illness" />
       </BottomSheetModal>
     </BottomSheetModalProvider>

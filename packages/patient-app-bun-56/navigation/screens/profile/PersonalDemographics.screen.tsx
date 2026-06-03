@@ -21,16 +21,16 @@ type FormValues = {
   middleName: string;
   lastName: string;
   suffix: string;
-  sex: string;
+  sex: 'Male' | 'Female' | 'Other' | '';
   dob: string;
   placeOfBirth: string;
-  civilStatus: string;
-  bloodType: string;
+  civilStatus: 'Single' | 'Married' | 'Widowed' | 'Separated' | 'Divorced' | '';
+  bloodType: 'A+' | 'A-' | 'B+' | 'B-' | 'AB+' | 'AB-' | 'O+' | 'O-' | 'Unknown' | '';
   nationality: string;
   ethnicity: string;
   religion: string;
   primaryLanguage: string;
-  educationLevel: string;
+  educationLevel: 'None' | 'Elementary' | 'HighSchool' | 'Vocational' | 'College' | 'Graduate' | 'PostGraduate' | '';
 };
 
 const SEX_OPTIONS = [
@@ -127,15 +127,22 @@ export default function PersonalDemographicsScreen() {
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
     try {
+      const payload = {
+        ...data,
+        sex: data.sex || null,
+        civilStatus: data.civilStatus || null,
+        bloodType: data.bloodType || null,
+        educationLevel: data.educationLevel || null,
+      };
       await db.insert(patients).values({
         id: patientId,
         clerkUserId: patientId,
-        ...data,
+        ...payload,
         createdAt: new Date(),
         updatedAt: new Date(),
       }).onConflictDoUpdate({
         target: patients.id,
-        set: { ...data, updatedAt: new Date() },
+        set: { ...payload, updatedAt: new Date() },
       });
       reset(data);
       navigation.goBack();

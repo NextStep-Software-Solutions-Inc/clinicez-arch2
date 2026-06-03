@@ -4,7 +4,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { db } from '@db/index';
 import { patientHealthcareProviders } from '@db/schema/patientHealthcareProviders';
 import { eq } from 'drizzle-orm';
-import { BottomSheetModal, BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetModalProvider, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import ProfileFormField from 'components/profile/ProfileFormField';
 import ProfileListItemCard from 'components/profile/ProfileListItemCard';
 import ProfileAddButton from 'components/profile/ProfileAddButton';
@@ -17,7 +17,7 @@ import { usePatientId } from 'hooks/usePatientId';
 
 type ProviderForm = {
   id: string | null;
-  providerType: string;
+  providerType: 'primary_care' | 'specialist_1' | 'specialist_2';
   name: string;
   specialty: string;
   clinicHospital: string;
@@ -63,11 +63,12 @@ export default function HealthcareProvidersScreen() {
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
+    const { id, ...rest } = data;
     try {
-      if (data.id) {
-        await db.update(patientHealthcareProviders).set({ ...data, updatedAt: new Date() }).where(eq(patientHealthcareProviders.id, data.id));
+      if (id) {
+        await db.update(patientHealthcareProviders).set({ ...rest, updatedAt: new Date() }).where(eq(patientHealthcareProviders.id, id));
       } else {
-        await db.insert(patientHealthcareProviders).values({ id: randomUUID(), patientId: patientId, ...data, createdAt: new Date(), updatedAt: new Date() });
+        await db.insert(patientHealthcareProviders).values({ id: randomUUID(), patientId, ...rest, createdAt: new Date(), updatedAt: new Date() });
       }
       sheetRef.current?.dismiss();
       load();
@@ -99,7 +100,7 @@ export default function HealthcareProvidersScreen() {
 
       <BottomSheetModal ref={sheetRef} snapPoints={['55%', '85%']} enablePanDownToClose
         keyboardBehavior="interactive" keyboardBlurBehavior="restore">
-        <ScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
+        <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title="Healthcare Provider" />
           <Controller control={control} name="providerType" render={({ field }) => (
             <ProfileFormField label="Provider Type" value={typeLabel(field.value)} onPressIn={() => setTypeModal(true)} />
@@ -116,7 +117,7 @@ export default function HealthcareProvidersScreen() {
           <Controller control={control} name="phone" render={({ field }) => (
             <ProfileFormField label="Phone / Contact" value={field.value} onChangeText={field.onChange} keyboardType="phone-pad" placeholder="Optional" />
           )} />
-        </ScrollView>
+        </BottomSheetScrollView>
         <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} label="Save Provider" />
 
         <Controller control={control} name="providerType" render={({ field }) => (

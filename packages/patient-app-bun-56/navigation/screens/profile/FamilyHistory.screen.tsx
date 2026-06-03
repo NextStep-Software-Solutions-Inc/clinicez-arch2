@@ -4,7 +4,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { db } from '@db/index';
 import { patientFamilyHistory } from '@db/schema/patientFamilyHistory';
 import { eq } from 'drizzle-orm';
-import { BottomSheetModal, BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetModalProvider, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import ProfileFormField from 'components/profile/ProfileFormField';
 import ProfileListItemCard from 'components/profile/ProfileListItemCard';
 import ProfileAddButton from 'components/profile/ProfileAddButton';
@@ -62,12 +62,13 @@ export default function FamilyHistoryScreen() {
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
+    const { id, ...rest } = data;
     try {
-      const payload = { ...data, ageOfOnset: data.ageOfOnset ? parseInt(data.ageOfOnset) : null, ageAtDeath: data.ageAtDeath ? parseInt(data.ageAtDeath) : null };
-      if (data.id) {
-        await db.update(patientFamilyHistory).set({ ...payload, updatedAt: new Date() }).where(eq(patientFamilyHistory.id, data.id));
+      const payload = { ...rest, ageOfOnset: data.ageOfOnset ? parseInt(data.ageOfOnset) : null, ageAtDeath: data.ageAtDeath ? parseInt(data.ageAtDeath) : null };
+      if (id) {
+        await db.update(patientFamilyHistory).set({ ...payload, updatedAt: new Date() }).where(eq(patientFamilyHistory.id, id));
       } else {
-        await db.insert(patientFamilyHistory).values({ id: randomUUID(), patientId: patientId, ...payload, createdAt: new Date(), updatedAt: new Date() });
+        await db.insert(patientFamilyHistory).values({ id: randomUUID(), patientId, ...payload, createdAt: new Date(), updatedAt: new Date() });
       }
       sheetRef.current?.dismiss();
       load();
@@ -85,7 +86,7 @@ export default function FamilyHistoryScreen() {
       </ScrollView>
 
       <BottomSheetModal ref={sheetRef} snapPoints={['60%', '85%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
-        <ScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
+        <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title="Family Health Condition" />
           <Controller control={control} name="condition" render={({ field }) => (
             <ProfileFormField label="Condition / Disease" value={field.value} onChangeText={field.onChange} required placeholder="e.g. Hypertension, Diabetes" />
@@ -115,7 +116,7 @@ export default function FamilyHistoryScreen() {
           <Controller control={control} name="notes" render={({ field }) => (
             <ProfileFormField label="Additional Notes" value={field.value} onChangeText={field.onChange} multiline placeholder="Optional" />
           )} />
-        </ScrollView>
+        </BottomSheetScrollView>
         <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} label="Save Entry" />
         <Controller control={control} name="side" render={({ field }) => (
           <ProfileSelectModal visible={sideModal} title="Family Side" options={SIDE_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setSideModal(false)} />

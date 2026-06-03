@@ -4,7 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import { db } from '@db/index';
 import { patientAddresses } from '@db/schema/patientAddresses';
 import { eq, isNull } from 'drizzle-orm';
-import { BottomSheetModal, BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetModalProvider, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useForm, Controller } from 'react-hook-form';
 import ProfileFormField from 'components/profile/ProfileFormField';
 import ProfileListItemCard from 'components/profile/ProfileListItemCard';
@@ -19,7 +19,7 @@ import { usePatientId } from 'hooks/usePatientId';
 
 type AddressForm = {
   id: string | null;
-  type: string;
+  type: 'primary' | 'secondary';
   houseNo: string;
   streetBarangay: string;
   cityMunicipality: string;
@@ -35,7 +35,7 @@ const TYPE_OPTIONS = [
 ];
 
 const EMPTY_FORM: AddressForm = {
-  id: null, type: 'primary', houseNo: '', streetBarangay: '',
+  id: null, type: 'primary' as const, houseNo: '', streetBarangay: '',
   cityMunicipality: '', province: '', region: '', postalCode: '', country: 'Philippines',
 };
 
@@ -84,11 +84,12 @@ export default function AddressesScreen() {
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
+    const { id, ...rest } = data;
     try {
-      if (data.id) {
-        await db.update(patientAddresses).set({ ...data, updatedAt: new Date() }).where(eq(patientAddresses.id, data.id));
+      if (id) {
+        await db.update(patientAddresses).set({ ...rest, updatedAt: new Date() }).where(eq(patientAddresses.id, id));
       } else {
-        await db.insert(patientAddresses).values({ id: randomUUID(), patientId: patientId, ...data, createdAt: new Date(), updatedAt: new Date() });
+        await db.insert(patientAddresses).values({ id: randomUUID(), patientId, ...rest, createdAt: new Date(), updatedAt: new Date() });
       }
       sheetRef.current?.dismiss();
       load();
@@ -118,10 +119,15 @@ export default function AddressesScreen() {
         <ProfileAddButton label="Add Address" onPress={openAdd} />
       </ScrollView>
 
-      <BottomSheetModal ref={sheetRef} snapPoints={['70%', '90%']} enablePanDownToClose
-        keyboardBehavior="interactive" keyboardBlurBehavior="restore"
+      <BottomSheetModal 
+        ref={sheetRef} 
+        snapPoints={['70%', '90%']}
+        enablePanDownToClose
+        keyboardBehavior="interactive"
+        keyboardBlurBehavior="restore"
       >
-        <ScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
+        
+        <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title={editing?.id ? 'Edit Address' : 'Add Address'} />
           <Controller control={control} name="type" render={({ field }) => (
             <ProfileFormField
@@ -152,7 +158,7 @@ export default function AddressesScreen() {
           <Controller control={control} name="country" render={({ field }) => (
             <ProfileFormField label="Country" value={field.value} onChangeText={field.onChange} />
           )} />
-        </ScrollView>
+        </BottomSheetScrollView>
         <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} label="Save Address" />
 
         <Controller control={control} name="type" render={({ field }) => (

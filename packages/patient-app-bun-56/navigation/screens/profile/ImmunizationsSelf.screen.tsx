@@ -4,7 +4,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { db } from '@db/index';
 import { patientImmunizationsSelf } from '@db/schema/patientImmunizationsSelf';
 import { eq } from 'drizzle-orm';
-import { BottomSheetModal, BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetModalProvider, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import ProfileFormField from 'components/profile/ProfileFormField';
 import ProfileListItemCard from 'components/profile/ProfileListItemCard';
 import ProfileAddButton from 'components/profile/ProfileAddButton';
@@ -42,11 +42,12 @@ export default function ImmunizationsSelfScreen() {
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
+    const { id, ...rest } = data;
     try {
-      if (data.id) {
-        await db.update(patientImmunizationsSelf).set({ ...data, updatedAt: new Date() }).where(eq(patientImmunizationsSelf.id, data.id));
+      if (id) {
+        await db.update(patientImmunizationsSelf).set({ ...rest, updatedAt: new Date() }).where(eq(patientImmunizationsSelf.id, id));
       } else {
-        await db.insert(patientImmunizationsSelf).values({ id: randomUUID(), patientId: patientId, ...data, createdAt: new Date(), updatedAt: new Date() });
+        await db.insert(patientImmunizationsSelf).values({ id: randomUUID(), patientId, ...rest, createdAt: new Date(), updatedAt: new Date() });
       }
       sheetRef.current?.dismiss();
       load();
@@ -64,7 +65,7 @@ export default function ImmunizationsSelfScreen() {
       </ScrollView>
 
       <BottomSheetModal ref={sheetRef} snapPoints={['50%', '75%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
-        <ScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
+        <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title="Vaccine / Immunization" />
           <Controller control={control} name="vaccineName" render={({ field }) => (
             <ProfileFormField label="Vaccine Name" value={field.value} onChangeText={field.onChange} required placeholder="e.g. COVID-19 (Pfizer), Influenza" />
@@ -81,7 +82,7 @@ export default function ImmunizationsSelfScreen() {
           <Controller control={control} name="lotNumber" render={({ field }) => (
             <ProfileFormField label="Lot / Batch Number" value={field.value} onChangeText={field.onChange} placeholder="Optional" />
           )} />
-        </ScrollView>
+        </BottomSheetScrollView>
         <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} label="Save Vaccine" />
       </BottomSheetModal>
     </BottomSheetModalProvider>

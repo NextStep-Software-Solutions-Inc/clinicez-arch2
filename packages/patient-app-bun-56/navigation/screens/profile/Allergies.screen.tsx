@@ -4,7 +4,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { db } from '@db/index';
 import { patientAllergies } from '@db/schema/patientAllergies';
 import { eq } from 'drizzle-orm';
-import { BottomSheetModal, BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetModalProvider, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import ProfileFormField from 'components/profile/ProfileFormField';
 import ProfileListItemCard from 'components/profile/ProfileListItemCard';
 import ProfileAddButton from 'components/profile/ProfileAddButton';
@@ -62,11 +62,12 @@ export default function AllergiesScreen() {
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
+    const { id, ...rest } = data;
     try {
-      if (data.id) {
-        await db.update(patientAllergies).set({ ...data, updatedAt: new Date() }).where(eq(patientAllergies.id, data.id));
+      if (id) {
+        await db.update(patientAllergies).set({ ...rest, updatedAt: new Date() }).where(eq(patientAllergies.id, id));
       } else {
-        await db.insert(patientAllergies).values({ id: randomUUID(), patientId: patientId, ...data, createdAt: new Date(), updatedAt: new Date() });
+        await db.insert(patientAllergies).values({ id: randomUUID(), patientId, ...rest, createdAt: new Date(), updatedAt: new Date() });
       }
       sheetRef.current?.dismiss();
       load();
@@ -95,7 +96,7 @@ export default function AllergiesScreen() {
       </ScrollView>
 
       <BottomSheetModal ref={sheetRef} snapPoints={['55%', '80%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
-        <ScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
+        <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title="Allergy" />
           <Controller control={control} name="allergen" render={({ field }) => (
             <ProfileFormField label="Allergen" value={field.value} onChangeText={field.onChange} required placeholder="e.g. Penicillin, Peanuts, Dust" />
@@ -112,7 +113,7 @@ export default function AllergiesScreen() {
           <Controller control={control} name="isActive" render={({ field }) => (
             <ProfileToggle label="Currently Active" value={field.value} onValueChange={field.onChange} />
           )} />
-        </ScrollView>
+        </BottomSheetScrollView>
         <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} label="Save Allergy" />
         <Controller control={control} name="severity" render={({ field }) => (
           <ProfileSelectModal visible={severityModal} title="Severity" options={SEVERITY_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setSeverityModal(false)} />

@@ -1,6 +1,7 @@
 import { useAuth } from "@clerk/expo"
 
-export const usePatientId = () => {
-    // In a real app, this would come from auth context or similar
-    return useAuth().userId;
+export const usePatientId = (): string => {
+    const { userId } = useAuth();
+    if (!userId) throw new Error('usePatientId called outside authenticated context');
+    return userId;
 }

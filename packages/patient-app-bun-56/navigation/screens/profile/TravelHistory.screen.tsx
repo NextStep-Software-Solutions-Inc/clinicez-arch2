@@ -4,7 +4,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { db } from '@db/index';
 import { patientTravelHistory } from '@db/schema/patientTravelHistory';
 import { eq } from 'drizzle-orm';
-import { BottomSheetModal, BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetModalProvider, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import ProfileFormField from 'components/profile/ProfileFormField';
 import ProfileListItemCard from 'components/profile/ProfileListItemCard';
 import ProfileAddButton from 'components/profile/ProfileAddButton';
@@ -42,11 +42,12 @@ export default function TravelHistoryScreen() {
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
+    const { id, ...rest } = data;
     try {
-      if (data.id) {
-        await db.update(patientTravelHistory).set({ ...data, updatedAt: new Date() }).where(eq(patientTravelHistory.id, data.id));
+      if (id) {
+        await db.update(patientTravelHistory).set({ ...rest, updatedAt: new Date() }).where(eq(patientTravelHistory.id, id));
       } else {
-        await db.insert(patientTravelHistory).values({ id: randomUUID(), patientId: patientId, ...data, createdAt: new Date(), updatedAt: new Date() });
+        await db.insert(patientTravelHistory).values({ id: randomUUID(), patientId, ...rest, createdAt: new Date(), updatedAt: new Date() });
       }
       sheetRef.current?.dismiss();
       load();
@@ -64,7 +65,7 @@ export default function TravelHistoryScreen() {
       </ScrollView>
 
       <BottomSheetModal ref={sheetRef} snapPoints={['55%', '85%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
-        <ScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
+        <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title="Travel Trip" />
           <Controller control={control} name="destination" render={({ field }) => (
             <ProfileFormField label="Destination / City" value={field.value} onChangeText={field.onChange} required placeholder="e.g. Bangkok" />
@@ -87,7 +88,7 @@ export default function TravelHistoryScreen() {
           <Controller control={control} name="healthIssuesDuring" render={({ field }) => (
             <ProfileFormField label="Health Issues During Travel" value={field.value} onChangeText={field.onChange} multiline placeholder="None, or describe" />
           )} />
-        </ScrollView>
+        </BottomSheetScrollView>
         <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} label="Save Trip" />
       </BottomSheetModal>
     </BottomSheetModalProvider>

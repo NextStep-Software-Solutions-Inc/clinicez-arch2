@@ -4,7 +4,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { db } from '@db/index';
 import { patientMedications } from '@db/schema/patientMedications';
 import { eq } from 'drizzle-orm';
-import { BottomSheetModal, BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetModalProvider, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import ProfileFormField from 'components/profile/ProfileFormField';
 import ProfileListItemCard from 'components/profile/ProfileListItemCard';
 import ProfileAddButton from 'components/profile/ProfileAddButton';
@@ -57,11 +57,12 @@ export default function MedicationsScreen() {
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
+    const { id, ...rest } = data;
     try {
-      if (data.id) {
-        await db.update(patientMedications).set({ ...data, updatedAt: new Date() }).where(eq(patientMedications.id, data.id));
+      if (id) {
+        await db.update(patientMedications).set({ ...rest, updatedAt: new Date() }).where(eq(patientMedications.id, id));
       } else {
-        await db.insert(patientMedications).values({ id: randomUUID(), patientId: patientId, ...data, createdAt: new Date(), updatedAt: new Date() });
+        await db.insert(patientMedications).values({ id: randomUUID(), patientId, ...rest, createdAt: new Date(), updatedAt: new Date() });
       }
       sheetRef.current?.dismiss();
       load();
@@ -90,7 +91,7 @@ export default function MedicationsScreen() {
       </ScrollView>
 
       <BottomSheetModal ref={sheetRef} snapPoints={['60%', '90%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
-        <ScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
+        <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title="Medication" />
           <Controller control={control} name="drugName" render={({ field }) => (
             <ProfileFormField label="Drug / Generic Name" value={field.value} onChangeText={field.onChange} required placeholder="e.g. Metformin" />
@@ -116,7 +117,7 @@ export default function MedicationsScreen() {
           <Controller control={control} name="isActive" render={({ field }) => (
             <ProfileToggle label="Currently Taking" value={field.value} onValueChange={field.onChange} />
           )} />
-        </ScrollView>
+        </BottomSheetScrollView>
         <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} label="Save Medication" />
       </BottomSheetModal>
     </BottomSheetModalProvider>

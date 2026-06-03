@@ -7,7 +7,7 @@ import { patientObstetricProfile } from '@db/schema/patientObstetricProfile';
 import { patientPregnancies } from '@db/schema/patientPregnancies';
 import { patientContraceptiveHistory } from '@db/schema/patientContraceptiveHistory';
 import { eq } from 'drizzle-orm';
-import { BottomSheetModal, BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetModalProvider, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { randomUUID } from 'expo-crypto';
 import ProfileFormField from 'components/profile/ProfileFormField';
 import ProfileListItemCard from 'components/profile/ProfileListItemCard';
@@ -126,16 +126,16 @@ export default function ObstetricProfileScreen() {
       .then((row) => {
         if (row) {
           obsForm.reset({
-            menarche: row.menarche?.toString() ?? '',
-            lastMenstrualPeriod: row.lastMenstrualPeriod ?? '',
+            menarche: row.ageAtMenarche?.toString() ?? '',
+            lastMenstrualPeriod: row.lmp ?? '',
             cycleLength: row.cycleLength?.toString() ?? '',
             cycleDuration: row.cycleDuration?.toString() ?? '',
-            dysmenorrhea: row.dysmenorrhea ?? '',
-            menopauseAge: row.menopauseAge?.toString() ?? '',
+            dysmenorrhea: row.dysmenorrheaSeverity ?? '',
+            menopauseAge: row.ageAtMenopause?.toString() ?? '',
             gravida: row.gravida?.toString() ?? '',
             para: row.para?.toString() ?? '',
             abortion: row.abortion?.toString() ?? '',
-            living: row.living?.toString() ?? '',
+            living: row.livingChildren?.toString() ?? '',
           });
         }
       })
@@ -148,19 +148,19 @@ export default function ObstetricProfileScreen() {
     setSaving(true);
     try {
       const payload = {
-        menarche: data.menarche ? parseInt(data.menarche) : null,
-        lastMenstrualPeriod: data.lastMenstrualPeriod || null,
+        ageAtMenarche: data.menarche ? parseInt(data.menarche) : null,
+        lmp: data.lastMenstrualPeriod || null,
         cycleLength: data.cycleLength ? parseInt(data.cycleLength) : null,
         cycleDuration: data.cycleDuration ? parseInt(data.cycleDuration) : null,
-        dysmenorrhea: data.dysmenorrhea || null,
-        menopauseAge: data.menopauseAge ? parseInt(data.menopauseAge) : null,
+        dysmenorrheaSeverity: (data.dysmenorrhea as 'None' | 'Mild' | 'Moderate' | 'Severe') || null,
+        ageAtMenopause: data.menopauseAge ? parseInt(data.menopauseAge) : null,
         gravida: data.gravida ? parseInt(data.gravida) : null,
         para: data.para ? parseInt(data.para) : null,
         abortion: data.abortion ? parseInt(data.abortion) : null,
-        living: data.living ? parseInt(data.living) : null,
+        livingChildren: data.living ? parseInt(data.living) : null,
         updatedAt: new Date(),
       };
-      await db.insert(patientObstetricProfile).values({ id: randomUUID(), patientId: patientId, ...payload, createdAt: new Date() }).onConflictDoUpdate({ target: patientObstetricProfile.patientId, set: payload });
+      await db.insert(patientObstetricProfile).values({ id: randomUUID(), patientId, ...payload, createdAt: new Date() }).onConflictDoUpdate({ target: patientObstetricProfile.patientId, set: payload });
       obsForm.reset(data);
     } catch (e) { console.error(e); } finally { setSaving(false); }
   });
@@ -168,11 +168,13 @@ export default function ObstetricProfileScreen() {
   const onSavePreg = pregForm.handleSubmit(async (data) => {
     setSavingPreg(true);
     try {
-      const payload = { ...data, gestationalWeeks: data.gestationalWeeks ? parseInt(data.gestationalWeeks) : null, year: data.year ? parseInt(data.year) : null };
-      if (data.id) {
-        await db.update(patientPregnancies).set({ ...payload, updatedAt: new Date() }).where(eq(patientPregnancies.id, data.id));
+      const { id, ...rest } = data;
+
+      const payload = { ...rest, gestationalWeeks: data.gestationalWeeks ? parseInt(data.gestationalWeeks) : null, year: data.year ? parseInt(data.year) : null };
+      if (id) {
+        await db.update(patientPregnancies).set({ ...payload, updatedAt: new Date() }).where(eq(patientPregnancies.id, id));
       } else {
-        await db.insert(patientPregnancies).values({ id: randomUUID(), patientId: patientId, ...payload, createdAt: new Date(), updatedAt: new Date() });
+        await db.insert(patientPregnancies).values({ id: randomUUID(), patientId, ...payload, createdAt: new Date(), updatedAt: new Date() });
       }
       pregSheetRef.current?.dismiss();
       loadPregnancies();
@@ -181,11 +183,12 @@ export default function ObstetricProfileScreen() {
 
   const onSaveContra = contraForm.handleSubmit(async (data) => {
     setSavingContra(true);
+    const { id, ...rest } = data;
     try {
-      if (data.id) {
-        await db.update(patientContraceptiveHistory).set({ ...data, updatedAt: new Date() }).where(eq(patientContraceptiveHistory.id, data.id));
+      if (id) {
+        await db.update(patientContraceptiveHistory).set({ ...rest, updatedAt: new Date() }).where(eq(patientContraceptiveHistory.id, id));
       } else {
-        await db.insert(patientContraceptiveHistory).values({ id: randomUUID(), patientId: patientId, ...data, createdAt: new Date(), updatedAt: new Date() });
+        await db.insert(patientContraceptiveHistory).values({ id: randomUUID(), patientId, ...rest, createdAt: new Date(), updatedAt: new Date() });
       }
       contraSheetRef.current?.dismiss();
       loadContra();
@@ -248,7 +251,7 @@ export default function ObstetricProfileScreen() {
 
       {/* Pregnancy Sheet */}
       <BottomSheetModal ref={pregSheetRef} snapPoints={['55%', '80%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
-        <ScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
+        <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title="Pregnancy" />
           <Controller control={pregForm.control} name="outcome" render={({ field }) => (
             <ProfileFormField label="Outcome" value={OUTCOME_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setOutcomeModal(true)} placeholder="Select outcome" />
@@ -265,7 +268,7 @@ export default function ObstetricProfileScreen() {
           <Controller control={pregForm.control} name="complications" render={({ field }) => (
             <ProfileFormField label="Complications" value={field.value} onChangeText={field.onChange} multiline placeholder="None, or describe" />
           )} />
-        </ScrollView>
+        </BottomSheetScrollView>
         <ProfileSaveBar onSave={onSavePreg} saving={savingPreg} isDirty={pregForm.formState.isDirty} label="Save Pregnancy" />
         <Controller control={pregForm.control} name="outcome" render={({ field }) => (
           <ProfileSelectModal visible={outcomeModal} title="Pregnancy Outcome" options={OUTCOME_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setOutcomeModal(false)} />
@@ -277,7 +280,7 @@ export default function ObstetricProfileScreen() {
 
       {/* Contraceptive Sheet */}
       <BottomSheetModal ref={contraSheetRef} snapPoints={['50%', '75%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
-        <ScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
+        <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title="Contraceptive Method" />
           <Controller control={contraForm.control} name="method" render={({ field }) => (
             <ProfileFormField label="Method" value={CONTRA_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setContraModal(true)} placeholder="Select method" />
@@ -294,7 +297,7 @@ export default function ObstetricProfileScreen() {
           <Controller control={contraForm.control} name="stopReason" render={({ field }) => (
             <ProfileFormField label="Reason for Stopping" value={field.value} onChangeText={field.onChange} multiline placeholder="Optional" />
           )} />
-        </ScrollView>
+        </BottomSheetScrollView>
         <ProfileSaveBar onSave={onSaveContra} saving={savingContra} isDirty={contraForm.formState.isDirty} label="Save Method" />
         <Controller control={contraForm.control} name="method" render={({ field }) => (
           <ProfileSelectModal visible={contraModal} title="Contraceptive Method" options={CONTRA_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setContraModal(false)} />

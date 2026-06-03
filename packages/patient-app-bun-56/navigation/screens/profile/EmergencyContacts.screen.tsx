@@ -4,7 +4,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { db } from '@db/index';
 import { emergencyContacts } from '@db/schema/emergencyContacts';
 import { eq } from 'drizzle-orm';
-import { BottomSheetModal, BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetModalProvider, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import ProfileFormField from 'components/profile/ProfileFormField';
 import ProfileListItemCard from 'components/profile/ProfileListItemCard';
 import ProfileAddButton from 'components/profile/ProfileAddButton';
@@ -61,12 +61,13 @@ export default function EmergencyContactsScreen() {
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
+    const { id, ...rest } = data;
     try {
-      if (data.id) {
-        await db.update(emergencyContacts).set({ ...data, updatedAt: new Date() }).where(eq(emergencyContacts.id, data.id));
+      if (id) {
+        await db.update(emergencyContacts).set({ ...rest, updatedAt: new Date() }).where(eq(emergencyContacts.id, id));
       } else {
         await db.insert(emergencyContacts).values({
-          id: randomUUID(), patientId: patientId, ...data,
+          id: randomUUID(), patientId, ...rest,
           sortOrder: contacts.length, createdAt: new Date(), updatedAt: new Date(),
         });
       }
@@ -105,7 +106,7 @@ export default function EmergencyContactsScreen() {
       <BottomSheetModal ref={sheetRef} snapPoints={['60%', '85%']} enablePanDownToClose
         keyboardBehavior="interactive" keyboardBlurBehavior="restore"
       >
-        <ScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
+        <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title="Emergency Contact" />
           <Controller control={control} name="name" render={({ field }) => (
             <ProfileFormField label="Full Name" value={field.value} onChangeText={field.onChange} required placeholder="e.g. Maria dela Cruz" />
@@ -125,7 +126,7 @@ export default function EmergencyContactsScreen() {
           <Controller control={control} name="address" render={({ field }) => (
             <ProfileFormField label="Address" value={field.value} onChangeText={field.onChange} multiline placeholder="Optional" />
           )} />
-        </ScrollView>
+        </BottomSheetScrollView>
         <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} label="Save Contact" />
       </BottomSheetModal>
     </BottomSheetModalProvider>
