@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ScrollView, StyleSheet, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import * as Updates from 'expo-updates';
 import { useAuth } from 'contexts/AuthContext';
 import { useAppearance } from 'contexts/AppearanceContext';
 import { SettingsRow, SettingsSection } from '@ui/SettingsItem';
@@ -18,6 +19,26 @@ export default function SettingsScreen() {
   const { logout, hasPIN } = useAuth();
   const { themePreference } = useAppearance();
   const [changePwdPinVisible, setChangePwdPinVisible] = useState(false);
+
+  // OTA updates
+  const { isChecking, isDownloading, isUpdateAvailable, isUpdatePending } = Updates.useUpdates();
+
+  const handleCheckForUpdates = async () => {
+    try {
+      await Updates.checkForUpdateAsync();
+    } catch (e) {
+      Alert.alert('Update Check Failed', 'Unable to check for updates. Please try again later.');
+    }
+  };
+
+  const handleInstallUpdate = async () => {
+    try {
+      await Updates.fetchUpdateAsync();
+      await Updates.reloadAsync();
+    } catch (e) {
+      Alert.alert('Update Failed', 'Unable to download the update. Please try again later.');
+    }
+  };
 
   const navigate = (screen: string) => navigation.navigate(screen as never);
 
@@ -112,6 +133,42 @@ export default function SettingsScreen() {
           onPress={() => navigate('NotificationsSettingsScreen')}
         />
       </SettingsSection>
+
+      {/* App Updates — hidden in dev builds (expo-updates does not operate there) */}
+      {!__DEV__ && (
+        <SettingsSection title="App Updates">
+          <SettingsRow
+            title="Check for Updates"
+            subtitle={isUpdateAvailable ? 'Update available' : 'Up to date'}
+            icon={{ android: 'system_update', ios: 'arrow.down.circle.fill' }}
+            iconColor="#3B82F6"
+            right={isChecking ? { type: 'loading' } : { type: 'none' }}
+            disabled={isChecking || isDownloading}
+            onPress={handleCheckForUpdates}
+          />
+          {isUpdateAvailable && (
+            <SettingsRow
+              title="Install Update"
+              subtitle="Tap to download and restart"
+              icon={{ android: 'download', ios: 'arrow.down.app.fill' }}
+              iconColor="#10B981"
+              right={isDownloading ? { type: 'loading' } : { type: 'none' }}
+              disabled={isDownloading}
+              onPress={handleInstallUpdate}
+            />
+          )}
+          {isUpdatePending && (
+            <SettingsRow
+              title="Restart to Apply"
+              subtitle="An update has been downloaded"
+              icon={{ android: 'restart_alt', ios: 'arrow.clockwise.circle.fill' }}
+              iconColor="#F59E0B"
+              right={{ type: 'none' }}
+              onPress={() => Updates.reloadAsync()}
+            />
+          )}
+        </SettingsSection>
+      )}
 
       {/* About */}
       <SettingsSection title="About">

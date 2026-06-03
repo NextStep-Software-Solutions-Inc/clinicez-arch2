@@ -24,6 +24,7 @@
     "expo-local-authentication": "~56.0.4",
     "expo-secure-store": "~56.0.4",
     "expo-sqlite": "~56.0.4",
+    "expo-updates": "~56.0.17",
     "expo-status-bar": "~56.0.4",
     "expo-system-ui": "~56.0.5",
     "react": "19.2.3",
