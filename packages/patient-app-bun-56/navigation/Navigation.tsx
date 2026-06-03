@@ -31,6 +31,7 @@ import AppearanceSettingsScreen from './screens/settings/AppearanceSettings.scre
 import NotificationsSettingsScreen from './screens/settings/NotificationsSettings.screen';
 import AboutSettingsScreen from './screens/settings/AboutSettings.screen';
 import DebugSettingsScreen from './screens/settings/DebugSettings.screen';
+import ChangePasswordScreen from './screens/settings/ChangePassword.screen';
 
 // Navigation state hooks
 import {
@@ -199,6 +200,10 @@ const MainStack = createNativeStackNavigator({
     ChangePINScreen: createNativeStackScreen({
       screen: ChangePINScreen,
       options: { title: 'Change PIN' },
+    }),
+    ChangePasswordScreen: createNativeStackScreen({
+      screen: ChangePasswordScreen,
+      options: { title: 'Change Password' },
     }),
     AppearanceSettingsScreen: createNativeStackScreen({
       screen: AppearanceSettingsScreen,

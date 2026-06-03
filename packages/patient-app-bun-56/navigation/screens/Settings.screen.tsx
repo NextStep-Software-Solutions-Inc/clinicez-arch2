@@ -1,10 +1,11 @@
-import { ScrollView, View, StyleSheet, Alert } from 'react-native';
-import { useNavigation, useTheme } from '@react-navigation/native';
-import { useUser } from '@clerk/expo';
+import { useState } from 'react';
+import { ScrollView, StyleSheet, Alert } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { useAuth } from 'contexts/AuthContext';
 import { useAppearance } from 'contexts/AppearanceContext';
 import { SettingsRow, SettingsSection } from '@ui/SettingsItem';
-import ThemedText from '@ui/ThemedText';
+import PinModal from '@ui/PinModal';
+import ProfileCard from 'components/ProfileCard';
 
 const THEME_LABELS: Record<string, string> = {
   system: 'System',
@@ -14,10 +15,9 @@ const THEME_LABELS: Record<string, string> = {
 
 export default function SettingsScreen() {
   const navigation = useNavigation();
-  const { colors } = useTheme();
   const { logout, hasPIN } = useAuth();
   const { themePreference } = useAppearance();
-  const { user } = useUser();
+  const [changePwdPinVisible, setChangePwdPinVisible] = useState(false);
 
   const navigate = (screen: string) => navigation.navigate(screen as never);
 
@@ -34,38 +34,20 @@ export default function SettingsScreen() {
     ]);
   };
 
-  const displayName =
-    user?.fullName ||
-    [user?.firstName, user?.lastName].filter(Boolean).join(' ') ||
-    user?.emailAddresses[0]?.emailAddress ||
-    'User';
-
-  const initials = displayName
-    .split(' ')
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
-
-  const email = user?.emailAddresses[0]?.emailAddress ?? '';
+  const handleChangePasswordPress = () => {
+    if (hasPIN) {
+      setChangePwdPinVisible(true);
+    } else {
+      navigate('ChangePasswordScreen');
+    }
+  };
 
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={styles.container}
     >
-      {/* Profile Card */}
-      <View style={[styles.profileCard, { backgroundColor: colors.card, borderColor: (colors.border as string) + '40' }]}>
-        <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
-          <ThemedText style={styles.avatarInitials}>{initials}</ThemedText>
-        </View>
-        <View style={styles.profileInfo}>
-          <ThemedText style={styles.profileName}>{displayName}</ThemedText>
-          {email ? (
-            <ThemedText style={[styles.profileEmail, { color: (colors.text as string) + '70' }]}>{email}</ThemedText>
-          ) : null}
-        </View>
-      </View>
+      <ProfileCard />
 
       {/* Account */}
       <SettingsSection title="Account">
@@ -98,6 +80,13 @@ export default function SettingsScreen() {
             onPress={() => navigate('ChangePINScreen')}
           />
         )}
+        <SettingsRow
+          title="Change Password"
+          icon={{ android: 'manage_accounts', ios: 'lock.rotation' }}
+          iconColor="#F97316"
+          right={{ type: 'chevron' }}
+          onPress={handleChangePasswordPress}
+        />
       </SettingsSection>
 
       {/* Appearance */}
@@ -147,6 +136,17 @@ export default function SettingsScreen() {
           />
         </SettingsSection>
       )}
+
+      <PinModal
+        visible={changePwdPinVisible}
+        title="Confirm PIN"
+        subtitle="Enter your PIN before changing your password."
+        onSuccess={() => {
+          setChangePwdPinVisible(false);
+          navigate('ChangePasswordScreen');
+        }}
+        onDismiss={() => setChangePwdPinVisible(false)}
+      />
     </ScrollView>
   );
 }
@@ -154,37 +154,5 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-  },
-  profileCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    marginBottom: 28,
-    gap: 14,
-  },
-  avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarInitials: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  profileInfo: {
-    flex: 1,
-  },
-  profileName: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  profileEmail: {
-    fontSize: 14,
-    marginTop: 2,
   },
 });
