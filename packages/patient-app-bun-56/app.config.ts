@@ -13,6 +13,7 @@ const appNames: Record<string, string> = {
 export default ({ config }: ConfigContext): ExpoConfig => ({
     ...config,
     name: appNames[APP_VARIANT] ?? 'ClinicEZ',
+    owner: 'nextstep-software',
     slug: 'patient-app-bun-56',
     version: '1.0.0',
     orientation: 'portrait',

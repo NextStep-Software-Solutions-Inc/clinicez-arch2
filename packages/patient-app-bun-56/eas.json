@@ -1,50 +1,58 @@
 {
-  "cli": {
-    "version": ">= 16.0.0",
-    "appVersionSource": "local"
-  },
-  "build": {
-    "development": {
-      "env": { "APP_VARIANT": "development" },
-      "distribution": "internal",
-      "environment": "development",
-      "channel": "development",
-      "android": {
-        "gradleCommand": ":app:assembleDebug",
-        "buildType": "apk"
-      },
-      "ios": {
-        "buildConfiguration": "Debug",
-        "simulator": true
-      }
+    "cli": {
+        "version": ">= 16.0.0",
+        "appVersionSource": "local"
     },
-    "preview": {
-      "env": { "APP_VARIANT": "preview" },
-      "distribution": "internal",
-      "environment": "preview",
-      "channel": "preview",
-      "android": {
-        "buildType": "apk"
-      }
+    "build": {
+        "development": {
+            "env": {
+                "APP_VARIANT": "development"
+            },
+            "distribution": "internal",
+            "environment": "development",
+            "channel": "development",
+            "android": {
+                "gradleCommand": ":app:assembleDebug",
+                "buildType": "apk"
+            },
+            "ios": {
+                "buildConfiguration": "Debug",
+                "simulator": true
+            }
+        },
+        "preview": {
+            "env": {
+                "APP_VARIANT": "preview"
+            },
+            "distribution": "internal",
+            "environment": "preview",
+            "channel": "preview",
+            "android": {
+                "buildType": "apk"
+            }
+        },
+        "staging": {
+            "env": {
+                "APP_VARIANT": "staging"
+            },
+            "distribution": "internal",
+            "environment": "preview",
+            "channel": "staging",
+            "android": {
+                "buildType": "apk"
+            }
+        },
+        "production": {
+            "env": {
+                "APP_VARIANT": "production"
+            },
+            "distribution": "store",
+            "environment": "production",
+            "channel": "production",
+            "autoIncrement": true
+        }
     },
-    "staging": {
-      "env": { "APP_VARIANT": "staging" },
-      "distribution": "internal",
-      "environment": "preview",
-      "channel": "staging",
-      "android": {
-        "buildType": "apk"
-      }
-    },
-    "production": {
-      "env": { "APP_VARIANT": "production" },
-      "distribution": "store",
-      "environment": "production",
-      "channel": "production",
-      "autoIncrement": true
+    "submit": {
+        "production": {}
     }
-  },
-  "submit": {
-    "production": {}
-  }
 }
