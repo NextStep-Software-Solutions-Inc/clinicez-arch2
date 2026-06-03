@@ -24,6 +24,14 @@ import CreatePINScreen from './screens/CreatePIN.screen';
 import NotificationScreen from './screens/Notification.screen';
 import LoadingScreen from './screens/Loading.screen';
 
+// Settings sub-screens
+import SecuritySettingsScreen from './screens/settings/SecuritySettings.screen';
+import ChangePINScreen from './screens/settings/ChangePIN.screen';
+import AppearanceSettingsScreen from './screens/settings/AppearanceSettings.screen';
+import NotificationsSettingsScreen from './screens/settings/NotificationsSettings.screen';
+import AboutSettingsScreen from './screens/settings/AboutSettings.screen';
+import DebugSettingsScreen from './screens/settings/DebugSettings.screen';
+
 // Navigation state hooks
 import {
   useIsAppLoading,
@@ -183,6 +191,30 @@ const MainStack = createNativeStackNavigator({
     SettingsScreen: createNativeStackScreen({
       screen: SettingsScreen,
       options: { title: 'Settings', headerLargeTitleEnabled: true },
+    }),
+    SecuritySettingsScreen: createNativeStackScreen({
+      screen: SecuritySettingsScreen,
+      options: { title: 'Security', headerLargeTitleEnabled: true },
+    }),
+    ChangePINScreen: createNativeStackScreen({
+      screen: ChangePINScreen,
+      options: { title: 'Change PIN' },
+    }),
+    AppearanceSettingsScreen: createNativeStackScreen({
+      screen: AppearanceSettingsScreen,
+      options: { title: 'Appearance', headerLargeTitleEnabled: true },
+    }),
+    NotificationsSettingsScreen: createNativeStackScreen({
+      screen: NotificationsSettingsScreen,
+      options: { title: 'Notifications', headerLargeTitleEnabled: true },
+    }),
+    AboutSettingsScreen: createNativeStackScreen({
+      screen: AboutSettingsScreen,
+      options: { title: 'About', headerLargeTitleEnabled: true },
+    }),
+    DebugSettingsScreen: createNativeStackScreen({
+      screen: DebugSettingsScreen,
+      options: { title: 'Debug', headerLargeTitleEnabled: true },
     }),
     NotificationScreen: createNativeStackScreen({
       screen: NotificationScreen,

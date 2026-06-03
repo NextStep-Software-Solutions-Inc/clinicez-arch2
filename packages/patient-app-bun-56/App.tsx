@@ -4,14 +4,22 @@ import { DefaultTheme, DarkTheme, MaterialDarkTheme, MaterialLightTheme, Theme }
 import { Platform, useColorScheme } from 'react-native';
 import { AuthProvider } from 'contexts/AuthContext';
 import { OnboardingProvider } from 'contexts/OnboardingContext';
+import { AppearanceProvider, useAppearance } from 'contexts/AppearanceContext';
 import { ClerkProvider } from '@clerk/expo';
 import { tokenCache } from '@clerk/expo/token-cache';
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!;
 
-export default function App() {
-  const theme = useColorScheme();
-  const isDarkMode = theme === 'dark';
+function AppWithTheme() {
+  const systemScheme = useColorScheme();
+  const { themePreference } = useAppearance();
+
+  const isDarkMode =
+    themePreference === 'dark'
+      ? true
+      : themePreference === 'light'
+        ? false
+        : systemScheme === 'dark';
 
   const selectedTheme = Platform.select<Theme>({
     ios: isDarkMode ? DarkTheme : DefaultTheme,
@@ -19,13 +27,23 @@ export default function App() {
   }) ?? DefaultTheme;
 
   return (
+    <>
+      <StatusBar style={isDarkMode ? 'light' : 'dark'} />
+      <Navigation theme={selectedTheme} />
+    </>
+  );
+}
+
+export default function App() {
+  return (
     <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
-      <OnboardingProvider>
-        <AuthProvider>
-          <StatusBar style="auto" />
-          <Navigation theme={selectedTheme} />
-        </AuthProvider>
-      </OnboardingProvider>
+      <AppearanceProvider>
+        <OnboardingProvider>
+          <AuthProvider>
+            <AppWithTheme />
+          </AuthProvider>
+        </OnboardingProvider>
+      </AppearanceProvider>
     </ClerkProvider>
   );
 }

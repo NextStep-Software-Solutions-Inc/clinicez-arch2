@@ -7,13 +7,15 @@ import * as LocalAuthentication from 'expo-local-authentication';
 const PIN_KEY = 'app_pin';
 const HAS_PIN_KEY = 'has_pin';
 const BIOMETRICS_ENABLED_KEY = 'biometrics_enabled';
-const LOCK_TIMEOUT_MS = 30_000;
+const LOCK_TIMEOUT_KEY = 'lock_timeout';
+const DEFAULT_LOCK_TIMEOUT_MS = 30_000;
 
 interface AuthContextType {
   isAuthenticated: boolean;
   isLocked: boolean;
   hasPIN: boolean;
   biometricsEnabled: boolean;
+  lockTimeout: number;
   isLoading: boolean;
   logout: () => Promise<void>;
   lock: () => void;
@@ -21,6 +23,7 @@ interface AuthContextType {
   savePin: (pin: string) => Promise<void>;
   verifyPin: (pin: string) => Promise<boolean>;
   setBiometricsEnabled: (enabled: boolean) => Promise<void>;
+  setLockTimeout: (ms: number) => Promise<void>;
   authenticateWithBiometrics: () => Promise<'success' | 'fallback' | 'error'>;
 }
 
@@ -32,19 +35,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [hasPIN, setHasPIN] = useState(false);
   const [biometricsEnabled, setBiometricsEnabledState] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
+  const [lockTimeout, setLockTimeoutState] = useState(DEFAULT_LOCK_TIMEOUT_MS);
   const [isLoading, setIsLoading] = useState(true);
   const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Hydrate PIN and biometrics state from secure store on mount
   useEffect(() => {
     const hydrate = async () => {
-      const [storedHasPIN, storedBiometrics] = await Promise.all([
+      const [storedHasPIN, storedBiometrics, storedTimeout] = await Promise.all([
         SecureStore.getItemAsync(HAS_PIN_KEY),
         SecureStore.getItemAsync(BIOMETRICS_ENABLED_KEY),
+        SecureStore.getItemAsync(LOCK_TIMEOUT_KEY),
       ]);
       const pinSet = storedHasPIN === 'true';
       setHasPIN(pinSet);
       setBiometricsEnabledState(storedBiometrics === 'true');
+      if (storedTimeout !== null) {
+        const parsed = parseInt(storedTimeout, 10);
+        if (!isNaN(parsed)) setLockTimeoutState(parsed);
+      }
       // Only lock if PIN is already set (returning user); fresh installs start unlocked
       setIsLocked(pinSet);
       setIsLoading(false);
@@ -56,10 +65,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const handleAppStateChange = (nextState: AppStateStatus) => {
       if (nextState === 'background' || nextState === 'inactive') {
-        if (hasPIN) {
+        if (hasPIN && lockTimeout > 0) {
           lockTimerRef.current = setTimeout(() => {
             setIsLocked(true);
-          }, LOCK_TIMEOUT_MS);
+          }, lockTimeout);
+        } else if (hasPIN && lockTimeout === 0) {
+          setIsLocked(true);
         }
       } else if (nextState === 'active') {
         if (lockTimerRef.current) {
@@ -74,7 +85,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       subscription.remove();
       if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
     };
-  }, [hasPIN]);
+  }, [hasPIN, lockTimeout]);
 
   const logout = async () => {
     await signOut();
@@ -107,6 +118,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setBiometricsEnabledState(enabled);
   };
 
+  const setLockTimeout = async (ms: number) => {
+    await SecureStore.setItemAsync(LOCK_TIMEOUT_KEY, String(ms));
+    setLockTimeoutState(ms);
+  };
+
   const authenticateWithBiometrics = async (): Promise<'success' | 'fallback' | 'error'> => {
     try {
       const result = await LocalAuthentication.authenticateAsync({
@@ -134,6 +150,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         isLocked,
         hasPIN,
         biometricsEnabled,
+        lockTimeout,
         isLoading,
         logout,
         lock,
@@ -141,6 +158,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         savePin,
         verifyPin,
         setBiometricsEnabled,
+        setLockTimeout,
         authenticateWithBiometrics,
       }}
     >

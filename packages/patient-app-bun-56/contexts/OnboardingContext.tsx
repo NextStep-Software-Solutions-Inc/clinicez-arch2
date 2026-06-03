@@ -7,6 +7,7 @@ interface OnboardingContextType {
   isComplete: boolean;
   isLoading: boolean;
   complete: () => Promise<void>;
+  reset: () => Promise<void>;
 }
 
 const OnboardingContext = createContext<OnboardingContextType | undefined>(undefined);
@@ -27,8 +28,13 @@ export const OnboardingProvider = ({ children }: { children: ReactNode }) => {
     setIsComplete(true);
   };
 
+  const reset = async () => {
+    await SecureStore.deleteItemAsync(ONBOARDING_KEY);
+    setIsComplete(false);
+  };
+
   return (
-    <OnboardingContext.Provider value={{ isComplete, isLoading, complete }}>
+    <OnboardingContext.Provider value={{ isComplete, isLoading, complete, reset }}>
       {children}
     </OnboardingContext.Provider>
   );
