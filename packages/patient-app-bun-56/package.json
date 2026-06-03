@@ -1,0 +1,35 @@
+{
+  "name": "patient-app-bun-56",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "dependencies": {
+    "@callstack/liquid-glass": "^0.8.0",
+    "@clerk/expo": "^3.3.0",
+    "@react-navigation/bottom-tabs": "^8.0.0-alpha.33",
+    "@react-navigation/elements": "^3.0.0-alpha.31",
+    "@react-navigation/native": "^8.0.0-alpha.28",
+    "@react-navigation/native-stack": "^8.0.0-alpha.34",
+    "expo": "~56.0.8",
+    "expo-linear-gradient": "^56.0.4",
+    "expo-secure-store": "~56.0.4",
+    "expo-status-bar": "~56.0.4",
+    "expo-system-ui": "~56.0.5",
+    "react": "19.2.3",
+    "react-hook-form": "^7.77.0",
+    "react-native": "0.85.3",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "4.25.2"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.3",
+    "babel-plugin-module-resolver": "^5.0.0",
+    "typescript": "~6.0.3"
+  },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web"
+  },
+  "private": true
+}
