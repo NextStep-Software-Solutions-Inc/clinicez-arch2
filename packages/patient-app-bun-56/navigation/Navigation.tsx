@@ -31,10 +31,16 @@ declare module "@react-navigation/core" {
 
 const useUnlocked = () => {
     const auth = useAuth();
+    console.log({auth});
     return !auth.isLocked && auth.isAuthenticated
 }
 
 const BottomTabs = createBottomTabNavigator({
+    screenOptions: {
+        tabBarStyle: {
+            backgroundColor: isLiquidGlassSupported ? "transparent" : undefined,
+        },
+    },
     screens: {
         HomeScreen: createBottomTabScreen({
             screen: HomeScreen,
@@ -121,7 +127,6 @@ const AuthStack = createNativeStackNavigator({
             screen: LoginScreen,
             if: () => !useAuth().isAuthenticated,
             options: {
-                title: "Login Auth stack",
             }
         }),
         Signup: createNativeStackScreen({
@@ -130,9 +135,11 @@ const AuthStack = createNativeStackNavigator({
         }),
         Verify: createNativeStackScreen({
             screen: VerifyScreen,
+            if: () => !useAuth().isAuthenticated
         }),
         ForgotPassword: createNativeStackScreen({
             screen: ForgotPasswordScreen,
+            if: () => !useAuth().isAuthenticated,
             options: {
                 title: "Forgot Password"
             }
@@ -174,7 +181,6 @@ const RootStack = createNativeStackNavigator({
     },
     screens: {
         Onboarding: createNativeStackScreen({
-            if: () => !useOnboarding().isComplete,
             screen: OnboardingStack,
             options: {
                 headerShown: false,
@@ -231,4 +237,5 @@ const RootStack = createNativeStackNavigator({
         }),
     }
 });
+
 export const Navigation = createStaticNavigation(RootStack);

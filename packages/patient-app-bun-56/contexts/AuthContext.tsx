@@ -1,46 +1,45 @@
-// create AuthContext provider and hook for patient app
-
 import { createContext, useContext, useState, ReactNode } from 'react';
+import { useAuth as useClerkAuth, useClerk } from '@clerk/expo';
+import { waitForNextFrame } from 'utils/wait-for-next-frame';
 
 interface AuthContextType {
   isAuthenticated: boolean;
   isLocked: boolean;
-  login: () => Promise<void>;
-  logout: () => Promise<void>;
-  lock: () => Promise<void>;
-  unlock: () => Promise<void>;
+  logout: () => void;
+  lock: () => void;
+  unlock: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLocked, setIsLocked] = useState(true)
+  const { isSignedIn } = useClerkAuth();
+  const { signOut } = useClerk();
+  const [isLocked, setIsLocked] = useState(true);
 
-  const waitForNextFrame = () =>
-    new Promise<void>((resolve) => {
-      requestAnimationFrame(() => resolve());
-    });
-
-  const login = async () => {
-    setIsAuthenticated(true);
-    await waitForNextFrame();
-  };
-  const logout = async () => {
-    setIsAuthenticated(false);
-    await waitForNextFrame();
-  };
-  const lock = async () => {
+  const logout = () => {
+    signOut();
     setIsLocked(true);
-    await waitForNextFrame();
   };
-  const unlock = async () => {
+
+  const lock = () => {
+    setIsLocked(true);
+  };
+
+  const unlock = () => {
     setIsLocked(false);
-    await waitForNextFrame();
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, login, logout, isLocked, lock, unlock }}>
+    <AuthContext.Provider
+      value={{
+        isAuthenticated: isSignedIn ?? false,
+        isLocked,
+        logout,
+        lock,
+        unlock,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

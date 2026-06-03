@@ -1,5 +1,6 @@
 
 import { createContext, useContext, useState, ReactNode } from 'react';
+import { waitForNextFrame } from 'utils/wait-for-next-frame';
 
 interface OnboardingContextType {
     isComplete: boolean
@@ -11,7 +12,9 @@ const OnboardingContext = createContext<OnboardingContextType| undefined>(undefi
 export const OnboardingProvider = ({children}: { children: ReactNode }) => {
   const [isComplete, setIsComplete] = useState(false);
 
-  const complete = () => setIsComplete(true);
+  const complete = () => {
+    setIsComplete(true);
+  };
 
   return (
     <OnboardingContext.Provider value={{ isComplete, complete }}>

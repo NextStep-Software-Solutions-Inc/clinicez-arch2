@@ -1,10 +1,10 @@
 import { StyleSheet, View, Pressable } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useTheme } from "@react-navigation/native";
 import ThemedText from "@ui/ThemedText";
 
 export default function WelcomeScreen() {
   const navigation = useNavigation();
-
+  const { colors } = useTheme();
   return (
     <View style={styles.page}>
       <View style={styles.hero}>
@@ -18,7 +18,7 @@ export default function WelcomeScreen() {
         </ThemedText>
       </View>
 
-      <View style={styles.card}>
+      <View style={[styles.card, { backgroundColor: colors.card }]}>
         <View style={styles.feature}>
           <ThemedText style={styles.featureTitle}>Fast access</ThemedText>
           <ThemedText style={styles.featureDescription}>
@@ -61,7 +61,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     paddingVertical: 40,
     justifyContent: "space-between",
-    backgroundColor: "#FAFAFB",
   },
   hero: {
     marginTop: 16,
