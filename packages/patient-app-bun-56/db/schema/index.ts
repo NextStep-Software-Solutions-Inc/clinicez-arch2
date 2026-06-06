@@ -34,6 +34,8 @@ export * from './labResults';
 export * from './imagingResults';
 export * from './vaccinationsAdministered';
 export * from './clinicalAssessments';
+export * from './patientNcdQuestionnaire';
+export * from './patientPhysicalExamProfile';
 
 // Infrastructure
 export * from './syncQueue';

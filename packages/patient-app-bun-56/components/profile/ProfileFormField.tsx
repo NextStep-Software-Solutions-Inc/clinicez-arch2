@@ -1,6 +1,7 @@
 import { View, TextInput, StyleSheet, TextInputProps, Pressable, Platform } from 'react-native';
 import { useTheme, SFSymbol, MaterialSymbol } from '@react-navigation/native';
 import ThemedText from '@ui/ThemedText';
+import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 
 interface ProfileFormFieldProps extends Omit<TextInputProps, 'value' | 'onChangeText'> {
   label: string;
@@ -28,7 +29,7 @@ export default function ProfileFormField({
   const isPickerField = picker || (!editable && !!rest.onPressIn);
 
   const inputEl = (
-    <TextInput
+    <BottomSheetTextInput
       value={value ?? ''}
       onChangeText={onChangeText}
       editable={isPickerField ? false : editable}

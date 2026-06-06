@@ -23,6 +23,14 @@ export const vitalSigns = sqliteTable('vital_signs', {
   waistCm: real('waist_cm'),
   hipCm: real('hip_cm'),
   headCircumferenceCm: real('head_circumference_cm'),
+  // PhilHealth YAKAP/eKonsulta — PEPERT additional fields
+  zScore: real('z_score'),
+  leftVisionAcuity: text('left_vision_acuity'),
+  rightVisionAcuity: text('right_vision_acuity'),
+  bodyLengthCm: real('body_length_cm'),        // lying length (infants)
+  skinfoldThicknessMm: real('skinfold_thickness_mm'),
+  midUpperArmCircCm: real('mid_upper_arm_circ_cm'),
+  limbMeasurements: text('limb_measurements'), // JSON string of limb values
   takenBy: text('taken_by'),
   facility: text('facility'),
   // Read-only sync metadata (no updatedAt)

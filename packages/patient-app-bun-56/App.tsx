@@ -3,6 +3,7 @@ import { Navigation } from './navigation/Navigation';
 import { DefaultTheme, DarkTheme, MaterialDarkTheme, MaterialLightTheme, Theme } from "@react-navigation/native";
 import { Platform, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { AuthProvider } from 'contexts/AuthContext';
 import { OnboardingProvider } from 'contexts/OnboardingContext';
 import { AppearanceProvider, useAppearance } from 'contexts/AppearanceContext';
@@ -32,7 +33,9 @@ function AppWithTheme() {
     <>
       <StatusBar style={isDarkMode ? 'light' : 'dark'} />
       <DatabaseProvider>
-        <Navigation theme={selectedTheme} />
+        <BottomSheetModalProvider>
+          <Navigation theme={selectedTheme} />
+        </BottomSheetModalProvider>
       </DatabaseProvider>
     </>
   );

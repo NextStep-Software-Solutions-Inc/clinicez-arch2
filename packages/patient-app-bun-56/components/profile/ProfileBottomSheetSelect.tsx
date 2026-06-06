@@ -1,10 +1,12 @@
-import { forwardRef, useState } from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
-import BottomSheet, {
+import { forwardRef, useCallback, useState } from 'react';
+import { Pressable, StyleSheet } from 'react-native';
+import  {
   BottomSheetModal,
+  BottomSheetBackdrop,
   BottomSheetFlatList,
   BottomSheetTextInput,
   BottomSheetView,
+  type BottomSheetBackdropProps,
 } from '@gorhom/bottom-sheet';
 import { useTheme } from '@react-navigation/native';
 import ThemedText from '@ui/ThemedText';
@@ -25,6 +27,13 @@ const ProfileBottomSheetSelect = forwardRef<BottomSheetModal, ProfileBottomSheet
     const [query, setQuery] = useState('');
     const snapPoints = ['50%', '85%'];
 
+    const renderBackdrop = useCallback(
+      (props: BottomSheetBackdropProps) => (
+        <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />
+      ),
+      [],
+    );
+
     const filtered = query.trim()
       ? options.filter((o) => o.label.toLowerCase().includes(query.toLowerCase()))
       : options;
@@ -39,6 +48,7 @@ const ProfileBottomSheetSelect = forwardRef<BottomSheetModal, ProfileBottomSheet
         ref={ref}
         snapPoints={snapPoints}
         enablePanDownToClose
+        backdropComponent={renderBackdrop}
         backgroundStyle={{ backgroundColor: colors.card }}
         handleIndicatorStyle={{ backgroundColor: colors.border }}
       >
@@ -48,7 +58,7 @@ const ProfileBottomSheetSelect = forwardRef<BottomSheetModal, ProfileBottomSheet
         <BottomSheetView style={[styles.searchContainer, { borderColor: colors.border }]}>
           <BottomSheetTextInput
             placeholder="Search…"
-            placeholderTextColor={colors.text + '55'}
+            placeholderTextColor={colors.text}
             value={query}
             onChangeText={setQuery}
             style={[
@@ -69,7 +79,7 @@ const ProfileBottomSheetSelect = forwardRef<BottomSheetModal, ProfileBottomSheet
                   styles.option,
                   { borderBottomColor: colors.border },
                   pressed && { opacity: 0.6 },
-                  isSelected && { backgroundColor: colors.primary + '18' },
+                  isSelected && { backgroundColor: colors.primary },
                 ]}
               >
                 <ThemedText

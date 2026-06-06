@@ -34,6 +34,8 @@ export const patientSocialHistory = sqliteTable('patient_social_history', {
   // Sleep
   sleepAvgHours: real('sleep_avg_hours'),
   sleepQuality: text('sleep_quality', { enum: ['Good', 'Fair', 'Poor'] }),
+  // PhilHealth YAKAP/eKonsulta — SOCHIST.pIsSexuallyActive
+  isSexuallyActive: integer('is_sexually_active', { mode: 'boolean' }),
   // Other
   waterIntake: text('water_intake'),
   caffeineUse: text('caffeine_use'),

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   View, Pressable, Modal, StyleSheet,
-  FlatList, type ListRenderItemInfo,
+  ScrollView,
 } from 'react-native';
 import { useTheme } from '@react-navigation/native';
 import { format } from 'date-fns';
@@ -72,65 +72,52 @@ interface WheelPickerProps {
 
 function WheelPicker({ items, selectedIndex, onSelect, flex = 1 }: WheelPickerProps) {
   const { colors } = useTheme();
-  const listRef = useRef<FlatList>(null);
-  const pendingScroll = useRef(false);
+  const scrollRef = useRef<ScrollView>(null);
 
   // Pad top/bottom so first and last real items can appear centered
   const paddedData = [...Array(PAD).fill(''), ...items, ...Array(PAD).fill('')];
 
   // Scroll to selectedIndex whenever it changes externally
   useEffect(() => {
-    if (!pendingScroll.current) {
-      listRef.current?.scrollToOffset({ offset: selectedIndex * ITEM_H, animated: false });
-    }
+    scrollRef.current?.scrollTo({ y: selectedIndex * ITEM_H, animated: false });
   }, [selectedIndex]);
 
-  const onScrollBeginDrag = () => { pendingScroll.current = true; };
-
   const onMomentumScrollEnd = (e: { nativeEvent: { contentOffset: { y: number } } }) => {
-    pendingScroll.current = false;
     const idx = Math.round(e.nativeEvent.contentOffset.y / ITEM_H);
     onSelect(Math.max(0, Math.min(idx, items.length - 1)));
   };
 
-  const renderItem = ({ item, index }: ListRenderItemInfo<string>) => {
-    const isSelected = index - PAD === selectedIndex;
-    return (
-      <View style={[styles.wheelItem, { height: ITEM_H }]}>
-        {item !== '' && (
-          <ThemedText
-            style={[
-              styles.wheelText,
-              { color: colors.text },
-              isSelected ? styles.wheelTextSelected : styles.wheelTextDim,
-            ]}
-            numberOfLines={1}
-          >
-            {item}
-          </ThemedText>
-        )}
-      </View>
-    );
-  };
-
   return (
     <View style={{ flex, height: ITEM_H * VISIBLE, overflow: 'hidden' }}>
-      <FlatList
-        ref={listRef}
-        data={paddedData}
-        keyExtractor={(_, i) => String(i)}
-        renderItem={renderItem}
-        getItemLayout={(_, i) => ({ length: ITEM_H, offset: ITEM_H * i, index: i })}
-        // initialScrollIndex puts paddedData[selectedIndex] at viewport top,
-        // which centres paddedData[selectedIndex + PAD] = items[selectedIndex] ✓
-        initialScrollIndex={selectedIndex}
+      <ScrollView
+        ref={scrollRef}
         snapToInterval={ITEM_H}
         decelerationRate="fast"
         showsVerticalScrollIndicator={false}
-        onScrollBeginDrag={onScrollBeginDrag}
         onMomentumScrollEnd={onMomentumScrollEnd}
         scrollEventThrottle={16}
-      />
+        contentOffset={{ x: 0, y: selectedIndex * ITEM_H }}
+      >
+        {paddedData.map((item, index) => {
+          const isSelected = index - PAD === selectedIndex;
+          return (
+            <View key={String(index)} style={[styles.wheelItem, { height: ITEM_H }]}>
+              {item !== '' && (
+                <ThemedText
+                  style={[
+                    styles.wheelText,
+                    { color: colors.text },
+                    isSelected ? styles.wheelTextSelected : styles.wheelTextDim,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {item}
+                </ThemedText>
+              )}
+            </View>
+          );
+        })}
+      </ScrollView>
       {/* Dim overlays above and below center row */}
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, { justifyContent: 'space-between' }]}>
         <View style={{ height: ITEM_H * PAD, backgroundColor: colors.card, opacity: 0.72 }} />

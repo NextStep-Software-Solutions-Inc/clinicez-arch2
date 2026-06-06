@@ -30,6 +30,8 @@ export const patients = sqliteTable('patients', {
   altPhone: text('alt_phone'),
   email: text('email'),
   messengerHandle: text('messenger_handle'),
+  // PhilHealth YAKAP/eKonsulta — ENLISTMENT.pWithConsent
+  consentToShareInfo: integer('consent_to_share_info', { mode: 'boolean' }).default(false),
   // Timestamps
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),

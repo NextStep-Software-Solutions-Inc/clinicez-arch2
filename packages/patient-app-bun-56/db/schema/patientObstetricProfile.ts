@@ -20,12 +20,25 @@ export const patientObstetricProfile = sqliteTable('patient_obstetric_profile', 
     enum: ['PreMenopausal', 'Peri', 'PostMenopausal', 'NA'],
   }),
   ageAtMenopause: integer('age_at_menopause'),
+  // PhilHealth YAKAP/eKonsulta — MENSHIST additional fields
+  padsPerDay: integer('pads_per_day'),
+  ageAtOnsetSexualActivity: integer('age_at_onset_sexual_activity'),
+  currentContraceptiveMethod: text('current_contraceptive_method'),
+  menstruationApplicable: integer('menstruation_applicable', { mode: 'boolean' }).default(true),
   // Obstetric summary (GPAL)
   gravida: integer('gravida'),
   para: integer('para'),
   abortion: integer('abortion'),
   livingChildren: integer('living_children'),
   lmp: text('lmp'), // YYYY-MM-DD last menstrual period
+  // PhilHealth YAKAP/eKonsulta — PREGHIST additional fields
+  deliveryCnt: integer('delivery_cnt'),
+  deliveryType: text('delivery_type'),
+  fullTermDeliveries: integer('full_term_deliveries'),
+  prematureDeliveries: integer('premature_deliveries'),
+  pregnancyInducedHypertension: integer('pregnancy_induced_hypertension', { mode: 'boolean' }),
+  onFamilyPlanning: integer('on_family_planning', { mode: 'boolean' }),
+  pregnancyApplicable: integer('pregnancy_applicable', { mode: 'boolean' }).default(true),
   // Timestamps
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),

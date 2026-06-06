@@ -7,6 +7,10 @@ export const patientImmunizationsSelf = sqliteTable('patient_immunizations_self'
   patientId: text('patient_id')
     .notNull()
     .references(() => patients.id, { onDelete: 'cascade' }),
+  // PhilHealth YAKAP/eKonsulta — IMMUNIZATION category grouping
+  immunizationCategory: text('immunization_category', {
+    enum: ['Child', 'YoungWoman', 'Pregnant', 'Elderly', 'Other'],
+  }),
   vaccineName: text('vaccine_name').notNull(),
   doseNumber: text('dose_number'),
   lotNumber: text('lot_number'),

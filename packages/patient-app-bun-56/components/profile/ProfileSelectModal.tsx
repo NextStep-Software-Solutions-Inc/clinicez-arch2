@@ -6,6 +6,7 @@ import {
   Animated,
   FlatList,
   Platform,
+  useColorScheme,
 } from 'react-native';
 import { useRef, useEffect } from 'react';
 import { useTheme } from '@react-navigation/native';
@@ -34,7 +35,9 @@ export default function ProfileSelectModal({
   onSelect,
   onClose,
 }: ProfileSelectModalProps) {
-  const { colors } = useTheme();
+  const { colors, dark } = useTheme();
+  const systemScheme = useColorScheme();
+  const isDark = dark || systemScheme === 'dark';
   const scale = new Animated.Value(0.88);
   const opacity = new Animated.Value(0);
 
