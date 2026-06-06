@@ -5,6 +5,7 @@ import ThemedText from '@ui/ThemedText';
 import ThemedView from '@ui/ThemedView';
 import EmptyState from '@ui/EmptyState';
 import { SkeletonCard } from '@ui/Skeleton';
+import EntityCoverHeader from '@ui/EntityCoverHeader';
 import { usePatientId } from 'hooks/usePatientId';
 import {
   getClinicDetail,
@@ -109,7 +110,15 @@ export default function ClinicDetailsScreen() {
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.container}>
-      <ThemedView style={[styles.heroCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
+      <EntityCoverHeader
+        name={clinic.name}
+        logoUrl={clinic.logoUrl}
+        coverImageUrl={clinic.coverImageUrl}
+        badgeLabel={clinic.isJoined ? 'Joined' : clinic.isPublic ? 'Public' : 'Private'}
+        badgeColor={clinic.isJoined ? '#10B981' : clinic.isPublic ? '#3B82F6' : '#F59E0B'}
+        style={styles.coverHeader}
+      />
+      <ThemedView style={styles.titleBlock}>
         <ThemedText style={styles.title}>{clinic.name}</ThemedText>
         <ThemedText style={[styles.subtitle, { color: colors.text }]}>{clinic.description}</ThemedText>
         <ThemedText style={[styles.meta, { color: colors.text }]}>{clinic.isPublic ? 'Public clinic' : 'Private clinic'} · {clinic.supportsAppointments ? 'Supports bookings' : 'Booking not yet available'}</ThemedText>
@@ -193,9 +202,10 @@ export default function ClinicDetailsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 16, gap: 16, paddingBottom: 28 },
+  container: { paddingHorizontal: 16, paddingBottom: 28, gap: 16 },
   loadingContainer: { padding: 16, gap: 16 },
-  heroCard: { borderRadius: 18, borderWidth: StyleSheet.hairlineWidth, padding: 16, gap: 6 },
+  coverHeader: { marginHorizontal: -16 },
+  titleBlock: { gap: 6, paddingTop: 4 },
   title: { fontSize: 24, fontWeight: '800' },
   subtitle: { fontSize: 14, lineHeight: 20, opacity: 0.85 },
   meta: { fontSize: 12, opacity: 0.75 },

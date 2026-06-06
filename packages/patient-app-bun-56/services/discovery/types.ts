@@ -37,6 +37,7 @@ export interface OrganizationEntity {
     description: string;
     isPublic: boolean;
     logoUrl?: string;
+    coverImageUrl?: string;
     inviteCode?: string;
     addressHint?: string;
     privacyPolicyUrl: string;
@@ -59,6 +60,7 @@ export interface ClinicEntity {
     privacyPolicyUrl: string;
     termsAndConditionsUrl: string;
     logoUrl?: string;
+    coverImageUrl?: string;
     specialties: string[];
     featuredScore: number;
 }

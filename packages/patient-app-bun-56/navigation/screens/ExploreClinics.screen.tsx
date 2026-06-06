@@ -12,6 +12,7 @@ import {
 import { useNavigation, useRoute, useTheme } from '@react-navigation/native';
 import EmptyState from '@ui/EmptyState';
 import { SkeletonCard } from '@ui/Skeleton';
+import EntityMediaCardHeader from '@ui/EntityMediaCardHeader';
 import ThemedText from '@ui/ThemedText';
 import ThemedView from '@ui/ThemedView';
 import { usePatientId } from 'hooks/usePatientId';
@@ -207,63 +208,55 @@ export default function ExploreClinicsScreen() {
                 }
                 renderItem={({ item }) => (
                     <ThemedView style={[styles.card, { borderColor: colors.border, backgroundColor: colors.card }]}>
-                        <ThemedView style={styles.cardTopRow}>
+                        <EntityMediaCardHeader
+                            name={item.name}
+                            logoUrl={item.logoUrl}
+                            coverImageUrl={item.coverImageUrl}
+                            badgeLabel={item.isJoined ? 'Joined' : item.isPublic ? 'Public' : 'Private'}
+                            badgeColor={item.isJoined ? '#10B981' : item.isPublic ? '#3B82F6' : '#F59E0B'}
+                        />
+                        <ThemedView style={styles.cardBody}>
                             <ThemedText style={styles.cardTitle}>{item.name}</ThemedText>
-                            <ThemedView
-                                style={[
-                                    styles.badge,
-                                    {
-                                        backgroundColor: item.isJoined
-                                            ? '#10B981'
-                                            : item.isPublic
-                                                ? '#3B82F6'
-                                                : '#F59E0B',
-                                    },
-                                ]}
-                            >
-                                <ThemedText style={styles.badgeText}>{item.isJoined ? 'Joined' : item.isPublic ? 'Public' : 'Private'}</ThemedText>
-                            </ThemedView>
-                        </ThemedView>
+                            <ThemedText style={[styles.cardDescription, { color: colors.text }]}>{item.description}</ThemedText>
+                            <ThemedText style={[styles.metaText, { color: colors.text }]}>Address: {item.address}</ThemedText>
+                            <ThemedText style={[styles.metaText, { color: colors.text }]}>Appointments: {item.supportsAppointments ? 'Supported' : 'Not available'}</ThemedText>
 
-                        <ThemedText style={[styles.cardDescription, { color: colors.text }]}>{item.description}</ThemedText>
-                        <ThemedText style={[styles.metaText, { color: colors.text }]}>Address: {item.address}</ThemedText>
-                        <ThemedText style={[styles.metaText, { color: colors.text }]}>Appointments: {item.supportsAppointments ? 'Supported' : 'Not available'}</ThemedText>
-
-                        <ThemedView style={styles.cardActionsRow}>
-                            <Pressable
-                                onPress={() => navigation.navigate('Main', { screen: 'ClinicDetailsScreen', params: { clinicId: item.id } })}
-                                style={({ pressed }) => [
-                                    styles.secondaryAction,
-                                    { borderColor: colors.border, opacity: pressed ? 0.75 : 1 },
-                                ]}
-                                accessibilityRole="button"
-                            >
-                                <ThemedText style={styles.secondaryActionText}>Details</ThemedText>
-                            </Pressable>
-                            {!item.isJoined && (
+                            <ThemedView style={styles.cardActionsRow}>
                                 <Pressable
-                                    onPress={() => openJoinModal(item)}
+                                    onPress={() => navigation.navigate('Main', { screen: 'ClinicDetailsScreen', params: { clinicId: item.id } })}
                                     style={({ pressed }) => [
-                                        styles.primaryAction,
-                                        { backgroundColor: colors.primary, opacity: pressed ? 0.75 : 1 },
+                                        styles.secondaryAction,
+                                        { borderColor: colors.border, opacity: pressed ? 0.75 : 1 },
+                                    ]}
+                                    accessibilityRole="button"
+                                >
+                                    <ThemedText style={styles.secondaryActionText}>Details</ThemedText>
+                                </Pressable>
+                                {!item.isJoined && (
+                                    <Pressable
+                                        onPress={() => openJoinModal(item)}
+                                        style={({ pressed }) => [
+                                            styles.primaryAction,
+                                            { backgroundColor: colors.primary, opacity: pressed ? 0.75 : 1 },
+                                        ]}
+                                    >
+                                        <ThemedText style={styles.primaryActionText}>Join Clinic</ThemedText>
+                                    </Pressable>
+                                )}
+                                <Pressable
+                                    disabled={!item.supportsAppointments}
+                                    onPress={() => navigation.navigate('Main', { screen: 'BookingDraftScreen', params: { clinicId: item.id } })}
+                                    style={({ pressed }) => [
+                                        styles.secondaryAction,
+                                        {
+                                            borderColor: colors.border,
+                                            opacity: !item.supportsAppointments || pressed ? 0.6 : 1,
+                                        },
                                     ]}
                                 >
-                                    <ThemedText style={styles.primaryActionText}>Join Clinic</ThemedText>
+                                    <ThemedText style={styles.secondaryActionText}>Book Consultation</ThemedText>
                                 </Pressable>
-                            )}
-                            <Pressable
-                                disabled={!item.supportsAppointments}
-                                onPress={() => navigation.navigate('Main', { screen: 'BookingDraftScreen', params: { clinicId: item.id } })}
-                                style={({ pressed }) => [
-                                    styles.secondaryAction,
-                                    {
-                                        borderColor: colors.border,
-                                        opacity: !item.supportsAppointments || pressed ? 0.6 : 1,
-                                    },
-                                ]}
-                            >
-                                <ThemedText style={styles.secondaryActionText}>Book Consultation</ThemedText>
-                            </Pressable>
+                            </ThemedView>
                         </ThemedView>
                     </ThemedView>
                 )}
@@ -395,7 +388,11 @@ const styles = StyleSheet.create({
     card: {
         borderRadius: 14,
         borderWidth: StyleSheet.hairlineWidth,
+        overflow: 'hidden',
+    },
+    cardBody: {
         padding: 14,
+        paddingTop: 10,
         gap: 8,
     },
     cardTopRow: {

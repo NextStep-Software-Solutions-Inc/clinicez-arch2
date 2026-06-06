@@ -264,7 +264,10 @@ const MainStack = createNativeStackNavigator({
     }),
     ExploreClinicsScreen: createNativeStackScreen({
       screen: ExploreClinicsScreen,
-      options: { headerLargeTitleEnabled: true },
+      options: { 
+        title: 'Explore Clinics',
+        headerLargeTitleEnabled: true
+      },
     }),
     ExploreOrgsScreen: createNativeStackScreen({
       screen: ExploreOrgsScreen,

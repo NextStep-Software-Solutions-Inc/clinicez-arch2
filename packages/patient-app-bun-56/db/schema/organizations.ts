@@ -6,6 +6,7 @@ export const organizations = sqliteTable('organizations', {
     name: text('name').notNull(),
     description: text('description').notNull(),
     logoUrl: text('logo_url'),
+    coverImageUrl: text('cover_image_url'),
     addressHint: text('address_hint'),
     isPublic: integer('is_public', { mode: 'boolean' }).notNull().default(true),
     inviteCode: text('invite_code'),

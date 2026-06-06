@@ -7,6 +7,7 @@ export const clinics = sqliteTable('clinics', {
   address: text('address'),
   description: text('description'),
   logoUrl: text('logo_url'),
+  coverImageUrl: text('cover_image_url'),
   isPublic: integer('is_public', { mode: 'boolean' }).notNull().default(true),
   supportsAppointments: integer('supports_appointments', { mode: 'boolean' }).notNull().default(true),
   baseUrl: text('base_url').notNull(),
