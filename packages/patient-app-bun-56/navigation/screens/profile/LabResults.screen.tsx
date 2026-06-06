@@ -6,11 +6,13 @@ import { labResults } from '@db/schema/labResults';
 import { eq, desc } from 'drizzle-orm';
 import ProfileReadOnlyField from 'components/profile/ProfileReadOnlyField';
 import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
+import { useClinicNameMap } from 'hooks/useClinicNameMap';
 import { usePatientId } from 'hooks/usePatientId';
 
 
 export default function LabResultsScreen() {
   const patientId = usePatientId();
+  const { getClinicName } = useClinicNameMap();
   const { colors } = useTheme();
   const [records, setRecords] = useState<any[]>([]);
 
@@ -36,6 +38,7 @@ export default function LabResultsScreen() {
           <ProfileReadOnlyField label="Unit" value={item.unit} />
           <ProfileReadOnlyField label="Reference Range" value={item.referenceRange} />
           <ProfileReadOnlyField label="Flag" value={item.flag} />
+          <ProfileReadOnlyField label="Clinic Source" value={getClinicName(item.clinicId) ?? item.laboratory ?? null} />
           <ProfileReadOnlyField label="Laboratory" value={item.laboratory} />
           <ProfileReadOnlyField label="Ordered By" value={item.orderingPhysician} />
         </View>

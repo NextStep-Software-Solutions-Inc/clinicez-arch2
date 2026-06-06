@@ -6,11 +6,13 @@ import { consultations } from '@db/schema/consultations';
 import { eq, desc } from 'drizzle-orm';
 import ProfileReadOnlyField from 'components/profile/ProfileReadOnlyField';
 import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
+import { useClinicNameMap } from 'hooks/useClinicNameMap';
 import { usePatientId } from 'hooks/usePatientId';
 
 
 export default function ConsultationsScreen() {
   const patientId = usePatientId();
+  const { getClinicName } = useClinicNameMap();
   const { colors } = useTheme();
   const [records, setRecords] = useState<any[]>([]);
 
@@ -30,7 +32,7 @@ export default function ConsultationsScreen() {
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <ProfileSectionHeader title={item.visitDate ? new Date(item.visitDate).toLocaleDateString() : 'Visit'} />
           <ProfileReadOnlyField label="Visit Type" value={item.visitType} />
-          <ProfileReadOnlyField label="Clinic" value={item.clinicName} />
+          <ProfileReadOnlyField label="Clinic Source" value={getClinicName(item.clinicId) ?? item.clinicName ?? null} />
           <ProfileReadOnlyField label="Provider" value={item.doctorName} />
           <ProfileReadOnlyField label="Specialty" value={item.doctorSpecialty} />
           <ProfileReadOnlyField label="Chief Complaint" value={item.chiefComplaint} />

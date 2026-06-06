@@ -6,11 +6,60 @@ import { vitalSigns } from '@db/schema/vitalSigns';
 import { eq, desc } from 'drizzle-orm';
 import ProfileReadOnlyField from 'components/profile/ProfileReadOnlyField';
 import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
+import { useClinicNameMap } from 'hooks/useClinicNameMap';
 import { usePatientId } from 'hooks/usePatientId';
+
+
+function humanizeLabel(input: string): string {
+  return input
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatNumber(value: number | null | undefined, unit?: string): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  return unit ? `${value} ${unit}` : String(value);
+}
+
+function formatLimbMeasurements(raw: string | null | undefined): string | null {
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const entries = Object.entries(parsed);
+
+    if (!entries.length) {
+      return null;
+    }
+
+    return entries
+      .map(([key, value]) => {
+        if (value === null || value === undefined || value === '') {
+          return `${humanizeLabel(key)}: —`;
+        }
+
+        return typeof value === 'number'
+          ? `${humanizeLabel(key)}: ${value} cm`
+          : `${humanizeLabel(key)}: ${String(value)}`;
+      })
+      .join('\n');
+  } catch {
+    return raw;
+  }
+}
 
 
 export default function VitalSignsScreen() {
   const patientId = usePatientId();
+  const { getClinicName } = useClinicNameMap();
   const { colors } = useTheme();
   const [records, setRecords] = useState<any[]>([]);
 
@@ -38,8 +87,18 @@ export default function VitalSignsScreen() {
           <ProfileReadOnlyField label="Height" value={item.heightCm ? `${item.heightCm} cm` : null} />
           <ProfileReadOnlyField label="BMI" value={item.bmi?.toString() ?? null} />
           <ProfileReadOnlyField label="Blood Glucose" value={item.fastingBloodGlucose ? `${item.fastingBloodGlucose} mg/dL` : null} />
+          <ProfileReadOnlyField label="Waist Circumference" value={formatNumber(item.waistCm, 'cm')} />
+          <ProfileReadOnlyField label="Hip Circumference" value={formatNumber(item.hipCm, 'cm')} />
+          <ProfileReadOnlyField label="Head Circumference" value={formatNumber(item.headCircumferenceCm, 'cm')} />
+          <ProfileReadOnlyField label="Z-Score" value={formatNumber(item.zScore)} />
+          <ProfileReadOnlyField label="Left Vision Acuity" value={item.leftVisionAcuity} />
+          <ProfileReadOnlyField label="Right Vision Acuity" value={item.rightVisionAcuity} />
+          <ProfileReadOnlyField label="Body Length" value={formatNumber(item.bodyLengthCm, 'cm')} />
+          <ProfileReadOnlyField label="Skinfold Thickness" value={formatNumber(item.skinfoldThicknessMm, 'mm')} />
+          <ProfileReadOnlyField label="Mid-Upper Arm Circumference" value={formatNumber(item.midUpperArmCircCm, 'cm')} />
+          <ProfileReadOnlyField label="Limb Measurements" value={formatLimbMeasurements(item.limbMeasurements)} />
           <ProfileReadOnlyField label="Recorded By" value={item.takenBy} />
-          <ProfileReadOnlyField label="Facility" value={item.facility} />
+          <ProfileReadOnlyField label="Clinic Source" value={getClinicName(item.clinicId) ?? item.facility ?? null} />
         </View>
       )}
     />

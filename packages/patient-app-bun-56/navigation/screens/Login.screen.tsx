@@ -8,7 +8,7 @@ import {
   ScrollView,
   ActivityIndicator,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { Theme, useNavigation, useTheme } from "@react-navigation/native";
 import { useSignIn } from "@clerk/expo";
 import ThemedText from "@ui/ThemedText";
 import { useAuth } from "contexts/AuthContext";
@@ -18,9 +18,15 @@ export default function LoginScreen() {
   const navigation = useNavigation();
   const { signIn, errors, fetchStatus } = useSignIn();
   const { unlock } = useAuth();
+  const theme = useTheme();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const isLoading = fetchStatus === "fetching";
+
+  const hasPasswordError = !!errors?.fields?.password;
+  const hasEmailError = !!errors?.fields?.identifier;
+  const styles = createStyles(theme);
+  const { colors } = theme;
 
   const handleSignIn = async () => {
     const { error } = await signIn.password({ emailAddress: email, password });
@@ -48,7 +54,7 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.page}
+      style={[styles.page]}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <ScrollView
@@ -64,18 +70,19 @@ export default function LoginScreen() {
           </ThemedText>
         </View>
 
-        <View style={styles.card}>
+        <View style={[styles.card]}>
           <View style={styles.field}>
             <ThemedText style={styles.label}>Email address</ThemedText>
             <TextInput
-              style={styles.input}
+              style={[ styles.input, { backgroundColor: colors.background, borderColor: hasEmailError ? colors.notification : colors.border, color: hasEmailError ? colors.notification : colors.text } ]}
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
               autoCapitalize="none"
               autoComplete="email"
               placeholder="you@example.com"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={hasEmailError ? colors.notification : colors.text}
+
             />
             {errors?.fields?.identifier && (
               <ThemedText style={styles.error}>
@@ -92,17 +99,18 @@ export default function LoginScreen() {
                   navigation.navigate("Auth", { screen: "ForgotPassword" })
                 }
               >
-                <ThemedText style={styles.link}>Forgot password?</ThemedText>
+                <ThemedText style={[styles.link]}>Forgot password?</ThemedText>
               </Pressable>
             </View>
             <TextInput
-              style={styles.input}
+              style={[ styles.input, { borderColor: hasPasswordError ? colors.notification : colors.border, color: hasPasswordError ? colors.notification : colors.text } ]}
               value={password}
               onChangeText={setPassword}
               secureTextEntry
               autoComplete="current-password"
+              autoCapitalize="none"
               placeholder="••••••••"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={hasPasswordError ? colors.notification : colors.text}
             />
             {errors?.fields?.password && (
               <ThemedText style={styles.error}>
@@ -117,14 +125,15 @@ export default function LoginScreen() {
             styles.cta,
             (!email || !password || isLoading) && styles.ctaDisabled,
             pressed && styles.ctaPressed,
+            { backgroundColor: colors.primary },
           ]}
           onPress={handleSignIn}
           disabled={!email || !password || isLoading}
         >
           {isLoading ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <ActivityIndicator color={colors.text} />
           ) : (
-            <ThemedText style={styles.ctaText}>Sign in</ThemedText>
+            <ThemedText style={[styles.ctaText]}>Sign in</ThemedText>
           )}
         </Pressable>
 
@@ -135,7 +144,7 @@ export default function LoginScreen() {
           <Pressable
             onPress={() => navigation.navigate("Auth", { screen: "Signup" })}
           >
-            <ThemedText style={styles.link}>Create account</ThemedText>
+            <ThemedText style={[styles.link]}>Create account</ThemedText>
           </Pressable>
         </View>
       </ScrollView>
@@ -143,10 +152,10 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   page: {
     flex: 1,
-    backgroundColor: "#FAFAFB",
+    backgroundColor: theme.colors.background,
   },
   scroll: {
     paddingHorizontal: 28,
@@ -175,7 +184,7 @@ const styles = StyleSheet.create({
     opacity: 0.75,
   },
   card: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: theme.colors.card,
     borderRadius: 24,
     padding: 24,
     gap: 16,
@@ -191,7 +200,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#374151",
+    color: theme.colors.text,
   },
   labelRow: {
     flexDirection: "row",
@@ -199,14 +208,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   input: {
-    backgroundColor: "#F9FAFB",
+    backgroundColor: theme.colors.background,
     borderWidth: 1,
     borderColor: "#E5E7EB",
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
-    color: "#111827",
+    color: theme.colors.text,
   },
   codeInput: {
     textAlign: "center",
@@ -216,10 +225,10 @@ const styles = StyleSheet.create({
   },
   error: {
     fontSize: 13,
-    color: "#EF4444",
+    color: theme.colors.notification,
   },
   cta: {
-    backgroundColor: "#111827",
+    backgroundColor: theme.colors.primary,
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: "center",
@@ -254,6 +263,6 @@ const styles = StyleSheet.create({
   link: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#111827",
+    color: theme.colors.primary,
   },
 });

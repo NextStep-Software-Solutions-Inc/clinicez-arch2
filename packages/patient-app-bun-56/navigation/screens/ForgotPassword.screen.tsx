@@ -8,7 +8,7 @@ import {
   ScrollView,
   ActivityIndicator,
 } from "react-native";
-import { useNavigation, useTheme } from "@react-navigation/native";
+import { Theme, useNavigation, useTheme } from "@react-navigation/native";
 import { useSignIn } from "@clerk/expo";
 import ThemedText from "@ui/ThemedText";
 import { useAuth } from "contexts/AuthContext";
@@ -21,7 +21,7 @@ const STEP_LABELS = ["Email", "Code", "Password"];
 
 export default function ForgotPasswordScreen() {
   const navigation = useNavigation();
-  const { colors } = useTheme();
+  const theme = useTheme();
   const { signIn, errors, fetchStatus } = useSignIn();
   const { unlock, isAuthenticated } = useAuth();
   const [step, setStep] = useState<Step>("email");
@@ -30,6 +30,7 @@ export default function ForgotPasswordScreen() {
   const [password, setPassword] = useState("");
   const isLoading = fetchStatus === "fetching";
   const currentStepIndex = STEPS.indexOf(step);
+  const styles = createStyles(theme);
 
   const handleSendCode = async () => {
     const { error: createError } = await signIn.create({ identifier: email });
@@ -143,12 +144,12 @@ export default function ForgotPasswordScreen() {
           )}
         </View>
 
-        <View style={[styles.card, {backgroundColor: colors.card}]}>
+        <View style={[styles.card]}>
           {step === "email" && (
             <View style={styles.field}>
               <ThemedText style={styles.label}>Email address</ThemedText>
               <TextInput
-                style={{...styles.input, borderColor: colors.border}}
+                style={{...styles.input}}
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
@@ -234,7 +235,7 @@ export default function ForgotPasswordScreen() {
           }
         >
           {isLoading ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <ActivityIndicator color={theme.colors.text} />
           ) : (
             <ThemedText style={styles.ctaText}>
               {step === "email"
@@ -269,42 +270,52 @@ export default function ForgotPasswordScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   page: {
     flex: 1,
-    // backgroundColor: "#FAFAFB",
+    backgroundColor: theme.colors.background,
   },
   scroll: {
     paddingHorizontal: 28,
     paddingTop: 32,
     paddingBottom: 36,
     gap: 20,
+    maxWidth: "auto",
   },
   stepper: {
     flexDirection: "row",
     alignItems: "center",
+    // flexWrap: "wrap",
+    justifyContent: "space-between",
     marginBottom: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: theme.colors.border,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   stepItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    flexShrink: 1,
+    minWidth: 0,
   },
   stepDot: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: theme.colors.border,
     justifyContent: "center",
     alignItems: "center",
   },
   stepDotActive: {
-    backgroundColor: "#111827",
+    backgroundColor: theme.colors.primary,
   },
   stepNumber: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#9CA3AF",
+    color: theme.colors.text,
   },
   stepNumberActive: {
     color: "#FFFFFF",
@@ -312,21 +323,21 @@ const styles = StyleSheet.create({
   stepLabel: {
     fontSize: 12,
     fontWeight: "500",
-    color: "#9CA3AF",
+    color: theme.colors.text,
   },
   stepLabelActive: {
-    color: "#111827",
+    color: theme.colors.text,
     fontWeight: "600",
   },
   stepLine: {
     flex: 1,
+    maxWidth: 50,
     height: 1,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: theme.colors.border,
     marginHorizontal: 6,
-    width: 24,
   },
   stepLineActive: {
-    backgroundColor: "#111827",
+    backgroundColor: theme.colors.text,
   },
   header: {
     gap: 10,
@@ -349,7 +360,7 @@ const styles = StyleSheet.create({
     opacity: 0.75,
   },
   card: {
-    // backgroundColor: "#FFFFFF",
+    backgroundColor: theme.colors.card,
     borderRadius: 24,
     padding: 24,
     gap: 16,
@@ -365,17 +376,17 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#374151",
+    color: theme.colors.text,
   },
   input: {
-    // backgroundColor: "#F9FAFB",
+    backgroundColor: theme.colors.background,
     borderWidth: 1,
-    // borderColor: "#E5E7EB",
+    borderColor: theme.colors.border,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
-    color: "#111827",
+    color: theme.colors.text,
   },
   codeInput: {
     textAlign: "center",
@@ -385,10 +396,10 @@ const styles = StyleSheet.create({
   },
   error: {
     fontSize: 13,
-    color: "#EF4444",
+    color: theme.colors.notification,
   },
   cta: {
-    backgroundColor: "#111827",
+    backgroundColor: theme.colors.primary,
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: "center",
@@ -424,6 +435,6 @@ const styles = StyleSheet.create({
   link: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#111827",
+    color: theme.colors.primary,
   },
 });

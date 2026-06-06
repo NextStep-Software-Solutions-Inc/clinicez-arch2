@@ -23,6 +23,8 @@ import {
   imagingResults,
   vaccinationsAdministered,
   clinicalAssessments,
+  patientPhysicalExamProfile,
+  patientNcdQuestionnaire,
 } from '@db/schema/index';
 import { isNull, count } from 'drizzle-orm';
 import ProfileCard from 'components/ProfileCard';
@@ -49,6 +51,8 @@ type Counts = {
   imaging: number;
   vaccinations: number;
   assessments: number;
+  physicalExams: number;
+  ncdQuestionnaires: number;
 };
 
 async function loadCounts(): Promise<Counts> {
@@ -57,6 +61,7 @@ async function loadCounts(): Promise<Counts> {
     surgeryCount, illnessCount, chronicCount, disabilityCount, immunizationCount,
     familyCount, travelCount, pregnancyCount, vitalCount, consultCount,
     rxCount, labCount, imagingCount, vaccinationCount, assessmentCount,
+    physicalExamCount, ncdQuestionnaireCount,
   ] = await Promise.all([
     db.select({ c: count() }).from(patientAddresses).where(isNull(patientAddresses.deletedAt)),
     db.select({ c: count() }).from(emergencyContacts).where(isNull(emergencyContacts.deletedAt)),
@@ -78,6 +83,8 @@ async function loadCounts(): Promise<Counts> {
     db.select({ c: count() }).from(imagingResults),
     db.select({ c: count() }).from(vaccinationsAdministered),
     db.select({ c: count() }).from(clinicalAssessments),
+    db.select({ c: count() }).from(patientPhysicalExamProfile),
+    db.select({ c: count() }).from(patientNcdQuestionnaire),
   ]);
 
   return {
@@ -101,6 +108,8 @@ async function loadCounts(): Promise<Counts> {
     imaging: imagingCount[0]?.c ?? 0,
     vaccinations: vaccinationCount[0]?.c ?? 0,
     assessments: assessmentCount[0]?.c ?? 0,
+    physicalExams: physicalExamCount[0]?.c ?? 0,
+    ncdQuestionnaires: ncdQuestionnaireCount[0]?.c ?? 0,
   };
 }
 
@@ -357,6 +366,20 @@ export default function ProfileScreen() {
           iconColor="#6B7280"
           right={c ? { type: 'value', label: plural(c.assessments, 'assessment') } : { type: 'loading' }}
           onPress={() => navigation.navigate('Main', { screen: 'ClinicalAssessmentsScreen' })}
+        />
+        <SettingsRow
+          title="Physical Exam"
+          icon={{ android: 'monitor', ios: 'stethoscope' }}
+          iconColor="#14B8A6"
+          right={c ? { type: 'value', label: plural(c.physicalExams, 'record') } : { type: 'loading' }}
+          onPress={() => navigation.navigate('Main', { screen: 'PhysicalExamScreen' })}
+        />
+        <SettingsRow
+          title="NCD Questionnaire"
+          icon={{ android: 'quiz', ios: 'checklist' }}
+          iconColor="#9333EA"
+          right={c ? { type: 'value', label: plural(c.ncdQuestionnaires, 'record') } : { type: 'loading' }}
+          onPress={() => navigation.navigate('Main', { screen: 'NcdQuestionnaireScreen' })}
         />
       </SettingsSection>
     </ScrollView>

@@ -1,5 +1,27 @@
 import { db } from './index';
+import { clinics } from './schema/clinics';
 import { patients } from './schema/patients';
+import { patientGovernmentIds } from './schema/patientGovernmentIds';
+import { patientAddresses } from './schema/patientAddresses';
+import { emergencyContacts } from './schema/emergencyContacts';
+import { patientHealthcareProviders } from './schema/patientHealthcareProviders';
+import { patientAllergies } from './schema/patientAllergies';
+import { patientMedications } from './schema/patientMedications';
+import { patientSurgicalHistory } from './schema/patientSurgicalHistory';
+import { patientPastIllnesses } from './schema/patientPastIllnesses';
+import { patientChronicConditions } from './schema/patientChronicConditions';
+import { patientDisabilities } from './schema/patientDisabilities';
+import { patientImmunizationsSelf } from './schema/patientImmunizationsSelf';
+import { patientFamilyHistory } from './schema/patientFamilyHistory';
+import { patientSocialHistory } from './schema/patientSocialHistory';
+import { patientOccupation } from './schema/patientOccupation';
+import { patientTravelHistory } from './schema/patientTravelHistory';
+import { patientObstetricProfile } from './schema/patientObstetricProfile';
+import { patientPregnancies } from './schema/patientPregnancies';
+import { patientContraceptiveHistory } from './schema/patientContraceptiveHistory';
+import { patientMaleReproductive } from './schema/patientMaleReproductive';
+import { patientDentalVision } from './schema/patientDentalVision';
+import { patientMentalHealthProfile } from './schema/patientMentalHealthProfile';
 import { consultations } from './schema/consultations';
 import { vitalSigns } from './schema/vitalSigns';
 import { labResults } from './schema/labResults';
@@ -66,10 +88,44 @@ async function ensurePatientRow(patientId: string) {
         });
 }
 
+async function ensureClinicRows(patientId: string) {
+    const joinedAt = new Date('2024-01-15T08:00:00.000Z');
+
+    const primaryClinicId = demoId(patientId, 'clinic-city-health');
+    const secondaryClinicId = demoId(patientId, 'clinic-riverside-diagnostics');
+
+    const clinicRows: (typeof clinics.$inferInsert)[] = [
+        {
+            id: primaryClinicId,
+            name: 'City Health Center - OPD',
+            address: 'JP Rizal Street, Poblacion, City Proper',
+            baseUrl: 'https://city-health.demo.clinicez.local',
+            inviteCode: 'CITY-DEMO-01',
+            joinedAt,
+        },
+        {
+            id: secondaryClinicId,
+            name: 'Riverside Diagnostics and Imaging',
+            address: 'Riverside Avenue, District 2, Metro City',
+            baseUrl: 'https://riverside-diagnostics.demo.clinicez.local',
+            inviteCode: 'RIVER-DEMO-02',
+            joinedAt,
+        },
+    ];
+
+    for (const row of clinicRows) {
+        const { id, ...set } = row;
+        await db.insert(clinics).values(row).onConflictDoUpdate({ target: clinics.id, set });
+    }
+
+    return { primaryClinicId, secondaryClinicId };
+}
+
 export async function seedDemoHealthRecords(patientId: string): Promise<void> {
     if (!patientId) return;
 
     await ensurePatientRow(patientId);
+    const { primaryClinicId, secondaryClinicId } = await ensureClinicRows(patientId);
 
     const now = new Date();
     const d56 = new Date(now.getTime() - 56 * DAY_MS);
@@ -85,6 +141,7 @@ export async function seedDemoHealthRecords(patientId: string): Promise<void> {
         {
             id: demoId(patientId, 'consultation-initial'),
             patientId,
+            clinicId: primaryClinicId,
             visitDate: toDate(d28),
             visitType: 'Scheduled',
             clinicName: 'City Health Center - OPD',
@@ -106,6 +163,7 @@ export async function seedDemoHealthRecords(patientId: string): Promise<void> {
         {
             id: demoId(patientId, 'consultation-followup'),
             patientId,
+            clinicId: secondaryClinicId,
             visitDate: toDate(d14),
             visitType: 'FollowUp',
             clinicName: 'City Health Center - OPD',
@@ -135,6 +193,7 @@ export async function seedDemoHealthRecords(patientId: string): Promise<void> {
         {
             id: demoId(patientId, 'vitals-baseline'),
             patientId,
+            clinicId: primaryClinicId,
             measuredAt: toDateTime(d56),
             heightCm: 169,
             weightKg: 75.2,
@@ -170,6 +229,7 @@ export async function seedDemoHealthRecords(patientId: string): Promise<void> {
         {
             id: demoId(patientId, 'vitals-followup-1'),
             patientId,
+            clinicId: primaryClinicId,
             measuredAt: toDateTime(d28),
             heightCm: 169,
             weightKg: 74.3,
@@ -205,6 +265,7 @@ export async function seedDemoHealthRecords(patientId: string): Promise<void> {
         {
             id: demoId(patientId, 'vitals-followup-2'),
             patientId,
+            clinicId: secondaryClinicId,
             measuredAt: toDateTime(d9),
             heightCm: 169,
             weightKg: 73.7,
@@ -248,6 +309,7 @@ export async function seedDemoHealthRecords(patientId: string): Promise<void> {
         {
             id: demoId(patientId, 'lab-lipid-ldl'),
             patientId,
+            clinicId: secondaryClinicId,
             testName: 'Lipid Profile',
             componentParameter: 'LDL Cholesterol',
             resultValue: '136',
@@ -263,6 +325,7 @@ export async function seedDemoHealthRecords(patientId: string): Promise<void> {
         {
             id: demoId(patientId, 'lab-fbs'),
             patientId,
+            clinicId: primaryClinicId,
             testName: 'Fasting Blood Sugar',
             componentParameter: 'Glucose',
             resultValue: '101',
@@ -278,6 +341,7 @@ export async function seedDemoHealthRecords(patientId: string): Promise<void> {
         {
             id: demoId(patientId, 'lab-creatinine'),
             patientId,
+            clinicId: secondaryClinicId,
             testName: 'Renal Function Panel',
             componentParameter: 'Creatinine',
             resultValue: '0.96',
@@ -301,6 +365,7 @@ export async function seedDemoHealthRecords(patientId: string): Promise<void> {
         {
             id: demoId(patientId, 'imaging-cxr'),
             patientId,
+            clinicId: secondaryClinicId,
             imagingType: 'XRay',
             bodyPart: 'Chest',
             examDate: toDate(d21),
@@ -314,6 +379,7 @@ export async function seedDemoHealthRecords(patientId: string): Promise<void> {
         {
             id: demoId(patientId, 'imaging-ecg'),
             patientId,
+            clinicId: primaryClinicId,
             imagingType: 'ECG',
             bodyPart: 'Cardiac',
             examDate: toDate(d14),
@@ -335,6 +401,7 @@ export async function seedDemoHealthRecords(patientId: string): Promise<void> {
         {
             id: demoId(patientId, 'assessment-phq9'),
             patientId,
+            clinicId: primaryClinicId,
             assessmentType: 'PHQ9',
             date: toDate(d14),
             assessedBy: 'Dr. Maria Santos',
@@ -355,6 +422,7 @@ export async function seedDemoHealthRecords(patientId: string): Promise<void> {
         {
             id: demoId(patientId, 'assessment-occ-health'),
             patientId,
+            clinicId: secondaryClinicId,
             assessmentType: 'OccupationalHealth',
             date: toDate(d3),
             assessedBy: 'Nurse J. Navarro',
@@ -378,6 +446,7 @@ export async function seedDemoHealthRecords(patientId: string): Promise<void> {
         {
             id: demoId(patientId, 'rx-amlodipine'),
             patientId,
+            clinicId: primaryClinicId,
             drugName: 'Amlodipine 5 mg Tablet',
             genericName: 'Amlodipine',
             dosage: '5 mg',
@@ -396,6 +465,7 @@ export async function seedDemoHealthRecords(patientId: string): Promise<void> {
         {
             id: demoId(patientId, 'rx-paracetamol'),
             patientId,
+            clinicId: secondaryClinicId,
             drugName: 'Paracetamol 500 mg Tablet',
             genericName: 'Paracetamol',
             dosage: '500 mg',
@@ -422,6 +492,7 @@ export async function seedDemoHealthRecords(patientId: string): Promise<void> {
         {
             id: demoId(patientId, 'vax-influenza-2025'),
             patientId,
+            clinicId: primaryClinicId,
             vaccineName: 'Quadrivalent Influenza Vaccine',
             diseaseTargeted: 'Influenza',
             doseNumber: 'Annual',
@@ -440,6 +511,7 @@ export async function seedDemoHealthRecords(patientId: string): Promise<void> {
         {
             id: demoId(patientId, 'vax-td-booster'),
             patientId,
+            clinicId: secondaryClinicId,
             vaccineName: 'Tetanus-Diphtheria Booster',
             diseaseTargeted: 'Tetanus, Diphtheria',
             doseNumber: 'Booster',
@@ -463,6 +535,511 @@ export async function seedDemoHealthRecords(patientId: string): Promise<void> {
             .insert(vaccinationsAdministered)
             .values(row)
             .onConflictDoUpdate({ target: vaccinationsAdministered.id, set });
+    }
+
+    const governmentIdsRow: typeof patientGovernmentIds.$inferInsert = {
+        id: demoId(patientId, 'government-ids'),
+        patientId,
+        philhealthId: '12-345678901-2',
+        philhealthCategory: 'Member',
+        sssNumber: '34-1234567-8',
+        gsisNumber: '11-234567890-1',
+        pagibigId: '1234-5678-9012',
+        tin: '123-456-789-000',
+        seniorCitizenId: null,
+        isPwd: false,
+        pwdIdNumber: null,
+        disabilityType: null,
+        hmoProvider: 'DemoCare HMO',
+        hmoPolicyNumber: 'HMO-2026-0008',
+        hmoPlanType: 'Family',
+        hmoCoverageStart: toDate(d56),
+        hmoCoverageEnd: toDate(new Date(now.getTime() + 330 * DAY_MS)),
+        createdAt: d56,
+        updatedAt: now,
+    };
+
+    {
+        const { id, ...set } = governmentIdsRow;
+        await db
+            .insert(patientGovernmentIds)
+            .values(governmentIdsRow)
+            .onConflictDoUpdate({ target: patientGovernmentIds.patientId, set });
+    }
+
+    const addressRows: (typeof patientAddresses.$inferInsert)[] = [
+        {
+            id: demoId(patientId, 'address-primary'),
+            patientId,
+            type: 'primary',
+            houseStreet: 'Lot 18 Block 4, Sampaguita Street',
+            barangay: 'Barangay San Isidro',
+            cityMunicipality: 'Quezon City',
+            province: 'Metro Manila',
+            region: 'NCR',
+            zipCode: '1106',
+            country: 'Philippines',
+            createdAt: d56,
+            updatedAt: now,
+        },
+        {
+            id: demoId(patientId, 'address-secondary'),
+            patientId,
+            type: 'secondary',
+            houseStreet: 'Unit 4B, Riverside Residences',
+            barangay: 'Barangay Riverside',
+            cityMunicipality: 'Pasig City',
+            province: 'Metro Manila',
+            region: 'NCR',
+            zipCode: '1600',
+            country: 'Philippines',
+            createdAt: d28,
+            updatedAt: now,
+        },
+    ];
+
+    for (const row of addressRows) {
+        const { id, ...set } = row;
+        await db.insert(patientAddresses).values(row).onConflictDoUpdate({ target: patientAddresses.id, set });
+    }
+
+    const emergencyContactRows: (typeof emergencyContacts.$inferInsert)[] = [
+        {
+            id: demoId(patientId, 'emergency-contact-1'),
+            patientId,
+            sortOrder: 1,
+            name: 'Ana Patient',
+            relationship: 'Spouse',
+            phone: '09170000001',
+            altPhone: '0281234567',
+            email: 'ana.patient@example.com',
+            address: 'Quezon City',
+            createdAt: d56,
+            updatedAt: now,
+        },
+        {
+            id: demoId(patientId, 'emergency-contact-2'),
+            patientId,
+            sortOrder: 2,
+            name: 'Luis Patient',
+            relationship: 'Brother',
+            phone: '09170000002',
+            altPhone: null,
+            email: 'luis.patient@example.com',
+            address: 'Pasig City',
+            createdAt: d42,
+            updatedAt: now,
+        },
+    ];
+
+    for (const row of emergencyContactRows) {
+        const { id, ...set } = row;
+        await db.insert(emergencyContacts).values(row).onConflictDoUpdate({ target: emergencyContacts.id, set });
+    }
+
+    const healthcareProviderRows: (typeof patientHealthcareProviders.$inferInsert)[] = [
+        {
+            id: demoId(patientId, 'healthcare-provider-pcp'),
+            patientId,
+            providerType: 'primary_care',
+            name: 'Dr. Maria Santos',
+            specialty: 'Family Medicine',
+            clinicHospital: 'City Health Center - OPD',
+            phone: '0281112233',
+            createdAt: d56,
+            updatedAt: now,
+        },
+        {
+            id: demoId(patientId, 'healthcare-provider-specialist'),
+            patientId,
+            providerType: 'specialist_1',
+            name: 'Dr. Ramon Dela Cruz',
+            specialty: 'Cardiology',
+            clinicHospital: 'Riverside Diagnostics and Imaging',
+            phone: '0284445566',
+            createdAt: d28,
+            updatedAt: now,
+        },
+    ];
+
+    for (const row of healthcareProviderRows) {
+        const { id, ...set } = row;
+        await db
+            .insert(patientHealthcareProviders)
+            .values(row)
+            .onConflictDoUpdate({ target: patientHealthcareProviders.id, set });
+    }
+
+    const allergyRows: (typeof patientAllergies.$inferInsert)[] = [
+        {
+            id: demoId(patientId, 'allergy-penicillin'),
+            patientId,
+            allergen: 'Penicillin',
+            reactionType: 'Rash',
+            severity: 'Moderate',
+            management: 'Avoid penicillin-class antibiotics; use alternatives.',
+            isActive: true,
+            createdAt: d56,
+            updatedAt: now,
+        },
+    ];
+
+    for (const row of allergyRows) {
+        const { id, ...set } = row;
+        await db.insert(patientAllergies).values(row).onConflictDoUpdate({ target: patientAllergies.id, set });
+    }
+
+    const selfMedicationRows: (typeof patientMedications.$inferInsert)[] = [
+        {
+            id: demoId(patientId, 'self-med-amlodipine'),
+            patientId,
+            drugName: 'Amlodipine',
+            dosage: '5 mg',
+            dosageForm: 'Tablet',
+            frequency: 'Once daily',
+            prescribingPhysician: 'Dr. Maria Santos',
+            startDate: toDate(d28),
+            indication: 'Blood pressure control',
+            isActive: true,
+            createdAt: d28,
+            updatedAt: now,
+        },
+    ];
+
+    for (const row of selfMedicationRows) {
+        const { id, ...set } = row;
+        await db.insert(patientMedications).values(row).onConflictDoUpdate({ target: patientMedications.id, set });
+    }
+
+    const surgicalHistoryRows: (typeof patientSurgicalHistory.$inferInsert)[] = [
+        {
+            id: demoId(patientId, 'surgical-appendectomy'),
+            patientId,
+            procedure: 'Appendectomy',
+            surgeon: 'Dr. Paolo Mercado',
+            facility: 'St. Gabriel Medical Center',
+            date: '2014-09-10',
+            anesthesiaType: 'General anesthesia',
+            complications: 'None',
+            createdAt: d56,
+            updatedAt: now,
+        },
+    ];
+
+    for (const row of surgicalHistoryRows) {
+        const { id, ...set } = row;
+        await db.insert(patientSurgicalHistory).values(row).onConflictDoUpdate({ target: patientSurgicalHistory.id, set });
+    }
+
+    const pastIllnessRows: (typeof patientPastIllnesses.$inferInsert)[] = [
+        {
+            id: demoId(patientId, 'past-illness-dengue'),
+            patientId,
+            diagnosis: 'Dengue fever',
+            duration: '7 days',
+            complications: 'Resolved without complications',
+            createdAt: d56,
+            updatedAt: now,
+        },
+    ];
+
+    for (const row of pastIllnessRows) {
+        const { id, ...set } = row;
+        await db.insert(patientPastIllnesses).values(row).onConflictDoUpdate({ target: patientPastIllnesses.id, set });
+    }
+
+    const chronicConditionRows: (typeof patientChronicConditions.$inferInsert)[] = [
+        {
+            id: demoId(patientId, 'chronic-hypertension'),
+            patientId,
+            diagnosis: 'Hypertension',
+            controlStatus: 'Partially controlled',
+            monitoringFrequency: 'Weekly home BP log',
+            createdAt: d56,
+            updatedAt: now,
+        },
+    ];
+
+    for (const row of chronicConditionRows) {
+        const { id, ...set } = row;
+        await db
+            .insert(patientChronicConditions)
+            .values(row)
+            .onConflictDoUpdate({ target: patientChronicConditions.id, set });
+    }
+
+    const disabilityRows: (typeof patientDisabilities.$inferInsert)[] = [
+        {
+            id: demoId(patientId, 'disability-vision'),
+            patientId,
+            bodyPart: 'Eyes',
+            classification: 'Low vision requiring corrective lenses',
+            isPwdCertified: false,
+            createdAt: d56,
+            updatedAt: now,
+        },
+    ];
+
+    for (const row of disabilityRows) {
+        const { id, ...set } = row;
+        await db.insert(patientDisabilities).values(row).onConflictDoUpdate({ target: patientDisabilities.id, set });
+    }
+
+    const selfImmunizationRows: (typeof patientImmunizationsSelf.$inferInsert)[] = [
+        {
+            id: demoId(patientId, 'self-immunization-covid-booster'),
+            patientId,
+            immunizationCategory: 'Other',
+            vaccineName: 'COVID-19 Booster',
+            doseNumber: 'Booster 1',
+            lotNumber: 'C19-8891',
+            date: toDate(d42),
+            administeredBy: 'Private clinic',
+            createdAt: d42,
+            updatedAt: now,
+        },
+    ];
+
+    for (const row of selfImmunizationRows) {
+        const { id, ...set } = row;
+        await db
+            .insert(patientImmunizationsSelf)
+            .values(row)
+            .onConflictDoUpdate({ target: patientImmunizationsSelf.id, set });
+    }
+
+    const familyHistoryRows: (typeof patientFamilyHistory.$inferInsert)[] = [
+        {
+            id: demoId(patientId, 'family-history-hypertension'),
+            patientId,
+            condition: 'Hypertension',
+            affectedRelative: 'Father',
+            side: 'Paternal',
+            ageOfOnset: 48,
+            isDeceased: false,
+            ageAtDeath: null,
+            causeOfDeath: null,
+            notes: 'Controlled with maintenance medications.',
+            createdAt: d56,
+            updatedAt: now,
+        },
+    ];
+
+    for (const row of familyHistoryRows) {
+        const { id, ...set } = row;
+        await db.insert(patientFamilyHistory).values(row).onConflictDoUpdate({ target: patientFamilyHistory.id, set });
+    }
+
+    const socialHistoryRow: typeof patientSocialHistory.$inferInsert = {
+        id: demoId(patientId, 'social-history'),
+        patientId,
+        tobaccoStatus: 'Former',
+        cigsPerDay: 0,
+        packYears: 3.5,
+        quitDate: '2020-06-01',
+        otherTobaccoProducts: 'None',
+        alcoholUseLevel: 'Occasional',
+        alcoholType: 'Beer',
+        alcoholFrequencyDaysPerWeek: 1,
+        alcoholQuantityPerOccasion: 2,
+        substanceUse: false,
+        substanceName: null,
+        substanceRoute: null,
+        substanceFrequency: null,
+        activityLevel: 'Moderate',
+        exerciseType: 'Brisk walking',
+        exerciseFrequencyDaysPerWeek: 4,
+        dietPattern: 'Balanced with reduced sodium',
+        foodRestrictions: 'Low sodium',
+        sleepAvgHours: 7,
+        sleepQuality: 'Good',
+        isSexuallyActive: true,
+        waterIntake: '2 liters/day',
+        caffeineUse: '1 cup coffee/day',
+        dailyScreenTime: '6 hours/day',
+        createdAt: d56,
+        updatedAt: now,
+    };
+
+    {
+        const { id, ...set } = socialHistoryRow;
+        await db
+            .insert(patientSocialHistory)
+            .values(socialHistoryRow)
+            .onConflictDoUpdate({ target: patientSocialHistory.patientId, set });
+    }
+
+    const occupationRow: typeof patientOccupation.$inferInsert = {
+        id: demoId(patientId, 'occupation'),
+        patientId,
+        occupation: 'Administrative Assistant',
+        employer: 'Metro Logistics Inc.',
+        industry: 'Logistics',
+        workEnvironment: 'Office',
+        yearsInOccupation: 8,
+        hazardExposure: 'Prolonged sitting and screen exposure',
+        createdAt: d56,
+        updatedAt: now,
+    };
+
+    {
+        const { id, ...set } = occupationRow;
+        await db.insert(patientOccupation).values(occupationRow).onConflictDoUpdate({ target: patientOccupation.patientId, set });
+    }
+
+    const travelHistoryRows: (typeof patientTravelHistory.$inferInsert)[] = [
+        {
+            id: demoId(patientId, 'travel-history-baguio'),
+            patientId,
+            destination: 'Baguio',
+            cityProvince: 'Benguet',
+            departureDate: toDate(new Date(now.getTime() - 120 * DAY_MS)),
+            returnDate: toDate(new Date(now.getTime() - 116 * DAY_MS)),
+            purpose: 'Leisure',
+            illnessDuringAfterTravel: 'None',
+            createdAt: d56,
+            updatedAt: now,
+        },
+    ];
+
+    for (const row of travelHistoryRows) {
+        const { id, ...set } = row;
+        await db.insert(patientTravelHistory).values(row).onConflictDoUpdate({ target: patientTravelHistory.id, set });
+    }
+
+    const obstetricRow: typeof patientObstetricProfile.$inferInsert = {
+        id: demoId(patientId, 'obstetric-profile'),
+        patientId,
+        ageAtMenarche: 12,
+        cycleLength: 28,
+        cycleDuration: 5,
+        regularity: 'Regular',
+        dysmenorrheaSeverity: 'Mild',
+        menopausalStatus: 'NA',
+        ageAtMenopause: null,
+        padsPerDay: 3,
+        ageAtOnsetSexualActivity: 21,
+        currentContraceptiveMethod: 'Condom',
+        menstruationApplicable: true,
+        gravida: 1,
+        para: 1,
+        abortion: 0,
+        livingChildren: 1,
+        lmp: toDate(new Date(now.getTime() - 20 * DAY_MS)),
+        deliveryCnt: 1,
+        deliveryType: 'Vaginal',
+        fullTermDeliveries: 1,
+        prematureDeliveries: 0,
+        pregnancyInducedHypertension: false,
+        onFamilyPlanning: true,
+        pregnancyApplicable: true,
+        createdAt: d56,
+        updatedAt: now,
+    };
+
+    {
+        const { id, ...set } = obstetricRow;
+        await db
+            .insert(patientObstetricProfile)
+            .values(obstetricRow)
+            .onConflictDoUpdate({ target: patientObstetricProfile.patientId, set });
+    }
+
+    const pregnancyRows: (typeof patientPregnancies.$inferInsert)[] = [
+        {
+            id: demoId(patientId, 'pregnancy-2020'),
+            patientId,
+            year: 2020,
+            outcome: 'Live birth',
+            gestationalAgeWeeks: 39,
+            deliveryType: 'Vaginal',
+            birthWeightKg: 3.2,
+            complications: 'None',
+            facility: 'City General Hospital',
+            createdAt: d56,
+            updatedAt: now,
+        },
+    ];
+
+    for (const row of pregnancyRows) {
+        const { id, ...set } = row;
+        await db.insert(patientPregnancies).values(row).onConflictDoUpdate({ target: patientPregnancies.id, set });
+    }
+
+    const contraceptiveRows: (typeof patientContraceptiveHistory.$inferInsert)[] = [
+        {
+            id: demoId(patientId, 'contraceptive-condom'),
+            patientId,
+            method: 'Condom',
+            isCurrent: true,
+            dateStarted: '2024-01-01',
+            reasonForStopping: null,
+            createdAt: d56,
+            updatedAt: now,
+        },
+    ];
+
+    for (const row of contraceptiveRows) {
+        const { id, ...set } = row;
+        await db
+            .insert(patientContraceptiveHistory)
+            .values(row)
+            .onConflictDoUpdate({ target: patientContraceptiveHistory.id, set });
+    }
+
+    const maleReproductiveRow: typeof patientMaleReproductive.$inferInsert = {
+        id: demoId(patientId, 'male-reproductive'),
+        patientId,
+        hasVasectomy: false,
+        vasectomyDate: null,
+        conditions: 'None reported',
+        createdAt: d56,
+        updatedAt: now,
+    };
+
+    {
+        const { id, ...set } = maleReproductiveRow;
+        await db
+            .insert(patientMaleReproductive)
+            .values(maleReproductiveRow)
+            .onConflictDoUpdate({ target: patientMaleReproductive.patientId, set });
+    }
+
+    const dentalVisionRow: typeof patientDentalVision.$inferInsert = {
+        id: demoId(patientId, 'dental-vision'),
+        patientId,
+        dentistName: 'Dr. Elena Cruz',
+        dentistClinic: 'SmileCare Dental Clinic',
+        orthodonticDevice: 'None',
+        eyeDoctorName: 'Dr. Jorge Lim',
+        correctiveLenses: 'Glasses',
+        createdAt: d56,
+        updatedAt: now,
+    };
+
+    {
+        const { id, ...set } = dentalVisionRow;
+        await db.insert(patientDentalVision).values(dentalVisionRow).onConflictDoUpdate({ target: patientDentalVision.patientId, set });
+    }
+
+    const mentalHealthRow: typeof patientMentalHealthProfile.$inferInsert = {
+        id: demoId(patientId, 'mental-health-profile'),
+        patientId,
+        hasPriorDiagnosis: false,
+        providerName: 'Dr. Andrea Molina',
+        providerSpecialty: 'Psychiatry',
+        providerClinic: 'City Health Center - Behavioral Unit',
+        psychotherapyStatus: 'None',
+        createdAt: d56,
+        updatedAt: now,
+    };
+
+    {
+        const { id, ...set } = mentalHealthRow;
+        await db
+            .insert(patientMentalHealthProfile)
+            .values(mentalHealthRow)
+            .onConflictDoUpdate({ target: patientMentalHealthProfile.patientId, set });
     }
 
     const ncdqRow: typeof patientNcdQuestionnaire.$inferInsert = {
@@ -510,13 +1087,14 @@ export async function seedDemoHealthRecords(patientId: string): Promise<void> {
         await db
             .insert(patientNcdQuestionnaire)
             .values(ncdqRow)
-            .onConflictDoUpdate({ target: patientNcdQuestionnaire.id, set });
+            .onConflictDoUpdate({ target: patientNcdQuestionnaire.patientId, set });
     }
 
     const physicalExamRows: (typeof patientPhysicalExamProfile.$inferInsert)[] = [
         {
             id: demoId(patientId, 'pepert-initial'),
             patientId,
+            clinicId: primaryClinicId,
             examDate: toDate(d21),
             genSurveyId: 'GS001',
             genSurveyRem: 'Conscious, coherent, ambulatory, not in cardiopulmonary distress.',
@@ -541,6 +1119,7 @@ export async function seedDemoHealthRecords(patientId: string): Promise<void> {
         {
             id: demoId(patientId, 'pepert-followup'),
             patientId,
+            clinicId: secondaryClinicId,
             examDate: toDate(d3),
             genSurveyId: 'GS001',
             genSurveyRem: 'Well-appearing and comfortable at rest.',

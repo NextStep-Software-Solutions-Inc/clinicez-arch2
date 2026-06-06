@@ -64,6 +64,8 @@ import LabResultsScreen from './screens/profile/LabResults.screen';
 import ImagingResultsScreen from './screens/profile/ImagingResults.screen';
 import VaccinationsAdministeredScreen from './screens/profile/VaccinationsAdministered.screen';
 import ClinicalAssessmentsScreen from './screens/profile/ClinicalAssessments.screen';
+import PhysicalExamScreen from './screens/profile/PhysicalExam.screen';
+import NcdQuestionnaireScreen from './screens/profile/NcdQuestionnaire.screen';
 
 // Navigation state hooks
 import {
@@ -378,6 +380,14 @@ const MainStack = createNativeStackNavigator({
     ClinicalAssessmentsScreen: createNativeStackScreen({
       screen: ClinicalAssessmentsScreen,
       options: { title: 'Clinical Assessments', headerLargeTitleEnabled: true },
+    }),
+    PhysicalExamScreen: createNativeStackScreen({
+      screen: PhysicalExamScreen,
+      options: { title: 'Physical Exam', headerLargeTitleEnabled: true },
+    }),
+    NcdQuestionnaireScreen: createNativeStackScreen({
+      screen: NcdQuestionnaireScreen,
+      options: { title: 'NCD Questionnaire', headerLargeTitleEnabled: true },
     }),
   },
 });

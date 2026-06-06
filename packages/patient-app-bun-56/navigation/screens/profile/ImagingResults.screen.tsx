@@ -6,11 +6,13 @@ import { imagingResults } from '@db/schema/imagingResults';
 import { eq, desc } from 'drizzle-orm';
 import ProfileReadOnlyField from 'components/profile/ProfileReadOnlyField';
 import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
+import { useClinicNameMap } from 'hooks/useClinicNameMap';
 import { usePatientId } from 'hooks/usePatientId';
 
 
 export default function ImagingResultsScreen() {
   const patientId = usePatientId();
+  const { getClinicName } = useClinicNameMap();
   const { colors } = useTheme();
   const [records, setRecords] = useState<any[]>([]);
 
@@ -36,6 +38,7 @@ export default function ImagingResultsScreen() {
           <ProfileReadOnlyField label="Findings" value={item.findings} />
           <ProfileReadOnlyField label="Impression" value={item.impression} />
           <ProfileReadOnlyField label="Recommendation" value={item.recommendation} />
+          <ProfileReadOnlyField label="Clinic Source" value={getClinicName(item.clinicId) ?? item.orderingPhysician ?? null} />
           <ProfileReadOnlyField label="Ordered By" value={item.orderingPhysician} />
         </View>
       )}

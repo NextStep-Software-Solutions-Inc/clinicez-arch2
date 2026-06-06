@@ -8,7 +8,7 @@ import {
   ScrollView,
   ActivityIndicator,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { Theme, useNavigation, useTheme } from "@react-navigation/native";
 import { useSignUp } from "@clerk/expo";
 import ThemedText from "@ui/ThemedText";
 import { useState } from "react";
@@ -16,10 +16,12 @@ import { useState } from "react";
 export default function SignupScreen() {
   const navigation = useNavigation();
   const { signUp, errors, fetchStatus } = useSignUp();
+  const theme = useTheme();
   const [firstName, setFirstName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const isLoading = fetchStatus === "fetching";
+  const styles = createStyles(theme);
 
   const handleSignUp = async () => {
     const { error } = await signUp.password({
@@ -118,7 +120,7 @@ export default function SignupScreen() {
           disabled={!email || !password || isLoading}
         >
           {isLoading ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <ActivityIndicator color={theme.colors.text} />
           ) : (
             <ThemedText style={styles.ctaText}>Create account</ThemedText>
           )}
@@ -139,10 +141,10 @@ export default function SignupScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   page: {
     flex: 1,
-    backgroundColor: "#FAFAFB",
+    backgroundColor: theme.colors.background,
   },
   scroll: {
     paddingHorizontal: 28,
@@ -171,7 +173,7 @@ const styles = StyleSheet.create({
     opacity: 0.75,
   },
   card: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: theme.colors.card,
     borderRadius: 24,
     padding: 24,
     gap: 16,
@@ -187,24 +189,24 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#374151",
+    color: theme.colors.text,
   },
   input: {
-    backgroundColor: "#F9FAFB",
+    backgroundColor: theme.colors.background,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: theme.colors.border,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
-    color: "#111827",
+    color: theme.colors.text,
   },
   error: {
     fontSize: 13,
-    color: "#EF4444",
+    color: theme.colors.notification,
   },
   cta: {
-    backgroundColor: "#111827",
+    backgroundColor: theme.colors.primary,
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: "center",
@@ -235,6 +237,6 @@ const styles = StyleSheet.create({
   link: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#111827",
+    color: theme.colors.primary,
   },
 });

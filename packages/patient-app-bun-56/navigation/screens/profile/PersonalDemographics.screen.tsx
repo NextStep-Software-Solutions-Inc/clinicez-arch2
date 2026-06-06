@@ -3,15 +3,13 @@ import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform } from 'react-na
 import { useNavigation } from '@react-navigation/native';
 import { useForm, Controller } from 'react-hook-form';
 import { db } from '@db/index';
-import { patients, type Patient } from '@db/schema/patients';
+import { patients } from '@db/schema/patients';
 import { eq } from 'drizzle-orm';
 import ProfileFormField from 'components/profile/ProfileFormField';
 import ProfileSelectModal from 'components/profile/ProfileSelectModal';
 import ProfileDatePicker from 'components/profile/ProfileDatePicker';
 import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
 import ProfileSaveBar from 'components/profile/ProfileSaveBar';
-import { SettingsRow } from '@ui/SettingsItem';
-import ThemedText from '@ui/ThemedText';
 import { usePatientId } from 'hooks/usePatientId';
 import { useUser } from '@clerk/expo';
 
@@ -64,6 +62,13 @@ const EDUCATION_OPTIONS = [
   { label: 'Graduate', value: 'Graduate' },
   { label: 'Post Graduate', value: 'PostGraduate' },
 ];
+
+function selectedLabel(
+  options: { label: string; value: string }[],
+  value: string,
+): string {
+  return options.find((option) => option.value === value)?.label ?? '';
+}
 
 export default function PersonalDemographicsScreen() {
   const patientId = usePatientId();
@@ -179,10 +184,12 @@ export default function PersonalDemographicsScreen() {
 
         <ProfileSectionHeader title="Basic Information" />
         <Controller control={control} name="sex" render={({ field }) => (
-          <SettingsRow
-            title="Sex"
-            right={{ type: 'value', label: field.value || 'Select' }}
-            onPress={() => setModal('sex')}
+          <ProfileFormField
+            label="Sex"
+            value={selectedLabel(SEX_OPTIONS, field.value)}
+            onPressIn={() => setModal('sex')}
+            placeholder="Select sex"
+            picker
           />
         )} />
         <Controller control={control} name="dob" render={({ field }) => (
@@ -192,17 +199,21 @@ export default function PersonalDemographicsScreen() {
           <ProfileFormField label="Place of Birth" value={field.value} onChangeText={field.onChange} placeholder="City, Province" useBottomSheetInput={false} />
         )} />
         <Controller control={control} name="civilStatus" render={({ field }) => (
-          <SettingsRow
-            title="Civil Status"
-            right={{ type: 'value', label: field.value || 'Select' }}
-            onPress={() => setModal('civil')}
+          <ProfileFormField
+            label="Civil Status"
+            value={selectedLabel(CIVIL_STATUS_OPTIONS, field.value)}
+            onPressIn={() => setModal('civil')}
+            placeholder="Select civil status"
+            picker
           />
         )} />
         <Controller control={control} name="bloodType" render={({ field }) => (
-          <SettingsRow
-            title="Blood Type"
-            right={{ type: 'value', label: field.value || 'Select' }}
-            onPress={() => setModal('blood')}
+          <ProfileFormField
+            label="Blood Type"
+            value={selectedLabel(BLOOD_TYPE_OPTIONS, field.value)}
+            onPressIn={() => setModal('blood')}
+            placeholder="Select blood type"
+            picker
           />
         )} />
 
@@ -220,10 +231,12 @@ export default function PersonalDemographicsScreen() {
           <ProfileFormField label="Primary Language" value={field.value} onChangeText={field.onChange} placeholder="e.g. Filipino" useBottomSheetInput={false} />
         )} />
         <Controller control={control} name="educationLevel" render={({ field }) => (
-          <SettingsRow
-            title="Education Level"
-            right={{ type: 'value', label: field.value || 'Select' }}
-            onPress={() => setModal('education')}
+          <ProfileFormField
+            label="Education Level"
+            value={selectedLabel(EDUCATION_OPTIONS, field.value)}
+            onPressIn={() => setModal('education')}
+            placeholder="Select education level"
+            picker
           />
         )} />
       </ScrollView>
