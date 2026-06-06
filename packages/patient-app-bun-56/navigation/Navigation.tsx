@@ -11,6 +11,9 @@ import SettingsScreen from './screens/Settings.screen';
 import FilesScreen from './screens/Files.screen';
 import ExploreClinicsScreen from './screens/ExploreClinics.screen';
 import ExploreOrgsScreen from './screens/ExploreOrgs.screen';
+import OrganizationDetailsScreen from './screens/OrganizationDetails.screen';
+import ClinicDetailsScreen from './screens/ClinicDetails.screen';
+import BookingDraftScreen from './screens/BookingDraft.screen';
 import AppointmentsScreen from './screens/Appointments.screen';
 import LoginScreen from './screens/Login.screen';
 import SignupScreen from './screens/Signup.screen';
@@ -265,7 +268,22 @@ const MainStack = createNativeStackNavigator({
     }),
     ExploreOrgsScreen: createNativeStackScreen({
       screen: ExploreOrgsScreen,
-      options: { headerLargeTitleEnabled: true },
+      options: { 
+        title: 'Explore Organizations',
+        headerLargeTitleEnabled: true
+      },
+    }),
+    OrganizationDetailsScreen: createNativeStackScreen({
+      screen: OrganizationDetailsScreen,
+      options: { title: 'Organization Details', headerLargeTitleEnabled: true },
+    }),
+    ClinicDetailsScreen: createNativeStackScreen({
+      screen: ClinicDetailsScreen,
+      options: { title: 'Clinic Details', headerLargeTitleEnabled: true },
+    }),
+    BookingDraftScreen: createNativeStackScreen({
+      screen: BookingDraftScreen,
+      options: { title: 'Booking Draft', headerLargeTitleEnabled: true },
     }),
     // ── Profile Part A ────────────────────────────────────────────────────────
     PersonalDemographicsScreen: createNativeStackScreen({

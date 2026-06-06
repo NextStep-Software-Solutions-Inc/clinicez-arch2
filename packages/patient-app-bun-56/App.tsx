@@ -10,6 +10,7 @@ import { AppearanceProvider, useAppearance } from 'contexts/AppearanceContext';
 import { ClerkProvider } from '@clerk/expo';
 import { tokenCache } from '@clerk/expo/token-cache';
 import DatabaseProvider from 'components/DatabaseProvider';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!;
 
@@ -43,7 +44,8 @@ function AppWithTheme() {
 
 export default function App() {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <SafeAreaProvider>
+      <GestureHandlerRootView style={{ flex: 1 }}>
       <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
         <AppearanceProvider>
           <OnboardingProvider>
@@ -54,5 +56,6 @@ export default function App() {
         </AppearanceProvider>
       </ClerkProvider>
     </GestureHandlerRootView>
+    </SafeAreaProvider>
   );
 }

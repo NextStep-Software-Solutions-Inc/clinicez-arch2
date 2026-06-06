@@ -23,7 +23,12 @@ export * from './patientDentalVision';
 export * from './patientMentalHealthProfile';
 
 // Support tables
+export * from './organizations';
+export * from './organizationMemberships';
+export * from './clinicMemberships';
+export * from './clinicOrganizationLinks';
 export * from './clinics';
+export * from './bookingDrafts';
 export * from './filesMetadata';
 
 // Part B — HCW Entry (read-only for patient)

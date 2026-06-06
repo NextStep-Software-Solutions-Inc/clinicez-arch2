@@ -1,4 +1,4 @@
-import { View, Pressable, StyleSheet, Switch, ActivityIndicator, Platform } from 'react-native';
+import { View, Pressable, StyleSheet, Switch, ActivityIndicator, Platform, ColorValue } from 'react-native';
 import { useTheme } from '@react-navigation/native';
 import { MaterialSymbol, SFSymbol } from '@react-navigation/native';
 import ThemedText from './ThemedText';
@@ -95,11 +95,16 @@ export function SettingsRow({
 
 interface SettingsSectionProps {
   title?: string;
+  titleRightAction?: React.ReactNode;
   children: React.ReactNode;
   footer?: string;
+  bodyStyle?: {
+    backgroundColor?: ColorValue;
+    borderColor?: ColorValue;
+  };
 }
 
-export function SettingsSection({ title, children, footer }: SettingsSectionProps) {
+export function SettingsSection({ title, children, footer, bodyStyle, titleRightAction }: SettingsSectionProps) {
   const { colors } = useTheme();
   return (
     <View style={styles.section}>
@@ -108,7 +113,12 @@ export function SettingsSection({ title, children, footer }: SettingsSectionProp
           {title.toUpperCase()}
         </ThemedText>
       ) : null}
-      <View style={[styles.sectionBody, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      {titleRightAction ? (
+        <View style={styles.titleRightAction}>
+          {titleRightAction}
+        </View>
+      ) : null}
+      <View style={[styles.sectionBody, { backgroundColor: bodyStyle?.backgroundColor ?? colors.card, borderColor: bodyStyle?.borderColor ?? colors.border }]}>
         {children}
       </View>
       {footer ? (
@@ -172,6 +182,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 2,
     lineHeight: 18,
+  },
+  titleRightAction: {
+    position: 'absolute',
+    top: 0,
+    right: 16
   },
   rightSlot: {
     alignItems: 'flex-end',
