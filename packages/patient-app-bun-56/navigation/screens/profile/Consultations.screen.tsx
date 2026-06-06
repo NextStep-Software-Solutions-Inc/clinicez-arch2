@@ -17,7 +17,7 @@ export default function ConsultationsScreen() {
   useEffect(() => {
     db.select().from(consultations).where(eq(consultations.patientId, patientId)).orderBy(desc(consultations.visitDate))
       .then(setRecords).catch(console.error);
-  }, []);
+  }, [patientId]);
 
   return (
     <FlatList
@@ -30,14 +30,18 @@ export default function ConsultationsScreen() {
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <ProfileSectionHeader title={item.visitDate ? new Date(item.visitDate).toLocaleDateString() : 'Visit'} />
           <ProfileReadOnlyField label="Visit Type" value={item.visitType} />
-          <ProfileReadOnlyField label="Provider" value={item.providerName} />
+          <ProfileReadOnlyField label="Clinic" value={item.clinicName} />
+          <ProfileReadOnlyField label="Provider" value={item.doctorName} />
+          <ProfileReadOnlyField label="Specialty" value={item.doctorSpecialty} />
           <ProfileReadOnlyField label="Chief Complaint" value={item.chiefComplaint} />
           <ProfileReadOnlyField label="Primary Diagnosis" value={item.primaryDiagnosis} />
-          <ProfileReadOnlyField label="Subjective Notes" value={item.subjectiveNotes} />
-          <ProfileReadOnlyField label="Objective Notes" value={item.objectiveNotes} />
-          <ProfileReadOnlyField label="Assessment" value={item.assessment} />
-          <ProfileReadOnlyField label="Plan" value={item.plan} />
+          <ProfileReadOnlyField label="ICD-10 Code" value={item.icd10Code} />
+          <ProfileReadOnlyField label="Secondary Diagnoses" value={item.secondaryDiagnoses} />
+          <ProfileReadOnlyField label="SOAP Notes" value={item.soapNotes} />
+          <ProfileReadOnlyField label="Treatment Plan" value={item.treatmentPlan} />
+          <ProfileReadOnlyField label="Follow-up Instructions" value={item.followUpInstructions} />
           <ProfileReadOnlyField label="Follow-up Date" value={item.followUpDate} />
+          <ProfileReadOnlyField label="Referral Issued" value={item.referralIssued} />
         </View>
       )}
     />

@@ -22,7 +22,7 @@ export default function ClinicalAssessmentsScreen() {
   useEffect(() => {
     db.select().from(clinicalAssessments).where(eq(clinicalAssessments.patientId, patientId)).orderBy(desc(clinicalAssessments.date))
       .then(setRecords).catch(console.error);
-  }, []);
+  }, [patientId]);
 
   return (
     <FlatList
@@ -34,14 +34,10 @@ export default function ClinicalAssessmentsScreen() {
       renderItem={({ item }) => (
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <ProfileSectionHeader title={item.assessmentType ?? 'Assessment'} />
-          <ProfileReadOnlyField label="Date" value={item.assessmentDate} />
+          <ProfileReadOnlyField label="Date" value={item.date} />
           <ProfileReadOnlyField label="Assessed By" value={item.assessedBy} />
-          <ProfileReadOnlyField label="Total Score" value={item.totalScore?.toString()} />
-          <ProfileReadOnlyField label="Interpretation" value={item.interpretation} />
           <ProfileReadOnlyField label="Scores" value={prettyJson(item.scoresJson)} />
           <ProfileReadOnlyField label="Findings" value={prettyJson(item.findingsJson)} />
-          <ProfileReadOnlyField label="Recommendations" value={item.recommendations} />
-          <ProfileReadOnlyField label="Notes" value={item.notes} />
         </View>
       )}
     />

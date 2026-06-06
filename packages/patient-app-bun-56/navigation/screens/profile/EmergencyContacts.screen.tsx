@@ -4,7 +4,9 @@ import { useForm, Controller } from 'react-hook-form';
 import { db } from '@db/index';
 import { emergencyContacts } from '@db/schema/emergencyContacts';
 import { eq } from 'drizzle-orm';
-import { BottomSheetModal, BottomSheetModalProvider, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { BottomSheetModalProvider, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import type { BottomSheetModal as BottomSheetModalType } from '@gorhom/bottom-sheet';
+import ThemedBottomSheetModal from '@ui/ThemedBottomSheetModal';
 import ProfileFormField from 'components/profile/ProfileFormField';
 import ProfileListItemCard from 'components/profile/ProfileListItemCard';
 import ProfileAddButton from 'components/profile/ProfileAddButton';
@@ -33,7 +35,7 @@ export default function EmergencyContactsScreen() {
   const patientId = usePatientId();
   const [contacts, setContacts] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
-  const sheetRef = useRef<BottomSheetModal>(null);
+  const sheetRef = useRef<BottomSheetModalType>(null);
 
   const { control, handleSubmit, reset, formState: { isDirty } } = useForm<ContactForm>({ defaultValues: EMPTY });
 
@@ -103,7 +105,7 @@ export default function EmergencyContactsScreen() {
         />
       </ScrollView>
 
-      <BottomSheetModal ref={sheetRef} snapPoints={['60%', '85%']} enablePanDownToClose
+      <ThemedBottomSheetModal ref={sheetRef} snapPoints={['60%', '85%']} enablePanDownToClose
         keyboardBehavior="interactive" keyboardBlurBehavior="restore"
       >
         <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
@@ -128,7 +130,7 @@ export default function EmergencyContactsScreen() {
           )} />
         </BottomSheetScrollView>
         <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} label="Save Contact" />
-      </BottomSheetModal>
+      </ThemedBottomSheetModal>
     </BottomSheetModalProvider>
   );
 }

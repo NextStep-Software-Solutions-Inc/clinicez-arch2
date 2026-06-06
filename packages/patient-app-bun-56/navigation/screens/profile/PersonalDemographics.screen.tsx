@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ScrollView, View, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
+import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useForm, Controller } from 'react-hook-form';
 import { db } from '@db/index';
@@ -165,16 +165,16 @@ export default function PersonalDemographicsScreen() {
       >
         <ProfileSectionHeader title="Full Name" />
         <Controller control={control} name="firstName" render={({ field }) => (
-          <ProfileFormField label="First Name" value={field.value} onChangeText={field.onChange} required placeholder="e.g. Juan" />
+          <ProfileFormField label="First Name" value={field.value} onChangeText={field.onChange} required placeholder="e.g. Juan" useBottomSheetInput={false} />
         )} />
         <Controller control={control} name="middleName" render={({ field }) => (
-          <ProfileFormField label="Middle Name" value={field.value} onChangeText={field.onChange} placeholder="e.g. Santos" />
+          <ProfileFormField label="Middle Name" value={field.value} onChangeText={field.onChange} placeholder="e.g. Santos" useBottomSheetInput={false} />
         )} />
         <Controller control={control} name="lastName" render={({ field }) => (
-          <ProfileFormField label="Last Name" value={field.value} onChangeText={field.onChange} required placeholder="e.g. dela Cruz" />
+          <ProfileFormField label="Last Name" value={field.value} onChangeText={field.onChange} required placeholder="e.g. dela Cruz" useBottomSheetInput={false} />
         )} />
         <Controller control={control} name="suffix" render={({ field }) => (
-          <ProfileFormField label="Suffix" value={field.value} onChangeText={field.onChange} placeholder="e.g. Jr., III" />
+          <ProfileFormField label="Suffix" value={field.value} onChangeText={field.onChange} placeholder="e.g. Jr., III" useBottomSheetInput={false} />
         )} />
 
         <ProfileSectionHeader title="Basic Information" />
@@ -189,7 +189,7 @@ export default function PersonalDemographicsScreen() {
           <ProfileDatePicker label="Date of Birth" value={field.value} onChange={field.onChange} maximumDate={new Date()} />
         )} />
         <Controller control={control} name="placeOfBirth" render={({ field }) => (
-          <ProfileFormField label="Place of Birth" value={field.value} onChangeText={field.onChange} placeholder="City, Province" />
+          <ProfileFormField label="Place of Birth" value={field.value} onChangeText={field.onChange} placeholder="City, Province" useBottomSheetInput={false} />
         )} />
         <Controller control={control} name="civilStatus" render={({ field }) => (
           <SettingsRow
@@ -208,16 +208,16 @@ export default function PersonalDemographicsScreen() {
 
         <ProfileSectionHeader title="Background" />
         <Controller control={control} name="nationality" render={({ field }) => (
-          <ProfileFormField label="Nationality" value={field.value} onChangeText={field.onChange} />
+          <ProfileFormField label="Nationality" value={field.value} onChangeText={field.onChange} useBottomSheetInput={false} />
         )} />
         <Controller control={control} name="ethnicity" render={({ field }) => (
-          <ProfileFormField label="Ethnicity" value={field.value} onChangeText={field.onChange} placeholder="Optional" />
+          <ProfileFormField label="Ethnicity" value={field.value} onChangeText={field.onChange} placeholder="Optional" useBottomSheetInput={false} />
         )} />
         <Controller control={control} name="religion" render={({ field }) => (
-          <ProfileFormField label="Religion" value={field.value} onChangeText={field.onChange} placeholder="Optional" />
+          <ProfileFormField label="Religion" value={field.value} onChangeText={field.onChange} placeholder="Optional" useBottomSheetInput={false} />
         )} />
         <Controller control={control} name="primaryLanguage" render={({ field }) => (
-          <ProfileFormField label="Primary Language" value={field.value} onChangeText={field.onChange} placeholder="e.g. Filipino" />
+          <ProfileFormField label="Primary Language" value={field.value} onChangeText={field.onChange} placeholder="e.g. Filipino" useBottomSheetInput={false} />
         )} />
         <Controller control={control} name="educationLevel" render={({ field }) => (
           <SettingsRow

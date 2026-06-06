@@ -4,7 +4,8 @@ import { useForm, Controller } from 'react-hook-form';
 import { db } from '@db/index';
 import { patientFamilyHistory } from '@db/schema/patientFamilyHistory';
 import { eq } from 'drizzle-orm';
-import { BottomSheetModal, BottomSheetModalProvider, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { BottomSheetModalProvider, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import type { BottomSheetModal as BottomSheetModalType } from '@gorhom/bottom-sheet';
 import ProfileFormField from 'components/profile/ProfileFormField';
 import ProfileListItemCard from 'components/profile/ProfileListItemCard';
 import ProfileAddButton from 'components/profile/ProfileAddButton';
@@ -14,12 +15,15 @@ import ProfileSelectModal from 'components/profile/ProfileSelectModal';
 import ProfileToggle from 'components/profile/ProfileToggle';
 import { randomUUID } from 'expo-crypto';
 import { usePatientId } from 'hooks/usePatientId';
+import ThemedBottomSheetModal from '@ui/ThemedBottomSheetModal';
+
+type FamilySide = 'Paternal' | 'Maternal' | 'Both' | 'Unknown';
 
 type Form = {
   id: string | null;
   condition: string;
   affectedRelative: string;
-  side: string;
+  side: FamilySide | '';
   ageOfOnset: string;
   isDeceased: boolean;
   ageAtDeath: string;
@@ -40,7 +44,7 @@ export default function FamilyHistoryScreen() {
   const [items, setItems] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const [sideModal, setSideModal] = useState(false);
-  const sheetRef = useRef<BottomSheetModal>(null);
+  const sheetRef = useRef<BottomSheetModalType>(null);
   const { control, handleSubmit, reset, watch, formState: { isDirty } } = useForm<Form>({ defaultValues: EMPTY });
   const isDeceased = watch('isDeceased');
 
@@ -48,7 +52,7 @@ export default function FamilyHistoryScreen() {
     const rows = await db.select().from(patientFamilyHistory).where(eq(patientFamilyHistory.patientId, patientId));
     setItems(rows.filter((r) => !r.deletedAt));
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [patientId]);
 
   const openEdit = (row: any) => {
     reset({ id: row.id, condition: row.condition ?? '', affectedRelative: row.affectedRelative ?? '', side: row.side ?? '', ageOfOnset: row.ageOfOnset?.toString() ?? '', isDeceased: row.isDeceased ?? false, ageAtDeath: row.ageAtDeath?.toString() ?? '', causeOfDeath: row.causeOfDeath ?? '', notes: row.notes ?? '' });
@@ -64,7 +68,12 @@ export default function FamilyHistoryScreen() {
     setSaving(true);
     const { id, ...rest } = data;
     try {
-      const payload = { ...rest, ageOfOnset: data.ageOfOnset ? parseInt(data.ageOfOnset) : null, ageAtDeath: data.ageAtDeath ? parseInt(data.ageAtDeath) : null };
+      const payload = {
+        ...rest,
+        side: rest.side || null,
+        ageOfOnset: data.ageOfOnset ? parseInt(data.ageOfOnset, 10) : null,
+        ageAtDeath: data.ageAtDeath ? parseInt(data.ageAtDeath, 10) : null,
+      };
       if (id) {
         await db.update(patientFamilyHistory).set({ ...payload, updatedAt: new Date() }).where(eq(patientFamilyHistory.id, id));
       } else {
@@ -85,7 +94,7 @@ export default function FamilyHistoryScreen() {
         <ProfileAddButton label="Add Family Condition" onPress={() => { reset(EMPTY); sheetRef.current?.present(); }} />
       </ScrollView>
 
-      <BottomSheetModal ref={sheetRef} snapPoints={['60%', '85%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
+      <ThemedBottomSheetModal ref={sheetRef} snapPoints={['60%', '85%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
         <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title="Family Health Condition" />
           <Controller control={control} name="condition" render={({ field }) => (
@@ -121,7 +130,7 @@ export default function FamilyHistoryScreen() {
         <Controller control={control} name="side" render={({ field }) => (
           <ProfileSelectModal visible={sideModal} title="Family Side" options={SIDE_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setSideModal(false)} />
         )} />
-      </BottomSheetModal>
+      </ThemedBottomSheetModal>
     </BottomSheetModalProvider>
   );
 }

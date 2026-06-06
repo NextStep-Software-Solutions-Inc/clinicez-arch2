@@ -4,7 +4,9 @@ import { useForm, Controller } from 'react-hook-form';
 import { db } from '@db/index';
 import { patientMedications } from '@db/schema/patientMedications';
 import { eq } from 'drizzle-orm';
-import { BottomSheetModal, BottomSheetModalProvider, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { BottomSheetModalProvider, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import type { BottomSheetModal as BottomSheetModalType } from '@gorhom/bottom-sheet';
+import ThemedBottomSheetModal from '@ui/ThemedBottomSheetModal';
 import ProfileFormField from 'components/profile/ProfileFormField';
 import ProfileListItemCard from 'components/profile/ProfileListItemCard';
 import ProfileAddButton from 'components/profile/ProfileAddButton';
@@ -34,7 +36,7 @@ export default function MedicationsScreen() {
   const patientId = usePatientId();
   const [items, setItems] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
-  const sheetRef = useRef<BottomSheetModal>(null);
+  const sheetRef = useRef<BottomSheetModalType>(null);
 
   const { control, handleSubmit, reset, formState: { isDirty } } = useForm<MedForm>({ defaultValues: EMPTY });
 
@@ -90,7 +92,7 @@ export default function MedicationsScreen() {
         <ProfileAddButton label="Add Medication" onPress={() => { reset(EMPTY); sheetRef.current?.present(); }} />
       </ScrollView>
 
-      <BottomSheetModal ref={sheetRef} snapPoints={['60%', '90%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
+      <ThemedBottomSheetModal ref={sheetRef} snapPoints={['60%', '90%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
         <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title="Medication" />
           <Controller control={control} name="drugName" render={({ field }) => (
@@ -119,7 +121,7 @@ export default function MedicationsScreen() {
           )} />
         </BottomSheetScrollView>
         <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} label="Save Medication" />
-      </BottomSheetModal>
+      </ThemedBottomSheetModal>
     </BottomSheetModalProvider>
   );
 }

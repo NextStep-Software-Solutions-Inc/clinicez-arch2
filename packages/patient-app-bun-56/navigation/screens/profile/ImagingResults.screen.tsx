@@ -17,7 +17,7 @@ export default function ImagingResultsScreen() {
   useEffect(() => {
     db.select().from(imagingResults).where(eq(imagingResults.patientId, patientId)).orderBy(desc(imagingResults.examDate))
       .then(setRecords).catch(console.error);
-  }, []);
+  }, [patientId]);
 
   return (
     <FlatList
@@ -29,14 +29,14 @@ export default function ImagingResultsScreen() {
       renderItem={({ item }) => (
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <ProfileSectionHeader title={[item.imagingType, item.bodyPart].filter(Boolean).join(' — ') || 'Imaging Result'} />
-          <ProfileReadOnlyField label="Date" value={item.imagingDate} />
+          <ProfileReadOnlyField label="Date" value={item.examDate} />
           <ProfileReadOnlyField label="Imaging Type" value={item.imagingType} />
           <ProfileReadOnlyField label="Body Part" value={item.bodyPart} />
-          <ProfileReadOnlyField label="Facility" value={item.facilityName} />
-          <ProfileReadOnlyField label="Radiologist" value={item.radiologistName} />
+          <ProfileReadOnlyField label="Radiologist" value={item.radiologist} />
           <ProfileReadOnlyField label="Findings" value={item.findings} />
           <ProfileReadOnlyField label="Impression" value={item.impression} />
-          <ProfileReadOnlyField label="Ordered By" value={item.orderedBy} />
+          <ProfileReadOnlyField label="Recommendation" value={item.recommendation} />
+          <ProfileReadOnlyField label="Ordered By" value={item.orderingPhysician} />
         </View>
       )}
     />

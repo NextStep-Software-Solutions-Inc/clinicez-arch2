@@ -12,14 +12,21 @@ import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
 import ProfileSaveBar from 'components/profile/ProfileSaveBar';
 import { usePatientId } from 'hooks/usePatientId';
 
-type FormValues = { dentistName: string; dentistClinic: string; orthodonticDevice: string; eyeDoctorName: string; correctiveLenses: string; visionNotes: string; };
+type CorrectiveLenses = 'None' | 'Glasses' | 'Contacts' | 'Both';
+
+type FormValues = {
+  dentistName: string;
+  dentistClinic: string;
+  orthodonticDevice: string;
+  eyeDoctorName: string;
+  correctiveLenses: CorrectiveLenses | '';
+};
 
 const LENSES_OPTIONS = [
   { label: 'None', value: 'None' },
   { label: 'Eyeglasses', value: 'Glasses' },
   { label: 'Contact Lenses', value: 'Contacts' },
   { label: 'Both', value: 'Both' },
-  { label: 'Post-LASIK / Surgical', value: 'PostSurgical' },
 ];
 
 export default function DentalVisionScreen() {
@@ -29,24 +36,39 @@ export default function DentalVisionScreen() {
   const [lensesModal, setLensesModal] = useState(false);
 
   const { control, handleSubmit, reset, formState: { isDirty } } = useForm<FormValues>({
-    defaultValues: { dentistName: '', dentistClinic: '', orthodonticDevice: '', eyeDoctorName: '', correctiveLenses: '', visionNotes: '' },
+    defaultValues: { dentistName: '', dentistClinic: '', orthodonticDevice: '', eyeDoctorName: '', correctiveLenses: '' },
   });
 
   useEffect(() => {
     db.query.patientDentalVision.findFirst({ where: eq(patientDentalVision.patientId, patientId) })
       .then((row) => {
         if (row) {
-          reset({ dentistName: row.dentistName ?? '', dentistClinic: row.dentistClinic ?? '', orthodonticDevice: row.orthodonticDevice ?? '', eyeDoctorName: row.eyeDoctorName ?? '', correctiveLenses: row.correctiveLenses ?? '', visionNotes: row.visionNotes ?? '' });
+          reset({
+            dentistName: row.dentistName ?? '',
+            dentistClinic: row.dentistClinic ?? '',
+            orthodonticDevice: row.orthodonticDevice ?? '',
+            eyeDoctorName: row.eyeDoctorName ?? '',
+            correctiveLenses: row.correctiveLenses ?? '',
+          });
         }
       })
       .catch(console.error);
-  }, [reset]);
+  }, [patientId, reset]);
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
     try {
-      const payload = { ...data, updatedAt: new Date() };
-      await db.insert(patientDentalVision).values({ id: randomUUID(), patientId: patientId, ...payload, createdAt: new Date() }).onConflictDoUpdate({ target: patientDentalVision.patientId, set: payload });
+      const payload = {
+        ...data,
+        correctiveLenses: data.correctiveLenses || null,
+        updatedAt: new Date(),
+      };
+
+      await db
+        .insert(patientDentalVision)
+        .values({ id: randomUUID(), patientId, ...payload, createdAt: new Date() })
+        .onConflictDoUpdate({ target: patientDentalVision.patientId, set: payload });
+
       reset(data);
       navigation.goBack();
     } catch (e) { console.error(e); } finally { setSaving(false); }
@@ -72,9 +94,6 @@ export default function DentalVisionScreen() {
         )} />
         <Controller control={control} name="correctiveLenses" render={({ field }) => (
           <ProfileFormField label="Corrective Lenses" value={LENSES_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setLensesModal(true)} placeholder="Select option" />
-        )} />
-        <Controller control={control} name="visionNotes" render={({ field }) => (
-          <ProfileFormField label="Vision Notes" value={field.value} onChangeText={field.onChange} multiline placeholder="e.g. Myopia -3.50, Color blind, LASIK done 2021" />
         )} />
       </ScrollView>
       <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} />

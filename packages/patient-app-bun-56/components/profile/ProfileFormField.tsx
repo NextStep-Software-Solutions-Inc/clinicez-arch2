@@ -11,6 +11,11 @@ interface ProfileFormFieldProps extends Omit<TextInputProps, 'value' | 'onChange
   editable?: boolean;
   /** Marks the field as a tappable picker: disables keyboard but keeps full-opacity styling + chevron */
   picker?: boolean;
+  /**
+   * Use the BottomSheet-aware input only when this field is rendered inside a BottomSheet.
+   * Rendering BottomSheetTextInput outside of a sheet throws runtime context errors.
+   */
+  useBottomSheetInput?: boolean;
 }
 
 export default function ProfileFormField({
@@ -20,6 +25,7 @@ export default function ProfileFormField({
   required = false,
   editable = true,
   picker = false,
+  useBottomSheetInput = false,
   multiline = false,
   ...rest
 }: ProfileFormFieldProps) {
@@ -28,8 +34,10 @@ export default function ProfileFormField({
   const isDisabled = !editable && !picker;
   const isPickerField = picker || (!editable && !!rest.onPressIn);
 
+  const InputComponent = useBottomSheetInput ? BottomSheetTextInput : TextInput;
+
   const inputEl = (
-    <BottomSheetTextInput
+    <InputComponent
       value={value ?? ''}
       onChangeText={onChangeText}
       editable={isPickerField ? false : editable}

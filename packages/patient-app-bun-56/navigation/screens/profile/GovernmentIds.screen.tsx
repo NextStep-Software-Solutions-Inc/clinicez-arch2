@@ -14,10 +14,14 @@ import ProfileSaveBar from 'components/profile/ProfileSaveBar';
 import { randomUUID } from 'expo-crypto';
 import { usePatientId } from 'hooks/usePatientId';
 
+type PhilhealthCategory = 'Member' | 'Dependent' | 'Indigent' | 'SeniorCitizen' | 'PWD';
+type DisabilityType = 'Physical' | 'Sensory' | 'Intellectual' | 'Psychosocial';
+type HmoPlanType = 'Individual' | 'Group' | 'Family';
+
 
 type FormValues = {
   philhealthId: string;
-  philhealthCategory: string;
+  philhealthCategory: PhilhealthCategory | '';
   sssNumber: string;
   gsisNumber: string;
   pagIbigNumber: string;
@@ -25,34 +29,33 @@ type FormValues = {
   seniorCitizenId: string;
   isPwd: boolean;
   pwdIdNumber: string;
-  disabilityType: string;
+  disabilityType: DisabilityType | '';
   hmoProvider: string;
   hmoPolicyNumber: string;
-  hmoPlanType: string;
+  hmoPlanType: HmoPlanType | '';
   hmoCoverageStart: string;
   hmoCoverageEnd: string;
 };
 
 const PHILHEALTH_CATEGORY_OPTIONS = [
-  { label: 'Employed', value: 'Employed' },
-  { label: 'Self-Employed', value: 'SelfEmployed' },
+  { label: 'Member', value: 'Member' },
+  { label: 'Dependent', value: 'Dependent' },
   { label: 'Indigent', value: 'Indigent' },
   { label: 'Senior Citizen', value: 'SeniorCitizen' },
-  { label: 'Lifetime Member', value: 'LifetimeMember' },
-  { label: 'OFW', value: 'OFW' },
+  { label: 'PWD', value: 'PWD' },
 ];
 
 const DISABILITY_TYPE_OPTIONS = [
   { label: 'Physical', value: 'Physical' },
-  { label: 'Visual', value: 'Visual' },
-  { label: 'Hearing', value: 'Hearing' },
-  { label: 'Mental/Psychosocial', value: 'Mental' },
+  { label: 'Sensory', value: 'Sensory' },
+  { label: 'Intellectual', value: 'Intellectual' },
+  { label: 'Psychosocial', value: 'Psychosocial' },
 ];
 
 const HMO_PLAN_TYPE_OPTIONS = [
   { label: 'Individual', value: 'Individual' },
   { label: 'Family', value: 'Family' },
-  { label: 'Corporate', value: 'Corporate' },
+  { label: 'Group', value: 'Group' },
 ];
 
 export default function GovernmentIdsScreen() {
@@ -82,8 +85,8 @@ export default function GovernmentIdsScreen() {
             philhealthCategory: row.philhealthCategory ?? '',
             sssNumber: row.sssNumber ?? '',
             gsisNumber: row.gsisNumber ?? '',
-            pagIbigNumber: row.pagIbigNumber ?? '',
-            tinNumber: row.tinNumber ?? '',
+            pagIbigNumber: row.pagibigId ?? '',
+            tinNumber: row.tin ?? '',
             seniorCitizenId: row.seniorCitizenId ?? '',
             isPwd: row.isPwd ?? false,
             pwdIdNumber: row.pwdIdNumber ?? '',
@@ -97,20 +100,38 @@ export default function GovernmentIdsScreen() {
         }
       })
       .catch(console.error);
-  }, [reset]);
+  }, [patientId, reset]);
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
     try {
+      const payload = {
+        philhealthId: data.philhealthId,
+        philhealthCategory: data.philhealthCategory || null,
+        sssNumber: data.sssNumber,
+        gsisNumber: data.gsisNumber,
+        pagibigId: data.pagIbigNumber,
+        tin: data.tinNumber,
+        seniorCitizenId: data.seniorCitizenId,
+        isPwd: data.isPwd,
+        pwdIdNumber: data.pwdIdNumber,
+        disabilityType: data.disabilityType || null,
+        hmoProvider: data.hmoProvider,
+        hmoPolicyNumber: data.hmoPolicyNumber,
+        hmoPlanType: data.hmoPlanType || null,
+        hmoCoverageStart: data.hmoCoverageStart,
+        hmoCoverageEnd: data.hmoCoverageEnd,
+      };
+
       await db.insert(patientGovernmentIds).values({
         id: randomUUID(),
-        patientId: patientId,
-        ...data,
+        patientId,
+        ...payload,
         createdAt: new Date(),
         updatedAt: new Date(),
       }).onConflictDoUpdate({
         target: patientGovernmentIds.patientId,
-        set: { ...data, updatedAt: new Date() },
+        set: { ...payload, updatedAt: new Date() },
       });
       reset(data);
       navigation.goBack();

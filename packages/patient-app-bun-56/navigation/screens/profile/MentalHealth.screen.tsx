@@ -13,7 +13,15 @@ import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
 import ProfileSaveBar from 'components/profile/ProfileSaveBar';
 import { usePatientId } from 'hooks/usePatientId';
 
-type FormValues = { hasPriorDiagnosis: boolean; diagnosisName: string; providerName: string; providerSpecialty: string; providerClinic: string; psychotherapyStatus: string; notes: string; };
+type PsychotherapyStatus = 'Active' | 'Inactive' | 'None';
+
+type FormValues = {
+  hasPriorDiagnosis: boolean;
+  providerName: string;
+  providerSpecialty: string;
+  providerClinic: string;
+  psychotherapyStatus: PsychotherapyStatus | '';
+};
 
 const PSYCHOTHERAPY_OPTIONS = [
   { label: 'Active (Currently attending)', value: 'Active' },
@@ -27,25 +35,34 @@ export default function MentalHealthScreen() {
   const [saving, setSaving] = useState(false);
   const [therapyModal, setTherapyModal] = useState(false);
 
-  const { control, handleSubmit, reset, watch, formState: { isDirty } } = useForm<FormValues>({
-    defaultValues: { hasPriorDiagnosis: false, diagnosisName: '', providerName: '', providerSpecialty: '', providerClinic: '', psychotherapyStatus: '', notes: '' },
+  const { control, handleSubmit, reset, formState: { isDirty } } = useForm<FormValues>({
+    defaultValues: { hasPriorDiagnosis: false, providerName: '', providerSpecialty: '', providerClinic: '', psychotherapyStatus: '' },
   });
-  const hasPriorDiagnosis = watch('hasPriorDiagnosis');
 
   useEffect(() => {
     db.query.patientMentalHealthProfile.findFirst({ where: eq(patientMentalHealthProfile.patientId, patientId) })
       .then((row) => {
         if (row) {
-          reset({ hasPriorDiagnosis: row.hasPriorDiagnosis ?? false, diagnosisName: row.diagnosisName ?? '', providerName: row.providerName ?? '', providerSpecialty: row.providerSpecialty ?? '', providerClinic: row.providerClinic ?? '', psychotherapyStatus: row.psychotherapyStatus ?? '', notes: row.notes ?? '' });
+          reset({
+            hasPriorDiagnosis: row.hasPriorDiagnosis ?? false,
+            providerName: row.providerName ?? '',
+            providerSpecialty: row.providerSpecialty ?? '',
+            providerClinic: row.providerClinic ?? '',
+            psychotherapyStatus: row.psychotherapyStatus ?? '',
+          });
         }
       })
       .catch(console.error);
-  }, [reset]);
+  }, [patientId, reset]);
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
     try {
-      const payload = { ...data, updatedAt: new Date() };
+      const payload = {
+        ...data,
+        psychotherapyStatus: data.psychotherapyStatus || null,
+        updatedAt: new Date(),
+      };
       await db.insert(patientMentalHealthProfile).values({ id: randomUUID(), patientId: patientId, ...payload, createdAt: new Date() }).onConflictDoUpdate({ target: patientMentalHealthProfile.patientId, set: payload });
       reset(data);
       navigation.goBack();
@@ -59,11 +76,6 @@ export default function MentalHealthScreen() {
         <Controller control={control} name="hasPriorDiagnosis" render={({ field }) => (
           <ProfileToggle label="Has Prior Mental Health Diagnosis" value={field.value} onValueChange={field.onChange} />
         )} />
-        {hasPriorDiagnosis && (
-          <Controller control={control} name="diagnosisName" render={({ field }) => (
-            <ProfileFormField label="Diagnosis" value={field.value} onChangeText={field.onChange} placeholder="e.g. Major Depressive Disorder, Anxiety" />
-          )} />
-        )}
         <ProfileSectionHeader title="Mental Health Provider" />
         <Controller control={control} name="providerName" render={({ field }) => (
           <ProfileFormField label="Provider Name" value={field.value} onChangeText={field.onChange} placeholder="Optional" />
@@ -77,9 +89,6 @@ export default function MentalHealthScreen() {
         <ProfileSectionHeader title="Psychotherapy" />
         <Controller control={control} name="psychotherapyStatus" render={({ field }) => (
           <ProfileFormField label="Psychotherapy Status" value={PSYCHOTHERAPY_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setTherapyModal(true)} placeholder="Select status" />
-        )} />
-        <Controller control={control} name="notes" render={({ field }) => (
-          <ProfileFormField label="Additional Notes" value={field.value} onChangeText={field.onChange} multiline placeholder="Optional" />
         )} />
       </ScrollView>
       <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} />

@@ -3,6 +3,7 @@ import { AppState, AppStateStatus } from 'react-native';
 import { useAuth as useClerkAuth, useClerk } from '@clerk/expo';
 import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
+import { seedDemoHealthRecords } from '@db/seedDemoData';
 
 const PIN_KEY = 'app_pin';
 const HAS_PIN_KEY = 'has_pin';
@@ -30,7 +31,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const { isSignedIn } = useClerkAuth();
+  const { isSignedIn, userId } = useClerkAuth();
   const { signOut } = useClerk();
   const [hasPIN, setHasPIN] = useState(false);
   const [biometricsEnabled, setBiometricsEnabledState] = useState(false);
@@ -38,6 +39,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [lockTimeout, setLockTimeoutState] = useState(DEFAULT_LOCK_TIMEOUT_MS);
   const [isLoading, setIsLoading] = useState(true);
   const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const seededForUserRef = useRef<string | null>(null);
+  const isDemoSeedEnabled = process.env.EXPO_PUBLIC_SEED_DEMO_DATA === 'true';
 
   // Hydrate PIN and biometrics state from secure store on mount
   useEffect(() => {
@@ -86,6 +89,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
     };
   }, [hasPIN, lockTimeout]);
+
+  useEffect(() => {
+    if (!isDemoSeedEnabled || !isSignedIn || !userId || isLoading) return;
+    if (seededForUserRef.current === userId) return;
+
+    let cancelled = false;
+
+    const runDemoSeed = async () => {
+      try {
+        await seedDemoHealthRecords(userId);
+        if (!cancelled) {
+          seededForUserRef.current = userId;
+        }
+      } catch (error) {
+        console.error('Failed to seed demo health records:', error);
+      }
+    };
+
+    runDemoSeed();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isDemoSeedEnabled, isSignedIn, userId, isLoading]);
 
   const logout = async () => {
     await signOut();

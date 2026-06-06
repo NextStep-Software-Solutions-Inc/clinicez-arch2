@@ -90,13 +90,13 @@ export default function ProfileSelectModal({
                     styles.option,
                     { borderBottomColor: colors.border },
                     pressed && { opacity: 0.6 },
-                    isSelected && { backgroundColor: colors.primary, color: colors.card },
+                    isSelected && { backgroundColor: colors.primary },
                   ]}
                 >
                   <ThemedText
                     style={[
                       styles.optionText,
-                      { color: isSelected ? colors.primary : colors.text },
+                      { color: isSelected ? colors.card : colors.text },
                       isSelected && styles.optionTextSelected,
                     ]}
                   >
@@ -104,8 +104,8 @@ export default function ProfileSelectModal({
                   </ThemedText>
                   {isSelected &&
                     Platform.select({
-                      ios: <SFSymbol name="checkmark" size={14} color={colors.primary} />,
-                      android: <MaterialSymbol name="check" size={16} color={colors.primary} />,
+                      ios: <SFSymbol name="checkmark" size={14} color={colors.card} />,
+                      android: <MaterialSymbol name="check" size={16} color={colors.card} />,
                     })}
                 </Pressable>
               );

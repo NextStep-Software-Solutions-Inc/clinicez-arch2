@@ -40,20 +40,30 @@ export default function ContactInfoScreen() {
         }
       })
       .catch(console.error);
-  }, [reset]);
+  }, [patientId, reset]);
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
     try {
-      await db.insert(patients).values({
-        id: patientId,
-        ...data,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }).onConflictDoUpdate({
-        target: patients.id,
-        set: { ...data, updatedAt: new Date() },
-      });
+      const existing = await db.query.patients.findFirst({ where: eq(patients.id, patientId) });
+
+      if (existing) {
+        await db
+          .update(patients)
+          .set({ ...data, updatedAt: new Date() })
+          .where(eq(patients.id, patientId));
+      } else {
+        await db.insert(patients).values({
+          id: patientId,
+          clerkUserId: patientId,
+          firstName: 'Unknown',
+          lastName: 'Unknown',
+          ...data,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      }
+
       reset(data);
       navigation.goBack();
     } catch (e) {

@@ -13,9 +13,12 @@ import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
 import ProfileSaveBar from 'components/profile/ProfileSaveBar';
 import { usePatientId } from 'hooks/usePatientId';
 
+type TobaccoStatus = 'Never' | 'Former' | 'Current';
+type SleepQuality = 'Good' | 'Fair' | 'Poor';
+
 
 type FormValues = {
-  tobaccoStatus: string;
+  tobaccoStatus: TobaccoStatus | '';
   cigsPerDay: string;
   quitDate: string;
   otherTobaccoProducts: string;
@@ -33,7 +36,7 @@ type FormValues = {
   dietPattern: string;
   foodRestrictions: string;
   sleepAvgHours: string;
-  sleepQuality: string;
+  sleepQuality: SleepQuality | '';
   waterIntake: string;
   caffeineUse: string;
   dailyScreenTime: string;
@@ -85,7 +88,7 @@ export default function SocialHistoryScreen() {
             alcoholUseLevel: row.alcoholUseLevel ?? '',
             alcoholType: row.alcoholType ?? '',
             alcoholFrequencyDaysPerWeek: row.alcoholFrequencyDaysPerWeek?.toString() ?? '',
-            alcoholQuantityPerOccasion: row.alcoholQuantityPerOccasion ?? '',
+            alcoholQuantityPerOccasion: row.alcoholQuantityPerOccasion?.toString() ?? '',
             substanceUse: row.substanceUse ?? false,
             substanceName: row.substanceName ?? '',
             substanceRoute: row.substanceRoute ?? '',
@@ -104,17 +107,20 @@ export default function SocialHistoryScreen() {
         }
       })
       .catch(console.error);
-  }, [reset]);
+  }, [patientId, reset]);
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
     try {
       const payload = {
         ...data,
+        tobaccoStatus: data.tobaccoStatus || null,
         cigsPerDay: data.cigsPerDay ? parseInt(data.cigsPerDay) : null,
         alcoholFrequencyDaysPerWeek: data.alcoholFrequencyDaysPerWeek ? parseInt(data.alcoholFrequencyDaysPerWeek) : null,
+        alcoholQuantityPerOccasion: data.alcoholQuantityPerOccasion ? parseInt(data.alcoholQuantityPerOccasion, 10) : null,
         exerciseFrequencyDaysPerWeek: data.exerciseFrequencyDaysPerWeek ? parseInt(data.exerciseFrequencyDaysPerWeek) : null,
         sleepAvgHours: data.sleepAvgHours ? parseFloat(data.sleepAvgHours) : null,
+        sleepQuality: data.sleepQuality || null,
         updatedAt: new Date(),
       };
       await db.insert(patientSocialHistory).values({

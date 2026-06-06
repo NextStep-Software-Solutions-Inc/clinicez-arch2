@@ -4,7 +4,8 @@ import { useForm, Controller } from 'react-hook-form';
 import { db } from '@db/index';
 import { patientAllergies } from '@db/schema/patientAllergies';
 import { eq } from 'drizzle-orm';
-import { BottomSheetModal, BottomSheetModalProvider, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { BottomSheetModalProvider, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import type { BottomSheetModal as BottomSheetModalType } from '@gorhom/bottom-sheet';
 import ProfileFormField from 'components/profile/ProfileFormField';
 import ProfileListItemCard from 'components/profile/ProfileListItemCard';
 import ProfileAddButton from 'components/profile/ProfileAddButton';
@@ -14,13 +15,15 @@ import ProfileSelectModal from 'components/profile/ProfileSelectModal';
 import ProfileToggle from 'components/profile/ProfileToggle';
 import { randomUUID } from 'expo-crypto';
 import { usePatientId } from 'hooks/usePatientId';
+import ThemedBottomSheetModal from '@ui/ThemedBottomSheetModal';
 
+type AllergySeverity = 'Mild' | 'Moderate' | 'Severe' | 'LifeThreatening';
 
 type AllergyForm = {
   id: string | null;
   allergen: string;
   reactionType: string;
-  severity: string;
+  severity: AllergySeverity | '';
   management: string;
   isActive: boolean;
 };
@@ -39,7 +42,7 @@ export default function AllergiesScreen() {
   const [items, setItems] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const [severityModal, setSeverityModal] = useState(false);
-  const sheetRef = useRef<BottomSheetModal>(null);
+  const sheetRef = useRef<BottomSheetModalType>(null);
 
   const { control, handleSubmit, reset, formState: { isDirty } } = useForm<AllergyForm>({ defaultValues: EMPTY });
 
@@ -48,7 +51,7 @@ export default function AllergiesScreen() {
     setItems(rows.filter((r) => !r.deletedAt));
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [patientId]);
 
   const openEdit = (row: any) => {
     reset({ id: row.id, allergen: row.allergen ?? '', reactionType: row.reactionType ?? '', severity: row.severity ?? '', management: row.management ?? '', isActive: row.isActive ?? true });
@@ -64,10 +67,20 @@ export default function AllergiesScreen() {
     setSaving(true);
     const { id, ...rest } = data;
     try {
+      const payload = {
+        ...rest,
+        severity: rest.severity || null,
+        updatedAt: new Date(),
+      };
       if (id) {
-        await db.update(patientAllergies).set({ ...rest, updatedAt: new Date() }).where(eq(patientAllergies.id, id));
+        await db.update(patientAllergies).set(payload).where(eq(patientAllergies.id, id));
       } else {
-        await db.insert(patientAllergies).values({ id: randomUUID(), patientId, ...rest, createdAt: new Date(), updatedAt: new Date() });
+        await db.insert(patientAllergies).values({
+          id: randomUUID(),
+          patientId,
+          ...payload,
+          createdAt: new Date(),
+        });
       }
       sheetRef.current?.dismiss();
       load();
@@ -95,7 +108,7 @@ export default function AllergiesScreen() {
         <ProfileAddButton label="Add Allergy" onPress={() => { reset(EMPTY); sheetRef.current?.present(); }} />
       </ScrollView>
 
-      <BottomSheetModal ref={sheetRef} snapPoints={['55%', '80%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
+      <ThemedBottomSheetModal ref={sheetRef} snapPoints={['55%', '80%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
         <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title="Allergy" />
           <Controller control={control} name="allergen" render={({ field }) => (
@@ -118,7 +131,7 @@ export default function AllergiesScreen() {
         <Controller control={control} name="severity" render={({ field }) => (
           <ProfileSelectModal visible={severityModal} title="Severity" options={SEVERITY_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setSeverityModal(false)} />
         )} />
-      </BottomSheetModal>
+      </ThemedBottomSheetModal>
     </BottomSheetModalProvider>
   );
 }

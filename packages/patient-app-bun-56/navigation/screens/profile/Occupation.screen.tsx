@@ -12,7 +12,16 @@ import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
 import ProfileSaveBar from 'components/profile/ProfileSaveBar';
 import { usePatientId } from 'hooks/usePatientId';
 
-type FormValues = { occupation: string; employer: string; industry: string; workEnvironment: string; yearsInOccupation: string; hazardExposure: string; };
+type WorkEnvironment = 'Office' | 'Field' | 'Factory' | 'Healthcare' | 'Agriculture' | 'Other';
+
+type FormValues = {
+  occupation: string;
+  employer: string;
+  industry: string;
+  workEnvironment: WorkEnvironment | '';
+  yearsInOccupation: string;
+  hazardExposure: string;
+};
 
 const WORK_ENV_OPTIONS = [
   { label: 'Office', value: 'Office' }, { label: 'Field', value: 'Field' },
@@ -38,12 +47,17 @@ export default function OccupationScreen() {
         }
       })
       .catch(console.error);
-  }, [reset]);
+  }, [patientId, reset]);
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
     try {
-      const payload = { ...data, yearsInOccupation: data.yearsInOccupation ? parseInt(data.yearsInOccupation) : null, updatedAt: new Date() };
+      const payload = {
+        ...data,
+        workEnvironment: data.workEnvironment || null,
+        yearsInOccupation: data.yearsInOccupation ? parseInt(data.yearsInOccupation, 10) : null,
+        updatedAt: new Date(),
+      };
       await db.insert(patientOccupation).values({ id: randomUUID(), patientId: patientId, ...payload, createdAt: new Date() }).onConflictDoUpdate({ target: patientOccupation.patientId, set: payload });
       reset(data);
       navigation.goBack();

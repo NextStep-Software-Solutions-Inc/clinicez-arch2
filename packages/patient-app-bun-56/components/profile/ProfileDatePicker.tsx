@@ -74,10 +74,8 @@ function WheelPicker({ items, selectedIndex, onSelect, flex = 1 }: WheelPickerPr
   const { colors } = useTheme();
   const scrollRef = useRef<ScrollView>(null);
 
-  // Pad top/bottom so first and last real items can appear centered
   const paddedData = [...Array(PAD).fill(''), ...items, ...Array(PAD).fill('')];
 
-  // Scroll to selectedIndex whenever it changes externally
   useEffect(() => {
     scrollRef.current?.scrollTo({ y: selectedIndex * ITEM_H, animated: false });
   }, [selectedIndex]);
@@ -91,12 +89,12 @@ function WheelPicker({ items, selectedIndex, onSelect, flex = 1 }: WheelPickerPr
     <View style={{ flex, height: ITEM_H * VISIBLE, overflow: 'hidden' }}>
       <ScrollView
         ref={scrollRef}
+        style={{ flex: 1, width: '100%' }} // 🆕 CHANGED: Ensures hit area stretches horizontally
         snapToInterval={ITEM_H}
         decelerationRate="fast"
         showsVerticalScrollIndicator={false}
         onMomentumScrollEnd={onMomentumScrollEnd}
         scrollEventThrottle={16}
-        contentOffset={{ x: 0, y: selectedIndex * ITEM_H }}
       >
         {paddedData.map((item, index) => {
           const isSelected = index - PAD === selectedIndex;
@@ -118,12 +116,10 @@ function WheelPicker({ items, selectedIndex, onSelect, flex = 1 }: WheelPickerPr
           );
         })}
       </ScrollView>
-      {/* Dim overlays above and below center row */}
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, { justifyContent: 'space-between' }]}>
         <View style={{ height: ITEM_H * PAD, backgroundColor: colors.card, opacity: 0.72 }} />
         <View style={{ height: ITEM_H * PAD, backgroundColor: colors.card, opacity: 0.72 }} />
       </View>
-      {/* Selection rail */}
       <View
         pointerEvents="none"
         style={[styles.selectionRail, { top: ITEM_H * PAD, height: ITEM_H, borderColor: colors.border }]}
@@ -136,7 +132,7 @@ function WheelPicker({ items, selectedIndex, onSelect, flex = 1 }: WheelPickerPr
 function DatePickerWheels({ date, onChange }: { date: Date; onChange: (d: Date) => void }) {
   const month = date.getMonth();
   const year = date.getFullYear();
-  const day = date.getDate() - 1; // 0-indexed
+  const day = date.getDate() - 1; 
   const yearIdx = Math.max(0, Math.min(year - YEAR_START, ALL_YEARS.length - 1));
   const numDays = numDaysInMonth(month, year);
   const DAYS = Array.from({ length: numDays }, (_, i) => String(i + 1));
@@ -160,8 +156,6 @@ function DatePickerWheels({ date, onChange }: { date: Date; onChange: (d: Date) 
 function TimePickerWheels({ date, onChange }: { date: Date; onChange: (d: Date) => void }) {
   const h24 = date.getHours();
   const isPM = h24 >= 12;
-  // Map h24 → 0-indexed in HOURS_12 ('1'..'12')
-  // 1→0 … 12→11, 13→0(PM) … 0→11(AM midnight)
   const hourIdx = h24 % 12 === 0 ? 11 : (h24 % 12) - 1;
   const minuteIdx = date.getMinutes();
 
@@ -231,11 +225,14 @@ export default function ProfileDatePicker({
 
       {show && (
         <Modal visible transparent animationType="slide" onRequestClose={handleCancel} statusBarTranslucent>
-          <Pressable style={styles.backdrop} onPress={handleCancel}>
-            <Pressable
-              style={[styles.sheet, { backgroundColor: colors.card, borderColor: colors.border }]}
-              onPress={() => undefined}
-            >
+          {/* 🆕 CHANGED: Changed wrapper to View. Decoupled backdrop and sheet. */}
+          <View style={styles.backdrop}> 
+            
+            {/* 🆕 CHANGED: Background touch target placed absolutely behind the sheet */}
+            <Pressable style={StyleSheet.absoluteFill} onPress={handleCancel} />
+
+            {/* 🆕 CHANGED: Sheet is now just a plain View. Removed onStartShouldSetResponder entirely. */}
+            <View style={[styles.sheet, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={[styles.toolbar, { borderBottomColor: colors.border }]}>
                 <Pressable onPress={handleCancel} style={styles.toolbarBtn} hitSlop={8}>
                   <ThemedText style={{ color: '#EF4444', fontSize: 15 }}>Cancel</ThemedText>
@@ -251,8 +248,8 @@ export default function ProfileDatePicker({
                   : <TimePickerWheels date={tempDate} onChange={setTempDate} />
                 }
               </View>
-            </Pressable>
-          </Pressable>
+            </View>
+          </View>
         </Modal>
       )}
     </View>
@@ -293,4 +290,3 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth,
   },
 });
-

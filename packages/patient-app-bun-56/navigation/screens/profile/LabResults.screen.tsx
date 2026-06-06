@@ -17,7 +17,7 @@ export default function LabResultsScreen() {
   useEffect(() => {
     db.select().from(labResults).where(eq(labResults.patientId, patientId)).orderBy(desc(labResults.dateResulted))
       .then(setRecords).catch(console.error);
-  }, []);
+  }, [patientId]);
 
   return (
     <FlatList
@@ -29,15 +29,15 @@ export default function LabResultsScreen() {
       renderItem={({ item }) => (
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <ProfileSectionHeader title={item.testName ?? 'Lab Result'} />
-          <ProfileReadOnlyField label="Collection Date" value={item.collectionDate} />
-          <ProfileReadOnlyField label="Result Date" value={item.resultDate} />
-          <ProfileReadOnlyField label="Value" value={item.value} />
+          <ProfileReadOnlyField label="Ordered Date" value={item.dateOrdered} />
+          <ProfileReadOnlyField label="Result Date" value={item.dateResulted} />
+          <ProfileReadOnlyField label="Component" value={item.componentParameter} />
+          <ProfileReadOnlyField label="Value" value={item.resultValue} />
           <ProfileReadOnlyField label="Unit" value={item.unit} />
           <ProfileReadOnlyField label="Reference Range" value={item.referenceRange} />
           <ProfileReadOnlyField label="Flag" value={item.flag} />
-          <ProfileReadOnlyField label="Lab Name" value={item.labName} />
-          <ProfileReadOnlyField label="Ordered By" value={item.orderedBy} />
-          <ProfileReadOnlyField label="Notes" value={item.notes} />
+          <ProfileReadOnlyField label="Laboratory" value={item.laboratory} />
+          <ProfileReadOnlyField label="Ordered By" value={item.orderingPhysician} />
         </View>
       )}
     />

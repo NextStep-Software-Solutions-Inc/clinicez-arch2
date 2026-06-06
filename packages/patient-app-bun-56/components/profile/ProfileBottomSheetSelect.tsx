@@ -1,16 +1,17 @@
 import { forwardRef, useCallback, useState } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 import  {
-  BottomSheetModal,
   BottomSheetBackdrop,
   BottomSheetFlatList,
   BottomSheetTextInput,
   BottomSheetView,
   type BottomSheetBackdropProps,
+  type BottomSheetModal,
 } from '@gorhom/bottom-sheet';
 import { useTheme } from '@react-navigation/native';
 import ThemedText from '@ui/ThemedText';
 import type { SelectOption } from './ProfileSelectModal';
+import ThemedBottomSheetModal from '@ui/ThemedBottomSheetModal';
 
 interface ProfileBottomSheetSelectProps {
   title: string;
@@ -44,13 +45,11 @@ const ProfileBottomSheetSelect = forwardRef<BottomSheetModal, ProfileBottomSheet
     };
 
     return (
-      <BottomSheetModal
+      <ThemedBottomSheetModal
         ref={ref}
         snapPoints={snapPoints}
         enablePanDownToClose
         backdropComponent={renderBackdrop}
-        backgroundStyle={{ backgroundColor: colors.card }}
-        handleIndicatorStyle={{ backgroundColor: colors.border }}
       >
         <BottomSheetView style={styles.header}>
           <ThemedText style={[styles.title, { color: colors.text }]}>{title}</ThemedText>
@@ -100,7 +99,7 @@ const ProfileBottomSheetSelect = forwardRef<BottomSheetModal, ProfileBottomSheet
           contentContainerStyle={styles.listContent}
           keyboardShouldPersistTaps="handled"
         />
-      </BottomSheetModal>
+      </ThemedBottomSheetModal>
     );
   },
 );

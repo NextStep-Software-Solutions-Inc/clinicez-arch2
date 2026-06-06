@@ -7,7 +7,9 @@ import { patientObstetricProfile } from '@db/schema/patientObstetricProfile';
 import { patientPregnancies } from '@db/schema/patientPregnancies';
 import { patientContraceptiveHistory } from '@db/schema/patientContraceptiveHistory';
 import { eq } from 'drizzle-orm';
-import { BottomSheetModal, BottomSheetModalProvider, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { BottomSheetModalProvider, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import type { BottomSheetModal as BottomSheetModalType } from '@gorhom/bottom-sheet';
+import ThemedBottomSheetModal from '@ui/ThemedBottomSheetModal';
 import { randomUUID } from 'expo-crypto';
 import ProfileFormField from 'components/profile/ProfileFormField';
 import ProfileListItemCard from 'components/profile/ProfileListItemCard';
@@ -97,8 +99,8 @@ export default function ObstetricProfileScreen() {
   const [outcomeModal, setOutcomeModal] = useState(false);
   const [deliveryModal, setDeliveryModal] = useState(false);
   const [contraModal, setContraModal] = useState(false);
-  const pregSheetRef = useRef<BottomSheetModal>(null);
-  const contraSheetRef = useRef<BottomSheetModal>(null);
+  const pregSheetRef = useRef<BottomSheetModalType>(null);
+  const contraSheetRef = useRef<BottomSheetModalType>(null);
 
   const obsForm = useForm<ObsForm>({
     defaultValues: { menarche: '', lastMenstrualPeriod: '', cycleLength: '', cycleDuration: '', dysmenorrhea: '', menopauseAge: '', gravida: '', para: '', abortion: '', living: '' },
@@ -250,7 +252,7 @@ export default function ObstetricProfileScreen() {
       </KeyboardAvoidingView>
 
       {/* Pregnancy Sheet */}
-      <BottomSheetModal ref={pregSheetRef} snapPoints={['55%', '80%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
+      <ThemedBottomSheetModal ref={pregSheetRef} snapPoints={['55%', '80%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
         <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title="Pregnancy" />
           <Controller control={pregForm.control} name="outcome" render={({ field }) => (
@@ -276,10 +278,10 @@ export default function ObstetricProfileScreen() {
         <Controller control={pregForm.control} name="deliveryMode" render={({ field }) => (
           <ProfileSelectModal visible={deliveryModal} title="Delivery Mode" options={DELIVERY_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setDeliveryModal(false)} />
         )} />
-      </BottomSheetModal>
+      </ThemedBottomSheetModal>
 
       {/* Contraceptive Sheet */}
-      <BottomSheetModal ref={contraSheetRef} snapPoints={['50%', '75%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
+      <ThemedBottomSheetModal ref={contraSheetRef} snapPoints={['50%', '75%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
         <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title="Contraceptive Method" />
           <Controller control={contraForm.control} name="method" render={({ field }) => (
@@ -302,7 +304,7 @@ export default function ObstetricProfileScreen() {
         <Controller control={contraForm.control} name="method" render={({ field }) => (
           <ProfileSelectModal visible={contraModal} title="Contraceptive Method" options={CONTRA_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setContraModal(false)} />
         )} />
-      </BottomSheetModal>
+      </ThemedBottomSheetModal>
     </BottomSheetModalProvider>
   );
 }

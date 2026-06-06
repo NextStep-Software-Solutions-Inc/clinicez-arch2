@@ -4,7 +4,9 @@ import { useForm, Controller } from 'react-hook-form';
 import { db } from '@db/index';
 import { patientSurgicalHistory } from '@db/schema/patientSurgicalHistory';
 import { eq } from 'drizzle-orm';
-import { BottomSheetModal, BottomSheetModalProvider, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { BottomSheetModalProvider, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import type { BottomSheetModal as BottomSheetModalType } from '@gorhom/bottom-sheet';
+import ThemedBottomSheetModal from '@ui/ThemedBottomSheetModal';
 import ProfileFormField from 'components/profile/ProfileFormField';
 import ProfileListItemCard from 'components/profile/ProfileListItemCard';
 import ProfileAddButton from 'components/profile/ProfileAddButton';
@@ -22,7 +24,7 @@ export default function SurgicalHistoryScreen() {
   const patientId = usePatientId();
   const [items, setItems] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
-  const sheetRef = useRef<BottomSheetModal>(null);
+  const sheetRef = useRef<BottomSheetModalType>(null);
   const { control, handleSubmit, reset, formState: { isDirty } } = useForm<SurgForm>({ defaultValues: EMPTY });
 
   const load = async () => {
@@ -65,7 +67,7 @@ export default function SurgicalHistoryScreen() {
         <ProfileAddButton label="Add Procedure" onPress={() => { reset(EMPTY); sheetRef.current?.present(); }} />
       </ScrollView>
 
-      <BottomSheetModal ref={sheetRef} snapPoints={['55%', '85%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
+      <ThemedBottomSheetModal ref={sheetRef} snapPoints={['55%', '85%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
         <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title="Surgery / Procedure" />
           <Controller control={control} name="procedure" render={({ field }) => (
@@ -88,7 +90,7 @@ export default function SurgicalHistoryScreen() {
           )} />
         </BottomSheetScrollView>
         <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} label="Save Procedure" />
-      </BottomSheetModal>
+      </ThemedBottomSheetModal>
     </BottomSheetModalProvider>
   );
 }

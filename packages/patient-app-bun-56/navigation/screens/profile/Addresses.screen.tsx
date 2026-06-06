@@ -1,10 +1,12 @@
 import { useEffect, useState, useRef } from 'react';
 import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useTheme } from '@react-navigation/native';
 import { db } from '@db/index';
 import { patientAddresses } from '@db/schema/patientAddresses';
 import { eq, isNull } from 'drizzle-orm';
-import { BottomSheetModal, BottomSheetModalProvider, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { BottomSheetModalProvider, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import type { BottomSheetModal as BottomSheetModalType } from '@gorhom/bottom-sheet';
+import ThemedBottomSheetModal from '@ui/ThemedBottomSheetModal';
 import { useForm, Controller } from 'react-hook-form';
 import ProfileFormField from 'components/profile/ProfileFormField';
 import ProfileListItemCard from 'components/profile/ProfileListItemCard';
@@ -13,7 +15,6 @@ import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
 import ProfileSaveBar from 'components/profile/ProfileSaveBar';
 import ProfileSelectModal from 'components/profile/ProfileSelectModal';
 import { randomUUID } from 'expo-crypto';
-import type { BottomSheetModal as BottomSheetModalType } from '@gorhom/bottom-sheet';
 import { usePatientId } from 'hooks/usePatientId';
 
 
@@ -42,6 +43,7 @@ const EMPTY_FORM: AddressForm = {
 export default function AddressesScreen() {
   const patientId = usePatientId();
   const navigation = useNavigation();
+  const { colors } = useTheme();
   const [addresses, setAddresses] = useState<any[]>([]);
   const [editing, setEditing] = useState<AddressForm | null>(null);
   const [saving, setSaving] = useState(false);
@@ -119,12 +121,14 @@ export default function AddressesScreen() {
         <ProfileAddButton label="Add Address" onPress={openAdd} />
       </ScrollView>
 
-      <BottomSheetModal 
+      <ThemedBottomSheetModal 
         ref={sheetRef} 
         snapPoints={['70%', '90%']}
         enablePanDownToClose
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
+        backgroundStyle={{ backgroundColor: colors.card }}
+        handleIndicatorStyle={{ backgroundColor: colors.text }}
       >
         
         <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
@@ -165,7 +169,7 @@ export default function AddressesScreen() {
           <ProfileSelectModal visible={typeModal} title="Address Type" options={TYPE_OPTIONS}
             selected={field.value} onSelect={field.onChange} onClose={() => setTypeModal(false)} />
         )} />
-      </BottomSheetModal>
+      </ThemedBottomSheetModal>
     </BottomSheetModalProvider>
   );
 }

@@ -17,7 +17,7 @@ export default function VitalSignsScreen() {
   useEffect(() => {
     db.select().from(vitalSigns).where(eq(vitalSigns.patientId, patientId)).orderBy(desc(vitalSigns.measuredAt))
       .then(setRecords).catch(console.error);
-  }, []);
+  }, [patientId]);
 
   return (
     <FlatList
@@ -28,17 +28,18 @@ export default function VitalSignsScreen() {
       ListEmptyComponent={<ProfileSectionHeader title="" description="No vital signs recorded yet. These are added by your healthcare provider." />}
       renderItem={({ item }) => (
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <ProfileSectionHeader title={item.recordedAt ? new Date(item.recordedAt).toLocaleDateString() : 'Recorded'} />
-          <ProfileReadOnlyField label="Blood Pressure" value={item.bloodPressureSystolic && item.bloodPressureDiastolic ? `${item.bloodPressureSystolic}/${item.bloodPressureDiastolic} mmHg` : null} />
-          <ProfileReadOnlyField label="Heart Rate" value={item.heartRate ? `${item.heartRate} bpm` : null} />
+          <ProfileSectionHeader title={item.measuredAt ? new Date(item.measuredAt).toLocaleDateString() : 'Recorded'} />
+          <ProfileReadOnlyField label="Blood Pressure" value={item.bpSystolic && item.bpDiastolic ? `${item.bpSystolic}/${item.bpDiastolic} mmHg` : null} />
+          <ProfileReadOnlyField label="Heart Rate" value={item.heartRateBpm ? `${item.heartRateBpm} bpm` : null} />
           <ProfileReadOnlyField label="Respiratory Rate" value={item.respiratoryRate ? `${item.respiratoryRate} breaths/min` : null} />
           <ProfileReadOnlyField label="Temperature" value={item.temperatureCelsius ? `${item.temperatureCelsius} °C` : null} />
-          <ProfileReadOnlyField label="Oxygen Saturation" value={item.oxygenSaturation ? `${item.oxygenSaturation}%` : null} />
+          <ProfileReadOnlyField label="Oxygen Saturation" value={item.spO2Percent ? `${item.spO2Percent}%` : null} />
           <ProfileReadOnlyField label="Weight" value={item.weightKg ? `${item.weightKg} kg` : null} />
           <ProfileReadOnlyField label="Height" value={item.heightCm ? `${item.heightCm} cm` : null} />
           <ProfileReadOnlyField label="BMI" value={item.bmi?.toString() ?? null} />
-          <ProfileReadOnlyField label="Blood Glucose" value={item.bloodGlucose ? `${item.bloodGlucose} mg/dL` : null} />
-          <ProfileReadOnlyField label="Recorded By" value={item.recordedBy} />
+          <ProfileReadOnlyField label="Blood Glucose" value={item.fastingBloodGlucose ? `${item.fastingBloodGlucose} mg/dL` : null} />
+          <ProfileReadOnlyField label="Recorded By" value={item.takenBy} />
+          <ProfileReadOnlyField label="Facility" value={item.facility} />
         </View>
       )}
     />

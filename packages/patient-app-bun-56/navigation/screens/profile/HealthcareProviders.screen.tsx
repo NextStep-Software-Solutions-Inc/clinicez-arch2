@@ -4,7 +4,9 @@ import { useForm, Controller } from 'react-hook-form';
 import { db } from '@db/index';
 import { patientHealthcareProviders } from '@db/schema/patientHealthcareProviders';
 import { eq } from 'drizzle-orm';
-import { BottomSheetModal, BottomSheetModalProvider, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { BottomSheetModalProvider, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import type { BottomSheetModal as BottomSheetModalType } from '@gorhom/bottom-sheet';
+import ThemedBottomSheetModal from '@ui/ThemedBottomSheetModal';
 import ProfileFormField from 'components/profile/ProfileFormField';
 import ProfileListItemCard from 'components/profile/ProfileListItemCard';
 import ProfileAddButton from 'components/profile/ProfileAddButton';
@@ -39,7 +41,7 @@ export default function HealthcareProvidersScreen() {
   const [providers, setProviders] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const [typeModal, setTypeModal] = useState(false);
-  const sheetRef = useRef<BottomSheetModal>(null);
+  const sheetRef = useRef<BottomSheetModalType>(null);
 
   const { control, handleSubmit, reset, formState: { isDirty } } = useForm<ProviderForm>({ defaultValues: EMPTY });
 
@@ -98,7 +100,7 @@ export default function HealthcareProvidersScreen() {
         <ProfileAddButton label="Add Provider" onPress={openAdd} />
       </ScrollView>
 
-      <BottomSheetModal ref={sheetRef} snapPoints={['55%', '85%']} enablePanDownToClose
+      <ThemedBottomSheetModal ref={sheetRef} snapPoints={['55%', '85%']} enablePanDownToClose
         keyboardBehavior="interactive" keyboardBlurBehavior="restore">
         <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title="Healthcare Provider" />
@@ -124,7 +126,7 @@ export default function HealthcareProvidersScreen() {
           <ProfileSelectModal visible={typeModal} title="Provider Type" options={PROVIDER_TYPE_OPTIONS}
             selected={field.value} onSelect={field.onChange} onClose={() => setTypeModal(false)} />
         )} />
-      </BottomSheetModal>
+      </ThemedBottomSheetModal>
     </BottomSheetModalProvider>
   );
 }
