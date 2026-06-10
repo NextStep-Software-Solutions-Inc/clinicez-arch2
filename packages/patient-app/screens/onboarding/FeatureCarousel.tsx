@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRef, useState } from "react";
-import { Dimensions, FlatList, Pressable, type ViewToken } from "react-native";
+import { Dimensions, FlatList, type ViewToken } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
@@ -51,7 +51,6 @@ const features: Feature[] = [
 
 export default function FeatureCarousel({
 	onNext,
-	onBack,
 }: FeatureCarouselProps) {
 	const [currentIndex, setCurrentIndex] = useState(0);
 	const flatListRef = useRef<FlatList>(null);
@@ -64,11 +63,11 @@ export default function FeatureCarousel({
 		},
 	);
 
-	const scrollToIndex = (index: number) => {
-		flatListRef.current?.scrollToIndex({ index, animated: true });
-	};
+	// const scrollToIndex = (index: number) => {
+	// 	flatListRef.current?.scrollToIndex({ index, animated: true });
+	// };
 
-	const isFirst = currentIndex === 0;
+	// const isFirst = currentIndex === 0;
 	const isLast = currentIndex === features.length - 1;
 
 	return (
@@ -107,7 +106,7 @@ export default function FeatureCarousel({
 										key={`dot-${
 											// biome-ignore lint/suspicious/noArrayIndexKey: stable indices
 											idx
-										}`}
+											}`}
 										style={{
 											height: 8,
 											width: currentIndex === idx ? 24 : 8,
