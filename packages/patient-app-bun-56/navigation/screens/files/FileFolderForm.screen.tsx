@@ -66,7 +66,7 @@ export default function FileFolderFormScreen({ route }: FilesScreenProps<'FileFo
             value={name}
             onChangeText={setName}
             placeholder="e.g. Medical records"
-            placeholderTextColor={colors.text + '66'}
+            placeholderTextColor={colors.text}
             autoFocus
             style={[styles.input, { color: colors.text }]}
           />

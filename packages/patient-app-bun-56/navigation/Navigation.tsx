@@ -117,8 +117,10 @@ const FilesStack = createNativeStackNavigator({
       options: {
         title: 'Folder',
         presentation: 'formSheet',
-        sheetGrabberVisible: true,
-        sheetAllowedDetents: [0.45, 0.9],
+        sheetAllowedDetents: [0.7],
+        sheetGrabberVisible: true,               // Adds drag indicator handle
+        sheetCornerRadius: 20,           // Customizes top corner rounds
+        headerShown: false,                   // Rounded corners
       },
     }),
     FileMoveScreen: createNativeStackScreen({

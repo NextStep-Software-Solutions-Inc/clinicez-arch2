@@ -26,6 +26,8 @@ import { useAuth as useClerkAuth } from '@clerk/expo';
 import EmptyState from '@ui/EmptyState';
 import ThemedText from '@ui/ThemedText';
 import { usePatientId } from 'hooks/usePatientId';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import {
   FileBrowserFile,
   FileBrowserFolder,
@@ -270,6 +272,9 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
   const navigation = useNavigation('FilesBrowserScreen');
   const patientId = usePatientId();
   const { getToken } = useClerkAuth();
+  const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight ? useBottomTabBarHeight() : 0;
+  const fabBottom = 20 + insets.bottom + tabBarHeight;
   const folderId = route.params?.folderId;
   const [fabOpen, setFabOpen] = useState(false);
   const getTokenRef = useRef(getToken);
@@ -418,7 +423,7 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
             colors={[BRAND]}
           />
         }
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, { paddingBottom: 110 + tabBarHeight }]}
         ItemSeparatorComponent={({ leadingItem }) =>
           (leadingItem as ListEntry).kind === 'section' ? null : <View style={{ height: 8 }} />
         }
@@ -484,9 +489,10 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
           );
         }}
       />
+      <ThemedText></ThemedText>
 
       {/* ── FAB ─────────────────────────────────────────────────────────────── */}
-      <View style={styles.fabWrap} pointerEvents="box-none">
+      <View style={[styles.fabWrap, { bottom: fabBottom }]} pointerEvents="box-none">
         {fabOpen && (
           <View style={styles.fabMenu}>
             <Pressable
@@ -514,6 +520,7 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
         >
           {Icon({ android: fabOpen ? 'close' : 'add', ios: fabOpen ? 'xmark' : 'plus', color: '#fff', size: 28 })}
         </Pressable>
+
       </View>
     </View>
   );
@@ -622,8 +629,8 @@ const styles = StyleSheet.create({
   swipeBtn: { width: 72, alignItems: 'center', justifyContent: 'center', gap: 3 },
   swipeBtnLabel: { color: '#fff', fontSize: 11, fontWeight: '700' },
 
-  fabWrap: { position: 'absolute', right: 20, bottom: 36, alignItems: 'flex-end' },
-  fabMenu: { marginBottom: 14, gap: 10, alignItems: 'flex-end' },
+  fabWrap: { position: 'absolute', right: 20, bottom: 36, alignItems: 'flex-end', zIndex: 9999, elevation: 20 },
+  fabMenu: { marginBottom: 94, gap: 10, alignItems: 'flex-end' },
   fabItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -651,6 +658,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.45,
     shadowRadius: 10,
     elevation: 8,
+    bottom: 80
   },
 });
 
