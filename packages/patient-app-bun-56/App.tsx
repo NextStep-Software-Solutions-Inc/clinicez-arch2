@@ -9,6 +9,7 @@ import { OnboardingProvider } from 'contexts/OnboardingContext';
 import { AppearanceProvider, useAppearance } from 'contexts/AppearanceContext';
 import { ClerkProvider } from '@clerk/expo';
 import { tokenCache } from '@clerk/expo/token-cache';
+import { resourceCache } from '@clerk/expo/resource-cache'
 import DatabaseProvider from 'components/DatabaseProvider';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -46,16 +47,16 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <GestureHandlerRootView style={{ flex: 1 }}>
-      <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
-        <AppearanceProvider>
-          <OnboardingProvider>
-            <AuthProvider>
-              <AppWithTheme />
-            </AuthProvider>
-          </OnboardingProvider>
-        </AppearanceProvider>
-      </ClerkProvider>
-    </GestureHandlerRootView>
+        <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache} __experimental_resourceCache={resourceCache}>
+          <AppearanceProvider>
+            <OnboardingProvider>
+              <AuthProvider>
+                <AppWithTheme />
+              </AuthProvider>
+            </OnboardingProvider>
+          </AppearanceProvider>
+        </ClerkProvider>
+      </GestureHandlerRootView>
     </SafeAreaProvider>
   );
 }
