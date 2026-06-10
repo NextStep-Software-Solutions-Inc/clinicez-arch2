@@ -536,10 +536,11 @@ export async function importFiles(input: ImportFilesInput) {
 
   // Preload existing names in the target folder so we can avoid duplicate names.
   const parentFolderId = input.folderId ?? null;
+  const parentFolderFilter = parentFolderId ? eq(filesMetadata.folderId, parentFolderId) : isNull(filesMetadata.folderId);
   const existingNameRows = await db
     .select({ name: filesMetadata.name })
     .from(filesMetadata)
-    .where(and(eq(filesMetadata.patientId, input.patientId), eq(filesMetadata.folderId, parentFolderId), isNull(filesMetadata.deletedAt)));
+    .where(and(eq(filesMetadata.patientId, input.patientId), parentFolderFilter, isNull(filesMetadata.deletedAt)));
   const existingNames = new Set(existingNameRows.map((r) => (r.name ?? '').toLowerCase()));
   const batchNames = new Set<string>();
 
