@@ -29,6 +29,9 @@ export * from './clinicMemberships';
 export * from './clinicOrganizationLinks';
 export * from './clinics';
 export * from './bookingDrafts';
+export * from './fileFolders';
+export * from './fileTypes';
+export * from './fileUploadConfig';
 export * from './filesMetadata';
 
 // Part B — HCW Entry (read-only for patient)

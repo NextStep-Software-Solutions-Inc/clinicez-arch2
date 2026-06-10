@@ -1,5 +1,5 @@
 import { createNativeStackNavigator, createNativeStackScreen } from '@react-navigation/native-stack';
-import { createStaticNavigation, StaticParamList } from '@react-navigation/native';
+import { createStaticNavigation, getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { createBottomTabNavigator, createBottomTabScreen } from '@react-navigation/bottom-tabs';
 import { Platform } from 'react-native';
 import { isLiquidGlassSupported } from '@callstack/liquid-glass';
@@ -9,6 +9,12 @@ import HomeScreen from './screens/Home.screen';
 import ProfileScreen from './screens/Profile.screen';
 import SettingsScreen from './screens/Settings.screen';
 import FilesScreen from './screens/Files.screen';
+import FilesUploadScreen from './screens/files/FilesUpload.screen';
+import FileFolderFormScreen from './screens/files/FileFolderForm.screen';
+import FileMoveScreen from './screens/files/FileMove.screen';
+import FileViewerScreen from './screens/files/FileViewer.screen';
+import ExternalOpenConsentScreen from './screens/files/ExternalOpenConsent.screen';
+import StorageScreen from './screens/files/Storage.screen';
 import ExploreClinicsScreen from './screens/ExploreClinics.screen';
 import ExploreOrgsScreen from './screens/ExploreOrgs.screen';
 import OrganizationDetailsScreen from './screens/OrganizationDetails.screen';
@@ -19,8 +25,6 @@ import LoginScreen from './screens/Login.screen';
 import SignupScreen from './screens/Signup.screen';
 import VerifyScreen from './screens/Verify.screen';
 import ForgotPasswordScreen from './screens/ForgotPassword.screen';
-import LockScreen from './screens/Lock.screen';
-import UnlockScreen from './screens/Unlock.screen';
 import WelcomeScreen from './screens/Welcome.screen';
 import OnboardScreen from './screens/Onboard.screen';
 import CreatePINScreen from './screens/CreatePIN.screen';
@@ -76,8 +80,7 @@ import {
   useIsOnboarding,
   useIsInAuthFlow,
   useIsSettingUpPIN,
-  useIsLocked,
-  useIsUnlocked,
+  useIsMainReady,
 } from 'hooks/useNavState';
 
 import BottomTabsHeaderRight from '../components/BottomTabsHeaderRight';
@@ -85,10 +88,58 @@ import BottomTabsHeaderRight from '../components/BottomTabsHeaderRight';
 export type RootStackType = typeof RootStack;
 
 declare module '@react-navigation/core' {
-  export interface RootNavigator extends RootStackType {}
+  export interface RootNavigator extends RootStackType { }
 }
 
 // ── Bottom Tabs ───────────────────────────────────────────────────────────────
+
+const FilesStack = createNativeStackNavigator({
+  screenOptions: {
+    headerStyle: {
+      backgroundColor: isLiquidGlassSupported ? 'transparent' : undefined,
+    },
+  },
+  screens: {
+    FilesBrowserScreen: createNativeStackScreen({
+      screen: FilesScreen,
+      options: { title: 'Files', headerLargeTitleEnabled: true },
+    }),
+    FilesUploadScreen: createNativeStackScreen({
+      screen: FilesUploadScreen,
+      options: { title: 'Add File', presentation: 'modal' },
+    }),
+    StorageScreen: createNativeStackScreen({
+      screen: StorageScreen,
+      options: { title: 'Storage', presentation: 'modal' },
+    }),
+    FileFolderFormScreen: createNativeStackScreen({
+      screen: FileFolderFormScreen,
+      options: {
+        title: 'Folder',
+        presentation: 'formSheet',
+        sheetGrabberVisible: true,
+        sheetAllowedDetents: [0.45, 0.9],
+      },
+    }),
+    FileMoveScreen: createNativeStackScreen({
+      screen: FileMoveScreen,
+      options: {
+        title: 'Move',
+        presentation: 'formSheet',
+        sheetGrabberVisible: true,
+        sheetAllowedDetents: [0.5, 1.0],
+      },
+    }),
+    FileViewerScreen: createNativeStackScreen({
+      screen: FileViewerScreen,
+      options: { title: 'Preview', headerLargeTitleEnabled: false },
+    }),
+    ExternalOpenConsentScreen: createNativeStackScreen({
+      screen: ExternalOpenConsentScreen,
+      options: { title: 'Open in Another App', presentation: 'modal' },
+    }),
+  },
+});
 
 const MainBottomTabs = createBottomTabNavigator({
   screenOptions: {
@@ -118,7 +169,7 @@ const MainBottomTabs = createBottomTabNavigator({
       },
     }),
     FilesScreen: createBottomTabScreen({
-      screen: FilesScreen,
+      screen: FilesStack,
       options: {
         title: 'Files',
         tabBarIcon: Platform.select({
@@ -184,26 +235,11 @@ const SetupPINStack = createNativeStackNavigator({
   screens: {
     CreatePIN: createNativeStackScreen({
       screen: CreatePINScreen,
-      options: { 
-        title: 'Create PIN', 
-        headerBackVisible: false, 
+      options: {
+        title: 'Create PIN',
+        headerBackVisible: false,
         headerShown: false
-       },
-    }),
-  },
-});
-
-// ── Lock Stack ────────────────────────────────────────────────────────────────
-
-const LockStack = createNativeStackNavigator({
-  screens: {
-    Lock: createNativeStackScreen({
-      screen: LockScreen,
-      options: { headerShown: false },
-    }),
-    Unlock: createNativeStackScreen({
-      screen: UnlockScreen,
-      options: { title: 'Unlock', headerBackVisible: false, headerShown: false  },
+      },
     }),
   },
 });
@@ -219,11 +255,17 @@ const MainStack = createNativeStackNavigator({
   screens: {
     BottomTabs: createNativeStackScreen({
       screen: MainBottomTabs,
-      options: {
-        title: 'Clinic EZ',
-        headerLargeTitleEnabled: true,
-        headerRight: BottomTabsHeaderRight,
-        headerBackVisible: false,
+      options: ({ route }) => {
+        const focusedTab = getFocusedRouteNameFromRoute(route) ?? 'HomeScreen';
+        const isFilesTabFocused = focusedTab === 'FilesScreen';
+
+        return {
+          title: 'Clinic EZ',
+          headerLargeTitleEnabled: true,
+          headerRight: BottomTabsHeaderRight,
+          headerBackVisible: false,
+          headerShown: !isFilesTabFocused,
+        };
       },
     }),
     SettingsScreen: createNativeStackScreen({
@@ -264,14 +306,14 @@ const MainStack = createNativeStackNavigator({
     }),
     ExploreClinicsScreen: createNativeStackScreen({
       screen: ExploreClinicsScreen,
-      options: { 
+      options: {
         title: 'Explore Clinics',
         headerLargeTitleEnabled: true
       },
     }),
     ExploreOrgsScreen: createNativeStackScreen({
       screen: ExploreOrgsScreen,
-      options: { 
+      options: {
         title: 'Explore Organizations',
         headerLargeTitleEnabled: true
       },
@@ -435,13 +477,9 @@ const RootStack = createNativeStackNavigator({
       screen: SetupPINStack,
       if: useIsSettingUpPIN,
     }),
-    LockFlow: createNativeStackScreen({
-      screen: LockStack,
-      if: useIsLocked,
-    }),
     Main: createNativeStackScreen({
       screen: MainStack,
-      if: useIsUnlocked,
+      if: useIsMainReady,
     }),
   },
 });

@@ -1,11 +1,14 @@
 import { View, StyleSheet, Pressable, Image, Alert } from 'react-native';
-import { useNavigation, useTheme } from '@react-navigation/native';
+import { useTheme } from '@react-navigation/native';
 import { useUser } from '@clerk/expo';
 import { useAuth } from 'contexts/AuthContext';
 import ThemedText from '@ui/ThemedText';
 
-export default function LockScreen() {
-  const navigation = useNavigation();
+interface LockScreenProps {
+  onUnlockPress: () => void;
+}
+
+export default function LockScreen({ onUnlockPress }: LockScreenProps) {
   const { colors } = useTheme();
   const { user } = useUser();
   const { logout } = useAuth();
@@ -56,7 +59,7 @@ export default function LockScreen() {
       <View style={styles.actions}>
         <Pressable
           style={({ pressed }) => [styles.cta, { backgroundColor: colors.primary ?? '#3B82F6' }, pressed && styles.ctaPressed]}
-          onPress={() => navigation.navigate('LockFlow', { screen: 'Unlock' })}
+          onPress={onUnlockPress}
           accessibilityRole='button'
           accessibilityLabel='Unlock app'
         >

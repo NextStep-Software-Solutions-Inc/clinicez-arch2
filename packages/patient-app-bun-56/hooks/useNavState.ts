@@ -45,11 +45,18 @@ export const useIsLocked = () => {
   return onboarding.isComplete && auth.isAuthenticated && auth.hasPIN && auth.isLocked;
 };
 
-/** Fully authenticated, PIN set, and unlocked — show main app */
-export const useIsUnlocked = () => {
+/** Fully authenticated with a PIN — show main app, with lock UI overlaid if needed */
+export const useIsMainReady = () => {
   const auth = useAuth();
   const onboarding = useOnboarding();
   const isAuthLoading = useIsAppLoading();
   if (isAuthLoading) return false;
-  return onboarding.isComplete && auth.isAuthenticated && auth.hasPIN && !auth.isLocked;
+  return onboarding.isComplete && auth.isAuthenticated && auth.hasPIN;
+};
+
+/** Fully authenticated, PIN set, and unlocked */
+export const useIsUnlocked = () => {
+  const auth = useAuth();
+  const isMainReady = useIsMainReady();
+  return isMainReady && !auth.isLocked;
 };

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { useAuth as useClerkAuth, useClerk } from '@clerk/expo';
 import * as SecureStore from 'expo-secure-store';
@@ -21,6 +21,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   lock: () => void;
   unlock: () => void;
+  runWithAutoLockPaused: <T>(task: () => Promise<T>) => Promise<T>;
   savePin: (pin: string) => Promise<void>;
   verifyPin: (pin: string) => Promise<boolean>;
   setBiometricsEnabled: (enabled: boolean) => Promise<void>;
@@ -39,8 +40,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [lockTimeout, setLockTimeoutState] = useState(DEFAULT_LOCK_TIMEOUT_MS);
   const [isLoading, setIsLoading] = useState(true);
   const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  const autoLockPauseDepthRef = useRef(0);
   const seededForUserRef = useRef<string | null>(null);
   const isDemoSeedEnabled = process.env.EXPO_PUBLIC_SEED_DEMO_DATA === 'true';
+
+  const clearLockTimer = useCallback(() => {
+    if (lockTimerRef.current) {
+      clearTimeout(lockTimerRef.current);
+      lockTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleLock = useCallback(() => {
+    clearLockTimer();
+
+    if (!hasPIN || lockTimeout < 0 || autoLockPauseDepthRef.current > 0) return;
+
+    if (lockTimeout === 0) {
+      setIsLocked(true);
+      return;
+    }
+
+    lockTimerRef.current = setTimeout(() => {
+      setIsLocked(true);
+    }, lockTimeout);
+  }, [clearLockTimer, hasPIN, lockTimeout]);
 
   // Hydrate PIN and biometrics state from secure store on mount
   useEffect(() => {
@@ -64,31 +89,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     hydrate();
   }, []);
 
-  // AppState listener: lock after 30s in background
+  // Lock only after real background time. Native pickers can briefly move the app
+  // through inactive/background while the user is still completing an in-app action.
   useEffect(() => {
     const handleAppStateChange = (nextState: AppStateStatus) => {
-      if (nextState === 'background' || nextState === 'inactive') {
-        if (hasPIN && lockTimeout > 0) {
-          lockTimerRef.current = setTimeout(() => {
-            setIsLocked(true);
-          }, lockTimeout);
-        } else if (hasPIN && lockTimeout === 0) {
-          setIsLocked(true);
-        }
+      appStateRef.current = nextState;
+
+      if (nextState === 'background') {
+        scheduleLock();
       } else if (nextState === 'active') {
-        if (lockTimerRef.current) {
-          clearTimeout(lockTimerRef.current);
-          lockTimerRef.current = null;
-        }
+        clearLockTimer();
       }
     };
 
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     return () => {
       subscription.remove();
-      if (lockTimerRef.current) clearTimeout(lockTimerRef.current);
+      clearLockTimer();
     };
-  }, [hasPIN, lockTimeout]);
+  }, [clearLockTimer, scheduleLock]);
 
   useEffect(() => {
     if (!isDemoSeedEnabled || !isSignedIn || !userId || isLoading) return;
@@ -121,6 +140,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const lock = () => setIsLocked(true);
   const unlock = () => setIsLocked(false);
+
+  const runWithAutoLockPaused = useCallback(async <T,>(task: () => Promise<T>): Promise<T> => {
+    autoLockPauseDepthRef.current += 1;
+    clearLockTimer();
+
+    try {
+      return await task();
+    } finally {
+      autoLockPauseDepthRef.current = Math.max(0, autoLockPauseDepthRef.current - 1);
+
+      if (autoLockPauseDepthRef.current === 0 && appStateRef.current === 'background') {
+        scheduleLock();
+      }
+    }
+  }, [clearLockTimer, scheduleLock]);
 
   const savePin = async (pin: string) => {
     await Promise.all([
@@ -182,6 +216,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         logout,
         lock,
         unlock,
+        runWithAutoLockPaused,
         savePin,
         verifyPin,
         setBiometricsEnabled,
