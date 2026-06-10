@@ -23,6 +23,8 @@ import {
   type SFSymbolProps,
 } from '@react-navigation/native';
 import { useAuth as useClerkAuth } from '@clerk/expo';
+import { useAuth as useAppAuth } from 'contexts/AuthContext';
+import * as Sharing from 'expo-sharing';
 import EmptyState from '@ui/EmptyState';
 import ThemedText from '@ui/ThemedText';
 import { usePatientId } from 'hooks/usePatientId';
@@ -37,6 +39,7 @@ import {
   listFolderContents,
   refreshFileTypes,
   syncPendingFiles,
+  preparePreviewFile,
 } from '../../services/files';
 import type { FilesScreenProps } from './files/navigationTypes';
 
@@ -104,12 +107,13 @@ function StatusDot({ status }: { status: string }) {
 
 // ─── FileRow ──────────────────────────────────────────────────────────────────
 function FileRow({
-  item, onPress, onMove, onDelete,
+  item, onPress, onMove, onDelete, onShare,
 }: {
   item: BrowserItem;
   onPress: () => void;
   onMove: () => void;
   onDelete: () => void;
+  onShare: () => void;
 }) {
   const { colors, dark } = useTheme();
   const isFolder = item.kind === 'folder';
@@ -132,6 +136,12 @@ function FileRow({
 
   const renderRightActions = () => (
     <View style={styles.swipeWrap}>
+      {!isFolder && (
+        <Pressable onPress={onShare} style={[styles.swipeBtn, { backgroundColor: '#F59E0B' }]}>
+          {Icon({ android: 'ios_share', ios: 'square.and.arrow.up', color: '#fff', size: 18 })}
+          <ThemedText style={styles.swipeBtnLabel}>Share</ThemedText>
+        </Pressable>
+      )}
       <Pressable onPress={onMove} style={[styles.swipeBtn, { backgroundColor: BRAND }]}>
         {Icon({ android: 'drive_file_move', ios: 'folder.badge.plus', color: '#fff', size: 18 })}
         <ThemedText style={styles.swipeBtnLabel}>Move</ThemedText>
@@ -275,6 +285,7 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight ? useBottomTabBarHeight() : 0;
   const fabBottom = 20 + insets.bottom + tabBarHeight;
+  const { runWithAutoLockPaused } = useAppAuth();
   const folderId = route.params?.folderId;
   const [fabOpen, setFabOpen] = useState(false);
   const getTokenRef = useRef(getToken);
@@ -393,6 +404,20 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
     }
   }, [getToken, load, patientId]);
 
+  const shareFile = useCallback(async (fileId: string) => {
+    try {
+      const available = await Sharing.isAvailableAsync();
+      if (!available) {
+        Alert.alert('No app available', 'This device cannot share files with other apps.');
+        return;
+      }
+      const preview = await preparePreviewFile(patientId, fileId);
+      await runWithAutoLockPaused(() => Sharing.shareAsync(preview.uri, { mimeType: preview.mimeType, dialogTitle: preview.name }));
+    } catch (error) {
+      Alert.alert('Could not share file', error instanceof Error ? error.message : 'Unable to share this file.');
+    }
+  }, [patientId, runWithAutoLockPaused]);
+
   const openUpload = useCallback(() => { navigation.navigate('FilesUploadScreen', { folderId: folderId ?? null }); }, [folderId, navigation]);
   const createFolder = useCallback(() => { navigation.navigate('FileFolderFormScreen', { parentId: folderId ?? null }); }, [folderId, navigation]);
   const openRoot = useCallback(() => { navigation.navigate('FilesBrowserScreen'); }, [navigation]);
@@ -485,6 +510,7 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
                 })
               }
               onDelete={() => handleDelete(bItem.kind, bItem.id)}
+              onShare={() => shareFile(bItem.id)}
             />
           );
         }}
