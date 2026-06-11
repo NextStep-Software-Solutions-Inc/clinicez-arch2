@@ -21,6 +21,8 @@ import OrganizationDetailsScreen from './screens/OrganizationDetails.screen';
 import ClinicDetailsScreen from './screens/ClinicDetails.screen';
 import BookingDraftScreen from './screens/BookingDraft.screen';
 import AppointmentsScreen from './screens/Appointments.screen';
+import AppointmentDetailScreen from './screens/appointments/AppointmentDetail.screen';
+import ProviderProfileScreen from './screens/appointments/ProviderProfile.screen';
 import LoginScreen from './screens/Login.screen';
 import SignupScreen from './screens/Signup.screen';
 import VerifyScreen from './screens/Verify.screen';
@@ -331,7 +333,26 @@ const MainStack = createNativeStackNavigator({
     }),
     BookingDraftScreen: createNativeStackScreen({
       screen: BookingDraftScreen,
-      options: { title: 'Booking Draft', headerLargeTitleEnabled: true },
+      options: {
+        title: 'Book Appointment',
+        presentation: 'formSheet',
+        sheetAllowedDetents: [0.92],
+        sheetGrabberVisible: true,
+        sheetCornerRadius: 20,
+        headerShown: true,
+      },
+    }),
+    AppointmentDetailScreen: createNativeStackScreen({
+      screen: AppointmentDetailScreen,
+      options: { title: 'Appointment Details', headerBackTitle: '' },
+    }),
+    ProviderProfileScreen: createNativeStackScreen({
+      screen: ProviderProfileScreen,
+      options: {
+        title: 'Provider Profile',
+        presentation: 'modal',
+        headerBackTitle: '',
+      },
     }),
     // ── Profile Part A ────────────────────────────────────────────────────────
     PersonalDemographicsScreen: createNativeStackScreen({

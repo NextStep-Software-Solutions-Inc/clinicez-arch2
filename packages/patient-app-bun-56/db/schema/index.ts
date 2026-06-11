@@ -48,3 +48,6 @@ export * from './patientPhysicalExamProfile';
 // Infrastructure
 export * from './syncQueue';
 export * from './auditLogs';
+
+// API cache tables
+export * from './appointments';

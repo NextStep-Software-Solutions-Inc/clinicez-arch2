@@ -36,6 +36,13 @@
       "when": 1781082740118,
       "tag": "0004_classy_earthquake",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1781192612877,
+      "tag": "0005_romantic_puppet_master",
+      "breakpoints": true
     }
   ]
 }

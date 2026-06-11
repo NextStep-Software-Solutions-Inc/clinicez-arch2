@@ -6,6 +6,7 @@ import m0001 from './0001_busy_ikaris.sql';
 import m0002 from './0002_loving_prima.sql';
 import m0003 from './0003_wonderful_sunspot.sql';
 import m0004 from './0004_classy_earthquake.sql';
+import m0005 from './0005_romantic_puppet_master.sql';
 
   export default {
     journal,
@@ -14,7 +15,8 @@ import m0004 from './0004_classy_earthquake.sql';
 m0001,
 m0002,
 m0003,
-m0004
+m0004,
+m0005
     }
   }
   
