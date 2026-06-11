@@ -56,7 +56,9 @@ export interface AppointmentItem {
     scheduledAt: string;          // ISO-8601 datetime
     durationMinutes: number;
     status: AppointmentStatus;
-    notes?: string | null;
+    subject?: string | null;         // optional visit subject/title set by patient
+    chiefComplaint?: string | null;  // main reason for the visit (patient-entered)
+    notes?: string | null;           // additional notes
     attachedDocuments: AttachedDocument[];
     cachedAt: string;             // ISO-8601
     // Payment / invoicing

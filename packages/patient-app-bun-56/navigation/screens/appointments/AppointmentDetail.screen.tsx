@@ -180,6 +180,15 @@ export default function AppointmentDetailScreen({ route }: Props) {
 
     const handleViewProfile = () => {
         if (!item) return;
+        // Local bookings use a placeholder provider — show an informational modal
+        if (item.provider.id === 'local-pending') {
+            Alert.alert(
+                'Provider Not Yet Assigned',
+                `${item.clinic.name} will assign a healthcare provider once your appointment request has been reviewed and confirmed. You will be notified when a provider is assigned.`,
+                [{ text: 'OK' }],
+            );
+            return;
+        }
         navigation.navigate('Main', { screen: 'ProviderProfileScreen', params: { providerData: item.provider } });
     };
 
