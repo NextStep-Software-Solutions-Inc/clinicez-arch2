@@ -168,9 +168,9 @@ const MainBottomTabs = createBottomTabNavigator({
     AppointmentsScreen: createBottomTabScreen({
       screen: AppointmentsScreen,
       options: {
-        title: 'Health',
+        title: 'My Appointments',
         tabBarIcon: Platform.select({
-          android: { type: 'materialSymbol', name: 'health_and_safety' },
+          android: { type: 'materialSymbol', name: 'heart_check' },
           ios: { type: 'sfSymbol', name: 'heart.fill' },
         }),
       },
@@ -178,7 +178,7 @@ const MainBottomTabs = createBottomTabNavigator({
     FilesScreen: createBottomTabScreen({
       screen: FilesStack,
       options: {
-        title: 'Files',
+        title: 'My Files',
         tabBarIcon: Platform.select({
           android: { type: 'materialSymbol', name: 'files' },
           ios: { type: 'sfSymbol', name: 'doc.fill' },
@@ -188,7 +188,7 @@ const MainBottomTabs = createBottomTabNavigator({
     ProfileScreen: createBottomTabScreen({
       screen: ProfileScreen,
       options: {
-        title: 'Profile',
+        title: 'My Profile',
         tabBarIcon: Platform.select({
           android: { type: 'materialSymbol', name: 'person' },
           ios: { type: 'sfSymbol', name: 'person.fill' },
