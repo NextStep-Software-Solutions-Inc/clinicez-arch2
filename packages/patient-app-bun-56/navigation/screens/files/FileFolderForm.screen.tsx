@@ -6,6 +6,8 @@ import ThemedView from '@ui/ThemedView';
 import { usePatientId } from 'hooks/usePatientId';
 import { createFolder, getFolder, renameFolder } from '../../../services/files';
 import type { FilesScreenProps } from './navigationTypes';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
 const BRAND = '#7C3AED';
 
@@ -38,9 +40,10 @@ export default function FileFolderFormScreen({ route }: FilesScreenProps<'FileFo
       setIsSaving(false);
     }
   };
-
+  const inset = useSafeAreaInsets();
+  const tabBarHeight = (useBottomTabBarHeight?.() || 96) + inset.bottom;
   return (
-    <ThemedView style={[styles.container]}>
+    <ThemedView style={[styles.container, { paddingBottom: tabBarHeight }]}>
       <ThemedView style={styles.content}>
         <ThemedView style={[styles.iconWrap, { backgroundColor: BRAND + '18' }]}>
           {Platform.select({
