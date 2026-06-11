@@ -275,39 +275,75 @@ export async function getAppointmentDetail(
 }
 
 /**
- * Updates the cached appointment in-place:
- *   - Sets scheduledAt to the new ISO-8601 date/time string
- *   - Resets status to 'pending' (awaiting clinic confirmation)
- *   - Adds a rescheduledAt note to the rawJson
+ * Updates an appointment's schedule in-place:
+ *   - Sets scheduledAt to the new ISO-8601 datetime
+ *   - Resets status to 'pending' (awaiting clinic re-confirmation)
+ *   - Appends the reschedule reason to notes; everything else is preserved as-is
  *
- * This does NOT create a new booking draft. It mutates the existing cache row
- * so the UI immediately reflects the pending reschedule before the next sync.
+ * Works for both API-cached appointments (in `appointments` table) and
+ * locally-confirmed bookings (in `bookingDrafts` with status='ready').
  */
 export async function rescheduleAppointment(
     appointmentId: string,
     newScheduledAt: string,
+    reason: string,
     db: ExpoSQLiteDatabase<any>,
 ): Promise<AppointmentItem | null> {
     const existing = await getAppointmentDetail(appointmentId, db);
     if (!existing) return null;
 
     const now = new Date().toISOString();
+    const rescheduleNote = reason.trim()
+        ? `Reschedule request: ${reason.trim()}`
+        : 'Reschedule requested by patient';
+
+    const updatedNotes = existing.notes
+        ? `${existing.notes}\n\n${rescheduleNote}`
+        : rescheduleNote;
+
     const updated: AppointmentItem = {
         ...existing,
         scheduledAt: newScheduledAt,
         status: 'pending',
+        notes: updatedNotes,
         cachedAt: now,
     };
 
+    // 1. Update the API-cache table (server-confirmed appointments)
     await db
         .update(appointments)
         .set({
             scheduledAt: newScheduledAt,
             status: 'pending',
+            notes: updatedNotes,
             cachedAt: now,
             rawJson: JSON.stringify(updated),
         })
         .where(eq(appointments.id, appointmentId));
+
+    // 2. Also update bookingDrafts for locally-confirmed bookings that
+    //    haven't synced yet (their id matches appointmentId in that table)
+    const dateStr = newScheduledAt.slice(0, 10);       // YYYY-MM-DD
+    const timeStr = newScheduledAt.slice(11, 16);       // HH:mm
+    await db
+        .update(bookingDrafts)
+        .set({
+            preferredDate: dateStr,
+            preferredTime: timeStr,
+            notes: (() => {
+                // Preserve the [[service:...]] metadata prefix if present
+                const raw = existing.notes ?? '';
+                const metaMatch = raw.match(/^(\[\[service:[^\]]+\]\]\n?)([\s\S]*)$/);
+                if (metaMatch) {
+                    const body = metaMatch[2].trim();
+                    const newBody = body ? `${body}\n\n${rescheduleNote}` : rescheduleNote;
+                    return `${metaMatch[1]}${newBody}`;
+                }
+                return raw ? `${raw}\n\n${rescheduleNote}` : rescheduleNote;
+            })(),
+            updatedAt: new Date(),
+        })
+        .where(eq(bookingDrafts.id, appointmentId));
 
     return updated;
 }

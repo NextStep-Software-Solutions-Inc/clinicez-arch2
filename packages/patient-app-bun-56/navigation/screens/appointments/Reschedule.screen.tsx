@@ -76,10 +76,8 @@ export default function RescheduleScreen({ route }: Props) {
             // Build the new ISO-8601 datetime by combining the selected date and slot time
             const newScheduledAt = new Date(`${selectedDate}T${selectedSlot.time}:00`).toISOString();
 
-            // Update the existing appointment row in the local SQLite cache:
-            //   scheduledAt → new datetime
-            //   status      → 'pending' (reset, awaiting clinic re-confirmation)
-            const updated = await rescheduleAppointment(appointmentId, newScheduledAt, db);
+            // Update the appointment in-place: new date/time, status → pending, reason appended to notes
+            const updated = await rescheduleAppointment(appointmentId, newScheduledAt, reason, db);
 
             if (!updated) {
                 Alert.alert('Error', 'Appointment not found in local cache. Please refresh and try again.');
