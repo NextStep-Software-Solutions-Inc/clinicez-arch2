@@ -40,8 +40,8 @@ import {
   refreshFileTypes,
   syncPendingFiles,
   preparePreviewFile,
-} from '../../services/files';
-import type { FilesScreenProps } from './files/navigationTypes';
+} from '../../../services/files';
+import type { FilesScreenProps } from './navigationTypes';
 
 // ─── types ────────────────────────────────────────────────────────────────────
 type BrowserItem = FileBrowserFolder | FileBrowserFile;

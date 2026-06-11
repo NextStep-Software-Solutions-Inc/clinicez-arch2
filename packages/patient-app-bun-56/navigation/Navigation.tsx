@@ -6,9 +6,9 @@ import { isLiquidGlassSupported } from '@callstack/liquid-glass';
 
 // Screens
 import HomeScreen from './screens/Home.screen';
-import ProfileScreen from './screens/Profile.screen';
-import SettingsScreen from './screens/Settings.screen';
-import FilesScreen from './screens/Files.screen';
+import ProfileScreen from './screens/profile/Profile.screen';
+import SettingsScreen from './screens/settings/Settings.screen';
+import FilesScreen from './screens/files/Files.screen';
 import FilesUploadScreen from './screens/files/FilesUpload.screen';
 import FileFolderFormScreen from './screens/files/FileFolderForm.screen';
 import FileMoveScreen from './screens/files/FileMove.screen';
