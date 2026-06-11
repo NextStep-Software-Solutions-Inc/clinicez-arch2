@@ -578,13 +578,16 @@ export default function BookingDraftScreen({ route }: Props) {
           { text: 'OK', onPress: () => navigation.goBack() },
         ]);
       } else {
-        // Booking confirmed — delete the draft row so it no longer appears in the Drafts section
+        // Booking confirmed — mark status='ready' so it persists locally and
+        // shows up in the Appointments screen until the server syncs it.
+        // It won't appear in the Drafts section (which only shows status='draft').
         await db
-          .delete(bookingDrafts)
+          .update(bookingDrafts)
+          .set({ status: 'ready', updatedAt: new Date() })
           .where(and(eq(bookingDrafts.patientId, patientId), eq(bookingDrafts.clinicId, selectedClinicId)));
         Alert.alert(
           'Booking Requested!',
-          'Your appointment request has been sent. The clinic will confirm shortly.',
+          'Your appointment request has been saved and will sync to the clinic when internet is available. You can view it in the Health tab.',
           [{ text: 'Done', onPress: () => navigation.goBack() }],
         );
       }

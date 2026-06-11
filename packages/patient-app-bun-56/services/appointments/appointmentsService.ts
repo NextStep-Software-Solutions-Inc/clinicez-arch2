@@ -5,9 +5,11 @@
 // falls back to the SQLite cache on failure, returning an isFromCache flag.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, and, inArray } from 'drizzle-orm';
 import type { ExpoSQLiteDatabase } from 'drizzle-orm/expo-sqlite';
 import { appointments } from '@db/schema/appointments';
+import { bookingDrafts } from '@db/schema/bookingDrafts';
+import { clinics } from '@db/schema/clinics';
 import {
     getAppointments,
     getAvailableSlots,
@@ -25,6 +27,109 @@ export interface FetchAppointmentsResult {
     items: AppointmentItem[];
     isFromCache: boolean;
     cachedAt: string | null;
+}
+
+// ── Local booking helpers (bookingDrafts with status='ready') ────────────────
+
+/**
+ * Converts a confirmed local booking (bookingDrafts row with status='ready')
+ * into an AppointmentItem so it can be displayed in the Appointments screen
+ * before the server has synced it.
+ */
+function localBookingToAppointmentItem(
+    draft: typeof bookingDrafts.$inferSelect,
+    clinic: typeof clinics.$inferSelect | undefined,
+): AppointmentItem {
+    // Parse service name from encoded notes: [[service:id=X;name=Y]]
+    const serviceMatch = draft.notes?.match(/^\[\[service:id=[^;]+;name=([^\]]+)\]\]/);
+    const serviceName = serviceMatch?.[1] ?? draft.reason ?? 'Booking Request';
+
+    // Strip metadata prefix from notes for display
+    const cleanNotes = draft.notes?.replace(/^\[\[service:[^\]]+\]\]\n?/, '').trim() || null;
+
+    const dateStr = draft.preferredDate ?? new Date().toISOString().slice(0, 10);
+    const timeStr = draft.preferredTime ?? '09:00';
+    const scheduledAt = (() => {
+        try { return new Date(`${dateStr}T${timeStr}:00`).toISOString(); }
+        catch { return new Date().toISOString(); }
+    })();
+
+    return {
+        id: draft.id,
+        patientId: draft.patientId,
+        clinic: {
+            id: draft.clinicId,
+            name: clinic?.name ?? 'Clinic',
+            address: clinic?.address ?? '',
+            logoUrl: clinic?.logoUrl ?? null,
+            coverImageUrl: clinic?.coverImageUrl ?? null,
+            phoneNumber: null,
+        },
+        provider: {
+            id: 'local-pending',
+            name: 'To be assigned',
+            specialty: '',
+            avatarUrl: null,
+            bio: 'The clinic will assign a provider once the appointment is confirmed.',
+            credentials: [],
+            affiliatedClinics: [],
+            rating: 0,
+        },
+        serviceType: serviceName,
+        scheduledAt,
+        durationMinutes: 30,
+        status: 'pending',
+        notes: cleanNotes,
+        attachedDocuments: [],
+        cachedAt: draft.updatedAt.toISOString(),
+        paymentStatus: null,
+        paymentDueAt: null,
+        invoiceAmount: null,
+        currency: 'PHP',
+    };
+}
+
+/**
+ * Reads all locally-confirmed bookings (status='ready') for a patient.
+ * These are bookings submitted by the user but not yet acknowledged by the
+ * server. They persist across app restarts and are merged into the
+ * appointments list until the server sync replaces them.
+ */
+async function loadLocalBookings(
+    db: ExpoSQLiteDatabase<any>,
+    patientId: string,
+): Promise<AppointmentItem[]> {
+    const draftRows = await db
+        .select()
+        .from(bookingDrafts)
+        .where(and(
+            eq(bookingDrafts.patientId, patientId),
+            eq(bookingDrafts.status, 'ready'),
+        ))
+        .orderBy(desc(bookingDrafts.updatedAt));
+
+    if (draftRows.length === 0) return [];
+
+    const clinicIds = [...new Set(draftRows.map(r => r.clinicId))];
+    const clinicRows = await db.select().from(clinics).where(inArray(clinics.id, clinicIds));
+    const clinicMap = new Map(clinicRows.map(c => [c.id, c]));
+
+    return draftRows.map(draft => localBookingToAppointmentItem(draft, clinicMap.get(draft.clinicId)));
+}
+
+/**
+ * Merges local confirmed bookings with server/cache items.
+ * Local items take precedence when IDs match (shouldn't happen in practice
+ * since local IDs are UUIDs and server IDs are server-assigned).
+ * Result is sorted newest scheduledAt first.
+ */
+function mergeWithLocalBookings(
+    local: AppointmentItem[],
+    remote: AppointmentItem[],
+): AppointmentItem[] {
+    const localIds = new Set(local.map(a => a.id));
+    const merged = [...local, ...remote.filter(a => !localIds.has(a.id))];
+    return merged.sort((a, b) => b.scheduledAt.localeCompare(a.scheduledAt));
 }
 
 // ── Cache helpers ─────────────────────────────────────────────────────────────
@@ -102,12 +207,16 @@ export async function fetchAppointments(
     patientId: string,
     db: ExpoSQLiteDatabase<any>,
 ): Promise<FetchAppointmentsResult> {
+    // Always load locally-confirmed bookings first — these persist regardless of
+    // API availability and should always be visible to the user.
+    const localBookings = await loadLocalBookings(db, patientId);
+
     try {
         const response = await getAppointments(patientId);
-        const items = response.appointments;
-        await persistToCache(db, patientId, items);
+        const apiItems = response.appointments;
+        await persistToCache(db, patientId, apiItems);
         return {
-            items,
+            items: mergeWithLocalBookings(localBookings, apiItems),
             isFromCache: false,
             cachedAt: response.fetchedAt,
         };
@@ -115,7 +224,7 @@ export async function fetchAppointments(
         const cached = await readFromCache(db, patientId);
         const cachedAt = cached.length > 0 ? cached[0].cachedAt : null;
         return {
-            items: cached,
+            items: mergeWithLocalBookings(localBookings, cached),
             isFromCache: true,
             cachedAt,
         };
@@ -141,13 +250,28 @@ export async function getAppointmentDetail(
     appointmentId: string,
     db: ExpoSQLiteDatabase<any>,
 ): Promise<AppointmentItem | null> {
+    // 1. Check the API cache first (server-confirmed appointments)
     const rows = await db
         .select()
         .from(appointments)
         .where(eq(appointments.id, appointmentId));
 
-    if (rows.length === 0) return null;
-    return rowToItem(rows[0]);
+    if (rows.length > 0) return rowToItem(rows[0]);
+
+    // 2. Fall back to locally-confirmed bookings not yet synced to server
+    const draftRows = await db
+        .select()
+        .from(bookingDrafts)
+        .where(and(
+            eq(bookingDrafts.id, appointmentId),
+            eq(bookingDrafts.status, 'ready'),
+        ));
+
+    if (draftRows.length === 0) return null;
+
+    const draft = draftRows[0];
+    const clinicRows = await db.select().from(clinics).where(eq(clinics.id, draft.clinicId));
+    return localBookingToAppointmentItem(draft, clinicRows[0]);
 }
 
 /**
