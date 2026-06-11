@@ -142,11 +142,12 @@ export default function OrganizationDetailsScreen() {
       <ThemedView style={styles.titleBlock}>
         <ThemedText style={styles.title}>{organization.name}</ThemedText>
         <ThemedText style={[styles.subtitle, { color: colors.text }]}>{organization.description}</ThemedText>
-        <ThemedText style={[styles.meta, { color: colors.text }]}>{organization.isPublic ? 'Public organization' : 'Private organization'} · {organization.partneredClinicIds.length} partnered clinics</ThemedText>
+        <ThemedText style={[styles.meta, { color: colors.text }]}>{organization.isPublic ? 'Public organization' : 'Private organization'} · {organization.partneredClinicIds.length} partnered clinics · 👥 {organization.activeMemberCount.toLocaleString()} active members</ThemedText>
       </ThemedView>
 
       <ThemedView style={[styles.section, { borderColor: colors.border, backgroundColor: colors.card }]}>
         <ThemedText style={styles.sectionTitle}>Membership</ThemedText>
+        <ThemedText style={[styles.memberCount, { color: colors.primary }]}>👥 {organization.activeMemberCount.toLocaleString()} active members</ThemedText>
         <ThemedText style={[styles.sectionCopy, { color: colors.text }]}>{organization.isJoined ? `Joined as ${organization.membershipRoleName ?? 'member'}` : 'Join to unlock private clinics and member-only content.'}</ThemedText>
         {!organization.isJoined ? (
           <Pressable onPress={startJoin} style={({ pressed }) => [styles.primaryButton, { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 }]} accessibilityRole="button">
@@ -247,6 +248,7 @@ const styles = StyleSheet.create({
   section: { borderRadius: 18, borderWidth: StyleSheet.hairlineWidth, padding: 16, gap: 12 },
   sectionTitle: { fontSize: 16, fontWeight: '800' },
   sectionCopy: { fontSize: 14, lineHeight: 20 },
+  memberCount: { fontSize: 15, fontWeight: '700', marginBottom: 4 },
   requiredWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   requiredChip: { borderRadius: 999, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 10, paddingVertical: 6 },
   requiredText: { fontSize: 12, fontWeight: '700' },

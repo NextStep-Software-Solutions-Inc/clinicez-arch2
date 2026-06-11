@@ -21,7 +21,7 @@ import {
     joinClinic,
     listClinics,
 } from '../../services/discovery/discoveryService';
-import { ClinicView, ConsentSelection } from '../../services/discovery/types';
+import { ClinicDetail, ConsentSelection } from '../../services/discovery/types';
 
 type ClinicFilter = 'all' | 'public' | 'partnered' | 'joined';
 
@@ -82,9 +82,9 @@ export default function ExploreClinicsScreen() {
 
     const [searchQuery, setSearchQuery] = useState('');
     const [filter, setFilter] = useState<ClinicFilter>('all');
-    const [clinics, setClinics] = useState<ClinicView[]>([]);
+    const [clinics, setClinics] = useState<ClinicDetail[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [selectedClinic, setSelectedClinic] = useState<ClinicView | null>(null);
+    const [selectedClinic, setSelectedClinic] = useState<ClinicDetail | null>(null);
     const [isJoining, setIsJoining] = useState(false);
     const [consent, setConsent] = useState<ConsentSelection>({
         acceptedPrivacyPolicy: false,
@@ -107,7 +107,7 @@ export default function ExploreClinicsScreen() {
             .finally(() => setIsLoading(false));
     }, [patientId, searchQuery, filter, organizationId]);
 
-    const openJoinModal = (clinic: ClinicView) => {
+    const openJoinModal = (clinic: ClinicDetail) => {
         setSelectedClinic(clinic);
         setConsent({
             acceptedPrivacyPolicy: false,
@@ -221,6 +221,37 @@ export default function ExploreClinicsScreen() {
                             <ThemedText style={[styles.metaText, { color: colors.text }]}>Address: {item.address}</ThemedText>
                             <ThemedText style={[styles.metaText, { color: colors.text }]}>Appointments: {item.supportsAppointments ? 'Supported' : 'Not available'}</ThemedText>
 
+                            {item.healthcareProviders.length > 0 && (
+                                <ThemedView style={styles.providersRow}>
+                                    <ThemedText style={[styles.providersLabel, { color: colors.text }]}>Providers:</ThemedText>
+                                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.providersChips}>
+                                        {item.healthcareProviders.map((provider) => (
+                                            <Pressable
+                                                key={provider.id}
+                                                onPress={() =>
+                                                    navigation.navigate('Main', {
+                                                        screen: 'ProviderProfileScreen',
+                                                        params: {
+                                                            providerData: {
+                                                                ...provider,
+                                                                affiliatedClinics: [{ id: item.id, name: item.name, address: item.address, logoUrl: item.logoUrl ?? null, coverImageUrl: item.coverImageUrl ?? null }],
+                                                            },
+                                                        },
+                                                    })
+                                                }
+                                                style={({ pressed }) => [
+                                                    styles.providerChip,
+                                                    { borderColor: colors.border, backgroundColor: colors.card, opacity: pressed ? 0.7 : 1 },
+                                                ]}
+                                            >
+                                                <ThemedText style={styles.providerChipName} numberOfLines={1}>{provider.name}</ThemedText>
+                                                <ThemedText style={[styles.providerChipSpec, { color: colors.text }]} numberOfLines={1}>{provider.credentials[0]}</ThemedText>
+                                            </Pressable>
+                                        ))}
+                                    </ScrollView>
+                                </ThemedView>
+                            )}
+
                             <ThemedView style={styles.cardActionsRow}>
                                 <Pressable
                                     onPress={() => navigation.navigate('Main', { screen: 'ClinicDetailsScreen', params: { clinicId: item.id } })}
@@ -272,7 +303,7 @@ export default function ExploreClinicsScreen() {
                             <ThemedText style={styles.sectionLabel}>Required data fields</ThemedText>
                             <ThemedView style={styles.requiredFieldsWrap}>
                                 {selectedClinic?.requiredShareFields.map((field) => (
-                                    <ThemedView key={field} style={[styles.requiredFieldChip, { borderColor: colors.border }]}> 
+                                    <ThemedView key={field} style={[styles.requiredFieldChip, { borderColor: colors.border }]}>
                                         <ThemedText style={styles.requiredFieldText}>{getShareFieldLabel(field)}</ThemedText>
                                     </ThemedView>
                                 ))}
@@ -301,7 +332,7 @@ export default function ExploreClinicsScreen() {
                             <ThemedText style={[styles.linksText, { color: colors.text }]}>Terms: {selectedClinic?.termsAndConditionsUrl}</ThemedText>
                         </ScrollView>
 
-                        <ThemedView style={[styles.modalActions, { borderTopColor: colors.border }]}> 
+                        <ThemedView style={[styles.modalActions, { borderTopColor: colors.border }]}>
                             <Pressable
                                 onPress={closeJoinModal}
                                 style={({ pressed }) => [
@@ -414,6 +445,33 @@ const styles = StyleSheet.create({
     metaText: {
         fontSize: 12,
         opacity: 0.8,
+    },
+    providersRow: {
+        gap: 4,
+    },
+    providersLabel: {
+        fontSize: 12,
+        opacity: 0.7,
+        fontWeight: '600',
+    },
+    providersChips: {
+        gap: 8,
+        paddingVertical: 4,
+    },
+    providerChip: {
+        borderWidth: StyleSheet.hairlineWidth,
+        borderRadius: 10,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        minWidth: 100,
+    },
+    providerChipName: {
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    providerChipSpec: {
+        fontSize: 11,
+        opacity: 0.7,
     },
     badge: {
         borderRadius: 999,

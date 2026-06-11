@@ -7,6 +7,33 @@ import ThemedView from '@ui/ThemedView';
 import EntityMediaCardHeader from '@ui/EntityMediaCardHeader';
 import type { ProviderSnapshot, AffiliatedClinic } from '../../../services/appointments/types';
 
+function StarRating({ rating }: { rating: number }) {
+    const { colors } = useTheme();
+    const filled = Math.floor(rating);
+    const hasHalf = rating - filled >= 0.5;
+    const empty = 5 - filled - (hasHalf ? 1 : 0);
+    return (
+        <View style={starStyles.row}>
+            {Array.from({ length: filled }).map((_, i) => (
+                <ThemedText key={`f${i}`} style={starStyles.star}>★</ThemedText>
+            ))}
+            {hasHalf && <ThemedText style={starStyles.halfStar}>½</ThemedText>}
+            {Array.from({ length: empty }).map((_, i) => (
+                <ThemedText key={`e${i}`} style={[starStyles.star, starStyles.emptyStar, { color: colors.border }]}>☆</ThemedText>
+            ))}
+            <ThemedText style={[starStyles.ratingText, { color: colors.text }]}>{rating.toFixed(1)}</ThemedText>
+        </View>
+    );
+}
+
+const starStyles = StyleSheet.create({
+    row: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+    star: { fontSize: 18, color: '#F59E0B' },
+    halfStar: { fontSize: 16, color: '#F59E0B', marginHorizontal: 1 },
+    emptyStar: { fontSize: 18 },
+    ratingText: { fontSize: 14, fontWeight: '700', marginLeft: 4, opacity: 0.8 },
+});
+
 type Props = StaticScreenProps<{ providerData: ProviderSnapshot }>;
 
 function AffiliatedClinicCard({ clinic }: { clinic: AffiliatedClinic }) {
@@ -14,6 +41,7 @@ function AffiliatedClinicCard({ clinic }: { clinic: AffiliatedClinic }) {
         <EntityMediaCardHeader
             name={clinic.name}
             logoUrl={clinic.logoUrl}
+            coverImageUrl={clinic.coverImageUrl}
             badgeLabel="Affiliated"
             badgeColor="#6366F1"
         />
@@ -52,6 +80,8 @@ export default function ProviderProfileScreen({ route }: Props) {
                         {provider.specialty}
                     </ThemedText>
 
+                    <StarRating rating={provider.rating} />
+
                     {provider.credentials.length > 0 && (
                         <View style={styles.credRow}>
                             {provider.credentials.map(c => (
@@ -59,7 +89,7 @@ export default function ProviderProfileScreen({ route }: Props) {
                                     key={c}
                                     style={[
                                         styles.credChip,
-                                        { borderColor: colors.border, backgroundColor: colors.primary + '12' },
+                                        { borderColor: colors.border, backgroundColor: 'rgba(99,102,241,0.1)' },
                                     ]}
                                 >
                                     <ThemedText style={[styles.credText, { color: colors.primary }]}>{c}</ThemedText>

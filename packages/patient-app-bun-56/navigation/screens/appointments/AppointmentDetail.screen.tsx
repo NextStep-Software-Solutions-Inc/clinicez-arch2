@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Image, Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useNavigation, useTheme } from '@react-navigation/native';
 import type { StaticScreenProps } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { format, parseISO } from 'date-fns';
+import { differenceInSeconds, format, parseISO } from 'date-fns';
 import ThemedText from '@ui/ThemedText';
 import ThemedView from '@ui/ThemedView';
 import EntityCoverHeader from '@ui/EntityCoverHeader';
@@ -21,6 +21,39 @@ function formatFileSize(bytes: number): string {
     return `${(bytes / 1_048_576).toFixed(1)} MB`;
 }
 
+function formatCountdown(seconds: number): string {
+    if (seconds <= 0) return 'Overdue';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+}
+
+function PaymentCountdown({ dueAt }: { dueAt: string }) {
+    const [secondsLeft, setSecondsLeft] = useState(() => {
+        try { return Math.max(0, differenceInSeconds(parseISO(dueAt), new Date())); } catch { return 0; }
+    });
+
+    const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    useEffect(() => {
+        timerRef.current = setInterval(() => {
+            setSecondsLeft(() => {
+                try { return Math.max(0, differenceInSeconds(parseISO(dueAt), new Date())); } catch { return 0; }
+            });
+        }, 1000);
+        return () => { if (timerRef.current) clearInterval(timerRef.current); };
+    }, [dueAt]);
+
+    const isOverdue = secondsLeft <= 0;
+    return (
+        <ThemedText style={[styles.countdownText, isOverdue && styles.countdownOverdue]}>
+            {isOverdue ? '⚠️ Payment overdue — appointment may be canceled' : `⏱ Pay within: ${formatCountdown(secondsLeft)}`}
+        </ThemedText>
+    );
+}
+
 function DocumentRow({ doc }: { doc: AttachedDocument }) {
     const { colors } = useTheme();
     const uploadedLabel = (() => {
@@ -28,7 +61,7 @@ function DocumentRow({ doc }: { doc: AttachedDocument }) {
     })();
     return (
         <View style={[styles.docRow, { borderColor: colors.border }]}>
-            <View style={[styles.docIconBox, { backgroundColor: colors.primary + '18' }]}>
+            <View style={styles.docIconBox}>
                 <ThemedText style={[styles.docIcon, { color: colors.primary }]}>📄</ThemedText>
             </View>
             <View style={styles.docInfo}>
@@ -76,10 +109,7 @@ function ProviderBlock({
                             {provider.credentials.map(c => (
                                 <View
                                     key={c}
-                                    style={[
-                                        styles.credChip,
-                                        { borderColor: colors.border, backgroundColor: colors.primary + '12' },
-                                    ]}
+                                    style={[styles.credChip, { borderColor: colors.border }]}
                                 >
                                     <ThemedText style={[styles.credText, { color: colors.primary }]}>{c}</ThemedText>
                                 </View>
@@ -107,6 +137,7 @@ export default function AppointmentDetailScreen({ route }: Props) {
 
     const [item, setItem] = useState<AppointmentItem | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [isPaidLocally, setIsPaidLocally] = useState(false);
 
     useEffect(() => {
         let mounted = true;
@@ -121,30 +152,42 @@ export default function AppointmentDetailScreen({ route }: Props) {
         return () => { mounted = false; };
     }, [appointmentId, navigation]);
 
+    const effectivePaid = isPaidLocally || item?.paymentStatus === 'paid';
+
+    const handlePayNow = () => {
+        if (!item) return;
+        const amount = item.invoiceAmount ?? 0;
+        if (amount === 0) {
+            // Free — auto-confirm immediately
+            setIsPaidLocally(true);
+            Alert.alert('Payment Confirmed', 'This appointment is free of charge. You\'re all set!');
+        } else {
+            // Payment gateway not yet integrated
+            Alert.alert(
+                'Online Payment Coming Soon',
+                `Secure online payment for ${item.currency ?? 'PHP'} ${amount.toFixed(2)} is being set up. Please pay at the clinic on your appointment day.`,
+                [{ text: 'OK' }],
+            );
+        }
+    };
+
     const handleGetDirections = () => {
         if (!item) return;
         const address = encodeURIComponent(item.clinic.address);
-        const url = Platform.OS === 'ios'
-            ? `maps:?q=${address}`
-            : `geo:0,0?q=${address}`;
-        Linking.openURL(url).catch(() =>
-            Linking.openURL(`https://maps.google.com/?q=${address}`)
-        );
+        const url = Platform.OS === 'ios' ? `maps:?q=${address}` : `geo:0,0?q=${address}`;
+        Linking.openURL(url).catch(() => Linking.openURL(`https://maps.google.com/?q=${address}`));
     };
 
     const handleViewProfile = () => {
         if (!item) return;
-        navigation.navigate('Main', {
-            screen: 'ProviderProfileScreen',
-            params: { providerData: item.provider },
-        });
+        navigation.navigate('Main', { screen: 'ProviderProfileScreen', params: { providerData: item.provider } });
     };
 
     const handleReschedule = () => {
         if (!item) return;
         navigation.navigate('Main', {
-            screen: 'BookingDraftScreen',
-            params: { clinicId: item.clinic.id },
+            screen: 'RescheduleScreen',
+            params: { appointmentId: item.id, clinicId: item.clinic.id, currentScheduledAt: item.scheduledAt },
         });
     };
 
@@ -152,9 +195,8 @@ export default function AppointmentDetailScreen({ route }: Props) {
         Alert.alert('Cancel Appointment', 'Are you sure you want to cancel this appointment?', [
             { text: 'Keep', style: 'cancel' },
             {
-                text: 'Cancel Appointment',
-                style: 'destructive',
-                onPress: () => Alert.alert('Coming soon', 'Cancellation requires the backend API.'),
+                text: 'Cancel Appointment', style: 'destructive',
+                onPress: () => Alert.alert('Coming soon', 'Cancellation requires the backend API.')
             },
         ]);
     };
@@ -179,8 +221,7 @@ export default function AppointmentDetailScreen({ route }: Props) {
 
     const patientDocs = item.attachedDocuments.filter(d => d.uploadedBy === 'patient');
     const clinicDocs = item.attachedDocuments.filter(d => d.uploadedBy === 'clinic');
-    const isFinalStatus =
-        item.status === 'canceled' || item.status === 'completed' || item.status === 'no_show';
+    const isFinalStatus = item.status === 'canceled' || item.status === 'completed' || item.status === 'no_show';
 
     return (
         <ThemedView style={styles.screen}>
@@ -197,29 +238,17 @@ export default function AppointmentDetailScreen({ route }: Props) {
                     />
                     <View style={styles.heroInfo}>
                         <ThemedText style={styles.heroClinicName}>{item.clinic.name}</ThemedText>
-                        <ThemedText style={[styles.heroAddress, { color: colors.text }]}>
-                            {item.clinic.address}
-                        </ThemedText>
+                        <ThemedText style={[styles.heroAddress, { color: colors.text }]}>{item.clinic.address}</ThemedText>
                         {item.clinic.phoneNumber ? (
-                            <ThemedText style={[styles.heroPhone, { color: colors.text }]}>
-                                {item.clinic.phoneNumber}
-                            </ThemedText>
+                            <ThemedText style={[styles.heroPhone, { color: colors.text }]}>{item.clinic.phoneNumber}</ThemedText>
                         ) : null}
                         <Pressable
                             onPress={handleGetDirections}
-                            style={[
-                                styles.directionsBtn,
-                                {
-                                    backgroundColor: colors.primary + '18',
-                                    borderColor: colors.primary + '40',
-                                },
-                            ]}
+                            style={[styles.directionsBtn, { borderColor: colors.border }]}
                             accessibilityRole="button"
                         >
-                            <ThemedText style={styles.directionsBtnIcon}>🗺</ThemedText>
-                            <ThemedText style={[styles.directionsBtnText, { color: colors.primary }]}>
-                                Get Directions
-                            </ThemedText>
+                            <ThemedText style={styles.directionsIcon}>🗺</ThemedText>
+                            <ThemedText style={[styles.directionsBtnText, { color: colors.primary }]}>Get Directions</ThemedText>
                         </Pressable>
                     </View>
                 </View>
@@ -233,16 +262,81 @@ export default function AppointmentDetailScreen({ route }: Props) {
                     </ThemedText>
                     <AppointmentStatusBadge status={item.status} />
                     {item.cachedAt ? (
-                        <View style={styles.cachedRow}>
-                            <ThemedText style={[styles.cachedText, { color: colors.text }]}>
-                                🕐 Last synced {format(parseISO(item.cachedAt), 'MMM d, h:mm a')}
-                            </ThemedText>
-                        </View>
+                        <ThemedText style={[styles.cachedText, { color: colors.text }]}>
+                            🕐 Last synced {format(parseISO(item.cachedAt), 'MMM d, h:mm a')}
+                        </ThemedText>
                     ) : null}
                 </View>
 
                 {/* Provider */}
                 <ProviderBlock provider={item.provider} onViewProfile={handleViewProfile} />
+
+                {/* Payment / Invoice */}
+                {item.invoiceAmount !== null && item.invoiceAmount !== undefined ? (
+                    <View
+                        style={[
+                            styles.section,
+                            {
+                                borderColor: effectivePaid
+                                    ? 'rgba(16,185,129,0.35)'
+                                    : 'rgba(245,158,11,0.35)',
+                                backgroundColor: effectivePaid
+                                    ? 'rgba(16,185,129,0.06)'
+                                    : 'rgba(245,158,11,0.06)',
+                            },
+                        ]}
+                    >
+                        <ThemedText style={styles.sectionTitle}>Payment</ThemedText>
+                        <View style={styles.invoiceRow}>
+                            <ThemedText style={[styles.invoiceServiceLabel, { color: colors.text }]}>
+                                {item.serviceType}
+                            </ThemedText>
+                            <ThemedText style={styles.invoiceAmount}>
+                                {item.invoiceAmount === 0
+                                    ? 'Free'
+                                    : `${item.currency ?? 'PHP'} ${item.invoiceAmount.toFixed(2)}`}
+                            </ThemedText>
+                        </View>
+                        <View style={styles.paymentStatusRow}>
+                            <View
+                                style={[
+                                    styles.paymentBadge,
+                                    {
+                                        backgroundColor:
+                                            effectivePaid ? '#10B981' :
+                                                item.paymentStatus === 'waived' ? '#6366F1' : '#F59E0B',
+                                    },
+                                ]}
+                            >
+                                <ThemedText style={styles.paymentBadgeText}>
+                                    {effectivePaid ? 'Paid' :
+                                        item.paymentStatus === 'waived' ? 'Waived' : 'Payment Required'}
+                                </ThemedText>
+                            </View>
+                            {!effectivePaid && item.paymentStatus !== 'waived' && item.paymentDueAt ? (
+                                <ThemedText style={[styles.paymentDueLabel, { color: colors.text }]}>
+                                    Due: {format(parseISO(item.paymentDueAt), 'MMM d, h:mm a')}
+                                </ThemedText>
+                            ) : null}
+                        </View>
+                        {!effectivePaid && item.paymentStatus !== 'waived' && item.paymentDueAt ? (
+                            <PaymentCountdown dueAt={item.paymentDueAt} />
+                        ) : null}
+                        {!effectivePaid && item.paymentStatus !== 'waived' ? (
+                            <Pressable
+                                style={[styles.payNowBtn, { backgroundColor: '#10B981' }]}
+                                onPress={handlePayNow}
+                                accessibilityRole="button"
+                            >
+                                <ThemedText style={styles.payNowBtnText}>
+                                    {item.invoiceAmount === 0
+                                        ? 'Confirm Free Appointment'
+                                        : `Pay ${item.currency ?? 'PHP'} ${item.invoiceAmount.toFixed(2)} Now`}
+                                </ThemedText>
+                            </Pressable>
+                        ) : null}
+                    </View>
+                ) : null}
 
                 {/* Notes */}
                 {item.notes ? (
@@ -267,12 +361,7 @@ export default function AppointmentDetailScreen({ route }: Props) {
                         : <ThemedText style={[styles.docEmpty, { color: colors.text }]}>The clinic hasn't shared any files.</ThemedText>}
 
                     <Pressable
-                        onPress={() =>
-                            navigation.navigate('Main', {
-                                screen: 'BottomTabs',
-                                params: { screen: 'FilesScreen' },
-                            })
-                        }
+                        onPress={() => navigation.navigate('Main', { screen: 'AttachFilesScreen' })}
                         style={[styles.attachBtn, { borderColor: colors.primary }]}
                         accessibilityRole="button"
                     >
@@ -286,11 +375,7 @@ export default function AppointmentDetailScreen({ route }: Props) {
                 <View
                     style={[
                         styles.actionBar,
-                        {
-                            backgroundColor: colors.card,
-                            borderTopColor: colors.border,
-                            paddingBottom: insets.bottom + 12,
-                        },
+                        { backgroundColor: colors.card, borderTopColor: colors.border, paddingBottom: insets.bottom + 12 },
                     ]}
                 >
                     <Pressable
@@ -298,9 +383,7 @@ export default function AppointmentDetailScreen({ route }: Props) {
                         style={[styles.rescheduleBtn, { borderColor: colors.primary }]}
                         accessibilityRole="button"
                     >
-                        <ThemedText style={[styles.rescheduleBtnText, { color: colors.primary }]}>
-                            Reschedule
-                        </ThemedText>
+                        <ThemedText style={[styles.rescheduleBtnText, { color: colors.primary }]}>Reschedule</ThemedText>
                     </Pressable>
                     <Pressable onPress={handleCancel} style={styles.cancelBtn} accessibilityRole="button">
                         <ThemedText style={styles.cancelBtnText}>Cancel Appointment</ThemedText>
@@ -330,7 +413,7 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         marginTop: 6,
     },
-    directionsBtnIcon: { fontSize: 14 },
+    directionsIcon: { fontSize: 14 },
     directionsBtnText: { fontSize: 13, fontWeight: '700' },
     section: {
         marginHorizontal: 16,
@@ -339,18 +422,13 @@ const styles = StyleSheet.create({
         padding: 16,
         gap: 8,
     },
-    sectionTitle: {
-        fontSize: 11,
-        fontWeight: '800',
-        letterSpacing: 0.6,
-        opacity: 0.55,
-        textTransform: 'uppercase',
-    },
+    sectionTitle: { fontSize: 11, fontWeight: '800', letterSpacing: 0.6, opacity: 0.55, textTransform: 'uppercase' },
     dateLabel: { fontSize: 14, fontWeight: '500', opacity: 0.75 },
     timeLabel: { fontSize: 32, fontWeight: '800', letterSpacing: -0.5 },
     duration: { fontSize: 13, opacity: 0.7 },
-    cachedRow: {},
     cachedText: { fontSize: 11, opacity: 0.5 },
+    countdownText: { fontSize: 13, fontWeight: '700', color: '#D97706' },
+    countdownOverdue: { color: '#EF4444' },
     providerRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
     providerAvatar: { width: 56, height: 56, borderRadius: 28 },
     providerAvatarFallback: { backgroundColor: '#94A3B8', alignItems: 'center', justifyContent: 'center' },
@@ -361,13 +439,7 @@ const styles = StyleSheet.create({
     credRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
     credChip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, borderWidth: 1 },
     credText: { fontSize: 11, fontWeight: '700' },
-    viewProfileBtn: {
-        alignSelf: 'flex-start',
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 999,
-        borderWidth: 1.5,
-    },
+    viewProfileBtn: { alignSelf: 'flex-start', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999, borderWidth: 1.5 },
     viewProfileText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.8 },
     notesText: { fontSize: 14, lineHeight: 22, opacity: 0.8 },
     docSubheader: { fontSize: 12, fontWeight: '700', opacity: 0.6, marginTop: 4 },
@@ -378,7 +450,7 @@ const styles = StyleSheet.create({
         borderBottomWidth: StyleSheet.hairlineWidth,
         paddingVertical: 10,
     },
-    docIconBox: { width: 36, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+    docIconBox: { width: 36, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(99,102,241,0.12)' },
     docIcon: { fontSize: 18 },
     docInfo: { flex: 1, gap: 2 },
     docName: { fontSize: 13, fontWeight: '600' },
@@ -394,6 +466,17 @@ const styles = StyleSheet.create({
         marginTop: 4,
     },
     attachBtnText: { fontSize: 13, fontWeight: '600' },
+    // Invoice / payment
+    invoiceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    invoiceServiceLabel: { fontSize: 14, opacity: 0.8, flex: 1 },
+    invoiceAmount: { fontSize: 20, fontWeight: '800' },
+    paymentStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
+    paymentBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
+    paymentBadgeText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+    paymentDueLabel: { fontSize: 12, opacity: 0.7 },
+    payNowBtn: { borderRadius: 999, paddingVertical: 12, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
+    payNowBtnText: { color: '#fff', fontSize: 14, fontWeight: '800' },
+    // Action bar
     actionBar: {
         paddingHorizontal: 16,
         paddingTop: 12,
@@ -401,13 +484,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         gap: 10,
     },
-    rescheduleBtn: {
-        flex: 1,
-        paddingVertical: 13,
-        borderRadius: 999,
-        borderWidth: 1.5,
-        alignItems: 'center',
-    },
+    rescheduleBtn: { flex: 1, paddingVertical: 13, borderRadius: 999, borderWidth: 1.5, alignItems: 'center' },
     rescheduleBtnText: { fontSize: 15, fontWeight: '700' },
     cancelBtn: {
         flex: 1,
@@ -420,3 +497,4 @@ const styles = StyleSheet.create({
     },
     cancelBtnText: { fontSize: 15, fontWeight: '700', color: '#EF4444' },
 });
+

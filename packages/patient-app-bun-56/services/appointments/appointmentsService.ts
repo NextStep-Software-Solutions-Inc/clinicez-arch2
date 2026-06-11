@@ -151,6 +151,44 @@ export async function getAppointmentDetail(
 }
 
 /**
+ * Updates the cached appointment in-place:
+ *   - Sets scheduledAt to the new ISO-8601 date/time string
+ *   - Resets status to 'pending' (awaiting clinic confirmation)
+ *   - Adds a rescheduledAt note to the rawJson
+ *
+ * This does NOT create a new booking draft. It mutates the existing cache row
+ * so the UI immediately reflects the pending reschedule before the next sync.
+ */
+export async function rescheduleAppointment(
+    appointmentId: string,
+    newScheduledAt: string,
+    db: ExpoSQLiteDatabase<any>,
+): Promise<AppointmentItem | null> {
+    const existing = await getAppointmentDetail(appointmentId, db);
+    if (!existing) return null;
+
+    const now = new Date().toISOString();
+    const updated: AppointmentItem = {
+        ...existing,
+        scheduledAt: newScheduledAt,
+        status: 'pending',
+        cachedAt: now,
+    };
+
+    await db
+        .update(appointments)
+        .set({
+            scheduledAt: newScheduledAt,
+            status: 'pending',
+            cachedAt: now,
+            rawJson: JSON.stringify(updated),
+        })
+        .where(eq(appointments.id, appointmentId));
+
+    return updated;
+}
+
+/**
  * Fetches available time slots for a clinic on a given date.
  * Not cached — always live (mock for now).
  */

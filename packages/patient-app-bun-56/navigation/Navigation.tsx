@@ -23,6 +23,8 @@ import BookingDraftScreen from './screens/BookingDraft.screen';
 import AppointmentsScreen from './screens/Appointments.screen';
 import AppointmentDetailScreen from './screens/appointments/AppointmentDetail.screen';
 import ProviderProfileScreen from './screens/appointments/ProviderProfile.screen';
+import RescheduleScreen from './screens/appointments/Reschedule.screen';
+import AttachFilesScreen from './screens/appointments/AttachFiles.screen';
 import LoginScreen from './screens/Login.screen';
 import SignupScreen from './screens/Signup.screen';
 import VerifyScreen from './screens/Verify.screen';
@@ -352,6 +354,28 @@ const MainStack = createNativeStackNavigator({
         title: 'Provider Profile',
         presentation: 'modal',
         headerBackTitle: '',
+      },
+    }),
+    RescheduleScreen: createNativeStackScreen({
+      screen: RescheduleScreen,
+      options: {
+        title: 'Reschedule',
+        presentation: 'formSheet',
+        sheetAllowedDetents: [0.88],
+        sheetGrabberVisible: true,
+        sheetCornerRadius: 20,
+        headerShown: true,
+      },
+    }),
+    AttachFilesScreen: createNativeStackScreen({
+      screen: AttachFilesScreen,
+      options: {
+        title: 'Attach Files',
+        presentation: 'formSheet',
+        sheetAllowedDetents: [0.75, 1.0],
+        sheetGrabberVisible: true,
+        sheetCornerRadius: 20,
+        headerShown: true,
       },
     }),
     // ── Profile Part A ────────────────────────────────────────────────────────

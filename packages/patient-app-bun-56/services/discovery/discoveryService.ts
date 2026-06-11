@@ -15,6 +15,7 @@ import {
     BookingDraftRecord,
     ClinicDetail,
     ClinicEntity,
+    ClinicProvider,
     ClinicView,
     ConsentSelection,
     HealthMetric,
@@ -249,6 +250,37 @@ function parseJsonArray<T>(value: string | null | undefined, fallback: T[]): T[]
     }
 }
 
+const providerFirstNames = ['Maria', 'Jose', 'Ana', 'Juan', 'Sofia', 'Carlos', 'Elena', 'Miguel', 'Rosa', 'Luis', 'Patricia', 'Eduardo'];
+const providerLastNames = ['Santos', 'Reyes', 'Cruz', 'Garcia', 'Lopez', 'Bautista', 'Mendoza', 'Torres', 'Ramos', 'Dela Cruz', 'Gonzales', 'Castillo'];
+const providerCredentials = ['MD', 'MD-FPCP', 'MD-FPOGS', 'MD-FPSCC', 'MD-FPCM', 'RN', 'RND', 'RPh', 'DDS', 'PT'];
+
+function buildProvidersForClinic(clinicId: string, clinicName: string, specialty: string): ClinicProvider[] {
+    const baseIndex = parseInt(clinicId.replace('clinic-', ''), 10) - 1;
+    const count = 2 + (baseIndex % 4);
+    return Array.from({ length: count }, (_, i) => {
+        const nameIdx = (baseIndex * 7 + i * 13) % providerFirstNames.length;
+        const lastIdx = (nameIdx + 3) % providerLastNames.length;
+        const credIdx = (baseIndex + i * 3) % providerCredentials.length;
+        const cred = providerCredentials[credIdx];
+        // Generate a deterministic rating between 3.5–5.0
+        const rawRating = 3.5 + ((baseIndex * 3 + i * 7) % 16) * 0.1;
+        const rating = Math.round(rawRating * 10) / 10;
+        return {
+            id: `provider-${clinicId}-${i + 1}`,
+            name: `Dr. ${providerFirstNames[nameIdx]} ${providerLastNames[lastIdx]}`,
+            specialty,
+            avatarUrl: `https://picsum.photos/seed/prov-${clinicId}-${i}/80/80`,
+            bio: `${cred} specializing in ${specialty.toLowerCase()} at ${clinicName}.`,
+            credentials: [cred],
+            rating,
+        } satisfies ClinicProvider;
+    });
+}
+
+function computeActiveMemberCount(featuredScore: number): number {
+    return 50 + Math.floor(featuredScore * 41.7);
+}
+
 function hasAllConsent(consent: ConsentSelection): boolean {
     return consent.acceptedDataSharing && consent.acceptedPrivacyPolicy && consent.acceptedTermsAndConditions;
 }
@@ -308,6 +340,7 @@ function mapOrganizationRows(rows: Array<Record<string, any>>) {
         requiredShareFields: parseJsonArray<ShareableFieldKey>(row.requiredShareFieldsJson, ['fullName', 'mobile']),
         partneredClinicIds: [] as string[],
         featuredScore: Number(row.featuredScore ?? 0),
+        activeMemberCount: computeActiveMemberCount(Number(row.featuredScore ?? 0)),
     } as OrganizationEntity));
 }
 
@@ -398,6 +431,7 @@ async function loadCatalogSnapshot(patientId: string) {
             isVisible,
             unlockedByOrganizationIds,
             membershipStatus: membership?.status,
+            healthcareProviders: buildProvidersForClinic(clinic.id, clinic.name, clinic.specialties[0] ?? 'General Medicine'),
         } satisfies ClinicDetail;
     });
 
@@ -535,6 +569,7 @@ function buildOrganizationPayload(row: Record<string, any>): OrganizationEntity 
         requiredShareFields: parseJsonArray<ShareableFieldKey>(String(row.requiredShareFieldsJson ?? '[]'), ['fullName', 'mobile']),
         partneredClinicIds: [],
         featuredScore: Number(row.featuredScore ?? 0),
+        activeMemberCount: computeActiveMemberCount(Number(row.featuredScore ?? 0)),
     };
 }
 
@@ -597,7 +632,7 @@ export async function listOrganizations(patientId: string, query = '', filter: '
 export async function listClinics(
     patientId: string,
     options: { query?: string; filter?: 'all' | 'public' | 'partnered' | 'joined'; organizationId?: string } = {},
-): Promise<ClinicView[]> {
+): Promise<ClinicDetail[]> {
     const snapshot = await loadCatalogSnapshot(patientId);
     const normalizedQuery = normalizeQuery(options.query ?? '');
     const filter = options.filter ?? 'all';
@@ -626,6 +661,7 @@ export async function listClinics(
                 isJoined,
                 isVisible,
                 membershipStatus: clinicMembership?.status,
+                healthcareProviders: buildProvidersForClinic(clinic.id, clinic.name, clinic.specialties[0] ?? 'General Medicine'),
             } as ClinicDetail;
         })
         .filter((clinic) => {
@@ -681,6 +717,7 @@ export async function getClinicDetail(patientId: string, clinicId: string): Prom
         isVisible,
         unlockedByOrganizationIds,
         membershipStatus: membership?.status,
+        healthcareProviders: buildProvidersForClinic(clinic.id, clinic.name, clinic.specialties[0] ?? 'General Medicine'),
     };
 }
 

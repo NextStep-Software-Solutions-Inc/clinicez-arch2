@@ -3,8 +3,9 @@ import { Alert, FlatList, Platform, Pressable, StyleSheet, View } from 'react-na
 import { useFocusEffect, useNavigation, useTheme } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
-import { isToday, isFuture, isPast, parseISO } from 'date-fns';
+import { format, isToday, isFuture, isPast, parseISO } from 'date-fns';
 import { MaterialSymbol, SFSymbol } from '@react-navigation/native';
+import { and, eq, desc } from 'drizzle-orm';
 import ThemedText from '@ui/ThemedText';
 import ThemedView from '@ui/ThemedView';
 import EmptyState from '@ui/EmptyState';
@@ -14,10 +15,75 @@ import SegmentedControl from 'components/appointments/SegmentedControl';
 import OfflineBanner from 'components/appointments/OfflineBanner';
 import { usePatientId } from 'hooks/usePatientId';
 import { db } from '@db/index';
+import { bookingDrafts } from '@db/schema/bookingDrafts';
+import { clinics as clinicsTable } from '@db/schema/clinics';
 import { fetchAppointments } from '../../services/appointments/appointmentsService';
 import type { AppointmentItem } from '../../services/appointments/types';
 
 type Segment = 0 | 1;
+
+interface DraftSummary {
+    id: string;
+    clinicId: string;
+    clinicName: string | null;
+    reason: string | null;
+    preferredDate: string | null;
+    updatedAt: Date;
+}
+
+function DraftCard({
+    draft,
+    onContinue,
+    onDiscard,
+}: {
+    draft: DraftSummary;
+    onContinue: () => void;
+    onDiscard: () => void;
+}) {
+    const { colors } = useTheme();
+    const dateLabel = (() => {
+        try { return format(draft.updatedAt, 'MMM d'); } catch { return ''; }
+    })();
+    return (
+        <Pressable
+            onPress={onContinue}
+            accessibilityRole="button"
+            style={({ pressed }) => [
+                styles.draftCard,
+                { borderColor: '#F59E0B50', backgroundColor: '#F59E0B08', opacity: pressed ? 0.84 : 1 },
+            ]}
+        >
+            <View style={styles.draftHeader}>
+                <ThemedText style={styles.draftClinic} numberOfLines={1}>
+                    {draft.clinicName ?? 'Unknown Clinic'}
+                </ThemedText>
+                <ThemedText style={[styles.draftDate, { color: colors.text }]}>{dateLabel}</ThemedText>
+            </View>
+            {draft.reason ? (
+                <ThemedText style={[styles.draftReason, { color: colors.text }]} numberOfLines={2}>
+                    {/* Strip service metadata prefix if present */}
+                    {draft.reason.replace(/^\[\[service:[^\]]+\]\]\n?/, '')}
+                </ThemedText>
+            ) : null}
+            <View style={styles.draftActions}>
+                <Pressable
+                    onPress={onContinue}
+                    style={[styles.draftContinueBtn, { backgroundColor: '#F59E0B' }]}
+                    accessibilityRole="button"
+                >
+                    <ThemedText style={styles.draftContinueBtnText}>Continue Booking</ThemedText>
+                </Pressable>
+                <Pressable
+                    onPress={onDiscard}
+                    style={styles.draftDiscardBtn}
+                    accessibilityRole="button"
+                >
+                    <ThemedText style={[styles.draftDiscardBtnText, { color: colors.text }]}>Discard</ThemedText>
+                </Pressable>
+            </View>
+        </Pressable>
+    );
+}
 
 function isUpcoming(item: AppointmentItem): boolean {
     try {
@@ -53,7 +119,39 @@ export default function AppointmentsScreen() {
     const [isLoading, setIsLoading] = useState(true);
     const [isFromCache, setIsFromCache] = useState(false);
     const [segment, setSegment] = useState<Segment>(0);
+    const [drafts, setDrafts] = useState<DraftSummary[]>([]);
     const dbRef = useRef(db);
+
+    const loadDrafts = useCallback(async () => {
+        const rows = await dbRef.current
+            .select({
+                id: bookingDrafts.id,
+                clinicId: bookingDrafts.clinicId,
+                clinicName: clinicsTable.name,
+                reason: bookingDrafts.reason,
+                preferredDate: bookingDrafts.preferredDate,
+                updatedAt: bookingDrafts.updatedAt,
+            })
+            .from(bookingDrafts)
+            .leftJoin(clinicsTable, eq(bookingDrafts.clinicId, clinicsTable.id))
+            .where(and(
+                eq(bookingDrafts.patientId, patientId),
+                eq(bookingDrafts.status, 'draft'),
+            ))
+            .orderBy(desc(bookingDrafts.updatedAt));
+        setDrafts(rows.map(r => {
+            // Strip the service metadata prefix from notes before displaying the reason
+            const rawReason = r.reason ?? null;
+            return {
+                id: r.id,
+                clinicId: r.clinicId,
+                clinicName: r.clinicName ?? null,
+                reason: rawReason,
+                preferredDate: r.preferredDate ?? null,
+                updatedAt: r.updatedAt,
+            };
+        }));
+    }, [patientId]);
 
     const loadAppointments = useCallback(async () => {
         setIsLoading(true);
@@ -65,7 +163,7 @@ export default function AppointmentsScreen() {
         finally { setIsLoading(false); }
     }, [patientId]);
 
-    useFocusEffect(useCallback(() => { loadAppointments(); }, [loadAppointments]));
+    useFocusEffect(useCallback(() => { loadAppointments(); loadDrafts(); }, [loadAppointments, loadDrafts]));
 
     const upcomingItems = appointments.filter(isUpcoming);
     const pastItems = appointments.filter(isPastItem);
@@ -76,7 +174,14 @@ export default function AppointmentsScreen() {
         navigation.navigate('Main', { screen: 'AppointmentDetailScreen', params: { appointmentId: item.id } });
 
     const handleReschedule = (item: AppointmentItem) =>
-        navigation.navigate('Main', { screen: 'BookingDraftScreen', params: { clinicId: item.clinic.id } });
+        navigation.navigate('Main', {
+            screen: 'RescheduleScreen',
+            params: {
+                appointmentId: item.id,
+                clinicId: item.clinic.id,
+                currentScheduledAt: item.scheduledAt,
+            },
+        });
 
     const handleCancel = (item: AppointmentItem) =>
         Alert.alert('Cancel Appointment', `Cancel at ${item.clinic.name}?`, [
@@ -90,12 +195,47 @@ export default function AppointmentsScreen() {
     const handleBookNew = () =>
         navigation.navigate('Main', { screen: 'BookingDraftScreen' });
 
+    const handleDiscardDraft = (draftId: string) => {
+        Alert.alert('Discard Draft', 'Remove this booking draft?', [
+            { text: 'Keep', style: 'cancel' },
+            {
+                text: 'Discard',
+                style: 'destructive',
+                onPress: async () => {
+                    await dbRef.current.delete(bookingDrafts).where(eq(bookingDrafts.id, draftId));
+                    loadDrafts();
+                },
+            },
+        ]);
+    };
+
     const renderHeader = () => (
         <View style={styles.listHeader}>
             <OfflineBanner isFromCache={isFromCache} />
             <View style={styles.segmentWrapper}>
                 <SegmentedControl options={['Upcoming', 'Past']} selectedIndex={segment} onChange={setSegment} />
             </View>
+
+            {/* Drafts — only in Upcoming tab */}
+            {segment === 0 && drafts.length > 0 && (
+                <View style={styles.draftSection}>
+                    <ThemedText style={[styles.sectionLabel, { color: colors.text }]}>DRAFTS</ThemedText>
+                    {drafts.map(draft => (
+                        <View key={draft.id} style={styles.cardWrapper}>
+                            <DraftCard
+                                draft={draft}
+                                onContinue={() =>
+                                    navigation.navigate('Main', {
+                                        screen: 'BookingDraftScreen',
+                                        params: { clinicId: draft.clinicId },
+                                    })
+                                }
+                                onDiscard={() => handleDiscardDraft(draft.id)}
+                            />
+                        </View>
+                    ))}
+                </View>
+            )}
             {segment === 0 && activeTodayItem && (
                 <View style={styles.todaySection}>
                     <ThemedText style={[styles.sectionLabel, { color: colors.text }]}>TODAY</ThemedText>
@@ -201,6 +341,24 @@ const styles = StyleSheet.create({
     },
     emptyWrapper: { paddingHorizontal: 16, paddingTop: 8 },
     cardWrapper: { paddingHorizontal: 16 },
+    draftSection: { gap: 8, marginBottom: 8 },
+    // Draft card
+    draftCard: {
+        borderRadius: 16,
+        borderWidth: 1,
+        padding: 14,
+        gap: 8,
+    },
+    draftHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    draftClinic: { fontSize: 14, fontWeight: '700', flex: 1 },
+    draftDate: { fontSize: 11, opacity: 0.6, marginLeft: 8 },
+    draftReason: { fontSize: 13, lineHeight: 18, opacity: 0.75 },
+    draftActions: { flexDirection: 'row', gap: 8, marginTop: 4 },
+    draftContinueBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999 },
+    draftContinueBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+    draftDiscardBtn: { paddingHorizontal: 14, paddingVertical: 8 },
+    draftDiscardBtnText: { fontSize: 13, fontWeight: '600', opacity: 0.6 },
+    // FAB
     fab: {
         position: 'absolute',
         right: 20,

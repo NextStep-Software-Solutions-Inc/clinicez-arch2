@@ -35,17 +35,17 @@ function isoDate(offsetDays: number, hour: number, minute = 0): string {
 // ── Fixture Data ──────────────────────────────────────────────────────────────
 
 const AFFILIATED_CLINICS_CITYSIDE: AffiliatedClinic[] = [
-    { id: 'clinic-1', name: 'Cityside Medical Center', address: '123 Ayala Ave, Makati City, Metro Manila' },
-    { id: 'clinic-4', name: 'Eastwood Outpatient Clinic', address: '45 Eastwood Ave, Quezon City, Metro Manila' },
+    { id: 'clinic-1', name: 'Cityside Medical Center', address: '123 Ayala Ave, Makati City, Metro Manila', logoUrl: 'https://ui-avatars.com/api/?name=Cityside+Medical&background=1D4ED8&color=fff&size=128', coverImageUrl: 'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=800&q=80' },
+    { id: 'clinic-4', name: 'Eastwood Outpatient Clinic', address: '45 Eastwood Ave, Quezon City, Metro Manila', logoUrl: 'https://ui-avatars.com/api/?name=Eastwood+Clinic&background=7C3AED&color=fff&size=128', coverImageUrl: 'https://images.unsplash.com/photo-1516841273335-e39b37888115?w=800&q=80' },
 ];
 
 const AFFILIATED_CLINICS_HOPEWELL: AffiliatedClinic[] = [
-    { id: 'clinic-2', name: 'Hopewell Community Clinic', address: '78 Rizal St, Bacolod City, Negros Occidental' },
-    { id: 'clinic-5', name: 'Southern Cross Medical Hub', address: '12 Burgos St, Davao City, Davao del Sur' },
+    { id: 'clinic-2', name: 'Hopewell Community Clinic', address: '78 Rizal St, Bacolod City, Negros Occidental', logoUrl: 'https://ui-avatars.com/api/?name=Hopewell+Clinic&background=059669&color=fff&size=128', coverImageUrl: 'https://images.unsplash.com/photo-1538108149393-fbbd81895907?w=800&q=80' },
+    { id: 'clinic-5', name: 'Southern Cross Medical Hub', address: '12 Burgos St, Davao City, Davao del Sur', logoUrl: 'https://ui-avatars.com/api/?name=Southern+Cross&background=DC2626&color=fff&size=128', coverImageUrl: 'https://images.unsplash.com/photo-1551190822-a9333d879b1f?w=800&q=80' },
 ];
 
 const AFFILIATED_CLINICS_METRO: AffiliatedClinic[] = [
-    { id: 'clinic-3', name: 'Metro Primary Care Center', address: '56 Session Rd, Baguio City, Benguet' },
+    { id: 'clinic-3', name: 'Metro Primary Care Center', address: '56 Session Rd, Baguio City, Benguet', logoUrl: 'https://ui-avatars.com/api/?name=Metro+Primary&background=D97706&color=fff&size=128', coverImageUrl: 'https://images.unsplash.com/photo-1587351021759-3e566b6af7cc?w=800&q=80' },
 ];
 
 const PROVIDER_DR_REYES: ProviderSnapshot = {
@@ -56,6 +56,7 @@ const PROVIDER_DR_REYES: ProviderSnapshot = {
     bio: 'Dr. Reyes is a board-certified internist with over 15 years of clinical practice. She completed her fellowship at the Philippine General Hospital and specializes in preventive medicine and chronic disease management. She is known for her holistic, patient-centered approach.',
     credentials: ['MD', 'FPCP', 'DPIM', 'MSCE'],
     affiliatedClinics: AFFILIATED_CLINICS_CITYSIDE,
+    rating: 4.8,
 };
 
 const PROVIDER_DR_VILLANUEVA: ProviderSnapshot = {
@@ -66,6 +67,7 @@ const PROVIDER_DR_VILLANUEVA: ProviderSnapshot = {
     bio: 'Dr. Villanueva is a cardiologist with expertise in interventional cardiology and heart failure management. He trained at the Heart Institute of the Philippines and has been practicing for 20 years.',
     credentials: ['MD', 'FPCC', 'FACC', 'DPCM'],
     affiliatedClinics: AFFILIATED_CLINICS_HOPEWELL,
+    rating: 4.6,
 };
 
 const PROVIDER_DR_DELA_CRUZ: ProviderSnapshot = {
@@ -76,6 +78,7 @@ const PROVIDER_DR_DELA_CRUZ: ProviderSnapshot = {
     bio: 'Dr. Dela Cruz is a general practitioner serving the Baguio community for over 10 years. She provides comprehensive primary care for all ages, with a focus on family medicine and preventive health.',
     credentials: ['MD', 'DPFM'],
     affiliatedClinics: AFFILIATED_CLINICS_METRO,
+    rating: 4.9,
 };
 
 const CLINIC_CITYSIDE: ClinicSnapshot = {
@@ -141,6 +144,10 @@ function buildMockAppointments(patientId: string, now: string): AppointmentItem[
             notes: 'Please fast for 8 hours before the appointment. Bring your previous lab results.',
             attachedDocuments: DOCS_CITYSIDE,
             cachedAt: now,
+            paymentStatus: 'unpaid',
+            invoiceAmount: 500,
+            currency: 'PHP',
+            paymentDueAt: isoDate(1, 23, 59),
         },
         // 2. Upcoming — action_required (consent needed)
         {
@@ -155,20 +162,28 @@ function buildMockAppointments(patientId: string, now: string): AppointmentItem[
             notes: 'Please review and sign the updated consent form before your visit.',
             attachedDocuments: [],
             cachedAt: now,
+            paymentStatus: null,
+            invoiceAmount: null,
+            currency: 'PHP',
+            paymentDueAt: null,
         },
-        // 3. Upcoming — pending
+        // 3. Upcoming — pending (free service — tests zero-payment gate)
         {
             id: 'appt-upcoming-2',
             patientId,
             clinic: CLINIC_METRO,
             provider: PROVIDER_DR_DELA_CRUZ,
-            serviceType: 'General Consultation',
+            serviceType: 'Free Initial Screening',
             scheduledAt: isoDate(7, 9, 0),
-            durationMinutes: 20,
+            durationMinutes: 10,
             status: 'pending' as AppointmentStatus,
             notes: null,
             attachedDocuments: [],
             cachedAt: now,
+            paymentStatus: 'unpaid',
+            invoiceAmount: 0,
+            currency: 'PHP',
+            paymentDueAt: null,
         },
         // 4. Past — completed
         {
@@ -183,6 +198,10 @@ function buildMockAppointments(patientId: string, now: string): AppointmentItem[
             notes: null,
             attachedDocuments: [],
             cachedAt: now,
+            paymentStatus: 'paid',
+            invoiceAmount: 200,
+            currency: 'PHP',
+            paymentDueAt: null,
         },
         // 5. Past — canceled
         {
@@ -197,6 +216,10 @@ function buildMockAppointments(patientId: string, now: string): AppointmentItem[
             notes: 'Canceled by patient — rescheduled.',
             attachedDocuments: [],
             cachedAt: now,
+            paymentStatus: 'waived',
+            invoiceAmount: 800,
+            currency: 'PHP',
+            paymentDueAt: null,
         },
     ];
 }
@@ -262,10 +285,11 @@ export async function getAvailableSlots(clinicId: string, date: string): Promise
 export async function getServiceOptions(_clinicId: string): Promise<BookingServiceOption[]> {
     await delay(150);
     return [
-        { id: 'svc-1', name: 'Annual Physical Exam', description: 'Comprehensive head-to-toe physical examination', durationMinutes: 45 },
-        { id: 'svc-2', name: 'General Consultation', description: 'Discuss symptoms, get a diagnosis and treatment plan', durationMinutes: 20 },
-        { id: 'svc-3', name: 'Follow-Up Visit', description: 'Review test results or check on a previous condition', durationMinutes: 15 },
-        { id: 'svc-4', name: 'Specialist Referral Consult', description: 'Consultation for specialist referral evaluation', durationMinutes: 30 },
+        { id: 'svc-0', name: 'Free Initial Screening', description: 'Complimentary first-visit health screening — no charge', durationMinutes: 10, price: 0, currency: 'PHP' },
+        { id: 'svc-1', name: 'Annual Physical Exam', description: 'Comprehensive head-to-toe physical examination', durationMinutes: 45, price: 500, currency: 'PHP' },
+        { id: 'svc-2', name: 'General Consultation', description: 'Discuss symptoms, get a diagnosis and treatment plan', durationMinutes: 20, price: 300, currency: 'PHP' },
+        { id: 'svc-3', name: 'Follow-Up Visit', description: 'Review test results or check on a previous condition', durationMinutes: 15, price: 200, currency: 'PHP' },
+        { id: 'svc-4', name: 'Specialist Referral Consult', description: 'Consultation for specialist referral evaluation', durationMinutes: 30, price: 800, currency: 'PHP' },
     ];
 }
 

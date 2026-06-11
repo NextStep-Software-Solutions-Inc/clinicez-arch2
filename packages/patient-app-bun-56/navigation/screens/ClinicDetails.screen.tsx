@@ -152,6 +152,50 @@ export default function ClinicDetailsScreen() {
       </ThemedView>
 
       <ThemedView style={[styles.section, { borderColor: colors.border, backgroundColor: colors.card }]}>
+        <ThemedText style={styles.sectionTitle}>Healthcare Providers</ThemedText>
+        {clinic.healthcareProviders.length === 0 ? (
+          <ThemedText style={[styles.sectionCopy, { color: colors.text }]}>No providers listed for this clinic.</ThemedText>
+        ) : (
+          <FlatList
+            data={clinic.healthcareProviders}
+            keyExtractor={(item) => item.id}
+            scrollEnabled={false}
+            ItemSeparatorComponent={() => <ThemedView style={styles.divider} />}
+            renderItem={({ item: provider }) => (
+              <Pressable
+                onPress={() =>
+                  navigation.navigate('Main', {
+                    screen: 'ProviderProfileScreen',
+                    params: {
+                      providerData: {
+                        ...provider,
+                        affiliatedClinics: [{ id: clinic.id, name: clinic.name, address: clinic.address, logoUrl: clinic.logoUrl ?? null, coverImageUrl: clinic.coverImageUrl ?? null }],
+                      },
+                    },
+                  })
+                }
+                accessibilityRole="button"
+                style={({ pressed }) => [styles.providerRow, { opacity: pressed ? 0.75 : 1 }]}
+              >
+                <ThemedView style={[styles.providerAvatar, { backgroundColor: colors.primary }]}>
+                  <ThemedText style={styles.providerInitials}>
+                    {provider.name.split(' ').filter(w => w[0]?.match(/[A-Z]/)).slice(0, 2).map(w => w[0]).join('')}
+                  </ThemedText>
+                </ThemedView>
+                <ThemedView style={styles.providerInfo}>
+                  <ThemedText style={styles.providerName}>{provider.name}</ThemedText>
+                  <ThemedText style={[styles.providerMeta, { color: colors.text }]}>
+                    {provider.specialty} · {provider.credentials.join(', ')}
+                  </ThemedText>
+                </ThemedView>
+                <ThemedText style={[styles.providerChevron, { color: colors.text }]}>›</ThemedText>
+              </Pressable>
+            )}
+          />
+        )}
+      </ThemedView>
+
+      <ThemedView style={[styles.section, { borderColor: colors.border, backgroundColor: colors.card }]}>
         <ThemedText style={styles.sectionTitle}>Partner organizations</ThemedText>
         <FlatList
           data={clinic.linkedOrganizations}
@@ -219,6 +263,13 @@ const styles = StyleSheet.create({
   linkTitle: { fontSize: 15, fontWeight: '700' },
   linkSubtitle: { fontSize: 13, opacity: 0.8 },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(148, 163, 184, 0.3)' },
+  providerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
+  providerAvatar: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
+  providerInitials: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  providerInfo: { flex: 1, gap: 2 },
+  providerName: { fontSize: 15, fontWeight: '700' },
+  providerMeta: { fontSize: 12, opacity: 0.75 },
+  providerChevron: { fontSize: 22, opacity: 0.4 },
   primaryButton: { borderRadius: 14, minHeight: 46, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
   primaryButtonText: { color: '#fff', fontSize: 14, fontWeight: '800' },
   secondaryButton: { borderRadius: 14, minHeight: 46, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, borderWidth: StyleSheet.hairlineWidth },

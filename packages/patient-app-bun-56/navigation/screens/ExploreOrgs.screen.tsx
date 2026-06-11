@@ -225,7 +225,10 @@ export default function ExploreOrgsScreen() {
                         <ThemedView style={styles.cardBody}>
                             <ThemedText style={styles.cardTitle}>{item.name}</ThemedText>
                             <ThemedText style={[styles.cardDescription, { color: colors.text }]}>{item.description}</ThemedText>
-                            <ThemedText style={[styles.metaText, { color: colors.text }]}>Partnered clinics: {item.partneredClinicIds.length}</ThemedText>
+                            <ThemedView style={styles.metaRow}>
+                                <ThemedText style={[styles.metaText, { color: colors.text }]}>Partnered clinics: {item.partneredClinicIds.length}</ThemedText>
+                                <ThemedText style={[styles.metaText, { color: colors.primary }]}>👥 {item.activeMemberCount.toLocaleString()} members</ThemedText>
+                            </ThemedView>
 
                             <ThemedView style={styles.cardActionsRow}>
                                 <Pressable
@@ -321,7 +324,7 @@ export default function ExploreOrgsScreen() {
                             <ThemedText style={styles.sectionLabel}>Required data fields</ThemedText>
                             <ThemedView style={styles.requiredFieldsWrap}>
                                 {selectedOrg?.requiredShareFields.map((field) => (
-                                    <ThemedView key={field} style={[styles.requiredFieldChip, { borderColor: colors.border }]}> 
+                                    <ThemedView key={field} style={[styles.requiredFieldChip, { borderColor: colors.border }]}>
                                         <ThemedText style={styles.requiredFieldText}>{getShareFieldLabel(field)}</ThemedText>
                                     </ThemedView>
                                 ))}
@@ -350,7 +353,7 @@ export default function ExploreOrgsScreen() {
                             <ThemedText style={[styles.linksText, { color: colors.text }]}>Terms: {selectedOrg?.termsAndConditionsUrl}</ThemedText>
                         </ScrollView>
 
-                        <ThemedView style={[styles.modalActions, { borderTopColor: colors.border }]}> 
+                        <ThemedView style={[styles.modalActions, { borderTopColor: colors.border }]}>
                             <Pressable
                                 onPress={closeJoinModal}
                                 style={({ pressed }) => [
@@ -463,6 +466,11 @@ const styles = StyleSheet.create({
     metaText: {
         fontSize: 12,
         opacity: 0.8,
+    },
+    metaRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
     },
     badge: {
         borderRadius: 999,

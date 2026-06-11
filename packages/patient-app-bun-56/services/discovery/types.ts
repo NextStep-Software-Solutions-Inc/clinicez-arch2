@@ -46,6 +46,17 @@ export interface OrganizationEntity {
     requiredShareFields: ShareableFieldKey[];
     partneredClinicIds: string[];
     featuredScore: number;
+    activeMemberCount: number;
+}
+
+export interface ClinicProvider {
+    id: string;
+    name: string;
+    specialty: string;
+    avatarUrl?: string | null;
+    bio?: string | null;
+    credentials: string[];
+    rating: number;  // 0–5, one decimal place
 }
 
 export interface ClinicEntity {
@@ -101,6 +112,7 @@ export interface OrganizationDetail extends OrganizationView {
 export interface ClinicDetail extends ClinicView {
     linkedOrganizations: OrganizationEntity[];
     membershipStatus?: 'pending' | 'active';
+    healthcareProviders: ClinicProvider[];
 }
 
 export interface BookingDraftRecord {

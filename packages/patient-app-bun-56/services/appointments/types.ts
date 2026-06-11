@@ -14,6 +14,7 @@ export interface AffiliatedClinic {
     id: string;
     name: string;
     logoUrl?: string | null;
+    coverImageUrl?: string | null;
     address: string;
 }
 
@@ -25,6 +26,7 @@ export interface ProviderSnapshot {
     bio?: string | null;
     credentials: string[];
     affiliatedClinics: AffiliatedClinic[];
+    rating: number;  // 0–5, one decimal place
 }
 
 export interface ClinicSnapshot {
@@ -56,7 +58,12 @@ export interface AppointmentItem {
     status: AppointmentStatus;
     notes?: string | null;
     attachedDocuments: AttachedDocument[];
-    cachedAt: string;             // ISO-8601 — when this was last fetched from server
+    cachedAt: string;             // ISO-8601
+    // Payment / invoicing
+    paymentStatus?: 'unpaid' | 'paid' | 'waived' | null;
+    paymentDueAt?: string | null; // ISO-8601
+    invoiceAmount?: number | null; // in local currency
+    currency?: string;            // e.g. 'PHP'
 }
 
 export interface AppointmentsApiResponse {
@@ -84,6 +91,8 @@ export interface BookingServiceOption {
     name: string;
     description?: string | null;
     durationMinutes: number;
+    price?: number | null;   // null or 0 means free; positive = fee in local currency
+    currency?: string;       // e.g. 'PHP'
 }
 
 export interface BookingProviderOption {
@@ -101,11 +110,16 @@ export interface BookingWizardState {
     clinicName: string;
     service: BookingServiceOption | null;
     provider: BookingProviderOption | null;
-    date: string;        // YYYY-MM-DD
-    time: string;        // HH:mm
+    skipProvider: boolean;
+    date: string;             // YYYY-MM-DD
     slotId: string;
-    chiefComplaint: string;
-    notes: string;
+    skipSchedule: boolean;
+    subject: string;          // optional visit subject/title
+    chiefComplaint: string;   // required
+    notes: string;            // optional additional notes
+    consentPrivacy: boolean;
+    consentTerms: boolean;
+    attachedFileIds: string[];
 }
 
 // ── Navigation param lists ────────────────────────────────────────────────────
@@ -115,7 +129,9 @@ import type { StaticScreenProps } from '@react-navigation/native';
 export type AppointmentDetailParams = { appointmentId: string };
 export type ProviderProfileParams = { providerData: ProviderSnapshot };
 export type BookingDraftParams = { clinicId?: string } | undefined;
+export type RescheduleParams = { appointmentId: string; clinicId: string; currentScheduledAt: string };
 
 export type AppointmentDetailScreenProps = StaticScreenProps<AppointmentDetailParams>;
 export type ProviderProfileScreenProps = StaticScreenProps<ProviderProfileParams>;
 export type BookingDraftScreenProps = StaticScreenProps<BookingDraftParams>;
+export type RescheduleScreenProps = StaticScreenProps<RescheduleParams>;
