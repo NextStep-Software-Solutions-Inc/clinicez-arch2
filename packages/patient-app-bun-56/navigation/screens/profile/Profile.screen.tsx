@@ -29,6 +29,8 @@ import {
 import { isNull, count } from 'drizzle-orm';
 import ProfileCard from 'components/ProfileCard';
 import { SettingsSection, SettingsRow } from '@ui/SettingsItem';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
 type Counts = {
   addresses: number;
@@ -131,11 +133,13 @@ export default function ProfileScreen() {
   }, [navigation]);
 
   const c = counts;
+  const inset = useSafeAreaInsets();
+  const tabBarHeight = (useBottomTabBarHeight?.() || 96) + inset.bottom;
 
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={styles.container}
+      contentContainerStyle={[styles.container, { paddingBottom: tabBarHeight }]}
     >
       <ProfileCard />
 
@@ -389,7 +393,6 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    gap: 4,
-    paddingBottom: 40,
+    gap: 4
   },
 });

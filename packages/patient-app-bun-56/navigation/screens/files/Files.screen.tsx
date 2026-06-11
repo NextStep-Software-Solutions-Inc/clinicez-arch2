@@ -344,11 +344,11 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
           onPress={() => navigation.navigate('StorageScreen', { folderId: folderId ?? null })}
           style={({ pressed }) => [{ padding: 8, opacity: pressed ? 0.7 : 1 }]}
         >
-          {Icon({ android: 'cloud_sync', ios: 'icloud.and.arrow.up.fill', color: BRAND, size: 22 })}
+          {Icon({ android: 'cloud', ios: 'icloud.and.arrow.up.fill', color: colors.primary, size: 22 })}
         </Pressable>
       ),
     });
-  }, [navigation, folderName, folderId]);
+  }, [navigation, folderName, folderId, colors.primary]);
 
   const load = useCallback(
     async (mode: LoadMode = 'initial', searchQuery = queryRef.current) => {

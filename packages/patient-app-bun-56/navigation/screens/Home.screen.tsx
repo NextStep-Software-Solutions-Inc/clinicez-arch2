@@ -12,6 +12,7 @@ import { usePatientId } from 'hooks/usePatientId';
 import { getHomeDashboard } from '../../services/discovery/discoveryService';
 import { HomeDashboard, HealthMetric, AppointmentLineupItem } from '../../services/discovery/types';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
 function MetricCard({ metric }: { metric: HealthMetric }) {
   const { colors } = useTheme();
@@ -75,10 +76,10 @@ export default function HomeScreen() {
   const navigation = useNavigation();
   const { user } = useUser();
   const patientId = usePatientId();
-  const insets = useSafeAreaInsets();
   const [dashboard, setDashboard] = useState<HomeDashboard | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-
+  const inset = useSafeAreaInsets();
+  const tabBarHeight = (useBottomTabBarHeight?.() || 96) + inset.bottom;
   useEffect(() => {
     let mounted = true;
     const load = () => {
@@ -104,7 +105,7 @@ export default function HomeScreen() {
   const greetingName = useMemo(() => dashboard?.greetingName ?? user?.firstName ?? 'Patient', [dashboard, user]);
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + 80}]}>
+    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.container, { paddingBottom: tabBarHeight }]}>
       {/* <ProfileCard /> */}
 
       <LinearGradient
@@ -156,13 +157,13 @@ export default function HomeScreen() {
         />
       </SettingsSection>
 
-      <SettingsSection 
-        title="Next Appointment Line-up" 
+      <SettingsSection
+        title="Next Appointment Line-up"
         titleRightAction={
           <Pressable onPress={() => navigation.navigate('Main', { screen: 'BottomTabs', params: { screen: 'AppointmentsScreen' } })} accessibilityRole="button">
-            <ThemedText style={{ 
-              color: colors.primary, 
-              fontWeight: '600', 
+            <ThemedText style={{
+              color: colors.primary,
+              fontWeight: '600',
               fontSize: 12,
               letterSpacing: 0.5
             }}>SEE ALL</ThemedText>
