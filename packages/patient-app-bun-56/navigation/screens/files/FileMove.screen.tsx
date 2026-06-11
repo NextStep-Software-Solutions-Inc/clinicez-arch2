@@ -45,7 +45,7 @@ export default function FileMoveScreen({ route }: FilesScreenProps<'FileMoveScre
   };
 
   return (
-    <ThemedView style={[{ flex: 1 }, { backgroundColor: dark ? '#0F0A1E' : '#F5F3FF' }]}>
+    <ThemedView style={[{ flex: 1 }, { backgroundColor: colors.background }]}>
       <FlatList
         data={options}
         keyExtractor={(item) => item.id ?? 'root'}

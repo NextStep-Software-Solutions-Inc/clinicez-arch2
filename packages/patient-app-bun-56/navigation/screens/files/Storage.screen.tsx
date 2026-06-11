@@ -9,6 +9,7 @@ import { usePatientId } from 'hooks/usePatientId';
 import { useAuth as useClerkAuth } from '@clerk/expo';
 import { listFolderContents, formatBytes } from '../../../services/files';
 import type { FilesScreenProps } from './navigationTypes';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
 const BRAND = '#7C3AED';
 
@@ -48,13 +49,13 @@ function StorageHero({ used, total, pending }: { used: number; total: number; pe
       end={{ x: 1, y: 1 }}
       style={styles.hero}
     >
-      <View style={styles.heroTop}>
-        <View style={styles.heroIconBox}>
+      <ThemedView style={styles.heroTop}>
+        <ThemedView style={styles.heroIconBox}>
           {Ic({ a: 'cloud', i: 'icloud.fill', color: '#fff', size: 28 })}
-        </View>
-        <View style={{ flex: 1, marginLeft: 12 }}>
+        </ThemedView>
+        <ThemedView style={{ flex: 1, marginLeft: 12 }}>
           <ThemedText style={[styles.heroTitle, { color: '#fff' }]}>Cloud Storage</ThemedText>
-          <View style={[
+          <ThemedView style={[
             styles.heroBadge,
             { backgroundColor: pending > 0 ? 'rgba(245,158,11,0.3)' : 'rgba(16,185,129,0.3)' },
           ]}>
@@ -62,31 +63,31 @@ function StorageHero({ used, total, pending }: { used: number; total: number; pe
             <ThemedText style={[styles.heroBadgeText, { color: pending > 0 ? '#FCD34D' : '#A7F3D0' }]}>
               {pending > 0 ? `${pending} pending` : 'Sync active'}
             </ThemedText>
-          </View>
-        </View>
+          </ThemedView>
+        </ThemedView>
         <Pressable
           onPress={() => Alert.alert('Upgrade', 'Upgrade to unlock more storage.')}
           style={({ pressed }) => [styles.upgradeBtn, { opacity: pressed ? 0.85 : 1 }]}
         >
           <ThemedText style={[styles.upgradeBtnText, { color: BRAND }]}>Upgrade</ThemedText>
         </Pressable>
-      </View>
+      </ThemedView>
 
-      <View style={styles.heroBarTrack}>
-        <View style={[styles.heroBarFill, { width: `${pctInt}%`, backgroundColor: isHigh ? '#FCA5A5' : '#fff' }]} />
-      </View>
+      <ThemedView style={styles.heroBarTrack}>
+        <ThemedView style={[styles.heroBarFill, { width: `${pctInt}%`, backgroundColor: isHigh ? '#FCA5A5' : '#fff' }]} />
+      </ThemedView>
 
-      <View style={styles.heroLabels}>
+      <ThemedView style={styles.heroLabels}>
         <ThemedText style={[styles.heroLabelSm, { color: 'rgba(255,255,255,0.75)' }]}>{formatBytes(used)} used</ThemedText>
         <ThemedText style={[styles.heroLabelBold, { color: '#fff' }]}>{formatBytes(total - used)} free · {pctInt}%</ThemedText>
-      </View>
+      </ThemedView>
     </LinearGradient>
   );
 }
 
 // ─── Stat pills ───────────────────────────────────────────────────────────────
 function StatPills({ filesCount, foldersCount, pending, avg }: { filesCount: number; foldersCount: number; pending: number; avg: number }) {
-  const { dark } = useTheme();
+  const { colors } = useTheme();
   const pills = [
     { label: 'Files', value: String(filesCount), color: '#3B82F6', a: 'insert_drive_file', i: 'doc.fill' },
     { label: 'Folders', value: String(foldersCount), color: '#F59E0B', a: 'folder', i: 'folder.fill' },
@@ -94,17 +95,17 @@ function StatPills({ filesCount, foldersCount, pending, avg }: { filesCount: num
     { label: 'Avg size', value: formatBytes(avg), color: '#10B981', a: 'data_usage', i: 'chart.bar.fill' },
   ];
   return (
-    <View style={styles.pillsRow}>
+    <ThemedView style={styles.pillsRow}>
       {pills.map((p) => (
-        <View key={p.label} style={[styles.pillCard, { backgroundColor: dark ? '#1C1633' : '#fff' }]}>
-          <View style={[styles.pillIcon, { backgroundColor: p.color + '1A' }]}>
+        <ThemedView key={p.label} style={[styles.pillCard, { backgroundColor: colors.card }]}>
+          <ThemedView style={[styles.pillIcon, { backgroundColor: p.color + '1A' }]}>
             {Ic({ a: p.a, i: p.i, color: p.color, size: 18 })}
-          </View>
+          </ThemedView>
           <ThemedText style={styles.pillValue}>{p.value}</ThemedText>
           <ThemedText style={styles.pillLabel}>{p.label}</ThemedText>
-        </View>
+        </ThemedView>
       ))}
-    </View>
+    </ThemedView>
   );
 }
 
@@ -121,9 +122,9 @@ function CategoryChips({ types, onPress }: { types: any[]; onPress: (id: string)
             onPress={() => onPress(t.id)}
             style={({ pressed }) => [styles.chip, { backgroundColor: m.color + '15', opacity: pressed ? 0.75 : 1 }]}
           >
-            <View style={[styles.chipIcon, { backgroundColor: m.color + '22' }]}>
+            <ThemedView style={[styles.chipIcon, { backgroundColor: m.color + '22' }]}>
               {Ic({ a: m.a, i: m.i, color: m.color, size: 22 })}
-            </View>
+            </ThemedView>
             <ThemedText style={[styles.chipLabel, { color: m.color }]}>{t.label}</ThemedText>
             <ThemedText style={[styles.chipCount, { color: m.color }]}>{t.count}</ThemedText>
           </Pressable>
@@ -136,16 +137,16 @@ function CategoryChips({ types, onPress }: { types: any[]; onPress: (id: string)
 // ─── File list row ────────────────────────────────────────────────────────────
 function FileListRow({ name, subtitle, sizeBytes, color, a, i }: { name: string; subtitle: string; sizeBytes: number; color: string; a: string; i: string }) {
   return (
-    <View style={styles.fileRow}>
-      <View style={[styles.fileRowIcon, { backgroundColor: color + '1A' }]}>
+    <ThemedView style={styles.fileRow}>
+      <ThemedView style={[styles.fileRowIcon, { backgroundColor: color + '1A' }]}>
         {Ic({ a, i, color, size: 20 })}
-      </View>
-      <View style={styles.fileRowBody}>
+      </ThemedView>
+      <ThemedView style={styles.fileRowBody}>
         <ThemedText style={styles.fileRowName} numberOfLines={1}>{name}</ThemedText>
         <ThemedText style={styles.fileRowSub} numberOfLines={1}>{subtitle}</ThemedText>
-      </View>
+      </ThemedView>
       <ThemedText style={styles.fileRowSize}>{formatBytes(sizeBytes)}</ThemedText>
-    </View>
+    </ThemedView>
   );
 }
 
@@ -200,15 +201,16 @@ export default function StorageScreen({ route }: FilesScreenProps<'StorageScreen
     return { filesCount, foldersCount, pending, total, used, typeList, avg, recent, largest };
   }, [contents]);
 
+  const tabBarHeight = useBottomTabBarHeight() || 96 + insets.bottom;
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }]}
+      contentContainerStyle={[styles.scroll, { paddingBottom: tabBarHeight }]}
       showsVerticalScrollIndicator={false}
       refreshControl={<RefreshControl refreshing={loading} onRefresh={load} colors={[BRAND]} tintColor={BRAND} />}
     >
       {loading || !stats ? (
-        <View style={styles.loadingWrap}><ActivityIndicator size="large" color={BRAND} /></View>
+        <ThemedView style={styles.loadingWrap}><ActivityIndicator size="large" color={BRAND} /></ThemedView>
       ) : (
         <>
           <StorageHero used={stats.used} total={stats.total} pending={stats.pending} />
@@ -221,16 +223,16 @@ export default function StorageScreen({ route }: FilesScreenProps<'StorageScreen
           />
 
           {stats.typeList.length > 0 && (
-            <View style={styles.section}>
+            <ThemedView style={styles.section}>
               <ThemedText style={styles.sectionTitle}>Categories</ThemedText>
               <CategoryChips types={stats.typeList} onPress={() => navigation.goBack()} />
-            </View>
+            </ThemedView>
           )}
 
           {stats.recent.length > 0 && (
-            <View style={styles.section}>
+            <ThemedView style={styles.section}>
               <ThemedText style={styles.sectionTitle}>Recent</ThemedText>
-              <View style={[styles.listCard, { backgroundColor: dark ? '#1C1633' : '#fff' }]}>
+              <ThemedView style={[styles.listCard, { backgroundColor: colors.card }]}>
                 {stats.recent.map((f: any, idx: number) => {
                   const m = iconForFile(f);
                   const ts = f.createdAt ? new Date(f.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
@@ -241,29 +243,29 @@ export default function StorageScreen({ route }: FilesScreenProps<'StorageScreen
                     </View>
                   );
                 })}
-              </View>
-            </View>
+              </ThemedView>
+            </ThemedView>
           )}
 
           {stats.largest.length > 0 && (
-            <View style={styles.section}>
+            <ThemedView style={styles.section}>
               <ThemedText style={styles.sectionTitle}>Largest files</ThemedText>
-              <View style={[styles.listCard, { backgroundColor: dark ? '#1C1633' : '#fff' }]}>
+              <ThemedView style={[styles.listCard, { backgroundColor: colors.card }]}>
                 {stats.largest.map((f: any, idx: number) => {
                   const m = iconForFile(f);
                   const pct = stats.total > 0 ? Math.round(((f.sizeBytes ?? 0) / stats.total) * 100) : 0;
                   return (
-                    <View key={f.id}>
+                    <ThemedView key={f.id}>
                       <FileListRow name={f.name} subtitle={`${pct}% of your storage`} sizeBytes={f.sizeBytes ?? 0} {...m} />
-                      {idx < stats.largest.length - 1 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
-                    </View>
+                      {idx < stats.largest.length - 1 && <ThemedView style={[styles.divider, { backgroundColor: colors.border }]} />}
+                    </ThemedView>
                   );
                 })}
-              </View>
-            </View>
+              </ThemedView>
+            </ThemedView>
           )}
 
-          <View style={styles.actionsRow}>
+          <ThemedView style={styles.actionsRow}>
             <Pressable
               onPress={() => Alert.alert('Free up space', 'Remove local cached copies of backed up files?', [
                 { text: 'Cancel', style: 'cancel' },
@@ -281,7 +283,7 @@ export default function StorageScreen({ route }: FilesScreenProps<'StorageScreen
               {Ic({ a: 'ios_share', i: 'square.and.arrow.up', color: BRAND, size: 18 })}
               <ThemedText style={[styles.actionBtnText, { color: colors.text }]}>Export all</ThemedText>
             </Pressable>
-          </View>
+          </ThemedView>
         </>
       )}
     </ScrollView>

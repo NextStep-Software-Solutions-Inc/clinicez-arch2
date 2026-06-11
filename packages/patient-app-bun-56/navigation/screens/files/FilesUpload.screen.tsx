@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, ColorValue, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, ColorValue, Platform, Pressable, ScrollView, StyleSheet } from 'react-native';
 import {
   MaterialSymbol,
   SFSymbol,
@@ -18,6 +18,8 @@ import { usePatientId } from 'hooks/usePatientId';
 import { formatBytes, getFileConfig, getTypeExtensions, importFiles, listAllFolders, refreshFileTypes } from '../../../services/files';
 import type { PickedFileInput } from '../../../services/files';
 import type { FilesScreenProps } from './navigationTypes';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
 const BRAND = '#7C3AED';
 
@@ -40,7 +42,7 @@ function Icon({ android, ios, color, size = 20 }: { android: MaterialSymbolProps
 }
 
 export default function FilesUploadScreen({ route }: FilesScreenProps<'FilesUploadScreen'>) {
-  const { colors, dark } = useTheme();
+  const { colors } = useTheme();
   const navigation = useNavigation('FilesUploadScreen');
   const patientId = usePatientId();
   const { getToken } = useClerkAuth();
@@ -117,58 +119,57 @@ export default function FilesUploadScreen({ route }: FilesScreenProps<'FilesUplo
   };
 
   const usedPct = config && config.quotaBytes > 0 ? Math.min(1, config.usedStorageBytes / config.quotaBytes) : 0;
-  const pageBg = dark ? '#0F0A1E' : '#F5F3FF';
-
+  const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight() ?? 96 + insets.bottom;
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={[styles.content, { backgroundColor: pageBg }]}
-      style={{ backgroundColor: pageBg }}
+      contentContainerStyle={[styles.content, { paddingBottom: tabBarHeight, }]}
     >
       {/* Destination banner */}
-      <ThemedView style={[styles.destCard, { backgroundColor: dark ? '#1C1633' : '#fff' }]}>
-        <View style={[styles.destIcon, { backgroundColor: BRAND + '18' }]}>
+      <ThemedView style={[styles.destCard, { backgroundColor: colors.card }]}>
+        <ThemedView style={[styles.destIcon, { backgroundColor: BRAND + '18' }]}>
           {Icon({ android: 'folder', ios: 'folder.fill', color: BRAND, size: 20 })}
-        </View>
-        <View style={{ flex: 1 }}>
+        </ThemedView>
+        <ThemedView style={{ flex: 1 }}>
           <ThemedText style={styles.destTitle}>Saving to</ThemedText>
           <ThemedText style={[styles.destFolder, { color: BRAND }]}>{folderName}</ThemedText>
-        </View>
+        </ThemedView>
         {config ? (
-          <View style={{ alignItems: 'flex-end' }}>
+          <ThemedView style={{ alignItems: 'flex-end' }}>
             <ThemedText style={[styles.quotaText, { color: colors.text }]}>
               {formatBytes(config.quotaBytes - config.usedStorageBytes)} free
             </ThemedText>
-            <View style={styles.quotaBar}>
-              <View style={[styles.quotaFill, { width: `${Math.round(usedPct * 100)}%`, backgroundColor: usedPct > 0.9 ? '#EF4444' : BRAND }]} />
-            </View>
-          </View>
+            <ThemedView style={styles.quotaBar}>
+              <ThemedView style={[styles.quotaFill, { width: `${Math.round(usedPct * 100)}%`, backgroundColor: usedPct > 0.9 ? '#EF4444' : BRAND }]} />
+            </ThemedView>
+          </ThemedView>
         ) : null}
       </ThemedView>
 
       {/* Source picker */}
-      <View style={styles.pickGrid}>
+      <ThemedView style={styles.pickGrid}>
         {([
-          { label: 'Browse', sub: 'From device', android: 'upload_file' as MaterialSymbolProps['name'], ios: 'doc.badge.plus' as SFSymbolProps['name'], color: BRAND, onPress: pickDocuments },
-          { label: 'Photos', sub: 'From library', android: 'photo_library' as MaterialSymbolProps['name'], ios: 'photo.on.rectangle' as SFSymbolProps['name'], color: '#EC4899', onPress: () => pickImage('library') },
-          { label: 'Camera', sub: 'Take a photo', android: 'photo_camera' as MaterialSymbolProps['name'], ios: 'camera.fill' as SFSymbolProps['name'], color: '#10B981', onPress: () => pickImage('camera') },
+          { label: 'Browse', sub: 'From device', android: 'upload_file', ios: 'doc.badge.plus', color: BRAND, onPress: pickDocuments },
+          { label: 'Photos', sub: 'From library', android: 'photo_library', ios: 'photo.on.rectangle', color: '#EC4899', onPress: () => pickImage('library') },
+          { label: 'Camera', sub: 'Take a photo', android: 'photo_camera', ios: 'camera.fill', color: '#10B981', onPress: () => pickImage('camera') },
         ] as const).map((s) => (
           <Pressable
             key={s.label}
             onPress={s.onPress}
-            style={({ pressed }) => [styles.pickCard, { backgroundColor: dark ? '#1C1633' : '#fff', opacity: pressed ? 0.8 : 1 }]}
+            style={({ pressed }) => [styles.pickCard, { backgroundColor: colors.card, opacity: pressed ? 0.8 : 1 }]}
           >
-            <View style={[styles.pickIconWrap, { backgroundColor: s.color + '18' }]}>
+            <ThemedView style={[styles.pickIconWrap, { backgroundColor: s.color + '18' }]}>
               {Icon({ android: s.android, ios: s.ios, color: s.color, size: 26 })}
-            </View>
+            </ThemedView>
             <ThemedText style={styles.pickTitle}>{s.label}</ThemedText>
             <ThemedText style={[styles.pickSub, { color: colors.text }]}>{s.sub}</ThemedText>
           </Pressable>
         ))}
-      </View>
+      </ThemedView>
 
       {/* Type selector */}
-      <View style={styles.section}>
+      <ThemedView style={styles.section}>
         <ThemedText style={styles.sectionTitle}>Document type</ThemedText>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.typeList}>
           {fileTypes.map((type) => {
@@ -182,12 +183,12 @@ export default function FilesUploadScreen({ route }: FilesScreenProps<'FilesUplo
                   styles.typeChip,
                   selected
                     ? { backgroundColor: meta.color, borderColor: meta.color }
-                    : { backgroundColor: dark ? '#1C1633' : '#fff', borderColor: colors.border },
+                    : { backgroundColor: colors.card, borderColor: colors.border },
                 ]}
               >
-                <View style={[styles.typeChipIcon, { backgroundColor: selected ? 'rgba(255,255,255,0.2)' : meta.color + '18' }]}>
+                <ThemedView style={[styles.typeChipIcon, { backgroundColor: selected ? 'rgba(255,255,255,0.2)' : meta.color + '18' }]}>
                   {Icon({ android: meta.android, ios: meta.ios, color: selected ? '#fff' : meta.color, size: 16 })}
-                </View>
+                </ThemedView>
                 <ThemedText style={[styles.typeLabel, { color: selected ? '#fff' : colors.text }]}>{type.label}</ThemedText>
                 <ThemedText style={[styles.typeMeta, { color: selected ? 'rgba(255,255,255,0.78)' : colors.text }]}>
                   {getTypeExtensions(type).slice(0, 3).join(', ') || 'All types'}
@@ -196,39 +197,39 @@ export default function FilesUploadScreen({ route }: FilesScreenProps<'FilesUplo
             );
           })}
         </ScrollView>
-      </View>
+      </ThemedView>
 
       {/* Selected files */}
-      <View style={styles.section}>
+      <ThemedView style={styles.section}>
         <ThemedText style={styles.sectionTitle}>
           {pickedFiles.length > 0 ? `${pickedFiles.length} file${pickedFiles.length === 1 ? '' : 's'} selected` : 'Selected files'}
         </ThemedText>
         {pickedFiles.length > 0 ? (
-          <View style={styles.selectedList}>
-            {pickedFiles.map((item) => {
+          <ThemedView style={styles.selectedList}>
+            {pickedFiles.map((item, index) => {
               const meta = typeMeta(selectedTypeId ?? '');
               return (
-                <ThemedView key={item.file.uri} style={[styles.selectedRow, { backgroundColor: dark ? '#1C1633' : '#fff' }]}>
-                  <View style={[styles.selectedIcon, { backgroundColor: meta.color + '18' }]}>
+                <ThemedView key={item.file.uri + index} style={[styles.selectedRow, { backgroundColor: colors.card }]}>
+                  <ThemedView style={[styles.selectedIcon, { backgroundColor: meta.color + '18' }]}>
                     {Icon({ android: meta.android, ios: meta.ios, color: meta.color, size: 18 })}
-                  </View>
-                  <View style={styles.selectedBody}>
+                  </ThemedView>
+                  <ThemedView style={styles.selectedBody}>
                     <ThemedText style={styles.selectedName} numberOfLines={1}>{item.name ?? item.file.name}</ThemedText>
                     <ThemedText style={[styles.selectedMeta, { color: colors.text }]}>{formatBytes(item.sizeBytes ?? item.file.size)}</ThemedText>
-                  </View>
+                  </ThemedView>
                 </ThemedView>
               );
             })}
-          </View>
+          </ThemedView>
         ) : (
-          <View style={[styles.emptyFiles, { backgroundColor: dark ? '#1C1633' : '#fff' }]}>
+          <ThemedView style={[styles.emptyFiles, { backgroundColor: colors.card }]}>
             {Icon({ android: 'upload_file', ios: 'doc.badge.plus', color: colors.text, size: 28 })}
             <ThemedText style={[styles.emptyFilesText, { color: colors.text }]}>
               No files selected yet. Use the picker above.
             </ThemedText>
-          </View>
+          </ThemedView>
         )}
-      </View>
+      </ThemedView>
 
       {/* Save button */}
       <Pressable
@@ -249,7 +250,7 @@ export default function FilesUploadScreen({ route }: FilesScreenProps<'FilesUplo
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 16, paddingBottom: 48, gap: 18 },
+  content: { padding: 16, gap: 18 },
 
   destCard: {
     flexDirection: 'row',

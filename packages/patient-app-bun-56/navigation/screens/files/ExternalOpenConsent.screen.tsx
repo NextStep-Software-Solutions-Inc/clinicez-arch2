@@ -39,7 +39,7 @@ export default function ExternalOpenConsentScreen({ route }: FilesScreenProps<'E
   };
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor: dark ? '#0F0A1E' : '#F5F3FF' }]}>
+    <ThemedView style={[styles.container]}>
       <View style={styles.content}>
         <View style={styles.iconWrap}>
           {Platform.select({

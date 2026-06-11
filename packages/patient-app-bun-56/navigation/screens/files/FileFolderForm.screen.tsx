@@ -40,23 +40,23 @@ export default function FileFolderFormScreen({ route }: FilesScreenProps<'FileFo
   };
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor: dark ? '#0F0A1E' : '#F5F3FF' }]}>
-      <View style={styles.content}>
-        <View style={[styles.iconWrap, { backgroundColor: BRAND + '18' }]}>
+    <ThemedView style={[styles.container]}>
+      <ThemedView style={styles.content}>
+        <ThemedView style={[styles.iconWrap, { backgroundColor: BRAND + '18' }]}>
           {Platform.select({
             android: <MaterialSymbol name="create_new_folder" size={32} color={BRAND} />,
             ios: <SFSymbol name="folder.badge.plus" size={28} color={BRAND} />,
           })}
-        </View>
+        </ThemedView>
 
         <ThemedText style={styles.title}>{isEdit ? 'Rename folder' : 'New folder'}</ThemedText>
         <ThemedText style={[styles.subtitle, { color: colors.text }]}>
           {isEdit ? 'Enter a new name for this folder.' : 'Give your folder a descriptive name.'}
         </ThemedText>
 
-        <View style={[
+        <ThemedView style={[
           styles.inputWrap,
-          { backgroundColor: dark ? '#1C1633' : '#fff', borderColor: colors.border },
+          { backgroundColor: colors.card, borderColor: colors.border },
         ]}>
           {Platform.select({
             android: <MaterialSymbol name="folder" size={20} color={BRAND} />,
@@ -70,7 +70,7 @@ export default function FileFolderFormScreen({ route }: FilesScreenProps<'FileFo
             autoFocus
             style={[styles.input, { color: colors.text }]}
           />
-        </View>
+        </ThemedView>
 
         <Pressable
           onPress={handleSave}
@@ -90,7 +90,7 @@ export default function FileFolderFormScreen({ route }: FilesScreenProps<'FileFo
         >
           <ThemedText style={[styles.cancelText, { color: colors.text }]}>Cancel</ThemedText>
         </Pressable>
-      </View>
+      </ThemedView>
     </ThemedView>
   );
 }

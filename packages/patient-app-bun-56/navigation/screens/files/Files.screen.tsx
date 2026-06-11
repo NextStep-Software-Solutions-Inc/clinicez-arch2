@@ -12,10 +12,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { Swipeable } from 'react-native-gesture-handler';
+import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import {
   MaterialSymbol,
   SFSymbol,
+  Theme,
   useFocusEffect,
   useNavigation,
   useTheme,
@@ -42,6 +43,7 @@ import {
   preparePreviewFile,
 } from '../../../services/files';
 import type { FilesScreenProps } from './navigationTypes';
+import ThemedView from '@ui/ThemedView';
 
 // ─── types ────────────────────────────────────────────────────────────────────
 type BrowserItem = FileBrowserFolder | FileBrowserFile;
@@ -52,6 +54,28 @@ type ListEntry = BrowserItem | SectionHeader;
 
 // ─── design tokens ─────────────────────────────────────────────────────────────
 const BRAND = '#7C3AED';
+type ActionType = 'share' | 'move' | 'delete';
+
+const getActionColors = (isDark: boolean): Record<ActionType, { bg: string; fg: string }> => ({
+  share: {
+    // Light: Pastel amber background with deep amber text
+    // Dark: Soft muted gold background with dark charcoal text for high contrast
+    bg: isDark ? '#E2A85F' : '#FED7AA',
+    fg: isDark ? '#763F19' : '#9A3412'
+  },
+  move: {
+    // Light: Soft pastel blue background with deep navy text
+    // Dark: Muted twilight blue background with white text
+    bg: isDark ? '#94A3D7' : '#DBEAFE',
+    fg: isDark ? '#2C3E75' : '#1E3A8A'
+  },
+  delete: {
+    // Light: Soft pastel rose background with deep crimson text
+    // Dark: Muted brick red background with white text
+    bg: isDark ? '#CD7F71' : '#FEE2E2',
+    fg: isDark ? '#69251F' : '#991B1B'
+  },
+});
 
 // ─── per-type icon / colour map ───────────────────────────────────────────────
 type TMeta = { color: string; android: MaterialSymbolProps['name']; ios: SFSymbolProps['name'] };
@@ -89,6 +113,8 @@ function Icon({
 
 // ─── StatusDot ────────────────────────────────────────────────────────────────
 function StatusDot({ status }: { status: string }) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const c =
     status === 'synced' ? '#10B981' :
       status === 'failed' ? '#EF4444' :
@@ -115,10 +141,11 @@ function FileRow({
   onDelete: () => void;
   onShare: () => void;
 }) {
-  const { colors, dark } = useTheme();
+  const theme = useTheme();
+  const { colors, dark } = theme;
   const isFolder = item.kind === 'folder';
   const meta = isFolder ? FOLDER_META : fileMeta(item as FileBrowserFile);
-
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const dateStr =
     !isFolder && (item as FileBrowserFile).createdAt
       ? new Date((item as FileBrowserFile).createdAt!).toLocaleDateString(undefined, {
@@ -135,22 +162,22 @@ function FileRow({
     ].filter(Boolean).join('  ·  ');
 
   const renderRightActions = () => (
-    <View style={styles.swipeWrap}>
+    <ThemedView style={styles.swipeWrap}>
       {!isFolder && (
-        <Pressable onPress={onShare} style={[styles.swipeBtn, { backgroundColor: '#F59E0B' }]}>
-          {Icon({ android: 'ios_share', ios: 'square.and.arrow.up', color: '#fff', size: 18 })}
-          <ThemedText style={styles.swipeBtnLabel}>Share</ThemedText>
+        <Pressable onPress={onShare} style={[styles.swipeBtn, { backgroundColor: getActionColors(dark).share.bg }]}>
+          {Icon({ android: 'ios_share', ios: 'square.and.arrow.up', color: getActionColors(dark).share.fg, size: 18 })}
+          <ThemedText style={[styles.swipeBtnLabel, { color: getActionColors(dark).share.fg }]}>Share</ThemedText>
         </Pressable>
       )}
-      <Pressable onPress={onMove} style={[styles.swipeBtn, { backgroundColor: BRAND }]}>
-        {Icon({ android: 'drive_file_move', ios: 'folder.badge.plus', color: '#fff', size: 18 })}
-        <ThemedText style={styles.swipeBtnLabel}>Move</ThemedText>
+      <Pressable onPress={onMove} style={[styles.swipeBtn, { backgroundColor: getActionColors(dark).move.bg }]}>
+        {Icon({ android: 'drive_file_move', ios: 'folder.badge.plus', color: getActionColors(dark).move.fg, size: 18 })}
+        <ThemedText style={[styles.swipeBtnLabel, { color: getActionColors(dark).move.fg }]}>Move</ThemedText>
       </Pressable>
-      <Pressable onPress={onDelete} style={[styles.swipeBtn, { backgroundColor: '#EF4444' }]}>
-        {Icon({ android: 'delete', ios: 'trash', color: '#fff', size: 18 })}
-        <ThemedText style={styles.swipeBtnLabel}>Delete</ThemedText>
+      <Pressable onPress={onDelete} style={[styles.swipeBtn, { backgroundColor: getActionColors(dark).delete.bg }]}>
+        {Icon({ android: 'delete', ios: 'trash', color: getActionColors(dark).delete.fg, size: 18 })}
+        <ThemedText style={[styles.swipeBtnLabel, { color: getActionColors(dark).delete.fg }]}>Delete</ThemedText>
       </Pressable>
-    </View>
+    </ThemedView>
   );
 
   return (
@@ -160,7 +187,6 @@ function FileRow({
         accessibilityRole="button"
         style={({ pressed }) => [
           styles.row,
-          { backgroundColor: dark ? '#1C1633' : '#fff', opacity: pressed ? 0.8 : 1 },
         ]}
       >
         <View style={[styles.rowIcon, { backgroundColor: meta.color + '1A' }]}>
@@ -196,45 +222,47 @@ function FilesHeader({
   onOpenUpload: () => void;
   onSync: () => void;
 }) {
-  const { colors, dark } = useTheme();
+  const theme = useTheme();
+  const { colors, dark } = theme;
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const hasCrumbs = (contents?.breadcrumbs?.length ?? 0) > 0 || !!folderId;
 
   return (
-    <View style={styles.header}>
+    <ThemedView style={styles.header}>
       {(contents?.pendingSyncCount ?? 0) > 0 && (
         <Pressable
           onPress={onSync}
           disabled={isSyncing}
           style={({ pressed }) => [styles.syncBanner, { opacity: pressed ? 0.8 : 1 }]}
         >
-          <View style={styles.syncIconWrap}>
+          <ThemedView style={styles.syncIconWrap}>
             {isSyncing
               ? <ActivityIndicator size="small" color="#B45309" />
               : Icon({ android: 'cloud_upload', ios: 'icloud.and.arrow.up', color: '#B45309', size: 17 })}
-          </View>
-          <View style={{ flex: 1 }}>
+          </ThemedView>
+          <ThemedView style={{ flex: 1 }}>
             <ThemedText style={[styles.syncTitle, { color: dark ? '#FDE68A' : '#78350F' }]}>
               {contents!.pendingSyncCount} item{contents!.pendingSyncCount === 1 ? '' : 's'} waiting to back up
             </ThemedText>
             <ThemedText style={[styles.syncSub, { color: dark ? '#FCD34D' : '#92400E' }]}>Tap to sync now</ThemedText>
-          </View>
+          </ThemedView>
           {Icon({ android: 'chevron_right', ios: 'chevron.right', color: '#B45309', size: 15 })}
         </Pressable>
       )}
 
-      <View style={[styles.searchPill, { backgroundColor: dark ? '#1C1633' : '#fff', borderColor: colors.border }]}>
+      <ThemedView style={[styles.searchPill, { backgroundColor: colors.card, borderColor: colors.border }]}>
         {Icon({ android: 'search', ios: 'magnifyingglass', color: colors.text, size: 17 })}
         <TextInput
           value={query}
           onChangeText={onChangeQuery}
           placeholder="Search files and folders…"
-          placeholderTextColor={dark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'}
+          placeholderTextColor={colors.text}
           style={[styles.searchInput, { color: colors.text }]}
           autoCapitalize="none"
           returnKeyType="search"
         />
-        {isSearching ? <ActivityIndicator size="small" color={BRAND} /> : null}
-      </View>
+        {isSearching ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+      </ThemedView>
 
       {hasCrumbs && (
         <ScrollView
@@ -272,18 +300,18 @@ function FilesHeader({
           ))}
         </ScrollView>
       )}
-    </View>
+    </ThemedView>
   );
 }
 
 // ─── FilesScreen ──────────────────────────────────────────────────────────────
 export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScreen'>) {
-  const { colors, dark } = useTheme();
+  const theme = useTheme();
   const navigation = useNavigation('FilesBrowserScreen');
   const patientId = usePatientId();
   const { getToken } = useClerkAuth();
   const insets = useSafeAreaInsets();
-  const tabBarHeight = useBottomTabBarHeight ? useBottomTabBarHeight() : 0;
+  const tabBarHeight = useBottomTabBarHeight?.() || 96;
   const fabBottom = 20 + insets.bottom + tabBarHeight;
   const { runWithAutoLockPaused } = useAppAuth();
   const folderId = route.params?.folderId;
@@ -298,6 +326,8 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const { colors, dark } = theme;
+  const styles = useMemo(() => createStyles(theme), [theme]);
 
   useEffect(() => { getTokenRef.current = getToken; }, [getToken]);
   useEffect(() => { queryRef.current = query; }, [query]);
@@ -423,19 +453,18 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
   const openRoot = useCallback(() => { navigation.navigate('FilesBrowserScreen'); }, [navigation]);
   const openFolder = useCallback((id: string) => { navigation.navigate('FilesBrowserScreen', { folderId: id }); }, [navigation]);
 
-  const pageBg = dark ? '#0F0A1E' : '#F5F3FF';
 
   if (isLoading && !contents) {
     return (
-      <View style={[styles.center, { backgroundColor: pageBg }]}>
+      <ThemedView style={[styles.center]}>
         <ActivityIndicator size="large" color={BRAND} />
         <ThemedText style={styles.loadingText}>Loading your files…</ThemedText>
-      </View>
+      </ThemedView>
     );
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: pageBg }}>
+    <ThemedView style={{ flex: 1 }}>
       <FlatList<ListEntry>
         data={items}
         keyExtractor={(item) => item.id}
@@ -444,8 +473,10 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={() => load('refresh')}
-            tintColor={BRAND}
-            colors={[BRAND]}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+            progressBackgroundColor={colors.background}
+
           />
         }
         contentContainerStyle={[styles.listContent, { paddingBottom: 110 + tabBarHeight }]}
@@ -548,145 +579,146 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
         </Pressable>
 
       </View>
-    </View>
+    </ThemedView>
   );
 }
 
 // ─── styles ───────────────────────────────────────────────────────────────────
-const styles = StyleSheet.create({
-  listContent: { padding: 16, paddingBottom: 110 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  loadingText: { fontSize: 14, opacity: 0.6 },
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    listContent: { padding: 16, paddingBottom: 110 },
+    center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+    loadingText: { fontSize: 14, opacity: 0.6 },
 
-  header: { gap: 12, marginBottom: 16 },
+    header: { gap: 12, marginBottom: 16 },
 
-  syncBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: 'rgba(245,158,11,0.12)',
-    borderRadius: 16,
-    padding: 14,
-  },
-  syncIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: 'rgba(245,158,11,0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  syncTitle: { fontSize: 13, fontWeight: '700' },
-  syncSub: { fontSize: 11, marginTop: 2, opacity: 0.85 },
+    syncBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      backgroundColor: 'rgba(245,158,11,0.12)',
+      borderRadius: 16,
+      padding: 14,
+    },
+    syncIconWrap: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      backgroundColor: 'rgba(245,158,11,0.18)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    syncTitle: { fontSize: 13, fontWeight: '700' },
+    syncSub: { fontSize: 11, marginTop: 2, opacity: 0.85 },
 
-  searchPill: {
-    height: 48,
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  searchInput: { flex: 1, fontSize: 15 },
+    searchPill: {
+      height: 48,
+      borderRadius: 999,
+      borderWidth: StyleSheet.hairlineWidth,
+      paddingHorizontal: 16,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.06,
+      shadowRadius: 4,
+      elevation: 1,
+    },
+    searchInput: { flex: 1, fontSize: 15 },
 
-  crumbRow: { gap: 8, paddingVertical: 2 },
-  crumb: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  crumbText: { fontSize: 13, fontWeight: '700' },
+    crumbRow: { gap: 8, paddingVertical: 2 },
+    crumb: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      borderRadius: 999,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+    },
+    crumbText: { fontSize: 13, fontWeight: '700' },
 
-  sectionHead: {
-    fontSize: 12,
-    fontWeight: '800',
-    opacity: 0.5,
-    letterSpacing: 0.7,
-    textTransform: 'uppercase',
-    marginTop: 12,
-    marginBottom: 8,
-    marginLeft: 4,
-  },
+    sectionHead: {
+      fontSize: 12,
+      fontWeight: '800',
+      opacity: 0.5,
+      letterSpacing: 0.7,
+      textTransform: 'uppercase',
+      marginTop: 12,
+      marginBottom: 8,
+      marginLeft: 4,
+    },
 
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 16,
-    gap: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  rowIcon: { width: 46, height: 46, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
-  rowBody: { flex: 1, minWidth: 0 },
-  rowName: { fontSize: 15, fontWeight: '700' },
-  rowSub: { fontSize: 12, opacity: 0.6, marginTop: 2 },
+    row: {
+      backgroundColor: theme.colors.card,
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 12,
+      borderRadius: 16,
+      gap: 12,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.05,
+      shadowRadius: 3,
+      elevation: 1,
+    },
+    rowIcon: { width: 46, height: 46, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+    rowBody: { flex: 1, minWidth: 0 },
+    rowName: { fontSize: 15, fontWeight: '700' },
+    rowSub: { fontSize: 12, opacity: 0.6, marginTop: 2 },
 
-  dot: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  dotInner: { width: 6, height: 6, borderRadius: 3 },
-  dotLabel: { fontSize: 11, fontWeight: '700' },
+    dot: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      borderRadius: 999,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+    },
+    dotInner: { width: 6, height: 6, borderRadius: 3 },
+    dotLabel: { fontSize: 11, fontWeight: '700' },
 
-  swipeWrap: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    borderRadius: 16,
-    overflow: 'hidden',
-    marginLeft: 6,
-  },
-  swipeBtn: { width: 72, alignItems: 'center', justifyContent: 'center', gap: 3 },
-  swipeBtnLabel: { color: '#fff', fontSize: 11, fontWeight: '700' },
+    swipeWrap: {
+      flexDirection: 'row',
+      alignItems: 'stretch',
+      borderRadius: 16,
+      overflow: 'hidden',
+      marginLeft: 6,
+    },
+    swipeBtn: { width: 72, alignItems: 'center', justifyContent: 'center', gap: 3 },
+    swipeBtnLabel: { fontSize: 11, fontWeight: '700' },
 
-  fabWrap: { position: 'absolute', right: 20, bottom: 36, alignItems: 'flex-end', zIndex: 9999, elevation: 20 },
-  fabMenu: { marginBottom: 94, gap: 10, alignItems: 'flex-end' },
-  fabItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 18,
-    paddingVertical: 13,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  fabItemLabel: { fontSize: 14, fontWeight: '700' },
-  fabItemLabelWhite: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  fab: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: BRAND,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: BRAND,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.45,
-    shadowRadius: 10,
-    elevation: 8,
-    bottom: 80
-  },
-});
+    fabWrap: { position: 'absolute', right: 20, bottom: 36, alignItems: 'flex-end', zIndex: 9999, elevation: 20 },
+    fabMenu: { marginBottom: 10, gap: 10, alignItems: 'flex-end' },
+    fabItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingHorizontal: 18,
+      paddingVertical: 13,
+      borderRadius: 16,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 6,
+      elevation: 3,
+    },
+    fabItemLabel: { fontSize: 14, fontWeight: '700' },
+    fabItemLabelWhite: { color: '#fff', fontSize: 14, fontWeight: '700' },
+    fab: {
+      width: 60,
+      height: 60,
+      borderRadius: 30,
+      backgroundColor: BRAND,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: BRAND,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.45,
+      shadowRadius: 10,
+      elevation: 8,
+    },
+  });
 
 
 

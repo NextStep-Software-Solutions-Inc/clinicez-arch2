@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet } from 'react-native';
 import ThemedText from './ThemedText';
 import ThemedView from './ThemedView';
+import { Theme, useTheme } from '@react-navigation/native';
 
 interface EmptyStateProps {
   title: string;
@@ -10,6 +11,10 @@ interface EmptyStateProps {
 }
 
 export default function EmptyState({ title, message, actionLabel, onActionPress }: EmptyStateProps) {
+
+  const theme = useTheme();
+  const styles = createStyles(theme);
+
   return (
     <ThemedView style={styles.card}>
       <ThemedText style={styles.title}>{title}</ThemedText>
@@ -23,11 +28,12 @@ export default function EmptyState({ title, message, actionLabel, onActionPress 
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: Theme) => StyleSheet.create({
   card: {
     padding: 16,
     borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
+    backgroundColor: theme.colors.card,
     gap: 6,
   },
   title: {
