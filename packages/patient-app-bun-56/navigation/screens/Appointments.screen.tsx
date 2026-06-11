@@ -81,8 +81,10 @@ export default function AppointmentsScreen() {
     const handleCancel = (item: AppointmentItem) =>
         Alert.alert('Cancel Appointment', `Cancel at ${item.clinic.name}?`, [
             { text: 'Keep', style: 'cancel' },
-            { text: 'Cancel Appointment', style: 'destructive',
-              onPress: () => Alert.alert('Coming soon', 'Cancellation requires the backend API.') },
+            {
+                text: 'Cancel Appointment', style: 'destructive',
+                onPress: () => Alert.alert('Coming soon', 'Cancellation requires the backend API.')
+            },
         ]);
 
     const handleBookNew = () =>

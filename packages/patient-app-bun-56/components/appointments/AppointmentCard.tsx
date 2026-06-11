@@ -7,21 +7,21 @@ import type { AppointmentItem, AppointmentStatus } from '../../services/appointm
 import { format, parseISO } from 'date-fns';
 
 const STATUS_BG: Record<AppointmentStatus, string> = {
-    confirmed:       '#10B98115',
-    pending:         '#94A3B815',
-    canceled:        '#EF444415',
+    confirmed: '#10B98115',
+    pending: '#94A3B815',
+    canceled: '#EF444415',
     action_required: '#F9731615',
-    completed:       '#6366F115',
-    no_show:         '#78716C15',
+    completed: '#6366F115',
+    no_show: '#78716C15',
 };
 
 const STATUS_BORDER: Record<AppointmentStatus, string> = {
-    confirmed:       '#10B98135',
-    pending:         '#94A3B835',
-    canceled:        '#EF444435',
+    confirmed: '#10B98135',
+    pending: '#94A3B835',
+    canceled: '#EF444435',
     action_required: '#F9731635',
-    completed:       '#6366F135',
-    no_show:         '#78716C35',
+    completed: '#6366F135',
+    no_show: '#78716C35',
 };
 
 interface AppointmentCardProps {
