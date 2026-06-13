@@ -8,6 +8,7 @@ import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { AuthProvider } from 'contexts/AuthContext';
 import { OnboardingProvider } from 'contexts/OnboardingContext';
 import { AppearanceProvider, useAppearance } from 'contexts/AppearanceContext';
+import { NotificationProvider } from 'contexts/NotificationContext';
 import { ClerkProvider } from '@clerk/expo';
 import { tokenCache } from '@clerk/expo/token-cache';
 import { resourceCache } from '@clerk/expo/resource-cache'
@@ -16,6 +17,17 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useIsLocked } from 'hooks/useNavState';
 import LockScreen from './navigation/screens/Lock.screen';
 import UnlockScreen from './navigation/screens/Unlock.screen';
+import * as ExpoNotifications from 'expo-notifications';
+
+// Show banners, sounds, and badges while app is in foreground
+ExpoNotifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!;
 
@@ -56,12 +68,14 @@ function AppWithTheme() {
     <>
       <StatusBar style={isDarkMode ? 'light' : 'dark'} />
       <DatabaseProvider>
-        <BottomSheetModalProvider>
-          <Navigation theme={selectedTheme} />
-          <ThemeProvider value={selectedTheme}>
-            <LockOverlay backgroundColor={selectedTheme.colors.background} />
-          </ThemeProvider>
-        </BottomSheetModalProvider>
+        <NotificationProvider>
+          <BottomSheetModalProvider>
+            <Navigation theme={selectedTheme} />
+            <ThemeProvider value={selectedTheme}>
+              <LockOverlay backgroundColor={selectedTheme.colors.background} />
+            </ThemeProvider>
+          </BottomSheetModalProvider>
+        </NotificationProvider>
       </DatabaseProvider>
     </>
   );

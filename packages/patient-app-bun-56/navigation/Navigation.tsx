@@ -33,6 +33,7 @@ import WelcomeScreen from './screens/Welcome.screen';
 import OnboardScreen from './screens/Onboard.screen';
 import CreatePINScreen from './screens/CreatePIN.screen';
 import NotificationScreen from './screens/Notification.screen';
+import NotificationDetailScreen from './screens/NotificationDetail.screen';
 import LoadingScreen from './screens/Loading.screen';
 
 // Settings sub-screens
@@ -269,7 +270,7 @@ const MainStack = createNativeStackNavigator({
         return {
           title: 'Clinic EZ',
           headerLargeTitleEnabled: true,
-          headerRight: BottomTabsHeaderRight,
+          headerRight: () => <BottomTabsHeaderRight />,
           headerBackVisible: false,
           headerShown: !isFilesTabFocused,
         };
@@ -310,6 +311,17 @@ const MainStack = createNativeStackNavigator({
     NotificationScreen: createNativeStackScreen({
       screen: NotificationScreen,
       options: { title: 'Notifications', headerLargeTitleEnabled: true },
+    }),
+    NotificationDetailScreen: createNativeStackScreen({
+      screen: NotificationDetailScreen,
+      options: {
+        title: '',
+        presentation: 'formSheet',
+        sheetAllowedDetents: [0.55, 0.85],
+        sheetGrabberVisible: true,
+        sheetCornerRadius: 20,
+        headerShown: true,
+      },
     }),
     ExploreClinicsScreen: createNativeStackScreen({
       screen: ExploreClinicsScreen,

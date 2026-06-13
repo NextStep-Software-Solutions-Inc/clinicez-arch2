@@ -49,6 +49,17 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         'expo-secure-store',
         'expo-local-authentication',
         'expo-updates',
+        [
+            'expo-notifications',
+            {
+                // Provide a 96×96 white-on-transparent PNG for Android notification icon.
+                // Replace './assets/notification-icon.png' once the asset is ready.
+                // icon: './assets/notification-icon.png',
+                color: '#3B82F6',
+                defaultChannel: 'default',
+                sounds: [],
+            },
+        ],
     ],
     extra: {
         eas: { projectId: EAS_PROJECT_ID },
