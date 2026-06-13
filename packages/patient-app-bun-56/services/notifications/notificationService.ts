@@ -215,7 +215,7 @@ export async function clearAllNotifications(patientId: string): Promise<void> {
 export async function seedMockNotifications(patientId: string): Promise<void> {
   const now = Date.now();
   const mins = (n: number) => new Date(now - n * 60_000);
-  const hrs  = (n: number) => new Date(now - n * 3_600_000);
+  const hrs = (n: number) => new Date(now - n * 3_600_000);
   const days = (n: number) => new Date(now - n * 86_400_000);
 
   const mocks: Array<{
@@ -223,142 +223,142 @@ export async function seedMockNotifications(patientId: string): Promise<void> {
     isRead: boolean;
     payload: NotificationPayload;
   }> = [
-    // ── Appointments ──────────────────────────────────────────────────────────
-    {
-      createdAt: mins(5),
-      isRead: false,
-      payload: {
-        type: 'appointment_reminder' as const,
-        category: 'appointments',
-        title: 'Appointment Confirmed',
-        body: 'Your appointment with Dr. Reyes on Jun 15 at 10:00 AM has been confirmed.',
+      // ── Appointments ──────────────────────────────────────────────────────────
+      {
+        createdAt: mins(5),
+        isRead: false,
+        payload: {
+          type: 'appointment_reminder' as const,
+          category: 'appointments',
+          title: 'Appointment Confirmed',
+          body: 'Your appointment with Dr. Reyes on Jun 15 at 10:00 AM has been confirmed.',
+        },
       },
-    },
-    {
-      createdAt: hrs(2),
-      isRead: false,
-      payload: {
-        type: 'appointment_reminder' as const,
-        category: 'appointments',
-        title: 'Appointment Tomorrow',
-        body: 'Reminder: You have an appointment with Dr. Santos tomorrow at 2:00 PM.',
+      {
+        createdAt: hrs(2),
+        isRead: false,
+        payload: {
+          type: 'appointment_reminder' as const,
+          category: 'appointments',
+          title: 'Appointment Tomorrow',
+          body: 'Reminder: You have an appointment with Dr. Santos tomorrow at 2:00 PM.',
+        },
       },
-    },
-    {
-      createdAt: days(1),
-      isRead: true,
-      payload: {
-        type: 'appointment_reminder' as const,
-        category: 'appointments',
-        title: 'Appointment Rescheduled',
-        body: 'Your appointment with Makati Medical Center has been moved to Jun 20 at 9:00 AM.',
+      {
+        createdAt: days(1),
+        isRead: true,
+        payload: {
+          type: 'appointment_reminder' as const,
+          category: 'appointments',
+          title: 'Appointment Rescheduled',
+          body: 'Your appointment with Makati Medical Center has been moved to Jun 20 at 9:00 AM.',
+        },
       },
-    },
-    // ── Reminders ─────────────────────────────────────────────────────────────
-    {
-      createdAt: mins(30),
-      isRead: false,
-      payload: {
-        type: 'medication_reminder' as const,
-        category: 'reminders',
-        title: 'Take Your Medication',
-        body: "Time to take Metformin 500 mg. Don't skip your dose.",
+      // ── Reminders ─────────────────────────────────────────────────────────────
+      {
+        createdAt: mins(30),
+        isRead: false,
+        payload: {
+          type: 'medication_reminder' as const,
+          category: 'reminders',
+          title: 'Take Your Medication',
+          body: "Time to take Metformin 500 mg. Don't skip your dose.",
+        },
       },
-    },
-    {
-      createdAt: hrs(5),
-      isRead: false,
-      payload: {
-        type: 'medication_reminder' as const,
-        category: 'reminders',
-        title: 'Blood Pressure Check',
-        body: 'Your weekly blood pressure log is due. Please update your vitals.',
+      {
+        createdAt: hrs(5),
+        isRead: false,
+        payload: {
+          type: 'medication_reminder' as const,
+          category: 'reminders',
+          title: 'Blood Pressure Check',
+          body: 'Your weekly blood pressure log is due. Please update your vitals.',
+        },
       },
-    },
-    {
-      createdAt: days(2),
-      isRead: true,
-      payload: {
-        type: 'medication_reminder' as const,
-        category: 'reminders',
-        title: 'Annual Check-up Due',
-        body: "It's been over a year since your last annual physical. Book an appointment soon.",
+      {
+        createdAt: days(2),
+        isRead: true,
+        payload: {
+          type: 'medication_reminder' as const,
+          category: 'reminders',
+          title: 'Annual Check-up Due',
+          body: "It's been over a year since your last annual physical. Book an appointment soon.",
+        },
       },
-    },
-    // ── Clinic ────────────────────────────────────────────────────────────────
-    {
-      createdAt: hrs(1),
-      isRead: false,
-      payload: {
-        type: 'lab_result' as const,
-        category: 'clinic',
-        title: 'New Lab Result Available',
-        body: 'Your CBC panel result from Jun 12 is now available. Tap to view.',
+      // ── Clinic ────────────────────────────────────────────────────────────────
+      {
+        createdAt: hrs(1),
+        isRead: false,
+        payload: {
+          type: 'lab_result' as const,
+          category: 'clinic',
+          title: 'New Lab Result Available',
+          body: 'Your CBC panel result from Jun 12 is now available. Tap to view.',
+        },
       },
-    },
-    {
-      createdAt: hrs(8),
-      isRead: true,
-      payload: {
-        type: 'clinic_announcement' as const,
-        category: 'clinic',
-        title: 'Prescription Ready',
-        body: 'Your prescription for Amlodipine 5 mg is ready for pick-up at the clinic.',
+      {
+        createdAt: hrs(8),
+        isRead: true,
+        payload: {
+          type: 'clinic_announcement' as const,
+          category: 'clinic',
+          title: 'Prescription Ready',
+          body: 'Your prescription for Amlodipine 5 mg is ready for pick-up at the clinic.',
+        },
       },
-    },
-    {
-      createdAt: days(3),
-      isRead: true,
-      payload: {
-        type: 'clinic_announcement' as const,
-        category: 'clinic',
-        title: 'Clinic Maintenance Notice',
-        body: 'ClinicEZ Marikina will be closed on Jun 17 for scheduled maintenance.',
+      {
+        createdAt: days(3),
+        isRead: true,
+        payload: {
+          type: 'clinic_announcement' as const,
+          category: 'clinic',
+          title: 'Clinic Maintenance Notice',
+          body: 'ClinicEZ Marikina will be closed on Jun 17 for scheduled maintenance.',
+        },
       },
-    },
-    // ── Messages ──────────────────────────────────────────────────────────────
-    {
-      createdAt: mins(45),
-      isRead: false,
-      payload: {
-        type: 'new_message' as const,
-        category: 'messages',
-        title: 'Message from Dr. Reyes',
-        body: 'Please bring your previous lab results to your next visit.',
+      // ── Messages ──────────────────────────────────────────────────────────────
+      {
+        createdAt: mins(45),
+        isRead: false,
+        payload: {
+          type: 'new_message' as const,
+          category: 'messages',
+          title: 'Message from Dr. Reyes',
+          body: 'Please bring your previous lab results to your next visit.',
+        },
       },
-    },
-    {
-      createdAt: days(1),
-      isRead: true,
-      payload: {
-        type: 'new_message' as const,
-        category: 'messages',
-        title: 'Clinic Replied',
-        body: 'Makati Medical answered your query about vaccine availability.',
+      {
+        createdAt: days(1),
+        isRead: true,
+        payload: {
+          type: 'new_message' as const,
+          category: 'messages',
+          title: 'Clinic Replied',
+          body: 'Makati Medical answered your query about vaccine availability.',
+        },
       },
-    },
-    // ── System ────────────────────────────────────────────────────────────────
-    {
-      createdAt: hrs(3),
-      isRead: false,
-      payload: {
-        type: 'system' as const,
-        category: 'system',
-        title: 'App Updated',
-        body: "ClinicEZ has been updated to version 2.1. Check out what's new.",
+      // ── System ────────────────────────────────────────────────────────────────
+      {
+        createdAt: hrs(3),
+        isRead: false,
+        payload: {
+          type: 'system' as const,
+          category: 'system',
+          title: 'App Updated',
+          body: "ClinicEZ has been updated to version 2.1. Check out what's new.",
+        },
       },
-    },
-    {
-      createdAt: days(5),
-      isRead: true,
-      payload: {
-        type: 'system' as const,
-        category: 'system',
-        title: 'Welcome to ClinicEZ',
-        body: 'Your account is set up. Start by connecting to a clinic near you.',
+      {
+        createdAt: days(5),
+        isRead: true,
+        payload: {
+          type: 'system' as const,
+          category: 'system',
+          title: 'Welcome to ClinicEZ',
+          body: 'Your account is set up. Start by connecting to a clinic near you.',
+        },
       },
-    },
-  ];
+    ];
 
   for (const mock of mocks) {
     const row = {

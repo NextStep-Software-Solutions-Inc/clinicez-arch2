@@ -312,13 +312,13 @@ export default function NotificationScreen() {
     navigation.setOptions({
       headerRight: unreadCount > 0
         ? () => (
-            <ThemedText
-              onPress={handleMarkAllRead}
-              style={{ color: colors.primary, fontSize: 14, fontWeight: '600' }}
-            >
-              Mark all as read
-            </ThemedText>
-          )
+          <ThemedText
+            onPress={handleMarkAllRead}
+            style={{ color: colors.primary, fontSize: 14, fontWeight: '600' }}
+          >
+            Mark all as read
+          </ThemedText>
+        )
         : undefined,
     });
   }, [unreadCount, handleMarkAllRead, navigation, colors.primary]);
