@@ -4,15 +4,17 @@ const EAS_PROJECT_ID = 'b73e0d31-2001-40df-b1a1-0482faebb5b1';
 const APP_VARIANT = process.env.APP_VARIANT ?? 'production';
 
 const appNames: Record<string, string> = {
-    development: 'Clinic EZ Dev',
-    preview: 'Clinic EZ Preview',
-    staging: 'Clinic EZ Staging',
-    production: 'Clinic EZ',
+    development: 'Clinic EZ Patient Dev',
+    preview: 'Clinic EZ Patient Preview',
+    staging: 'Clinic EZ Patient Staging',
+    production: 'Clinic EZ Patient',
 };
 
-export default ({ config }: ConfigContext): ExpoConfig => ({
+
+export default ({ config }: ConfigContext): ExpoConfig =>
+({
     ...config,
-    name: appNames[APP_VARIANT] ?? 'ClinicEZ',
+    name: appNames[APP_VARIANT] ?? 'Clinic EZ',
     owner: 'nextstep-software',
     slug: 'patient-app-bun-56',
     version: '1.0.0',
@@ -27,6 +29,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     },
     ios: {
         supportsTablet: true,
+        bundleIdentifier: 'com.nextstepsoftware.clinicez.patient',
         infoPlist: {
             NSFaceIDUsageDescription: 'ClinicEZ uses Face ID to unlock your account securely.',
         },
@@ -39,7 +42,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
             monochromeImage: './assets/android-icon-monochrome.png',
         },
         predictiveBackGestureEnabled: false,
-        package: 'com.wacanam.patientappbun56',
+        package: 'com.nextstepsoftware.clinicez.patient',
+        // ⬇ Place your google-services.json at the project root before running
+        //   an EAS build or `expo run:android` on a physical device.
+        //   Without this file push tokens will not be issued on Android.
+        googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? './google-services.json',
     },
     web: {
         favicon: './assets/favicon.png',
@@ -52,12 +59,15 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         [
             'expo-notifications',
             {
-                // Provide a 96×96 white-on-transparent PNG for Android notification icon.
-                // Replace './assets/notification-icon.png' once the asset is ready.
+                // Replace with a real 96×96 white-on-transparent PNG before releasing.
+                // The file must exist at build time or the build will fail.
                 // icon: './assets/notification-icon.png',
                 color: '#3B82F6',
                 defaultChannel: 'default',
                 sounds: [],
+                // Enables background push delivery on iOS (content-available: 1).
+                // Required for the BACKGROUND_NOTIFICATION_TASK to fire.
+                enableBackgroundRemoteNotifications: true,
             },
         ],
     ],

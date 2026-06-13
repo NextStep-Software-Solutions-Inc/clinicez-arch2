@@ -45,13 +45,6 @@
       "breakpoints": true
     },
     {
-      "idx": 6,
-      "version": "6",
-      "when": 1749686400000,
-      "tag": "0006_notifications",
-      "breakpoints": true
-    },
-    {
       "idx": 7,
       "version": "6",
       "when": 1781321448597,

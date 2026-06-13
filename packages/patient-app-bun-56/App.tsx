@@ -18,6 +18,26 @@ import { useIsLocked } from 'hooks/useNavState';
 import LockScreen from './navigation/screens/Lock.screen';
 import UnlockScreen from './navigation/screens/Unlock.screen';
 import * as ExpoNotifications from 'expo-notifications';
+import * as TaskManager from 'expo-task-manager';
+
+// ─── Background notification task ─────────────────────────────────────────────
+// This task runs when a push notification is received while the app is
+// killed or in the background. It lets the OS deliver the notification
+// and keeps the notification handler available at the module level.
+// Note: on iOS the task only fires when the app is woken by a background
+// push (content-available: 1). Android handles background delivery via FCM
+// without needing this task.
+const BACKGROUND_NOTIFICATION_TASK = 'BACKGROUND_NOTIFICATION_TASK';
+
+TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async ({ data, error }) => {
+  if (error) {
+    console.error('[BackgroundNotification] Task error:', error);
+    return;
+  }
+  // data.notification is available here for custom background processing.
+  // For most apps the OS push delivery is sufficient; add any
+  // extra local DB writes or badge updates here as needed.
+});
 
 // Show banners, sounds, and badges while app is in foreground
 ExpoNotifications.setNotificationHandler({
@@ -28,6 +48,14 @@ ExpoNotifications.setNotificationHandler({
     shouldSetBadge: true,
   }),
 });
+
+// Register the background task so expo-notifications knows to wake it.
+// Must be called before the app renders (module level).
+ExpoNotifications.registerTaskAsync(BACKGROUND_NOTIFICATION_TASK).catch(
+  // Swallow the error — on Expo Go / simulators this will throw because
+  // background tasks are not supported; it is safe to ignore.
+  () => { },
+);
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!;
 
