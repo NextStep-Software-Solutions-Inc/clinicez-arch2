@@ -81,6 +81,12 @@ public static class DependencyInjection
         services.AddScoped<ISyncLogRepository, SyncLogRepository>();
         services.AddScoped<IDeviceSessionRepository, DeviceSessionRepository>();
         services.AddScoped<INotificationRepository, NotificationRepository>();
+        services.AddScoped<IOrganizationRepository, OrganizationRepository>();
+        services.AddScoped<IClinicRepository, ClinicRepository>();
+        services.AddScoped<IOrganizationMembershipRepository, OrganizationMembershipRepository>();
+        services.AddScoped<IClinicMembershipRepository, ClinicMembershipRepository>();
+        services.AddScoped<IBookingDraftRepository, BookingDraftRepository>();
+        services.AddScoped<INotificationPreferencesRepository, NotificationPreferencesRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         // ── Application Services ──────────────────────────────────────────────
@@ -90,8 +96,18 @@ public static class DependencyInjection
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<IBackgroundJobEnqueuer, HangfireJobEnqueuer>();
 
-        // ── Sync entity processors (add one per ISyncable entity type) ────────
+        // ── Sync entity processors ────────────────────────────────────────────
         services.AddScoped<ISyncEntityProcessor, PatientSyncProcessor>();
+        services.AddScoped<ISyncEntityProcessor, PatientHealthcareProviderSyncProcessor>();
+        services.AddScoped<ISyncEntityProcessor, PatientImmunizationSelfSyncProcessor>();
+        services.AddScoped<ISyncEntityProcessor, PatientDisabilitySyncProcessor>();
+        services.AddScoped<ISyncEntityProcessor, PatientOccupationSyncProcessor>();
+        services.AddScoped<ISyncEntityProcessor, PatientTravelHistorySyncProcessor>();
+        services.AddScoped<ISyncEntityProcessor, PatientContraceptiveHistorySyncProcessor>();
+        services.AddScoped<ISyncEntityProcessor, PatientPregnancySyncProcessor>();
+        services.AddScoped<ISyncEntityProcessor, PatientMaleReproductiveSyncProcessor>();
+        services.AddScoped<ISyncEntityProcessor, PatientDentalVisionSyncProcessor>();
+        services.AddScoped<ISyncEntityProcessor, FileFolderSyncProcessor>();
 
         // ── Hangfire job implementation ────────────────────────────────────────
         services.AddScoped<ISyncPayloadJob, SyncPayloadJobProcessor>();

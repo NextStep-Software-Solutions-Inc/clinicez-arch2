@@ -11,14 +11,23 @@ public sealed class PatientSocialHistoryConfiguration : IEntityTypeConfiguration
         builder.HasKey(s => s.Id);
         builder.HasIndex(s => s.PatientId).IsUnique();
         builder.Property(s => s.SmokingStatus).HasConversion<string>().HasMaxLength(30);
+        builder.Property(s => s.OtherTobaccoProducts).HasMaxLength(200);
         builder.Property(s => s.AlcoholUse).HasConversion<string>().HasMaxLength(30);
-        builder.Property(s => s.SubstanceTypes).HasMaxLength(500);
+        builder.Property(s => s.AlcoholType).HasMaxLength(100);
+        builder.Property(s => s.SubstanceName).HasMaxLength(200);
+        builder.Property(s => s.SubstanceRoute).HasMaxLength(100);
+        builder.Property(s => s.SubstanceFrequency).HasMaxLength(100);
         builder.Property(s => s.ActivityLevel).HasConversion<string>().HasMaxLength(30);
-        builder.Property(s => s.DietNotes).HasMaxLength(1000);
+        builder.Property(s => s.ExerciseType).HasMaxLength(200);
+        builder.Property(s => s.DietPattern).HasMaxLength(200);
+        builder.Property(s => s.FoodRestrictions).HasMaxLength(500);
+        builder.Property(s => s.SleepQuality).HasConversion<string>().HasMaxLength(20);
+        builder.Property(s => s.WaterIntake).HasMaxLength(100);
         builder.Property(s => s.OccupationalHazards).HasMaxLength(500);
+        builder.Property(s => s.PackYears).HasPrecision(5, 1);
+        builder.Property(s => s.SleepAvgHours).HasPrecision(4, 1);
         builder.Property(s => s.CreatedBy).HasMaxLength(128).IsRequired();
         builder.Property(s => s.UpdatedBy).HasMaxLength(128);
-        builder.Property(s => s.PacksPerDay).HasPrecision(4, 1);
     }
 }
 

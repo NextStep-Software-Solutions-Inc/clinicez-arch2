@@ -2,30 +2,54 @@ namespace PatientApp.Application.Common.Constants;
 
 /// <summary>
 /// Canonical entity type names used in sync payloads.
-/// Must match the C# class names of ISyncable domain entities exactly.
+/// Match the mobile app's syncQueue.entityType enum (snake_case).
 /// </summary>
 public static class SyncableEntityTypes
 {
-    public const string Patient                  = nameof(Domain.Entities.Patient);
-    public const string PatientGovernmentId      = nameof(Domain.Entities.PatientGovernmentId);
-    public const string PatientAddress           = nameof(Domain.Entities.PatientAddress);
-    public const string EmergencyContact         = nameof(Domain.Entities.EmergencyContact);
-    public const string PatientAllergy           = nameof(Domain.Entities.PatientAllergy);
-    public const string PatientMedication        = nameof(Domain.Entities.PatientMedication);
-    public const string PatientSurgicalHistory   = nameof(Domain.Entities.PatientSurgicalHistory);
-    public const string PatientPastIllness       = nameof(Domain.Entities.PatientPastIllness);
-    public const string PatientChronicCondition  = nameof(Domain.Entities.PatientChronicCondition);
-    public const string PatientFamilyHistory     = nameof(Domain.Entities.PatientFamilyHistory);
-    public const string PatientSocialHistory     = nameof(Domain.Entities.PatientSocialHistory);
-    public const string PatientObstetricProfile  = nameof(Domain.Entities.PatientObstetricProfile);
-    public const string PatientMentalHealthProfile = nameof(Domain.Entities.PatientMentalHealthProfile);
-    public const string FileRecord               = nameof(Domain.Entities.FileRecord);
+    // ── Part A: Patient self-entry ───────────────────────────────────────────
+    public const string Patient                     = "patient";
+    public const string PatientGovernmentId         = "patient_government_ids";
+    public const string PatientAddress              = "patient_addresses";
+    public const string EmergencyContact            = "emergency_contacts";
+    public const string PatientAllergy              = "patient_allergies";
+    public const string PatientMedication           = "patient_medications";
+    public const string PatientSurgicalHistory      = "patient_surgical_history";
+    public const string PatientPastIllness          = "patient_past_illnesses";
+    public const string PatientChronicCondition     = "patient_chronic_conditions";
+    public const string PatientFamilyHistory        = "patient_family_history";
+    public const string PatientSocialHistory        = "patient_social_history";
+    public const string PatientObstetricProfile     = "patient_obstetric_profile";
+    public const string PatientMentalHealthProfile  = "patient_mental_health_profile";
+    public const string PatientHealthcareProvider   = "patient_healthcare_providers";
+    public const string PatientImmunizationSelf     = "patient_immunizations_self";
+    public const string PatientDisability           = "patient_disabilities";
+    public const string PatientOccupation           = "patient_occupation";
+    public const string PatientTravelHistory        = "patient_travel_history";
+    public const string PatientContraceptiveHistory = "patient_contraceptive_history";
+    public const string PatientPregnancy            = "patient_pregnancies";
+    public const string PatientMaleReproductive     = "patient_male_reproductive";
+    public const string PatientDentalVision         = "patient_dental_vision";
+
+    // ── Files & folders ──────────────────────────────────────────────────────
+    public const string FileRecord   = "file";
+    public const string FileFolder   = "file_folder";
+
+    // ── Memberships & drafts ─────────────────────────────────────────────────
+    public const string ClinicMembership        = "clinic_memberships";
+    public const string OrganizationMembership  = "organization_memberships";
+    public const string BookingDraft            = "booking_drafts";
+    public const string NotificationPreferences = "notification_preferences";
 
     public static readonly HashSet<string> All =
     [
         Patient, PatientGovernmentId, PatientAddress, EmergencyContact,
         PatientAllergy, PatientMedication, PatientSurgicalHistory, PatientPastIllness,
         PatientChronicCondition, PatientFamilyHistory, PatientSocialHistory,
-        PatientObstetricProfile, PatientMentalHealthProfile, FileRecord,
+        PatientObstetricProfile, PatientMentalHealthProfile,
+        PatientHealthcareProvider, PatientImmunizationSelf, PatientDisability,
+        PatientOccupation, PatientTravelHistory, PatientContraceptiveHistory,
+        PatientPregnancy, PatientMaleReproductive, PatientDentalVision,
+        FileRecord, FileFolder,
+        ClinicMembership, OrganizationMembership, BookingDraft, NotificationPreferences,
     ];
 }

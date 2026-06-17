@@ -10,9 +10,15 @@ public sealed class FileRecordConfiguration : IEntityTypeConfiguration<FileRecor
     {
         builder.HasKey(f => f.Id);
         builder.Property(f => f.FileName).HasMaxLength(255).IsRequired();
-        builder.Property(f => f.ContentType).HasMaxLength(100).IsRequired();
+        builder.Property(f => f.MimeType).HasMaxLength(100);
+        builder.Property(f => f.Extension).HasMaxLength(20);
         builder.Property(f => f.StorageKey).HasMaxLength(500).IsRequired();
         builder.Property(f => f.Category).HasConversion<string>().HasMaxLength(30);
+        builder.Property(f => f.SyncStatus).HasConversion<string>().HasMaxLength(20);
+        builder.Property(f => f.SyncError).HasMaxLength(500);
+        builder.Property(f => f.EncryptionKeyId).HasMaxLength(100);
+        builder.Property(f => f.EncryptionIvBase64).HasMaxLength(100);
+        builder.Property(f => f.EncryptionTagBase64).HasMaxLength(100);
         builder.Property(f => f.CreatedBy).HasMaxLength(128).IsRequired();
         builder.Property(f => f.UpdatedBy).HasMaxLength(128);
 
@@ -20,6 +26,11 @@ public sealed class FileRecordConfiguration : IEntityTypeConfiguration<FileRecor
             .WithMany(p => p.Files)
             .HasForeignKey(f => f.PatientId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne(f => f.Folder)
+            .WithMany(ff => ff.Files)
+            .HasForeignKey(f => f.FolderId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }
 
@@ -98,9 +109,11 @@ public sealed class NotificationConfiguration : IEntityTypeConfiguration<Notific
     public void Configure(EntityTypeBuilder<Notification> builder)
     {
         builder.HasKey(n => n.Id);
-        builder.Property(n => n.Type).HasConversion<string>().HasMaxLength(40);
+        builder.Property(n => n.Type).HasConversion<string>().HasMaxLength(50);
+        builder.Property(n => n.Category).HasConversion<string>().HasMaxLength(30);
         builder.Property(n => n.Title).HasMaxLength(300).IsRequired();
         builder.Property(n => n.Body).HasMaxLength(1000).IsRequired();
+        builder.Property(n => n.SourceId).HasMaxLength(128);
         builder.Property(n => n.Payload).HasColumnType("text");
         builder.Property(n => n.CreatedBy).HasMaxLength(128).IsRequired();
         builder.Property(n => n.UpdatedBy).HasMaxLength(128);
@@ -111,5 +124,6 @@ public sealed class NotificationConfiguration : IEntityTypeConfiguration<Notific
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasIndex(n => new { n.PatientId, n.IsRead });
+        builder.HasIndex(n => new { n.PatientId, n.Category });
     }
 }

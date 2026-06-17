@@ -63,4 +63,17 @@ public sealed class ClinicDashboardService : IClinicDashboardService
                 $"The request to the Clinic Dashboard at '{clinicBaseUrl}' timed out.");
         }
     }
+
+    public async Task<string?> SubmitBookingAsync(
+        string clinicBaseUrl, Guid patientId, Guid bookingDraftId,
+        string shareFieldsJson, string bearerToken, CancellationToken cancellationToken = default)
+    {
+        // The Clinic Dashboard booking API is not yet fully developed.
+        // This stub accepts the request and returns a synthetic booking reference.
+        _logger.LogInformation(
+            "Booking submission stub: patient {PatientId} draft {DraftId} → {BaseUrl}",
+            patientId, bookingDraftId, clinicBaseUrl);
+
+        return await Task.FromResult($"PENDING-{bookingDraftId:N}");
+    }
 }

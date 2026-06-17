@@ -8,8 +8,7 @@ public sealed class GetPatientByClerkIdQueryHandler : IRequestHandler<GetPatient
 {
     private readonly IPatientRepository _patientRepository;
 
-    public GetPatientByClerkIdQueryHandler(IPatientRepository patientRepository)
-        => _patientRepository = patientRepository;
+    public GetPatientByClerkIdQueryHandler(IPatientRepository patientRepository) => _patientRepository = patientRepository;
 
     public async Task<PatientSummaryDto?> Handle(GetPatientByClerkIdQuery request, CancellationToken cancellationToken)
     {

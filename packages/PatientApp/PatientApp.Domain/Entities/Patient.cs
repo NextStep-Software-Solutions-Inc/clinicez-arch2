@@ -47,6 +47,17 @@ public sealed class Patient : BaseEntity, ISyncable
     public PatientSocialHistory? SocialHistory { get; set; }
     public PatientObstetricProfile? ObstetricProfile { get; set; }
     public PatientMentalHealthProfile? MentalHealthProfile { get; set; }
+    // New self-entry entities
+    public ICollection<PatientHealthcareProvider> HealthcareProviders { get; set; } = [];
+    public ICollection<PatientImmunizationSelf> ImmunizationsSelf { get; set; } = [];
+    public ICollection<PatientDisability> Disabilities { get; set; } = [];
+    public PatientOccupation? Occupation { get; set; }
+    public ICollection<PatientTravelHistory> TravelHistories { get; set; } = [];
+    public ICollection<PatientContraceptiveHistory> ContraceptiveHistories { get; set; } = [];
+    public ICollection<PatientPregnancy> Pregnancies { get; set; } = [];
+    public PatientMaleReproductive? MaleReproductive { get; set; }
+    public PatientDentalVision? DentalVision { get; set; }
+    public ICollection<FileFolder> FileFolders { get; set; } = [];
 
     // Navigation — clinical records (HCW entry, read-only for patient)
     public ICollection<VitalSigns> VitalSigns { get; set; } = [];
@@ -55,9 +66,17 @@ public sealed class Patient : BaseEntity, ISyncable
     public ICollection<ImagingResult> ImagingResults { get; set; } = [];
     public ICollection<FileRecord> Files { get; set; } = [];
     public ICollection<Appointment> Appointments { get; set; } = [];
+    public ICollection<VaccinationAdministered> VaccinationsAdministered { get; set; } = [];
+    public ICollection<ClinicalAssessment> ClinicalAssessments { get; set; } = [];
+    public ICollection<PatientPhysicalExamProfile> PhysicalExamProfiles { get; set; } = [];
+    public PatientNcdQuestionnaire? NcdQuestionnaire { get; set; }
 
     // Navigation — infrastructure
     public ICollection<SyncLog> SyncLogs { get; set; } = [];
     public ICollection<DeviceSession> DeviceSessions { get; set; } = [];
     public ICollection<Notification> Notifications { get; set; } = [];
+    public ICollection<ClinicMembership> ClinicMemberships { get; set; } = [];
+    public ICollection<OrganizationMembership> OrganizationMemberships { get; set; } = [];
+    public ICollection<BookingDraft> BookingDrafts { get; set; } = [];
+    public ICollection<NotificationPreferences> NotificationPreferences { get; set; } = [];
 }

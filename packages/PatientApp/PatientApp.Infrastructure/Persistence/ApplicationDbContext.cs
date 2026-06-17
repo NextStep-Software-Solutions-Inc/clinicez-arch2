@@ -31,11 +31,20 @@ public sealed class ApplicationDbContext : DbContext
     public DbSet<PatientPastIllness> PatientPastIllnesses => Set<PatientPastIllness>();
     public DbSet<PatientChronicCondition> PatientChronicConditions => Set<PatientChronicCondition>();
     public DbSet<PatientFamilyHistory> PatientFamilyHistories => Set<PatientFamilyHistory>();
+    public DbSet<PatientHealthcareProvider> PatientHealthcareProviders => Set<PatientHealthcareProvider>();
+    public DbSet<PatientImmunizationSelf> PatientImmunizationsSelf => Set<PatientImmunizationSelf>();
+    public DbSet<PatientDisability> PatientDisabilities => Set<PatientDisability>();
+    public DbSet<PatientTravelHistory> PatientTravelHistories => Set<PatientTravelHistory>();
+    public DbSet<PatientContraceptiveHistory> PatientContraceptiveHistories => Set<PatientContraceptiveHistory>();
+    public DbSet<PatientPregnancy> PatientPregnancies => Set<PatientPregnancy>();
 
     // ── One-to-one profiles ─────────────────────────────────────────────────
     public DbSet<PatientSocialHistory> PatientSocialHistories => Set<PatientSocialHistory>();
     public DbSet<PatientObstetricProfile> PatientObstetricProfiles => Set<PatientObstetricProfile>();
     public DbSet<PatientMentalHealthProfile> PatientMentalHealthProfiles => Set<PatientMentalHealthProfile>();
+    public DbSet<PatientOccupation> PatientOccupations => Set<PatientOccupation>();
+    public DbSet<PatientMaleReproductive> PatientMaleReproductives => Set<PatientMaleReproductive>();
+    public DbSet<PatientDentalVision> PatientDentalVisions => Set<PatientDentalVision>();
 
     // ── Clinical records (HCW entry) ────────────────────────────────────────
     public DbSet<VitalSigns> VitalSigns => Set<VitalSigns>();
@@ -43,15 +52,31 @@ public sealed class ApplicationDbContext : DbContext
     public DbSet<Prescription> Prescriptions => Set<Prescription>();
     public DbSet<LabResult> LabResults => Set<LabResult>();
     public DbSet<ImagingResult> ImagingResults => Set<ImagingResult>();
+    public DbSet<VaccinationAdministered> VaccinationsAdministered => Set<VaccinationAdministered>();
+    public DbSet<ClinicalAssessment> ClinicalAssessments => Set<ClinicalAssessment>();
+    public DbSet<PatientPhysicalExamProfile> PatientPhysicalExamProfiles => Set<PatientPhysicalExamProfile>();
+    public DbSet<PatientNcdQuestionnaire> PatientNcdQuestionnaires => Set<PatientNcdQuestionnaire>();
 
     // ── Files & Appointments ────────────────────────────────────────────────
+    public DbSet<FileFolder> FileFolders => Set<FileFolder>();
     public DbSet<FileRecord> FileRecords => Set<FileRecord>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
+
+    // ── Discovery catalogue ─────────────────────────────────────────────────
+    public DbSet<Organization> Organizations => Set<Organization>();
+    public DbSet<Clinic> Clinics => Set<Clinic>();
+    public DbSet<ClinicOrganizationLink> ClinicOrganizationLinks => Set<ClinicOrganizationLink>();
+
+    // ── Memberships ─────────────────────────────────────────────────────────
+    public DbSet<OrganizationMembership> OrganizationMemberships => Set<OrganizationMembership>();
+    public DbSet<ClinicMembership> ClinicMemberships => Set<ClinicMembership>();
+    public DbSet<BookingDraft> BookingDrafts => Set<BookingDraft>();
 
     // ── Infrastructure ──────────────────────────────────────────────────────
     public DbSet<SyncLog> SyncLogs => Set<SyncLog>();
     public DbSet<DeviceSession> DeviceSessions => Set<DeviceSession>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<NotificationPreferences> NotificationPreferences => Set<NotificationPreferences>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

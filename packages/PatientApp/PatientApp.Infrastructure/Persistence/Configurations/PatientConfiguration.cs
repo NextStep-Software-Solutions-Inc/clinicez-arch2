@@ -49,5 +49,21 @@ public sealed class PatientConfiguration : IEntityTypeConfiguration<Patient>
         builder.HasOne(p => p.MentalHealthProfile)
             .WithOne(m => m.Patient)
             .HasForeignKey<PatientMentalHealthProfile>(m => m.PatientId);
+
+        builder.HasOne(p => p.Occupation)
+            .WithOne(o => o.Patient)
+            .HasForeignKey<PatientOccupation>(o => o.PatientId);
+
+        builder.HasOne(p => p.MaleReproductive)
+            .WithOne(m => m.Patient)
+            .HasForeignKey<PatientMaleReproductive>(m => m.PatientId);
+
+        builder.HasOne(p => p.DentalVision)
+            .WithOne(d => d.Patient)
+            .HasForeignKey<PatientDentalVision>(d => d.PatientId);
+
+        builder.HasOne(p => p.NcdQuestionnaire)
+            .WithOne(n => n.Patient)
+            .HasForeignKey<PatientNcdQuestionnaire>(n => n.PatientId);
     }
 }

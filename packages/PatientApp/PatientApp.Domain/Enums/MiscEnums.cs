@@ -13,5 +13,6 @@ public enum FileCategory
 
 public enum NotificationType
 {
-    Appointment, SyncConflict, ClinicMessage, System
+    AppointmentReminder, ClinicAnnouncement, MedicationReminder,
+    LabResult, NewMessage, System, SyncConflict
 }
