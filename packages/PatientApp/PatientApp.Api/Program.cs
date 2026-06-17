@@ -4,6 +4,7 @@ using PatientApp.Api;
 using PatientApp.Api.Extensions;
 using PatientApp.Api.Hubs;
 using PatientApp.Api.Infrastructure;
+using PatientApp.Api.Middleware;
 using PatientApp.Application;
 using PatientApp.Infrastructure;
 using Scalar.AspNetCore;
@@ -34,6 +35,12 @@ app.UseExceptionHandler();
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+// E2E payload encryption — only active when Encryption:Enabled = true (Production).
+// Decrypts request bodies and encrypts response bodies using AES-256-GCM.
+// Bypassed entirely in Development (Encryption:Enabled = false in appsettings.Development.json).
+if (app.Configuration.GetValue<bool>("Encryption:Enabled"))
+    app.UseMiddleware<PayloadEncryptionMiddleware>();
 
 // Hangfire dashboard — protected by HTTP Basic Auth (credentials from config)
 var hangfireAuth = app.Services.GetRequiredService<HangfireDashboardBasicAuthFilter>();

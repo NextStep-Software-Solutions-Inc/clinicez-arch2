@@ -13,6 +13,7 @@ using PatientApp.Infrastructure.Options;
 using PatientApp.Infrastructure.Persistence;
 using PatientApp.Infrastructure.Persistence.Repositories;
 using PatientApp.Infrastructure.Services.Auth;
+using PatientApp.Infrastructure.Services.Clinic;
 using PatientApp.Infrastructure.Services.Jobs;
 using PatientApp.Infrastructure.Services.Jobs.Processors;
 using PatientApp.Infrastructure.Services.Session;
@@ -37,6 +38,7 @@ public static class DependencyInjection
         // ── Options ──────────────────────────────────────────────────────────
         services.Configure<R2Options>(configuration.GetSection("R2"));
         services.Configure<ClerkOptions>(configuration.GetSection("Clerk"));
+        services.Configure<EncryptionOptions>(configuration.GetSection("Encryption"));
 
         // ── EF Core — PostgreSQL with snake_case naming ───────────────────────
         services.AddDbContext<ApplicationDbContext>(options =>
@@ -49,7 +51,25 @@ public static class DependencyInjection
         services.AddSingleton<IConnectionMultiplexer>(
             ConnectionMultiplexer.Connect(redisConnection));
 
-        // ── Hangfire — PostgreSQL backed ──────────────────────────────────────
+        // ── Clinic Dashboard — named HttpClient with Polly standard resilience ─
+        var clinicTimeout = configuration.GetValue<int>("ClinicDashboard:TimeoutSeconds", 30);
+        var clinicRetry = configuration.GetValue<int>("ClinicDashboard:RetryCount", 3);
+
+        services.AddHttpClient("ClinicDashboard")
+            .AddStandardResilienceHandler(options =>
+            {
+                options.Retry.MaxRetryAttempts = clinicRetry;
+                options.Retry.Delay = TimeSpan.FromMilliseconds(500);
+                options.Retry.UseJitter = true;
+                // Total timeout accounts for all retry attempts
+                options.TotalRequestTimeout.Timeout =
+                    TimeSpan.FromSeconds(clinicTimeout * (clinicRetry + 1));
+                options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(clinicTimeout);
+            });
+
+        services.AddScoped<IClinicDashboardService, ClinicDashboardService>();
+
+
         services.AddHangfire(config => config
             .UseSimpleAssemblyNameTypeSerializer()
             .UseRecommendedSerializerSettings()
