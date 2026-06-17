@@ -1,7 +1,0 @@
-/* Biome: suppress noUnknownAtRules for tailwind directives */
-/* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind CSS directive */
-@tailwind base;
-/* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind CSS directive */
-@tailwind components;
-/* biome-ignore lint/suspicious/noUnknownAtRules: Tailwind CSS directive */
-@tailwind utilities;
