@@ -93,3 +93,9 @@ packages/**/obj/
 
 # Ignore any .vs folders at repo level
 .vs/
+
+# migration_reports
+migration_reports/
+
+# .tmp files
+*.tmp
