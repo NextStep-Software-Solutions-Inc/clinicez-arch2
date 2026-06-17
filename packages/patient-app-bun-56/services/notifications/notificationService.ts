@@ -199,6 +199,81 @@ export async function deleteNotification(id: string): Promise<void> {
     .where(eq(notifications.id, id));
 }
 
+// ─── Backend Sync ──────────────────────────────────────────────────────────────
+
+import {
+  fetchNotificationsFromBackend,
+  markNotificationReadOnBackend,
+  markAllNotificationsReadOnBackend,
+} from '../api/notificationsApi';
+
+/**
+ * Pulls the latest notifications from the backend and upserts them into the
+ * local SQLite table. Intended to be called on app foreground / pull-to-refresh.
+ * Fails silently when offline.
+ */
+export async function syncNotificationsFromBackend(
+  getToken: () => Promise<string | null>,
+  patientId: string,
+): Promise<void> {
+  try {
+    const result = await fetchNotificationsFromBackend(getToken, patientId, { take: 100 });
+    for (const n of result.items) {
+      await db
+        .insert(notifications)
+        .values({
+          id: n.id,
+          patientId,
+          type: (n.type as NotificationType) ?? 'system',
+          category: (n.category as NotificationCategory) ?? 'system',
+          title: n.title,
+          body: n.body,
+          data: n.payload,
+          isRead: n.isRead,
+          createdAt: n.createdAt ? new Date(n.createdAt) : new Date(),
+          readAt: n.readAt ? new Date(n.readAt) : null,
+          expiresAt: n.expiresAt ? new Date(n.expiresAt) : null,
+          sourceId: n.sourceId,
+          deletedAt: null,
+        })
+        .onConflictDoUpdate({
+          target: notifications.id,
+          set: {
+            isRead: n.isRead,
+            readAt: n.readAt ? new Date(n.readAt) : null,
+            title: n.title,
+            body: n.body,
+          },
+        });
+    }
+  } catch {
+    // Offline — local cache remains unchanged
+  }
+}
+
+/**
+ * Marks a single notification as read locally and fires-and-forgets to the backend.
+ */
+export async function markAsReadWithSync(
+  getToken: () => Promise<string | null>,
+  patientId: string,
+  id: string,
+): Promise<void> {
+  await markAsRead(id);
+  try { await markNotificationReadOnBackend(getToken, patientId, id); } catch { /* offline */ }
+}
+
+/**
+ * Marks all notifications as read locally and fires-and-forgets to the backend.
+ */
+export async function markAllAsReadWithSync(
+  getToken: () => Promise<string | null>,
+  patientId: string,
+): Promise<void> {
+  await markAllAsRead(patientId);
+  try { await markAllNotificationsReadOnBackend(getToken, patientId); } catch { /* offline */ }
+}
+
 export async function clearAllNotifications(patientId: string): Promise<void> {
   await db
     .update(notifications)

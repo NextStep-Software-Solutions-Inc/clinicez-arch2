@@ -890,3 +890,139 @@ export function getOrganizationVisibilityLabel(organization: OrganizationEntity)
 export function getClinicVisibilityLabel(clinic: ClinicEntity): string {
     return clinic.isPublic ? 'Public' : 'Private';
 }
+
+// ─── Online-first API wrappers ─────────────────────────────────────────────────
+// These functions call the PatientApp backend when connectivity is available,
+// and fall back silently so callers can continue from local seeded/SQLite data.
+
+import {
+    searchOrganizations as apiSearchOrgs,
+    searchClinics as apiSearchClinics,
+    getOrganizationByInviteCode as apiGetOrgByInvite,
+    getClinicDetail as apiGetClinicDetail,
+    joinOrganization as apiJoinOrg,
+    joinClinic as apiJoinClinic,
+    type OrganizationSummary as RemoteOrgSummary,
+    type OrganizationDetail as RemoteOrgDetail,
+    type ClinicSummary as RemoteClinicSummary,
+    type ClinicDetail as RemoteClinicDetail,
+    type JoinConsentInput,
+} from '../api/discoveryApi';
+import { createBookingDraft as apiCreateDraft, submitBookingDraft as apiSubmitDraft } from '../api/bookingApi';
+import { ApiError } from '../api/apiClient';
+
+export type { RemoteOrgSummary, RemoteOrgDetail, RemoteClinicSummary, RemoteClinicDetail };
+
+/**
+ * Searches organizations from the backend. Returns [] when offline.
+ * Use the raw useSWR hook (useOrganizations from services/api/useApi) for
+ * reactive UI components that need automatic revalidation.
+ */
+export async function searchOrganizationsOnline(
+    getToken: () => Promise<string | null>,
+    query?: string,
+): Promise<RemoteOrgSummary[]> {
+    try {
+        const result = await apiSearchOrgs(getToken, query, 0, 50);
+        return result.items;
+    } catch {
+        return [];
+    }
+}
+
+/**
+ * Resolves an organization by invite code. Returns null when offline or not found.
+ * Used by the join-flow screens before the patient commits to joining.
+ */
+export async function lookupOrganizationByInviteCode(
+    getToken: () => Promise<string | null>,
+    inviteCode: string,
+): Promise<RemoteOrgDetail | null> {
+    return apiGetOrgByInvite(getToken, inviteCode.trim());
+}
+
+/**
+ * Searches clinics from the backend. Pass organizationId to scope to a joined org.
+ */
+export async function searchClinicsOnline(
+    getToken: () => Promise<string | null>,
+    query?: string,
+    organizationId?: string,
+): Promise<RemoteClinicSummary[]> {
+    try {
+        const result = await apiSearchClinics(getToken, query, organizationId, 0, 50);
+        return result.items;
+    } catch {
+        return [];
+    }
+}
+
+/**
+ * Fetches full clinic detail including linked organizations and the
+ * current patient's membership status.
+ */
+export async function fetchClinicDetailOnline(
+    getToken: () => Promise<string | null>,
+    clinicId: string,
+    patientId?: string,
+): Promise<RemoteClinicDetail | null> {
+    return apiGetClinicDetail(getToken, clinicId, patientId);
+}
+
+/**
+ * Joins an organization via invite code — requires online.
+ * Throws ApiError on failure (UI should handle the error message).
+ */
+export async function joinOrganizationOnline(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    inviteCode: string,
+    roleId: string,
+    consent: JoinConsentInput,
+) {
+    return apiJoinOrg(getToken, patientId, inviteCode, roleId, consent);
+}
+
+/**
+ * Joins a clinic directly — consent only, no invite code.
+ * Returns the new ClinicMembership server ID.
+ */
+export async function joinClinicOnline(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    clinicId: string,
+    consent: JoinConsentInput,
+): Promise<string> {
+    return apiJoinClinic(getToken, patientId, clinicId, consent);
+}
+
+/**
+ * Creates a booking draft on the backend and returns the server UUID.
+ * The local bookingDrafts row should be updated with this serverId afterwards.
+ */
+export async function createBookingDraftOnline(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    payload: {
+        clinicId: string;
+        organizationId?: string | null;
+        preferredDate?: string | null;
+        preferredTime?: string | null;
+        reason?: string | null;
+        notes?: string | null;
+        shareFieldsJson: string;
+    },
+): Promise<string> {
+    return apiCreateDraft(getToken, patientId, payload);
+}
+
+/**
+ * Submits a ready booking draft to the Clinic Dashboard via the PatientApp backend.
+ */
+export async function submitBookingDraftOnline(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    draftId: string,
+): Promise<string | null> {
+    return apiSubmitDraft(getToken, patientId, draftId);
+}

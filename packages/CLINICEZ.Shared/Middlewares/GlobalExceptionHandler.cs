@@ -3,7 +3,6 @@ using CLINICEZ.Shared.Common;
 using CLINICEZ.Shared.Exceptions;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
 
 namespace CLINICEZ.Shared.Middlewares;
 
@@ -11,42 +10,42 @@ public class GlobalExceptionHandler : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
-        var (statusCode, title) = exception switch
+        var (statusCode, genericCode) = exception switch
         {
-            ValidationException => ((int)HttpStatusCode.BadRequest, "Validation failed"),
-            BadRequestException => ((int)HttpStatusCode.BadRequest, "Bad request"),
-            UnauthorizedException => ((int)HttpStatusCode.Unauthorized, "Unauthorized"),
-            ForbiddenException => ((int)HttpStatusCode.Forbidden, "Forbidden"),
-            TooManyRequestsException => ((int)HttpStatusCode.TooManyRequests, "Too many requests"),
-            ServiceUnavailableException => ((int)HttpStatusCode.ServiceUnavailable, "Service unavailable"),
-            ConflictException => ((int)HttpStatusCode.Conflict, "Conflict occurred"),
-            NotFoundException => ((int)HttpStatusCode.NotFound, "Resource not found"),
-            _ => ((int)HttpStatusCode.InternalServerError, "An unexpected error occurred")
+            ValidationException          => ((int)HttpStatusCode.BadRequest,            "VALIDATION_ERROR"),
+            BadRequestException          => ((int)HttpStatusCode.BadRequest,            "BAD_REQUEST"),
+            UnauthorizedException        => ((int)HttpStatusCode.Unauthorized,          "UNAUTHORIZED"),
+            ForbiddenException           => ((int)HttpStatusCode.Forbidden,             "FORBIDDEN"),
+            TooManyRequestsException     => ((int)HttpStatusCode.TooManyRequests,       "TOO_MANY_REQUESTS"),
+            ServiceUnavailableException  => ((int)HttpStatusCode.ServiceUnavailable,    "SERVICE_UNAVAILABLE"),
+            ConflictException            => ((int)HttpStatusCode.Conflict,              "CONFLICT"),
+            NotFoundException            => ((int)HttpStatusCode.NotFound,              "NOT_FOUND"),
+            _                            => ((int)HttpStatusCode.InternalServerError,   "INTERNAL_ERROR"),
         };
 
         httpContext.Response.StatusCode = statusCode;
 
+        // ── Validation errors: produce one ApiFieldError per field ────────────
         if (exception is ValidationException vex && vex.Errors is not null)
         {
-            var validationProblem = new ValidationProblemDetails(vex.Errors)
-            {
-                Status = statusCode,
-                Title = "Validation failed",
-                Detail = vex.Message
-            };
+            var fieldErrors = vex.Errors
+                .SelectMany(kvp => kvp.Value.Select(msg =>
+                    new ApiFieldError(kvp.Key, "VALIDATION_ERROR", msg)))
+                .ToList();
 
-            await httpContext.Response.WriteAsJsonAsync(ApiResponse<object>.Fail(validationProblem.Detail ?? vex.Message), cancellationToken);
+            var response = ApiResponse<object>.Fail(
+                vex.Message ?? "One or more validation errors occurred.",
+                fieldErrors);
+
+            await httpContext.Response.WriteAsJsonAsync(response, cancellationToken);
             return true;
         }
 
-        var problemDetails = new ProblemDetails
-        {
-            Status = statusCode,
-            Title = title,
-            Detail = exception.Message
-        };
-
-        await httpContext.Response.WriteAsJsonAsync(ApiResponse<object>.Fail(problemDetails.Detail), cancellationToken);
+        // ── All other exceptions: single top-level error ───────────────────────
+        var singleError = new ApiFieldError(null, genericCode, exception.Message);
+        await httpContext.Response.WriteAsJsonAsync(
+            ApiResponse<object>.Fail(exception.Message, [singleError]),
+            cancellationToken);
 
         return true;
     }

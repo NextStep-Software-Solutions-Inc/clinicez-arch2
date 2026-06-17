@@ -126,3 +126,48 @@ export async function isNotificationEnabled(
 }
 
 export { NOTIFICATION_CATEGORIES };
+
+// ─── Backend Sync ──────────────────────────────────────────────────────────────
+
+import {
+  fetchNotificationPreferencesFromBackend,
+  upsertNotificationPreferenceOnBackend,
+} from '../api/notificationsApi';
+
+/**
+ * Pulls notification preferences from the backend and merges them into the
+ * local SQLite table. Called on app foreground when online.
+ * Fails silently when offline.
+ */
+export async function syncPreferencesFromBackend(
+  getToken: () => Promise<string | null>,
+  patientId: string,
+): Promise<void> {
+  try {
+    const remote = await fetchNotificationPreferencesFromBackend(getToken, patientId);
+    for (const p of remote) {
+      await setPreference(
+        patientId,
+        p.category as NotificationCategory,
+        p.pushEnabled,
+        p.inAppEnabled,
+      );
+    }
+  } catch { /* offline */ }
+}
+
+/**
+ * Saves a preference locally and pushes to the backend (fire-and-forget on failure).
+ */
+export async function setPreferenceWithSync(
+  getToken: () => Promise<string | null>,
+  patientId: string,
+  category: NotificationCategory,
+  pushEnabled: boolean,
+  inAppEnabled: boolean,
+): Promise<void> {
+  await setPreference(patientId, category, pushEnabled, inAppEnabled);
+  try {
+    await upsertNotificationPreferenceOnBackend(getToken, patientId, category, pushEnabled, inAppEnabled);
+  } catch { /* offline — will reconcile on next sync */ }
+}

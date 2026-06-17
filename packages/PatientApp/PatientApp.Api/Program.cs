@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Hangfire;
 using Hangfire.Dashboard;
 using PatientApp.Api;
@@ -16,6 +18,14 @@ builder.Configuration
     .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true)
     .AddUserSecrets<Program>(optional: true)
     .AddEnvironmentVariables();
+
+// ── JSON: camelCase properties + lowercase enum strings (matches mobile expectations) ────
+builder.Services.ConfigureHttpJsonOptions(opts =>
+{
+    opts.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+    opts.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
+    opts.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+});
 
 builder.Services
     .AddApiServices()
