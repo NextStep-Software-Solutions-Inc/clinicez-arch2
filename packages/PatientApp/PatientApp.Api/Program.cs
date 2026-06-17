@@ -1,0 +1,55 @@
+using Hangfire;
+using Hangfire.Dashboard;
+using PatientApp.Api;
+using PatientApp.Api.Extensions;
+using PatientApp.Api.Hubs;
+using PatientApp.Api.Infrastructure;
+using PatientApp.Application;
+using PatientApp.Infrastructure;
+using Scalar.AspNetCore;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Configuration
+    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+    .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true)
+    .AddUserSecrets<Program>(optional: true)
+    .AddEnvironmentVariables();
+
+builder.Services
+    .AddApiServices()
+    .AddApplicationServices()
+    .AddInfrastructureServices(builder.Configuration, builder.Environment);
+
+var app = builder.Build();
+
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+    app.MapScalarApiReference(opts => opts.WithTitle("ClinicEZ Patient App API"));
+}
+
+app.UseHttpsRedirection();
+app.UseExceptionHandler();
+
+app.UseAuthentication();
+app.UseAuthorization();
+
+// Hangfire dashboard — protected by HTTP Basic Auth (credentials from config)
+var hangfireAuth = app.Services.GetRequiredService<HangfireDashboardBasicAuthFilter>();
+app.UseHangfireDashboard("/hangfire", new DashboardOptions
+{
+    Authorization = [hangfireAuth],
+    IsReadOnlyFunc = _ => !app.Environment.IsDevelopment(),
+});
+
+// Auto-maps all IEndpoint implementations under /api/v1
+app.MapApiEndpoints();
+
+// SignalR hub for real-time sync state & session management
+app.MapHub<SyncHub>("/hubs/sync");
+
+app.Run();
+
+// Anchor for WebApplicationFactory in integration tests
+public partial class Program { }

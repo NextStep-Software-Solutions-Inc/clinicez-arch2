@@ -1,0 +1,115 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using PatientApp.Domain.Entities;
+
+namespace PatientApp.Infrastructure.Persistence.Configurations;
+
+public sealed class FileRecordConfiguration : IEntityTypeConfiguration<FileRecord>
+{
+    public void Configure(EntityTypeBuilder<FileRecord> builder)
+    {
+        builder.HasKey(f => f.Id);
+        builder.Property(f => f.FileName).HasMaxLength(255).IsRequired();
+        builder.Property(f => f.ContentType).HasMaxLength(100).IsRequired();
+        builder.Property(f => f.StorageKey).HasMaxLength(500).IsRequired();
+        builder.Property(f => f.Category).HasConversion<string>().HasMaxLength(30);
+        builder.Property(f => f.CreatedBy).HasMaxLength(128).IsRequired();
+        builder.Property(f => f.UpdatedBy).HasMaxLength(128);
+
+        builder.HasOne(f => f.Patient)
+            .WithMany(p => p.Files)
+            .HasForeignKey(f => f.PatientId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public sealed class AppointmentConfiguration : IEntityTypeConfiguration<Appointment>
+{
+    public void Configure(EntityTypeBuilder<Appointment> builder)
+    {
+        builder.HasKey(a => a.Id);
+        builder.Property(a => a.ServiceType).HasMaxLength(200);
+        builder.Property(a => a.Notes).HasMaxLength(1000);
+        builder.Property(a => a.Status).HasConversion<string>().HasMaxLength(30);
+        builder.Property(a => a.RawJson).HasColumnType("text").IsRequired();
+        builder.Property(a => a.CreatedBy).HasMaxLength(128).IsRequired();
+        builder.Property(a => a.UpdatedBy).HasMaxLength(128);
+
+        builder.HasOne(a => a.Patient)
+            .WithMany(p => p.Appointments)
+            .HasForeignKey(a => a.PatientId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasIndex(a => new { a.PatientId, a.ScheduledAt });
+        builder.HasIndex(a => new { a.PatientId, a.Status });
+    }
+}
+
+public sealed class SyncLogConfiguration : IEntityTypeConfiguration<SyncLog>
+{
+    public void Configure(EntityTypeBuilder<SyncLog> builder)
+    {
+        builder.HasKey(s => s.Id);
+        builder.Property(s => s.EntityType).HasMaxLength(100).IsRequired();
+        builder.Property(s => s.EntityId).IsRequired(false);
+        builder.Property(s => s.Operation).HasConversion<string>().HasMaxLength(20);
+        builder.Property(s => s.Status).HasConversion<string>().HasMaxLength(30);
+        builder.Property(s => s.ConflictDetail).HasColumnType("text");
+        builder.Property(s => s.PayloadJson).HasColumnType("text");
+        builder.Property(s => s.CreatedBy).HasMaxLength(128).IsRequired();
+        builder.Property(s => s.UpdatedBy).HasMaxLength(128);
+
+        builder.HasOne(s => s.Patient)
+            .WithMany(p => p.SyncLogs)
+            .HasForeignKey(s => s.PatientId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasIndex(s => new { s.PatientId, s.Status });
+        builder.HasIndex(s => new { s.EntityType, s.EntityId });
+    }
+}
+
+public sealed class DeviceSessionConfiguration : IEntityTypeConfiguration<DeviceSession>
+{
+    public void Configure(EntityTypeBuilder<DeviceSession> builder)
+    {
+        builder.HasKey(d => d.Id);
+        builder.Property(d => d.DeviceId).HasMaxLength(128).IsRequired();
+        builder.Property(d => d.DeviceLabel).HasMaxLength(200).IsRequired();
+        builder.Property(d => d.ClerkSessionId).HasMaxLength(256).IsRequired();
+        builder.Property(d => d.RedisKey).HasMaxLength(256).IsRequired();
+        builder.Property(d => d.CreatedBy).HasMaxLength(128).IsRequired();
+        builder.Property(d => d.UpdatedBy).HasMaxLength(128);
+
+        builder.HasOne(d => d.Patient)
+            .WithMany(p => p.DeviceSessions)
+            .HasForeignKey(d => d.PatientId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Only one active session per patient at a time
+        builder.HasIndex(d => d.PatientId)
+            .HasFilter("is_revoked = false")
+            .IsUnique();
+    }
+}
+
+public sealed class NotificationConfiguration : IEntityTypeConfiguration<Notification>
+{
+    public void Configure(EntityTypeBuilder<Notification> builder)
+    {
+        builder.HasKey(n => n.Id);
+        builder.Property(n => n.Type).HasConversion<string>().HasMaxLength(40);
+        builder.Property(n => n.Title).HasMaxLength(300).IsRequired();
+        builder.Property(n => n.Body).HasMaxLength(1000).IsRequired();
+        builder.Property(n => n.Payload).HasColumnType("text");
+        builder.Property(n => n.CreatedBy).HasMaxLength(128).IsRequired();
+        builder.Property(n => n.UpdatedBy).HasMaxLength(128);
+
+        builder.HasOne(n => n.Patient)
+            .WithMany(p => p.Notifications)
+            .HasForeignKey(n => n.PatientId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasIndex(n => new { n.PatientId, n.IsRead });
+    }
+}

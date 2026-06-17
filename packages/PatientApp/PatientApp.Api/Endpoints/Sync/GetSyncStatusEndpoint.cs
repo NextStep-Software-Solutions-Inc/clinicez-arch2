@@ -1,0 +1,29 @@
+using CLINICEZ.Shared.Common;
+using MediatR;
+using PatientApp.Api.Abstractions;
+using PatientApp.Application.Common.DTOs;
+using PatientApp.Application.Features.Sync.Queries.GetSyncStatus;
+
+namespace PatientApp.Api.Endpoints.Sync;
+
+public sealed class GetSyncStatusEndpoint : IEndpoint
+{
+    public void MapEndpoint(IEndpointRouteBuilder app)
+    {
+        app.MapGet("/patients/{patientId:guid}/sync/status", async (
+                Guid patientId,
+                ISender sender,
+                CancellationToken ct,
+                int take = 50) =>
+            {
+                var status = await sender.Send(new GetSyncStatusQuery(patientId, take), ct);
+                return Results.Ok(ApiResponse<SyncStatusDto>.Success(status));
+            })
+            .WithTags("Sync")
+            .WithName("GetSyncStatus")
+            .WithSummary("Get the sync processing status and recent log entries for a patient")
+            .Produces<ApiResponse<SyncStatusDto>>(StatusCodes.Status200OK)
+            .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
+            .RequireAuthorization();
+    }
+}
