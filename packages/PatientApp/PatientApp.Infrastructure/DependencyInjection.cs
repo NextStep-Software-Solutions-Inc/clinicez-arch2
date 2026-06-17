@@ -62,8 +62,7 @@ public static class DependencyInjection
                 options.Retry.Delay = TimeSpan.FromMilliseconds(500);
                 options.Retry.UseJitter = true;
                 // Total timeout accounts for all retry attempts
-                options.TotalRequestTimeout.Timeout =
-                    TimeSpan.FromSeconds(clinicTimeout * (clinicRetry + 1));
+                options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(clinicTimeout * (clinicRetry + 1));
                 options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(clinicTimeout);
             });
 
