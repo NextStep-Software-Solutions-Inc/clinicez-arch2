@@ -19,32 +19,27 @@ public sealed class GetPatientProfileQueryHandler : IRequestHandler<GetPatientPr
 
         var demographics = new PatientSummaryDto(
             patient.Id,
-            patient.FirstName,
-            patient.MiddleName,
-            patient.LastName,
-            patient.Suffix,
-            patient.Sex?.ToString(),
-            patient.DateOfBirth,
-            patient.BloodType?.ToString(),
-            patient.CivilStatus?.ToString(),
-            patient.Nationality,
-            patient.Mobile,
-            patient.Email,
+            patient.FirstName, patient.MiddleName, patient.LastName, patient.Suffix,
+            patient.Sex?.ToString(), patient.DateOfBirth, patient.PlaceOfBirth,
+            patient.BloodType?.ToString(), patient.CivilStatus?.ToString(),
+            patient.Nationality, patient.Ethnicity, patient.Religion, patient.PrimaryLanguage,
+            patient.EducationLevel?.ToString(),
+            patient.Mobile, patient.AltPhone, patient.Email, patient.MessengerHandle,
             patient.AvatarUrl,
             patient.ConsentToShareInfo);
 
         var addresses = patient.Addresses
             .Select(a => new PatientAddressDto(
-                a.Id, a.Type.ToString(), a.Street, a.Barangay,
-                a.City, a.Province, a.ZipCode, a.Country, a.IsPrimary))
-            .ToList()
-            .AsReadOnly();
+                a.Id, a.ClientId, a.Type.ToString(),
+                a.Street, a.Barangay, a.City, a.Province, a.ZipCode, a.Country,
+                a.IsPrimary, a.UpdatedAt))
+            .ToList().AsReadOnly();
 
         var emergencyContacts = patient.EmergencyContacts
             .Select(e => new EmergencyContactDto(
-                e.Id, e.FullName, e.Relationship, e.Mobile, e.AltPhone, e.IsPrimary))
-            .ToList()
-            .AsReadOnly();
+                e.Id, e.ClientId, e.FullName, e.Relationship,
+                e.Mobile, e.AltPhone, e.IsPrimary, e.UpdatedAt))
+            .ToList().AsReadOnly();
 
         return new PatientProfileDto(demographics, addresses, emergencyContacts);
     }

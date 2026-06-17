@@ -16,17 +16,12 @@ public sealed class GetPatientByClerkIdQueryHandler : IRequestHandler<GetPatient
 
         return patient is null ? null : new PatientSummaryDto(
             patient.Id,
-            patient.FirstName,
-            patient.MiddleName,
-            patient.LastName,
-            patient.Suffix,
-            patient.Sex?.ToString(),
-            patient.DateOfBirth,
-            patient.BloodType?.ToString(),
-            patient.CivilStatus?.ToString(),
-            patient.Nationality,
-            patient.Mobile,
-            patient.Email,
+            patient.FirstName, patient.MiddleName, patient.LastName, patient.Suffix,
+            patient.Sex?.ToString(), patient.DateOfBirth, patient.PlaceOfBirth,
+            patient.BloodType?.ToString(), patient.CivilStatus?.ToString(),
+            patient.Nationality, patient.Ethnicity, patient.Religion, patient.PrimaryLanguage,
+            patient.EducationLevel?.ToString(),
+            patient.Mobile, patient.AltPhone, patient.Email, patient.MessengerHandle,
             patient.AvatarUrl,
             patient.ConsentToShareInfo);
     }

@@ -62,7 +62,10 @@ public sealed class UpdatePatientDemographicsEndpoint : IEndpoint
             })
             .WithTags("Patients")
             .WithName("UpdatePatientDemographics")
-            .WithSummary("Update the demographic and contact information for a patient")
+            .WithSummary(
+                "DIRECT write — for Dashboard / admin use only. " +
+                "Mobile clients MUST use POST /patients/{id}/sync instead, " +
+                "which goes through the Hangfire queue, conflict resolution, and SyncLog audit trail.")
             .Produces(StatusCodes.Status204NoContent)
             .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
             .ProducesValidationProblem()

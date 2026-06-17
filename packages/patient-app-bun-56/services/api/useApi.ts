@@ -13,7 +13,7 @@
 import useSWR, { type SWRConfiguration } from 'swr';
 import useSWRMutation from 'swr/mutation';
 import { swrFetcher, swrKey, api, ApiError } from './apiClient';
-import type { PatientSummary, PushSyncAck, SyncItemRequest } from './patientApi';
+import type { PatientSummary, PushSyncAck, SyncItemRequest, PatientFullRecord } from './patientApi';
 import type {
     PagedResult,
     OrganizationSummary,
@@ -45,6 +45,25 @@ export function usePatientByClerkId(
             catch (err) { if (err instanceof ApiError && err.status === 404) return null; throw err; }
         },
         OFFLINE_OPTS,
+    );
+}
+
+/**
+ * Fetches the full patient record — all 22 ISyncable entity categories.
+ *
+ * Use on first install or re-install to hydrate local SQLite from server state.
+ * `revalidateOnFocus: false` because this is expensive and should be triggered
+ * explicitly, not on every app-foreground event.
+ */
+export function usePatientFullRecord(
+    getToken: () => Promise<string | null>,
+    patientId: string | null | undefined,
+) {
+    const key = patientId ? swrKey(`/patients/${patientId}/full-record`) : null;
+    return useSWR<PatientFullRecord>(
+        key ? [key, getToken] : null,
+        ([k, gt]) => swrFetcher<PatientFullRecord>(k, gt),
+        { ...OFFLINE_OPTS, revalidateOnFocus: false },
     );
 }
 
