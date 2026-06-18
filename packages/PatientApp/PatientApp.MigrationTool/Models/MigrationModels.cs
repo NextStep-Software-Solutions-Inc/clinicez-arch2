@@ -10,6 +10,50 @@ public sealed class MigrationToolOptions
     public string ReportDirectory { get; set; } = string.Empty;
 }
 
+public sealed class MigrationMappingConfiguration
+{
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public Dictionary<string, TableMappingOverride> Tables { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public TableMappingOverride? FindTable(string sourceTableKey)
+    {
+        return Tables.FirstOrDefault(
+            entry => string.Equals(entry.Key, sourceTableKey, StringComparison.OrdinalIgnoreCase)).Value;
+    }
+}
+
+public sealed class TableMappingOverride
+{
+    public string? TargetTableName { get; set; }
+    public bool ForceUnmapped { get; set; }
+    public bool Trash { get; set; }
+    public Dictionary<string, string> Columns { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, ColumnMappingOverride> ColumnSources { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public string? FindSourceColumn(string targetColumn)
+    {
+        var source = FindColumnSource(targetColumn);
+        if (!string.IsNullOrWhiteSpace(source?.SourceColumnName))
+            return source.SourceColumnName;
+
+        return Columns.FirstOrDefault(
+            entry => string.Equals(entry.Key, targetColumn, StringComparison.OrdinalIgnoreCase)).Value;
+    }
+
+    public ColumnMappingOverride? FindColumnSource(string targetColumn)
+    {
+        return ColumnSources.FirstOrDefault(
+            entry => string.Equals(entry.Key, targetColumn, StringComparison.OrdinalIgnoreCase)).Value;
+    }
+}
+
+public sealed class ColumnMappingOverride
+{
+    public string? SourceTableKey { get; set; }
+    public string SourceColumnName { get; set; } = string.Empty;
+    public string? Transform { get; set; }
+}
+
 public sealed class DatabaseCheckResult
 {
     public string Name { get; init; } = string.Empty;
@@ -153,9 +197,12 @@ public sealed class TableMapping
 public sealed class ColumnMapping
 {
     public string TargetColumn { get; init; } = string.Empty;
+    public string? SourceTableKey { get; init; }
     public string? SourceColumn { get; init; }
+    public string? Transform { get; init; }
     public string Action { get; init; } = string.Empty;
     public string Notes { get; init; } = string.Empty;
+    public string? Warning { get; init; }
 }
 
 public sealed class SourceRow
@@ -185,6 +232,7 @@ public sealed class MigrationReport
     public IReadOnlyList<TrashEntry> Trash { get; set; } = [];
     public IReadOnlyList<IdMapEntry> IdMap { get; set; } = [];
     public IReadOnlyList<string> Messages { get; set; } = [];
+    public string MappingConfigurationVersion { get; set; } = string.Empty;
     public bool DryRunSucceeded { get; set; }
     public bool ApplySucceeded { get; set; }
 }

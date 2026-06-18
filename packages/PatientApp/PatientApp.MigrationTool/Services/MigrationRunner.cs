@@ -11,6 +11,7 @@ public sealed class MigrationRunner(
     PgSchemaInspector inspector,
     TargetSchemaReader targetSchemaReader,
     MappingEngine mappingEngine,
+    MappingConfigurationStore mappingConfigurationStore,
     ReportStore reportStore,
     MigrationState state,
     IOptions<MigrationToolOptions> options)
@@ -38,7 +39,8 @@ public sealed class MigrationRunner(
     {
         var targetSchema = targetSchemaReader.Read();
         var sourceSchema = await inspector.ReadSourceSchemaAsync(cancellationToken);
-        var plan = mappingEngine.Build(sourceSchema, targetSchema);
+        var configuration = mappingConfigurationStore.Load();
+        var plan = mappingEngine.Build(sourceSchema, targetSchema, configuration);
 
         var report = new MigrationReport
         {
@@ -49,6 +51,7 @@ public sealed class MigrationRunner(
             TargetTableCount = targetSchema.Tables.Count,
             TotalSourceRows = sourceSchema.Tables.Sum(t => t.RowCount.GetValueOrDefault()),
             TableMappings = plan.TableMappings,
+            MappingConfigurationVersion = mappingConfigurationStore.GetVersion(configuration),
             Messages = ["Source schema scanned. Review mappings, then run dry-run."],
         };
 
@@ -68,6 +71,11 @@ public sealed class MigrationRunner(
         if (latest is null || !latest.DryRunSucceeded)
             throw new InvalidOperationException("A successful dry-run is required before apply.");
 
+        var configuration = mappingConfigurationStore.Load();
+        var configurationVersion = mappingConfigurationStore.GetVersion(configuration);
+        if (!string.Equals(latest.MappingConfigurationVersion, configurationVersion, StringComparison.Ordinal))
+            throw new InvalidOperationException("Mapping configuration changed after the last dry-run. Run dry-run again before apply.");
+
         return await RunAsync(apply: true, cancellationToken);
     }
 
@@ -77,7 +85,9 @@ public sealed class MigrationRunner(
         var sourceSchema = await inspector.ReadSourceSchemaAsync(cancellationToken);
         var sourceCheck = await inspector.CheckSourceAsync(cancellationToken);
         var targetCheck = await inspector.CheckTargetAsync(targetSchema, cancellationToken);
-        var plan = mappingEngine.Build(sourceSchema, targetSchema);
+        var configuration = mappingConfigurationStore.Load();
+        var configurationVersion = mappingConfigurationStore.GetVersion(configuration);
+        var plan = mappingEngine.Build(sourceSchema, targetSchema, configuration);
 
         if (!sourceCheck.CanConnect)
             throw new InvalidOperationException(sourceCheck.Message);
@@ -86,6 +96,7 @@ public sealed class MigrationRunner(
             throw new InvalidOperationException(targetCheck.Message);
 
         var idMap = await BuildIdMapAsync(sourceSchema, targetSchema, plan, cancellationToken);
+        var sourceRowLookup = await BuildSourceRowLookupAsync(sourceSchema, plan, cancellationToken);
         var trash = new List<TrashEntry>();
         var tableResults = new List<TableMigrationResult>();
         var generatedUuidCount = idMap.Count;
@@ -132,7 +143,7 @@ public sealed class MigrationRunner(
                 await foreach (var row in inspector.ReadRowsAsync(sourceTable, cancellationToken))
                 {
                     result.SourceRows++;
-                    var transform = TransformRow(row, mapping, sourceSchema, targetSchema, plan, idMap, uniqueValueTracker);
+                    var transform = TransformRow(row, mapping, sourceSchema, targetSchema, plan, idMap, uniqueValueTracker, sourceRowLookup);
                     if (!transform.Success)
                     {
                         result.TrashedRows++;
@@ -152,8 +163,11 @@ public sealed class MigrationRunner(
                 }
 
                 result.Notes = mapping.ColumnMappings
-                    .Where(c => c.Action is "generated_uuid" or "generated_default" or "fk_remap")
-                    .Select(c => $"{c.TargetColumn}: {c.Notes}")
+                    .Where(c =>
+                        c.Action is "generated_uuid" or "generated_default" or "fk_remap"
+                        || !string.IsNullOrWhiteSpace(c.Transform)
+                        || !string.IsNullOrWhiteSpace(c.Warning))
+                    .Select(c => $"{c.TargetColumn}: {FirstConfigured(c.Warning, DescribeTransform(c.Transform), c.Notes)}")
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .Take(8)
                     .ToArray();
@@ -197,6 +211,7 @@ public sealed class MigrationRunner(
                 .ThenBy(entry => entry.SourceKey, StringComparer.OrdinalIgnoreCase)
                 .Take(5000)
                 .ToArray(),
+            MappingConfigurationVersion = configurationVersion,
             DryRunSucceeded = !apply,
             ApplySucceeded = apply,
             Messages = apply
@@ -241,6 +256,34 @@ public sealed class MigrationRunner(
         return idMap;
     }
 
+    private async Task<SourceRowLookup> BuildSourceRowLookupAsync(
+        DatabaseSchema sourceSchema,
+        MappingPlan plan,
+        CancellationToken cancellationToken)
+    {
+        var relatedTableKeys = plan.TableMappings
+            .SelectMany(mapping => mapping.ColumnMappings
+                .Where(column =>
+                    !string.IsNullOrWhiteSpace(column.SourceTableKey)
+                    && !string.Equals(column.SourceTableKey, mapping.SourceTableKey, StringComparison.OrdinalIgnoreCase))
+                .Select(column => column.SourceTableKey!))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var lookup = new SourceRowLookup();
+        foreach (var tableKey in relatedTableKeys)
+        {
+            var table = sourceSchema.FindTable(tableKey);
+            if (table is null)
+                continue;
+
+            await foreach (var row in inspector.ReadRowsAsync(table, cancellationToken))
+                lookup.Add(row);
+        }
+
+        return lookup;
+    }
+
     private RowTransformResult TransformRow(
         SourceRow row,
         TableMapping mapping,
@@ -248,7 +291,8 @@ public sealed class MigrationRunner(
         TargetDatabaseSchema targetSchema,
         MappingPlan plan,
         Dictionary<string, IdMapEntry> idMap,
-        UniqueValueTracker uniqueValueTracker)
+        UniqueValueTracker uniqueValueTracker,
+        SourceRowLookup sourceRowLookup)
     {
         var targetTable = mapping.TargetTableName is null ? null : targetSchema.FindTable(mapping.TargetTableName);
         if (targetTable is null)
@@ -276,14 +320,21 @@ public sealed class MigrationRunner(
                 continue;
             }
 
-            var sourceColumn = NameMatcher.FindBestColumn(row.Table.Columns, targetColumn.Name);
-            var sourceValue = sourceColumn is null || !row.Values.TryGetValue(sourceColumn.Name, out var rawValue)
-                ? null
-                : rawValue;
+            var sourceValue = ResolveSourceValue(row, mapping, targetColumn, sourceSchema, sourceRowLookup);
+            if (!string.IsNullOrWhiteSpace(sourceValue.MissingRelationMessage))
+                trash.Add(BuildTrash(row, mapping, "MissingRelatedSourceRow", sourceValue.MissingRelationMessage));
 
-            if (sourceValue is not null && ShouldRemapForeignKey(targetColumn))
+            if (sourceValue.Value is not null && ShouldRemapForeignKey(targetColumn))
             {
-                var remap = TryRemapForeignKey(row, sourceColumn, sourceValue, targetColumn, sourceSchema, plan, idMap);
+                var remap = TryRemapForeignKey(
+                    row,
+                    sourceValue.SourceTable,
+                    sourceValue.SourceColumn,
+                    sourceValue.Value,
+                    targetColumn,
+                    sourceSchema,
+                    plan,
+                    idMap);
                 if (remap.Success)
                 {
                     values[targetColumn.Name] = remap.Value;
@@ -305,7 +356,7 @@ public sealed class MigrationRunner(
                 };
             }
 
-            var conversion = ConvertValue(sourceValue, targetColumn, row, mapping);
+            var conversion = ConvertValue(sourceValue.Value, targetColumn, row, mapping, sourceValue.Transform);
             if (!conversion.Success)
             {
                 return new RowTransformResult
@@ -350,6 +401,85 @@ public sealed class MigrationRunner(
         return targetColumn.IsForeignKey
             || (targetColumn.ClrType == typeof(Guid) || Nullable.GetUnderlyingType(targetColumn.ClrType) == typeof(Guid))
             && targetColumn.Name.EndsWith("_id", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static SourceValueResolution ResolveSourceValue(
+        SourceRow row,
+        TableMapping mapping,
+        TargetColumnInfo targetColumn,
+        DatabaseSchema sourceSchema,
+        SourceRowLookup sourceRowLookup)
+    {
+        var mappedColumn = mapping.ColumnMappings.FirstOrDefault(column =>
+            string.Equals(column.TargetColumn, targetColumn.Name, StringComparison.OrdinalIgnoreCase));
+
+        if (!string.IsNullOrWhiteSpace(mappedColumn?.SourceColumn))
+        {
+            if (mappedColumn.Action == "manual_missing_source_table")
+            {
+                return new SourceValueResolution(
+                    null,
+                    null,
+                    null,
+                    mappedColumn.Transform,
+                    $"Mapped source table {mappedColumn.SourceTableKey} no longer exists for target column {targetColumn.Name}.");
+            }
+
+            var sourceTable = string.IsNullOrWhiteSpace(mappedColumn.SourceTableKey)
+                ? row.Table
+                : sourceSchema.FindTable(mappedColumn.SourceTableKey);
+            if (sourceTable is null)
+            {
+                return new SourceValueResolution(
+                    null,
+                    null,
+                    null,
+                    mappedColumn.Transform,
+                    $"Mapped source table {mappedColumn.SourceTableKey} no longer exists for target column {targetColumn.Name}.");
+            }
+
+            var sourceColumn = sourceTable.FindColumn(mappedColumn.SourceColumn);
+            if (sourceColumn is null)
+            {
+                return new SourceValueResolution(
+                    sourceTable,
+                    null,
+                    null,
+                    mappedColumn.Transform,
+                    $"Mapped source column {sourceTable.Key}.{mappedColumn.SourceColumn} no longer exists for target column {targetColumn.Name}.");
+            }
+
+            if (string.Equals(sourceTable.Key, row.Table.Key, StringComparison.OrdinalIgnoreCase))
+            {
+                return new SourceValueResolution(
+                    sourceTable,
+                    sourceColumn,
+                    row.Values.TryGetValue(sourceColumn.Name, out var rawValue) ? rawValue : null,
+                    mappedColumn.Transform,
+                    null);
+            }
+
+            if (sourceRowLookup.TryFindRelatedRow(row, sourceTable, out var relatedRow)
+                && relatedRow.Values.TryGetValue(sourceColumn.Name, out var relatedValue))
+            {
+                return new SourceValueResolution(sourceTable, sourceColumn, relatedValue, mappedColumn.Transform, null);
+            }
+
+            return new SourceValueResolution(
+                sourceTable,
+                sourceColumn,
+                null,
+                mappedColumn.Transform,
+                $"No related source row in {sourceTable.Key} was found for target column {targetColumn.Name}.");
+        }
+
+        var fallbackColumn = NameMatcher.FindBestColumn(row.Table.Columns, targetColumn.Name);
+        return new SourceValueResolution(
+            row.Table,
+            fallbackColumn,
+            fallbackColumn is not null && row.Values.TryGetValue(fallbackColumn.Name, out var value) ? value : null,
+            null,
+            null);
     }
 
     private static RowUniqueValidationResult ApplyUniqueConstraints(
@@ -575,6 +705,7 @@ public sealed class MigrationRunner(
 
     private static FkRemapResult TryRemapForeignKey(
         SourceRow row,
+        SourceTableInfo? sourceValueTable,
         SourceColumnInfo? sourceColumn,
         object sourceValue,
         TargetColumnInfo targetColumn,
@@ -591,7 +722,7 @@ public sealed class MigrationRunner(
 
         var sourceForeignKey = sourceColumn is null
             ? null
-            : row.Table.ForeignKeys.FirstOrDefault(fk =>
+            : (sourceValueTable ?? row.Table).ForeignKeys.FirstOrDefault(fk =>
                 string.Equals(fk.ColumnName, sourceColumn.Name, StringComparison.OrdinalIgnoreCase));
 
         if (sourceForeignKey is not null)
@@ -629,9 +760,14 @@ public sealed class MigrationRunner(
         object? sourceValue,
         TargetColumnInfo targetColumn,
         SourceRow row,
-        TableMapping mapping)
+        TableMapping mapping,
+        string? transform = null)
     {
         var targetType = Nullable.GetUnderlyingType(targetColumn.ClrType) ?? targetColumn.ClrType;
+        transform = NormalizeTransform(transform);
+
+        if (transform == "json_stringify")
+            return BuildJsonStringValue(sourceValue, targetColumn);
 
         if (sourceValue is null)
         {
@@ -654,7 +790,9 @@ public sealed class MigrationRunner(
                         string.Empty);
                 }
 
-                return ValueConversionResult.Ok(stringValue);
+                return transform == "convert"
+                    ? new ValueConversionResult(true, stringValue, string.Empty, string.Empty, "Explicitly converted source value to target string.")
+                    : ValueConversionResult.Ok(stringValue);
             }
 
             if (targetType == typeof(Guid))
@@ -707,6 +845,57 @@ public sealed class MigrationRunner(
 
             return new ValueConversionResult(false, null, "InvalidValue", $"Could not convert value for {targetColumn.Name}: {ex.Message}", string.Empty);
         }
+    }
+
+    private static string? NormalizeTransform(string? transform)
+    {
+        return transform is "convert" or "json_stringify" ? transform : null;
+    }
+
+    private static ValueConversionResult BuildJsonStringValue(object? sourceValue, TargetColumnInfo targetColumn)
+    {
+        var json = StringifyJson(sourceValue);
+        if (targetColumn.MaxLength is not null && json.Length > targetColumn.MaxLength.Value)
+        {
+            return new ValueConversionResult(
+                true,
+                json[..targetColumn.MaxLength.Value],
+                string.Empty,
+                $"Stringified JSON value was truncated to {targetColumn.MaxLength.Value} characters.",
+                string.Empty);
+        }
+
+        return new ValueConversionResult(true, json, string.Empty, string.Empty, "Stringified source value as JSON text.");
+    }
+
+    private static string StringifyJson(object? sourceValue)
+    {
+        if (sourceValue is null or DBNull)
+            return "null";
+
+        if (sourceValue is JsonElement jsonElement)
+            return jsonElement.GetRawText();
+
+        if (sourceValue is string text)
+        {
+            var trimmed = text.Trim();
+            if (trimmed.Length > 0)
+            {
+                try
+                {
+                    using var document = JsonDocument.Parse(trimmed);
+                    return document.RootElement.GetRawText();
+                }
+                catch (JsonException)
+                {
+                    return JsonSerializer.Serialize(text, CompactJsonOptions);
+                }
+            }
+
+            return JsonSerializer.Serialize(text, CompactJsonOptions);
+        }
+
+        return JsonSerializer.Serialize(sourceValue, CompactJsonOptions);
     }
 
     private static ValueConversionResult BuildDefaultValue(
@@ -946,6 +1135,21 @@ public sealed class MigrationRunner(
         return messages;
     }
 
+    private static string FirstConfigured(params string?[] values)
+    {
+        return values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
+    }
+
+    private static string? DescribeTransform(string? transform)
+    {
+        return transform switch
+        {
+            "convert" => "Explicit conversion to target type is enabled.",
+            "json_stringify" => "Source value will be serialized to JSON text.",
+            _ => null,
+        };
+    }
+
     private sealed record ValueConversionResult(
         bool Success,
         object? Value,
@@ -955,6 +1159,13 @@ public sealed class MigrationRunner(
     {
         public static ValueConversionResult Ok(object? value) => new(true, value, string.Empty, string.Empty, string.Empty);
     }
+
+    private sealed record SourceValueResolution(
+        SourceTableInfo? SourceTable,
+        SourceColumnInfo? SourceColumn,
+        object? Value,
+        string? Transform,
+        string? MissingRelationMessage);
 
     private sealed record FkRemapResult(bool Success, object? Value, string Message);
 
@@ -1014,6 +1225,108 @@ public sealed class MigrationRunner(
                 Enum enumValue => enumValue.ToString(),
                 _ => Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty,
             };
+        }
+    }
+
+    private sealed class SourceRowLookup
+    {
+        private readonly Dictionary<string, List<SourceRow>> rowsByTable = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, Dictionary<string, SourceRow>> indexes = new(StringComparer.OrdinalIgnoreCase);
+
+        public void Add(SourceRow row)
+        {
+            if (!rowsByTable.TryGetValue(row.Table.Key, out var rows))
+            {
+                rows = [];
+                rowsByTable[row.Table.Key] = rows;
+            }
+
+            rows.Add(row);
+        }
+
+        public bool TryFindRelatedRow(SourceRow row, SourceTableInfo relatedTable, out SourceRow relatedRow)
+        {
+            if (string.Equals(row.Table.Key, relatedTable.Key, StringComparison.OrdinalIgnoreCase))
+            {
+                relatedRow = row;
+                return true;
+            }
+
+            foreach (var foreignKey in row.Table.ForeignKeys.Where(fk =>
+                string.Equals(fk.ReferencedKey, relatedTable.Key, StringComparison.OrdinalIgnoreCase)))
+            {
+                if (row.Values.TryGetValue(foreignKey.ColumnName, out var value)
+                    && TryFindByColumn(relatedTable, foreignKey.ReferencedColumn, value, out relatedRow))
+                {
+                    return true;
+                }
+            }
+
+            foreach (var foreignKey in relatedTable.ForeignKeys.Where(fk =>
+                string.Equals(fk.ReferencedKey, row.Table.Key, StringComparison.OrdinalIgnoreCase)))
+            {
+                if (row.Values.TryGetValue(foreignKey.ReferencedColumn, out var value)
+                    && TryFindByColumn(relatedTable, foreignKey.ColumnName, value, out relatedRow))
+                {
+                    return true;
+                }
+            }
+
+            if (row.Table.PrimaryKeyColumns.Count == 1 && relatedTable.PrimaryKeyColumns.Count == 1)
+            {
+                var sourceKey = GetSourceKey(row);
+                if (TryFindByColumn(relatedTable, relatedTable.PrimaryKeyColumns[0], sourceKey, out relatedRow))
+                    return true;
+            }
+
+            relatedRow = new SourceRow();
+            return false;
+        }
+
+        private bool TryFindByColumn(
+            SourceTableInfo table,
+            string columnName,
+            object? value,
+            out SourceRow row)
+        {
+            row = new SourceRow();
+            var lookupValue = BuildLookupValue(value);
+            if (lookupValue is null)
+                return false;
+
+            var index = GetIndex(table, columnName);
+            return index.TryGetValue(lookupValue, out row!);
+        }
+
+        private Dictionary<string, SourceRow> GetIndex(SourceTableInfo table, string columnName)
+        {
+            var indexKey = $"{table.Key}:{columnName}";
+            if (indexes.TryGetValue(indexKey, out var index))
+                return index;
+
+            index = new Dictionary<string, SourceRow>(StringComparer.OrdinalIgnoreCase);
+            if (rowsByTable.TryGetValue(table.Key, out var rows))
+            {
+                foreach (var row in rows)
+                {
+                    if (!row.Values.TryGetValue(columnName, out var value))
+                        continue;
+
+                    var lookupValue = BuildLookupValue(value);
+                    if (lookupValue is not null && !index.ContainsKey(lookupValue))
+                        index[lookupValue] = row;
+                }
+            }
+
+            indexes[indexKey] = index;
+            return index;
+        }
+
+        private static string? BuildLookupValue(object? value)
+        {
+            return value is null or DBNull
+                ? null
+                : Convert.ToString(value, CultureInfo.InvariantCulture);
         }
     }
 }

@@ -241,6 +241,272 @@ public sealed class MappingEngineTests
     }
 
     [Fact]
+    public void MigrationRunner_StringifiesJsonTransformFromScalarSource()
+    {
+        var row = new SourceRow
+        {
+            Table = SourceTable("legacy_events", ["id", "legacy_id"]),
+            Ordinal = 1,
+            Values = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["id"] = 1,
+                ["legacy_id"] = 42,
+            },
+        };
+        var mapping = new TableMapping
+        {
+            SourceTableKey = row.Table.Key,
+            SourceTableName = row.Table.Name,
+            TargetTableName = "events",
+        };
+        var targetColumn = TargetColumn("raw_json", typeof(string));
+
+        var conversion = InvokeConvertValue(row.Values["legacy_id"], targetColumn, row, mapping, "json_stringify");
+
+        Assert.True((bool)conversion.GetType().GetProperty("Success")!.GetValue(conversion)!);
+        Assert.Equal("42", conversion.GetType().GetProperty("Value")!.GetValue(conversion));
+    }
+
+    [Fact]
+    public void MigrationRunner_ExplicitlyConvertsNumericSourceToStringTarget()
+    {
+        var row = new SourceRow
+        {
+            Table = SourceTable("legacy_patients", ["id", "legacy_id"]),
+            Ordinal = 1,
+            Values = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["id"] = 1,
+                ["legacy_id"] = 42,
+            },
+        };
+        var mapping = new TableMapping
+        {
+            SourceTableKey = row.Table.Key,
+            SourceTableName = row.Table.Name,
+            TargetTableName = "patients",
+        };
+        var targetColumn = TargetColumn("external_id", typeof(string));
+
+        var conversion = InvokeConvertValue(row.Values["legacy_id"], targetColumn, row, mapping, "convert");
+
+        Assert.True((bool)conversion.GetType().GetProperty("Success")!.GetValue(conversion)!);
+        Assert.Equal("42", conversion.GetType().GetProperty("Value")!.GetValue(conversion));
+        Assert.Equal("Explicitly converted source value to target string.", conversion.GetType().GetProperty("Note")!.GetValue(conversion));
+    }
+
+    [Fact]
+    public void ManualColumnMapping_OverridesAutomaticTransformSelection()
+    {
+        var sourceTable = SourceTable("legacy_patients", ["id", "fname", "patient_fullname"]);
+        var sourceSchema = new DatabaseSchema { Tables = [sourceTable] };
+        var targetTable = new TargetTableInfo
+        {
+            Schema = "public",
+            Name = "patients",
+            Columns =
+            [
+                TargetColumn("id", typeof(Guid), primaryKey: true),
+                TargetColumn("first_name", typeof(string)),
+            ],
+        };
+        var targetSchema = new TargetDatabaseSchema { Tables = [targetTable] };
+        var configuration = new MigrationMappingConfiguration
+        {
+            Tables =
+            {
+                [sourceTable.Key] = new TableMappingOverride
+                {
+                    TargetTableName = "patients",
+                    Columns = { ["first_name"] = "patient_fullname" },
+                },
+            },
+        };
+        var plan = new MappingEngine().Build(sourceSchema, targetSchema, configuration);
+        var mapping = Assert.Single(plan.TableMappings);
+        var row = SourceRow(sourceTable, 1, new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["id"] = 1,
+            ["fname"] = "Auto",
+            ["patient_fullname"] = "Manual",
+        });
+        var idMap = new Dictionary<string, IdMapEntry>(StringComparer.OrdinalIgnoreCase)
+        {
+            [$"{sourceTable.Key}:1"] = new() { SourceTable = sourceTable.Key, SourceKey = "1", TargetTable = targetTable.Name, TargetId = Guid.NewGuid() },
+        };
+
+        var transform = InvokeTransformRow(row, mapping, sourceSchema, targetSchema, plan, idMap, CreateUniqueValueTracker());
+
+        Assert.Equal("manual", mapping.Status);
+        Assert.Contains(mapping.ColumnMappings, column =>
+            column.TargetColumn == "first_name"
+            && column.SourceColumn == "patient_fullname"
+            && column.Action == "manual_copy_or_convert");
+        Assert.True(transform.Success);
+        Assert.Equal("Manual", transform.Values["first_name"]);
+    }
+
+    [Fact]
+    public void ManualColumnMapping_CanReadFromRelatedSourceTableThroughForeignKey()
+    {
+        var clinicTable = SourceTable("legacy_clinics", ["id", "name"]);
+        var patientTable = new SourceTableInfo
+        {
+            Schema = "public",
+            Name = "legacy_patients",
+            Columns =
+            [
+                Column("id", 1),
+                Column("clinic_id", 2),
+            ],
+            PrimaryKeyColumns = ["id"],
+            ForeignKeys =
+            [
+                new SourceForeignKeyInfo
+                {
+                    ConstraintName = "fk_patients_clinics",
+                    ColumnName = "clinic_id",
+                    ReferencedSchema = clinicTable.Schema,
+                    ReferencedTable = clinicTable.Name,
+                    ReferencedColumn = "id",
+                },
+            ],
+        };
+        var sourceSchema = new DatabaseSchema { Tables = [patientTable, clinicTable] };
+        var targetTable = new TargetTableInfo
+        {
+            Schema = "public",
+            Name = "patients",
+            Columns =
+            [
+                TargetColumn("id", typeof(Guid), primaryKey: true),
+                TargetColumn("clinic_name", typeof(string), nullable: true),
+            ],
+        };
+        var targetSchema = new TargetDatabaseSchema { Tables = [targetTable] };
+        var configuration = new MigrationMappingConfiguration
+        {
+            Tables =
+            {
+                [patientTable.Key] = new TableMappingOverride
+                {
+                    TargetTableName = "patients",
+                    ColumnSources =
+                    {
+                        ["clinic_name"] = new ColumnMappingOverride
+                        {
+                            SourceTableKey = clinicTable.Key,
+                            SourceColumnName = "name",
+                        },
+                    },
+                },
+            },
+        };
+        var plan = new MappingEngine().Build(sourceSchema, targetSchema, configuration);
+        var mapping = Assert.Single(plan.TableMappings, table =>
+            table.TargetTableName == "patients"
+            && table.SourceTableKey == patientTable.Key);
+        var patientRow = SourceRow(patientTable, 1, new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["id"] = 10,
+            ["clinic_id"] = 2,
+        });
+        var clinicRow = SourceRow(clinicTable, 1, new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["id"] = 2,
+            ["name"] = "North Clinic",
+        });
+        var idMap = new Dictionary<string, IdMapEntry>(StringComparer.OrdinalIgnoreCase)
+        {
+            [$"{patientTable.Key}:10"] = new() { SourceTable = patientTable.Key, SourceKey = "10", TargetTable = targetTable.Name, TargetId = Guid.NewGuid() },
+        };
+
+        var transform = InvokeTransformRow(patientRow, mapping, sourceSchema, targetSchema, plan, idMap, CreateUniqueValueTracker(), CreateSourceRowLookup(clinicRow));
+
+        Assert.Contains(mapping.ColumnMappings, column =>
+            column.TargetColumn == "clinic_name"
+            && column.SourceTableKey == clinicTable.Key
+            && column.SourceColumn == "name"
+            && column.Action == "manual_related_copy_or_convert");
+        Assert.True(transform.Success);
+        Assert.Equal("North Clinic", transform.Values["clinic_name"]);
+    }
+
+    [Fact]
+    public void MappingConfigurationStore_VersionTracksOverrideContent()
+    {
+        var store = new MappingConfigurationStore(Options.Create(new MigrationToolOptions()));
+        var first = new MigrationMappingConfiguration
+        {
+            Tables =
+            {
+                ["public.legacy_patients"] = new TableMappingOverride
+                {
+                    TargetTableName = "patients",
+                    Columns =
+                    {
+                        ["first_name"] = "fname",
+                        ["last_name"] = "lname",
+                    },
+                },
+            },
+        };
+        var sameContentDifferentOrder = new MigrationMappingConfiguration
+        {
+            Tables =
+            {
+                ["public.legacy_patients"] = new TableMappingOverride
+                {
+                    TargetTableName = "patients",
+                    Columns =
+                    {
+                        ["last_name"] = "lname",
+                        ["first_name"] = "fname",
+                    },
+                },
+            },
+        };
+        var changed = new MigrationMappingConfiguration
+        {
+            Tables =
+            {
+                ["public.legacy_patients"] = new TableMappingOverride
+                {
+                    TargetTableName = "patients",
+                    Columns =
+                    {
+                        ["first_name"] = "patient_fullname",
+                        ["last_name"] = "lname",
+                    },
+                },
+            },
+        };
+        var transformChanged = new MigrationMappingConfiguration
+        {
+            Tables =
+            {
+                ["public.legacy_patients"] = new TableMappingOverride
+                {
+                    TargetTableName = "patients",
+                    ColumnSources =
+                    {
+                        ["raw_json"] = new ColumnMappingOverride
+                        {
+                            SourceTableKey = "public.legacy_patients",
+                            SourceColumnName = "payload",
+                            Transform = "json_stringify",
+                        },
+                    },
+                },
+            },
+        };
+
+        Assert.Equal(store.GetVersion(first), store.GetVersion(sameContentDifferentOrder));
+        Assert.NotEqual(store.GetVersion(first), store.GetVersion(changed));
+        Assert.NotEqual(store.GetVersion(first), store.GetVersion(transformChanged));
+    }
+
+    [Fact]
     public void MappingEngine_MapsLegacyPatientTableToPatientsTarget()
     {
         var source = new DatabaseSchema
@@ -408,11 +674,12 @@ public sealed class MappingEngineTests
         object? sourceValue,
         TargetColumnInfo targetColumn,
         SourceRow row,
-        TableMapping mapping)
+        TableMapping mapping,
+        string? transform = null)
     {
         var method = typeof(MigrationRunner).GetMethod("ConvertValue", BindingFlags.NonPublic | BindingFlags.Static);
         Assert.NotNull(method);
-        return method.Invoke(null, [sourceValue, targetColumn, row, mapping])!;
+        return method.Invoke(null, [sourceValue, targetColumn, row, mapping, transform])!;
     }
 
     private static RowTransformResult InvokeTransformRow(
@@ -422,12 +689,17 @@ public sealed class MappingEngineTests
         TargetDatabaseSchema targetSchema,
         MappingPlan plan,
         Dictionary<string, IdMapEntry> idMap,
-        object uniqueValueTracker)
+        object uniqueValueTracker,
+        object? sourceRowLookup = null)
     {
-        var runner = new MigrationRunner(null!, null!, null!, null!, null!, null!);
-        var method = typeof(MigrationRunner).GetMethod("TransformRow", BindingFlags.NonPublic | BindingFlags.Instance);
+        var runner = new MigrationRunner(null!, null!, null!, null!, null!, null!, null!);
+        var method = typeof(MigrationRunner)
+            .GetMethods(BindingFlags.NonPublic | BindingFlags.Instance)
+            .Single(method => method.Name == "TransformRow" && method.GetParameters().Length == 8);
         Assert.NotNull(method);
-        return Assert.IsType<RowTransformResult>(method.Invoke(runner, [row, mapping, sourceSchema, targetSchema, plan, idMap, uniqueValueTracker]));
+        return Assert.IsType<RowTransformResult>(method.Invoke(
+            runner,
+            [row, mapping, sourceSchema, targetSchema, plan, idMap, uniqueValueTracker, sourceRowLookup ?? CreateSourceRowLookup()]));
     }
 
     private static object CreateUniqueValueTracker()
@@ -435,5 +707,19 @@ public sealed class MappingEngineTests
         var trackerType = typeof(MigrationRunner).GetNestedType("UniqueValueTracker", BindingFlags.NonPublic);
         Assert.NotNull(trackerType);
         return Activator.CreateInstance(trackerType, nonPublic: true)!;
+    }
+
+    private static object CreateSourceRowLookup(params SourceRow[] rows)
+    {
+        var lookupType = typeof(MigrationRunner).GetNestedType("SourceRowLookup", BindingFlags.NonPublic);
+        Assert.NotNull(lookupType);
+        var lookup = Activator.CreateInstance(lookupType, nonPublic: true)!;
+        var addMethod = lookupType.GetMethod("Add");
+        Assert.NotNull(addMethod);
+
+        foreach (var row in rows)
+            addMethod.Invoke(lookup, [row]);
+
+        return lookup;
     }
 }
