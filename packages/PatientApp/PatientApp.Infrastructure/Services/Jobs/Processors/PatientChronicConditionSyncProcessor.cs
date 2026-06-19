@@ -5,15 +5,15 @@ using PatientApp.Infrastructure.Persistence;
 
 namespace PatientApp.Infrastructure.Services.Jobs.Processors;
 
+// Mobile schema fields: diagnosis, controlStatus, monitoringFrequency
+// Backend entity fields: ConditionName, DiagnosedAt, IsControlled, TreatmentNotes, CurrentMedications
 internal sealed class ChronicConditionPayload
 {
     public Guid ClientId { get; set; }
     public Guid PatientId { get; set; }
-    public string ConditionName { get; set; } = string.Empty;
-    public DateOnly? DiagnosedAt { get; set; }
-    public bool IsControlled { get; set; }
-    public string? TreatmentNotes { get; set; }
-    public string? CurrentMedications { get; set; }
+    public string Diagnosis { get; set; } = string.Empty;      // → ConditionName
+    public string? ControlStatus { get; set; }                 // "Controlled" / "Uncontrolled" → IsControlled
+    public string? MonitoringFrequency { get; set; }           // → TreatmentNotes
     public DateTime UpdatedAt { get; set; }
 }
 
@@ -29,15 +29,18 @@ internal sealed class PatientChronicConditionSyncProcessor
 
     protected override PatientChronicCondition CreateFromPayload(ChronicConditionPayload p) => new()
     {
-        ClientId = p.ClientId, PatientId = p.PatientId, ConditionName = p.ConditionName,
-        DiagnosedAt = p.DiagnosedAt, IsControlled = p.IsControlled,
-        TreatmentNotes = p.TreatmentNotes, CurrentMedications = p.CurrentMedications,
+        ClientId = p.ClientId,
+        PatientId = p.PatientId,
+        ConditionName = p.Diagnosis,
+        IsControlled = string.Equals(p.ControlStatus, "Controlled", StringComparison.OrdinalIgnoreCase),
+        TreatmentNotes = p.MonitoringFrequency,
     };
 
     protected override void ApplyUpdate(PatientChronicCondition e, ChronicConditionPayload p)
     {
-        e.ConditionName = p.ConditionName; e.DiagnosedAt = p.DiagnosedAt; e.IsControlled = p.IsControlled;
-        e.TreatmentNotes = p.TreatmentNotes; e.CurrentMedications = p.CurrentMedications;
+        e.ConditionName = p.Diagnosis;
+        e.IsControlled = string.Equals(p.ControlStatus, "Controlled", StringComparison.OrdinalIgnoreCase);
+        e.TreatmentNotes = p.MonitoringFrequency;
     }
 
     protected override DateTime GetPayloadTimestamp(ChronicConditionPayload p) => p.UpdatedAt;

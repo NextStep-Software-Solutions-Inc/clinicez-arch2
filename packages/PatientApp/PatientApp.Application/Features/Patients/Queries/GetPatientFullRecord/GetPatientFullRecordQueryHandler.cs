@@ -39,8 +39,8 @@ public sealed class GetPatientFullRecordQueryHandler
 
         var addresses = p.Addresses
             .Select(a => new PatientAddressDto(a.Id, a.ClientId,
-                a.Type.ToString(), a.Street, a.Barangay, a.City,
-                a.Province, a.ZipCode, a.Country, a.IsPrimary, a.UpdatedAt))
+                a.Type.ToString(), a.HouseStreet, a.Barangay, a.CityMunicipality,
+                a.Province, a.Region, a.ZipCode, a.Country, a.IsPrimary, a.UpdatedAt))
             .ToList().AsReadOnly();
 
         var contacts = p.EmergencyContacts

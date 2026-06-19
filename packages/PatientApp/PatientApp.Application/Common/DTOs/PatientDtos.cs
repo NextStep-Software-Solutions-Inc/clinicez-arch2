@@ -24,8 +24,8 @@ public sealed record PatientGovernmentIdDto(
 public sealed record PatientAddressDto(
     Guid Id, Guid ClientId,
     string Type,
-    string? Street, string? Barangay, string? City,
-    string? Province, string? ZipCode, string? Country,
+    string? HouseStreet, string? Barangay, string? CityMunicipality,
+    string? Province, string? Region, string? ZipCode, string? Country,
     bool IsPrimary, DateTime? UpdatedAt);
 
 public sealed record EmergencyContactDto(

@@ -1819,10 +1819,10 @@ namespace PatientApp.Infrastructure.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("barangay");
 
-                    b.Property<string>("City")
+                    b.Property<string>("CityMunicipality")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
-                        .HasColumnName("city");
+                        .HasColumnName("city_municipality");
 
                     b.Property<Guid>("ClientId")
                         .HasColumnType("uuid")
@@ -1851,6 +1851,11 @@ namespace PatientApp.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("deleted_by");
 
+                    b.Property<string>("HouseStreet")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("house_street");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
@@ -1868,10 +1873,10 @@ namespace PatientApp.Infrastructure.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("province");
 
-                    b.Property<string>("Street")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("street");
+                    b.Property<string>("Region")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("region");
 
                     b.Property<string>("Type")
                         .IsRequired()

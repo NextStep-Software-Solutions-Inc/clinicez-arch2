@@ -12,6 +12,7 @@ import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
 import ProfileSaveBar from 'components/profile/ProfileSaveBar';
 import ProfileDatePicker from 'components/profile/ProfileDatePicker';
 import { usePatientId } from 'hooks/usePatientId';
+import { addToSyncQueue } from 'services/api/syncService';
 
 type FormValues = { hasVasectomy: boolean; vasectomyDate: string; conditions: string; };
 
@@ -38,7 +39,9 @@ export default function MaleReproductiveScreen() {
     setSaving(true);
     try {
       const payload = { ...data, updatedAt: new Date() };
-      await db.insert(patientMaleReproductive).values({ id: randomUUID(), patientId: patientId, ...payload, createdAt: new Date() }).onConflictDoUpdate({ target: patientMaleReproductive.patientId, set: payload });
+      const result = await db.insert(patientMaleReproductive).values({ id: randomUUID(), patientId: patientId, ...payload, createdAt: new Date() }).onConflictDoUpdate({ target: patientMaleReproductive.patientId, set: payload }).returning({ id: patientMaleReproductive.id });
+      const savedId = result[0]?.id ?? patientId;
+      await addToSyncQueue('patient_male_reproductive', savedId, 'update', { ...payload, patientId, id: savedId });
       reset(data);
       navigation.goBack();
     } catch (e) { console.error(e); } finally { setSaving(false); }

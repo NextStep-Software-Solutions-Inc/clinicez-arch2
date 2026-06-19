@@ -15,6 +15,7 @@ import ProfileSaveBar from 'components/profile/ProfileSaveBar';
 import ProfileDatePicker from 'components/profile/ProfileDatePicker';
 import { randomUUID } from 'expo-crypto';
 import { usePatientId } from 'hooks/usePatientId';
+import { addToSyncQueue } from 'services/api/syncService';
 
 type Form = { id: string | null; vaccineName: string; doseNumber: string; lotNumber: string; date: string; administeredBy: string; };
 const EMPTY: Form = { id: null, vaccineName: '', doseNumber: '', lotNumber: '', date: '', administeredBy: '' };
@@ -48,8 +49,11 @@ export default function ImmunizationsSelfScreen() {
     try {
       if (id) {
         await db.update(patientImmunizationsSelf).set({ ...rest, updatedAt: new Date() }).where(eq(patientImmunizationsSelf.id, id));
+        await addToSyncQueue('patient_immunizations_self', id, 'update', { ...rest, patientId, id });
       } else {
-        await db.insert(patientImmunizationsSelf).values({ id: randomUUID(), patientId, ...rest, createdAt: new Date(), updatedAt: new Date() });
+        const newId = randomUUID();
+        await db.insert(patientImmunizationsSelf).values({ id: newId, patientId, ...rest, createdAt: new Date(), updatedAt: new Date() });
+        await addToSyncQueue('patient_immunizations_self', newId, 'create', { ...rest, patientId, id: newId });
       }
       sheetRef.current?.dismiss();
       load();

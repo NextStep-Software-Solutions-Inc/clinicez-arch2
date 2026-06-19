@@ -12,6 +12,7 @@ import ProfileToggle from 'components/profile/ProfileToggle';
 import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
 import ProfileSaveBar from 'components/profile/ProfileSaveBar';
 import { usePatientId } from 'hooks/usePatientId';
+import { addToSyncQueue } from 'services/api/syncService';
 
 type TobaccoStatus = 'Never' | 'Former' | 'Current';
 type SleepQuality = 'Good' | 'Fair' | 'Poor';
@@ -123,9 +124,11 @@ export default function SocialHistoryScreen() {
         sleepQuality: data.sleepQuality || null,
         updatedAt: new Date(),
       };
-      await db.insert(patientSocialHistory).values({
+      const result = await db.insert(patientSocialHistory).values({
         id: randomUUID(), patientId: patientId, ...payload, createdAt: new Date(),
-      }).onConflictDoUpdate({ target: patientSocialHistory.patientId, set: payload });
+      }).onConflictDoUpdate({ target: patientSocialHistory.patientId, set: payload }).returning({ id: patientSocialHistory.id });
+      const savedId = result[0]?.id ?? patientId;
+      await addToSyncQueue('patient_social_history', savedId, 'update', { ...payload, patientId, id: savedId });
       reset(data);
       navigation.goBack();
     } catch (e) {

@@ -15,6 +15,7 @@ import ProfileSaveBar from 'components/profile/ProfileSaveBar';
 import ProfileToggle from 'components/profile/ProfileToggle';
 import { randomUUID } from 'expo-crypto';
 import { usePatientId } from 'hooks/usePatientId';
+import { addToSyncQueue } from 'services/api/syncService';
 
 type Form = { id: string | null; bodyPart: string; classification: string; isPwdCertified: boolean; };
 const EMPTY: Form = { id: null, bodyPart: '', classification: '', isPwdCertified: false };
@@ -48,8 +49,11 @@ export default function DisabilitiesScreen() {
     try {
       if (id) {
         await db.update(patientDisabilities).set({ ...rest, updatedAt: new Date() }).where(eq(patientDisabilities.id, id));
+        await addToSyncQueue('patient_disabilities', id, 'update', { ...rest, patientId, id });
       } else {
-        await db.insert(patientDisabilities).values({ id: randomUUID(), patientId, ...rest, createdAt: new Date(), updatedAt: new Date() });
+        const newId = randomUUID();
+        await db.insert(patientDisabilities).values({ id: newId, patientId, ...rest, createdAt: new Date(), updatedAt: new Date() });
+        await addToSyncQueue('patient_disabilities', newId, 'create', { ...rest, patientId, id: newId });
       }
       sheetRef.current?.dismiss();
       load();

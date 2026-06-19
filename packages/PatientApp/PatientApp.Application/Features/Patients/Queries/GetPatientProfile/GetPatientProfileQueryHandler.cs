@@ -31,7 +31,7 @@ public sealed class GetPatientProfileQueryHandler : IRequestHandler<GetPatientPr
         var addresses = patient.Addresses
             .Select(a => new PatientAddressDto(
                 a.Id, a.ClientId, a.Type.ToString(),
-                a.Street, a.Barangay, a.City, a.Province, a.ZipCode, a.Country,
+                a.HouseStreet, a.Barangay, a.CityMunicipality, a.Province, a.Region, a.ZipCode, a.Country,
                 a.IsPrimary, a.UpdatedAt))
             .ToList().AsReadOnly();
 

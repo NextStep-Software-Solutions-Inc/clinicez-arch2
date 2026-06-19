@@ -10,11 +10,14 @@ internal sealed class PatientAddressPayload
 {
     public Guid ClientId { get; set; }
     public Guid PatientId { get; set; }
-    public string Type { get; set; } = string.Empty;
-    public string? Street { get; set; }
+    // Mobile type enum: "primary" | "secondary" — drives IsPrimary, not AddressType
+    public string? Type { get; set; }
+    // Mobile schema field names
+    public string? HouseStreet { get; set; }       // house_street column
     public string? Barangay { get; set; }
-    public string? City { get; set; }
+    public string? CityMunicipality { get; set; }  // city_municipality column
     public string? Province { get; set; }
+    public string? Region { get; set; }
     public string? ZipCode { get; set; }
     public string? Country { get; set; }
     public bool IsPrimary { get; set; }
@@ -33,17 +36,30 @@ internal sealed class PatientAddressSyncProcessor
 
     protected override PatientAddress CreateFromPayload(PatientAddressPayload p) => new()
     {
-        ClientId = p.ClientId, PatientId = p.PatientId,
-        Type = Enum.TryParse<AddressType>(p.Type, true, out var at) ? at : AddressType.Home,
-        Street = p.Street, Barangay = p.Barangay, City = p.City,
-        Province = p.Province, ZipCode = p.ZipCode, Country = p.Country, IsPrimary = p.IsPrimary,
+        ClientId = p.ClientId,
+        PatientId = p.PatientId,
+        // Mobile type field means "primary"/"secondary" — drive IsPrimary from it
+        IsPrimary = string.Equals(p.Type, "primary", StringComparison.OrdinalIgnoreCase) || p.IsPrimary,
+        Type = AddressType.Home,   // default; can be refined later when mobile exposes Home/Work
+        HouseStreet = p.HouseStreet,
+        Barangay = p.Barangay,
+        CityMunicipality = p.CityMunicipality,
+        Province = p.Province,
+        Region = p.Region,
+        ZipCode = p.ZipCode,
+        Country = p.Country,
     };
 
     protected override void ApplyUpdate(PatientAddress e, PatientAddressPayload p)
     {
-        e.Type = Enum.TryParse<AddressType>(p.Type, true, out var at) ? at : e.Type;
-        e.Street = p.Street; e.Barangay = p.Barangay; e.City = p.City;
-        e.Province = p.Province; e.ZipCode = p.ZipCode; e.Country = p.Country; e.IsPrimary = p.IsPrimary;
+        e.IsPrimary = string.Equals(p.Type, "primary", StringComparison.OrdinalIgnoreCase) || p.IsPrimary;
+        e.HouseStreet = p.HouseStreet;
+        e.Barangay = p.Barangay;
+        e.CityMunicipality = p.CityMunicipality;
+        e.Province = p.Province;
+        e.Region = p.Region;
+        e.ZipCode = p.ZipCode;
+        e.Country = p.Country;
     }
 
     protected override DateTime GetPayloadTimestamp(PatientAddressPayload p) => p.UpdatedAt;

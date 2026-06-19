@@ -11,6 +11,7 @@ import ProfileSelectModal from 'components/profile/ProfileSelectModal';
 import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
 import ProfileSaveBar from 'components/profile/ProfileSaveBar';
 import { usePatientId } from 'hooks/usePatientId';
+import { addToSyncQueue } from 'services/api/syncService';
 
 type CorrectiveLenses = 'None' | 'Glasses' | 'Contacts' | 'Both';
 
@@ -64,10 +65,13 @@ export default function DentalVisionScreen() {
         updatedAt: new Date(),
       };
 
-      await db
+      const result = await db
         .insert(patientDentalVision)
         .values({ id: randomUUID(), patientId, ...payload, createdAt: new Date() })
-        .onConflictDoUpdate({ target: patientDentalVision.patientId, set: payload });
+        .onConflictDoUpdate({ target: patientDentalVision.patientId, set: payload })
+        .returning({ id: patientDentalVision.id });
+      const savedId = result[0]?.id ?? patientId;
+      await addToSyncQueue('patient_dental_vision', savedId, 'update', { ...payload, patientId, id: savedId });
 
       reset(data);
       navigation.goBack();

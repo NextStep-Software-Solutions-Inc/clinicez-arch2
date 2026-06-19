@@ -69,9 +69,10 @@ export default function AddressesScreen() {
   const openEdit = (row: any) => {
     const form: AddressForm = {
       id: row.id, type: row.type ?? 'primary',
-      houseNo: row.houseNo ?? '', streetBarangay: row.streetBarangay ?? '',
+      houseNo: row.houseStreet ?? '',          // DB column: houseStreet
+      streetBarangay: row.barangay ?? '',      // DB column: barangay
       cityMunicipality: row.cityMunicipality ?? '', province: row.province ?? '',
-      region: row.region ?? '', postalCode: row.postalCode ?? '',
+      region: row.region ?? '', postalCode: row.zipCode ?? '',
       country: row.country ?? 'Philippines',
     };
     reset(form);
@@ -86,12 +87,20 @@ export default function AddressesScreen() {
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
-    const { id, ...rest } = data;
+    const { id, houseNo, streetBarangay, postalCode, ...rest } = data;
+    // Map form field names → DB column names
+    const dbFields = {
+      ...rest,
+      houseStreet: houseNo,
+      barangay: streetBarangay,
+      zipCode: postalCode,
+      updatedAt: new Date(),
+    };
     try {
       if (id) {
-        await db.update(patientAddresses).set({ ...rest, updatedAt: new Date() }).where(eq(patientAddresses.id, id));
+        await db.update(patientAddresses).set(dbFields).where(eq(patientAddresses.id, id));
       } else {
-        await db.insert(patientAddresses).values({ id: randomUUID(), patientId, ...rest, createdAt: new Date(), updatedAt: new Date() });
+        await db.insert(patientAddresses).values({ id: randomUUID(), patientId, ...dbFields, createdAt: new Date() });
       }
       sheetRef.current?.dismiss();
       load();
@@ -110,7 +119,7 @@ export default function AddressesScreen() {
         {addresses.map((a) => (
           <ProfileListItemCard
             key={a.id}
-            title={[a.houseNo, a.streetBarangay].filter(Boolean).join(' ') || 'Address'}
+            title={[a.houseStreet, a.barangay].filter(Boolean).join(', ') || 'Address'}
             subtitle={[a.cityMunicipality, a.province].filter(Boolean).join(', ')}
             badge={a.type === 'primary' ? 'Primary' : 'Secondary'}
             onEdit={() => openEdit(a)}

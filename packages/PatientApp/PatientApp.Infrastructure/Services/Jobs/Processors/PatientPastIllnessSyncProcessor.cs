@@ -5,15 +5,15 @@ using PatientApp.Infrastructure.Persistence;
 
 namespace PatientApp.Infrastructure.Services.Jobs.Processors;
 
+// Mobile schema fields: diagnosis, duration, complications
+// Backend entity fields: IllnessName, DiagnosedAt, ResolvedAt, TreatmentReceived, Notes
 internal sealed class PastIllnessPayload
 {
     public Guid ClientId { get; set; }
     public Guid PatientId { get; set; }
-    public string IllnessName { get; set; } = string.Empty;
-    public DateOnly? DiagnosedAt { get; set; }
-    public DateOnly? ResolvedAt { get; set; }
-    public string? TreatmentReceived { get; set; }
-    public string? Notes { get; set; }
+    public string Diagnosis { get; set; } = string.Empty;   // → IllnessName
+    public string? Duration { get; set; }                   // → Notes (no exact match)
+    public string? Complications { get; set; }              // → TreatmentReceived (closest)
     public DateTime UpdatedAt { get; set; }
 }
 
@@ -29,15 +29,18 @@ internal sealed class PatientPastIllnessSyncProcessor
 
     protected override PatientPastIllness CreateFromPayload(PastIllnessPayload p) => new()
     {
-        ClientId = p.ClientId, PatientId = p.PatientId, IllnessName = p.IllnessName,
-        DiagnosedAt = p.DiagnosedAt, ResolvedAt = p.ResolvedAt,
-        TreatmentReceived = p.TreatmentReceived, Notes = p.Notes,
+        ClientId = p.ClientId,
+        PatientId = p.PatientId,
+        IllnessName = p.Diagnosis,
+        Notes = p.Duration,
+        TreatmentReceived = p.Complications,
     };
 
     protected override void ApplyUpdate(PatientPastIllness e, PastIllnessPayload p)
     {
-        e.IllnessName = p.IllnessName; e.DiagnosedAt = p.DiagnosedAt; e.ResolvedAt = p.ResolvedAt;
-        e.TreatmentReceived = p.TreatmentReceived; e.Notes = p.Notes;
+        e.IllnessName = p.Diagnosis;
+        e.Notes = p.Duration;
+        e.TreatmentReceived = p.Complications;
     }
 
     protected override DateTime GetPayloadTimestamp(PastIllnessPayload p) => p.UpdatedAt;

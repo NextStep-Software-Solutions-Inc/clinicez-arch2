@@ -5,18 +5,17 @@ using PatientApp.Infrastructure.Persistence;
 
 namespace PatientApp.Infrastructure.Services.Jobs.Processors;
 
+// Mobile schema fields: hasPriorDiagnosis, providerName, providerSpecialty, providerClinic, psychotherapyStatus
+// Backend entity fields: HasDiagnosis, DiagnosisName, IsOnMedication, MedicationName, TherapistName, TherapyType, SessionFrequency, Notes
 internal sealed class MentalHealthProfilePayload
 {
     public Guid ClientId { get; set; }
     public Guid PatientId { get; set; }
-    public bool HasDiagnosis { get; set; }
-    public string? DiagnosisName { get; set; }
-    public bool IsOnMedication { get; set; }
-    public string? MedicationName { get; set; }
-    public string? TherapistName { get; set; }
-    public string? TherapyType { get; set; }
-    public string? SessionFrequency { get; set; }
-    public string? Notes { get; set; }
+    public bool HasPriorDiagnosis { get; set; }            // → HasDiagnosis
+    public string? ProviderName { get; set; }              // → TherapistName
+    public string? ProviderSpecialty { get; set; }         // → TherapyType
+    public string? ProviderClinic { get; set; }            // stored in Notes
+    public string? PsychotherapyStatus { get; set; }       // Active/Inactive/None → SessionFrequency
     public DateTime UpdatedAt { get; set; }
 }
 
@@ -32,19 +31,22 @@ internal sealed class PatientMentalHealthProfileSyncProcessor
 
     protected override PatientMentalHealthProfile CreateFromPayload(MentalHealthProfilePayload p) => new()
     {
-        ClientId = p.ClientId, PatientId = p.PatientId,
-        HasDiagnosis = p.HasDiagnosis, DiagnosisName = p.DiagnosisName,
-        IsOnMedication = p.IsOnMedication, MedicationName = p.MedicationName,
-        TherapistName = p.TherapistName, TherapyType = p.TherapyType,
-        SessionFrequency = p.SessionFrequency, Notes = p.Notes,
+        ClientId = p.ClientId,
+        PatientId = p.PatientId,
+        HasDiagnosis = p.HasPriorDiagnosis,
+        TherapistName = p.ProviderName,
+        TherapyType = p.ProviderSpecialty,
+        SessionFrequency = p.PsychotherapyStatus,
+        Notes = p.ProviderClinic,
     };
 
     protected override void ApplyUpdate(PatientMentalHealthProfile e, MentalHealthProfilePayload p)
     {
-        e.HasDiagnosis = p.HasDiagnosis; e.DiagnosisName = p.DiagnosisName;
-        e.IsOnMedication = p.IsOnMedication; e.MedicationName = p.MedicationName;
-        e.TherapistName = p.TherapistName; e.TherapyType = p.TherapyType;
-        e.SessionFrequency = p.SessionFrequency; e.Notes = p.Notes;
+        e.HasDiagnosis = p.HasPriorDiagnosis;
+        e.TherapistName = p.ProviderName;
+        e.TherapyType = p.ProviderSpecialty;
+        e.SessionFrequency = p.PsychotherapyStatus;
+        e.Notes = p.ProviderClinic;
     }
 
     protected override DateTime GetPayloadTimestamp(MentalHealthProfilePayload p) => p.UpdatedAt;

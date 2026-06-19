@@ -5,21 +5,20 @@ using PatientApp.Infrastructure.Persistence;
 
 namespace PatientApp.Infrastructure.Services.Jobs.Processors;
 
+// Mobile schema fields: drugName, dosage, dosageForm, frequency, prescribingPhysician, startDate, indication, isActive
+// Backend entity fields: MedicationName, GenericName, Dosage, Frequency, Route, StartDate, EndDate, IsCurrentlyTaking, PrescribedBy, Purpose, Notes
 internal sealed class MedicationPayload
 {
     public Guid ClientId { get; set; }
     public Guid PatientId { get; set; }
-    public string MedicationName { get; set; } = string.Empty;
-    public string? GenericName { get; set; }
+    public string DrugName { get; set; } = string.Empty;        // → MedicationName
     public string? Dosage { get; set; }
+    public string? DosageForm { get; set; }                     // → Route (closest match)
     public string? Frequency { get; set; }
-    public string? Route { get; set; }
-    public DateOnly? StartDate { get; set; }
-    public DateOnly? EndDate { get; set; }
-    public bool IsCurrentlyTaking { get; set; }
-    public string? PrescribedBy { get; set; }
-    public string? Purpose { get; set; }
-    public string? Notes { get; set; }
+    public string? PrescribingPhysician { get; set; }           // → PrescribedBy
+    public string? StartDate { get; set; }                      // ISO date string
+    public string? Indication { get; set; }                     // → Purpose
+    public bool IsActive { get; set; } = true;                  // → IsCurrentlyTaking
     public DateTime UpdatedAt { get; set; }
 }
 
@@ -35,18 +34,28 @@ internal sealed class PatientMedicationSyncProcessor
 
     protected override PatientMedication CreateFromPayload(MedicationPayload p) => new()
     {
-        ClientId = p.ClientId, PatientId = p.PatientId, MedicationName = p.MedicationName,
-        GenericName = p.GenericName, Dosage = p.Dosage, Frequency = p.Frequency, Route = p.Route,
-        StartDate = p.StartDate, EndDate = p.EndDate, IsCurrentlyTaking = p.IsCurrentlyTaking,
-        PrescribedBy = p.PrescribedBy, Purpose = p.Purpose, Notes = p.Notes,
+        ClientId = p.ClientId,
+        PatientId = p.PatientId,
+        MedicationName = p.DrugName,
+        Dosage = p.Dosage,
+        Route = p.DosageForm,
+        Frequency = p.Frequency,
+        StartDate = DateOnly.TryParse(p.StartDate, out var sd) ? sd : null,
+        IsCurrentlyTaking = p.IsActive,
+        PrescribedBy = p.PrescribingPhysician,
+        Purpose = p.Indication,
     };
 
     protected override void ApplyUpdate(PatientMedication e, MedicationPayload p)
     {
-        e.MedicationName = p.MedicationName; e.GenericName = p.GenericName; e.Dosage = p.Dosage;
-        e.Frequency = p.Frequency; e.Route = p.Route; e.StartDate = p.StartDate; e.EndDate = p.EndDate;
-        e.IsCurrentlyTaking = p.IsCurrentlyTaking; e.PrescribedBy = p.PrescribedBy;
-        e.Purpose = p.Purpose; e.Notes = p.Notes;
+        e.MedicationName = p.DrugName;
+        e.Dosage = p.Dosage;
+        e.Route = p.DosageForm;
+        e.Frequency = p.Frequency;
+        e.StartDate = DateOnly.TryParse(p.StartDate, out var sd) ? sd : e.StartDate;
+        e.IsCurrentlyTaking = p.IsActive;
+        e.PrescribedBy = p.PrescribingPhysician;
+        e.Purpose = p.Indication;
     }
 
     protected override DateTime GetPayloadTimestamp(MedicationPayload p) => p.UpdatedAt;

@@ -15,9 +15,11 @@ import ProfileSaveBar from 'components/profile/ProfileSaveBar';
 import ProfileDatePicker from 'components/profile/ProfileDatePicker';
 import { randomUUID } from 'expo-crypto';
 import { usePatientId } from 'hooks/usePatientId';
+import { addToSyncQueue } from 'services/api/syncService';
 
-type Form = { id: string | null; destination: string; country: string; departureDate: string; returnDate: string; purposeOfTravel: string; vaccinationsGiven: string; healthIssuesDuring: string; };
-const EMPTY: Form = { id: null, destination: '', country: '', departureDate: '', returnDate: '', purposeOfTravel: '', vaccinationsGiven: '', healthIssuesDuring: '' };
+// Form uses DB schema field names exactly: destination, cityProvince, departureDate, returnDate, purpose, illnessDuringAfterTravel
+type Form = { id: string | null; destination: string; cityProvince: string; departureDate: string; returnDate: string; purpose: string; illnessDuringAfterTravel: string; };
+const EMPTY: Form = { id: null, destination: '', cityProvince: '', departureDate: '', returnDate: '', purpose: '', illnessDuringAfterTravel: '' };
 
 export default function TravelHistoryScreen() {
   const patientId = usePatientId();
@@ -33,7 +35,7 @@ export default function TravelHistoryScreen() {
   useEffect(() => { load(); }, []);
 
   const openEdit = (row: any) => {
-    reset({ id: row.id, destination: row.destination ?? '', country: row.country ?? '', departureDate: row.departureDate ?? '', returnDate: row.returnDate ?? '', purposeOfTravel: row.purposeOfTravel ?? '', vaccinationsGiven: row.vaccinationsGiven ?? '', healthIssuesDuring: row.healthIssuesDuring ?? '' });
+    reset({ id: row.id, destination: row.destination ?? '', cityProvince: row.cityProvince ?? '', departureDate: row.departureDate ?? '', returnDate: row.returnDate ?? '', purpose: row.purpose ?? '', illnessDuringAfterTravel: row.illnessDuringAfterTravel ?? '' });
     sheetRef.current?.present();
   };
 
@@ -48,8 +50,11 @@ export default function TravelHistoryScreen() {
     try {
       if (id) {
         await db.update(patientTravelHistory).set({ ...rest, updatedAt: new Date() }).where(eq(patientTravelHistory.id, id));
+        await addToSyncQueue('patient_travel_history', id, 'update', { ...rest, patientId, id });
       } else {
-        await db.insert(patientTravelHistory).values({ id: randomUUID(), patientId, ...rest, createdAt: new Date(), updatedAt: new Date() });
+        const newId = randomUUID();
+        await db.insert(patientTravelHistory).values({ id: newId, patientId, ...rest, createdAt: new Date(), updatedAt: new Date() });
+        await addToSyncQueue('patient_travel_history', newId, 'create', { ...rest, patientId, id: newId });
       }
       sheetRef.current?.dismiss();
       load();

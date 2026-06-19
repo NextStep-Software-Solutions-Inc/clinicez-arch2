@@ -15,6 +15,7 @@ import ProfileSaveBar from 'components/profile/ProfileSaveBar';
 import ProfileSelectModal from 'components/profile/ProfileSelectModal';
 import { randomUUID } from 'expo-crypto';
 import { usePatientId } from 'hooks/usePatientId';
+import { addToSyncQueue } from 'services/api/syncService';
 
 
 type ProviderForm = {
@@ -69,8 +70,11 @@ export default function HealthcareProvidersScreen() {
     try {
       if (id) {
         await db.update(patientHealthcareProviders).set({ ...rest, updatedAt: new Date() }).where(eq(patientHealthcareProviders.id, id));
+        await addToSyncQueue('patient_healthcare_providers', id, 'update', { ...rest, patientId, id });
       } else {
-        await db.insert(patientHealthcareProviders).values({ id: randomUUID(), patientId, ...rest, createdAt: new Date(), updatedAt: new Date() });
+        const newId = randomUUID();
+        await db.insert(patientHealthcareProviders).values({ id: newId, patientId, ...rest, createdAt: new Date(), updatedAt: new Date() });
+        await addToSyncQueue('patient_healthcare_providers', newId, 'create', { ...rest, patientId, id: newId });
       }
       sheetRef.current?.dismiss();
       load();

@@ -11,6 +11,7 @@ import ProfileSelectModal from 'components/profile/ProfileSelectModal';
 import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
 import ProfileSaveBar from 'components/profile/ProfileSaveBar';
 import { usePatientId } from 'hooks/usePatientId';
+import { addToSyncQueue } from 'services/api/syncService';
 
 type WorkEnvironment = 'Office' | 'Field' | 'Factory' | 'Healthcare' | 'Agriculture' | 'Other';
 
@@ -58,7 +59,9 @@ export default function OccupationScreen() {
         yearsInOccupation: data.yearsInOccupation ? parseInt(data.yearsInOccupation, 10) : null,
         updatedAt: new Date(),
       };
-      await db.insert(patientOccupation).values({ id: randomUUID(), patientId: patientId, ...payload, createdAt: new Date() }).onConflictDoUpdate({ target: patientOccupation.patientId, set: payload });
+      const result = await db.insert(patientOccupation).values({ id: randomUUID(), patientId: patientId, ...payload, createdAt: new Date() }).onConflictDoUpdate({ target: patientOccupation.patientId, set: payload }).returning({ id: patientOccupation.id });
+      const savedId = result[0]?.id ?? patientId;
+      await addToSyncQueue('patient_occupation', savedId, 'update', { ...payload, patientId, id: savedId });
       reset(data);
       navigation.goBack();
     } catch (e) { console.error(e); } finally { setSaving(false); }
