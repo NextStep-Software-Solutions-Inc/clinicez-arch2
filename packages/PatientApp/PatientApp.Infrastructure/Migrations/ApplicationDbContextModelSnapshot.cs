@@ -4201,10 +4201,6 @@ namespace PatientApp.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<Guid>("ClientId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("client_id");
-
                     b.Property<DateTime>("ClientTimestamp")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("client_timestamp");
@@ -4240,6 +4236,10 @@ namespace PatientApp.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("entity_type");
+
+                    b.Property<Guid>("IdempotencyKey")
+                        .HasColumnType("uuid")
+                        .HasColumnName("idempotency_key");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
