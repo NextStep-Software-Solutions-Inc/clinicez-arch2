@@ -31,6 +31,9 @@ interface AuthContextType {
   setBiometricsEnabled: (enabled: boolean) => Promise<void>;
   setLockTimeout: (ms: number) => Promise<void>;
   authenticateWithBiometrics: () => Promise<'success' | 'fallback' | 'error'>;
+  userId: string | null;
+  showUserNotFoundAlert: boolean;
+  setShowUserNotFoundAlert: (show: boolean) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -247,20 +250,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setBiometricsEnabled,
         setLockTimeout,
         authenticateWithBiometrics,
+        userId: userId ?? null,
+        showUserNotFoundAlert,
+        setShowUserNotFoundAlert,
       }}
     >
       {children}
-      <CustomAlertModal
-        visible={showUserNotFoundAlert}
-        title="Account Not Found"
-        message={`The user profile for Clerk ID: "${userId}" was not found in our database. Please contact support or register your account.`}
-        buttonText="Sign Out"
-        icon="❌"
-        onClose={async () => {
-          setShowUserNotFoundAlert(false);
-          await logout();
-        }}
-      />
     </AuthContext.Provider>
   );
 };

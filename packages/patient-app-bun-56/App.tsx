@@ -5,7 +5,8 @@ import { DefaultTheme, DarkTheme, MaterialDarkTheme, MaterialLightTheme, Theme, 
 import { ColorValue, Platform, StyleSheet, useColorScheme, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
-import { AuthProvider } from 'contexts/AuthContext';
+import { AuthProvider, useAuth } from 'contexts/AuthContext';
+import CustomAlertModal from 'components/ui/CustomAlertModal';
 import { OnboardingProvider } from 'contexts/OnboardingContext';
 import { AppearanceProvider, useAppearance } from 'contexts/AppearanceContext';
 import { NotificationProvider } from 'contexts/NotificationContext';
@@ -81,6 +82,7 @@ function LockOverlay({ backgroundColor }: { backgroundColor: ColorValue }) {
 function AppWithTheme() {
   const systemScheme = useColorScheme();
   const { themePreference } = useAppearance();
+  const { showUserNotFoundAlert, setShowUserNotFoundAlert, userId, logout } = useAuth();
 
   const isDarkMode =
     themePreference === 'dark'
@@ -105,6 +107,17 @@ function AppWithTheme() {
               <OfflineAlertProvider>
                 <Navigation theme={selectedTheme} />
                 <LockOverlay backgroundColor={selectedTheme.colors.background} />
+                <CustomAlertModal
+                  visible={showUserNotFoundAlert}
+                  title="Account Not Found"
+                  message={`The user profile for Clerk ID: "${userId || ''}" was not found in our database. Please contact support or register your account.`}
+                  buttonText="Sign Out"
+                  icon="❌"
+                  onClose={async () => {
+                    setShowUserNotFoundAlert(false);
+                    await logout();
+                  }}
+                />
               </OfflineAlertProvider>
             </ThemeProvider>
           </BottomSheetModalProvider>
