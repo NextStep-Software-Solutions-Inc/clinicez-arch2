@@ -3,7 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 import { useState, useEffect } from 'react';
 import { useOnboarding } from 'contexts/OnboardingContext';
 import { SettingsRow, SettingsSection } from '@ui/SettingsItem';
-import { useAuth } from '@clerk/expo';
+import { useAuth } from 'contexts/AuthContext';
 import { seedDemoHealthRecords, clearAllData } from '@db/seedDemoData';
 import { seedCatalog } from 'services/discovery/discoveryService';
 import { seedMockNotifications } from 'services/notifications/notificationService';
@@ -26,7 +26,7 @@ const SECURE_KEYS = [
 export default function DebugSettingsScreen() {
   const { isComplete, complete, reset } = useOnboarding();
   const [storeValues, setStoreValues] = useState<Record<string, string | null>>({});
-  const { userId } = useAuth();
+  const { userId, internalPatientId } = useAuth();
   
   const [isSeedingHealth, setIsSeedingHealth] = useState(false);
   const [isSeedingCatalog, setIsSeedingCatalog] = useState(false);
@@ -71,12 +71,12 @@ export default function DebugSettingsScreen() {
   };
 
   const handleSeedDemoHealthRecords = async () => {
-    if (!userId) {
-      Alert.alert('Error', 'No authenticated user ID found.');
+    if (!internalPatientId || !userId) {
+      Alert.alert('Error', 'Verification pending or user not authenticated.');
       return;
     }
     setIsSeedingHealth(true);
-    const [result, error] = await safeAwait(seedDemoHealthRecords(userId))
+    const [result, error] = await safeAwait(seedDemoHealthRecords(internalPatientId, userId))
     setIsSeedingHealth(false);
     if (error) {
       console.error(error);
@@ -125,11 +125,11 @@ export default function DebugSettingsScreen() {
           style: 'destructive',
           onPress: async () => {
             setIsClearingData(true);
-            const [, error] = await safeAwait(clearAllData());
+            const [, error] = await safeAwait(clearAllData(internalPatientId || undefined, userId || undefined));
             setIsClearingData(false);
             if (error) {
-              console.error(error);
-              Alert.alert('Error', error instanceof Error ? error.message : 'Failed to reset database.');
+               console.error(error);
+               Alert.alert('Error', error instanceof Error ? error.message : 'Failed to reset database.');
             }
             Alert.alert('Success', 'Local database has been cleared completely.');
             await refreshStoreValues();

@@ -9,6 +9,7 @@ import ProfileFormField from 'components/profile/ProfileFormField';
 import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
 import ProfileSaveBar from 'components/profile/ProfileSaveBar';
 import { usePatientId } from 'hooks/usePatientId';
+import { useAuth } from 'contexts/AuthContext';
 
 
 type FormValues = {
@@ -20,6 +21,7 @@ type FormValues = {
 
 export default function ContactInfoScreen() {
   const patientId = usePatientId();
+  const { userId } = useAuth();
   const navigation = useNavigation();
   const [saving, setSaving] = useState(false);
 
@@ -55,7 +57,7 @@ export default function ContactInfoScreen() {
       } else {
         await db.insert(patients).values({
           id: patientId,
-          clerkUserId: patientId,
+          clerkUserId: userId || patientId,
           firstName: 'Unknown',
           lastName: 'Unknown',
           ...data,

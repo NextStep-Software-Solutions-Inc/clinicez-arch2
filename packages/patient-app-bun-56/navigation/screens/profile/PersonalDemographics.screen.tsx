@@ -141,7 +141,7 @@ export default function PersonalDemographicsScreen() {
       };
       await db.insert(patients).values({
         id: patientId,
-        clerkUserId: patientId,
+        clerkUserId: user?.id || patientId,
         ...payload,
         createdAt: new Date(),
         updatedAt: new Date(),

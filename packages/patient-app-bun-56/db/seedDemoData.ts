@@ -48,13 +48,13 @@ function demoId(patientId: string, suffix: string): string {
     return `demo:${patientId}:${suffix}`;
 }
 
-async function ensurePatientRow(patientId: string) {
+async function ensurePatientRow(patientId: string, clerkUserId: string) {
     const now = new Date();
     await db
         .insert(patients)
         .values({
             id: patientId,
-            clerkUserId: patientId,
+            clerkUserId: clerkUserId,
             firstName: 'Demo',
             middleName: 'L.',
             lastName: 'Patient',
@@ -141,10 +141,10 @@ async function ensureClinicRows(patientId: string) {
     return { primaryClinicId, secondaryClinicId };
 }
 
-export async function seedDemoHealthRecords(patientId: string): Promise<void> {
-    if (!patientId) return;
+export async function seedDemoHealthRecords(patientId: string, clerkUserId: string): Promise<void> {
+    if (!patientId || !clerkUserId) return;
 
-    await ensurePatientRow(patientId);
+    await ensurePatientRow(patientId, clerkUserId);
     const { primaryClinicId, secondaryClinicId } = await ensureClinicRows(patientId);
 
     const now = new Date();
@@ -1381,7 +1381,7 @@ async function ensureAppointmentRows(patientId: string, primaryClinicId: string,
     }
 }
 
-export async function clearAllData(currentPatientId?: string): Promise<void> {
+export async function clearAllData(currentPatientId?: string, clerkUserId?: string): Promise<void> {
     const tables = [
         schema.patients,
         schema.patientGovernmentIds,
@@ -1438,11 +1438,11 @@ export async function clearAllData(currentPatientId?: string): Promise<void> {
             await tx.delete(table);
         }
         
-        if (currentPatientId) {
+        if (currentPatientId && clerkUserId) {
             const now = new Date();
             await tx.insert(schema.patients).values({
                 id: currentPatientId,
-                clerkUserId: currentPatientId,
+                clerkUserId: clerkUserId,
                 firstName: 'Active',
                 lastName: 'User',
                 sex: 'Male',
