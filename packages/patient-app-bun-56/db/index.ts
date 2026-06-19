@@ -106,48 +106,55 @@ async function handleInterceptWrite(tableName: string, operation: 'create' | 'up
   }
 }
 
-function wrapExecution(builder: any, table: any, operation: 'create' | 'update', values: any, condition?: any) {
+function createQueryProxy(
+  builder: any,
+  table: any,
+  operation: 'create' | 'update',
+  values: any,
+  condition?: any
+): any {
   return new Proxy(builder, {
     get(target, prop, receiver) {
       if (prop === 'then') {
-        return function(onfulfilled?: any, onrejected?: any) {
-          return target.then(async (result: any) => {
-            const nameSymbol = Object.getOwnPropertySymbols(table).find(s => s.description === 'drizzle:Name');
-            const tableName = nameSymbol ? table[nameSymbol] : null;
-            if (tableName && TABLE_TO_ENTITY_TYPE[tableName]) {
-              await handleInterceptWrite(String(tableName), operation, values, condition);
+        return function (onfulfilled?: any, onrejected?: any) {
+          return target.then(
+            async (result: any) => {
+              const nameSymbol = Object.getOwnPropertySymbols(table).find(
+                (s) => s.description === 'drizzle:Name'
+              );
+              const tableName = nameSymbol ? table[nameSymbol] : null;
+              if (tableName && TABLE_TO_ENTITY_TYPE[tableName]) {
+                await handleInterceptWrite(String(tableName), operation, values, condition);
+              }
+              if (onfulfilled) return onfulfilled(result);
+              return result;
+            },
+            (err: any) => {
+              if (onrejected) return onrejected(err);
+              throw err;
             }
-            if (onfulfilled) return onfulfilled(result);
-            return result;
-          }, (err: any) => {
-            if (onrejected) return onrejected(err);
-            throw err;
-          });
+          );
         };
       }
-      const val = Reflect.get(target, prop, receiver);
-      return typeof val === 'function' ? val.bind(target) : val;
-    }
-  });
-}
 
-function wrapUpdateSetBuilder(builder: any, table: any, values: any) {
-  let savedWhere: any = null;
-  return new Proxy(builder, {
-    get(target, prop, receiver) {
       if (prop === 'where') {
-        return function(condition: any) {
-          savedWhere = condition;
-          const nextBuilder = target.where(condition);
-          return wrapExecution(nextBuilder, table, 'update', values, savedWhere);
+        return function (cond: any) {
+          const nextBuilder = target.where(cond);
+          return createQueryProxy(nextBuilder, table, operation, values, cond);
         };
       }
-      if (prop === 'then') {
-        const wrappedThenable = wrapExecution(target, table, 'update', values, savedWhere);
-        return wrappedThenable.then.bind(wrappedThenable);
-      }
+
       const val = Reflect.get(target, prop, receiver);
-      return typeof val === 'function' ? val.bind(target) : val;
+      if (typeof val === 'function') {
+        return function (...args: any[]) {
+          const result = val.apply(target, args);
+          if (result && typeof result === 'object' && typeof result.then === 'function') {
+            return createQueryProxy(result, table, operation, values, condition);
+          }
+          return result;
+        };
+      }
+      return val;
     }
   });
 }
@@ -156,9 +163,9 @@ function wrapUpdateBuilder(builder: any, table: any) {
   return new Proxy(builder, {
     get(target, prop, receiver) {
       if (prop === 'set') {
-        return function(values: any) {
+        return function (values: any) {
           const nextBuilder = target.set(values);
-          return wrapUpdateSetBuilder(nextBuilder, table, values);
+          return createQueryProxy(nextBuilder, table, 'update', values);
         };
       }
       const val = Reflect.get(target, prop, receiver);
@@ -171,9 +178,9 @@ function wrapInsertBuilder(builder: any, table: any) {
   return new Proxy(builder, {
     get(target, prop, receiver) {
       if (prop === 'values') {
-        return function(values: any) {
+        return function (values: any) {
           const nextBuilder = target.values(values);
-          return wrapExecution(nextBuilder, table, 'create', values);
+          return createQueryProxy(nextBuilder, table, 'create', values);
         };
       }
       const val = Reflect.get(target, prop, receiver);
