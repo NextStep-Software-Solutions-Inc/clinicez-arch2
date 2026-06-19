@@ -836,6 +836,138 @@ export async function listClinics(
     return withLatency(items);
 }
 
+// ── Local-first helpers ───────────────────────────────────────────────────────
+//
+// Use these in screens instead of listOrganizations/listClinics for the
+// offline-first pattern:
+//
+//   1. Call loadLocal* immediately → display cached data (no spinner if data exists)
+//   2. Call refresh*FromApi in background → updates local DB cache
+//   3. After step 2 completes, call loadLocal* again to pick up new data
+
+/**
+ * Reads organizations from local SQLite only — no API call.
+ * Returns immediately with whatever is cached.
+ */
+export async function loadLocalOrganizations(
+    patientId: string,
+    query = '',
+    filter: 'all' | 'public' | 'private' | 'joined' = 'all',
+): Promise<OrganizationView[]> {
+    const snapshot = await loadCatalogSnapshot(patientId);
+    const normalizedQuery = normalizeQuery(query);
+    const membershipMap = new Map(snapshot.organizationMembershipRows.map((m: Record<string, any>) => [String(m.organizationId), m]));
+    const orgToClinicIds = new Map<string, string[]>();
+
+    for (const clinic of snapshot.clinics) {
+        for (const organizationId of clinic.organizationIds) {
+            const list = orgToClinicIds.get(organizationId) ?? [];
+            if (!list.includes(clinic.id)) list.push(clinic.id);
+            orgToClinicIds.set(organizationId, list);
+        }
+    }
+
+    return snapshot.organizations
+        .map((organization) => {
+            const membership = membershipMap.get(organization.id);
+            const linkedClinicIds = orgToClinicIds.get(organization.id) ?? [];
+            return {
+                ...organization,
+                partneredClinicIds: linkedClinicIds,
+                isJoined: membership?.status === 'active',
+                membershipRoleName: membership?.roleName,
+            } as OrganizationDetail;
+        })
+        .filter((organization) => {
+            if (filter === 'public' && !organization.isPublic) return false;
+            if (filter === 'private' && organization.isPublic) return false;
+            if (filter === 'joined' && !organization.isJoined) return false;
+            return searchMatch(organization.name, normalizedQuery) || searchMatch(organization.description, normalizedQuery) || searchMatch(organization.addressHint ?? '', normalizedQuery);
+        })
+        .sort((a, b) => Number(b.isJoined) - Number(a.isJoined) || b.featuredScore - a.featuredScore || a.name.localeCompare(b.name));
+}
+
+/**
+ * Fetches fresh organizations from the API and updates the local DB cache.
+ * Does NOT return data — call loadLocalOrganizations afterwards.
+ * Throws on network errors so the caller can handle them.
+ */
+export async function refreshOrganizationsFromApi(
+    patientId: string,
+    query: string,
+    getToken: () => Promise<string | null>,
+): Promise<void> {
+    const remoteOrgs = await searchOrganizationsOnline(getToken, query);
+    await updateOrganizationCache(patientId, remoteOrgs);
+}
+
+/**
+ * Reads clinics from local SQLite only — no API call.
+ * Returns immediately with whatever is cached.
+ */
+export async function loadLocalClinics(
+    patientId: string,
+    options: { query?: string; filter?: 'all' | 'public' | 'partnered' | 'joined'; organizationId?: string } = {},
+): Promise<ClinicDetail[]> {
+    const snapshot = await loadCatalogSnapshot(patientId);
+    const normalizedQuery = normalizeQuery(options.query ?? '');
+    const filter = options.filter ?? 'all';
+    const clinicToOrganizationIds = new Map<string, string[]>();
+
+    for (const organization of snapshot.organizations) {
+        for (const clinicId of organization.partneredClinicIds) {
+            const list = clinicToOrganizationIds.get(clinicId) ?? [];
+            if (!list.includes(organization.id)) list.push(organization.id);
+            clinicToOrganizationIds.set(clinicId, list);
+        }
+    }
+
+    return snapshot.clinics
+        .map((clinic) => {
+            const clinicMembership = snapshot.clinicMembershipRows.find((m: Record<string, any>) => String(m.clinicId) === clinic.id);
+            const linkedOrganizationIds = clinicToOrganizationIds.get(clinic.id) ?? [];
+            const unlockedByOrganizationIds = linkedOrganizationIds.filter((organizationId) =>
+                snapshot.organizationMembershipRows.some((m: Record<string, any>) => String(m.organizationId) === organizationId && m.status === 'active'),
+            );
+            const isJoined = clinicMembership?.status === 'active';
+            const isVisible = clinic.isPublic || isJoined || unlockedByOrganizationIds.length > 0;
+
+            return {
+                ...clinic,
+                organizationIds: linkedOrganizationIds,
+                unlockedByOrganizationIds,
+                isJoined,
+                isVisible,
+                membershipStatus: clinicMembership?.status,
+                healthcareProviders: buildProvidersForClinic(clinic.id, clinic.name, clinic.specialties[0] ?? 'General Medicine'),
+            } as ClinicDetail;
+        })
+        .filter((clinic) => {
+            if (options.organizationId && !clinic.organizationIds.includes(options.organizationId)) return false;
+            if (!clinic.isVisible) return false;
+            if (filter === 'public' && !clinic.isPublic) return false;
+            if (filter === 'partnered' && clinic.unlockedByOrganizationIds.length === 0) return false;
+            if (filter === 'joined' && !clinic.isJoined) return false;
+            return searchMatch(clinic.name, normalizedQuery) || searchMatch(clinic.description, normalizedQuery) || searchMatch(clinic.address, normalizedQuery);
+        })
+        .sort((a, b) => Number(b.isJoined) - Number(a.isJoined) || b.featuredScore - a.featuredScore || a.name.localeCompare(b.name));
+}
+
+/**
+ * Fetches fresh clinics from the API and updates the local DB cache.
+ * Does NOT return data — call loadLocalClinics afterwards.
+ * Throws on network errors so the caller can handle them.
+ */
+export async function refreshClinicsFromApi(
+    patientId: string,
+    query: string,
+    organizationId: string | undefined,
+    getToken: () => Promise<string | null>,
+): Promise<void> {
+    const remoteClinics = await searchClinicsOnline(getToken, query, organizationId);
+    await updateClinicCache(patientId, remoteClinics);
+}
+
 export async function getOrganizationDetail(patientId: string, organizationId: string): Promise<OrganizationDetail> {
     const snapshot = await loadCatalogSnapshot(patientId);
     const organization = snapshot.organizations.find((item) => item.id === organizationId);

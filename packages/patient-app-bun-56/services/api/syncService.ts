@@ -83,7 +83,7 @@ export async function syncPendingProfileWrites(
 
     // 3. Map to backend SyncItemRequest payload format
     const syncRequests: SyncItemRequest[] = pendingItems.map((item) => ({
-      clientId: item.entityId,
+      idempotencyKey: item.id,   // unique per sync-queue entry — used for server-side idempotency
       entityType: item.entityType,
       operation: item.operation,
       clientTimestamp: item.createdAt.toISOString(),

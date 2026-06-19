@@ -3,7 +3,7 @@ using PatientApp.Domain.Enums;
 namespace PatientApp.Application.Common.DTOs;
 
 public sealed record SyncItemRequest(
-    Guid ClientId,
+    Guid IdempotencyKey,
     string EntityType,
     SyncOperation Operation,
     DateTime ClientTimestamp,   // Must be UTC
@@ -15,7 +15,7 @@ public sealed record PushSyncAckDto(
     DateTime AcknowledgedAt);
 
 public sealed record SyncStatusItemDto(
-    Guid ClientId,
+    Guid IdempotencyKey,
     string EntityType,
     string Operation,
     string Status,

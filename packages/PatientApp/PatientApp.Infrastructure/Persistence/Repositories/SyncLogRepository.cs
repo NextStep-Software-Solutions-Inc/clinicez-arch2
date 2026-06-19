@@ -10,26 +10,26 @@ public sealed class SyncLogRepository : BaseRepository<SyncLog>, ISyncLogReposit
 {
     public SyncLogRepository(ApplicationDbContext context) : base(context) { }
 
-    public async Task<HashSet<Guid>> GetExistingClientIdsAsync(
-        IEnumerable<Guid> clientIds,
+    public async Task<HashSet<Guid>> GetExistingIdempotencyKeysAsync(
+        IEnumerable<Guid> keys,
         CancellationToken cancellationToken = default)
     {
-        var idList = clientIds.ToList();
+        var keyList = keys.ToList();
         var found = await DbSet
-            .Where(s => idList.Contains(s.ClientId))
-            .Select(s => s.ClientId)
+            .Where(s => keyList.Contains(s.IdempotencyKey))
+            .Select(s => s.IdempotencyKey)
             .ToListAsync(cancellationToken);
 
         return [..found];
     }
 
-    public async Task<IReadOnlyList<SyncLog>> GetPendingByClientIdsAsync(
-        IEnumerable<Guid> clientIds,
+    public async Task<IReadOnlyList<SyncLog>> GetPendingByIdempotencyKeysAsync(
+        IEnumerable<Guid> keys,
         CancellationToken cancellationToken = default)
     {
-        var idList = clientIds.ToList();
+        var keyList = keys.ToList();
         return await DbSet
-            .Where(s => idList.Contains(s.ClientId) && s.Status == SyncStatus.Pending)
+            .Where(s => keyList.Contains(s.IdempotencyKey) && s.Status == SyncStatus.Pending)
             .ToListAsync(cancellationToken);
     }
 

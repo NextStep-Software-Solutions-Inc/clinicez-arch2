@@ -10,7 +10,7 @@ public sealed class SyncLog : BaseEntity
 
     public string EntityType { get; set; } = string.Empty;
     public Guid? EntityId { get; set; }      // null until server creates the entity (CREATE ops)
-    public Guid ClientId { get; set; }
+    public Guid IdempotencyKey { get; set; }
 
     public SyncOperation Operation { get; set; }
     public DateTime ClientTimestamp { get; set; }

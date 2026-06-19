@@ -35,11 +35,11 @@ public sealed class PushSyncPayloadCommandHandler : IRequestHandler<PushSyncPayl
             ?? throw new NotFoundException($"Patient '{request.PatientId}' was not found.");
 
         // Idempotency: skip items already received
-        var clientIds = request.Items.Select(i => i.ClientId);
-        var existing = await _syncLogRepository.GetExistingClientIdsAsync(clientIds, cancellationToken);
+        var keys = request.Items.Select(i => i.IdempotencyKey);
+        var existing = await _syncLogRepository.GetExistingIdempotencyKeysAsync(keys, cancellationToken);
 
         var newItems = request.Items
-            .Where(i => !existing.Contains(i.ClientId))
+            .Where(i => !existing.Contains(i.IdempotencyKey))
             .ToList();
 
         if (newItems.Count > 0)
@@ -50,7 +50,7 @@ public sealed class PushSyncPayloadCommandHandler : IRequestHandler<PushSyncPayl
             {
                 PatientId = request.PatientId,
                 EntityType = item.EntityType,
-                ClientId = item.ClientId,
+                IdempotencyKey = item.IdempotencyKey,
                 Operation = item.Operation,
                 ClientTimestamp = item.ClientTimestamp,
                 ServerTimestamp = now,
@@ -63,7 +63,7 @@ public sealed class PushSyncPayloadCommandHandler : IRequestHandler<PushSyncPayl
 
             // Enqueue a Hangfire job to process this batch (implemented in Step 6)
             _jobEnqueuer.EnqueueSyncPayload(request.PatientId, JsonSerializer.Serialize(
-                newItems.Select(i => i.ClientId)));
+                newItems.Select(i => i.IdempotencyKey)));
         }
 
         return new PushSyncAckDto(

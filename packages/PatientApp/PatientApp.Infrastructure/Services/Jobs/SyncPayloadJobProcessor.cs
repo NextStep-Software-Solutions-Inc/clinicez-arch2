@@ -35,12 +35,12 @@ public sealed class SyncPayloadJobProcessor : ISyncPayloadJob
     }
 
     [AutomaticRetry(Attempts = 3, OnAttemptsExceeded = AttemptsExceededAction.Delete)]
-    public async Task ProcessAsync(Guid patientId, string clientIdsJson, CancellationToken cancellationToken)
+    public async Task ProcessAsync(Guid patientId, string idempotencyKeysJson, CancellationToken cancellationToken)
     {
-        var clientIds = JsonSerializer.Deserialize<List<Guid>>(clientIdsJson)
-            ?? throw new ArgumentException("clientIdsJson could not be deserialized.", nameof(clientIdsJson));
+        var idempotencyKeys = JsonSerializer.Deserialize<List<Guid>>(idempotencyKeysJson)
+            ?? throw new ArgumentException("idempotencyKeysJson could not be deserialized.", nameof(idempotencyKeysJson));
 
-        var pendingLogs = await _syncLogRepository.GetPendingByClientIdsAsync(clientIds, cancellationToken);
+        var pendingLogs = await _syncLogRepository.GetPendingByIdempotencyKeysAsync(idempotencyKeys, cancellationToken);
 
         if (pendingLogs.Count == 0)
         {
@@ -85,8 +85,8 @@ public sealed class SyncPayloadJobProcessor : ISyncPayloadJob
                 log.ConflictDetail = ex.Message;
                 rejected++;
                 _logger.LogError(ex,
-                    "Sync processor for {EntityType} ClientId {ClientId} threw an exception.",
-                    log.EntityType, log.ClientId);
+                    "Sync processor for {EntityType} IdempotencyKey {IdempotencyKey} threw an exception.",
+                    log.EntityType, log.IdempotencyKey);
             }
         }
 

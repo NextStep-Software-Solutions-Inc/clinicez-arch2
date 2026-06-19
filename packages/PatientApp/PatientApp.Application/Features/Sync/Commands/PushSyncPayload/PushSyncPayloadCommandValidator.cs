@@ -21,7 +21,7 @@ public sealed class PushSyncPayloadCommandValidator : AbstractValidator<PushSync
 
         RuleForEach(x => x.Items).ChildRules(item =>
         {
-            item.RuleFor(i => i.ClientId)
+            item.RuleFor(i => i.IdempotencyKey)
                 .NotEmpty().WithErrorCode(ErrorCodes.RequiredFieldMissing);
 
             item.RuleFor(i => i.EntityType)

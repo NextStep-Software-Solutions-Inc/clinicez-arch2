@@ -80,7 +80,8 @@ export interface PatientFullRecord {
 // ── Sync types ────────────────────────────────────────────────────────────────
 
 export interface SyncItemRequest {
-    clientId: string;
+    /** Unique ID for this sync transmission — used for server-side idempotency. */
+    idempotencyKey: string;
     entityType: string;
     /** "create" | "update" | "delete" */
     operation: string;
@@ -135,7 +136,7 @@ export async function createPatient(
 
 /**
  * Pushes queued offline changes to the backend.
- * The backend is idempotent — duplicate clientIds are counted as alreadyProcessed.
+ * The backend is idempotent — duplicate idempotencyKeys are counted as alreadyProcessed.
  */
 export async function pushSyncPayload(
     getToken: () => Promise<string | null>,

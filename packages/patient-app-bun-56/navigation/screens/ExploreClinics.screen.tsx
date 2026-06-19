@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute, useTheme, MaterialSymbol, SFSymbol } from '@react-navigation/native';
 import { useAuth as useClerkAuth } from '@clerk/expo';
+import NetInfo from '@react-native-community/netinfo';
 import EmptyState from '@ui/EmptyState';
 import { SkeletonCard } from '@ui/Skeleton';
 import EntityMediaCardHeader from '@ui/EntityMediaCardHeader';
@@ -25,6 +26,8 @@ import {
     getShareFieldLabel,
     joinClinic,
     listClinics,
+    loadLocalClinics,
+    refreshClinicsFromApi,
 } from '../../services/discovery/discoveryService';
 import { ClinicDetail, ConsentSelection } from '../../services/discovery/types';
 
@@ -90,7 +93,10 @@ export default function ExploreClinicsScreen() {
     const [searchQuery, setSearchQuery] = useState('');
     const [filter, setFilter] = useState<ClinicFilter>('all');
     const [clinics, setClinics] = useState<ClinicDetail[]>([]);
+    // isLoading = true only when cache is empty and we are still loading
     const [isLoading, setIsLoading] = useState(true);
+    // Track whether a background API refresh is in flight
+    const isRefreshingApiRef = useRef(false);
     const [selectedClinic, setSelectedClinic] = useState<ClinicDetail | null>(null);
     const [isJoining, setIsJoining] = useState(false);
     const [consent, setConsent] = useState<ConsentSelection>({
@@ -103,15 +109,36 @@ export default function ExploreClinicsScreen() {
         return consent.acceptedDataSharing && consent.acceptedPrivacyPolicy && consent.acceptedTermsAndConditions;
     }, [consent]);
 
+    // ── Load local data immediately, then background-refresh from API ─────────
+
+    const loadLocal = async () => {
+        const data = await loadLocalClinics(patientId, { query: searchQuery, filter, organizationId });
+        setClinics(data);
+        setIsLoading(false);
+    };
+
+    const triggerApiRefresh = async () => {
+        if (isRefreshingApiRef.current) return;
+        isRefreshingApiRef.current = true;
+        try {
+            const netState = await NetInfo.fetch();
+            if (!netState.isConnected) return;
+            await refreshClinicsFromApi(patientId, searchQuery, organizationId, getToken);
+            // Reload from local DB after the cache update
+            const fresh = await loadLocalClinics(patientId, { query: searchQuery, filter, organizationId });
+            setClinics(fresh);
+        } catch (err) {
+            console.warn('[ExploreClinics] Background API refresh failed:', err);
+        } finally {
+            isRefreshingApiRef.current = false;
+        }
+    };
+
     useEffect(() => {
-        setIsLoading(true);
-        listClinics(patientId, { query: searchQuery, filter, organizationId }, getToken)
-            .then(setClinics)
-            .catch((error: unknown) => {
-                const message = error instanceof Error ? error.message : 'Unable to load clinics.';
-                Alert.alert('Error', message);
-            })
-            .finally(() => setIsLoading(false));
+        // 1. Show cached data immediately
+        loadLocal();
+        // 2. Refresh from API in the background
+        triggerApiRefresh();
     }, [patientId, searchQuery, filter, organizationId]);
 
     const [isRefreshing, setIsRefreshing] = useState(false);

@@ -26,7 +26,7 @@ public sealed class GetSyncStatusQueryHandler : IRequestHandler<GetSyncStatusQue
 
         var items = logs
             .Select(l => new SyncStatusItemDto(
-                l.ClientId, l.EntityType, l.Operation.ToString(),
+                l.IdempotencyKey, l.EntityType, l.Operation.ToString(),
                 l.Status.ToString(), l.ClientTimestamp, l.ServerTimestamp, l.ConflictDetail))
             .ToList()
             .AsReadOnly();

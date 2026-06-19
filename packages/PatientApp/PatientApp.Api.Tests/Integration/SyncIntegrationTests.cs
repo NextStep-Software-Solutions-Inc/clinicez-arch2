@@ -33,13 +33,13 @@ public sealed class SyncIntegrationTests : IClassFixture<PatientAppWebApplicatio
         return body!.Data;
     }
 
-    private static object BuildSyncPayload(Guid patientId, Guid? clientId = null) => new
+    private static object BuildSyncPayload(Guid patientId, Guid? idempotencyKey = null) => new
     {
         Items = new[]
         {
             new
             {
-                ClientId = clientId ?? Guid.NewGuid(),
+                IdempotencyKey = idempotencyKey ?? Guid.NewGuid(),
                 EntityType = "Patient",
                 Operation = (int)SyncOperation.Update,
                 ClientTimestamp = DateTime.UtcNow.AddSeconds(-10),
@@ -69,20 +69,20 @@ public sealed class SyncIntegrationTests : IClassFixture<PatientAppWebApplicatio
     }
 
     [Fact]
-    public async Task PushSync_WithDuplicateClientId_ReturnsAlreadyProcessed()
+    public async Task PushSync_WithDuplicateIdempotencyKey_ReturnsAlreadyProcessed()
     {
         var patientId = await CreatePatientAsync();
-        var clientId = Guid.NewGuid();
+        var idempotencyKey = Guid.NewGuid();
 
         // First push — accepted
         await _client.PostAsJsonAsync(
             $"/api/v1/patients/{patientId}/sync",
-            BuildSyncPayload(patientId, clientId));
+            BuildSyncPayload(patientId, idempotencyKey));
 
-        // Second push with the same ClientId — should be idempotent
+        // Second push with the same IdempotencyKey — should be idempotent
         var response = await _client.PostAsJsonAsync(
             $"/api/v1/patients/{patientId}/sync",
-            BuildSyncPayload(patientId, clientId));
+            BuildSyncPayload(patientId, idempotencyKey));
 
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
 

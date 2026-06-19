@@ -7,7 +7,7 @@ import { randomUUID } from 'expo-crypto';
 const APP_VARIANT = process.env.APP_VARIANT ?? 'production';
 const expo = SQLite.openDatabaseSync(`clinicez_patient_${APP_VARIANT}.db`);
 
-const originalDb = drizzle(expo, { schema });
+export const originalDb = drizzle(expo, { schema });
 
 const TABLE_TO_ENTITY_TYPE: Record<string, string> = {
   patients: 'patient',
@@ -148,8 +148,12 @@ function createQueryProxy(
       if (typeof val === 'function') {
         return function (...args: any[]) {
           const result = val.apply(target, args);
+          // onConflictDoUpdate means the row already exists → this is an update,
+          // not a fresh create. Flip the operation so the sync queue sends the
+          // correct verb to the backend.
+          const effectiveOperation = prop === 'onConflictDoUpdate' ? 'update' : operation;
           if (result && typeof result === 'object' && typeof result.then === 'function') {
-            return createQueryProxy(result, table, operation, values, condition);
+            return createQueryProxy(result, table, effectiveOperation, values, condition);
           }
           return result;
         };

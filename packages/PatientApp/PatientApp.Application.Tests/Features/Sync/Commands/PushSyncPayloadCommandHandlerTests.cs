@@ -19,8 +19,8 @@ public sealed class PushSyncPayloadCommandHandlerTests
     private PushSyncPayloadCommandHandler CreateHandler() =>
         new(_patientRepo, _syncLogRepo, _jobEnqueuer, _uow);
 
-    private static SyncItemRequest MakeItem(Guid? clientId = null) => new(
-        clientId ?? Guid.NewGuid(),
+    private static SyncItemRequest MakeItem(Guid? idempotencyKey = null) => new(
+        idempotencyKey ?? Guid.NewGuid(),
         "Patient",
         SyncOperation.Update,
         DateTime.UtcNow.AddSeconds(-5),
@@ -36,7 +36,7 @@ public sealed class PushSyncPayloadCommandHandlerTests
         _patientRepo.GetByIdAsync(patientId, Arg.Any<CancellationToken>())
             .Returns(new Patient { FirstName = "Test" });
 
-        _syncLogRepo.GetExistingClientIdsAsync(Arg.Any<IEnumerable<Guid>>(), Arg.Any<CancellationToken>())
+        _syncLogRepo.GetExistingIdempotencyKeysAsync(Arg.Any<IEnumerable<Guid>>(), Arg.Any<CancellationToken>())
             .Returns(new HashSet<Guid>());   // nothing previously seen
 
         _uow.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(2);
@@ -58,20 +58,20 @@ public sealed class PushSyncPayloadCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WithDuplicateClientIds_SkipsAlreadyProcessed()
+    public async Task Handle_WithDuplicateIdempotencyKeys_SkipsAlreadyProcessed()
     {
         // Arrange
         var patientId = Guid.NewGuid();
-        var existingClientId = Guid.NewGuid();
-        var newClientId = Guid.NewGuid();
+        var existingKey = Guid.NewGuid();
+        var newKey = Guid.NewGuid();
 
-        var items = new[] { MakeItem(existingClientId), MakeItem(newClientId) };
+        var items = new[] { MakeItem(existingKey), MakeItem(newKey) };
 
         _patientRepo.GetByIdAsync(patientId, Arg.Any<CancellationToken>())
             .Returns(new Patient { FirstName = "Test" });
 
-        _syncLogRepo.GetExistingClientIdsAsync(Arg.Any<IEnumerable<Guid>>(), Arg.Any<CancellationToken>())
-            .Returns(new HashSet<Guid> { existingClientId });  // item1 already processed
+        _syncLogRepo.GetExistingIdempotencyKeysAsync(Arg.Any<IEnumerable<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(new HashSet<Guid> { existingKey });  // item1 already processed
 
         _uow.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(1);
         _jobEnqueuer.EnqueueSyncPayload(Arg.Any<Guid>(), Arg.Any<string>()).Returns("job-2");
@@ -86,7 +86,7 @@ public sealed class PushSyncPayloadCommandHandlerTests
 
         await _syncLogRepo.Received(1).AddRangeAsync(
             Arg.Is<IEnumerable<SyncLog>>(logs =>
-                logs.Count() == 1 && logs.Single().ClientId == newClientId),
+                logs.Count() == 1 && logs.Single().IdempotencyKey == newKey),
             Arg.Any<CancellationToken>());
     }
 
@@ -95,17 +95,17 @@ public sealed class PushSyncPayloadCommandHandlerTests
     {
         // Arrange
         var patientId = Guid.NewGuid();
-        var clientId = Guid.NewGuid();
+        var idempotencyKey = Guid.NewGuid();
 
         _patientRepo.GetByIdAsync(patientId, Arg.Any<CancellationToken>())
             .Returns(new Patient { FirstName = "Test" });
 
-        _syncLogRepo.GetExistingClientIdsAsync(Arg.Any<IEnumerable<Guid>>(), Arg.Any<CancellationToken>())
-            .Returns(new HashSet<Guid> { clientId });
+        _syncLogRepo.GetExistingIdempotencyKeysAsync(Arg.Any<IEnumerable<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(new HashSet<Guid> { idempotencyKey });
 
         // Act
         var ack = await CreateHandler().Handle(
-            new PushSyncPayloadCommand(patientId, [MakeItem(clientId)]), CancellationToken.None);
+            new PushSyncPayloadCommand(patientId, [MakeItem(idempotencyKey)]), CancellationToken.None);
 
         // Assert
         ack.Accepted.Should().Be(0);

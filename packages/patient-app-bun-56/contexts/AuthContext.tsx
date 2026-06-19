@@ -4,6 +4,7 @@ import { useAuth as useClerkAuth, useClerk } from '@clerk/expo';
 import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { getPatientByClerkId } from '../services/api/patientApi';
+import { upsertPatientSummary } from '../db/hydrate';
 import CustomAlertModal from '../components/ui/CustomAlertModal';
 
 const PIN_KEY = 'app_pin';
@@ -116,6 +117,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           if (patient && patient.id) {
             await SecureStore.setItemAsync(INTERNAL_PATIENT_ID_KEY, patient.id);
             setInternalPatientId(patient.id);
+            // Persist demographics to local SQLite so the app can show real
+            // profile data immediately without waiting for the full-record fetch.
+            upsertPatientSummary(patient).catch((err) =>
+              console.warn('[AuthContext] Failed to cache patient summary:', err)
+            );
           } else {
             setShowUserNotFoundAlert(true);
           }

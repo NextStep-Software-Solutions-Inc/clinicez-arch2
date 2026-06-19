@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -18,6 +18,7 @@ import EntityMediaCardHeader from '@ui/EntityMediaCardHeader';
 import ThemedText from '@ui/ThemedText';
 import ThemedView from '@ui/ThemedView';
 import { useAuth as useClerkAuth } from '@clerk/expo';
+import NetInfo from '@react-native-community/netinfo';
 import { useOfflineAlert } from 'contexts/OfflineAlertContext';
 import { safeAwait } from 'utils/safe';
 import { usePatientId } from 'hooks/usePatientId';
@@ -25,6 +26,8 @@ import {
     getShareFieldLabel,
     joinOrganization,
     listOrganizations,
+    loadLocalOrganizations,
+    refreshOrganizationsFromApi,
 } from '../../services/discovery/discoveryService';
 import { ConsentSelection, OrganizationView } from '../../services/discovery/types';
 
@@ -86,7 +89,10 @@ export default function ExploreOrgsScreen() {
     const [searchQuery, setSearchQuery] = useState('');
     const [filter, setFilter] = useState<OrganizationFilter>('all');
     const [organizations, setOrganizations] = useState<OrganizationView[]>([]);
+    // isLoading = true only when cache is empty and we are still fetching
     const [isLoading, setIsLoading] = useState(true);
+    // Track whether a background API refresh is in flight
+    const isRefreshingApiRef = useRef(false);
     const [selectedOrg, setSelectedOrg] = useState<OrganizationView | null>(null);
     const [selectedRoleId, setSelectedRoleId] = useState('');
     const [inviteCode, setInviteCode] = useState('');
@@ -104,15 +110,37 @@ export default function ExploreOrgsScreen() {
         return consent.acceptedDataSharing && consent.acceptedPrivacyPolicy && consent.acceptedTermsAndConditions;
     }, [selectedOrg, selectedRoleId, inviteCode, consent]);
 
+    // ── Load local data immediately, then background-refresh from API ─────────
+
+    const loadLocal = async () => {
+        const data = await loadLocalOrganizations(patientId, searchQuery, filter);
+        setOrganizations(data);
+        // Hide skeleton once we have at least attempted a local read
+        setIsLoading(false);
+    };
+
+    const triggerApiRefresh = async () => {
+        if (isRefreshingApiRef.current) return;
+        isRefreshingApiRef.current = true;
+        try {
+            const netState = await NetInfo.fetch();
+            if (!netState.isConnected) return;
+            await refreshOrganizationsFromApi(patientId, searchQuery, getToken);
+            // Reload from local DB after the cache update
+            const fresh = await loadLocalOrganizations(patientId, searchQuery, filter);
+            setOrganizations(fresh);
+        } catch (err) {
+            console.warn('[ExploreOrgs] Background API refresh failed:', err);
+        } finally {
+            isRefreshingApiRef.current = false;
+        }
+    };
+
     useEffect(() => {
-        setIsLoading(true);
-        listOrganizations(patientId, searchQuery, filter, getToken)
-            .then(setOrganizations)
-            .catch((error: unknown) => {
-                const message = error instanceof Error ? error.message : 'Unable to load organizations.';
-                Alert.alert('Error', message);
-            })
-            .finally(() => setIsLoading(false));
+        // 1. Show cached data immediately
+        loadLocal();
+        // 2. Refresh from API in the background
+        triggerApiRefresh();
     }, [patientId, searchQuery, filter]);
 
     const [isRefreshing, setIsRefreshing] = useState(false);

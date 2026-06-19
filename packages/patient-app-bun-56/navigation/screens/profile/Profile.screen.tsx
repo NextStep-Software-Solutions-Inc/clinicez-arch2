@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { RefreshControl, ScrollView, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import NetInfo from '@react-native-community/netinfo';
 import { db } from '@db/index';
 import {
   patientAddresses,
@@ -31,6 +32,10 @@ import ProfileCard from 'components/ProfileCard';
 import { SettingsSection, SettingsRow } from '@ui/SettingsItem';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useAuth } from 'contexts/AuthContext';
+import { useOfflineAlert } from 'contexts/OfflineAlertContext';
+import { getPatientFullRecord } from 'services/api/patientApi';
+import { hydrateFullRecord } from '@db/hydrate';
 
 type Counts = {
   addresses: number;
@@ -122,15 +127,81 @@ function plural(n: number, noun: string) {
 
 export default function ProfileScreen() {
   const navigation = useNavigation();
+  const { internalPatientId, getToken } = useAuth();
+  const { showOfflineAlert } = useOfflineAlert();
   const [counts, setCounts] = useState<Counts | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  // Track whether a background full-record fetch has been attempted this session
+  const hasBackgroundFetchedRef = useRef(false);
+
+  // ── helpers ──────────────────────────────────────────────────────────────
+
+  const reloadCounts = useCallback(() => {
+    loadCounts().then(setCounts).catch(console.error);
+  }, []);
+
+  /**
+   * Fetches the full patient record from the backend and hydrates local SQLite.
+   * Returns true if the fetch succeeded, false otherwise.
+   */
+  const fetchAndHydrateFullRecord = useCallback(async (): Promise<boolean> => {
+    if (!internalPatientId) return false;
+    try {
+      const record = await getPatientFullRecord(getToken, internalPatientId);
+      await hydrateFullRecord(record);
+      return true;
+    } catch (err) {
+      console.warn('[ProfileScreen] Failed to fetch full record:', err);
+      return false;
+    }
+  }, [internalPatientId, getToken]);
+
+  // ── initial mount: load local counts + background full-record fetch ───────
 
   useEffect(() => {
-    loadCounts().then(setCounts).catch(console.error);
-    const unsub = navigation.addListener('focus', () => {
-      loadCounts().then(setCounts).catch(console.error);
-    });
+    reloadCounts();
+
+    // Background full-record fetch — runs once per session when the screen
+    // is first mounted. Does NOT block the UI; counts are refreshed afterward.
+    if (!hasBackgroundFetchedRef.current) {
+      hasBackgroundFetchedRef.current = true;
+      NetInfo.fetch().then(async (state) => {
+        if (state.isConnected) {
+          const ok = await fetchAndHydrateFullRecord();
+          if (ok) reloadCounts();
+        }
+      }).catch(() => { /* offline or error — silent */ });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── reload counts when the screen comes back into focus ───────────────────
+
+  useEffect(() => {
+    const unsub = navigation.addListener('focus', reloadCounts);
     return unsub;
-  }, [navigation]);
+  }, [navigation, reloadCounts]);
+
+  // ── pull-to-refresh ────────────────────────────────────────────────────────
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      const state = await NetInfo.fetch();
+      if (!state.isConnected) {
+        showOfflineAlert(
+          'You\'re Offline',
+          'Connect to the internet to refresh your profile from the server.',
+        );
+        return;
+      }
+      const ok = await fetchAndHydrateFullRecord();
+      if (ok) reloadCounts();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [fetchAndHydrateFullRecord, reloadCounts, showOfflineAlert]);
+
+  // ── render ────────────────────────────────────────────────────────────────
 
   const c = counts;
   const inset = useSafeAreaInsets();
@@ -140,6 +211,12 @@ export default function ProfileScreen() {
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={[styles.container, { paddingBottom: tabBarHeight }]}
+      refreshControl={
+        <RefreshControl
+          refreshing={isRefreshing}
+          onRefresh={handleRefresh}
+        />
+      }
     >
       <ProfileCard />
 
