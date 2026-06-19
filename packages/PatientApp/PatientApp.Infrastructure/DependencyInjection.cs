@@ -133,12 +133,13 @@ public static class DependencyInjection
                 };
             });
 
-        // ── Dev auto-migration ────────────────────────────────────────────────
+        // ── Dev auto-migration & seeding ──────────────────────────────────────
         if (env is not null && env.IsDevelopment())
         {
             using var scope = services.BuildServiceProvider().CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             dbContext.Database.Migrate();
+            DbSeeder.Seed(dbContext);
         }
 
         return services;
