@@ -97,16 +97,35 @@ public static class DependencyInjection
         services.AddScoped<IBackgroundJobEnqueuer, HangfireJobEnqueuer>();
 
         // ── Sync entity processors ────────────────────────────────────────────
+        // Core
         services.AddScoped<ISyncEntityProcessor, PatientSyncProcessor>();
+        // Personal / contact
+        services.AddScoped<ISyncEntityProcessor, EmergencyContactSyncProcessor>();
+        services.AddScoped<ISyncEntityProcessor, PatientAddressSyncProcessor>();
+        services.AddScoped<ISyncEntityProcessor, PatientGovernmentIdSyncProcessor>();
+        // Medical history
+        services.AddScoped<ISyncEntityProcessor, PatientAllergySyncProcessor>();
+        services.AddScoped<ISyncEntityProcessor, PatientMedicationSyncProcessor>();
+        services.AddScoped<ISyncEntityProcessor, PatientSurgicalHistorySyncProcessor>();
+        services.AddScoped<ISyncEntityProcessor, PatientPastIllnessSyncProcessor>();
+        services.AddScoped<ISyncEntityProcessor, PatientChronicConditionSyncProcessor>();
+        services.AddScoped<ISyncEntityProcessor, PatientFamilyHistorySyncProcessor>();
+        // Lifestyle & social
+        services.AddScoped<ISyncEntityProcessor, PatientSocialHistorySyncProcessor>();
+        // Reproductive
+        services.AddScoped<ISyncEntityProcessor, PatientObstetricProfileSyncProcessor>();
+        services.AddScoped<ISyncEntityProcessor, PatientMentalHealthProfileSyncProcessor>();
+        services.AddScoped<ISyncEntityProcessor, PatientContraceptiveHistorySyncProcessor>();
+        services.AddScoped<ISyncEntityProcessor, PatientPregnancySyncProcessor>();
+        services.AddScoped<ISyncEntityProcessor, PatientMaleReproductiveSyncProcessor>();
+        // Clinical
         services.AddScoped<ISyncEntityProcessor, PatientHealthcareProviderSyncProcessor>();
         services.AddScoped<ISyncEntityProcessor, PatientImmunizationSelfSyncProcessor>();
         services.AddScoped<ISyncEntityProcessor, PatientDisabilitySyncProcessor>();
         services.AddScoped<ISyncEntityProcessor, PatientOccupationSyncProcessor>();
         services.AddScoped<ISyncEntityProcessor, PatientTravelHistorySyncProcessor>();
-        services.AddScoped<ISyncEntityProcessor, PatientContraceptiveHistorySyncProcessor>();
-        services.AddScoped<ISyncEntityProcessor, PatientPregnancySyncProcessor>();
-        services.AddScoped<ISyncEntityProcessor, PatientMaleReproductiveSyncProcessor>();
         services.AddScoped<ISyncEntityProcessor, PatientDentalVisionSyncProcessor>();
+        // Files
         services.AddScoped<ISyncEntityProcessor, FileFolderSyncProcessor>();
 
         // ── Hangfire job implementation ────────────────────────────────────────
