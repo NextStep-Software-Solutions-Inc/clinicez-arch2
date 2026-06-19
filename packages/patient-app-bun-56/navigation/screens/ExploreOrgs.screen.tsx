@@ -4,12 +4,14 @@ import {
     Alert,
     FlatList,
     Modal,
+    Platform,
     Pressable,
     ScrollView,
     StyleSheet,
     TextInput,
+    View,
 } from 'react-native';
-import { useNavigation, useTheme } from '@react-navigation/native';
+import { useNavigation, useTheme, MaterialSymbol, SFSymbol } from '@react-navigation/native';
 import EmptyState from '@ui/EmptyState';
 import { SkeletonCard } from '@ui/Skeleton';
 import EntityMediaCardHeader from '@ui/EntityMediaCardHeader';
@@ -128,6 +130,62 @@ export default function ExploreOrgsScreen() {
         }
     };
 
+    const [isSearching, setIsSearching] = useState(false);
+
+    useEffect(() => {
+        navigation.setOptions({
+            headerLargeTitleEnabled: !isSearching,
+            headerTitle: isSearching ? () => (
+                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', width: '100%', paddingRight: 8 }}>
+                    <TextInput
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                        placeholder="Search organizations..."
+                        placeholderTextColor={colors.border}
+                        autoFocus
+                        style={{
+                            flex: 1,
+                            color: colors.text,
+                            fontSize: 16,
+                            paddingVertical: Platform.select({ ios: 6, android: 4 }),
+                            paddingHorizontal: 12,
+                            backgroundColor: colors.card,
+                            borderRadius: 10,
+                            borderWidth: StyleSheet.hairlineWidth,
+                            borderColor: colors.border,
+                            height: 36,
+                        }}
+                    />
+                </View>
+            ) : 'Explore Organizations',
+            headerRight: () => (
+                <Pressable
+                    onPress={() => {
+                        if (isSearching) {
+                            setSearchQuery('');
+                            setIsSearching(false);
+                        } else {
+                            setIsSearching(true);
+                        }
+                    }}
+                    style={{ marginRight: 8, padding: 4 }}
+                >
+                    {isSearching ? (
+                        Platform.select({
+                            android: <MaterialSymbol name="close" size={24} color={colors.text} />,
+                            ios: <SFSymbol name="xmark" size={24} color={colors.text} />
+                        })
+                    ) : (
+                        Platform.select({
+                            android: <MaterialSymbol name="search" size={24} color={colors.text} />,
+                            ios: <SFSymbol name="magnifyingglass" size={24} color={colors.text} />
+                        })
+                    )}
+                </Pressable>
+            ),
+        });
+    }, [isSearching, searchQuery, colors, navigation]);
+
     const openJoinModal = (org: OrganizationView) => {
         setSelectedOrg(org);
         setSelectedRoleId(org.roles[0]?.id ?? '');
@@ -187,19 +245,6 @@ export default function ExploreOrgsScreen() {
                 onRefresh={handleRefresh}
                 ListHeaderComponent={
                     <ThemedView style={styles.headerWrap}>
-                        <ThemedText style={styles.heading}>Explore Organizations</ThemedText>
-                        <ThemedText style={[styles.subheading, { color: colors.text }]}>Join communities and unlock partnered private clinics.</ThemedText>
-
-                        <ThemedView style={[styles.searchContainer, { borderColor: colors.border, backgroundColor: colors.card }]}>
-                            <TextInput
-                                value={searchQuery}
-                                onChangeText={setSearchQuery}
-                                placeholder="Search organizations"
-                                placeholderTextColor={colors.border}
-                                style={[styles.searchInput, { color: colors.text }]}
-                            />
-                        </ThemedView>
-
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
                             {orgFilters.map((item) => {
                                 const active = item.key === filter;
@@ -238,6 +283,7 @@ export default function ExploreOrgsScreen() {
                             onActionPress={() => {
                                 setSearchQuery('');
                                 setFilter('all');
+                                setIsSearching(false);
                             }}
                         />
                     )

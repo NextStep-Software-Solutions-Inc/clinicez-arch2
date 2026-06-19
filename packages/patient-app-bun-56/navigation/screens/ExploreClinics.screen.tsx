@@ -4,12 +4,14 @@ import {
     Alert,
     FlatList,
     Modal,
+    Platform,
     Pressable,
     ScrollView,
     StyleSheet,
     TextInput,
+    View,
 } from 'react-native';
-import { useNavigation, useRoute, useTheme } from '@react-navigation/native';
+import { useNavigation, useRoute, useTheme, MaterialSymbol, SFSymbol } from '@react-navigation/native';
 import { useAuth as useClerkAuth } from '@clerk/expo';
 import EmptyState from '@ui/EmptyState';
 import { SkeletonCard } from '@ui/Skeleton';
@@ -127,6 +129,63 @@ export default function ExploreClinicsScreen() {
         }
     };
 
+    const [isSearching, setIsSearching] = useState(false);
+
+    useEffect(() => {
+        const title = organizationName ? `${organizationName} Clinics` : 'Explore Clinics';
+        navigation.setOptions({
+            headerLargeTitleEnabled: !isSearching,
+            headerTitle: isSearching ? () => (
+                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', width: '100%', paddingRight: 8 }}>
+                    <TextInput
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                        placeholder="Search clinics..."
+                        placeholderTextColor={colors.border}
+                        autoFocus
+                        style={{
+                            flex: 1,
+                            color: colors.text,
+                            fontSize: 16,
+                            paddingVertical: Platform.select({ ios: 6, android: 4 }),
+                            paddingHorizontal: 12,
+                            backgroundColor: colors.card,
+                            borderRadius: 10,
+                            borderWidth: StyleSheet.hairlineWidth,
+                            borderColor: colors.border,
+                            height: 36,
+                        }}
+                    />
+                </View>
+            ) : title,
+            headerRight: () => (
+                <Pressable
+                    onPress={() => {
+                        if (isSearching) {
+                            setSearchQuery('');
+                            setIsSearching(false);
+                        } else {
+                            setIsSearching(true);
+                        }
+                    }}
+                    style={{ marginRight: 8, padding: 4 }}
+                >
+                    {isSearching ? (
+                        Platform.select({
+                            android: <MaterialSymbol name="close" size={24} color={colors.text} />,
+                            ios: <SFSymbol name="xmark" size={24} color={colors.text} />
+                        })
+                    ) : (
+                        Platform.select({
+                            android: <MaterialSymbol name="search" size={24} color={colors.text} />,
+                            ios: <SFSymbol name="magnifyingglass" size={24} color={colors.text} />
+                        })
+                    )}
+                </Pressable>
+            ),
+        });
+    }, [isSearching, searchQuery, colors, navigation, organizationName]);
+
     const openJoinModal = (clinic: ClinicDetail) => {
         setSelectedClinic(clinic);
         setConsent({
@@ -180,19 +239,6 @@ export default function ExploreClinicsScreen() {
                 onRefresh={handleRefresh}
                 ListHeaderComponent={
                     <ThemedView style={styles.headerWrap}>
-                        <ThemedText style={styles.heading}>{organizationName ? `${organizationName} Clinics` : 'Explore Clinics'}</ThemedText>
-                        <ThemedText style={[styles.subheading, { color: colors.text }]}>Browse public clinics and private partnered clinics you unlocked.</ThemedText>
-
-                        <ThemedView style={[styles.searchContainer, { borderColor: colors.border, backgroundColor: colors.card }]}>
-                            <TextInput
-                                value={searchQuery}
-                                onChangeText={setSearchQuery}
-                                placeholder="Search clinics"
-                                placeholderTextColor={colors.border}
-                                style={[styles.searchInput, { color: colors.text }]}
-                            />
-                        </ThemedView>
-
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
                             {clinicFilters.map((item) => {
                                 const active = item.key === filter;
@@ -231,6 +277,7 @@ export default function ExploreClinicsScreen() {
                             onActionPress={() => {
                                 setSearchQuery('');
                                 setFilter('all');
+                                setIsSearching(false);
                             }}
                         />
                     )
