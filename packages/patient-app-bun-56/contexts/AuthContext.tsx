@@ -47,8 +47,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [lockTimeout, setLockTimeoutState] = useState(DEFAULT_LOCK_TIMEOUT_MS);
   const [isLoading, setIsLoading] = useState(true);
   const [internalPatientId, setInternalPatientId] = useState<string | null>(null);
-  const [isVerifying, setIsVerifying] = useState(false);
   const [showUserNotFoundAlert, setShowUserNotFoundAlert] = useState(false);
+  const isVerifying = !!(isSignedIn && !internalPatientId);
   const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const autoLockPauseDepthRef = useRef(0);
@@ -105,12 +105,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const verifyUser = async () => {
       if (isSignedIn && userId) {
-        setIsVerifying(true);
         try {
           const storedId = await SecureStore.getItemAsync(INTERNAL_PATIENT_ID_KEY);
           if (storedId) {
             setInternalPatientId(storedId);
-            setIsVerifying(false);
             return;
           }
 
@@ -123,8 +121,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }
         } catch (err) {
           console.error('[AuthContext] Error verifying user in backend:', err);
-        } finally {
-          setIsVerifying(false);
         }
       } else {
         setInternalPatientId(null);
