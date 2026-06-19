@@ -1,0 +1,35 @@
+using System;
+using System.Linq;
+using PatientApp.Domain.Entities;
+
+namespace PatientApp.Infrastructure.Persistence;
+
+public class PatientSeeder : IDataSeeder
+{
+    public int Order => 1;
+
+    public void Seed(ApplicationDbContext context)
+    {
+        var now = DateTime.UtcNow;
+        var testClerkUserId = "user_2hXZZn1Wmr7z1S4GqBhsdzvzHdm";
+
+        if (!context.Patients.Any(p => p.ClerkUserId == testClerkUserId))
+        {
+            var patientId = Guid.NewGuid();
+            var patient = new Patient
+            {
+                ClientId = patientId,
+                ClerkUserId = testClerkUserId,
+                FirstName = "Demo",
+                LastName = "Patient",
+                CreatedAt = now,
+                CreatedBy = "seeder",
+                UpdatedAt = now,
+                UpdatedBy = "seeder"
+            };
+            context.Patients.Add(patient);
+            context.SaveChanges();
+            Console.WriteLine($"[DbSeeder] Successfully seeded test patient (Clerk ID: {testClerkUserId}, Client ID: {patientId})");
+        }
+    }
+}
