@@ -13,7 +13,9 @@ import { ClerkProvider } from '@clerk/expo';
 import { tokenCache } from '@clerk/expo/token-cache';
 import { resourceCache } from '@clerk/expo/resource-cache'
 import DatabaseProvider from 'components/DatabaseProvider';
+import SyncManager from 'components/SyncManager';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { OfflineAlertProvider } from 'contexts/OfflineAlertContext';
 import { useIsLocked } from 'hooks/useNavState';
 import LockScreen from './navigation/screens/Lock.screen';
 import UnlockScreen from './navigation/screens/Unlock.screen';
@@ -96,11 +98,14 @@ function AppWithTheme() {
     <>
       <StatusBar style={isDarkMode ? 'light' : 'dark'} />
       <DatabaseProvider>
+        <SyncManager />
         <NotificationProvider>
           <BottomSheetModalProvider>
-            <Navigation theme={selectedTheme} />
             <ThemeProvider value={selectedTheme}>
-              <LockOverlay backgroundColor={selectedTheme.colors.background} />
+              <OfflineAlertProvider>
+                <Navigation theme={selectedTheme} />
+                <LockOverlay backgroundColor={selectedTheme.colors.background} />
+              </OfflineAlertProvider>
             </ThemeProvider>
           </BottomSheetModalProvider>
         </NotificationProvider>

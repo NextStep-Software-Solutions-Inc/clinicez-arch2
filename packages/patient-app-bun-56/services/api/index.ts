@@ -5,3 +5,5 @@ export * from './bookingApi';
 export * from './notificationsApi';
 export * from './appointmentsApi';
 export * from './useApi';
+export * from './syncService';
+

@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
 import { useNavigation, useRoute, useTheme } from '@react-navigation/native';
+import { useAuth as useClerkAuth } from '@clerk/expo';
 import ThemedText from '@ui/ThemedText';
 import ThemedView from '@ui/ThemedView';
 import EmptyState from '@ui/EmptyState';
 import { SkeletonCard } from '@ui/Skeleton';
 import EntityCoverHeader from '@ui/EntityCoverHeader';
+import { useOfflineAlert } from 'contexts/OfflineAlertContext';
+import { safeAwait } from 'utils/safe';
 import { usePatientId } from 'hooks/usePatientId';
 import {
   getOrganizationDetail,
@@ -52,6 +55,8 @@ export default function OrganizationDetailsScreen() {
   const navigation = useNavigation() as any;
   const route = useRoute() as any;
   const patientId = usePatientId();
+  const { getToken } = useClerkAuth();
+  const { showOfflineAlert } = useOfflineAlert();
   const organizationId = String(route.params?.organizationId ?? '');
 
   const [organization, setOrganization] = useState<OrganizationDetail | null>(null);
@@ -97,23 +102,31 @@ export default function OrganizationDetailsScreen() {
   const handleJoin = async () => {
     if (!organization) return;
     setIsJoining(true);
-    try {
-      await joinOrganization(patientId, {
-        organizationId: organization.id,
-        roleId: selectedRoleId,
-        inviteCode,
-        consent,
-      });
-      setShowJoinModal(false);
-      const refreshed = await getOrganizationDetail(patientId, organization.id);
-      setOrganization(refreshed);
-      Alert.alert('Joined', `You are now a member of ${organization.name}.`);
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unable to join organization.';
-      Alert.alert('Join failed', message);
-    } finally {
+    const [, error] = await safeAwait(joinOrganization(patientId, {
+      organizationId: organization.id,
+      roleId: selectedRoleId,
+      inviteCode,
+      consent,
+    }, getToken));
+
+    if (error) {
+      if (error.message === 'OFFLINE_ERROR') {
+        setShowJoinModal(false);
+        showOfflineAlert();
+      } else {
+        Alert.alert('Join failed', error.message);
+      }
       setIsJoining(false);
+      return;
     }
+
+    const [refreshed] = await safeAwait(getOrganizationDetail(patientId, organization.id));
+    if (refreshed) {
+      setOrganization(refreshed);
+    }
+    setShowJoinModal(false);
+    setIsJoining(false);
+    Alert.alert('Joined', `You are now a member of ${organization.name}.`);
   };
 
   if (isLoading) {

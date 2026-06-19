@@ -40,7 +40,7 @@ export function usePatientByClerkId(
     const key = clerkUserId ? swrKey(`/patients/by-clerk/${clerkUserId}`) : null;
     return useSWR<PatientSummary | null>(
         key ? [key, getToken] : null,
-        async ([k, gt]) => {
+        async ([k, gt]: [string, any]) => {
             try { return await swrFetcher<PatientSummary>(k, gt); }
             catch (err) { if (err instanceof ApiError && err.status === 404) return null; throw err; }
         },
@@ -62,7 +62,7 @@ export function usePatientFullRecord(
     const key = patientId ? swrKey(`/patients/${patientId}/full-record`) : null;
     return useSWR<PatientFullRecord>(
         key ? [key, getToken] : null,
-        ([k, gt]) => swrFetcher<PatientFullRecord>(k, gt),
+        ([k, gt]: [string, any]) => swrFetcher<PatientFullRecord>(k, gt),
         { ...OFFLINE_OPTS, revalidateOnFocus: false },
     );
 }
@@ -78,7 +78,7 @@ export function useOrganizations(
     const key = swrKey('/organizations', { q: query, skip, take });
     return useSWR<PagedResult<OrganizationSummary>>(
         [key, getToken],
-        ([k, gt]) => swrFetcher<PagedResult<OrganizationSummary>>(k, gt),
+        ([k, gt]: [string, any]) => swrFetcher<PagedResult<OrganizationSummary>>(k, gt),
         OFFLINE_OPTS,
     );
 }
@@ -92,7 +92,7 @@ export function useOrganizationByInviteCode(
         : null;
     return useSWR<OrganizationDetail | null>(
         key ? [key, getToken] : null,
-        async ([k, gt]) => {
+        async ([k, gt]: [string, any]) => {
             try { return await swrFetcher<OrganizationDetail>(k, gt); }
             catch (err) { if (err instanceof ApiError && err.status === 404) return null; throw err; }
         },
@@ -112,7 +112,7 @@ export function useClinics(
     const key = swrKey('/clinics', { q: query, organizationId, skip, take });
     return useSWR<PagedResult<ClinicSummary>>(
         [key, getToken],
-        ([k, gt]) => swrFetcher<PagedResult<ClinicSummary>>(k, gt),
+        ([k, gt]: [string, any]) => swrFetcher<PagedResult<ClinicSummary>>(k, gt),
         OFFLINE_OPTS,
     );
 }
@@ -127,7 +127,7 @@ export function useClinicDetail(
         : null;
     return useSWR<ClinicDetail | null>(
         key ? [key, getToken] : null,
-        async ([k, gt]) => {
+        async ([k, gt]: [string, any]) => {
             try { return await swrFetcher<ClinicDetail>(k, gt); }
             catch (err) { if (err instanceof ApiError && err.status === 404) return null; throw err; }
         },
@@ -151,7 +151,7 @@ export function useNotifications(
         : null;
     return useSWR<NotificationListResult>(
         key ? [key, getToken] : null,
-        ([k, gt]) => swrFetcher<NotificationListResult>(k, gt),
+        ([k, gt]: [string, any]) => swrFetcher<NotificationListResult>(k, gt),
         OFFLINE_OPTS,
     );
 }
@@ -165,7 +165,7 @@ export function useNotificationPreferences(
         : null;
     return useSWR<RemoteNotificationPreference[]>(
         key ? [key, getToken] : null,
-        ([k, gt]) => swrFetcher<RemoteNotificationPreference[]>(k, gt),
+        ([k, gt]: [string, any]) => swrFetcher<RemoteNotificationPreference[]>(k, gt),
         OFFLINE_OPTS,
     );
 }

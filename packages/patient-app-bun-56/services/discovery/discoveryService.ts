@@ -1,4 +1,5 @@
-import { count, desc, eq } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, not } from 'drizzle-orm';
+import NetInfo from '@react-native-community/netinfo';
 import { db } from '@db/index';
 import { bookingDrafts } from '@db/schema/bookingDrafts';
 import { clinicMemberships } from '@db/schema/clinicMemberships';
@@ -9,6 +10,22 @@ import { organizationMemberships } from '@db/schema/organizationMemberships';
 import { organizations } from '@db/schema/organizations';
 import { patients } from '@db/schema/patients';
 import { vitalSigns } from '@db/schema/vitalSigns';
+import {
+    searchOrganizations as apiSearchOrgs,
+    searchClinics as apiSearchClinics,
+    getOrganizationByInviteCode as apiGetOrgByInvite,
+    getClinicDetail as apiGetClinicDetail,
+    joinOrganization as apiJoinOrg,
+    joinClinic as apiJoinClinic,
+    type OrganizationSummary as RemoteOrgSummary,
+    type OrganizationDetail as RemoteOrgDetail,
+    type ClinicSummary as RemoteClinicSummary,
+    type ClinicDetail as RemoteClinicDetail,
+    type JoinConsentInput,
+} from '../api/discoveryApi';
+import { createBookingDraft as apiCreateDraft, submitBookingDraft as apiSubmitDraft } from '../api/bookingApi';
+import { ApiError } from '../api/apiClient';
+
 import {
     AppointmentLineupItem,
     BookingDraftInput,
@@ -41,7 +58,7 @@ const shareFieldLabels: Record<ShareableFieldKey, string> = {
     philhealthId: 'PhilHealth ID',
 };
 
-const discoverySeedPromiseMap = new Map<string, Promise<void>>();
+
 
 const regions = [
     'Metro Manila',
@@ -304,23 +321,15 @@ async function withLatency<T>(value: T): Promise<T> {
     });
 }
 
-async function seedCatalogIfNeeded(): Promise<void> {
+export async function seedCatalog(): Promise<boolean> {
     const existing = await db.select({ count: count() }).from(organizations);
-    if ((existing[0]?.count ?? 0) > 0) return;
+    if ((existing[0]?.count ?? 0) > 0) return false;
 
     const { organizationsSeed, clinicsSeed, linksSeed } = buildOrganizationSeed();
     await db.insert(organizations).values(organizationsSeed);
     await db.insert(clinics).values(clinicsSeed);
     await db.insert(clinicOrganizationLinks).values(linksSeed);
-}
-
-async function ensureSeeded(): Promise<void> {
-    const key = 'catalog';
-    if (!discoverySeedPromiseMap.has(key)) {
-        discoverySeedPromiseMap.set(key, seedCatalogIfNeeded().finally(() => discoverySeedPromiseMap.delete(key)));
-    }
-
-    await discoverySeedPromiseMap.get(key);
+    return true;
 }
 
 function mapOrganizationRows(rows: Array<Record<string, any>>) {
@@ -364,7 +373,6 @@ function mapClinicRows(rows: Array<Record<string, any>>) {
 }
 
 async function loadCatalogSnapshot(patientId: string) {
-    await ensureSeeded();
 
     const [organizationRows, clinicRows, linkRows, organizationMembershipRows, clinicMembershipRows, bookingDraftRows, patientRows, vitalRows, consultationRows] =
         await Promise.all([
@@ -592,7 +600,148 @@ function buildClinicPayload(row: Record<string, any>): ClinicEntity {
     };
 }
 
-export async function listOrganizations(patientId: string, query = '', filter: 'all' | 'public' | 'private' | 'joined' = 'all'): Promise<OrganizationView[]> {
+async function updateOrganizationCache(patientId: string, remoteOrgs: RemoteOrgSummary[]) {
+    const memberships = await db.select({ orgId: organizationMemberships.organizationId })
+        .from(organizationMemberships)
+        .where(eq(organizationMemberships.patientId, patientId));
+    const joinedOrgIds = memberships.map(m => m.orgId);
+
+    let orgIdsToKeep = [...joinedOrgIds];
+
+    const clinicMembershipsList = await db.select({ clinicId: clinicMemberships.clinicId })
+        .from(clinicMemberships)
+        .where(eq(clinicMemberships.patientId, patientId));
+    const joinedClinicIds = clinicMembershipsList.map(m => m.clinicId);
+
+    let clinicIdsToKeep = [...joinedClinicIds];
+
+    if (joinedOrgIds.length > 0) {
+        const partneredLinks = await db.select({ clinicId: clinicOrganizationLinks.clinicId })
+            .from(clinicOrganizationLinks)
+            .where(inArray(clinicOrganizationLinks.organizationId, joinedOrgIds));
+        partneredLinks.forEach(l => {
+            if (!clinicIdsToKeep.includes(l.clinicId)) clinicIdsToKeep.push(l.clinicId);
+        });
+    }
+
+    if (joinedClinicIds.length > 0) {
+        const partneredOrgLinks = await db.select({ orgId: clinicOrganizationLinks.organizationId })
+            .from(clinicOrganizationLinks)
+            .where(inArray(clinicOrganizationLinks.clinicId, joinedClinicIds));
+        partneredOrgLinks.forEach(l => {
+            if (!orgIdsToKeep.includes(l.orgId)) orgIdsToKeep.push(l.orgId);
+        });
+    }
+
+    if (orgIdsToKeep.length > 0) {
+        await db.delete(organizations).where(not(inArray(organizations.id, orgIdsToKeep)));
+    } else {
+        await db.delete(organizations);
+    }
+
+    for (const org of remoteOrgs) {
+        const row = {
+            id: org.id,
+            slug: org.slug,
+            name: org.name,
+            description: org.description,
+            logoUrl: org.logoUrl,
+            coverImageUrl: org.coverImageUrl,
+            addressHint: org.addressHint,
+            isPublic: org.isPublic,
+            rolesJson: org.rolesJson,
+            requiredShareFieldsJson: org.requiredShareFieldsJson,
+            featuredScore: org.featuredScore,
+            privacyPolicyUrl: 'https://clinicez.app/privacy',
+            termsAndConditionsUrl: 'https://clinicez.app/terms',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        };
+        await db.insert(organizations).values(row).onConflictDoUpdate({
+            target: organizations.id,
+            set: row,
+        });
+    }
+}
+
+async function updateClinicCache(patientId: string, remoteClinics: RemoteClinicSummary[]) {
+    const memberships = await db.select({ orgId: organizationMemberships.organizationId })
+        .from(organizationMemberships)
+        .where(eq(organizationMemberships.patientId, patientId));
+    const joinedOrgIds = memberships.map(m => m.orgId);
+
+    let orgIdsToKeep = [...joinedOrgIds];
+
+    const clinicMembershipsList = await db.select({ clinicId: clinicMemberships.clinicId })
+        .from(clinicMemberships)
+        .where(eq(clinicMemberships.patientId, patientId));
+    const joinedClinicIds = clinicMembershipsList.map(m => m.clinicId);
+
+    let clinicIdsToKeep = [...joinedClinicIds];
+
+    if (joinedOrgIds.length > 0) {
+        const partneredLinks = await db.select({ clinicId: clinicOrganizationLinks.clinicId })
+            .from(clinicOrganizationLinks)
+            .where(inArray(clinicOrganizationLinks.organizationId, joinedOrgIds));
+        partneredLinks.forEach(l => {
+            if (!clinicIdsToKeep.includes(l.clinicId)) clinicIdsToKeep.push(l.clinicId);
+        });
+    }
+
+    if (joinedClinicIds.length > 0) {
+        const partneredOrgLinks = await db.select({ orgId: clinicOrganizationLinks.organizationId })
+            .from(clinicOrganizationLinks)
+            .where(inArray(clinicOrganizationLinks.clinicId, joinedClinicIds));
+        partneredOrgLinks.forEach(l => {
+            if (!orgIdsToKeep.includes(l.orgId)) orgIdsToKeep.push(l.orgId);
+        });
+    }
+
+    if (clinicIdsToKeep.length > 0) {
+        await db.delete(clinics).where(not(inArray(clinics.id, clinicIdsToKeep)));
+    } else {
+        await db.delete(clinics);
+    }
+
+    for (const clinic of remoteClinics) {
+        const row = {
+            id: clinic.id,
+            name: clinic.name,
+            address: clinic.address,
+            description: clinic.description,
+            logoUrl: clinic.logoUrl,
+            coverImageUrl: clinic.coverImageUrl,
+            isPublic: clinic.isPublic,
+            supportsAppointments: clinic.supportsAppointments,
+            baseUrl: 'https://clinicez.app',
+            privacyPolicyUrl: 'https://clinicez.app/privacy',
+            termsAndConditionsUrl: 'https://clinicez.app/terms',
+            specialtiesJson: clinic.specialtiesJson,
+            requiredShareFieldsJson: clinic.requiredShareFieldsJson,
+            joinedAt: new Date(),
+        };
+        await db.insert(clinics).values(row).onConflictDoUpdate({
+            target: clinics.id,
+            set: row,
+        });
+    }
+}
+
+export async function listOrganizations(
+    patientId: string,
+    query = '',
+    filter: 'all' | 'public' | 'private' | 'joined' = 'all',
+    getToken?: () => Promise<string | null>,
+): Promise<OrganizationView[]> {
+    if (getToken) {
+        try {
+            const remoteOrgs = await searchOrganizationsOnline(getToken, query);
+            await updateOrganizationCache(patientId, remoteOrgs);
+        } catch (err) {
+            console.warn('[DiscoveryService] Failed to fetch organizations from API, falling back to local DB cache:', err);
+        }
+    }
+
     const snapshot = await loadCatalogSnapshot(patientId);
     const normalizedQuery = normalizeQuery(query);
     const membershipMap = new Map(snapshot.organizationMembershipRows.map((membership: Record<string, any>) => [String(membership.organizationId), membership]));
@@ -632,7 +781,17 @@ export async function listOrganizations(patientId: string, query = '', filter: '
 export async function listClinics(
     patientId: string,
     options: { query?: string; filter?: 'all' | 'public' | 'partnered' | 'joined'; organizationId?: string } = {},
+    getToken?: () => Promise<string | null>,
 ): Promise<ClinicDetail[]> {
+    if (getToken) {
+        try {
+            const remoteClinics = await searchClinicsOnline(getToken, options.query, options.organizationId);
+            await updateClinicCache(patientId, remoteClinics);
+        } catch (err) {
+            console.warn('[DiscoveryService] Failed to fetch clinics from API, falling back to local DB cache:', err);
+        }
+    }
+
     const snapshot = await loadCatalogSnapshot(patientId);
     const normalizedQuery = normalizeQuery(options.query ?? '');
     const filter = options.filter ?? 'all';
@@ -721,7 +880,16 @@ export async function getClinicDetail(patientId: string, clinicId: string): Prom
     };
 }
 
-export async function joinOrganization(patientId: string, input: JoinOrganizationInput): Promise<{ success: true }> {
+export async function joinOrganization(
+    patientId: string,
+    input: JoinOrganizationInput,
+    getToken: () => Promise<string | null>,
+): Promise<{ success: true }> {
+    const network = await NetInfo.fetch();
+    if (!network.isConnected) {
+        throw new Error('OFFLINE_ERROR');
+    }
+
     const snapshot = await loadCatalogSnapshot(patientId);
     const organization = snapshot.organizations.find((item) => item.id === input.organizationId);
     if (!organization) throw new Error('Organization not found.');
@@ -738,14 +906,24 @@ export async function joinOrganization(patientId: string, input: JoinOrganizatio
         throw new Error('Please accept privacy policy, terms, and data sharing consent.');
     }
 
+    const inviteCode = input.inviteCode?.trim() || organization.inviteCode || '';
+    const consentPayload = {
+        consentPrivacyPolicy: input.consent.acceptedPrivacyPolicy,
+        consentTermsAndConditions: input.consent.acceptedTermsAndConditions,
+        consentDataSharing: input.consent.acceptedDataSharing,
+    };
+
+    // Call API first!
+    const apiResult = await apiJoinOrg(getToken, patientId, inviteCode, input.roleId, consentPayload);
+
     const role = organization.roles.find((item) => item.id === input.roleId) ?? organization.roles[0];
     const timestamp = now();
     const row = {
-        id: getMembershipId('org-membership', patientId, organization.id),
+        id: apiResult.id || getMembershipId('org-membership', patientId, organization.id),
         patientId,
         organizationId: organization.id,
-        roleId: role.id,
-        roleName: role.name,
+        roleId: input.roleId,
+        roleName: role ? role.name : 'Member',
         status: 'active' as const,
         consentPrivacyPolicy: input.consent.acceptedPrivacyPolicy,
         consentTermsAndConditions: input.consent.acceptedTermsAndConditions,
@@ -754,13 +932,23 @@ export async function joinOrganization(patientId: string, input: JoinOrganizatio
         createdAt: timestamp,
         updatedAt: timestamp,
         syncedAt: timestamp,
+        serverId: apiResult.id,
     };
 
     await db.insert(organizationMemberships).values(row).onConflictDoUpdate({ target: organizationMemberships.id, set: row });
-    return withLatency({ success: true as const });
+    return { success: true };
 }
 
-export async function joinClinic(patientId: string, input: JoinClinicInput): Promise<{ success: true }> {
+export async function joinClinic(
+    patientId: string,
+    input: JoinClinicInput,
+    getToken: () => Promise<string | null>,
+): Promise<{ success: true }> {
+    const network = await NetInfo.fetch();
+    if (!network.isConnected) {
+        throw new Error('OFFLINE_ERROR');
+    }
+
     const snapshot = await loadCatalogSnapshot(patientId);
     const clinic = snapshot.clinics.find((item) => item.id === input.clinicId);
     if (!clinic) throw new Error('Clinic not found.');
@@ -776,9 +964,18 @@ export async function joinClinic(patientId: string, input: JoinClinicInput): Pro
         throw new Error('Please accept privacy policy, terms, and data sharing consent.');
     }
 
+    const consentPayload = {
+        consentPrivacyPolicy: input.consent.acceptedPrivacyPolicy,
+        consentTermsAndConditions: input.consent.acceptedTermsAndConditions,
+        consentDataSharing: input.consent.acceptedDataSharing,
+    };
+
+    // Call API first!
+    const serverId = await apiJoinClinic(getToken, patientId, clinic.id, consentPayload);
+
     const timestamp = now();
     const row = {
-        id: getMembershipId('clinic-membership', patientId, clinic.id),
+        id: serverId || getMembershipId('clinic-membership', patientId, clinic.id),
         patientId,
         clinicId: clinic.id,
         status: 'active' as const,
@@ -789,14 +986,14 @@ export async function joinClinic(patientId: string, input: JoinClinicInput): Pro
         createdAt: timestamp,
         updatedAt: timestamp,
         syncedAt: timestamp,
+        serverId: serverId,
     };
 
     await db.insert(clinicMemberships).values(row).onConflictDoUpdate({ target: clinicMemberships.id, set: row });
-    return withLatency({ success: true as const });
+    return { success: true };
 }
 
 export async function getBookingDraft(patientId: string, clinicId: string): Promise<BookingDraftRecord | null> {
-    await ensureSeeded();
     const draft = await db.select().from(bookingDrafts).where(eq(bookingDrafts.patientId, patientId));
     const row = draft.find((item) => item.clinicId === clinicId);
     if (!row) return null;
@@ -814,10 +1011,24 @@ export async function getBookingDraft(patientId: string, clinicId: string): Prom
     };
 }
 
-export async function saveBookingDraft(patientId: string, input: BookingDraftInput): Promise<BookingDraftRecord> {
+export async function saveBookingDraft(
+    patientId: string,
+    input: BookingDraftInput,
+    serverId?: string,
+): Promise<BookingDraftRecord> {
     const timestamp = now();
+
+    // Check if draft exists for the clinic
+    const existing = await db
+        .select()
+        .from(bookingDrafts)
+        .where(and(eq(bookingDrafts.patientId, patientId), eq(bookingDrafts.clinicId, input.clinicId)))
+        .limit(1);
+
+    const rowId = serverId || (existing.length > 0 ? existing[0].id : getMembershipId('booking-draft', patientId, input.clinicId));
+
     const row = {
-        id: getMembershipId('booking-draft', patientId, input.clinicId),
+        id: rowId,
         patientId,
         clinicId: input.clinicId,
         organizationId: input.organizationId ?? null,
@@ -827,7 +1038,7 @@ export async function saveBookingDraft(patientId: string, input: BookingDraftInp
         notes: input.notes ?? null,
         shareFieldsJson: serializeShareFields(input.shareFields),
         status: input.preferredDate && input.preferredTime && input.reason ? ('ready' as const) : ('draft' as const),
-        createdAt: timestamp,
+        createdAt: existing.length > 0 ? existing[0].createdAt : timestamp,
         updatedAt: timestamp,
         syncedAt: timestamp,
     };
@@ -864,7 +1075,6 @@ export async function getHomeDashboard(patientId: string): Promise<HomeDashboard
 }
 
 export async function listBookingDrafts(patientId: string): Promise<BookingDraftRecord[]> {
-    await ensureSeeded();
     const rows = await db.select().from(bookingDrafts).where(eq(bookingDrafts.patientId, patientId));
     return rows.map((row) => ({
         id: String(row.id),
@@ -895,21 +1105,7 @@ export function getClinicVisibilityLabel(clinic: ClinicEntity): string {
 // These functions call the PatientApp backend when connectivity is available,
 // and fall back silently so callers can continue from local seeded/SQLite data.
 
-import {
-    searchOrganizations as apiSearchOrgs,
-    searchClinics as apiSearchClinics,
-    getOrganizationByInviteCode as apiGetOrgByInvite,
-    getClinicDetail as apiGetClinicDetail,
-    joinOrganization as apiJoinOrg,
-    joinClinic as apiJoinClinic,
-    type OrganizationSummary as RemoteOrgSummary,
-    type OrganizationDetail as RemoteOrgDetail,
-    type ClinicSummary as RemoteClinicSummary,
-    type ClinicDetail as RemoteClinicDetail,
-    type JoinConsentInput,
-} from '../api/discoveryApi';
-import { createBookingDraft as apiCreateDraft, submitBookingDraft as apiSubmitDraft } from '../api/bookingApi';
-import { ApiError } from '../api/apiClient';
+
 
 export type { RemoteOrgSummary, RemoteOrgDetail, RemoteClinicSummary, RemoteClinicDetail };
 
@@ -922,12 +1118,8 @@ export async function searchOrganizationsOnline(
     getToken: () => Promise<string | null>,
     query?: string,
 ): Promise<RemoteOrgSummary[]> {
-    try {
-        const result = await apiSearchOrgs(getToken, query, 0, 50);
-        return result.items;
-    } catch {
-        return [];
-    }
+    const result = await apiSearchOrgs(getToken, query, 0, 50);
+    return result.items;
 }
 
 /**
@@ -949,12 +1141,8 @@ export async function searchClinicsOnline(
     query?: string,
     organizationId?: string,
 ): Promise<RemoteClinicSummary[]> {
-    try {
-        const result = await apiSearchClinics(getToken, query, organizationId, 0, 50);
-        return result.items;
-    } catch {
-        return [];
-    }
+    const result = await apiSearchClinics(getToken, query, organizationId, 0, 50);
+    return result.items;
 }
 
 /**

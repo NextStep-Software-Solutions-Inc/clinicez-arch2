@@ -32,7 +32,7 @@ interface DeepLinkAction {
     iconAndroid: string;
     color: string;
     /** Navigate after dismissing the sheet */
-    navigate: (nav: ReturnType<typeof useNavigation>) => void;
+    navigate: (nav: any) => void;
 }
 
 function getDeepLinkAction(

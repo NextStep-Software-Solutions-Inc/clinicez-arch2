@@ -6,6 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { eq, desc, and, inArray } from 'drizzle-orm';
+import NetInfo from '@react-native-community/netinfo';
 import type { ExpoSQLiteDatabase } from 'drizzle-orm/expo-sqlite';
 import { appointments } from '@db/schema/appointments';
 import { bookingDrafts } from '@db/schema/bookingDrafts';
@@ -289,6 +290,11 @@ export async function rescheduleAppointment(
     reason: string,
     db: ExpoSQLiteDatabase<any>,
 ): Promise<AppointmentItem | null> {
+    const network = await NetInfo.fetch();
+    if (!network.isConnected) {
+        throw new Error('OFFLINE_ERROR');
+    }
+
     const existing = await getAppointmentDetail(appointmentId, db);
     if (!existing) return null;
 

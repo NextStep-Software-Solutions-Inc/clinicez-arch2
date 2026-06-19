@@ -10,11 +10,14 @@ import {
     TextInput,
 } from 'react-native';
 import { useNavigation, useRoute, useTheme } from '@react-navigation/native';
+import { useAuth as useClerkAuth } from '@clerk/expo';
 import EmptyState from '@ui/EmptyState';
 import { SkeletonCard } from '@ui/Skeleton';
 import EntityMediaCardHeader from '@ui/EntityMediaCardHeader';
 import ThemedText from '@ui/ThemedText';
 import ThemedView from '@ui/ThemedView';
+import { useOfflineAlert } from 'contexts/OfflineAlertContext';
+import { safeAwait } from 'utils/safe';
 import { usePatientId } from 'hooks/usePatientId';
 import {
     getShareFieldLabel,
@@ -76,6 +79,8 @@ export default function ExploreClinicsScreen() {
     const navigation = useNavigation() as any;
     const route = useRoute() as any;
     const patientId = usePatientId();
+    const { getToken } = useClerkAuth();
+    const { showOfflineAlert } = useOfflineAlert();
 
     const organizationId: string | undefined = route.params?.organizationId;
     const organizationName: string | undefined = route.params?.organizationName;
@@ -98,7 +103,7 @@ export default function ExploreClinicsScreen() {
 
     useEffect(() => {
         setIsLoading(true);
-        listClinics(patientId, { query: searchQuery, filter, organizationId })
+        listClinics(patientId, { query: searchQuery, filter, organizationId }, getToken)
             .then(setClinics)
             .catch((error: unknown) => {
                 const message = error instanceof Error ? error.message : 'Unable to load clinics.';
@@ -106,6 +111,21 @@ export default function ExploreClinicsScreen() {
             })
             .finally(() => setIsLoading(false));
     }, [patientId, searchQuery, filter, organizationId]);
+
+    const [isRefreshing, setIsRefreshing] = useState(false);
+
+    const handleRefresh = async () => {
+        setIsRefreshing(true);
+        try {
+            const data = await listClinics(patientId, { query: searchQuery, filter, organizationId }, getToken);
+            setClinics(data);
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Unable to refresh clinics.';
+            Alert.alert('Error', message);
+        } finally {
+            setIsRefreshing(false);
+        }
+    };
 
     const openJoinModal = (clinic: ClinicDetail) => {
         setSelectedClinic(clinic);
@@ -124,22 +144,29 @@ export default function ExploreClinicsScreen() {
         if (!selectedClinic) return;
 
         setIsJoining(true);
-        try {
-            await joinClinic(patientId, {
-                clinicId: selectedClinic.id,
-                consent,
-            });
+        const [, error] = await safeAwait(joinClinic(patientId, {
+            clinicId: selectedClinic.id,
+            consent,
+        }, getToken));
 
-            const refreshed = await listClinics(patientId, { query: searchQuery, filter, organizationId });
-            setClinics(refreshed);
-            closeJoinModal();
-            Alert.alert('Clinic joined', `${selectedClinic.name} has been added to your clinics.`);
-        } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : 'Unable to join clinic.';
-            Alert.alert('Join failed', message);
-        } finally {
+        if (error) {
+            if (error.message === 'OFFLINE_ERROR') {
+                closeJoinModal();
+                showOfflineAlert();
+            } else {
+                Alert.alert('Join failed', error.message);
+            }
             setIsJoining(false);
+            return;
         }
+
+        const [refreshed] = await safeAwait(listClinics(patientId, { query: searchQuery, filter, organizationId }, getToken));
+        if (refreshed) {
+            setClinics(refreshed);
+        }
+        closeJoinModal();
+        setIsJoining(false);
+        Alert.alert('Clinic joined', `${selectedClinic.name} has been added to your clinics.`);
     };
 
     return (
@@ -149,6 +176,8 @@ export default function ExploreClinicsScreen() {
                 keyExtractor={(item) => item.id}
                 contentInsetAdjustmentBehavior="automatic"
                 contentContainerStyle={styles.listContent}
+                refreshing={isRefreshing}
+                onRefresh={handleRefresh}
                 ListHeaderComponent={
                     <ThemedView style={styles.headerWrap}>
                         <ThemedText style={styles.heading}>{organizationName ? `${organizationName} Clinics` : 'Explore Clinics'}</ThemedText>

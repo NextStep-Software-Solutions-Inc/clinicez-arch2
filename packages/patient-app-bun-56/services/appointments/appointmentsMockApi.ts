@@ -18,6 +18,9 @@ import {
     AttachedDocument,
     AffiliatedClinic,
 } from './types';
+import { db } from '@db/index';
+import { appointments } from '@db/schema/appointments';
+import { eq } from 'drizzle-orm';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -272,8 +275,15 @@ function buildMockSlots(date: string): AvailableSlot[] {
 export async function getAppointments(patientId: string): Promise<AppointmentsApiResponse> {
     await delay(320);
     const now = new Date().toISOString();
+    const rows = await db
+        .select()
+        .from(appointments)
+        .where(eq(appointments.patientId, patientId));
+        
+    const items = rows.map((row) => JSON.parse(row.rawJson) as AppointmentItem);
+    
     return {
-        appointments: buildMockAppointments(patientId, now),
+        appointments: items,
         fetchedAt: now,
     };
 }

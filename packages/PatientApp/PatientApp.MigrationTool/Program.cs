@@ -31,6 +31,11 @@ builder.Services.Configure<MigrationToolOptions>(options =>
         builder.Configuration["Migration:ReportDirectory"]);
 });
 
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
+{
+    options.ValueCountLimit = 32768;
+});
+
 builder.Services.AddSingleton<MigrationState>();
 builder.Services.AddSingleton<ReportStore>();
 builder.Services.AddSingleton<MappingConfigurationStore>();

@@ -12,6 +12,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { format, parseISO } from 'date-fns';
 import ThemedText from '@ui/ThemedText';
 import ThemedView from '@ui/ThemedView';
+import { useOfflineAlert } from 'contexts/OfflineAlertContext';
+import { safeAwait } from 'utils/safe';
 import WeeklyDatePicker from 'components/appointments/WeeklyDatePicker';
 import TimeSlotPicker from 'components/appointments/TimeSlotPicker';
 import { db } from '@db/index';
@@ -52,6 +54,7 @@ export default function RescheduleScreen({ route }: Props) {
     const [isLoadingSlots, setIsLoadingSlots] = useState(false);
     const [reason, setReason] = useState('');
     const [isSaving, setIsSaving] = useState(false);
+    const { showOfflineAlert } = useOfflineAlert();
 
     // Load slots when date changes
     useEffect(() => {
@@ -72,28 +75,34 @@ export default function RescheduleScreen({ route }: Props) {
     const handleSubmit = async () => {
         if (!selectedSlot || !reason.trim()) return;
         setIsSaving(true);
-        try {
-            // Build the new ISO-8601 datetime by combining the selected date and slot time
-            const newScheduledAt = new Date(`${selectedDate}T${selectedSlot.time}:00`).toISOString();
+        // Build the new ISO-8601 datetime by combining the selected date and slot time
+        const newScheduledAt = new Date(`${selectedDate}T${selectedSlot.time}:00`).toISOString();
 
-            // Update the appointment in-place: new date/time, status → pending, reason appended to notes
-            const updated = await rescheduleAppointment(appointmentId, newScheduledAt, reason, db);
+        // Update the appointment in-place: new date/time, status → pending, reason appended to notes
+        const [updated, error] = await safeAwait(rescheduleAppointment(appointmentId, newScheduledAt, reason, db));
 
-            if (!updated) {
-                Alert.alert('Error', 'Appointment not found in local cache. Please refresh and try again.');
-                return;
+        if (error) {
+            if (error.message === 'OFFLINE_ERROR') {
+                showOfflineAlert();
+            } else {
+                Alert.alert('Error', 'Unable to update the appointment. Please try again.');
             }
-
-            Alert.alert(
-                'Reschedule Requested',
-                `Your appointment has been updated to ${selectedSlot.displayTime} on ${format(new Date(selectedDate + 'T00:00:00'), 'EEE, MMM d, yyyy')}. Status reset to Pending — the clinic will re-confirm.`,
-                [{ text: 'Done', onPress: () => navigation.goBack() }],
-            );
-        } catch {
-            Alert.alert('Error', 'Unable to update the appointment. Please try again.');
-        } finally {
             setIsSaving(false);
+            return;
         }
+
+        if (!updated) {
+            Alert.alert('Error', 'Appointment not found in local cache. Please refresh and try again.');
+            setIsSaving(false);
+            return;
+        }
+
+        setIsSaving(false);
+        Alert.alert(
+            'Reschedule Requested',
+            `Your appointment has been updated to ${selectedSlot.displayTime} on ${format(new Date(selectedDate + 'T00:00:00'), 'EEE, MMM d, yyyy')}. Status reset to Pending — the clinic will re-confirm.`,
+            [{ text: 'Done', onPress: () => navigation.goBack() }],
+        );
     };
 
     return (

@@ -1,4 +1,6 @@
 import { db } from './index';
+import { sql } from 'drizzle-orm';
+import * as schema from './schema/index';
 import { clinics } from './schema/clinics';
 import { patients } from './schema/patients';
 import { patientGovernmentIds } from './schema/patientGovernmentIds';
@@ -1168,4 +1170,295 @@ export async function seedDemoHealthRecords(patientId: string): Promise<void> {
             .values(row)
             .onConflictDoUpdate({ target: patientPhysicalExamProfile.id, set });
     }
+
+    await ensureAppointmentRows(patientId, primaryClinicId, secondaryClinicId);
+}
+
+async function ensureAppointmentRows(patientId: string, primaryClinicId: string, secondaryClinicId: string) {
+    const now = new Date();
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    
+    const CLINIC_PRIMARY = {
+        id: primaryClinicId,
+        name: 'City Health Center - OPD',
+        address: 'JP Rizal Street, Poblacion, City Proper',
+        logoUrl: 'https://picsum.photos/seed/demo-city-health-logo/80/80',
+        coverImageUrl: 'https://picsum.photos/seed/demo-city-health-cover/400/180',
+        phoneNumber: '+63 2 8888 1234',
+    };
+
+    const CLINIC_SECONDARY = {
+        id: secondaryClinicId,
+        name: 'Riverside Diagnostics and Imaging',
+        address: 'Riverside Avenue, District 2, Metro City',
+        logoUrl: 'https://picsum.photos/seed/demo-riverside-logo/80/80',
+        coverImageUrl: 'https://picsum.photos/seed/demo-riverside-cover/400/180',
+        phoneNumber: '+63 34 433 5678',
+    };
+
+    const PROVIDER_DR_REYES = {
+        id: 'prov-1',
+        name: 'Dr. Maria Santos Reyes, MD',
+        specialty: 'Internal Medicine',
+        avatarUrl: 'https://i.pravatar.cc/150?img=47',
+        bio: 'Dr. Reyes is a board-certified internist with over 15 years of clinical practice.',
+        credentials: ['MD', 'FPCP'],
+        affiliatedClinics: [CLINIC_PRIMARY],
+        rating: 4.8,
+    };
+
+    const PROVIDER_DR_VILLANUEVA = {
+        id: 'prov-2',
+        name: 'Dr. Jose Villanueva, MD',
+        specialty: 'Cardiology',
+        avatarUrl: 'https://i.pravatar.cc/150?img=68',
+        bio: 'Dr. Villanueva is a cardiologist with expertise in interventional cardiology and heart failure.',
+        credentials: ['MD', 'FPCC'],
+        affiliatedClinics: [CLINIC_SECONDARY],
+        rating: 4.6,
+    };
+
+    const PROVIDER_DR_DELA_CRUZ = {
+        id: 'prov-3',
+        name: 'Dr. Ana Dela Cruz, MD',
+        specialty: 'General Practice',
+        avatarUrl: 'https://i.pravatar.cc/150?img=32',
+        bio: 'Dr. Dela Cruz is a general practitioner providing comprehensive primary care.',
+        credentials: ['MD'],
+        affiliatedClinics: [CLINIC_PRIMARY],
+        rating: 4.9,
+    };
+
+    const DOCS_PRIMARY = [
+        {
+            id: 'doc-1',
+            name: 'CBC Results - May 2026.pdf',
+            uploadedAt: new Date(now.getTime() - 7 * 86_400_000).toISOString(),
+            sizeBytes: 184_320,
+            mimeType: 'application/pdf',
+            uploadedBy: 'patient',
+        },
+        {
+            id: 'doc-2',
+            name: 'Lab Request Form.pdf',
+            uploadedAt: new Date(now.getTime() - 2 * 86_400_000).toISOString(),
+            sizeBytes: 92_160,
+            mimeType: 'application/pdf',
+            uploadedBy: 'clinic',
+        },
+    ];
+
+    const appts = [
+        {
+            id: demoId(patientId, 'appt-today-1'),
+            patientId,
+            clinic: CLINIC_PRIMARY,
+            provider: PROVIDER_DR_REYES,
+            serviceType: 'Annual Physical Exam',
+            scheduledAt: new Date(now.getTime() + 10 * 60 * 1000).toISOString(), // 10 minutes from now
+            durationMinutes: 45,
+            status: 'confirmed',
+            subject: 'Annual Check-up',
+            chiefComplaint: 'Routine annual physical. Slight fatigue for the past 2 weeks. Would like to review recent CBC results and blood pressure trends.',
+            notes: 'Please fast for 8 hours before the appointment. Bring your previous lab results.',
+            attachedDocuments: DOCS_PRIMARY,
+            cachedAt: now.toISOString(),
+            paymentStatus: 'unpaid',
+            invoiceAmount: 500,
+            currency: 'PHP',
+            paymentDueAt: new Date(now.getTime() + 86_400_000).toISOString(),
+        },
+        {
+            id: demoId(patientId, 'appt-upcoming-1'),
+            patientId,
+            clinic: CLINIC_SECONDARY,
+            provider: PROVIDER_DR_VILLANUEVA,
+            serviceType: 'Cardiology Follow-Up',
+            scheduledAt: new Date(now.getTime() + 3 * 86_400_000).toISOString(), // 3 days from now
+            durationMinutes: 30,
+            status: 'action_required',
+            subject: 'Post-ECG Follow-up',
+            chiefComplaint: 'Follow-up after ECG last month. Occasional palpitations in the evenings. No chest pain. Requesting review of last echocardiogram findings.',
+            notes: 'Please review and sign the updated consent form before your visit.',
+            attachedDocuments: [],
+            cachedAt: now.toISOString(),
+            paymentStatus: null,
+            invoiceAmount: null,
+            currency: 'PHP',
+            paymentDueAt: null,
+        },
+        {
+            id: demoId(patientId, 'appt-upcoming-2'),
+            patientId,
+            clinic: CLINIC_PRIMARY,
+            provider: PROVIDER_DR_DELA_CRUZ,
+            serviceType: 'Free Initial Screening',
+            scheduledAt: new Date(now.getTime() + 7 * 86_400_000).toISOString(), // 7 days from now
+            durationMinutes: 10,
+            status: 'pending',
+            subject: null,
+            chiefComplaint: 'First visit for a general health screening. No specific complaints, just want a baseline assessment.',
+            notes: null,
+            attachedDocuments: [],
+            cachedAt: now.toISOString(),
+            paymentStatus: 'unpaid',
+            invoiceAmount: 0,
+            currency: 'PHP',
+            paymentDueAt: null,
+        },
+        {
+            id: demoId(patientId, 'appt-past-1'),
+            patientId,
+            clinic: CLINIC_PRIMARY,
+            provider: PROVIDER_DR_REYES,
+            serviceType: 'Follow-Up Consultation',
+            scheduledAt: new Date(now.getTime() - 14 * 86_400_000).toISOString(), // 14 days ago
+            durationMinutes: 30,
+            status: 'completed',
+            subject: 'Lab Results Review',
+            chiefComplaint: 'Review of CBC and lipid panel results. Concerned about elevated LDL cholesterol levels noted in the last blood test.',
+            notes: null,
+            attachedDocuments: [],
+            cachedAt: now.toISOString(),
+            paymentStatus: 'paid',
+            invoiceAmount: 200,
+            currency: 'PHP',
+            paymentDueAt: null,
+        },
+        {
+            id: demoId(patientId, 'appt-past-2'),
+            patientId,
+            clinic: CLINIC_SECONDARY,
+            provider: PROVIDER_DR_VILLANUEVA,
+            serviceType: 'Echocardiogram',
+            scheduledAt: new Date(now.getTime() - 30 * 86_400_000).toISOString(), // 30 days ago
+            durationMinutes: 60,
+            status: 'canceled',
+            subject: null,
+            chiefComplaint: 'Persistent shortness of breath on exertion. Ordered echocardiogram to rule out structural heart disease.',
+            notes: 'Canceled by patient — rescheduled.',
+            attachedDocuments: [],
+            cachedAt: now.toISOString(),
+            paymentStatus: 'waived',
+            invoiceAmount: 800,
+            currency: 'PHP',
+            paymentDueAt: null,
+        },
+    ];
+
+    const rows = appts.map(item => ({
+        id: item.id,
+        patientId,
+        clinicId: item.clinic.id,
+        clinicName: item.clinic.name,
+        clinicAddress: item.clinic.address ?? null,
+        clinicLogoUrl: item.clinic.logoUrl ?? null,
+        clinicCoverImageUrl: item.clinic.coverImageUrl ?? null,
+        clinicPhoneNumber: item.clinic.phoneNumber ?? null,
+        providerId: item.provider.id,
+        providerName: item.provider.name,
+        providerSpecialty: item.provider.specialty ?? null,
+        providerAvatarUrl: item.provider.avatarUrl ?? null,
+        providerBio: item.provider.bio ?? null,
+        providerCredentialsJson: JSON.stringify(item.provider.credentials),
+        providerAffiliatedClinicsJson: JSON.stringify(item.provider.affiliatedClinics),
+        serviceType: item.serviceType ?? null,
+        scheduledAt: item.scheduledAt,
+        durationMinutes: item.durationMinutes,
+        status: item.status as any,
+        notes: item.notes ?? null,
+        attachedDocumentsJson: JSON.stringify(item.attachedDocuments),
+        cachedAt: now.toISOString(),
+        rawJson: JSON.stringify({ ...item, cachedAt: now.toISOString() }),
+    }));
+
+    for (const row of rows) {
+        const { id, ...set } = row;
+        await db
+            .insert(schema.appointments)
+            .values(row)
+            .onConflictDoUpdate({ target: schema.appointments.id, set });
+    }
+}
+
+export async function clearAllData(currentPatientId?: string): Promise<void> {
+    const tables = [
+        schema.patients,
+        schema.patientGovernmentIds,
+        schema.patientAddresses,
+        schema.emergencyContacts,
+        schema.patientHealthcareProviders,
+        schema.patientAllergies,
+        schema.patientMedications,
+        schema.patientSurgicalHistory,
+        schema.patientPastIllnesses,
+        schema.patientChronicConditions,
+        schema.patientDisabilities,
+        schema.patientImmunizationsSelf,
+        schema.patientSocialHistory,
+        schema.patientFamilyHistory,
+        schema.patientOccupation,
+        schema.patientTravelHistory,
+        schema.patientObstetricProfile,
+        schema.patientPregnancies,
+        schema.patientContraceptiveHistory,
+        schema.patientMaleReproductive,
+        schema.patientDentalVision,
+        schema.patientMentalHealthProfile,
+        schema.organizations,
+        schema.organizationMemberships,
+        schema.clinicMemberships,
+        schema.clinicOrganizationLinks,
+        schema.clinics,
+        schema.bookingDrafts,
+        schema.fileFolders,
+        schema.fileTypes,
+        schema.fileUploadConfig,
+        schema.filesMetadata,
+        schema.vitalSigns,
+        schema.consultations,
+        schema.prescriptions,
+        schema.labResults,
+        schema.imagingResults,
+        schema.vaccinationsAdministered,
+        schema.clinicalAssessments,
+        schema.patientNcdQuestionnaire,
+        schema.patientPhysicalExamProfile,
+        schema.syncQueue,
+        schema.auditLogs,
+        schema.appointments,
+        schema.notifications,
+        schema.notificationPreferences,
+    ];
+
+    await db.transaction(async (tx) => {
+        // Disable foreign keys temporarily during clear
+        await tx.run(sql`PRAGMA foreign_keys = OFF`);
+        for (const table of tables) {
+            await tx.delete(table);
+        }
+        
+        if (currentPatientId) {
+            const now = new Date();
+            await tx.insert(schema.patients).values({
+                id: currentPatientId,
+                clerkUserId: currentPatientId,
+                firstName: 'Active',
+                lastName: 'User',
+                sex: 'Male',
+                dob: '1990-01-01',
+                civilStatus: 'Single',
+                bloodType: 'O+',
+                nationality: 'Filipino',
+                primaryLanguage: 'English',
+                mobile: '09000000000',
+                email: `user.${currentPatientId}@example.com`,
+                consentToShareInfo: true,
+                createdAt: now,
+                updatedAt: now,
+            });
+        }
+        
+        await tx.run(sql`PRAGMA foreign_keys = ON`);
+    });
 }

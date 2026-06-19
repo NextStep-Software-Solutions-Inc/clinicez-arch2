@@ -15,6 +15,9 @@ import { SkeletonCard } from '@ui/Skeleton';
 import EntityMediaCardHeader from '@ui/EntityMediaCardHeader';
 import ThemedText from '@ui/ThemedText';
 import ThemedView from '@ui/ThemedView';
+import { useAuth as useClerkAuth } from '@clerk/expo';
+import { useOfflineAlert } from 'contexts/OfflineAlertContext';
+import { safeAwait } from 'utils/safe';
 import { usePatientId } from 'hooks/usePatientId';
 import {
     getShareFieldLabel,
@@ -75,6 +78,8 @@ export default function ExploreOrgsScreen() {
     const { colors } = useTheme();
     const navigation = useNavigation() as any;
     const patientId = usePatientId();
+    const { getToken } = useClerkAuth();
+    const { showOfflineAlert } = useOfflineAlert();
 
     const [searchQuery, setSearchQuery] = useState('');
     const [filter, setFilter] = useState<OrganizationFilter>('all');
@@ -99,7 +104,7 @@ export default function ExploreOrgsScreen() {
 
     useEffect(() => {
         setIsLoading(true);
-        listOrganizations(patientId, searchQuery, filter)
+        listOrganizations(patientId, searchQuery, filter, getToken)
             .then(setOrganizations)
             .catch((error: unknown) => {
                 const message = error instanceof Error ? error.message : 'Unable to load organizations.';
@@ -107,6 +112,21 @@ export default function ExploreOrgsScreen() {
             })
             .finally(() => setIsLoading(false));
     }, [patientId, searchQuery, filter]);
+
+    const [isRefreshing, setIsRefreshing] = useState(false);
+
+    const handleRefresh = async () => {
+        setIsRefreshing(true);
+        try {
+            const data = await listOrganizations(patientId, searchQuery, filter, getToken);
+            setOrganizations(data);
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Unable to refresh organizations.';
+            Alert.alert('Error', message);
+        } finally {
+            setIsRefreshing(false);
+        }
+    };
 
     const openJoinModal = (org: OrganizationView) => {
         setSelectedOrg(org);
@@ -129,24 +149,31 @@ export default function ExploreOrgsScreen() {
         if (!selectedOrg) return;
 
         setIsJoining(true);
-        try {
-            await joinOrganization(patientId, {
-                organizationId: selectedOrg.id,
-                roleId: selectedRoleId,
-                inviteCode,
-                consent,
-            });
+        const [, error] = await safeAwait(joinOrganization(patientId, {
+            organizationId: selectedOrg.id,
+            roleId: selectedRoleId,
+            inviteCode,
+            consent,
+        }, getToken));
 
-            const refreshed = await listOrganizations(patientId, searchQuery, filter);
-            setOrganizations(refreshed);
-            closeJoinModal();
-            Alert.alert('Joined', `You are now part of ${selectedOrg.name}.`);
-        } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : 'Unable to join this organization.';
-            Alert.alert('Join failed', message);
-        } finally {
+        if (error) {
+            if (error.message === 'OFFLINE_ERROR') {
+                closeJoinModal();
+                showOfflineAlert();
+            } else {
+                Alert.alert('Join failed', error.message);
+            }
             setIsJoining(false);
+            return;
         }
+
+        const [refreshed] = await safeAwait(listOrganizations(patientId, searchQuery, filter, getToken));
+        if (refreshed) {
+            setOrganizations(refreshed);
+        }
+        closeJoinModal();
+        setIsJoining(false);
+        Alert.alert('Joined', `You are now part of ${selectedOrg.name}.`);
     };
 
     return (
@@ -156,6 +183,8 @@ export default function ExploreOrgsScreen() {
                 keyExtractor={(item) => item.id}
                 contentInsetAdjustmentBehavior="automatic"
                 contentContainerStyle={styles.listContent}
+                refreshing={isRefreshing}
+                onRefresh={handleRefresh}
                 ListHeaderComponent={
                     <ThemedView style={styles.headerWrap}>
                         <ThemedText style={styles.heading}>Explore Organizations</ThemedText>

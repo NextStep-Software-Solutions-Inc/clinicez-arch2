@@ -35,6 +35,10 @@ import type { StaticScreenProps } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { addDays, format } from 'date-fns';
 import { and, eq, inArray } from 'drizzle-orm';
+import NetInfo from '@react-native-community/netinfo';
+import { useAuth as useClerkAuth } from '@clerk/expo';
+import { useOfflineAlert } from 'contexts/OfflineAlertContext';
+import { safeAwait } from 'utils/safe';
 import ThemedText from '@ui/ThemedText';
 import ThemedView from '@ui/ThemedView';
 import { SkeletonCard } from '@ui/Skeleton';
@@ -44,7 +48,12 @@ import { usePatientId } from 'hooks/usePatientId';
 import { db } from '@db/index';
 import { bookingDrafts } from '@db/schema/bookingDrafts';
 import { filesMetadata } from '@db/schema/filesMetadata';
-import { listClinics, saveBookingDraft } from '../../services/discovery/discoveryService';
+import {
+  listClinics,
+  saveBookingDraft,
+  createBookingDraftOnline,
+  submitBookingDraftOnline,
+} from '../../services/discovery/discoveryService';
 import {
   consumeAttachedFileSelection,
   initAttachedFileSelection,
@@ -314,6 +323,8 @@ export default function BookingDraftScreen({ route }: Props) {
   const { colors } = useTheme();
   const navigation = useNavigation();
   const patientId = usePatientId();
+  const { getToken } = useClerkAuth();
+  const { showOfflineAlert } = useOfflineAlert();
   const insets = useSafeAreaInsets();
   const initialClinicId = route.params?.clinicId ?? '';
 
@@ -523,6 +534,13 @@ export default function BookingDraftScreen({ route }: Props) {
   };
 
   const performSave = async (asDraft: boolean) => {
+    // Check connectivity first
+    const [network, networkErr] = await safeAwait(NetInfo.fetch());
+    if (networkErr || !network || !network.isConnected) {
+      showOfflineAlert();
+      return;
+    }
+
     // Inline validation for step 5
     const errors: Record<string, string> = {};
 
@@ -561,41 +579,87 @@ export default function BookingDraftScreen({ route }: Props) {
     const serviceMeta = selectedService
       ? `[[service:id=${selectedService.id};name=${selectedService.name}]]\n`
       : '';
-    try {
-      await saveBookingDraft(patientId, {
+
+    const notesValue = `${serviceMeta}${notes.trim()}`.trim() || null;
+    const reasonValue = subject.trim()
+      ? `${subject.trim()}: ${chiefComplaint.trim()}`
+      : chiefComplaint.trim();
+
+    // Create draft on backend first
+    const [serverDraftId, saveErr] = await safeAwait(createBookingDraftOnline(getToken, patientId, {
+      clinicId: selectedClinicId,
+      organizationId: null,
+      preferredDate: skipSchedule ? null : selectedDate,
+      preferredTime: selectedSlot?.time ?? null,
+      reason: reasonValue,
+      notes: notesValue,
+      shareFieldsJson: '[]',
+    }));
+
+    if (saveErr || !serverDraftId) {
+      console.error('[BookingDraftScreen] Save failed:', saveErr);
+      Alert.alert('Error', 'Unable to save. Please try again.');
+      setIsSaving(false);
+      setIsDraftSaving(false);
+      return;
+    }
+
+    if (asDraft) {
+      const [, localSaveErr] = await safeAwait(saveBookingDraft(patientId, {
         clinicId: selectedClinicId,
         organizationId: null,
         preferredDate: skipSchedule ? undefined : selectedDate,
         preferredTime: selectedSlot?.time,
-        reason: subject.trim()
-          ? `${subject.trim()}: ${chiefComplaint.trim()}`
-          : chiefComplaint.trim(),
-        notes: `${serviceMeta}${notes.trim()}`.trim() || undefined,
+        reason: reasonValue,
+        notes: notesValue || undefined,
         shareFields: [],
-      });
-      if (asDraft) {
-        Alert.alert('Draft Saved', 'Your booking has been saved. Continue anytime from the Health tab.', [
-          { text: 'OK', onPress: () => navigation.goBack() },
-        ]);
-      } else {
-        // Booking confirmed — mark status='ready' so it persists locally and
-        // shows up in the Appointments screen until the server syncs it.
-        // It won't appear in the Drafts section (which only shows status='draft').
-        await db
-          .update(bookingDrafts)
-          .set({ status: 'ready', updatedAt: new Date() })
-          .where(and(eq(bookingDrafts.patientId, patientId), eq(bookingDrafts.clinicId, selectedClinicId)));
-        Alert.alert(
-          'Booking Requested!',
-          'Your appointment request has been saved and will sync to the clinic when internet is available. You can view it in the Health tab.',
-          [{ text: 'Done', onPress: () => navigation.goBack() }],
-        );
-      }
-    } catch {
-      Alert.alert('Error', 'Unable to save. Please try again.');
-    } finally {
+      }, serverDraftId));
+
       setIsSaving(false);
       setIsDraftSaving(false);
+
+      if (localSaveErr) {
+        Alert.alert('Error', 'Unable to save draft locally.');
+        return;
+      }
+
+      Alert.alert('Draft Saved', 'Your booking has been saved. Continue anytime from the Health tab.', [
+        { text: 'OK', onPress: () => navigation.goBack() },
+      ]);
+    } else {
+      // Submit ready booking draft to the Clinic Dashboard via backend
+      const [, submitErr] = await safeAwait(submitBookingDraftOnline(getToken, patientId, serverDraftId));
+      if (submitErr) {
+        Alert.alert('Error', 'Unable to submit booking to clinic.');
+        setIsSaving(false);
+        setIsDraftSaving(false);
+        return;
+      }
+
+      await safeAwait(saveBookingDraft(patientId, {
+        clinicId: selectedClinicId,
+        organizationId: null,
+        preferredDate: skipSchedule ? undefined : selectedDate,
+        preferredTime: selectedSlot?.time,
+        reason: reasonValue,
+        notes: notesValue || undefined,
+        shareFields: [],
+      }, serverDraftId));
+
+      // Booking confirmed — mark status='ready' locally
+      await safeAwait(db
+        .update(bookingDrafts)
+        .set({ status: 'ready', updatedAt: new Date() })
+        .where(and(eq(bookingDrafts.patientId, patientId), eq(bookingDrafts.clinicId, selectedClinicId))));
+      
+      setIsSaving(false);
+      setIsDraftSaving(false);
+
+      Alert.alert(
+        'Booking Requested!',
+        'Your appointment request has been submitted successfully to the clinic. You can view it in the Health tab.',
+        [{ text: 'Done', onPress: () => navigation.goBack() }],
+      );
     }
   };
 
@@ -637,9 +701,21 @@ export default function BookingDraftScreen({ route }: Props) {
         {isLoadingClinics ? (
           <View style={{ height: 140 }}><SkeletonCard /></View>
         ) : clinics.length === 0 ? (
-          <ThemedText style={[styles.emptyHint, { color: colors.text }]}>
-            You haven't joined any clinics. Explore clinics from the Home tab.
-          </ThemedText>
+          <View style={styles.emptyContainer}>
+            <ThemedText style={[styles.emptyHint, { color: colors.text, textAlign: 'center' }]}>
+              You haven't joined any clinics yet. Explore clinics to join one and book an appointment.
+            </ThemedText>
+            <Pressable
+              onPress={() => navigation.navigate('Main', { screen: 'ExploreClinicsScreen' } as any)}
+              style={({ pressed }) => [
+                styles.exploreBtn,
+                { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 }
+              ]}
+              accessibilityRole="button"
+            >
+              <ThemedText style={styles.exploreBtnText}>Explore Clinics</ThemedText>
+            </Pressable>
+          </View>
         ) : (
           <FlatList
             data={clinics}
@@ -1128,6 +1204,29 @@ const styles = StyleSheet.create({
   fieldLabel: { fontSize: 13, fontWeight: '700', opacity: 0.65 },
   fieldHint: { fontSize: 11, opacity: 0.5 },
   emptyHint: { fontSize: 14, opacity: 0.6, lineHeight: 20 },
+  emptyContainer: {
+    padding: 20,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#ccc',
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    marginVertical: 10,
+  },
+  exploreBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  exploreBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
 
   horizontalList: { paddingHorizontal: 0 },
 
