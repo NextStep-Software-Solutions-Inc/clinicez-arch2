@@ -3,7 +3,7 @@ name: Deploy PatientApp API to DigitalOcean Droplet (Dev)
 on:
   push:
     branches:
-      - development
+      # - development
       - patient-app-be/feature/init
     paths:
       - 'packages/PatientApp/**'

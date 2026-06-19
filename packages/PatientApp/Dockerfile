@@ -23,9 +23,8 @@ RUN dotnet publish "PatientApp.Api.csproj" -c Release -o /app/publish /p:UseAppH
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 
-# Create non-root user for security
-RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
-USER appuser
+# Use the built-in non-root user from the .NET runtime image (APP_UID)
+USER $APP_UID
 
 COPY --from=build /app/publish .
 
