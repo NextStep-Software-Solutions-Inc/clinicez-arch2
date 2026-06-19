@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - development
+      - patient-app-be/feature/init
     paths:
       - 'packages/PatientApp/**'
       - 'packages/CLINICEZ.Shared/**'
