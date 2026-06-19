@@ -1,18 +1,18 @@
-import { useAuth } from "@clerk/expo";
+import { useAuth } from '../contexts/AuthContext';
 import { useEffect } from 'react';
 import NetInfo from '@react-native-community/netinfo';
 import { syncPendingProfileWrites } from '../services/api/syncService';
 import { registerSyncTrigger } from '../db/index';
 
 export default function SyncManager() {
-  const { getToken, userId } = useAuth();
+  const { getToken, internalPatientId } = useAuth();
 
   useEffect(() => {
-    if (!userId) return;
+    if (!internalPatientId) return;
 
     // Trigger sync function
     const triggerSync = () => {
-      syncPendingProfileWrites(userId, getToken).catch((err) => {
+      syncPendingProfileWrites(internalPatientId, getToken).catch((err) => {
         console.warn('[SyncManager] Background profile sync failed:', err);
       });
     };
@@ -35,7 +35,7 @@ export default function SyncManager() {
       unsubscribe();
       registerSyncTrigger(null);
     };
-  }, [userId, getToken]);
+  }, [internalPatientId, getToken]);
 
   return null;
 }

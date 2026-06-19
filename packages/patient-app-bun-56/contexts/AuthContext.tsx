@@ -3,11 +3,14 @@ import { AppState, AppStateStatus } from 'react-native';
 import { useAuth as useClerkAuth, useClerk } from '@clerk/expo';
 import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
+import { getPatientByClerkId } from '../services/api/patientApi';
+import CustomAlertModal from '../components/ui/CustomAlertModal';
 
 const PIN_KEY = 'app_pin';
 const HAS_PIN_KEY = 'has_pin';
 const BIOMETRICS_ENABLED_KEY = 'biometrics_enabled';
 const LOCK_TIMEOUT_KEY = 'lock_timeout';
+const INTERNAL_PATIENT_ID_KEY = 'internal_patient_id';
 const DEFAULT_LOCK_TIMEOUT_MS = 30_000;
 
 interface AuthContextType {
@@ -17,6 +20,8 @@ interface AuthContextType {
   biometricsEnabled: boolean;
   lockTimeout: number;
   isLoading: boolean;
+  internalPatientId: string | null;
+  getToken: () => Promise<string | null>;
   logout: () => Promise<void>;
   lock: () => void;
   unlock: () => void;
@@ -31,13 +36,16 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const { isSignedIn, userId } = useClerkAuth();
+  const { isSignedIn, userId, getToken } = useClerkAuth();
   const { signOut } = useClerk();
   const [hasPIN, setHasPIN] = useState(false);
   const [biometricsEnabled, setBiometricsEnabledState] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const [lockTimeout, setLockTimeoutState] = useState(DEFAULT_LOCK_TIMEOUT_MS);
   const [isLoading, setIsLoading] = useState(true);
+  const [internalPatientId, setInternalPatientId] = useState<string | null>(null);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [showUserNotFoundAlert, setShowUserNotFoundAlert] = useState(false);
   const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const autoLockPauseDepthRef = useRef(0);
@@ -67,10 +75,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // Hydrate PIN and biometrics state from secure store on mount
   useEffect(() => {
     const hydrate = async () => {
-      const [storedHasPIN, storedBiometrics, storedTimeout] = await Promise.all([
+      const [storedHasPIN, storedBiometrics, storedTimeout, storedInternalId] = await Promise.all([
         SecureStore.getItemAsync(HAS_PIN_KEY),
         SecureStore.getItemAsync(BIOMETRICS_ENABLED_KEY),
         SecureStore.getItemAsync(LOCK_TIMEOUT_KEY),
+        SecureStore.getItemAsync(INTERNAL_PATIENT_ID_KEY),
       ]);
       const pinSet = storedHasPIN === 'true';
       setHasPIN(pinSet);
@@ -79,12 +88,49 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const parsed = parseInt(storedTimeout, 10);
         if (!isNaN(parsed)) setLockTimeoutState(parsed);
       }
+      if (storedInternalId) {
+        setInternalPatientId(storedInternalId);
+      }
       // Only lock if PIN is already set (returning user); fresh installs start unlocked
       setIsLocked(pinSet);
       setIsLoading(false);
     };
     hydrate();
   }, []);
+
+  // Effect to verify user existence in the backend DB and retrieve their internal patient ID
+  useEffect(() => {
+    const verifyUser = async () => {
+      if (isSignedIn && userId) {
+        setIsVerifying(true);
+        try {
+          const storedId = await SecureStore.getItemAsync(INTERNAL_PATIENT_ID_KEY);
+          if (storedId) {
+            setInternalPatientId(storedId);
+            setIsVerifying(false);
+            return;
+          }
+
+          const patient = await getPatientByClerkId(getToken, userId);
+          if (patient && patient.id) {
+            await SecureStore.setItemAsync(INTERNAL_PATIENT_ID_KEY, patient.id);
+            setInternalPatientId(patient.id);
+          } else {
+            setShowUserNotFoundAlert(true);
+          }
+        } catch (err) {
+          console.error('[AuthContext] Error verifying user in backend:', err);
+        } finally {
+          setIsVerifying(false);
+        }
+      } else {
+        setInternalPatientId(null);
+        await SecureStore.deleteItemAsync(INTERNAL_PATIENT_ID_KEY).catch(() => {});
+      }
+    };
+
+    verifyUser();
+  }, [isSignedIn, userId, getToken]);
 
   // Lock only after real background time. Native pickers can briefly move the app
   // through inactive/background while the user is still completing an in-app action.
@@ -111,6 +157,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const logout = async () => {
     await signOut();
     setIsLocked(false);
+    setInternalPatientId(null);
+    await SecureStore.deleteItemAsync(INTERNAL_PATIENT_ID_KEY).catch(() => {});
   };
 
   const lock = () => setIsLocked(true);
@@ -187,7 +235,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         hasPIN,
         biometricsEnabled,
         lockTimeout,
-        isLoading,
+        isLoading: isLoading || isVerifying,
+        internalPatientId,
+        getToken,
         logout,
         lock,
         unlock,
@@ -200,6 +250,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }}
     >
       {children}
+      <CustomAlertModal
+        visible={showUserNotFoundAlert}
+        title="Account Not Found"
+        message={`The user profile for Clerk ID: "${userId}" was not found in our database. Please contact support or register your account.`}
+        buttonText="Sign Out"
+        icon="❌"
+        onClose={async () => {
+          setShowUserNotFoundAlert(false);
+          await logout();
+        }}
+      />
     </AuthContext.Provider>
   );
 };
