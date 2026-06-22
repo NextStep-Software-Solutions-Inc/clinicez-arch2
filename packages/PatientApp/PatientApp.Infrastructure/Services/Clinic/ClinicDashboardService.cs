@@ -89,4 +89,20 @@ public sealed class ClinicDashboardService : IClinicDashboardService
 
         return await Task.FromResult($"PENDING-{bookingDraftId:N}");
     }
+
+    public async Task<bool> PingClinicAsync(string clinicBaseUrl, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("ClinicDashboard");
+            var url = $"{clinicBaseUrl.TrimEnd('/')}/api/v1/sync/ping";
+            var response = await client.PostAsync(url, null, cancellationToken);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to ping clinic {ClinicBaseUrl}", clinicBaseUrl);
+            return false;
+        }
+    }
 }

@@ -33,6 +33,9 @@ public sealed class ClinicRepository : IClinicRepository
             .OrderByDescending(c => c.FeaturedScore).ThenBy(c => c.Name)
             .ToListAsync(ct);
 
+    public async Task<IReadOnlyList<Clinic>> GetAllAsync(CancellationToken ct = default)
+        => await _ctx.Clinics.ToListAsync(ct);
+
     public async Task AddAsync(Clinic clinic, CancellationToken ct = default)
         => await _ctx.Clinics.AddAsync(clinic, ct);
 

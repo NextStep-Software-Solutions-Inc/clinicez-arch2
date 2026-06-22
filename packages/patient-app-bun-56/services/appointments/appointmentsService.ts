@@ -11,13 +11,10 @@ import type { ExpoSQLiteDatabase } from 'drizzle-orm/expo-sqlite';
 import { appointments } from '@db/schema/appointments';
 import { bookingDrafts } from '@db/schema/bookingDrafts';
 import { clinics } from '@db/schema/clinics';
-import {
-    getAppointments,
-    getAvailableSlots,
-    getServiceOptions,
-    getProviderOptions,
-} from './appointmentsMockApi';
-import { getClinicDetailOnline } from '../discovery/discoveryService';
+// No mock imports
+import { getClinicDetailOnline, listClinics } from '../discovery/discoveryService';
+import { fetchAppointmentsLive } from '../api/appointmentsApi';
+import type { RemoteAppointment } from '../api/appointmentsApi';
 import type {
     AppointmentItem,
     AvailableSlotsResponse,
@@ -52,8 +49,9 @@ function localBookingToAppointmentItem(
     const dateStr = draft.preferredDate ?? new Date().toISOString().slice(0, 10);
     const timeStr = draft.preferredTime ?? '09:00';
     const scheduledAt = (() => {
-        try { return new Date(`${dateStr}T${timeStr}:00`).toISOString(); }
-        catch { return new Date().toISOString(); }
+        const [result, error] = safeRun(() => new Date(`${dateStr}T${timeStr}:00`))
+        if (error || result === null) return new Date().toISOString();
+        return result.toISOString();
     })();
 
     return {
@@ -84,6 +82,42 @@ function localBookingToAppointmentItem(
         notes: cleanNotes,
         attachedDocuments: [],
         cachedAt: draft.updatedAt.toISOString(),
+        paymentStatus: null,
+        paymentDueAt: null,
+        invoiceAmount: null,
+        currency: 'PHP',
+    };
+}
+
+function remoteToLocalItem(remote: RemoteAppointment): AppointmentItem {
+    return {
+        id: remote.id,
+        patientId: '',
+        clinic: {
+            id: remote.clinicId,
+            name: remote.clinicName,
+            address: '',
+            logoUrl: null,
+            coverImageUrl: null,
+            phoneNumber: '',
+        },
+        provider: {
+            id: remote.provider.id,
+            name: remote.provider.name,
+            specialty: remote.provider.specialty ?? '',
+            avatarUrl: remote.provider.avatarUrl ?? null,
+            bio: '',
+            credentials: [],
+            affiliatedClinics: [],
+            rating: 0,
+        },
+        serviceType: remote.serviceType ?? 'Consultation',
+        scheduledAt: remote.scheduledAt,
+        durationMinutes: remote.durationMinutes,
+        status: remote.status as any,
+        notes: remote.notes ?? null,
+        attachedDocuments: [],
+        cachedAt: new Date().toISOString(),
         paymentStatus: null,
         paymentDueAt: null,
         invoiceAmount: null,
@@ -208,19 +242,33 @@ async function readFromCache(
 export async function fetchAppointments(
     patientId: string,
     db: ExpoSQLiteDatabase<any>,
+    getToken: () => Promise<string | null>,
 ): Promise<FetchAppointmentsResult> {
-    // Always load locally-confirmed bookings first — these persist regardless of
-    // API availability and should always be visible to the user.
     const localBookings = await loadLocalBookings(db, patientId);
+    const netInfo = await NetInfo.fetch();
+    const isOnline = netInfo.isConnected && netInfo.isInternetReachable;
+
+    if (!isOnline) {
+        const cached = await readFromCache(db, patientId);
+        const cachedAt = cached.length > 0 ? cached[0].cachedAt : null;
+        return {
+            items: mergeWithLocalBookings(localBookings, cached),
+            isFromCache: true,
+            cachedAt,
+        };
+    }
 
     try {
-        const response = await getAppointments(patientId);
-        const apiItems = response.appointments;
+        const res = await fetchAppointmentsLive(getToken, patientId);
+        const apiItems = res.items.map(remoteToLocalItem);
+
+        apiItems.sort((a, b) => new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime());
+
         await persistToCache(db, patientId, apiItems);
         return {
             items: mergeWithLocalBookings(localBookings, apiItems),
             isFromCache: false,
-            cachedAt: response.fetchedAt,
+            cachedAt: new Date().toISOString(),
         };
     } catch {
         const cached = await readFromCache(db, patientId);
@@ -231,6 +279,20 @@ export async function fetchAppointments(
             cachedAt,
         };
     }
+}
+
+export async function getCachedAppointmentsWithLocalBookings(
+    patientId: string,
+    db: ExpoSQLiteDatabase<any>,
+): Promise<FetchAppointmentsResult> {
+    const localBookings = await loadLocalBookings(db, patientId);
+    const cached = await readFromCache(db, patientId);
+    const cachedAt = cached.length > 0 ? cached[0].cachedAt : null;
+    return {
+        items: mergeWithLocalBookings(localBookings, cached),
+        isFromCache: true,
+        cachedAt,
+    };
 }
 
 /**
@@ -356,6 +418,7 @@ export async function rescheduleAppointment(
 }
 
 import { fetchAvailableSlotsLive } from '../api/appointmentsApi';
+import { safeRun } from '../../utils/safe';
 
 /**
  * Fetches available time slots for a clinic on a given date.
@@ -367,15 +430,8 @@ export async function fetchAvailableSlots(
     date: string,
     getToken: () => Promise<string | null>,
 ): Promise<AvailableSlotsResponse> {
-    try {
-        const live = await fetchAvailableSlotsLive(getToken, clinicId, providerId, date);
-        if (live && live.slots) {
-            return live as AvailableSlotsResponse;
-        }
-    } catch (err) {
-        console.log('Failed to fetch live slots, falling back to mock:', err);
-    }
-    return getAvailableSlots(clinicId, date);
+    const live = await fetchAvailableSlotsLive(getToken, clinicId, providerId, date);
+    return live as AvailableSlotsResponse;
 }
 
 /**
@@ -387,15 +443,9 @@ export async function fetchServiceOptions(
     patientId: string,
     getToken: () => Promise<string | null>
 ): Promise<BookingServiceOption[]> {
-    try {
-        const detail = await getClinicDetailOnline(patientId, clinicId, getToken);
-        if (detail && detail.services.length > 0) {
-            return detail.services.map(s => ({ ...s, durationMinutes: s.durationMinutes ?? 0 }));
-        }
-    } catch (err) {
-        console.log('Failed to fetch real services, falling back to mock:', err);
-    }
-    return getServiceOptions(clinicId);
+    const detail = await getClinicDetailOnline(patientId, clinicId, getToken);
+    if (!detail) throw new Error('Clinic not found');
+    return detail.services.map(s => ({ ...s, durationMinutes: s.durationMinutes ?? 0 }));
 }
 
 /**
@@ -407,13 +457,7 @@ export async function fetchProviderOptions(
     patientId: string,
     getToken: () => Promise<string | null>
 ): Promise<BookingProviderOption[]> {
-    try {
-        const detail = await getClinicDetailOnline(patientId, clinicId, getToken);
-        if (detail && detail.healthcareProviders.length > 0) {
-            return detail.healthcareProviders;
-        }
-    } catch (err) {
-        console.log('Failed to fetch real providers, falling back to mock:', err);
-    }
-    return getProviderOptions(clinicId);
+    const detail = await getClinicDetailOnline(patientId, clinicId, getToken);
+    if (!detail) throw new Error('Clinic not found');
+    return detail.healthcareProviders;
 }

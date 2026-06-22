@@ -17,7 +17,7 @@ import { usePatientId } from 'hooks/usePatientId';
 import { db } from '@db/index';
 import { bookingDrafts } from '@db/schema/bookingDrafts';
 import { clinics as clinicsTable } from '@db/schema/clinics';
-import { fetchAppointments } from '../../services/appointments/appointmentsService';
+import { fetchAppointments, getCachedAppointmentsWithLocalBookings } from '../../services/appointments/appointmentsService';
 import type { AppointmentItem } from '../../services/appointments/types';
 
 type Segment = 0 | 1;
@@ -116,8 +116,9 @@ export default function AppointmentsScreen() {
     const tabBarHeight = (useBottomTabBarHeight?.() || 96) + insets.bottom;
 
     const [appointments, setAppointments] = useState<AppointmentItem[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
     const [isFromCache, setIsFromCache] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
     const [segment, setSegment] = useState<Segment>(0);
     const [drafts, setDrafts] = useState<DraftSummary[]>([]);
     const dbRef = useRef(db);
@@ -154,14 +155,26 @@ export default function AppointmentsScreen() {
     }, [patientId]);
 
     const loadAppointments = useCallback(async () => {
-        setIsLoading(true);
+        // 1. Immediately display cached data
         try {
-            const result = await fetchAppointments(patientId, dbRef.current);
-            setAppointments(result.items);
-            setIsFromCache(result.isFromCache);
-        } catch { /* service layer handles fallback */ }
-        finally { setIsLoading(false); }
-    }, [patientId]);
+            const cachedResult = await getCachedAppointmentsWithLocalBookings(patientId, dbRef.current);
+            setAppointments(cachedResult.items);
+            setIsFromCache(true);
+        } catch { /* ignore cache read error */ }
+        finally { setIsLoading(false); } // Cache loaded, hide skeleton
+
+        // 2. Fetch live data in the background
+        setIsRefreshing(true);
+        try {
+            const liveResult = await fetchAppointments(patientId, dbRef.current, getToken);
+            setAppointments(liveResult.items);
+            setIsFromCache(false);
+        } catch {
+            // Keep cache if it fails
+        } finally {
+            setIsRefreshing(false);
+        }
+    }, [patientId, getToken]);
 
     useFocusEffect(useCallback(() => { loadAppointments(); loadDrafts(); }, [loadAppointments, loadDrafts]));
 
@@ -275,7 +288,7 @@ export default function AppointmentsScreen() {
                 ListHeaderComponent={renderHeader}
                 showsVerticalScrollIndicator={false}
                 onRefresh={loadAppointments}
-                refreshing={isLoading}
+                refreshing={isRefreshing}
                 ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
                 ListEmptyComponent={
                     <View style={styles.emptyWrapper}>

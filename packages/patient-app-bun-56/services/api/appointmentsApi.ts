@@ -31,18 +31,15 @@ export interface ClinicAppointmentsResult {
 // ── API function ──────────────────────────────────────────────────────────────
 
 /**
- * Fetches appointments from a specific clinic's backend, proxied via the PatientApp API.
- * The clinicBaseUrl is the value stored in the local clinics table (clinic.baseUrl).
+ * Fetches appointments directly from the PatientApp backend.
  */
-export async function fetchClinicAppointments(
+export async function fetchAppointmentsLive(
     getToken: () => Promise<string | null>,
     patientId: string,
-    clinicBaseUrl: string,
 ): Promise<ClinicAppointmentsResult> {
-    const params = new URLSearchParams({ clinicBaseUrl });
     return api.get<ClinicAppointmentsResult>(
         getToken,
-        `/patients/${patientId}/clinic-appointments?${params}`,
+        `/patients/${patientId}/appointments`,
     );
 }
 

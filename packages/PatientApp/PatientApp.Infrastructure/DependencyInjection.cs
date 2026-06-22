@@ -12,12 +12,14 @@ using PatientApp.Domain.Interfaces;
 using PatientApp.Infrastructure.Options;
 using PatientApp.Infrastructure.Persistence;
 using PatientApp.Infrastructure.Persistence.Repositories;
+using PatientApp.Infrastructure.Services;
 using PatientApp.Infrastructure.Services.Auth;
 using PatientApp.Infrastructure.Services.Clinic;
 using PatientApp.Infrastructure.Services.Jobs;
 using PatientApp.Infrastructure.Services.Jobs.Processors;
 using PatientApp.Infrastructure.Services.Session;
 using PatientApp.Infrastructure.Services.Storage;
+using PatientApp.Infrastructure.Services.Workers;
 using StackExchange.Redis;
 
 namespace PatientApp.Infrastructure;
@@ -163,6 +165,8 @@ public static class DependencyInjection
             DbSeeder.Seed(dbContext);
         }
 
+        services.AddHostedService<ClinicPingBackgroundService>();
+        
         return services;
     }
 }

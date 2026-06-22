@@ -406,7 +406,7 @@ export default function BookingDraftScreen({ route }: Props) {
   useEffect(() => {
     let mounted = true;
     setIsLoadingClinics(true);
-    listClinics(patientId, { filter: 'joined' })
+    listClinics(patientId, { filter: 'joined' }, getToken)
       .then(async items => {
         if (!mounted) return;
         let finalItems = [...items];
