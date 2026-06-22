@@ -21,7 +21,10 @@ public sealed class ClinicRepository : IClinicRepository
     }
 
     public Task<Clinic?> GetByIdAsync(Guid id, CancellationToken ct = default)
-        => _ctx.Clinics.Include(c => c.OrganizationLinks).ThenInclude(l => l.Organization)
+        => _ctx.Clinics
+            .Include(c => c.OrganizationLinks).ThenInclude(l => l.Organization)
+            .Include(c => c.HealthcareProviders)
+            .Include(c => c.Services)
             .FirstOrDefaultAsync(c => c.Id == id, ct);
 
     public async Task<IReadOnlyList<Clinic>> GetByOrganizationAsync(Guid organizationId, CancellationToken ct = default)

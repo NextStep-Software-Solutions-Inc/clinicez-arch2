@@ -235,6 +235,10 @@ namespace PatientApp.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<int>("ActiveMemberCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("active_member_count");
+
                     b.Property<string>("Address")
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)")
@@ -314,6 +318,64 @@ namespace PatientApp.Infrastructure.Migrations
                         .HasDatabaseName("ix_clinics_featured_score");
 
                     b.ToTable("clinics", (string)null);
+                });
+
+            modelBuilder.Entity("PatientApp.Domain.Entities.ClinicHealthcareProvider", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AvatarUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("avatar_url");
+
+                    b.Property<Guid>("ClinicId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("clinic_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("display_order");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("ProfessionalLicenseNo")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("professional_license_no");
+
+                    b.Property<string>("Specialty")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("specialty");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_clinic_healthcare_providers");
+
+                    b.HasIndex("ClinicId", "IsActive")
+                        .HasDatabaseName("ix_clinic_healthcare_providers_clinic_id_is_active");
+
+                    b.ToTable("clinic_healthcare_providers", (string)null);
                 });
 
             modelBuilder.Entity("PatientApp.Domain.Entities.ClinicMembership", b =>
@@ -451,6 +513,62 @@ namespace PatientApp.Infrastructure.Migrations
                         .HasDatabaseName("ix_clinic_organization_links_clinic_id_organization_id");
 
                     b.ToTable("clinic_organization_links", (string)null);
+                });
+
+            modelBuilder.Entity("PatientApp.Domain.Entities.ClinicService", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ClinicId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("clinic_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("description");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("display_order");
+
+                    b.Property<int?>("DurationMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("duration_minutes");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<decimal?>("Price")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("price");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_clinic_services");
+
+                    b.HasIndex("ClinicId", "IsActive")
+                        .HasDatabaseName("ix_clinic_services_clinic_id_is_active");
+
+                    b.ToTable("clinic_services", (string)null);
                 });
 
             modelBuilder.Entity("PatientApp.Domain.Entities.ClinicalAssessment", b =>
@@ -1641,6 +1759,53 @@ namespace PatientApp.Infrastructure.Migrations
                         .HasDatabaseName("ix_organization_memberships_patient_id_organization_id");
 
                     b.ToTable("organization_memberships", (string)null);
+                });
+
+            modelBuilder.Entity("PatientApp.Domain.Entities.OrganizationRole", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("description");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("organization_id");
+
+                    b.Property<string>("RoleId")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("role_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_organization_roles");
+
+                    b.HasIndex("OrganizationId", "RoleId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_organization_roles_organization_id_role_id");
+
+                    b.ToTable("organization_roles", (string)null);
                 });
 
             modelBuilder.Entity("PatientApp.Domain.Entities.Patient", b =>
@@ -4589,6 +4754,18 @@ namespace PatientApp.Infrastructure.Migrations
                     b.Navigation("Patient");
                 });
 
+            modelBuilder.Entity("PatientApp.Domain.Entities.ClinicHealthcareProvider", b =>
+                {
+                    b.HasOne("PatientApp.Domain.Entities.Clinic", "Clinic")
+                        .WithMany("HealthcareProviders")
+                        .HasForeignKey("ClinicId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_clinic_healthcare_providers_clinics_clinic_id");
+
+                    b.Navigation("Clinic");
+                });
+
             modelBuilder.Entity("PatientApp.Domain.Entities.ClinicMembership", b =>
                 {
                     b.HasOne("PatientApp.Domain.Entities.Clinic", "Clinic")
@@ -4629,6 +4806,18 @@ namespace PatientApp.Infrastructure.Migrations
                     b.Navigation("Clinic");
 
                     b.Navigation("Organization");
+                });
+
+            modelBuilder.Entity("PatientApp.Domain.Entities.ClinicService", b =>
+                {
+                    b.HasOne("PatientApp.Domain.Entities.Clinic", "Clinic")
+                        .WithMany("Services")
+                        .HasForeignKey("ClinicId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_clinic_services_clinics_clinic_id");
+
+                    b.Navigation("Clinic");
                 });
 
             modelBuilder.Entity("PatientApp.Domain.Entities.ClinicalAssessment", b =>
@@ -4802,6 +4991,18 @@ namespace PatientApp.Infrastructure.Migrations
                     b.Navigation("Organization");
 
                     b.Navigation("Patient");
+                });
+
+            modelBuilder.Entity("PatientApp.Domain.Entities.OrganizationRole", b =>
+                {
+                    b.HasOne("PatientApp.Domain.Entities.Organization", "Organization")
+                        .WithMany("Roles")
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_organization_roles_organizations_organization_id");
+
+                    b.Navigation("Organization");
                 });
 
             modelBuilder.Entity("PatientApp.Domain.Entities.PatientAddress", b =>
@@ -5137,9 +5338,13 @@ namespace PatientApp.Infrastructure.Migrations
                 {
                     b.Navigation("BookingDrafts");
 
+                    b.Navigation("HealthcareProviders");
+
                     b.Navigation("Memberships");
 
                     b.Navigation("OrganizationLinks");
+
+                    b.Navigation("Services");
                 });
 
             modelBuilder.Entity("PatientApp.Domain.Entities.Consultation", b =>
@@ -5165,6 +5370,8 @@ namespace PatientApp.Infrastructure.Migrations
                     b.Navigation("ClinicLinks");
 
                     b.Navigation("Memberships");
+
+                    b.Navigation("Roles");
                 });
 
             modelBuilder.Entity("PatientApp.Domain.Entities.Patient", b =>

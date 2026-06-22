@@ -49,12 +49,12 @@ export default function TravelHistoryScreen() {
     const { id, ...rest } = data;
     try {
       if (id) {
-        await db.update(patientTravelHistory).set({ ...rest, updatedAt: new Date() }).where(eq(patientTravelHistory.id, id));
-        await addToSyncQueue('patient_travel_history', id, 'update', { ...rest, patientId, id });
+        await db.update(patientTravelHistory).set({ ...rest, purpose: (rest.purpose as any) || 'Other', updatedAt: new Date() }).where(eq(patientTravelHistory.id, id));
+        await addToSyncQueue('patient_travel_history', id, 'update', { ...rest, purpose: (rest.purpose as any) || 'Other', patientId, id });
       } else {
         const newId = randomUUID();
-        await db.insert(patientTravelHistory).values({ id: newId, patientId, ...rest, createdAt: new Date(), updatedAt: new Date() });
-        await addToSyncQueue('patient_travel_history', newId, 'create', { ...rest, patientId, id: newId });
+        await db.insert(patientTravelHistory).values({ id: newId, patientId, ...rest, purpose: (rest.purpose as any) || 'Other', createdAt: new Date(), updatedAt: new Date() });
+        await addToSyncQueue('patient_travel_history', newId, 'create', { ...rest, purpose: (rest.purpose as any) || 'Other', patientId, id: newId });
       }
       sheetRef.current?.dismiss();
       load();
@@ -77,8 +77,8 @@ export default function TravelHistoryScreen() {
           <Controller control={control} name="destination" render={({ field }) => (
             <ProfileFormField label="Destination / City" value={field.value} onChangeText={field.onChange} required placeholder="e.g. Bangkok" />
           )} />
-          <Controller control={control} name="country" render={({ field }) => (
-            <ProfileFormField label="Country" value={field.value} onChangeText={field.onChange} required placeholder="e.g. Thailand" />
+          <Controller control={control} name="cityProvince" render={({ field }) => (
+            <ProfileFormField label="Country / Province" value={field.value} onChangeText={field.onChange} required placeholder="e.g. Thailand" />
           )} />
           <Controller control={control} name="departureDate" render={({ field }) => (
             <ProfileDatePicker label="Departure Date" value={field.value} onChange={field.onChange} />
@@ -86,13 +86,11 @@ export default function TravelHistoryScreen() {
           <Controller control={control} name="returnDate" render={({ field }) => (
             <ProfileDatePicker label="Return Date" value={field.value} onChange={field.onChange} />
           )} />
-          <Controller control={control} name="purposeOfTravel" render={({ field }) => (
+          <Controller control={control} name="purpose" render={({ field }) => (
             <ProfileFormField label="Purpose" value={field.value} onChangeText={field.onChange} placeholder="e.g. Tourism, Business" />
           )} />
-          <Controller control={control} name="vaccinationsGiven" render={({ field }) => (
-            <ProfileFormField label="Vaccinations Before / During" value={field.value} onChangeText={field.onChange} placeholder="e.g. Typhoid, Hepatitis A" />
-          )} />
-          <Controller control={control} name="healthIssuesDuring" render={({ field }) => (
+
+          <Controller control={control} name="illnessDuringAfterTravel" render={({ field }) => (
             <ProfileFormField label="Health Issues During Travel" value={field.value} onChangeText={field.onChange} multiline placeholder="None, or describe" />
           )} />
         </BottomSheetScrollView>

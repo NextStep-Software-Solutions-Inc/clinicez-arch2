@@ -49,6 +49,7 @@ import { db } from '@db/index';
 import { bookingDrafts } from '@db/schema/bookingDrafts';
 import { filesMetadata } from '@db/schema/filesMetadata';
 import {
+  getClinicDetail,
   listClinics,
   saveBookingDraft,
   createBookingDraftOnline,
@@ -406,15 +407,30 @@ export default function BookingDraftScreen({ route }: Props) {
     let mounted = true;
     setIsLoadingClinics(true);
     listClinics(patientId, { filter: 'joined' })
-      .then(items => {
+      .then(async items => {
         if (!mounted) return;
-        setClinics(items);
-        if (!selectedClinicId && items.length > 0) setSelectedClinicId(items[0].id);
+        let finalItems = [...items];
+
+        if (initialClinicId && !finalItems.some(c => c.id === initialClinicId)) {
+          try {
+            const specificClinic = await getClinicDetail(patientId, initialClinicId);
+            if (specificClinic) {
+              finalItems = [specificClinic, ...finalItems];
+            }
+          } catch (err) {
+            console.warn('Failed to load initial clinic for booking:', err);
+          }
+        }
+
+        if (mounted) {
+          setClinics(finalItems);
+          if (!selectedClinicId && finalItems.length > 0) setSelectedClinicId(finalItems[0].id);
+        }
       })
       .catch(() => Alert.alert('Error', 'Unable to load your clinics.'))
       .finally(() => { if (mounted) setIsLoadingClinics(false); });
     return () => { mounted = false; };
-  }, [patientId]);
+  }, [patientId, initialClinicId]);
 
   // ── Load services when clinic changes ─────────────────────────────────────
 
@@ -423,7 +439,7 @@ export default function BookingDraftScreen({ route }: Props) {
     let mounted = true;
     setIsLoadingServices(true);
     setSelectedService(null);
-    fetchServiceOptions(selectedClinicId)
+    fetchServiceOptions(selectedClinicId, patientId, getToken)
       .then(s => { if (mounted) setServices(s); })
       .catch(() => Alert.alert('Error', 'Unable to load services.'))
       .finally(() => { if (mounted) setIsLoadingServices(false); });
@@ -481,7 +497,7 @@ export default function BookingDraftScreen({ route }: Props) {
     if (step !== 2 || !selectedClinicId) return;
     let mounted = true;
     setIsLoadingProviders(true);
-    fetchProviderOptions(selectedClinicId)
+    fetchProviderOptions(selectedClinicId, patientId, getToken)
       .then(p => { if (mounted) setProviders(p); })
       .catch(() => Alert.alert('Error', 'Unable to load providers.'))
       .finally(() => { if (mounted) setIsLoadingProviders(false); });

@@ -35,6 +35,8 @@ interface AuthContextType {
   userId: string | null;
   showUserNotFoundAlert: boolean;
   setShowUserNotFoundAlert: (show: boolean) => void;
+  verificationError: Error | null;
+  retryVerification: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -49,10 +51,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [internalPatientId, setInternalPatientId] = useState<string | null>(null);
   const [showUserNotFoundAlert, setShowUserNotFoundAlert] = useState(false);
+  const [verificationError, setVerificationError] = useState<Error | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
   const isVerifying = !!(isSignedIn && !internalPatientId);
   const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const autoLockPauseDepthRef = useRef(0);
+
+  const getTokenRef = useRef(getToken);
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
+
+  const retryVerification = useCallback(() => {
+    setVerificationError(null);
+    setRetryCount((prev) => prev + 1);
+  }, []);
 
   const clearLockTimer = useCallback(() => {
     if (lockTimerRef.current) {
@@ -107,13 +121,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const verifyUser = async () => {
       if (isSignedIn && userId) {
         try {
+          setVerificationError(null);
           const storedId = await SecureStore.getItemAsync(INTERNAL_PATIENT_ID_KEY);
           if (storedId) {
             setInternalPatientId(storedId);
             return;
           }
 
-          const patient = await getPatientByClerkId(getToken, userId);
+          const patient = await getPatientByClerkId(getTokenRef.current, userId);
           if (patient && patient.id) {
             await SecureStore.setItemAsync(INTERNAL_PATIENT_ID_KEY, patient.id);
             setInternalPatientId(patient.id);
@@ -127,15 +142,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }
         } catch (err) {
           console.error('[AuthContext] Error verifying user in backend:', err);
+          setVerificationError(err as Error);
         }
       } else {
         setInternalPatientId(null);
+        setVerificationError(null);
         await SecureStore.deleteItemAsync(INTERNAL_PATIENT_ID_KEY).catch(() => {});
       }
     };
 
     verifyUser();
-  }, [isSignedIn, userId, getToken]);
+  }, [isSignedIn, userId, retryCount]);
 
   // Lock only after real background time. Native pickers can briefly move the app
   // through inactive/background while the user is still completing an in-app action.
@@ -163,6 +180,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await signOut();
     setIsLocked(false);
     setInternalPatientId(null);
+    setVerificationError(null);
     await SecureStore.deleteItemAsync(INTERNAL_PATIENT_ID_KEY).catch(() => {});
   };
 
@@ -255,6 +273,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         userId: userId ?? null,
         showUserNotFoundAlert,
         setShowUserNotFoundAlert,
+        verificationError,
+        retryVerification,
       }}
     >
       {children}

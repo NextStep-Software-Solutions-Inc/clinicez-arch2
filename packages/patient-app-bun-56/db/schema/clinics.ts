@@ -16,6 +16,7 @@ export const clinics = sqliteTable('clinics', {
   termsAndConditionsUrl: text('terms_and_conditions_url'),
   specialtiesJson: text('specialties_json').notNull().default('[]'),
   requiredShareFieldsJson: text('required_share_fields_json').notNull().default('[]'),
+  activeMemberCount: integer('active_member_count').notNull().default(0),
   joinedAt: integer('joined_at', { mode: 'timestamp_ms' }).notNull(),
   syncedAt: integer('synced_at', { mode: 'timestamp_ms' }),
 });

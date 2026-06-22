@@ -1,6 +1,7 @@
 using MediatR;
 using PatientApp.Application.Common.DTOs;
 using PatientApp.Domain.Interfaces;
+using System.Linq;
 
 namespace PatientApp.Application.Features.Clinics.Queries.GetClinicDetail;
 
@@ -27,7 +28,7 @@ public sealed class GetClinicDetailQueryHandler
         {
             var membership = await _membershipRepo.GetByPatientAndClinicAsync(
                 request.ForPatientId.Value, request.ClinicId, cancellationToken);
-            membershipStatus = membership?.Status.ToString();
+            membershipStatus = membership?.Status.ToString().ToLowerInvariant();
         }
 
         var linkedOrgs = clinic.OrganizationLinks
@@ -40,12 +41,26 @@ public sealed class GetClinicDetailQueryHandler
                 l.Organization.RequiredShareFieldsJson, l.Organization.RolesJson))
             .ToList().AsReadOnly();
 
+        var providers = clinic.HealthcareProviders
+            .Where(p => p.IsActive)
+            .OrderBy(p => p.DisplayOrder)
+            .Select(p => new ClinicHealthcareProviderDto(
+                p.Id, p.Name, p.Specialty, p.AvatarUrl, p.ProfessionalLicenseNo))
+            .ToList().AsReadOnly();
+
+        var services = clinic.Services
+            .Where(s => s.IsActive)
+            .OrderBy(s => s.DisplayOrder)
+            .Select(s => new ClinicServiceDto(
+                s.Id, s.Name, s.Description, s.DurationMinutes, s.Price))
+            .ToList().AsReadOnly();
+
         return new ClinicDetailDto(
             clinic.Id, clinic.Name, clinic.Description, clinic.Address,
             clinic.IsPublic, clinic.SupportsAppointments, clinic.BaseUrl,
             clinic.LogoUrl, clinic.CoverImageUrl, clinic.PrivacyPolicyUrl,
             clinic.TermsAndConditionsUrl, clinic.SpecialtiesJson,
             clinic.RequiredShareFieldsJson, clinic.FeaturedScore,
-            linkedOrgs, membershipStatus);
+            clinic.ActiveMemberCount, providers, services, linkedOrgs, membershipStatus);
     }
 }

@@ -1,4 +1,5 @@
-import { Image, StyleSheet, View } from 'react-native';
+import { useState, useEffect } from 'react';
+import { Image, StyleSheet, View, ActivityIndicator } from 'react-native';
 import ThemedText from './ThemedText';
 
 const COVER_HEIGHT = 104;
@@ -26,38 +27,75 @@ export default function EntityMediaCardHeader({
     .join('')
     .toUpperCase();
 
+  const [coverError, setCoverError] = useState(false);
+  const [coverLoading, setCoverLoading] = useState(false);
+  const [logoError, setLogoError] = useState(false);
+  const [logoLoading, setLogoLoading] = useState(false);
+
+  useEffect(() => {
+    setCoverError(false);
+  }, [coverImageUrl]);
+
+  useEffect(() => {
+    setLogoError(false);
+  }, [logoUrl]);
+
   return (
     <View style={styles.wrapper}>
-      {coverImageUrl ? (
+      <View style={styles.coverWrapper}>
         <Image
-          source={{ uri: coverImageUrl }}
+          source={require('../../assets/fallback_cover.png')}
           style={styles.cover}
           resizeMode="cover"
-          accessibilityRole="image"
-          accessibilityLabel={`${name} cover photo`}
         />
-      ) : (
-        <View style={[styles.cover, styles.coverFallback]} />
-      )}
+        {coverImageUrl && !coverError && (
+          <Image
+            source={{ uri: coverImageUrl }}
+            style={[styles.cover, { position: 'absolute', top: 0, left: 0, right: 0 }]}
+            resizeMode="cover"
+            accessibilityRole="image"
+            accessibilityLabel={`${name} cover photo`}
+            onLoadStart={() => setCoverLoading(true)}
+            onLoadEnd={() => setCoverLoading(false)}
+            onError={() => { setCoverError(true); setCoverLoading(false); }}
+          />
+        )}
+        {coverLoading && (
+          <View style={[StyleSheet.absoluteFill, styles.loaderContainer]}>
+            <ActivityIndicator size="small" color="#ffffff" />
+          </View>
+        )}
+      </View>
 
       <View style={[styles.badge, { backgroundColor: badgeColor }]}>
         <ThemedText style={styles.badgeText}>{badgeLabel}</ThemedText>
       </View>
 
       <View style={styles.logoFrame}>
-        {logoUrl ? (
+        <View style={styles.logoWrapper}>
           <Image
-            source={{ uri: logoUrl }}
+            source={require('../../assets/fallback_profile.png')}
             style={styles.logo}
             resizeMode="cover"
-            accessibilityRole="image"
-            accessibilityLabel={`${name} logo`}
           />
-        ) : (
-          <View style={[styles.logo, styles.logoFallback]}>
-            <ThemedText style={styles.logoInitials}>{initials}</ThemedText>
-          </View>
-        )}
+          {logoUrl && !logoError && (
+            <Image
+              source={{ uri: logoUrl }}
+              style={[styles.logo, { position: 'absolute', top: 0, left: 0 }]}
+              resizeMode="cover"
+              accessibilityRole="image"
+              accessibilityLabel={`${name} logo`}
+              onLoadStart={() => setLogoLoading(true)}
+              onLoadEnd={() => setLogoLoading(false)}
+              onError={() => { setLogoError(true); setLogoLoading(false); }}
+            />
+          )}
+          {logoLoading && (
+            <View style={[StyleSheet.absoluteFill, styles.logoLoaderContainer]}>
+              <ActivityIndicator size="small" color="#2563EB" />
+            </View>
+          )}
+        </View>
       </View>
     </View>
   );
@@ -72,6 +110,28 @@ const styles = StyleSheet.create({
     height: COVER_HEIGHT,
     width: '100%',
     backgroundColor: '#1D3A6E',
+  },
+  coverWrapper: {
+    height: COVER_HEIGHT,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  logoWrapper: {
+    width: LOGO_SIZE,
+    height: LOGO_SIZE,
+    borderRadius: LOGO_SIZE / 2,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  loaderContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.15)',
+  },
+  logoLoaderContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.5)',
   },
   coverFallback: {
     backgroundColor: '#1D3A6E',

@@ -43,4 +43,12 @@ public sealed class OrganizationRepository : IOrganizationRepository
             q = q.Where(o => EF.Functions.ILike(o.Name, $"%{query}%"));
         return q.CountAsync(ct);
     }
+
+    public async Task<IReadOnlyList<OrganizationRole>> GetRolesAsync(Guid organizationId, CancellationToken ct = default)
+    {
+        return await _ctx.OrganizationRoles
+            .Where(r => r.OrganizationId == organizationId)
+            .OrderBy(r => r.Name)
+            .ToListAsync(ct);
+    }
 }

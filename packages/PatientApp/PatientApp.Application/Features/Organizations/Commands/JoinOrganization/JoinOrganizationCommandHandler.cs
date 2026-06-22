@@ -4,6 +4,7 @@ using PatientApp.Application.Common.DTOs;
 using PatientApp.Application.Common.Errors;
 using PatientApp.Domain.Entities;
 using PatientApp.Domain.Interfaces;
+using PatientApp.Domain.Enums;
 
 namespace PatientApp.Application.Features.Organizations.Commands.JoinOrganization;
 
@@ -29,17 +30,68 @@ public sealed class JoinOrganizationCommandHandler
         _ = await _patientRepo.GetByIdAsync(request.PatientId, cancellationToken)
             ?? throw new NotFoundException($"Patient '{request.PatientId}' was not found.");
 
-        var org = await _orgRepo.GetByInviteCodeAsync(request.InviteCode, cancellationToken)
-            ?? throw new NotFoundException($"No organization found for invite code '{request.InviteCode}'.");
+        Organization? org = null;
+        if (request.OrganizationId.HasValue)
+        {
+            org = await _orgRepo.GetByIdAsync(request.OrganizationId.Value, cancellationToken);
+            if (org is null)
+                throw new NotFoundException($"Organization '{request.OrganizationId.Value}' was not found.");
 
-        var existing = await _membershipRepo.GetByPatientAndOrgAsync(request.PatientId, org.Id, cancellationToken);
-        if (existing is not null)
-            throw new ConflictException($"Already a member of organization '{org.Name}'.");
+            if (!org.IsPublic)
+            {
+                if (string.IsNullOrWhiteSpace(request.InviteCode))
+                    throw new ValidationException("Invite code is required for private organizations.");
+
+                if (org.InviteCode != request.InviteCode)
+                    throw new ValidationException("The invite code is invalid for this organization.");
+            }
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(request.InviteCode))
+                throw new ValidationException("Invite code or organization ID must be provided.");
+
+            org = await _orgRepo.GetByInviteCodeAsync(request.InviteCode, cancellationToken);
+            if (org is null)
+                throw new NotFoundException($"No organization found for invite code '{request.InviteCode}'.");
+        }
 
         var roles = System.Text.Json.JsonSerializer.Deserialize<List<Dictionary<string, string>>>(org.RolesJson) ?? [];
         var role = roles.FirstOrDefault(r => r.TryGetValue("id", out var id) && id == request.RoleId)
             ?? roles.FirstOrDefault()
             ?? new Dictionary<string, string> { ["id"] = request.RoleId, ["name"] = request.RoleId };
+
+        var existing = await _membershipRepo.GetByPatientAndOrgWithDeletedAsync(request.PatientId, org.Id, cancellationToken);
+        if (existing is not null)
+        {
+            if (!existing.IsDeleted && (existing.Status == ClinicMembershipStatus.Active || existing.Status == ClinicMembershipStatus.Pending))
+            {
+                throw new ConflictException($"Already a member or request is pending for organization '{org.Name}'.");
+            }
+
+            if (existing.IsDeleted)
+            {
+                existing.IsDeleted = false;
+                existing.DeletedAt = null;
+                existing.DeletedBy = null;
+            }
+
+            existing.Status = ClinicMembershipStatus.Pending;
+            existing.RoleId = request.RoleId;
+            existing.RoleName = role.GetValueOrDefault("name", request.RoleId);
+            existing.ConsentPrivacyPolicy = request.ConsentPrivacyPolicy;
+            existing.ConsentTermsAndConditions = request.ConsentTermsAndConditions;
+            existing.ConsentDataSharing = request.ConsentDataSharing;
+            existing.ConsentedAt = DateTime.UtcNow;
+
+            _membershipRepo.Update(existing);
+            await _uow.SaveChangesAsync(cancellationToken);
+
+            return new OrganizationMembershipDto(
+                existing.Id, org.Id, org.Name,
+                existing.RoleId, existing.RoleName, existing.Status.ToString(),
+                existing.ConsentDataSharing, existing.ConsentedAt, existing.CreatedAt);
+        }
 
         var membership = new OrganizationMembership
         {

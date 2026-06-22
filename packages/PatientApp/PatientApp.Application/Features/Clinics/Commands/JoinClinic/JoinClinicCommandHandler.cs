@@ -2,6 +2,7 @@ using CLINICEZ.Shared.Exceptions;
 using MediatR;
 using PatientApp.Domain.Entities;
 using PatientApp.Domain.Interfaces;
+using PatientApp.Domain.Enums;
 
 namespace PatientApp.Application.Features.Clinics.Commands.JoinClinic;
 
@@ -28,9 +29,31 @@ public sealed class JoinClinicCommandHandler : IRequestHandler<JoinClinicCommand
         _ = await _clinicRepo.GetByIdAsync(request.ClinicId, cancellationToken)
             ?? throw new NotFoundException($"Clinic '{request.ClinicId}' was not found.");
 
-        var existing = await _membershipRepo.GetByPatientAndClinicAsync(request.PatientId, request.ClinicId, cancellationToken);
+        var existing = await _membershipRepo.GetByPatientAndClinicWithDeletedAsync(request.PatientId, request.ClinicId, cancellationToken);
         if (existing is not null)
-            throw new ConflictException($"Already a member of this clinic.");
+        {
+            if (!existing.IsDeleted && (existing.Status == ClinicMembershipStatus.Active || existing.Status == ClinicMembershipStatus.Pending))
+            {
+                throw new ConflictException($"Already a member of this clinic.");
+            }
+
+            if (existing.IsDeleted)
+            {
+                existing.IsDeleted = false;
+                existing.DeletedAt = null;
+                existing.DeletedBy = null;
+            }
+
+            existing.Status = ClinicMembershipStatus.Pending;
+            existing.ConsentPrivacyPolicy = request.ConsentPrivacyPolicy;
+            existing.ConsentTermsAndConditions = request.ConsentTermsAndConditions;
+            existing.ConsentDataSharing = request.ConsentDataSharing;
+            existing.ConsentedAt = DateTime.UtcNow;
+
+            _membershipRepo.Update(existing);
+            await _uow.SaveChangesAsync(cancellationToken);
+            return existing.Id;
+        }
 
         var membership = new ClinicMembership
         {

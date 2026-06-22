@@ -159,3 +159,58 @@ public sealed class NotificationPreferencesConfiguration : IEntityTypeConfigurat
     }
 }
 
+public sealed class ClinicHealthcareProviderConfiguration : IEntityTypeConfiguration<ClinicHealthcareProvider>
+{
+    public void Configure(EntityTypeBuilder<ClinicHealthcareProvider> builder)
+    {
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.Name).HasMaxLength(200).IsRequired();
+        builder.Property(e => e.Specialty).HasMaxLength(150).IsRequired();
+        builder.Property(e => e.AvatarUrl).HasMaxLength(500);
+        builder.Property(e => e.ProfessionalLicenseNo).HasMaxLength(50);
+        builder.HasIndex(e => new { e.ClinicId, e.IsActive });
+
+        builder.HasOne(e => e.Clinic)
+            .WithMany(c => c.HealthcareProviders)
+            .HasForeignKey(e => e.ClinicId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public sealed class ClinicServiceConfiguration : IEntityTypeConfiguration<ClinicService>
+{
+    public void Configure(EntityTypeBuilder<ClinicService> builder)
+    {
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.Name).HasMaxLength(200).IsRequired();
+        builder.Property(e => e.Description).HasMaxLength(1000);
+        builder.Property(e => e.Price).HasPrecision(18, 2);
+        builder.HasIndex(e => new { e.ClinicId, e.IsActive });
+
+        builder.HasOne(e => e.Clinic)
+            .WithMany(c => c.Services)
+            .HasForeignKey(e => e.ClinicId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public sealed class OrganizationRoleConfiguration : IEntityTypeConfiguration<OrganizationRole>
+{
+    public void Configure(EntityTypeBuilder<OrganizationRole> builder)
+    {
+        builder.HasKey(e => e.Id);
+        
+        // Ensure a specific RoleId is unique per organization
+        builder.HasIndex(e => new { e.OrganizationId, e.RoleId }).IsUnique();
+        
+        builder.Property(e => e.RoleId).HasMaxLength(50).IsRequired();
+        builder.Property(e => e.Name).HasMaxLength(150).IsRequired();
+        builder.Property(e => e.Description).HasMaxLength(500).IsRequired();
+
+        builder.HasOne(e => e.Organization)
+            .WithMany(o => o.Roles)
+            .HasForeignKey(e => e.OrganizationId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+

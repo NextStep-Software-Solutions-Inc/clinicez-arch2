@@ -5,7 +5,8 @@ namespace PatientApp.Application.Features.Organizations.Commands.JoinOrganizatio
 
 public sealed record JoinOrganizationCommand(
     Guid PatientId,
-    string InviteCode,
+    Guid? OrganizationId,
+    string? InviteCode,
     string RoleId,
     bool ConsentPrivacyPolicy,
     bool ConsentTermsAndConditions,

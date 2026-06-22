@@ -22,7 +22,7 @@ public sealed class GetOrganizationByInviteCodeQueryHandler
                 l.Clinic.Id, l.Clinic.Name, l.Clinic.Description, l.Clinic.Address,
                 l.Clinic.IsPublic, l.Clinic.SupportsAppointments,
                 l.Clinic.LogoUrl, l.Clinic.CoverImageUrl,
-                l.Clinic.SpecialtiesJson, l.Clinic.RequiredShareFieldsJson, l.Clinic.FeaturedScore))
+                l.Clinic.SpecialtiesJson, l.Clinic.RequiredShareFieldsJson, l.Clinic.FeaturedScore, l.Clinic.ActiveMemberCount))
             .ToList().AsReadOnly();
 
         return new OrganizationDetailDto(

@@ -53,6 +53,13 @@ export default function ProfileCard() {
 
   const email = user?.emailAddresses[0]?.emailAddress ?? '';
 
+  const [imageError, setImageError] = useState(false);
+  const [imageLoading, setImageLoading] = useState(false);
+
+  useEffect(() => {
+    setImageError(false);
+  }, [avatarSource]);
+
   const handlePickImage = useCallback(async () => {
     // Request permission
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -115,16 +122,33 @@ export default function ProfileCard() {
         accessibilityRole="button"
         style={styles.avatarWrapper}
       >
-        {avatarSource ? (
-          <Image
-            source={{ uri: avatarSource }}
-            style={[styles.avatar, { backgroundColor: colors.border }]}
-          />
-        ) : (
-          <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
-            <ThemedText style={styles.initials}>{initials}</ThemedText>
-          </View>
-        )}
+        <View style={styles.avatarContainer}>
+          {avatarSource ? (
+            <Image
+              source={require('../assets/fallback_profile.png')}
+              style={[styles.avatar, { backgroundColor: colors.border }]}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
+              <ThemedText style={styles.initials}>{initials}</ThemedText>
+            </View>
+          )}
+          {avatarSource && !imageError && (
+            <Image
+              source={{ uri: avatarSource }}
+              style={[styles.avatar, { position: 'absolute', top: 0, left: 0 }]}
+              onLoadStart={() => setImageLoading(true)}
+              onLoadEnd={() => setImageLoading(false)}
+              onError={() => setImageError(true)}
+            />
+          )}
+          {imageLoading && (
+            <View style={[StyleSheet.absoluteFill, styles.avatarLoader]}>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          )}
+        </View>
 
         {/* Camera overlay badge */}
         <View
@@ -171,6 +195,18 @@ const styles = StyleSheet.create({
   },
   avatarWrapper: {
     position: 'relative',
+  },
+  avatarContainer: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  avatarLoader: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.4)',
   },
   avatar: {
     width: 58,

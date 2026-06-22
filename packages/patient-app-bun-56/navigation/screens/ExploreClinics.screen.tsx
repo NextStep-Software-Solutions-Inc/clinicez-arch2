@@ -366,7 +366,7 @@ export default function ExploreClinicsScreen() {
                                 >
                                     <ThemedText style={styles.secondaryActionText}>Details</ThemedText>
                                 </Pressable>
-                                {!item.isJoined && (
+                                {!item.isJoined && item.membershipStatus !== 'pending' && (
                                     <Pressable
                                         onPress={() => openJoinModal(item)}
                                         style={({ pressed }) => [
@@ -376,6 +376,11 @@ export default function ExploreClinicsScreen() {
                                     >
                                         <ThemedText style={styles.primaryActionText}>Join Clinic</ThemedText>
                                     </Pressable>
+                                )}
+                                {item.membershipStatus === 'pending' && (
+                                    <ThemedView style={[styles.primaryAction, { backgroundColor: '#F59E0B', opacity: 0.8, justifyContent: 'center', alignItems: 'center' }]}>
+                                        <ThemedText style={styles.primaryActionText}>Requested</ThemedText>
+                                    </ThemedView>
                                 )}
                                 <Pressable
                                     disabled={!item.supportsAppointments}

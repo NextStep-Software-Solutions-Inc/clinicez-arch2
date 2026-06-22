@@ -1,18 +1,23 @@
 import { useAuth } from '../contexts/AuthContext';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import NetInfo from '@react-native-community/netinfo';
 import { syncPendingProfileWrites } from '../services/api/syncService';
 import { registerSyncTrigger } from '../db/index';
 
 export default function SyncManager() {
   const { getToken, internalPatientId } = useAuth();
+  const getTokenRef = useRef(getToken);
+
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
 
   useEffect(() => {
     if (!internalPatientId) return;
 
     // Trigger sync function
     const triggerSync = () => {
-      syncPendingProfileWrites(internalPatientId, getToken).catch((err) => {
+      syncPendingProfileWrites(internalPatientId, getTokenRef.current).catch((err) => {
         console.warn('[SyncManager] Background profile sync failed:', err);
       });
     };
@@ -35,7 +40,7 @@ export default function SyncManager() {
       unsubscribe();
       registerSyncTrigger(null);
     };
-  }, [internalPatientId, getToken]);
+  }, [internalPatientId]);
 
   return null;
 }

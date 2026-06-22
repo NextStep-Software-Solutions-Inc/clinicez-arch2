@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
+import { Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, TextInput, View, RefreshControl } from 'react-native';
 import { useNavigation, useRoute, useTheme } from '@react-navigation/native';
 import { useAuth as useClerkAuth } from '@clerk/expo';
 import ThemedText from '@ui/ThemedText';
@@ -14,6 +14,8 @@ import {
   getOrganizationDetail,
   getShareFieldLabel,
   joinOrganization,
+  cancelOrganizationMembershipOnline,
+  refreshOrganizationsFromApi,
 } from '../../services/discovery/discoveryService';
 import { ConsentSelection, OrganizationDetail } from '../../services/discovery/types';
 
@@ -65,6 +67,8 @@ export default function OrganizationDetailsScreen() {
   const [selectedRoleId, setSelectedRoleId] = useState('');
   const [inviteCode, setInviteCode] = useState('');
   const [isJoining, setIsJoining] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [consent, setConsent] = useState<ConsentSelection>({
     acceptedPrivacyPolicy: false,
     acceptedTermsAndConditions: false,
@@ -90,6 +94,23 @@ export default function OrganizationDetailsScreen() {
       mounted = false;
     };
   }, [organizationId, patientId, navigation]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    const state = await NetInfo.fetch();
+    if (state.isConnected) {
+      try {
+        await refreshOrganizationsFromApi(patientId, '', getToken);
+        const refreshed = await getOrganizationDetail(patientId, organizationId);
+        if (refreshed) setOrganization(refreshed);
+      } catch (error) {
+        console.log('Online refresh failed:', error);
+      }
+    } else {
+      showOfflineAlert();
+    }
+    setRefreshing(false);
+  };
 
   const startJoin = () => {
     if (!organization) return;
@@ -126,7 +147,32 @@ export default function OrganizationDetailsScreen() {
     }
     setShowJoinModal(false);
     setIsJoining(false);
-    Alert.alert('Joined', `You are now a member of ${organization.name}.`);
+    Alert.alert('Request Submitted', `Your request to join ${organization.name} has been submitted for approval.`);
+  };
+
+  const handleCancelRequest = async () => {
+    if (!organization) return;
+    setIsCancelling(true);
+    const [, error] = await safeAwait(cancelOrganizationMembershipOnline(patientId, organization.id, getToken));
+    if (error) {
+      if (error.message === 'OFFLINE_ERROR') {
+        showOfflineAlert();
+      } else {
+        Alert.alert('Cancel failed', error.message);
+      }
+      setIsCancelling(false);
+      return;
+    }
+
+    // Refresh details after cancellation
+    const [refreshed] = await safeAwait(getOrganizationDetail(patientId, organization.id));
+    if (refreshed) {
+      setOrganization(refreshed);
+    } else {
+      navigation.goBack();
+    }
+    setIsCancelling(false);
+    Alert.alert('Request Cancelled', `Your request to join ${organization.name} has been cancelled.`);
   };
 
   if (isLoading) {
@@ -143,13 +189,17 @@ export default function OrganizationDetailsScreen() {
   }
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.container}>
+    <ScrollView 
+      contentInsetAdjustmentBehavior="automatic" 
+      contentContainerStyle={styles.container}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+    >
       <EntityCoverHeader
         name={organization.name}
         logoUrl={organization.logoUrl}
         coverImageUrl={organization.coverImageUrl}
-        badgeLabel={organization.isJoined ? 'Joined' : organization.isPublic ? 'Public' : 'Private'}
-        badgeColor={organization.isJoined ? '#10B981' : organization.isPublic ? '#3B82F6' : '#F59E0B'}
+        badgeLabel={organization.isJoined ? 'Joined' : organization.membershipStatus === 'pending' ? 'Pending Approval' : organization.isPublic ? 'Public' : 'Private'}
+        badgeColor={organization.isJoined ? '#10B981' : organization.membershipStatus === 'pending' ? '#F59E0B' : organization.isPublic ? '#3B82F6' : '#6B7280'}
         style={styles.coverHeader}
       />
       <ThemedView style={styles.titleBlock}>
@@ -161,11 +211,33 @@ export default function OrganizationDetailsScreen() {
       <ThemedView style={[styles.section, { borderColor: colors.border, backgroundColor: colors.card }]}>
         <ThemedText style={styles.sectionTitle}>Membership</ThemedText>
         <ThemedText style={[styles.memberCount, { color: colors.primary }]}>👥 {organization.activeMemberCount.toLocaleString()} active members</ThemedText>
-        <ThemedText style={[styles.sectionCopy, { color: colors.text }]}>{organization.isJoined ? `Joined as ${organization.membershipRoleName ?? 'member'}` : 'Join to unlock private clinics and member-only content.'}</ThemedText>
-        {!organization.isJoined ? (
+        <ThemedText style={[styles.sectionCopy, { color: colors.text }]}>
+          {organization.isJoined
+            ? `Joined as ${organization.membershipRoleName ?? 'member'}`
+            : organization.membershipStatus === 'pending'
+            ? `Request to join as ${organization.membershipRoleName ?? 'member'} is pending approval.`
+            : 'Join to unlock private clinics and member-only content.'}
+        </ThemedText>
+        {!organization.isJoined && organization.membershipStatus !== 'pending' ? (
           <Pressable onPress={startJoin} style={({ pressed }) => [styles.primaryButton, { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 }]} accessibilityRole="button">
             <ThemedText style={styles.primaryButtonText}>Join organization</ThemedText>
           </Pressable>
+        ) : organization.membershipStatus === 'pending' ? (
+          <View style={{ gap: 8 }}>
+            <View style={[styles.primaryButton, { backgroundColor: '#F59E0B', opacity: 0.8, justifyContent: 'center', alignItems: 'center' }]}>
+              <ThemedText style={styles.primaryButtonText}>Request pending approval</ThemedText>
+            </View>
+            <Pressable
+              onPress={handleCancelRequest}
+              disabled={isCancelling}
+              style={({ pressed }) => [styles.secondaryButton, { borderColor: '#EF4444', opacity: pressed || isCancelling ? 0.7 : 1 }]}
+              accessibilityRole="button"
+            >
+              <ThemedText style={{ color: '#EF4444', fontWeight: '700', fontSize: 14 }}>
+                {isCancelling ? 'Cancelling...' : 'Cancel join request'}
+              </ThemedText>
+            </Pressable>
+          </View>
         ) : null}
       </ThemedView>
 
@@ -182,22 +254,21 @@ export default function OrganizationDetailsScreen() {
 
       <ThemedView style={[styles.section, { borderColor: colors.border, backgroundColor: colors.card }]}>
         <ThemedText style={styles.sectionTitle}>Partnered clinics</ThemedText>
-        <FlatList
-          data={organization.linkedClinics}
-          keyExtractor={(item) => item.id}
-          scrollEnabled={false}
-          ItemSeparatorComponent={() => <ThemedView style={styles.divider} />}
-          renderItem={({ item }) => (
-            <Pressable
-              onPress={() => navigation.navigate('Main', { screen: 'ClinicDetailsScreen', params: { clinicId: item.id } })}
-              accessibilityRole="button"
-              style={({ pressed }) => [styles.linkRow, { opacity: pressed ? 0.75 : 1 }]}
-            >
-              <ThemedText style={styles.linkTitle}>{item.name}</ThemedText>
-              <ThemedText style={[styles.linkSubtitle, { color: colors.text }]} numberOfLines={1}>{item.description}</ThemedText>
-            </Pressable>
-          )}
-        />
+        <ThemedView style={{ gap: 12 }}>
+          {organization.linkedClinics.map((item, idx) => (
+            <ThemedView key={item.id}>
+              {idx > 0 && <ThemedView style={styles.divider} />}
+              <Pressable
+                onPress={() => navigation.navigate('Main', { screen: 'ClinicDetailsScreen', params: { clinicId: item.id } })}
+                accessibilityRole="button"
+                style={({ pressed }) => [styles.linkRow, { opacity: pressed ? 0.75 : 1 }]}
+              >
+                <ThemedText style={styles.linkTitle}>{item.name}</ThemedText>
+                <ThemedText style={[styles.linkSubtitle, { color: colors.text }]} numberOfLines={1}>{item.description}</ThemedText>
+              </Pressable>
+            </ThemedView>
+          ))}
+        </ThemedView>
       </ThemedView>
 
       <ThemedView style={[styles.section, { borderColor: colors.border, backgroundColor: colors.card }]}>

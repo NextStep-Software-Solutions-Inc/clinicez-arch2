@@ -18,7 +18,7 @@ public sealed class OrganizationMembership : BaseEntity, ISyncable
 
     public string RoleId { get; set; } = string.Empty;
     public string RoleName { get; set; } = string.Empty;
-    public ClinicMembershipStatus Status { get; set; } = ClinicMembershipStatus.Active;
+    public ClinicMembershipStatus Status { get; set; } = ClinicMembershipStatus.Pending;
 
     public bool ConsentPrivacyPolicy { get; set; }
     public bool ConsentTermsAndConditions { get; set; }

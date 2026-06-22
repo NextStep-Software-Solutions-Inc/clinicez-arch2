@@ -1,0 +1,35 @@
+using CLINICEZ.Shared.Common;
+using MediatR;
+using PatientApp.Api.Abstractions;
+using PatientApp.Application.Features.Clinics.Commands.PropagateClinicMembershipApproval;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+using System;
+using System.Threading.Tasks;
+
+namespace PatientApp.Api.Endpoints.Clinics;
+
+public sealed record PropagateClinicMembershipApprovalRequest(bool Approve);
+
+public sealed class PropagateClinicMembershipApprovalEndpoint : IEndpoint
+{
+    public void MapEndpoint(IEndpointRouteBuilder app)
+    {
+        app.MapPost("/internal/clinics/{clinicId:guid}/memberships/{membershipId:guid}/approve", async (
+                Guid clinicId, Guid membershipId, PropagateClinicMembershipApprovalRequest request, ISender sender, CancellationToken ct) =>
+            {
+                var success = await sender.Send(new PropagateClinicMembershipApprovalCommand(
+                    clinicId, membershipId, request.Approve), ct);
+
+                return Results.Ok(ApiResponse<bool>.Success(success, "Clinic membership approval state updated successfully."));
+            })
+            .WithTags("Internal")
+            .WithName("PropagateClinicMembershipApproval")
+            .WithSummary("Propagate clinic membership approval state from Admin Dashboard")
+            .Produces<ApiResponse<bool>>(StatusCodes.Status200OK)
+            .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
+            .Produces<ApiResponse<object>>(StatusCodes.Status409Conflict);
+            // Note: In production this should be restricted to internal service authorization
+    }
+}

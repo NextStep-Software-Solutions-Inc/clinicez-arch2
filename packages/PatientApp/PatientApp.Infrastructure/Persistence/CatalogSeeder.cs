@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using PatientApp.Domain.Entities;
+using PatientApp.Domain.Enums;
 
 namespace PatientApp.Infrastructure.Persistence;
 
@@ -54,11 +55,20 @@ public class CatalogSeeder : IDataSeeder
     {
         var now = DateTime.UtcNow;
 
-        // Only seed catalog if organizations and clinics are empty
-        if (context.Organizations.Any() || context.Clinics.Any())
+        // Only seed catalog if healthcare providers are already seeded
+        if (context.ClinicHealthcareProviders.Any())
         {
             return;
         }
+
+        // Wipe existing catalog and memberships to re-seed cleanly
+        context.ClinicOrganizationLinks.RemoveRange(context.ClinicOrganizationLinks);
+        context.ClinicMemberships.RemoveRange(context.ClinicMemberships);
+        context.OrganizationMemberships.RemoveRange(context.OrganizationMemberships);
+        context.BookingDrafts.RemoveRange(context.BookingDrafts);
+        context.Clinics.RemoveRange(context.Clinics);
+        context.Organizations.RemoveRange(context.Organizations);
+        context.SaveChanges();
 
         var organizations = new List<Organization>();
         var clinics = new List<Clinic>();
@@ -101,9 +111,21 @@ public class CatalogSeeder : IDataSeeder
             var featuredScore = 100 - i;
             var activeMemberCount = 50 + (featuredScore * 41);
 
-            organizations.Add(new Organization
+            var orgId = Guid.NewGuid();
+            var orgRoles = roles.Select(r => new OrganizationRole
             {
                 Id = Guid.NewGuid(),
+                OrganizationId = orgId,
+                RoleId = r.id,
+                Name = r.name,
+                Description = r.description,
+                CreatedAt = now,
+                UpdatedAt = now
+            }).ToList();
+
+            organizations.Add(new Organization
+            {
+                Id = orgId,
                 Slug = slug,
                 Name = $"{region} {theme}",
                 Description = $"A {(isPublic ? "public" : "private")} patient community for {region.ToLowerInvariant()} members who want coordinated care and partner clinic access.",
@@ -118,6 +140,7 @@ public class CatalogSeeder : IDataSeeder
                 RequiredShareFieldsJson = JsonSerializer.Serialize(requiredFields),
                 FeaturedScore = featuredScore,
                 ActiveMemberCount = activeMemberCount,
+                Roles = orgRoles,
                 CreatedAt = now,
                 UpdatedAt = now
             });
@@ -131,12 +154,73 @@ public class CatalogSeeder : IDataSeeder
             var isPublic = i % 6 != 0;
             var supportsAppointments = i % 8 != 0;
             var slug = Slugify($"{specialty}-{region}-{i + 1}");
-            var inviteCode = isPublic ? null : $"CLN-{(i + 1):D4}";
             var requiredFields = RequiredFieldSets[(i + 2) % RequiredFieldSets.Length];
+
+            var clinicId = Guid.NewGuid();
+
+            var clinicProviders = new List<ClinicHealthcareProvider>
+            {
+                new ClinicHealthcareProvider
+                {
+                    Id = Guid.NewGuid(),
+                    ClinicId = clinicId,
+                    Name = $"Dr. Jane {specialty} Smith",
+                    Specialty = specialty,
+                    AvatarUrl = $"https://picsum.photos/seed/provider-avatar-{i}-1/150/150",
+                    ProfessionalLicenseNo = $"PRC-{100000 + i:D6}",
+                    IsActive = true,
+                    DisplayOrder = 1,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                },
+                new ClinicHealthcareProvider
+                {
+                    Id = Guid.NewGuid(),
+                    ClinicId = clinicId,
+                    Name = $"Dr. John {specialty} Doe",
+                    Specialty = specialty,
+                    AvatarUrl = $"https://picsum.photos/seed/provider-avatar-{i}-2/150/150",
+                    ProfessionalLicenseNo = $"PRC-{200000 + i:D6}",
+                    IsActive = true,
+                    DisplayOrder = 2,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                }
+            };
+
+            var clinicServices = new List<ClinicService>
+            {
+                new ClinicService
+                {
+                    Id = Guid.NewGuid(),
+                    ClinicId = clinicId,
+                    Name = $"{specialty} Consultation",
+                    Description = $"A standard {specialty.ToLowerInvariant()} consultation for general medical inquiry and health checkup.",
+                    DurationMinutes = 30,
+                    Price = 500.00m + (i % 10 * 100),
+                    IsActive = true,
+                    DisplayOrder = 1,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                },
+                new ClinicService
+                {
+                    Id = Guid.NewGuid(),
+                    ClinicId = clinicId,
+                    Name = $"Follow-up {specialty} Consultation",
+                    Description = $"Follow-up assessment after the initial consultation to track treatment progress.",
+                    DurationMinutes = 15,
+                    Price = 300.00m + (i % 10 * 50),
+                    IsActive = true,
+                    DisplayOrder = 2,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                }
+            };
 
             clinics.Add(new Clinic
             {
-                Id = Guid.NewGuid(),
+                Id = clinicId,
                 Name = $"{region} {specialty} Clinic",
                 Address = $"{region}, Philippines",
                 Description = $"A {(isPublic ? "public" : "private")} {specialty.ToLowerInvariant()} clinic built for online consultations and follow-up care.",
@@ -150,6 +234,9 @@ public class CatalogSeeder : IDataSeeder
                 SpecialtiesJson = JsonSerializer.Serialize(new[] { specialty, supportsAppointments ? "Telehealth" : "Virtual Follow-Up" }),
                 RequiredShareFieldsJson = JsonSerializer.Serialize(requiredFields),
                 FeaturedScore = 100 - i,
+                HealthcareProviders = clinicProviders,
+                Services = clinicServices,
+                ActiveMemberCount = 0, // start at 0, updated by memberships
                 CreatedAt = now,
                 UpdatedAt = now
             });
@@ -200,7 +287,88 @@ public class CatalogSeeder : IDataSeeder
         context.Organizations.AddRange(organizations);
         context.Clinics.AddRange(clinics);
         context.ClinicOrganizationLinks.AddRange(links);
+
+        // Seed memberships for the test patient user_2hXZZn1Wmr7z1S4GqBhsdzvzHdm
+        var testPatient = context.Patients.FirstOrDefault(p => p.ClerkUserId == "user_2hXZZn1Wmr7z1S4GqBhsdzvzHdm");
+        if (testPatient != null)
+        {
+            var org0 = organizations[0];
+            var org1 = organizations[1];
+            var clinic0 = clinics[0];
+            var clinic1 = clinics[1];
+
+            var testOrgMemberships = new List<OrganizationMembership>
+            {
+                new OrganizationMembership
+                {
+                    ClientId = Guid.NewGuid(),
+                    PatientId = testPatient.Id,
+                    OrganizationId = org0.Id,
+                    RoleId = "member",
+                    RoleName = "Member",
+                    Status = ClinicMembershipStatus.Active,
+                    ConsentPrivacyPolicy = true,
+                    ConsentTermsAndConditions = true,
+                    ConsentDataSharing = true,
+                    ConsentedAt = now,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                },
+                new OrganizationMembership
+                {
+                    ClientId = Guid.NewGuid(),
+                    PatientId = testPatient.Id,
+                    OrganizationId = org1.Id,
+                    RoleId = "member",
+                    RoleName = "Member",
+                    Status = ClinicMembershipStatus.Pending,
+                    ConsentPrivacyPolicy = true,
+                    ConsentTermsAndConditions = true,
+                    ConsentDataSharing = true,
+                    ConsentedAt = now,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                }
+            };
+
+            var testClinicMemberships = new List<ClinicMembership>
+            {
+                new ClinicMembership
+                {
+                    ClientId = Guid.NewGuid(),
+                    PatientId = testPatient.Id,
+                    ClinicId = clinic0.Id,
+                    Status = ClinicMembershipStatus.Active,
+                    ConsentPrivacyPolicy = true,
+                    ConsentTermsAndConditions = true,
+                    ConsentDataSharing = true,
+                    ConsentedAt = now,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                },
+                new ClinicMembership
+                {
+                    ClientId = Guid.NewGuid(),
+                    PatientId = testPatient.Id,
+                    ClinicId = clinic1.Id,
+                    Status = ClinicMembershipStatus.Pending,
+                    ConsentPrivacyPolicy = true,
+                    ConsentTermsAndConditions = true,
+                    ConsentDataSharing = true,
+                    ConsentedAt = now,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                }
+            };
+
+            org0.ActiveMemberCount++;
+            clinic0.ActiveMemberCount++;
+
+            context.OrganizationMemberships.AddRange(testOrgMemberships);
+            context.ClinicMemberships.AddRange(testClinicMemberships);
+        }
+
         context.SaveChanges();
-        Console.WriteLine($"[DbSeeder] Successfully seeded {organizations.Count} organizations, {clinics.Count} clinics, and {links.Count} links.");
+        Console.WriteLine($"[DbSeeder] Successfully seeded {organizations.Count} organizations, {clinics.Count} clinics (with providers & services), and {links.Count} links.");
     }
 }

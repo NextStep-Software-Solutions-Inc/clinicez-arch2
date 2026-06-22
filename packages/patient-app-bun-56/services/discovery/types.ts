@@ -74,6 +74,7 @@ export interface ClinicEntity {
     coverImageUrl?: string;
     specialties: string[];
     featuredScore: number;
+    activeMemberCount: number;
 }
 
 export interface ConsentSelection {
@@ -96,12 +97,14 @@ export interface JoinClinicInput {
 
 export interface OrganizationView extends OrganizationEntity {
     isJoined: boolean;
+    membershipStatus?: 'pending' | 'active' | null;
 }
 
 export interface ClinicView extends ClinicEntity {
     isJoined: boolean;
     isVisible: boolean;
     unlockedByOrganizationIds: string[];
+    membershipStatus?: 'pending' | 'active' | null;
 }
 
 export interface OrganizationDetail extends OrganizationView {
@@ -109,10 +112,19 @@ export interface OrganizationDetail extends OrganizationView {
     membershipRoleName?: string;
 }
 
+export interface ClinicService {
+    id: string;
+    name: string;
+    description?: string | null;
+    durationMinutes?: number | null;
+    price?: number | null;
+}
+
 export interface ClinicDetail extends ClinicView {
     linkedOrganizations: OrganizationEntity[];
     membershipStatus?: 'pending' | 'active';
     healthcareProviders: ClinicProvider[];
+    services: ClinicService[];
 }
 
 export interface BookingDraftRecord {

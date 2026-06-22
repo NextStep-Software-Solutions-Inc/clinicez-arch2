@@ -15,6 +15,7 @@ export interface OrganizationSummary {
     activeMemberCount: number;
     requiredShareFieldsJson: string;
     rolesJson: string;
+    membershipStatus?: 'pending' | 'active' | null;
 }
 
 export interface OrganizationDetail extends OrganizationSummary {
@@ -35,6 +36,24 @@ export interface ClinicSummary {
     specialtiesJson: string;
     requiredShareFieldsJson: string;
     featuredScore: number;
+    activeMemberCount: number;
+    membershipStatus?: 'pending' | 'active' | null;
+}
+
+export interface ClinicProviderDto {
+    id: string;
+    name: string;
+    specialty: string;
+    avatarUrl: string | null;
+    professionalLicenseNo: string | null;
+}
+
+export interface ClinicServiceDto {
+    id: string;
+    name: string;
+    description: string | null;
+    durationMinutes: number | null;
+    price: number | null;
 }
 
 export interface ClinicDetail extends ClinicSummary {
@@ -44,7 +63,9 @@ export interface ClinicDetail extends ClinicSummary {
     termsAndConditionsUrl: string | null;
     linkedOrganizations: OrganizationSummary[];
     /** "pending" | "active" | null if not joined */
-    membershipStatus: string | null;
+    membershipStatus: 'pending' | 'active' | null;
+    healthcareProviders: ClinicProviderDto[];
+    services: ClinicServiceDto[];
 }
 
 export interface PagedResult<T> {
@@ -72,17 +93,40 @@ export interface JoinConsentInput {
     consentDataSharing: boolean;
 }
 
+export interface OrganizationRoleDto {
+    id: string;
+    organizationId: string;
+    roleId: string;
+    name: string;
+    description: string;
+}
+
 // ── Discovery API ─────────────────────────────────────────────────────────────
 
 export async function searchOrganizations(
     getToken: () => Promise<string | null>,
     query?: string,
+    forPatientId?: string,
     skip = 0,
     take = 20,
 ): Promise<PagedResult<OrganizationSummary>> {
-    const params = new URLSearchParams({ skip: String(skip), take: String(take) });
+    const params = new URLSearchParams({
+        skip: skip.toString(),
+        take: take.toString(),
+    });
     if (query?.trim()) params.set('q', query.trim());
+    if (forPatientId) params.append('forPatientId', forPatientId);
     return api.get<PagedResult<OrganizationSummary>>(getToken, `/organizations?${params}`);
+}
+
+/**
+ * Fetches roles available for a specific organization.
+ */
+export async function getOrganizationRoles(
+    getToken: () => Promise<string | null>,
+    organizationId: string,
+): Promise<OrganizationRoleDto[]> {
+    return api.get<OrganizationRoleDto[]>(getToken, `/organizations/${organizationId}/roles`);
 }
 
 /**
@@ -108,12 +152,17 @@ export async function searchClinics(
     getToken: () => Promise<string | null>,
     query?: string,
     organizationId?: string,
+    forPatientId?: string,
     skip = 0,
     take = 20,
 ): Promise<PagedResult<ClinicSummary>> {
-    const params = new URLSearchParams({ skip: String(skip), take: String(take) });
+    const params = new URLSearchParams({
+        skip: skip.toString(),
+        take: take.toString(),
+    });
     if (query?.trim()) params.set('q', query.trim());
     if (organizationId) params.set('organizationId', organizationId);
+    if (forPatientId) params.append('forPatientId', forPatientId);
     return api.get<PagedResult<ClinicSummary>>(getToken, `/clinics?${params}`);
 }
 
@@ -144,14 +193,15 @@ export async function getClinicDetail(
 export async function joinOrganization(
     getToken: () => Promise<string | null>,
     patientId: string,
-    inviteCode: string,
+    organizationId: string | null,
+    inviteCode: string | null,
     roleId: string,
     consent: JoinConsentInput,
 ): Promise<OrganizationMembershipResult> {
     return api.post<OrganizationMembershipResult>(
         getToken,
         `/patients/${patientId}/organization-memberships`,
-        { inviteCode, roleId, ...consent },
+        { organizationId, inviteCode, roleId, ...consent },
     );
 }
 
@@ -170,3 +220,26 @@ export async function joinClinic(
         ...consent,
     });
 }
+
+/**
+ * Cancels an organization membership (either pending or active).
+ */
+export async function cancelOrganizationMembership(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    organizationId: string,
+): Promise<boolean> {
+    return api.delete<boolean>(getToken, `/patients/${patientId}/organization-memberships/${organizationId}`);
+}
+
+/**
+ * Cancels a clinic membership (either pending or active).
+ */
+export async function cancelClinicMembership(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    clinicId: string,
+): Promise<boolean> {
+    return api.delete<boolean>(getToken, `/patients/${patientId}/clinic-memberships/${clinicId}`);
+}
+

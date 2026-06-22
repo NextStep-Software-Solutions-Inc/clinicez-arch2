@@ -12,7 +12,15 @@ public sealed record OrganizationSummaryDto(
     int FeaturedScore,
     int ActiveMemberCount,
     string RequiredShareFieldsJson,
-    string RolesJson);
+    string RolesJson,
+    string? MembershipStatus = null);
+
+public sealed record OrganizationRoleDto(
+    Guid Id,
+    Guid OrganizationId,
+    string RoleId,
+    string Name,
+    string Description);
 
 public sealed record OrganizationDetailDto(
     Guid Id,
@@ -42,7 +50,23 @@ public sealed record ClinicSummaryDto(
     string? CoverImageUrl,
     string SpecialtiesJson,
     string RequiredShareFieldsJson,
-    int FeaturedScore);
+    int FeaturedScore,
+    int ActiveMemberCount,
+    string? MembershipStatus = null);
+
+public sealed record ClinicHealthcareProviderDto(
+    Guid Id,
+    string Name,
+    string Specialty,
+    string? AvatarUrl,
+    string? ProfessionalLicenseNo);
+
+public sealed record ClinicServiceDto(
+    Guid Id,
+    string Name,
+    string? Description,
+    int? DurationMinutes,
+    decimal? Price);
 
 public sealed record ClinicDetailDto(
     Guid Id,
@@ -59,6 +83,9 @@ public sealed record ClinicDetailDto(
     string SpecialtiesJson,
     string RequiredShareFieldsJson,
     int FeaturedScore,
+    int ActiveMemberCount,
+    IReadOnlyList<ClinicHealthcareProviderDto> HealthcareProviders,
+    IReadOnlyList<ClinicServiceDto> Services,
     IReadOnlyList<OrganizationSummaryDto> LinkedOrganizations,
     string? MembershipStatus);
 

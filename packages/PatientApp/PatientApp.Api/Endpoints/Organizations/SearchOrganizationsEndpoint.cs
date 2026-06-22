@@ -1,5 +1,6 @@
 using CLINICEZ.Shared.Common;
 using MediatR;
+using Microsoft.AspNetCore.Mvc;
 using PatientApp.Api.Abstractions;
 using PatientApp.Application.Common.DTOs;
 using PatientApp.Application.Features.Organizations.Queries.SearchOrganizations;
@@ -11,10 +12,14 @@ public sealed class SearchOrganizationsEndpoint : IEndpoint
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
         app.MapGet("/organizations", async (
-                ISender sender, CancellationToken ct,
-                string? q = null, int skip = 0, int take = 20) =>
+                ISender sender,
+                [FromQuery] string? q,
+                [FromQuery] Guid? forPatientId,
+                [FromQuery] int skip = 0,
+                [FromQuery] int take = 50,
+                CancellationToken ct = default) =>
             {
-                var result = await sender.Send(new SearchOrganizationsQuery(q, skip, take), ct);
+                var result = await sender.Send(new SearchOrganizationsQuery(q, forPatientId, skip, take), ct);
                 return Results.Ok(ApiResponse<DiscoveryPagedDto<OrganizationSummaryDto>>.Success(result));
             })
             .WithTags("Discovery")

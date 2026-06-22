@@ -13,6 +13,9 @@ public sealed class OrganizationMembershipRepository
     public Task<OrganizationMembership?> GetByPatientAndOrgAsync(Guid patientId, Guid organizationId, CancellationToken ct = default)
         => DbSet.FirstOrDefaultAsync(m => m.PatientId == patientId && m.OrganizationId == organizationId, ct);
 
+    public Task<OrganizationMembership?> GetByPatientAndOrgWithDeletedAsync(Guid patientId, Guid organizationId, CancellationToken ct = default)
+        => DbSet.IgnoreQueryFilters().FirstOrDefaultAsync(m => m.PatientId == patientId && m.OrganizationId == organizationId, ct);
+
     public async Task<IReadOnlyList<OrganizationMembership>> GetByPatientAsync(Guid patientId, CancellationToken ct = default)
         => await DbSet.Include(m => m.Organization)
             .Where(m => m.PatientId == patientId)

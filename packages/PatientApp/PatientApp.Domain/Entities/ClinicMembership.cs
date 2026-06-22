@@ -16,7 +16,7 @@ public sealed class ClinicMembership : BaseEntity, ISyncable
     public Guid ClinicId { get; set; }
     public Clinic Clinic { get; set; } = null!;
 
-    public ClinicMembershipStatus Status { get; set; } = ClinicMembershipStatus.Active;
+    public ClinicMembershipStatus Status { get; set; } = ClinicMembershipStatus.Pending;
 
     public bool ConsentPrivacyPolicy { get; set; }
     public bool ConsentTermsAndConditions { get; set; }

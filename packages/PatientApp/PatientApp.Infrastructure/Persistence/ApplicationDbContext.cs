@@ -62,10 +62,12 @@ public sealed class ApplicationDbContext : DbContext
     public DbSet<FileRecord> FileRecords => Set<FileRecord>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
 
-    // ── Discovery catalogue ─────────────────────────────────────────────────
     public DbSet<Organization> Organizations => Set<Organization>();
+    public DbSet<OrganizationRole> OrganizationRoles => Set<OrganizationRole>();
     public DbSet<Clinic> Clinics => Set<Clinic>();
     public DbSet<ClinicOrganizationLink> ClinicOrganizationLinks => Set<ClinicOrganizationLink>();
+    public DbSet<ClinicHealthcareProvider> ClinicHealthcareProviders => Set<ClinicHealthcareProvider>();
+    public DbSet<ClinicService> ClinicServices => Set<ClinicService>();
 
     // ── Memberships ─────────────────────────────────────────────────────────
     public DbSet<OrganizationMembership> OrganizationMemberships => Set<OrganizationMembership>();

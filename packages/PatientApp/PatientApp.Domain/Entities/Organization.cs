@@ -28,6 +28,7 @@ public sealed class Organization
     public DateTime UpdatedAt { get; set; }
 
     // Navigation
+    public ICollection<OrganizationRole> Roles { get; set; } = [];
     public ICollection<ClinicOrganizationLink> ClinicLinks { get; set; } = [];
     public ICollection<OrganizationMembership> Memberships { get; set; } = [];
 }

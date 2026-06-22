@@ -10,7 +10,7 @@ public enum TravelPurpose { Leisure, Business, Ofw, MedicalTourism, Other }
 
 public enum CorrectiveLenses { None, Glasses, Contacts, Both }
 
-public enum ClinicMembershipStatus { Pending, Active }
+public enum ClinicMembershipStatus { Pending, Active, Rejected }
 
 public enum BookingDraftStatus { Draft, Ready }
 

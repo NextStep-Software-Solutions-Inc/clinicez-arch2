@@ -17,6 +17,8 @@ import {
     getClinicDetail as apiGetClinicDetail,
     joinOrganization as apiJoinOrg,
     joinClinic as apiJoinClinic,
+    cancelOrganizationMembership as apiCancelOrgMembership,
+    cancelClinicMembership as apiCancelClinicMembership,
     type OrganizationSummary as RemoteOrgSummary,
     type OrganizationDetail as RemoteOrgDetail,
     type ClinicSummary as RemoteClinicSummary,
@@ -349,7 +351,7 @@ function mapOrganizationRows(rows: Array<Record<string, any>>) {
         requiredShareFields: parseJsonArray<ShareableFieldKey>(row.requiredShareFieldsJson, ['fullName', 'mobile']),
         partneredClinicIds: [] as string[],
         featuredScore: Number(row.featuredScore ?? 0),
-        activeMemberCount: computeActiveMemberCount(Number(row.featuredScore ?? 0)),
+        activeMemberCount: Number(row.activeMemberCount ?? 0),
     } as OrganizationEntity));
 }
 
@@ -369,6 +371,7 @@ function mapClinicRows(rows: Array<Record<string, any>>) {
         coverImageUrl: row.coverImageUrl ?? undefined,
         specialties: parseJsonArray<string>(row.specialtiesJson, []),
         featuredScore: Number(row.featuredScore ?? 0),
+        activeMemberCount: Number(row.activeMemberCount ?? 0),
     } as ClinicEntity));
 }
 
@@ -416,6 +419,7 @@ async function loadCatalogSnapshot(patientId: string) {
             ...organization,
             partneredClinicIds: linkedClinicIds,
             isJoined: membership?.status === 'active',
+            membershipStatus: membership?.status?.toLowerCase(),
             membershipRoleName: membership?.roleName,
             linkedClinics,
         } satisfies OrganizationDetail;
@@ -438,8 +442,9 @@ async function loadCatalogSnapshot(patientId: string) {
             isJoined,
             isVisible,
             unlockedByOrganizationIds,
-            membershipStatus: membership?.status,
+            membershipStatus: membership?.status?.toLowerCase(),
             healthcareProviders: buildProvidersForClinic(clinic.id, clinic.name, clinic.specialties[0] ?? 'General Medicine'),
+            services: [],
         } satisfies ClinicDetail;
     });
 
@@ -597,6 +602,7 @@ function buildClinicPayload(row: Record<string, any>): ClinicEntity {
         coverImageUrl: row.coverImageUrl ?? undefined,
         specialties: parseJsonArray<string>(String(row.specialtiesJson ?? '[]'), []),
         featuredScore: Number(row.featuredScore ?? 0),
+        activeMemberCount: Number(row.activeMemberCount ?? 0),
     };
 }
 
@@ -640,27 +646,79 @@ async function updateOrganizationCache(patientId: string, remoteOrgs: RemoteOrgS
     }
 
     for (const org of remoteOrgs) {
+        // Handle seed ID to API GUID migration to prevent UNIQUE constraint violation on slug
+        const existingOrg = await db.select({ id: organizations.id })
+            .from(organizations)
+            .where(eq(organizations.slug, org.slug));
+
+        if (existingOrg.length > 0 && existingOrg[0].id !== org.id) {
+            const oldId = existingOrg[0].id;
+            console.log(`[DiscoveryService] Migrating organization from local ID ${oldId} to remote ID ${org.id}`);
+            
+            await db.update(organizationMemberships)
+                .set({ organizationId: org.id })
+                .where(eq(organizationMemberships.organizationId, oldId));
+
+            await db.update(clinicOrganizationLinks)
+                .set({ organizationId: org.id })
+                .where(eq(clinicOrganizationLinks.organizationId, oldId));
+
+            await db.update(bookingDrafts)
+                .set({ organizationId: org.id })
+                .where(eq(bookingDrafts.organizationId, oldId));
+
+            await db.delete(organizations).where(eq(organizations.id, oldId));
+        }
+
         const row = {
             id: org.id,
             slug: org.slug,
             name: org.name,
             description: org.description,
+            isPublic: org.isPublic,
             logoUrl: org.logoUrl,
             coverImageUrl: org.coverImageUrl,
             addressHint: org.addressHint,
-            isPublic: org.isPublic,
+            privacyPolicyUrl: 'https://clinicez.app/privacy',
+            termsAndConditionsUrl: 'https://clinicez.app/terms',
             rolesJson: org.rolesJson,
             requiredShareFieldsJson: org.requiredShareFieldsJson,
             featuredScore: org.featuredScore,
-            privacyPolicyUrl: 'https://clinicez.app/privacy',
-            termsAndConditionsUrl: 'https://clinicez.app/terms',
+            activeMemberCount: org.activeMemberCount,
             createdAt: new Date(),
             updatedAt: new Date(),
         };
+
         await db.insert(organizations).values(row).onConflictDoUpdate({
             target: organizations.id,
             set: row,
         });
+
+        if (org.membershipStatus) {
+            const membershipRow = {
+                id: getMembershipId('org-membership', patientId, org.id),
+                patientId,
+                organizationId: org.id,
+                status: org.membershipStatus.toLowerCase(),
+                roleId: 'member',
+                roleName: 'Member',
+                consentPrivacyPolicy: true,
+                consentTermsAndConditions: true,
+                consentDataSharing: true,
+                consentedAt: now(),
+                createdAt: now(),
+                updatedAt: now(),
+                syncedAt: now(),
+            };
+            await db.insert(organizationMemberships).values(membershipRow).onConflictDoUpdate({
+                target: organizationMemberships.id,
+                set: {
+                    status: org.membershipStatus.toLowerCase(),
+                    updatedAt: now(),
+                    syncedAt: now(),
+                },
+            });
+        }
     }
 }
 
@@ -704,6 +762,30 @@ async function updateClinicCache(patientId: string, remoteClinics: RemoteClinicS
     }
 
     for (const clinic of remoteClinics) {
+        // Handle seed ID to API GUID migration for clinics based on name
+        const existingClinic = await db.select({ id: clinics.id })
+            .from(clinics)
+            .where(eq(clinics.name, clinic.name));
+
+        if (existingClinic.length > 0 && existingClinic[0].id !== clinic.id) {
+            const oldId = existingClinic[0].id;
+            console.log(`[DiscoveryService] Migrating clinic from local ID ${oldId} to remote ID ${clinic.id}`);
+
+            await db.update(clinicMemberships)
+                .set({ clinicId: clinic.id })
+                .where(eq(clinicMemberships.clinicId, oldId));
+
+            await db.update(clinicOrganizationLinks)
+                .set({ clinicId: clinic.id })
+                .where(eq(clinicOrganizationLinks.clinicId, oldId));
+
+            await db.update(bookingDrafts)
+                .set({ clinicId: clinic.id })
+                .where(eq(bookingDrafts.clinicId, oldId));
+
+            await db.delete(clinics).where(eq(clinics.id, oldId));
+        }
+
         const row = {
             id: clinic.id,
             name: clinic.name,
@@ -718,12 +800,37 @@ async function updateClinicCache(patientId: string, remoteClinics: RemoteClinicS
             termsAndConditionsUrl: 'https://clinicez.app/terms',
             specialtiesJson: clinic.specialtiesJson,
             requiredShareFieldsJson: clinic.requiredShareFieldsJson,
+            activeMemberCount: clinic.activeMemberCount,
             joinedAt: new Date(),
         };
         await db.insert(clinics).values(row).onConflictDoUpdate({
             target: clinics.id,
             set: row,
         });
+
+        if (clinic.membershipStatus) {
+            const membershipRow = {
+                id: getMembershipId('clinic-membership', patientId, clinic.id),
+                patientId,
+                clinicId: clinic.id,
+                status: clinic.membershipStatus.toLowerCase(),
+                consentPrivacyPolicy: true,
+                consentTermsAndConditions: true,
+                consentDataSharing: true,
+                consentedAt: now(),
+                createdAt: now(),
+                updatedAt: now(),
+                syncedAt: now(),
+            };
+            await db.insert(clinicMemberships).values(membershipRow).onConflictDoUpdate({
+                target: clinicMemberships.id,
+                set: {
+                    status: clinic.membershipStatus.toLowerCase(),
+                    updatedAt: now(),
+                    syncedAt: now(),
+                },
+            });
+        }
     }
 }
 
@@ -735,7 +842,7 @@ export async function listOrganizations(
 ): Promise<OrganizationView[]> {
     if (getToken) {
         try {
-            const remoteOrgs = await searchOrganizationsOnline(getToken, query);
+            const remoteOrgs = await searchOrganizationsOnline(getToken, query, patientId);
             await updateOrganizationCache(patientId, remoteOrgs);
         } catch (err) {
             console.warn('[DiscoveryService] Failed to fetch organizations from API, falling back to local DB cache:', err);
@@ -764,6 +871,7 @@ export async function listOrganizations(
                 ...organization,
                 partneredClinicIds: linkedClinicIds,
                 isJoined: membership?.status === 'active',
+                membershipStatus: membership?.status?.toLowerCase(),
                 membershipRoleName: membership?.roleName,
             } as OrganizationDetail;
         })
@@ -785,7 +893,7 @@ export async function listClinics(
 ): Promise<ClinicDetail[]> {
     if (getToken) {
         try {
-            const remoteClinics = await searchClinicsOnline(getToken, options.query, options.organizationId);
+            const remoteClinics = await searchClinicsOnline(getToken, options.query, options.organizationId, patientId);
             await updateClinicCache(patientId, remoteClinics);
         } catch (err) {
             console.warn('[DiscoveryService] Failed to fetch clinics from API, falling back to local DB cache:', err);
@@ -819,7 +927,7 @@ export async function listClinics(
                 unlockedByOrganizationIds,
                 isJoined,
                 isVisible,
-                membershipStatus: clinicMembership?.status,
+                membershipStatus: clinicMembership?.status?.toLowerCase(),
                 healthcareProviders: buildProvidersForClinic(clinic.id, clinic.name, clinic.specialties[0] ?? 'General Medicine'),
             } as ClinicDetail;
         })
@@ -875,6 +983,7 @@ export async function loadLocalOrganizations(
                 ...organization,
                 partneredClinicIds: linkedClinicIds,
                 isJoined: membership?.status === 'active',
+                membershipStatus: membership?.status?.toLowerCase(),
                 membershipRoleName: membership?.roleName,
             } as OrganizationDetail;
         })
@@ -938,7 +1047,7 @@ export async function loadLocalClinics(
                 unlockedByOrganizationIds,
                 isJoined,
                 isVisible,
-                membershipStatus: clinicMembership?.status,
+                membershipStatus: clinicMembership?.status?.toLowerCase(),
                 healthcareProviders: buildProvidersForClinic(clinic.id, clinic.name, clinic.specialties[0] ?? 'General Medicine'),
             } as ClinicDetail;
         })
@@ -980,6 +1089,7 @@ export async function getOrganizationDetail(patientId: string, organizationId: s
         ...organization,
         linkedClinics,
         isJoined: membership?.status === 'active',
+        membershipStatus: membership?.status?.toLowerCase(),
         membershipRoleName: membership?.roleName,
     };
 }
@@ -1007,8 +1117,9 @@ export async function getClinicDetail(patientId: string, clinicId: string): Prom
         isJoined,
         isVisible,
         unlockedByOrganizationIds,
-        membershipStatus: membership?.status,
+        membershipStatus: membership?.status?.toLowerCase(),
         healthcareProviders: buildProvidersForClinic(clinic.id, clinic.name, clinic.specialties[0] ?? 'General Medicine'),
+        services: [],
     };
 }
 
@@ -1038,7 +1149,7 @@ export async function joinOrganization(
         throw new Error('Please accept privacy policy, terms, and data sharing consent.');
     }
 
-    const inviteCode = input.inviteCode?.trim() || organization.inviteCode || '';
+    const inviteCode = input.inviteCode?.trim() || organization.inviteCode || null;
     const consentPayload = {
         consentPrivacyPolicy: input.consent.acceptedPrivacyPolicy,
         consentTermsAndConditions: input.consent.acceptedTermsAndConditions,
@@ -1046,7 +1157,7 @@ export async function joinOrganization(
     };
 
     // Call API first!
-    const apiResult = await apiJoinOrg(getToken, patientId, inviteCode, input.roleId, consentPayload);
+    const apiResult = await apiJoinOrg(getToken, patientId, organization.id, inviteCode, input.roleId, consentPayload);
 
     const role = organization.roles.find((item) => item.id === input.roleId) ?? organization.roles[0];
     const timestamp = now();
@@ -1056,7 +1167,7 @@ export async function joinOrganization(
         organizationId: organization.id,
         roleId: input.roleId,
         roleName: role ? role.name : 'Member',
-        status: 'active' as const,
+        status: 'pending' as const,
         consentPrivacyPolicy: input.consent.acceptedPrivacyPolicy,
         consentTermsAndConditions: input.consent.acceptedTermsAndConditions,
         consentDataSharing: input.consent.acceptedDataSharing,
@@ -1110,7 +1221,7 @@ export async function joinClinic(
         id: serverId || getMembershipId('clinic-membership', patientId, clinic.id),
         patientId,
         clinicId: clinic.id,
-        status: 'active' as const,
+        status: 'pending' as const,
         consentPrivacyPolicy: input.consent.acceptedPrivacyPolicy,
         consentTermsAndConditions: input.consent.acceptedTermsAndConditions,
         consentDataSharing: input.consent.acceptedDataSharing,
@@ -1249,8 +1360,9 @@ export type { RemoteOrgSummary, RemoteOrgDetail, RemoteClinicSummary, RemoteClin
 export async function searchOrganizationsOnline(
     getToken: () => Promise<string | null>,
     query?: string,
+    patientId?: string,
 ): Promise<RemoteOrgSummary[]> {
-    const result = await apiSearchOrgs(getToken, query, 0, 50);
+    const result = await apiSearchOrgs(getToken, query, patientId, 0, 50);
     return result.items;
 }
 
@@ -1272,8 +1384,9 @@ export async function searchClinicsOnline(
     getToken: () => Promise<string | null>,
     query?: string,
     organizationId?: string,
+    patientId?: string,
 ): Promise<RemoteClinicSummary[]> {
-    const result = await apiSearchClinics(getToken, query, organizationId, 0, 50);
+    const result = await apiSearchClinics(getToken, query, organizationId, patientId, 0, 50);
     return result.items;
 }
 
@@ -1296,11 +1409,12 @@ export async function fetchClinicDetailOnline(
 export async function joinOrganizationOnline(
     getToken: () => Promise<string | null>,
     patientId: string,
-    inviteCode: string,
+    organizationId: string | null,
+    inviteCode: string | null,
     roleId: string,
     consent: JoinConsentInput,
 ) {
-    return apiJoinOrg(getToken, patientId, inviteCode, roleId, consent);
+    return apiJoinOrg(getToken, patientId, organizationId, inviteCode, roleId, consent);
 }
 
 /**
@@ -1346,3 +1460,116 @@ export async function submitBookingDraftOnline(
 ): Promise<string | null> {
     return apiSubmitDraft(getToken, patientId, draftId);
 }
+
+export async function getClinicDetailOnline(
+    patientId: string,
+    clinicId: string,
+    getToken: () => Promise<string | null>,
+): Promise<ClinicDetail | null> {
+    const remote = await fetchClinicDetailOnline(getToken, clinicId, patientId);
+    if (!remote) return null;
+
+    return {
+        id: remote.id,
+        name: remote.name,
+        description: remote.description ?? '',
+        address: remote.address ?? '',
+        isPublic: remote.isPublic,
+        supportsAppointments: remote.supportsAppointments,
+        organizationIds: (remote.linkedOrganizations ?? []).map((o) => o.id),
+        requiredShareFields: parseJsonArray<ShareableFieldKey>(remote.requiredShareFieldsJson, ['fullName', 'mobile']),
+        privacyPolicyUrl: remote.privacyPolicyUrl ?? 'https://clinicez.app/privacy',
+        termsAndConditionsUrl: remote.termsAndConditionsUrl ?? 'https://clinicez.app/terms',
+        logoUrl: remote.logoUrl ?? undefined,
+        coverImageUrl: remote.coverImageUrl ?? undefined,
+        specialties: parseJsonArray<string>(remote.specialtiesJson, []),
+        featuredScore: remote.featuredScore ?? 0,
+        activeMemberCount: remote.activeMemberCount ?? 0,
+        isJoined: remote.membershipStatus?.toString().toLowerCase() === 'active',
+        isVisible: remote.isPublic || remote.membershipStatus?.toString().toLowerCase() === 'active' || (remote.membershipStatus !== null && remote.membershipStatus !== undefined),
+        unlockedByOrganizationIds: [],
+        membershipStatus: remote.membershipStatus ? String(remote.membershipStatus).toLowerCase() as any : undefined,
+        linkedOrganizations: (remote.linkedOrganizations ?? []).map((org) => ({
+            id: org.id,
+            slug: org.slug,
+            name: org.name,
+            description: org.description,
+            isPublic: org.isPublic,
+            logoUrl: org.logoUrl ?? undefined,
+            coverImageUrl: org.coverImageUrl ?? undefined,
+            featuredScore: org.featuredScore,
+            activeMemberCount: org.activeMemberCount,
+            addressHint: org.addressHint ?? undefined,
+            requiredShareFields: parseJsonArray<ShareableFieldKey>(org.requiredShareFieldsJson, ['fullName', 'mobile']),
+            roles: parseJsonArray<any>(org.rolesJson, []),
+            partneredClinicIds: [],
+            privacyPolicyUrl: '',
+            termsAndConditionsUrl: '',
+        })),
+        healthcareProviders: (remote.healthcareProviders ?? []).map((p) => ({
+            id: p.id,
+            name: p.name,
+            specialty: p.specialty,
+            avatarUrl: p.avatarUrl ?? undefined,
+            bio: '',
+            credentials: p.professionalLicenseNo ? [p.professionalLicenseNo] : [],
+            rating: 5.0,
+        })),
+        services: (remote.services ?? []).map((s) => ({
+            id: s.id,
+            name: s.name,
+            description: s.description ?? undefined,
+            durationMinutes: s.durationMinutes ?? undefined,
+            price: s.price ?? undefined,
+        })),
+    };
+}
+
+export async function cancelOrganizationMembershipOnline(
+    patientId: string,
+    organizationId: string,
+    getToken: () => Promise<string | null>,
+): Promise<{ success: true }> {
+    const network = await NetInfo.fetch();
+    if (!network.isConnected) {
+        throw new Error('OFFLINE_ERROR');
+    }
+
+    await apiCancelOrgMembership(getToken, patientId, organizationId);
+
+    // Update local database (remove membership row)
+    await db.delete(organizationMemberships)
+        .where(
+            and(
+                eq(organizationMemberships.patientId, patientId),
+                eq(organizationMemberships.organizationId, organizationId)
+            )
+        );
+
+    return { success: true };
+}
+
+export async function cancelClinicMembershipOnline(
+    patientId: string,
+    clinicId: string,
+    getToken: () => Promise<string | null>,
+): Promise<{ success: true }> {
+    const network = await NetInfo.fetch();
+    if (!network.isConnected) {
+        throw new Error('OFFLINE_ERROR');
+    }
+
+    await apiCancelClinicMembership(getToken, patientId, clinicId);
+
+    // Update local database (remove membership row)
+    await db.delete(clinicMemberships)
+        .where(
+            and(
+                eq(clinicMemberships.patientId, patientId),
+                eq(clinicMemberships.clinicId, clinicId)
+            )
+        );
+
+    return { success: true };
+}
+

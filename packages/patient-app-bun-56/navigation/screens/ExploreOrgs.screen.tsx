@@ -29,6 +29,7 @@ import {
     loadLocalOrganizations,
     refreshOrganizationsFromApi,
 } from '../../services/discovery/discoveryService';
+import { getOrganizationRoles, OrganizationRoleDto } from '../../services/api/discoveryApi';
 import { ConsentSelection, OrganizationView } from '../../services/discovery/types';
 
 type OrganizationFilter = 'all' | 'public' | 'private' | 'joined';
@@ -95,6 +96,8 @@ export default function ExploreOrgsScreen() {
     const isRefreshingApiRef = useRef(false);
     const [selectedOrg, setSelectedOrg] = useState<OrganizationView | null>(null);
     const [selectedRoleId, setSelectedRoleId] = useState('');
+    const [orgRoles, setOrgRoles] = useState<OrganizationRoleDto[]>([]);
+    const [isLoadingRoles, setIsLoadingRoles] = useState(false);
     const [inviteCode, setInviteCode] = useState('');
     const [isJoining, setIsJoining] = useState(false);
     const [consent, setConsent] = useState<ConsentSelection>({
@@ -214,15 +217,36 @@ export default function ExploreOrgsScreen() {
         });
     }, [isSearching, searchQuery, colors, navigation]);
 
-    const openJoinModal = (org: OrganizationView) => {
+    const openJoinModal = async (org: OrganizationView) => {
         setSelectedOrg(org);
-        setSelectedRoleId(org.roles[0]?.id ?? '');
+        setSelectedRoleId('');
         setInviteCode('');
         setConsent({
             acceptedPrivacyPolicy: false,
             acceptedTermsAndConditions: false,
             acceptedDataSharing: false,
         });
+
+        setIsLoadingRoles(true);
+        const [roles, err] = await safeAwait(getOrganizationRoles(getToken, org.id));
+        if (roles && roles.length > 0) {
+            setOrgRoles(roles);
+            setSelectedRoleId(roles[0].roleId);
+        } else {
+            console.warn('Failed to load roles dynamically, falling back to local cache', err);
+            const fallbackRoles = org.roles.map(r => ({
+                id: r.id,
+                organizationId: org.id,
+                roleId: r.id,
+                name: r.name,
+                description: r.description
+            }));
+            setOrgRoles(fallbackRoles);
+            if (fallbackRoles.length > 0) {
+                setSelectedRoleId(fallbackRoles[0].roleId);
+            }
+        }
+        setIsLoadingRoles(false);
     };
 
     const closeJoinModal = () => {
@@ -322,8 +346,8 @@ export default function ExploreOrgsScreen() {
                             name={item.name}
                             logoUrl={item.logoUrl}
                             coverImageUrl={item.coverImageUrl}
-                            badgeLabel={item.isJoined ? 'Joined' : item.isPublic ? 'Public' : 'Private'}
-                            badgeColor={item.isJoined ? '#10B981' : item.isPublic ? '#3B82F6' : '#F59E0B'}
+                            badgeLabel={item.isJoined ? 'Joined' : item.membershipStatus === 'pending' ? 'Pending Approval' : item.isPublic ? 'Public' : 'Private'}
+                            badgeColor={item.isJoined ? '#10B981' : item.membershipStatus === 'pending' ? '#F59E0B' : item.isPublic ? '#3B82F6' : '#6B7280'}
                         />
                         <ThemedView style={styles.cardBody}>
                             <ThemedText style={styles.cardTitle}>{item.name}</ThemedText>
@@ -363,7 +387,7 @@ export default function ExploreOrgsScreen() {
                                 >
                                     <ThemedText style={styles.secondaryActionText}>View Clinics</ThemedText>
                                 </Pressable>
-                                {!item.isJoined && (
+                                {!item.isJoined && item.membershipStatus !== 'pending' && (
                                     <Pressable
                                         onPress={() => openJoinModal(item)}
                                         style={({ pressed }) => [
@@ -373,6 +397,11 @@ export default function ExploreOrgsScreen() {
                                     >
                                         <ThemedText style={styles.primaryActionText}>Join</ThemedText>
                                     </Pressable>
+                                )}
+                                {item.membershipStatus === 'pending' && (
+                                    <View style={[styles.primaryAction, { backgroundColor: '#F59E0B', opacity: 0.8, justifyContent: 'center', alignItems: 'center' }]}>
+                                        <ThemedText style={styles.primaryActionText}>Requested</ThemedText>
+                                    </View>
                                 )}
                             </ThemedView>
                         </ThemedView>
@@ -387,12 +416,14 @@ export default function ExploreOrgsScreen() {
                             <ThemedText style={styles.modalTitle}>Join {selectedOrg?.name}</ThemedText>
                             <ThemedText style={[styles.modalSubtitle, { color: colors.text }]}>Select a role and provide required consent to continue.</ThemedText>
 
-                            {selectedOrg?.roles.map((role) => {
-                                const selected = role.id === selectedRoleId;
+                            {isLoadingRoles ? (
+                                <ActivityIndicator color={colors.primary} style={{ marginVertical: 12 }} />
+                            ) : orgRoles.map((role) => {
+                                const selected = role.roleId === selectedRoleId;
                                 return (
                                     <Pressable
                                         key={role.id}
-                                        onPress={() => setSelectedRoleId(role.id)}
+                                        onPress={() => setSelectedRoleId(role.roleId)}
                                         style={({ pressed }) => [
                                             styles.roleCard,
                                             {

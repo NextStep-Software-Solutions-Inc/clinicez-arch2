@@ -22,6 +22,7 @@ public sealed class Clinic
     public string SpecialtiesJson { get; set; } = "[]";
     public string RequiredShareFieldsJson { get; set; } = "[]";
     public int FeaturedScore { get; set; }
+    public int ActiveMemberCount { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 
@@ -29,4 +30,6 @@ public sealed class Clinic
     public ICollection<ClinicOrganizationLink> OrganizationLinks { get; set; } = [];
     public ICollection<ClinicMembership> Memberships { get; set; } = [];
     public ICollection<BookingDraft> BookingDrafts { get; set; } = [];
+    public ICollection<ClinicHealthcareProvider> HealthcareProviders { get; set; } = [];
+    public ICollection<ClinicService> Services { get; set; } = [];
 }

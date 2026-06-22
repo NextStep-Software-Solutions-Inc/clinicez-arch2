@@ -15,6 +15,7 @@ export const organizations = sqliteTable('organizations', {
     rolesJson: text('roles_json').notNull(),
     requiredShareFieldsJson: text('required_share_fields_json').notNull(),
     featuredScore: integer('featured_score').notNull().default(0),
+    activeMemberCount: integer('active_member_count').notNull().default(0),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
     syncedAt: integer('synced_at', { mode: 'timestamp_ms' }),

@@ -17,6 +17,7 @@ import {
     getServiceOptions,
     getProviderOptions,
 } from './appointmentsMockApi';
+import { getClinicDetailOnline } from '../discovery/discoveryService';
 import type {
     AppointmentItem,
     AvailableSlotsResponse,
@@ -369,7 +370,19 @@ export async function fetchAvailableSlots(
  * Fetches bookable service options for a clinic.
  * Not cached — always live (mock for now).
  */
-export async function fetchServiceOptions(clinicId: string): Promise<BookingServiceOption[]> {
+export async function fetchServiceOptions(
+    clinicId: string,
+    patientId: string,
+    getToken: () => Promise<string | null>
+): Promise<BookingServiceOption[]> {
+    try {
+        const detail = await getClinicDetailOnline(patientId, clinicId, getToken);
+        if (detail && detail.services.length > 0) {
+            return detail.services;
+        }
+    } catch (err) {
+        console.log('Failed to fetch real services, falling back to mock:', err);
+    }
     return getServiceOptions(clinicId);
 }
 
@@ -377,6 +390,18 @@ export async function fetchServiceOptions(clinicId: string): Promise<BookingServ
  * Fetches available healthcare providers for a clinic.
  * Not cached — always live (mock for now).
  */
-export async function fetchProviderOptions(clinicId: string): Promise<BookingProviderOption[]> {
+export async function fetchProviderOptions(
+    clinicId: string,
+    patientId: string,
+    getToken: () => Promise<string | null>
+): Promise<BookingProviderOption[]> {
+    try {
+        const detail = await getClinicDetailOnline(patientId, clinicId, getToken);
+        if (detail && detail.healthcareProviders.length > 0) {
+            return detail.healthcareProviders;
+        }
+    } catch (err) {
+        console.log('Failed to fetch real providers, falling back to mock:', err);
+    }
     return getProviderOptions(clinicId);
 }

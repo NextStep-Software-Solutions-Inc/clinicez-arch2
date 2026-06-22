@@ -7,7 +7,8 @@ using PatientApp.Application.Features.Organizations.Commands.JoinOrganization;
 namespace PatientApp.Api.Endpoints.Organizations;
 
 public sealed record JoinOrganizationRequest(
-    string InviteCode,
+    Guid? OrganizationId,
+    string? InviteCode,
     string RoleId,
     bool ConsentPrivacyPolicy,
     bool ConsentTermsAndConditions,
@@ -21,7 +22,7 @@ public sealed class JoinOrganizationEndpoint : IEndpoint
                 Guid patientId, JoinOrganizationRequest request, ISender sender, CancellationToken ct) =>
             {
                 var result = await sender.Send(new JoinOrganizationCommand(
-                    patientId, request.InviteCode, request.RoleId,
+                    patientId, request.OrganizationId, request.InviteCode, request.RoleId,
                     request.ConsentPrivacyPolicy, request.ConsentTermsAndConditions, request.ConsentDataSharing), ct);
 
                 return Results.Created(

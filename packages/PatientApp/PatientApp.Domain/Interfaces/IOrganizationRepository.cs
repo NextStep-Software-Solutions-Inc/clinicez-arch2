@@ -11,4 +11,5 @@ public interface IOrganizationRepository
     Task AddAsync(Organization organization, CancellationToken ct = default);
     void Update(Organization organization);
     Task<int> CountAsync(string? query, CancellationToken ct = default);
+    Task<IReadOnlyList<OrganizationRole>> GetRolesAsync(Guid organizationId, CancellationToken ct = default);
 }

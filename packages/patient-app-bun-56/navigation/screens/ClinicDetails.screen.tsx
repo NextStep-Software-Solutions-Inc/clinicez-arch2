@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
+import { Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, TextInput, View, RefreshControl } from 'react-native';
 import { useNavigation, useRoute, useTheme } from '@react-navigation/native';
 import { useAuth as useClerkAuth } from '@clerk/expo';
+import NetInfo from '@react-native-community/netinfo';
 import ThemedText from '@ui/ThemedText';
 import ThemedView from '@ui/ThemedView';
 import EmptyState from '@ui/EmptyState';
@@ -12,8 +13,10 @@ import { safeAwait } from 'utils/safe';
 import { usePatientId } from 'hooks/usePatientId';
 import {
   getClinicDetail,
+  getClinicDetailOnline,
   getShareFieldLabel,
   joinClinic,
+  cancelClinicMembershipOnline,
 } from '../../services/discovery/discoveryService';
 import { ClinicDetail, ConsentSelection } from '../../services/discovery/types';
 
@@ -54,6 +57,8 @@ export default function ClinicDetailsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [consent, setConsent] = useState<ConsentSelection>({
     acceptedPrivacyPolicy: false,
     acceptedTermsAndConditions: false,
@@ -65,18 +70,65 @@ export default function ClinicDetailsScreen() {
   useEffect(() => {
     let mounted = true;
     setIsLoading(true);
-    getClinicDetail(patientId, clinicId)
-      .then((detail) => mounted && setClinic(detail))
-      .catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : 'Unable to load clinic details.';
-        Alert.alert('Error', message, [{ text: 'OK', onPress: () => navigation.goBack() }]);
-      })
-      .finally(() => mounted && setIsLoading(false));
+
+    const loadData = async () => {
+      let hasData = false;
+      // 1. Load cached details first
+      try {
+        const localDetail = await getClinicDetail(patientId, clinicId);
+        if (mounted) {
+          setClinic(localDetail);
+          hasData = true;
+          setIsLoading(false);
+        }
+      } catch (error) {
+        console.log('Local load failed:', error);
+      }
+
+      // 2. Fetch online details in the background if connected
+      try {
+        const state = await NetInfo.fetch();
+        if (state.isConnected) {
+          const remoteDetail = await getClinicDetailOnline(patientId, clinicId, getToken);
+          if (remoteDetail && mounted) {
+            setClinic(remoteDetail);
+            hasData = true;
+          }
+        }
+      } catch (error) {
+        console.log('Background online load failed:', error);
+      }
+
+      if (mounted) {
+        setIsLoading(false);
+        if (!hasData) {
+          Alert.alert('Error', 'Unable to load clinic details.', [{ text: 'OK', onPress: () => navigation.goBack() }]);
+        }
+      }
+    };
+
+    loadData();
 
     return () => {
       mounted = false;
     };
   }, [clinicId, patientId, navigation]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    const state = await NetInfo.fetch();
+    if (state.isConnected) {
+      try {
+        const remoteDetail = await getClinicDetailOnline(patientId, clinicId, getToken);
+        if (remoteDetail) setClinic(remoteDetail);
+      } catch (error) {
+        console.log('Online refresh failed:', error);
+      }
+    } else {
+      showOfflineAlert();
+    }
+    setRefreshing(false);
+  };
 
   const startJoin = () => {
     setConsent({ acceptedPrivacyPolicy: false, acceptedTermsAndConditions: false, acceptedDataSharing: false });
@@ -104,7 +156,32 @@ export default function ClinicDetailsScreen() {
     }
     setShowJoinModal(false);
     setIsJoining(false);
-    Alert.alert('Joined', `${clinic.name} has been added to your clinics.`);
+    Alert.alert('Request Submitted', `Your request to join ${clinic.name} has been submitted for approval.`);
+  };
+
+  const handleCancelRequest = async () => {
+    if (!clinic) return;
+    setIsCancelling(true);
+    const [, error] = await safeAwait(cancelClinicMembershipOnline(patientId, clinic.id, getToken));
+    if (error) {
+      if (error.message === 'OFFLINE_ERROR') {
+        showOfflineAlert();
+      } else {
+        Alert.alert('Cancel failed', error.message);
+      }
+      setIsCancelling(false);
+      return;
+    }
+
+    // Refresh details after cancellation
+    const [refreshed] = await safeAwait(getClinicDetail(patientId, clinic.id));
+    if (refreshed) {
+      setClinic(refreshed);
+    } else {
+      navigation.goBack();
+    }
+    setIsCancelling(false);
+    Alert.alert('Request Cancelled', `Your request to join ${clinic.name} has been cancelled.`);
   };
 
   if (isLoading) {
@@ -121,13 +198,17 @@ export default function ClinicDetailsScreen() {
   }
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.container}>
+    <ScrollView 
+      contentInsetAdjustmentBehavior="automatic" 
+      contentContainerStyle={styles.container}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+    >
       <EntityCoverHeader
         name={clinic.name}
         logoUrl={clinic.logoUrl}
         coverImageUrl={clinic.coverImageUrl}
-        badgeLabel={clinic.isJoined ? 'Joined' : clinic.isPublic ? 'Public' : 'Private'}
-        badgeColor={clinic.isJoined ? '#10B981' : clinic.isPublic ? '#3B82F6' : '#F59E0B'}
+        badgeLabel={clinic.isJoined ? 'Joined' : clinic.membershipStatus === 'pending' ? 'Pending Approval' : clinic.isPublic ? 'Public' : 'Private'}
+        badgeColor={clinic.isJoined ? '#10B981' : clinic.membershipStatus === 'pending' ? '#F59E0B' : clinic.isPublic ? '#3B82F6' : '#6B7280'}
         style={styles.coverHeader}
       />
       <ThemedView style={styles.titleBlock}>
@@ -139,11 +220,35 @@ export default function ClinicDetailsScreen() {
 
       <ThemedView style={[styles.section, { borderColor: colors.border, backgroundColor: colors.card }]}>
         <ThemedText style={styles.sectionTitle}>Access</ThemedText>
-        <ThemedText style={[styles.sectionCopy, { color: colors.text }]}>{clinic.isJoined ? 'You have joined this clinic.' : clinic.isPublic ? 'You can join directly from here.' : 'Join a partnered organization to unlock this clinic.'}</ThemedText>
-        {!clinic.isJoined ? (
+        <ThemedText style={[styles.sectionCopy, { color: colors.text }]}>
+          {clinic.isJoined
+            ? 'You have joined this clinic.'
+            : clinic.membershipStatus === 'pending'
+            ? 'Your join request is pending approval.'
+            : clinic.isPublic
+            ? 'You can join directly from here.'
+            : 'Join a partnered organization to unlock this clinic.'}
+        </ThemedText>
+        {!clinic.isJoined && clinic.membershipStatus !== 'pending' ? (
           <Pressable onPress={startJoin} style={({ pressed }) => [styles.primaryButton, { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 }]} accessibilityRole="button">
             <ThemedText style={styles.primaryButtonText}>Join clinic</ThemedText>
           </Pressable>
+        ) : clinic.membershipStatus === 'pending' ? (
+          <View style={{ gap: 8 }}>
+            <View style={[styles.primaryButton, { backgroundColor: '#F59E0B', opacity: 0.8, justifyContent: 'center', alignItems: 'center' }]}>
+              <ThemedText style={styles.primaryButtonText}>Request pending approval</ThemedText>
+            </View>
+            <Pressable
+              onPress={handleCancelRequest}
+              disabled={isCancelling}
+              style={({ pressed }) => [styles.secondaryButton, { borderColor: '#EF4444', opacity: pressed || isCancelling ? 0.7 : 1 }]}
+              accessibilityRole="button"
+            >
+              <ThemedText style={{ color: '#EF4444', fontWeight: '700', fontSize: 14 }}>
+                {isCancelling ? 'Cancelling...' : 'Cancel join request'}
+              </ThemedText>
+            </Pressable>
+          </View>
         ) : null}
         {clinic.supportsAppointments ? (
           <Pressable onPress={() => navigation.navigate('Main', { screen: 'BookingDraftScreen', params: { clinicId: clinic.id } })} style={({ pressed }) => [styles.secondaryButton, { borderColor: colors.border, opacity: pressed ? 0.8 : 1 }]} accessibilityRole="button">
@@ -168,63 +273,96 @@ export default function ClinicDetailsScreen() {
         {clinic.healthcareProviders.length === 0 ? (
           <ThemedText style={[styles.sectionCopy, { color: colors.text }]}>No providers listed for this clinic.</ThemedText>
         ) : (
-          <FlatList
-            data={clinic.healthcareProviders}
-            keyExtractor={(item) => item.id}
-            scrollEnabled={false}
-            ItemSeparatorComponent={() => <ThemedView style={styles.divider} />}
-            renderItem={({ item: provider }) => (
-              <Pressable
-                onPress={() =>
-                  navigation.navigate('Main', {
-                    screen: 'ProviderProfileScreen',
-                    params: {
-                      providerData: {
-                        ...provider,
-                        affiliatedClinics: [{ id: clinic.id, name: clinic.name, address: clinic.address, logoUrl: clinic.logoUrl ?? null, coverImageUrl: clinic.coverImageUrl ?? null }],
+          <ThemedView style={{ gap: 12 }}>
+            {clinic.healthcareProviders.map((provider, idx) => (
+              <ThemedView key={provider.id}>
+                {idx > 0 && <ThemedView style={styles.divider} />}
+                <Pressable
+                  onPress={() =>
+                    navigation.navigate('Main', {
+                      screen: 'ProviderProfileScreen',
+                      params: {
+                        providerData: {
+                          ...provider,
+                          affiliatedClinics: [{ id: clinic.id, name: clinic.name, address: clinic.address, logoUrl: clinic.logoUrl ?? null, coverImageUrl: clinic.coverImageUrl ?? null }],
+                        },
                       },
-                    },
-                  })
-                }
-                accessibilityRole="button"
-                style={({ pressed }) => [styles.providerRow, { opacity: pressed ? 0.75 : 1 }]}
-              >
-                <ThemedView style={[styles.providerAvatar, { backgroundColor: colors.primary }]}>
-                  <ThemedText style={styles.providerInitials}>
-                    {provider.name.split(' ').filter(w => w[0]?.match(/[A-Z]/)).slice(0, 2).map(w => w[0]).join('')}
-                  </ThemedText>
+                    })
+                  }
+                  accessibilityRole="button"
+                  style={({ pressed }) => [styles.providerRow, { opacity: pressed ? 0.75 : 1 }]}
+                >
+                  <ThemedView style={[styles.providerAvatar, { backgroundColor: colors.primary }]}>
+                    <ThemedText style={styles.providerInitials}>
+                      {provider.name.split(' ').filter(w => w[0]?.match(/[A-Z]/)).slice(0, 2).map(w => w[0]).join('')}
+                    </ThemedText>
+                  </ThemedView>
+                  <ThemedView style={styles.providerInfo}>
+                    <ThemedText style={styles.providerName}>{provider.name}</ThemedText>
+                    <ThemedText style={[styles.providerMeta, { color: colors.text }]}>
+                      {provider.specialty} · {provider.credentials.join(', ')}
+                    </ThemedText>
+                  </ThemedView>
+                  <ThemedText style={[styles.providerChevron, { color: colors.text }]}>›</ThemedText>
+                </Pressable>
+              </ThemedView>
+            ))}
+          </ThemedView>
+        )}
+      </ThemedView>
+
+      <ThemedView style={[styles.section, { borderColor: colors.border, backgroundColor: colors.card }]}>
+        <ThemedText style={styles.sectionTitle}>Services & Pricing</ThemedText>
+        {!clinic.services || clinic.services.length === 0 ? (
+          <ThemedText style={[styles.sectionCopy, { color: colors.text }]}>No services listed for this clinic.</ThemedText>
+        ) : (
+          <ThemedView style={{ gap: 12 }}>
+            {clinic.services.map((service, idx) => (
+              <ThemedView key={service.id}>
+                {idx > 0 && <ThemedView style={styles.divider} />}
+                <ThemedView style={styles.serviceRow}>
+                  <ThemedView style={styles.serviceInfo}>
+                    <ThemedText style={styles.serviceName}>{service.name}</ThemedText>
+                    {service.description ? (
+                      <ThemedText style={[styles.serviceDescription, { color: colors.text }]} numberOfLines={2}>
+                        {service.description}
+                      </ThemedText>
+                    ) : null}
+                    <ThemedText style={[styles.serviceMeta, { color: colors.text }]}>
+                      {service.durationMinutes ? `${service.durationMinutes} mins` : 'N/A duration'}
+                    </ThemedText>
+                  </ThemedView>
+                  {service.price !== undefined && service.price !== null ? (
+                    <ThemedText style={[styles.servicePrice, { color: colors.primary }]}>
+                      ${service.price.toFixed(2)}
+                    </ThemedText>
+                  ) : (
+                    <ThemedText style={[styles.servicePrice, { color: colors.text }]}>Free</ThemedText>
+                  )}
                 </ThemedView>
-                <ThemedView style={styles.providerInfo}>
-                  <ThemedText style={styles.providerName}>{provider.name}</ThemedText>
-                  <ThemedText style={[styles.providerMeta, { color: colors.text }]}>
-                    {provider.specialty} · {provider.credentials.join(', ')}
-                  </ThemedText>
-                </ThemedView>
-                <ThemedText style={[styles.providerChevron, { color: colors.text }]}>›</ThemedText>
-              </Pressable>
-            )}
-          />
+              </ThemedView>
+            ))}
+          </ThemedView>
         )}
       </ThemedView>
 
       <ThemedView style={[styles.section, { borderColor: colors.border, backgroundColor: colors.card }]}>
         <ThemedText style={styles.sectionTitle}>Partner organizations</ThemedText>
-        <FlatList
-          data={clinic.linkedOrganizations}
-          keyExtractor={(item) => item.id}
-          scrollEnabled={false}
-          ItemSeparatorComponent={() => <ThemedView style={styles.divider} />}
-          renderItem={({ item }) => (
-            <Pressable
-              onPress={() => navigation.navigate('Main', { screen: 'OrganizationDetailsScreen', params: { organizationId: item.id } })}
-              accessibilityRole="button"
-              style={({ pressed }) => [styles.linkRow, { opacity: pressed ? 0.75 : 1 }]}
-            >
-              <ThemedText style={styles.linkTitle}>{item.name}</ThemedText>
-              <ThemedText style={[styles.linkSubtitle, { color: colors.text }]} numberOfLines={1}>{item.description}</ThemedText>
-            </Pressable>
-          )}
-        />
+        <ThemedView style={{ gap: 12 }}>
+          {clinic.linkedOrganizations.map((item, idx) => (
+            <ThemedView key={item.id}>
+              {idx > 0 && <ThemedView style={styles.divider} />}
+              <Pressable
+                onPress={() => navigation.navigate('Main', { screen: 'OrganizationDetailsScreen', params: { organizationId: item.id } })}
+                accessibilityRole="button"
+                style={({ pressed }) => [styles.linkRow, { opacity: pressed ? 0.75 : 1 }]}
+              >
+                <ThemedText style={styles.linkTitle}>{item.name}</ThemedText>
+                <ThemedText style={[styles.linkSubtitle, { color: colors.text }]} numberOfLines={1}>{item.description}</ThemedText>
+              </Pressable>
+            </ThemedView>
+          ))}
+        </ThemedView>
       </ThemedView>
 
       <ThemedView style={[styles.section, { borderColor: colors.border, backgroundColor: colors.card }]}>
@@ -295,4 +433,10 @@ const styles = StyleSheet.create({
   checkbox: { width: 20, height: 20, borderRadius: 6, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
   checkboxMark: { color: '#fff', fontWeight: '800' },
   consentLabel: { flex: 1, fontSize: 13, lineHeight: 18 },
+  serviceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, gap: 12 },
+  serviceInfo: { flex: 1, gap: 2 },
+  serviceName: { fontSize: 15, fontWeight: '700' },
+  serviceDescription: { fontSize: 12, opacity: 0.75, lineHeight: 16 },
+  serviceMeta: { fontSize: 12, opacity: 0.65 },
+  servicePrice: { fontSize: 16, fontWeight: '800' },
 });
