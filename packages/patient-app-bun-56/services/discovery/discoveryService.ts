@@ -125,6 +125,14 @@ function now(): Date {
     return new Date();
 }
 
+function parseMembershipStatus(status?: string | null): 'pending' | 'active' | undefined {
+    if (!status) return undefined;
+    const lower = status.toLowerCase();
+    if (lower === 'active') return 'active';
+    if (lower === 'pending') return 'pending';
+    return undefined;
+}
+
 function getId(prefix: string, index: number): string {
     return `${prefix}-${String(index + 1).padStart(3, '0')}`;
 }
@@ -419,7 +427,7 @@ async function loadCatalogSnapshot(patientId: string) {
             ...organization,
             partneredClinicIds: linkedClinicIds,
             isJoined: membership?.status === 'active',
-            membershipStatus: membership?.status?.toLowerCase(),
+            membershipStatus: parseMembershipStatus(membership?.status),
             membershipRoleName: membership?.roleName,
             linkedClinics,
         } satisfies OrganizationDetail;
@@ -442,7 +450,7 @@ async function loadCatalogSnapshot(patientId: string) {
             isJoined,
             isVisible,
             unlockedByOrganizationIds,
-            membershipStatus: membership?.status?.toLowerCase(),
+            membershipStatus: parseMembershipStatus(membership?.status),
             healthcareProviders: buildProvidersForClinic(clinic.id, clinic.name, clinic.specialties[0] ?? 'General Medicine'),
             services: [],
         } satisfies ClinicDetail;
@@ -654,7 +662,7 @@ async function updateOrganizationCache(patientId: string, remoteOrgs: RemoteOrgS
         if (existingOrg.length > 0 && existingOrg[0].id !== org.id) {
             const oldId = existingOrg[0].id;
             console.log(`[DiscoveryService] Migrating organization from local ID ${oldId} to remote ID ${org.id}`);
-            
+
             await db.update(organizationMemberships)
                 .set({ organizationId: org.id })
                 .where(eq(organizationMemberships.organizationId, oldId));
@@ -699,7 +707,7 @@ async function updateOrganizationCache(patientId: string, remoteOrgs: RemoteOrgS
                 id: getMembershipId('org-membership', patientId, org.id),
                 patientId,
                 organizationId: org.id,
-                status: org.membershipStatus.toLowerCase(),
+                status: parseMembershipStatus(org.membershipStatus) ?? 'pending',
                 roleId: 'member',
                 roleName: 'Member',
                 consentPrivacyPolicy: true,
@@ -713,7 +721,7 @@ async function updateOrganizationCache(patientId: string, remoteOrgs: RemoteOrgS
             await db.insert(organizationMemberships).values(membershipRow).onConflictDoUpdate({
                 target: organizationMemberships.id,
                 set: {
-                    status: org.membershipStatus.toLowerCase(),
+                    status: parseMembershipStatus(org.membershipStatus) ?? 'pending',
                     updatedAt: now(),
                     syncedAt: now(),
                 },
@@ -813,7 +821,7 @@ async function updateClinicCache(patientId: string, remoteClinics: RemoteClinicS
                 id: getMembershipId('clinic-membership', patientId, clinic.id),
                 patientId,
                 clinicId: clinic.id,
-                status: clinic.membershipStatus.toLowerCase(),
+                status: parseMembershipStatus(clinic.membershipStatus) ?? 'pending',
                 consentPrivacyPolicy: true,
                 consentTermsAndConditions: true,
                 consentDataSharing: true,
@@ -825,7 +833,7 @@ async function updateClinicCache(patientId: string, remoteClinics: RemoteClinicS
             await db.insert(clinicMemberships).values(membershipRow).onConflictDoUpdate({
                 target: clinicMemberships.id,
                 set: {
-                    status: clinic.membershipStatus.toLowerCase(),
+                    status: parseMembershipStatus(clinic.membershipStatus) ?? 'pending',
                     updatedAt: now(),
                     syncedAt: now(),
                 },
@@ -871,7 +879,7 @@ export async function listOrganizations(
                 ...organization,
                 partneredClinicIds: linkedClinicIds,
                 isJoined: membership?.status === 'active',
-                membershipStatus: membership?.status?.toLowerCase(),
+                membershipStatus: parseMembershipStatus(membership?.status),
                 membershipRoleName: membership?.roleName,
             } as OrganizationDetail;
         })
@@ -927,7 +935,7 @@ export async function listClinics(
                 unlockedByOrganizationIds,
                 isJoined,
                 isVisible,
-                membershipStatus: clinicMembership?.status?.toLowerCase(),
+                membershipStatus: parseMembershipStatus(clinicMembership?.status),
                 healthcareProviders: buildProvidersForClinic(clinic.id, clinic.name, clinic.specialties[0] ?? 'General Medicine'),
             } as ClinicDetail;
         })
@@ -983,7 +991,7 @@ export async function loadLocalOrganizations(
                 ...organization,
                 partneredClinicIds: linkedClinicIds,
                 isJoined: membership?.status === 'active',
-                membershipStatus: membership?.status?.toLowerCase(),
+                membershipStatus: parseMembershipStatus(membership?.status),
                 membershipRoleName: membership?.roleName,
             } as OrganizationDetail;
         })
@@ -1047,7 +1055,7 @@ export async function loadLocalClinics(
                 unlockedByOrganizationIds,
                 isJoined,
                 isVisible,
-                membershipStatus: clinicMembership?.status?.toLowerCase(),
+                membershipStatus: parseMembershipStatus(clinicMembership?.status),
                 healthcareProviders: buildProvidersForClinic(clinic.id, clinic.name, clinic.specialties[0] ?? 'General Medicine'),
             } as ClinicDetail;
         })
@@ -1089,7 +1097,7 @@ export async function getOrganizationDetail(patientId: string, organizationId: s
         ...organization,
         linkedClinics,
         isJoined: membership?.status === 'active',
-        membershipStatus: membership?.status?.toLowerCase(),
+        membershipStatus: parseMembershipStatus(membership?.status),
         membershipRoleName: membership?.roleName,
     };
 }
@@ -1117,7 +1125,7 @@ export async function getClinicDetail(patientId: string, clinicId: string): Prom
         isJoined,
         isVisible,
         unlockedByOrganizationIds,
-        membershipStatus: membership?.status?.toLowerCase(),
+        membershipStatus: parseMembershipStatus(membership?.status),
         healthcareProviders: buildProvidersForClinic(clinic.id, clinic.name, clinic.specialties[0] ?? 'General Medicine'),
         services: [],
     };

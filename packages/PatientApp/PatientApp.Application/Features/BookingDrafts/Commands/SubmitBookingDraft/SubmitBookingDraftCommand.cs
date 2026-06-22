@@ -56,7 +56,7 @@ public sealed class SubmitBookingDraftCommandHandler : IRequestHandler<SubmitBoo
             {
                 PatientId = request.PatientId,
                 ClinicId = clinic.Id,
-                Status = MembershipStatus.Pending,
+                Status = ClinicMembershipStatus.Pending,
                 ConsentPrivacyPolicy = true,
                 ConsentTermsAndConditions = true,
                 ConsentDataSharing = true,

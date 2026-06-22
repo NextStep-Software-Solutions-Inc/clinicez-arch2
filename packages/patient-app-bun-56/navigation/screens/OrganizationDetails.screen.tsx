@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, TextInput, View, RefreshControl } from 'react-native';
 import { useNavigation, useRoute, useTheme } from '@react-navigation/native';
 import { useAuth as useClerkAuth } from '@clerk/expo';
+import NetInfo from '@react-native-community/netinfo';
 import ThemedText from '@ui/ThemedText';
 import ThemedView from '@ui/ThemedView';
 import EmptyState from '@ui/EmptyState';

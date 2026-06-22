@@ -378,7 +378,7 @@ export async function fetchServiceOptions(
     try {
         const detail = await getClinicDetailOnline(patientId, clinicId, getToken);
         if (detail && detail.services.length > 0) {
-            return detail.services;
+            return detail.services.map(s => ({ ...s, durationMinutes: s.durationMinutes ?? 0 }));
         }
     } catch (err) {
         console.log('Failed to fetch real services, falling back to mock:', err);
