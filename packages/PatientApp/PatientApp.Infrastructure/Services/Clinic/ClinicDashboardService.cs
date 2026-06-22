@@ -66,10 +66,23 @@ public sealed class ClinicDashboardService : IClinicDashboardService
 
     public async Task<string?> SubmitBookingAsync(
         string clinicBaseUrl, Guid patientId, Guid bookingDraftId,
-        string shareFieldsJson, string bearerToken, CancellationToken cancellationToken = default)
+        string shareFieldsJson, string attachedFileIdsJson, string bearerToken, CancellationToken cancellationToken = default)
     {
-        // The Clinic Dashboard booking API is not yet fully developed.
-        // This stub accepts the request and returns a synthetic booking reference.
+        var httpClient = _httpClientFactory.CreateClient();
+        httpClient.BaseAddress = new Uri(clinicBaseUrl);
+        if (!string.IsNullOrWhiteSpace(bearerToken))
+        {
+            httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
+        }
+
+        var payload = new
+        {
+            PatientId = patientId,
+            BookingDraftId = bookingDraftId,
+            ShareFieldsJson = shareFieldsJson,
+            AttachedFileIdsJson = attachedFileIdsJson
+        };
+
         _logger.LogInformation(
             "Booking submission stub: patient {PatientId} draft {DraftId} → {BaseUrl}",
             patientId, bookingDraftId, clinicBaseUrl);

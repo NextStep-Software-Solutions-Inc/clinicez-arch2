@@ -355,14 +355,26 @@ export async function rescheduleAppointment(
     return updated;
 }
 
+import { fetchAvailableSlotsLive } from '../api/appointmentsApi';
+
 /**
  * Fetches available time slots for a clinic on a given date.
  * Not cached — always live (mock for now).
  */
 export async function fetchAvailableSlots(
     clinicId: string,
+    providerId: string,
     date: string,
+    getToken: () => Promise<string | null>,
 ): Promise<AvailableSlotsResponse> {
+    try {
+        const live = await fetchAvailableSlotsLive(getToken, clinicId, providerId, date);
+        if (live && live.slots) {
+            return live as AvailableSlotsResponse;
+        }
+    } catch (err) {
+        console.log('Failed to fetch live slots, falling back to mock:', err);
+    }
     return getAvailableSlots(clinicId, date);
 }
 

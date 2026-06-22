@@ -47,7 +47,7 @@ public sealed class SubmitBookingDraftCommandHandler : IRequestHandler<SubmitBoo
         var bearerToken = _currentUserService.UserId ?? string.Empty;
         var bookingRef = await _clinicService.SubmitBookingAsync(
             clinic.BaseUrl, request.PatientId, draft.Id,
-            draft.ShareFieldsJson, bearerToken, cancellationToken);
+            draft.ShareFieldsJson, draft.AttachedFileIdsJson, bearerToken, cancellationToken);
 
         var membership = await _membershipRepo.GetByPatientAndClinicAsync(request.PatientId, clinic.Id, cancellationToken);
         if (membership is null && clinic.IsPublic)

@@ -14,5 +14,5 @@ public interface IClinicDashboardService
     /// </summary>
     Task<string?> SubmitBookingAsync(
         string clinicBaseUrl, Guid patientId, Guid bookingDraftId,
-        string shareFieldsJson, string bearerToken, CancellationToken cancellationToken = default);
+        string shareFieldsJson, string attachedFileIdsJson, string bearerToken, CancellationToken cancellationToken = default);
 }

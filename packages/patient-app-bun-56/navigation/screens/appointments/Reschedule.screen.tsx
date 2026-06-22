@@ -17,8 +17,9 @@ import { safeAwait } from 'utils/safe';
 import WeeklyDatePicker from 'components/appointments/WeeklyDatePicker';
 import TimeSlotPicker from 'components/appointments/TimeSlotPicker';
 import { db } from '@db/index';
-import { fetchAvailableSlots, rescheduleAppointment } from '../../../services/appointments/appointmentsService';
-import type { AvailableSlot } from '../../../services/appointments/types';
+import { useAuth } from '../../../contexts/AuthContext';
+import { fetchAvailableSlots, rescheduleAppointment, getAppointmentDetail } from '../../../services/appointments/appointmentsService';
+import type { AvailableSlot, AppointmentItem } from '../../../services/appointments/types';
 
 type Props = StaticScreenProps<{
     appointmentId: string;
@@ -56,18 +57,31 @@ export default function RescheduleScreen({ route }: Props) {
     const [isSaving, setIsSaving] = useState(false);
     const { showOfflineAlert } = useOfflineAlert();
 
+    const [appointment, setAppointment] = useState<AppointmentItem | null>(null);
+    const { getToken } = useAuth();
+
+    // Fetch appointment detail
+    useEffect(() => {
+        let mounted = true;
+        getAppointmentDetail(appointmentId, db).then(item => {
+            if (mounted) setAppointment(item);
+        });
+        return () => { mounted = false; };
+    }, [appointmentId]);
+
     // Load slots when date changes
     useEffect(() => {
-        if (!clinicId) return;
+        if (!clinicId || !selectedDate || !appointment) return;
         let mounted = true;
         setIsLoadingSlots(true);
+        setSlots([]);
         setSelectedSlotId(null);
-        fetchAvailableSlots(clinicId, selectedDate)
+        fetchAvailableSlots(clinicId, appointment.provider.id, selectedDate, getToken)
             .then(res => { if (mounted) setSlots(res.slots); })
             .catch(() => Alert.alert('Error', 'Unable to load available slots.'))
             .finally(() => { if (mounted) setIsLoadingSlots(false); });
         return () => { mounted = false; };
-    }, [clinicId, selectedDate]);
+    }, [clinicId, selectedDate, appointment]);
 
     const selectedSlot = slots.find(s => s.id === selectedSlotId);
     const canSubmit = Boolean(selectedSlotId && reason.trim());

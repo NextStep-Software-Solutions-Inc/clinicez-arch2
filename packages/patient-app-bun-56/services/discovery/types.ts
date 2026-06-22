@@ -137,6 +137,7 @@ export interface BookingDraftRecord {
     notes?: string | null;
     shareFields: ShareableFieldKey[];
     status: 'draft' | 'ready';
+    attachedFileIds: string[];
 }
 
 export interface BookingDraftInput {
@@ -147,6 +148,7 @@ export interface BookingDraftInput {
     reason: string;
     notes?: string;
     shareFields: ShareableFieldKey[];
+    attachedFileIds?: string[];
 }
 
 export interface HomeDashboard {

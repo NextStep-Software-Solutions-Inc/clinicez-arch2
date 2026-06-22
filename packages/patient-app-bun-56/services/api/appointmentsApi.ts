@@ -45,3 +45,29 @@ export async function fetchClinicAppointments(
         `/patients/${patientId}/clinic-appointments?${params}`,
     );
 }
+
+export interface LiveAvailableSlot {
+    id: string;
+    time: string;
+    displayTime: string;
+    period: 'morning' | 'afternoon' | 'evening';
+    available: boolean;
+}
+
+export interface LiveAvailableSlotsResponse {
+    date: string;
+    slots: LiveAvailableSlot[];
+}
+
+export async function fetchAvailableSlotsLive(
+    getToken: () => Promise<string | null>,
+    clinicId: string,
+    providerId: string,
+    date: string,
+): Promise<LiveAvailableSlotsResponse> {
+    const params = new URLSearchParams({ date });
+    return api.get<LiveAvailableSlotsResponse>(
+        getToken,
+        `/clinics/${clinicId}/providers/${providerId}/slots?${params}`,
+    );
+}

@@ -51,7 +51,7 @@ export default function EntityMediaCardHeader({
         {coverImageUrl && !coverError && (
           <Image
             source={{ uri: coverImageUrl }}
-            style={[styles.cover, { position: 'absolute', top: 0, left: 0, right: 0 }]}
+            style={[styles.cover, { position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: 'transparent' }]}
             resizeMode="cover"
             accessibilityRole="image"
             accessibilityLabel={`${name} cover photo`}
@@ -81,7 +81,7 @@ export default function EntityMediaCardHeader({
           {logoUrl && !logoError && (
             <Image
               source={{ uri: logoUrl }}
-              style={[styles.logo, { position: 'absolute', top: 0, left: 0 }]}
+              style={[styles.logo, { position: 'absolute', top: 0, left: 0, backgroundColor: 'transparent' }]}
               resizeMode="cover"
               accessibilityRole="image"
               accessibilityLabel={`${name} logo`}
@@ -109,7 +109,6 @@ const styles = StyleSheet.create({
   cover: {
     height: COVER_HEIGHT,
     width: '100%',
-    backgroundColor: '#1D3A6E',
   },
   coverWrapper: {
     height: COVER_HEIGHT,

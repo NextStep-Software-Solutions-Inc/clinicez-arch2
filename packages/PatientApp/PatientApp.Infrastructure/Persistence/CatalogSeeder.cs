@@ -158,11 +158,14 @@ public class CatalogSeeder : IDataSeeder
 
             var clinicId = Guid.NewGuid();
 
+            var provider1Id = Guid.NewGuid();
+            var provider2Id = Guid.NewGuid();
+            
             var clinicProviders = new List<ClinicHealthcareProvider>
             {
                 new ClinicHealthcareProvider
                 {
-                    Id = Guid.NewGuid(),
+                    Id = provider1Id,
                     ClinicId = clinicId,
                     Name = $"Dr. Jane {specialty} Smith",
                     Specialty = specialty,
@@ -171,11 +174,17 @@ public class CatalogSeeder : IDataSeeder
                     IsActive = true,
                     DisplayOrder = 1,
                     CreatedAt = now,
-                    UpdatedAt = now
+                    UpdatedAt = now,
+                    ProviderAvailabilities = new List<ProviderAvailability>
+                    {
+                        new ProviderAvailability { DayOfWeek = DayOfWeek.Monday, StartTime = new TimeSpan(9, 0, 0), EndTime = new TimeSpan(17, 0, 0) },
+                        new ProviderAvailability { DayOfWeek = DayOfWeek.Wednesday, StartTime = new TimeSpan(9, 0, 0), EndTime = new TimeSpan(17, 0, 0) },
+                        new ProviderAvailability { DayOfWeek = DayOfWeek.Friday, StartTime = new TimeSpan(9, 0, 0), EndTime = new TimeSpan(12, 0, 0) }
+                    }
                 },
                 new ClinicHealthcareProvider
                 {
-                    Id = Guid.NewGuid(),
+                    Id = provider2Id,
                     ClinicId = clinicId,
                     Name = $"Dr. John {specialty} Doe",
                     Specialty = specialty,
@@ -184,12 +193,31 @@ public class CatalogSeeder : IDataSeeder
                     IsActive = true,
                     DisplayOrder = 2,
                     CreatedAt = now,
-                    UpdatedAt = now
+                    UpdatedAt = now,
+                    ProviderAvailabilities = new List<ProviderAvailability>
+                    {
+                        new ProviderAvailability { DayOfWeek = DayOfWeek.Tuesday, StartTime = new TimeSpan(10, 0, 0), EndTime = new TimeSpan(18, 0, 0) },
+                        new ProviderAvailability { DayOfWeek = DayOfWeek.Thursday, StartTime = new TimeSpan(10, 0, 0), EndTime = new TimeSpan(18, 0, 0) },
+                        new ProviderAvailability { DayOfWeek = DayOfWeek.Saturday, StartTime = new TimeSpan(8, 0, 0), EndTime = new TimeSpan(14, 0, 0) }
+                    }
                 }
             };
 
             var clinicServices = new List<ClinicService>
             {
+                new ClinicService
+                {
+                    Id = Guid.NewGuid(),
+                    ClinicId = clinicId,
+                    Name = $"Free Initial Screening",
+                    Description = $"A complimentary first-visit screening.",
+                    DurationMinutes = 15,
+                    Price = 0.00m,
+                    IsActive = true,
+                    DisplayOrder = 0,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                },
                 new ClinicService
                 {
                     Id = Guid.NewGuid(),

@@ -11,6 +11,7 @@ export interface CreateBookingDraftRequest {
     notes?: string | null;
     /** JSON array of ShareableFieldKey values */
     shareFieldsJson: string;
+    attachedFileIdsJson?: string;
 }
 
 /**

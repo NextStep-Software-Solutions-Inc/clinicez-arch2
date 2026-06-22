@@ -67,6 +67,7 @@ public sealed class ApplicationDbContext : DbContext
     public DbSet<Clinic> Clinics => Set<Clinic>();
     public DbSet<ClinicOrganizationLink> ClinicOrganizationLinks => Set<ClinicOrganizationLink>();
     public DbSet<ClinicHealthcareProvider> ClinicHealthcareProviders => Set<ClinicHealthcareProvider>();
+    public DbSet<ProviderAvailability> ProviderAvailabilities => Set<ProviderAvailability>();
     public DbSet<ClinicService> ClinicServices => Set<ClinicService>();
 
     // ── Memberships ─────────────────────────────────────────────────────────

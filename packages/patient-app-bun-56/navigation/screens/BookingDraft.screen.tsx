@@ -511,12 +511,12 @@ export default function BookingDraftScreen({ route }: Props) {
     let mounted = true;
     setIsLoadingSlots(true);
     setSelectedSlotId(null);
-    fetchAvailableSlots(selectedClinicId, selectedDate)
-      .then(res => { if (mounted) setSlots(res.slots); })
+    fetchAvailableSlots(selectedClinicId, selectedProvider?.id ?? '', selectedDate, getToken)
+      .then((res) => { if (mounted) setSlots(res.slots); })
       .catch(() => Alert.alert('Error', 'Unable to load available slots.'))
       .finally(() => { if (mounted) setIsLoadingSlots(false); });
     return () => { mounted = false; };
-  }, [step, selectedClinicId, selectedDate, skipSchedule]);
+  }, [step, selectedClinicId, selectedProvider, selectedDate, skipSchedule]);
 
   // ── Navigation ────────────────────────────────────────────────────────────
 
@@ -610,6 +610,7 @@ export default function BookingDraftScreen({ route }: Props) {
       reason: reasonValue,
       notes: notesValue,
       shareFieldsJson: '[]',
+      attachedFileIdsJson: JSON.stringify(attachedFileIds),
     }));
 
     if (saveErr || !serverDraftId) {
@@ -629,6 +630,7 @@ export default function BookingDraftScreen({ route }: Props) {
         reason: reasonValue,
         notes: notesValue || undefined,
         shareFields: [],
+        attachedFileIds: attachedFileIds,
       }, serverDraftId));
 
       setIsSaving(false);

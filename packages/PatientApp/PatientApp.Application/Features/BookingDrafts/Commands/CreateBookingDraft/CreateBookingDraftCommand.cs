@@ -11,4 +11,5 @@ public sealed record CreateBookingDraftCommand(
     string? PreferredTime,
     string? Reason,
     string? Notes,
-    string ShareFieldsJson) : IRequest<Guid>;
+    string ShareFieldsJson,
+    string AttachedFileIdsJson) : IRequest<Guid>;

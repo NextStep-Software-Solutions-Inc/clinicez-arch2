@@ -10,11 +10,15 @@ public sealed class Appointment : BaseEntity
     public Guid ClinicId { get; set; }
     public Guid ProviderId { get; set; }
 
+    public string? Subject { get; set; }
+    public string? ChiefComplaint { get; set; }
+    public string? Notes { get; set; }
+    public string AttachedFileIdsJson { get; set; } = "[]";
+
     public string? ServiceType { get; set; }
     public DateTime ScheduledAt { get; set; }
     public int DurationMinutes { get; set; }
     public AppointmentStatus Status { get; set; }
-    public string? Notes { get; set; }
 
     // Raw payload from Clinic Dashboard for lossless deserialization
     public DateTime CachedAt { get; set; }

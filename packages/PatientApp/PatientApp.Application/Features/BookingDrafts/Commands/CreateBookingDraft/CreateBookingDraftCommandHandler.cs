@@ -33,6 +33,7 @@ public sealed class CreateBookingDraftCommandHandler : IRequestHandler<CreateBoo
             Reason = request.Reason,
             Notes = request.Notes,
             ShareFieldsJson = request.ShareFieldsJson,
+            AttachedFileIdsJson = request.AttachedFileIdsJson,
         };
 
         await _draftRepo.AddAsync(draft, cancellationToken);

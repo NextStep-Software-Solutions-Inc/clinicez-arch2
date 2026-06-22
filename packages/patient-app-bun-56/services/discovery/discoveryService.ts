@@ -1258,6 +1258,7 @@ export async function getBookingDraft(patientId: string, clinicId: string): Prom
         reason: row.reason ?? null,
         notes: row.notes ?? null,
         shareFields: parseJsonArray<ShareableFieldKey>(String(row.shareFieldsJson ?? '[]'), []),
+        attachedFileIds: parseJsonArray<string>(String(row.attachedFileIdsJson ?? '[]'), []),
         status: (row.status as 'draft' | 'ready') ?? 'draft',
     };
 }
@@ -1288,6 +1289,7 @@ export async function saveBookingDraft(
         reason: input.reason,
         notes: input.notes ?? null,
         shareFieldsJson: serializeShareFields(input.shareFields),
+        attachedFileIdsJson: JSON.stringify(input.attachedFileIds ?? []),
         status: input.preferredDate && input.preferredTime && input.reason ? ('ready' as const) : ('draft' as const),
         createdAt: existing.length > 0 ? existing[0].createdAt : timestamp,
         updatedAt: timestamp,
@@ -1305,6 +1307,7 @@ export async function saveBookingDraft(
         reason: row.reason,
         notes: row.notes,
         shareFields: input.shareFields,
+        attachedFileIds: input.attachedFileIds || [],
         status: row.status,
     };
 }
@@ -1336,6 +1339,7 @@ export async function listBookingDrafts(patientId: string): Promise<BookingDraft
         reason: row.reason ?? null,
         notes: row.notes ?? null,
         shareFields: parseJsonArray<ShareableFieldKey>(String(row.shareFieldsJson ?? '[]'), []),
+        attachedFileIds: parseJsonArray<string>(String(row.attachedFileIdsJson ?? '[]'), []),
         status: (row.status as 'draft' | 'ready') ?? 'draft',
     }));
 }
@@ -1453,6 +1457,7 @@ export async function createBookingDraftOnline(
         reason?: string | null;
         notes?: string | null;
         shareFieldsJson: string;
+        attachedFileIdsJson?: string;
     },
 ): Promise<string> {
     return apiCreateDraft(getToken, patientId, payload);

@@ -19,5 +19,6 @@ public sealed class BookingDraft : BaseEntity, ISyncable
     public string? Notes { get; set; }
     /// <summary>JSON array of ShareableFieldKey values the patient consents to share.</summary>
     public string ShareFieldsJson { get; set; } = "[]";
+    public string AttachedFileIdsJson { get; set; } = "[]";
     public BookingDraftStatus Status { get; set; } = BookingDraftStatus.Draft;
 }
