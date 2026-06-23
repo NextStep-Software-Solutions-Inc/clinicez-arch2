@@ -120,7 +120,7 @@ export default function FilesUploadScreen({ route }: FilesScreenProps<'FilesUplo
 
   const usedPct = config && config.quotaBytes > 0 ? Math.min(1, config.usedStorageBytes / config.quotaBytes) : 0;
   const insets = useSafeAreaInsets();
-  const tabBarHeight = useBottomTabBarHeight() ?? 96 + insets.bottom;
+  const tabBarHeight = useBottomTabBarHeight() || 96 + insets.bottom;
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
