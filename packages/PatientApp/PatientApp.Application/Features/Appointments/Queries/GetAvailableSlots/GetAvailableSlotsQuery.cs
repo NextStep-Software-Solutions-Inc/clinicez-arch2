@@ -38,10 +38,17 @@ public sealed class GetAvailableSlotsQueryHandler : IRequestHandler<GetAvailable
             pa => pa.ClinicHealthcareProviderId == request.ProviderId && pa.DayOfWeek == dayOfWeek && pa.IsActive,
             cancellationToken);
 
+        var year = request.Date.Year;
+        var month = request.Date.Month;
+        var day = request.Date.Day;
+        var startOfDay = new DateTime(year, month, day, 0, 0, 0, DateTimeKind.Utc);
+        var endOfDay = startOfDay.AddDays(1);
+
         var existingAppointments = await _appointmentRepository.FindAsync(
             a => a.ClinicId == request.ClinicId 
                         && a.ProviderId == request.ProviderId 
-                        && a.ScheduledAt.Date == request.Date.ToDateTime(TimeOnly.MinValue).Date,
+                        && a.ScheduledAt >= startOfDay 
+                        && a.ScheduledAt < endOfDay,
             cancellationToken);
 
         var intervalMinutes = 30;

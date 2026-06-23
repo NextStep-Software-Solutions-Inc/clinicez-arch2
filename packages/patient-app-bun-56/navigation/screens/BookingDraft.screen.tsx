@@ -513,7 +513,7 @@ export default function BookingDraftScreen({ route }: Props) {
     setSelectedSlotId(null);
     fetchAvailableSlots(selectedClinicId, selectedProvider?.id ?? '', selectedDate, getToken)
       .then((res) => { if (mounted) setSlots(res.slots); })
-      .catch(() => Alert.alert('Error', 'Unable to load available slots.'))
+      .catch((err) => Alert.alert('Server Error', `Unable to load available slots. ${err?.message || ''}`))
       .finally(() => { if (mounted) setIsLoadingSlots(false); });
     return () => { mounted = false; };
   }, [step, selectedClinicId, selectedProvider, selectedDate, skipSchedule]);

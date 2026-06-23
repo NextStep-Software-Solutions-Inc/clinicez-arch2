@@ -112,10 +112,11 @@ export default function WeeklyDatePicker({ selectedDate, onSelectDate, available
 
                 return (
                     <Pressable
-                        onPress={() => onSelectDate(item.dateStr)}
+                        onPress={() => { if (!isPast) onSelectDate(item.dateStr); }}
                         accessibilityRole="button"
                         accessibilityLabel={format(item.date, 'MMMM d, yyyy')}
-                        accessibilityState={{ selected: isSelected }}
+                        accessibilityState={{ selected: isSelected, disabled: isPast }}
+                        disabled={isPast}
                         style={({ pressed }) => [styles.cell, { opacity: isPast && !isSelected ? 0.45 : pressed ? 0.7 : 1 }]}
                     >
                         <ThemedText style={[styles.dayName, { color: isSelected ? colors.primary : colors.text }]}>
