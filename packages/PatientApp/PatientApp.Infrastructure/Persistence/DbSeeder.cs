@@ -8,7 +8,8 @@ public static class DbSeeder
     private static readonly List<IDataSeeder> Seeders = new()
     {
         new PatientSeeder(),
-        new CatalogSeeder()
+        new CatalogSeeder(),
+        new AppointmentSeeder()
     };
 
     public static void Seed(ApplicationDbContext context)

@@ -3,6 +3,7 @@ import { Alert, FlatList, Platform, Pressable, StyleSheet, View } from 'react-na
 import { useFocusEffect, useNavigation, useTheme } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useNetInfo } from '@react-native-community/netinfo';
 import { format, isToday, isFuture, isPast, parseISO } from 'date-fns';
 import { MaterialSymbol, SFSymbol } from '@react-navigation/native';
 import { and, eq, desc } from 'drizzle-orm';
@@ -108,13 +109,17 @@ function isPastItem(item: AppointmentItem): boolean {
     } catch { return false; }
 }
 
+import { useAuth as useClerkAuth } from '@clerk/expo';
+
 export default function AppointmentsScreen() {
     const { colors } = useTheme();
     const navigation = useNavigation();
     const patientId = usePatientId();
+    const { getToken } = useClerkAuth();
     const insets = useSafeAreaInsets();
     const tabBarHeight = (useBottomTabBarHeight?.() || 96) + insets.bottom;
 
+    const netInfo = useNetInfo();
     const [appointments, setAppointments] = useState<AppointmentItem[]>([]);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [isFromCache, setIsFromCache] = useState(false);
@@ -122,61 +127,87 @@ export default function AppointmentsScreen() {
     const [segment, setSegment] = useState<Segment>(0);
     const [drafts, setDrafts] = useState<DraftSummary[]>([]);
     const dbRef = useRef(db);
+    
+    // Store getToken in a ref to avoid infinite loops in useFocusEffect
+    const getTokenRef = useRef(getToken);
+    getTokenRef.current = getToken;
 
     const loadDrafts = useCallback(async () => {
-        const rows = await dbRef.current
-            .select({
-                id: bookingDrafts.id,
-                clinicId: bookingDrafts.clinicId,
-                clinicName: clinicsTable.name,
-                reason: bookingDrafts.reason,
-                preferredDate: bookingDrafts.preferredDate,
-                updatedAt: bookingDrafts.updatedAt,
-            })
-            .from(bookingDrafts)
-            .leftJoin(clinicsTable, eq(bookingDrafts.clinicId, clinicsTable.id))
-            .where(and(
-                eq(bookingDrafts.patientId, patientId),
-                eq(bookingDrafts.status, 'draft'),
-            ))
-            .orderBy(desc(bookingDrafts.updatedAt));
-        setDrafts(rows.map(r => {
-            // Strip the service metadata prefix from notes before displaying the reason
-            const rawReason = r.reason ?? null;
-            return {
-                id: r.id,
-                clinicId: r.clinicId,
-                clinicName: r.clinicName ?? null,
-                reason: rawReason,
-                preferredDate: r.preferredDate ?? null,
-                updatedAt: r.updatedAt,
-            };
-        }));
+        try {
+            const rows = await dbRef.current
+                .select({
+                    id: bookingDrafts.id,
+                    clinicId: bookingDrafts.clinicId,
+                    clinicName: clinicsTable.name,
+                    reason: bookingDrafts.reason,
+                    preferredDate: bookingDrafts.preferredDate,
+                    updatedAt: bookingDrafts.updatedAt,
+                })
+                .from(bookingDrafts)
+                .leftJoin(clinicsTable, eq(bookingDrafts.clinicId, clinicsTable.id))
+                .where(and(
+                    eq(bookingDrafts.patientId, patientId),
+                    eq(bookingDrafts.status, 'draft'),
+                ))
+                .orderBy(desc(bookingDrafts.updatedAt));
+            setDrafts(rows.map(r => {
+                const rawReason = r.reason ?? null;
+                return {
+                    id: r.id,
+                    clinicId: r.clinicId,
+                    clinicName: r.clinicName ?? null,
+                    reason: rawReason,
+                    preferredDate: r.preferredDate ?? null,
+                    updatedAt: r.updatedAt,
+                };
+            }));
+        } catch (error) {
+            console.error('Failed to load drafts:', error);
+        }
     }, [patientId]);
+
+    const fetchLiveAppointments = useCallback(async () => {
+        if (netInfo.isConnected === false) return; // offline, do not fetch
+        
+        setIsRefreshing(true);
+        try {
+            const liveResult = await fetchAppointments(patientId, dbRef.current, getTokenRef.current);
+            setAppointments(liveResult.items);
+            setIsFromCache(false);
+        } catch (error) {
+            setIsFromCache(true); // Network failed, so we are definitively using cache
+            Alert.alert(
+                'Connection Error',
+                'Failed to pull the latest appointments from the server. Showing cached data instead.',
+                [
+                    { text: 'Close', style: 'cancel' },
+                    { text: 'Retry', onPress: fetchLiveAppointments }
+                ]
+            );
+        } finally {
+            setIsRefreshing(false);
+        }
+    }, [patientId, netInfo.isConnected]);
 
     const loadAppointments = useCallback(async () => {
         // 1. Immediately display cached data
         try {
             const cachedResult = await getCachedAppointmentsWithLocalBookings(patientId, dbRef.current);
             setAppointments(cachedResult.items);
-            setIsFromCache(true);
+            // We intentionally do not set isFromCache to true here yet,
+            // to avoid flickering the banner while the background fetch runs.
         } catch { /* ignore cache read error */ }
         finally { setIsLoading(false); } // Cache loaded, hide skeleton
 
         // 2. Fetch live data in the background
-        setIsRefreshing(true);
-        try {
-            const liveResult = await fetchAppointments(patientId, dbRef.current, getToken);
-            setAppointments(liveResult.items);
-            setIsFromCache(false);
-        } catch {
-            // Keep cache if it fails
-        } finally {
-            setIsRefreshing(false);
-        }
-    }, [patientId, getToken]);
+        await fetchLiveAppointments();
+    }, [patientId, fetchLiveAppointments]);
 
-    useFocusEffect(useCallback(() => { loadAppointments(); loadDrafts(); }, [loadAppointments, loadDrafts]));
+    // useFocusEffect will only re-run if loadAppointments or loadDrafts changes references.
+    useFocusEffect(useCallback(() => { 
+        loadAppointments(); 
+        loadDrafts(); 
+    }, [loadAppointments, loadDrafts]));
 
     const upcomingItems = appointments.filter(isUpcoming);
     const pastItems = appointments.filter(isPastItem);
@@ -285,7 +316,7 @@ export default function AppointmentsScreen() {
                 data={listItems}
                 keyExtractor={item => item.id}
                 contentContainerStyle={[styles.listContent, { paddingBottom: tabBarHeight + 80 }]}
-                ListHeaderComponent={renderHeader}
+                ListHeaderComponent={renderHeader()}
                 showsVerticalScrollIndicator={false}
                 onRefresh={loadAppointments}
                 refreshing={isRefreshing}

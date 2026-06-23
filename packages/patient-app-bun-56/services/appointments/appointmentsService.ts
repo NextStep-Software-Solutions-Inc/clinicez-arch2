@@ -95,7 +95,9 @@ function mapRemoteStatus(status?: string): AppointmentItem['status'] {
     if (s.includes('cancel')) return 'canceled';
     if (s.includes('noshow')) return 'no_show';
     if (s.includes('action')) return 'action_required';
-    if (s === 'confirmed' || s === 'completed' || s === 'pending') return s as any;
+    if (s === 'confirmed') return 'confirmed';
+    if (s === 'completed') return 'completed';
+    if (s === 'pending') return 'pending';
     return 'pending';
 }
 
