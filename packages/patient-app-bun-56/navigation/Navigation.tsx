@@ -1,5 +1,5 @@
 import { createNativeStackNavigator, createNativeStackScreen } from '@react-navigation/native-stack';
-import { createStaticNavigation, getFocusedRouteNameFromRoute, createNavigationContainerRef, RootNavigator } from '@react-navigation/native';
+import { createStaticNavigation, getFocusedRouteNameFromRoute, createNavigationContainerRef, type StaticParamList, RootNavigator } from '@react-navigation/native';
 import { createBottomTabNavigator, createBottomTabScreen } from '@react-navigation/bottom-tabs';
 import { Platform } from 'react-native';
 import { isLiquidGlassSupported } from '@callstack/liquid-glass';
@@ -544,6 +544,7 @@ const RootStack = createNativeStackNavigator({
   },
 });
 
-export const navigationRef = createNavigationContainerRef<RootNavigator>();
+export type RootParamList = StaticParamList<typeof RootStack>;
+export const navigationRef = createNavigationContainerRef<RootParamList>();
 
 export const Navigation = createStaticNavigation(RootStack);

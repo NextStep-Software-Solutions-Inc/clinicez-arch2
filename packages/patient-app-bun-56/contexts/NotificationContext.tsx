@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import * as ExpoNotifications from 'expo-notifications';
-import { useAuth as useClerkAuth } from '@clerk/expo';
+import { useAuth } from 'contexts/AuthContext';
 import {
   registerForPushNotifications,
   getUnreadCount,
@@ -55,7 +55,7 @@ interface NotificationProviderProps {
 }
 
 export function NotificationProvider({ children }: NotificationProviderProps) {
-  const { userId } = useClerkAuth();
+  const { internalPatientId: patientId } = useAuth();
 
   const [unreadCount, setUnreadCount] = useState(3);
   const [pushToken, setPushToken] = useState<string | null>(null);
@@ -65,23 +65,23 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
   const listenerCleanupRef = useRef<(() => void) | null>(null);
 
   const refresh = useCallback(async () => {
-    if (!userId) {
+    if (!patientId) {
       setUnreadCount(0);
       return;
     }
     try {
-      const count = await getUnreadCount(userId);
+      const count = await getUnreadCount(patientId);
       setUnreadCount(count);
     } catch (_) { }
-  }, [userId]);
+  }, [patientId]);
 
   const requestPermissions = useCallback(async (): Promise<boolean> => {
-    if (!userId) return false;
-    const { token, status } = await registerForPushNotifications(userId);
+    if (!patientId) return false;
+    const { token, status } = await registerForPushNotifications(patientId);
     setPermissionStatus(status);
     if (token) setPushToken(token);
     return status === 'granted';
-  }, [userId]);
+  }, [patientId]);
 
   useEffect(() => {
     // Check current permission status without prompting
@@ -105,9 +105,9 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
       };
 
       // Only persist notifications when there's an authenticated user
-      if (userId) {
+      if (patientId) {
         try {
-          await saveNotification(userId, payload);
+          await saveNotification(patientId, payload);
         } catch (_) { }
       }
 
@@ -132,7 +132,7 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
       listenerCleanupRef.current?.();
       listenerCleanupRef.current = null;
     };
-  }, [userId, refresh]);
+  }, [patientId, refresh]);
 
   return (
     <NotificationContext.Provider
