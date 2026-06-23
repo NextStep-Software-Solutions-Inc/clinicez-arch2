@@ -55,13 +55,14 @@ public class CatalogSeeder : IDataSeeder
     {
         var now = DateTime.UtcNow;
 
-        // Only seed catalog if healthcare providers are already seeded
-        if (context.ClinicHealthcareProviders.Any())
+        // Only seed catalog if healthcare providers and availabilities are already seeded
+        if (context.ClinicHealthcareProviders.Any() && context.ProviderAvailabilities.Any())
         {
             return;
         }
 
-        // Wipe existing catalog and memberships to re-seed cleanly
+        context.ProviderAvailabilities.RemoveRange(context.ProviderAvailabilities);
+        context.ClinicHealthcareProviders.RemoveRange(context.ClinicHealthcareProviders);
         context.ClinicOrganizationLinks.RemoveRange(context.ClinicOrganizationLinks);
         context.ClinicMemberships.RemoveRange(context.ClinicMemberships);
         context.OrganizationMemberships.RemoveRange(context.OrganizationMemberships);

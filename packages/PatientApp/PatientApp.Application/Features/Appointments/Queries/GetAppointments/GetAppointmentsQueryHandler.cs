@@ -35,15 +35,17 @@ public sealed class GetAppointmentsQueryHandler
         foreach (var appt in appointments)
         {
             var clinic = await _clinicRepository.GetByIdAsync(appt.ClinicId, cancellationToken);
+            var provider = clinic?.HealthcareProviders.FirstOrDefault(p => p.Id == appt.ProviderId);
+
             dtos.Add(new AppointmentDto(
                 appt.Id,
                 appt.ClinicId,
                 clinic?.Name ?? "Unknown Clinic",
                 new AppointmentProviderSnapshot(
                     appt.ProviderId,
-                    "Healthcare Provider",
-                    null, // specialty
-                    null  // avatar
+                    provider?.Name ?? "Unknown Provider",
+                    provider?.Specialty,
+                    provider?.AvatarUrl
                 ),
                 appt.ServiceType,
                 appt.ScheduledAt.ToString("O"),
