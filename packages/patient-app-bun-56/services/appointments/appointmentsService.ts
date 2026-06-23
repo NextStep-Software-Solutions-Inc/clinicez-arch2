@@ -89,6 +89,16 @@ function localBookingToAppointmentItem(
     };
 }
 
+function mapRemoteStatus(status?: string): AppointmentItem['status'] {
+    if (!status) return 'pending';
+    const s = status.toLowerCase();
+    if (s.includes('cancel')) return 'canceled';
+    if (s.includes('noshow')) return 'no_show';
+    if (s.includes('action')) return 'action_required';
+    if (s === 'confirmed' || s === 'completed' || s === 'pending') return s as any;
+    return 'pending';
+}
+
 function remoteToLocalItem(remote: RemoteAppointment): AppointmentItem {
     return {
         id: remote.id,
@@ -114,7 +124,7 @@ function remoteToLocalItem(remote: RemoteAppointment): AppointmentItem {
         serviceType: remote.serviceType ?? 'Consultation',
         scheduledAt: remote.scheduledAt,
         durationMinutes: remote.durationMinutes,
-        status: remote.status as any,
+        status: mapRemoteStatus(remote.status),
         notes: remote.notes ?? null,
         attachedDocuments: [],
         cachedAt: new Date().toISOString(),

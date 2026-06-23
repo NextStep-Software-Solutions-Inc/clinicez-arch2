@@ -23,6 +23,7 @@ import LockScreen from './navigation/screens/Lock.screen';
 import UnlockScreen from './navigation/screens/Unlock.screen';
 import * as ExpoNotifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
+import { ErrorBoundary } from 'components/ui/ErrorBoundary';
 
 // ─── Background notification task ─────────────────────────────────────────────
 // This task runs when a push notification is received while the app is
@@ -138,7 +139,9 @@ export default function App() {
           <AppearanceProvider>
             <OnboardingProvider>
               <AuthProvider>
-                <AppWithTheme />
+                <ErrorBoundary>
+                  <AppWithTheme />
+                </ErrorBoundary>
               </AuthProvider>
             </OnboardingProvider>
           </AppearanceProvider>
