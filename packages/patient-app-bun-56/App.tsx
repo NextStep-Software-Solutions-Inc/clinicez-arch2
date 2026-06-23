@@ -1,6 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { Navigation } from './navigation/Navigation';
+import { Navigation, navigationRef } from './navigation/Navigation';
+import { useOTAUpdate } from 'hooks/useOTAUpdate';
 import { DefaultTheme, DarkTheme, MaterialDarkTheme, MaterialLightTheme, Theme, ThemeProvider } from "@react-navigation/native";
 import { ColorValue, Platform, StyleSheet, useColorScheme, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -84,6 +85,8 @@ function AppWithTheme() {
   const { themePreference } = useAppearance();
   const { showUserNotFoundAlert, setShowUserNotFoundAlert, userId, logout } = useAuth();
 
+  useOTAUpdate();
+
   const isDarkMode =
     themePreference === 'dark'
       ? true
@@ -105,7 +108,7 @@ function AppWithTheme() {
           <BottomSheetModalProvider>
             <ThemeProvider value={selectedTheme}>
               <OfflineAlertProvider>
-                <Navigation theme={selectedTheme} />
+                <Navigation ref={navigationRef} theme={selectedTheme} />
                 <LockOverlay backgroundColor={selectedTheme.colors.background} />
                 <CustomAlertModal
                   visible={showUserNotFoundAlert}

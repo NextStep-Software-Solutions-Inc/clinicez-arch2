@@ -15,6 +15,7 @@ import {
   saveNotification,
   type NotificationPayload,
 } from 'services/notifications/notificationService';
+import { navigationRef } from 'navigation/Navigation';
 
 export interface NotificationContextValue {
   unreadCount: number;
@@ -113,7 +114,19 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
       refresh();
     });
 
-    listenerCleanupRef.current = () => receivedSub.remove();
+    const responseSub = ExpoNotifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data;
+      if (data?.route === 'SettingsScreen') {
+        if (navigationRef.isReady()) {
+          navigationRef.navigate('Main', { screen: 'SettingsScreen' });
+        }
+      }
+    });
+
+    listenerCleanupRef.current = () => {
+      receivedSub.remove();
+      responseSub.remove();
+    };
 
     return () => {
       listenerCleanupRef.current?.();
