@@ -1,7 +1,6 @@
-using System;
-using System.Linq;
 using PatientApp.Domain.Entities;
 using PatientApp.Domain.Enums;
+using Microsoft.EntityFrameworkCore;
 
 namespace PatientApp.Infrastructure.Persistence;
 
@@ -11,21 +10,25 @@ public class AppointmentSeeder : IDataSeeder
 
     public void Seed(ApplicationDbContext context)
     {
-        var testClerkUserId = "user_2hXZZn1Wmr7z1S4GqBhsdzvzHdm";
+        var testClerkUserId = "user_30WHio75ZUVC7SME6lFEriMNRyL";
         var patient = context.Patients.FirstOrDefault(p => p.ClerkUserId == testClerkUserId);
 
         if (patient == null)
         {
-            Console.WriteLine("[DbSeeder] Test patient not found. Skipping appointments seeding.");
+            Console.WriteLine("[DbSeeder] Target test patient not found. Skipping appointments seeding.");
             return;
         }
 
-        if (context.Appointments.Any(a => a.PatientId == patient.Id))
+        if (context.Appointments.Count(a => a.PatientId == patient.Id) >= 200)
         {
-            return; // Already seeded
+            return; // Already seeded enough
         }
 
-        var clinics = context.Clinics.Take(2).ToList();
+        var clinics = context.Clinics
+            .Include(c => c.HealthcareProviders)
+            .Include(c => c.Services)
+            .ToList();
+            
         if (clinics.Count == 0)
         {
             Console.WriteLine("[DbSeeder] No clinics found. Skipping appointments seeding.");
@@ -33,64 +36,85 @@ public class AppointmentSeeder : IDataSeeder
         }
 
         var now = DateTime.UtcNow;
-        var appointments = new[]
-        {
-            new Appointment
-            {
-                Id = Guid.NewGuid(),
-                PatientId = patient.Id,
-                ClinicId = clinics[0].Id,
-                ProviderId = Guid.NewGuid(),
-                Subject = "Dr. Alice Smith",
-                ServiceType = "General Consultation",
-                ScheduledAt = now.AddDays(1).AddHours(2), // Tomorrow
-                DurationMinutes = 30,
-                Status = AppointmentStatus.Confirmed,
-                Notes = "Routine checkup",
-                CreatedAt = now,
-                CreatedBy = "seeder",
-                UpdatedAt = now,
-                UpdatedBy = "seeder"
-            },
-            new Appointment
-            {
-                Id = Guid.NewGuid(),
-                PatientId = patient.Id,
-                ClinicId = clinics[0].Id,
-                ProviderId = Guid.NewGuid(),
-                Subject = "Dr. Bob Johnson",
-                ServiceType = "Dental Cleaning",
-                ScheduledAt = now.AddDays(5),
-                DurationMinutes = 60,
-                Status = AppointmentStatus.Pending,
-                Notes = "Bring previous dental records",
-                CreatedAt = now,
-                CreatedBy = "seeder",
-                UpdatedAt = now,
-                UpdatedBy = "seeder"
-            },
-            new Appointment
-            {
-                Id = Guid.NewGuid(),
-                PatientId = patient.Id,
-                ClinicId = clinics.Count > 1 ? clinics[1].Id : clinics[0].Id,
-                ProviderId = Guid.NewGuid(),
-                Subject = "Dr. Carol Williams",
-                ServiceType = "Follow-up",
-                ScheduledAt = now.AddDays(-2), // Past appointment
-                DurationMinutes = 15,
-                Status = AppointmentStatus.Completed,
-                Notes = "Follow-up on blood test results",
-                CreatedAt = now,
-                CreatedBy = "seeder",
-                UpdatedAt = now,
-                UpdatedBy = "seeder"
-            }
+        var rnd = new Random(12345);
+        var fallbackServiceTypes = new[] { "General Consultation", "Dental Cleaning", "Follow-up", "Annual Checkup", "Vaccination", "Cardiology Review", "Dermatology Screen" };
+        var chiefComplaints = new[] { 
+            "Persistent headache for 3 days", 
+            "Annual physical checkup", 
+            "Toothache in lower left jaw", 
+            "Skin rash on right arm", 
+            "Routine follow-up on blood pressure", 
+            "Mild fever and cough", 
+            "Chest pain after exercise", 
+            "Allergy symptoms flaring up", 
+            "Knee joint pain", 
+            "Stomach ache after meals" 
         };
+        var notesList = new[] {
+            "Patient reported symptoms started recently. Advised to bring previous lab results.",
+            "Routine visit. No special prep needed.",
+            "Patient is allergic to penicillin. Alerted pharmacy.",
+            "Discuss recent dietary changes and impact on health.",
+            "Please ensure patient signs the updated consent forms at the front desk.",
+            "Follow-up required from the specialist visit last month."
+        };
+
+        var appointments = new List<Appointment>();
+
+        for (int i = 0; i < 200; i++)
+        {
+            var clinic = clinics[rnd.Next(clinics.Count)];
+            var clinicProviders = clinic.HealthcareProviders.ToList();
+            var provider = clinicProviders.Count > 0 ? clinicProviders[rnd.Next(clinicProviders.Count)] : null;
+            
+            var clinicServices = clinic.Services.ToList();
+            var service = clinicServices.Count > 0 ? clinicServices[rnd.Next(clinicServices.Count)] : null;
+            var serviceType = service?.Name ?? fallbackServiceTypes[rnd.Next(fallbackServiceTypes.Length)];
+            var durationMinutes = service?.DurationMinutes ?? (rnd.Next(1, 5) * 15);
+            
+            // Random date between 30 days ago and 30 days in the future
+            var daysOffset = rnd.Next(-30, 31);
+            var hoursOffset = rnd.Next(8, 18); // 8 AM to 5 PM
+            var scheduledAt = now.Date.AddDays(daysOffset).AddHours(hoursOffset);
+            
+            // Determine logical status based on date
+            AppointmentStatus status;
+            if (scheduledAt < now)
+            {
+                // Past appointments are mostly completed or canceled/no-show
+                var pastStatuses = new[] { AppointmentStatus.Completed, AppointmentStatus.Completed, AppointmentStatus.Completed, AppointmentStatus.Cancelled, AppointmentStatus.NoShow };
+                status = pastStatuses[rnd.Next(pastStatuses.Length)];
+            }
+            else
+            {
+                // Future appointments are mostly confirmed or pending
+                var futureStatuses = new[] { AppointmentStatus.Confirmed, AppointmentStatus.Confirmed, AppointmentStatus.Pending };
+                status = futureStatuses[rnd.Next(futureStatuses.Length)];
+            }
+
+            appointments.Add(new Appointment
+            {
+                Id = Guid.NewGuid(),
+                PatientId = patient.Id,
+                ClinicId = clinic.Id,
+                ProviderId = provider?.Id ?? Guid.NewGuid(),
+                Subject = provider?.Name ?? "Dr. Unassigned",
+                ServiceType = serviceType,
+                ScheduledAt = scheduledAt,
+                DurationMinutes = durationMinutes, // 15, 30, 45, 60
+                Status = status,
+                ChiefComplaint = chiefComplaints[rnd.Next(chiefComplaints.Length)],
+                Notes = notesList[rnd.Next(notesList.Length)] + $" (Mock Ref: {i + 1})",
+                CreatedAt = now,
+                CreatedBy = "seeder",
+                UpdatedAt = now,
+                UpdatedBy = "seeder"
+            });
+        }
 
         context.Appointments.AddRange(appointments);
         context.SaveChanges();
 
-        Console.WriteLine($"[DbSeeder] Successfully seeded {appointments.Length} appointments for test patient.");
+        Console.WriteLine($"[DbSeeder] Successfully seeded {appointments.Count} random appointments for test patient.");
     }
 }

@@ -11,25 +11,31 @@ public class PatientSeeder : IDataSeeder
     public void Seed(ApplicationDbContext context)
     {
         var now = DateTime.UtcNow;
-        var testClerkUserId = "user_2hXZZn1Wmr7z1S4GqBhsdzvzHdm";
+        var testClerkUserIds = new[] { 
+            "user_2hXZZn1Wmr7z1S4GqBhsdzvzHdm",
+            "user_30WHio75ZUVC7SME6lFEriMNRyL"
+        };
 
-        if (!context.Patients.Any(p => p.ClerkUserId == testClerkUserId))
+        foreach (var testClerkUserId in testClerkUserIds)
         {
-            var patientId = Guid.NewGuid();
-            var patient = new Patient
+            if (!context.Patients.Any(p => p.ClerkUserId == testClerkUserId))
             {
-                ClientId = patientId,
-                ClerkUserId = testClerkUserId,
-                FirstName = "Demo",
-                LastName = "Patient",
-                CreatedAt = now,
-                CreatedBy = "seeder",
-                UpdatedAt = now,
-                UpdatedBy = "seeder"
-            };
-            context.Patients.Add(patient);
-            context.SaveChanges();
-            Console.WriteLine($"[DbSeeder] Successfully seeded test patient (Clerk ID: {testClerkUserId}, Client ID: {patientId})");
+                var patientId = Guid.NewGuid();
+                var patient = new Patient
+                {
+                    ClientId = patientId,
+                    ClerkUserId = testClerkUserId,
+                    FirstName = "Demo",
+                    LastName = "Patient",
+                    CreatedAt = now,
+                    CreatedBy = "seeder",
+                    UpdatedAt = now,
+                    UpdatedBy = "seeder"
+                };
+                context.Patients.Add(patient);
+                context.SaveChanges();
+                Console.WriteLine($"[DbSeeder] Successfully seeded test patient (Clerk ID: {testClerkUserId}, Client ID: {patientId})");
+            }
         }
     }
 }
