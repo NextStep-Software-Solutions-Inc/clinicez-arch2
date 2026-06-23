@@ -36,6 +36,37 @@ public class AppointmentSeeder : IDataSeeder
         }
 
         var now = DateTime.UtcNow;
+
+        // Ensure ALL clinics have a Free service
+        bool newServicesAdded = false;
+        foreach (var clinic in clinics)
+        {
+            if (!clinic.Services.Any(s => s.Price == 0 || s.Name.ToLower().Contains("free")))
+            {
+                var freeService = new ClinicService
+                {
+                    Id = Guid.NewGuid(),
+                    ClinicId = clinic.Id,
+                    Name = "Free Consultation",
+                    Description = "A complimentary free consultation.",
+                    DurationMinutes = 15,
+                    Price = 0.00m,
+                    IsActive = true,
+                    DisplayOrder = 0,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                };
+                context.Set<ClinicService>().Add(freeService);
+                clinic.Services.Add(freeService);
+                newServicesAdded = true;
+            }
+        }
+        if (newServicesAdded)
+        {
+            context.SaveChanges();
+            Console.WriteLine("[DbSeeder] Added missing Free Consultation services to existing clinics.");
+        }
+
         var rnd = new Random(12345);
         var fallbackServiceTypes = new[] { "General Consultation", "Dental Cleaning", "Follow-up", "Annual Checkup", "Vaccination", "Cardiology Review", "Dermatology Screen" };
         var chiefComplaints = new[] { 
