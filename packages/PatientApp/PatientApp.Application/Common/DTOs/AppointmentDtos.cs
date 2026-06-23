@@ -15,7 +15,9 @@ public sealed record AppointmentDto(
     string ScheduledAt, // ISO-8601 UTC string
     int DurationMinutes,
     string Status,
-    string? Notes);
+    string? Notes,
+    string? Subject,
+    string? ChiefComplaint);
 
 public sealed record AppointmentsResponse(
     IReadOnlyList<AppointmentDto> Items,

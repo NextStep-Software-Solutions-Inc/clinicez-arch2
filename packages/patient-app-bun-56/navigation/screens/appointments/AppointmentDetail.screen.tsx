@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Alert, Image, Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { Alert, Image, Linking, Platform, Pressable, ScrollView, StyleSheet, View, RefreshControl } from 'react-native';
 import { useNavigation, useTheme } from '@react-navigation/native';
 import type { StaticScreenProps } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -171,20 +171,31 @@ export default function AppointmentDetailScreen({ route }: Props) {
 
     const [item, setItem] = useState<AppointmentItem | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
     const [isPaidLocally, setIsPaidLocally] = useState(false);
+
+    const loadAppointment = useCallback(async () => {
+        try {
+            const detail = await getAppointmentDetail(appointmentId, db);
+            setItem(detail);
+        } catch (e) {
+            Alert.alert('Error', 'Unable to load appointment details.', [
+                { text: 'OK', onPress: () => navigation.goBack() },
+            ]);
+        }
+    }, [appointmentId, navigation]);
 
     useEffect(() => {
         let mounted = true;
-        getAppointmentDetail(appointmentId, db)
-            .then(detail => { if (mounted) setItem(detail); })
-            .catch(() =>
-                Alert.alert('Error', 'Unable to load appointment details.', [
-                    { text: 'OK', onPress: () => navigation.goBack() },
-                ])
-            )
-            .finally(() => { if (mounted) setIsLoading(false); });
+        loadAppointment().finally(() => { if (mounted) setIsLoading(false); });
         return () => { mounted = false; };
-    }, [appointmentId, navigation]);
+    }, [loadAppointment]);
+
+    const onRefresh = useCallback(async () => {
+        setIsRefreshing(true);
+        await loadAppointment();
+        setIsRefreshing(false);
+    }, [loadAppointment]);
 
     const effectivePaid = isPaidLocally || item?.paymentStatus === 'paid';
 
@@ -268,6 +279,7 @@ export default function AppointmentDetailScreen({ route }: Props) {
             <ScrollView
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
+                refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}
             >
                 {/* ── Clinic Hero ─────────────────────────────────────────── */}
                 <View style={styles.heroWrapper}>

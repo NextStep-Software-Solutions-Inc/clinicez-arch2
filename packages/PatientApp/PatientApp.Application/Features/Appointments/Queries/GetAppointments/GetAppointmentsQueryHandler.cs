@@ -41,7 +41,7 @@ public sealed class GetAppointmentsQueryHandler
                 clinic?.Name ?? "Unknown Clinic",
                 new AppointmentProviderSnapshot(
                     appt.ProviderId,
-                    appt.Subject ?? "Unknown Provider",
+                    "Healthcare Provider",
                     null, // specialty
                     null  // avatar
                 ),
@@ -49,7 +49,9 @@ public sealed class GetAppointmentsQueryHandler
                 appt.ScheduledAt.ToString("O"),
                 appt.DurationMinutes,
                 appt.Status.ToString(),
-                appt.Notes
+                appt.Notes,
+                appt.Subject,
+                appt.ChiefComplaint
             ));
         }
 

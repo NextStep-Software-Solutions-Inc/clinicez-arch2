@@ -21,6 +21,8 @@ export interface RemoteAppointment {
     /** "pending" | "confirmed" | "cancelled" | "completed" | "noShow" | "actionRequired" */
     status: string;
     notes: string | null;
+    subject?: string | null;
+    chiefComplaint?: string | null;
 }
 
 export interface ClinicAppointmentsResult {

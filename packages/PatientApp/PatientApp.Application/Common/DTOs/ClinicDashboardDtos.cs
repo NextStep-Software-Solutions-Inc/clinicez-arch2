@@ -17,7 +17,9 @@ public sealed record ClinicAppointmentDto(
     string ScheduledAt,        // ISO-8601 UTC string from the clinic backend
     int DurationMinutes,
     string Status,
-    string? Notes);
+    string? Notes,
+    string? Subject,
+    string? ChiefComplaint);
 
 public sealed record ClinicAppointmentsResponse(
     IReadOnlyList<ClinicAppointmentDto> Items,

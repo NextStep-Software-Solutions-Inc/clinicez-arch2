@@ -128,6 +128,8 @@ function remoteToLocalItem(remote: RemoteAppointment): AppointmentItem {
         durationMinutes: remote.durationMinutes,
         status: mapRemoteStatus(remote.status),
         notes: remote.notes ?? null,
+        subject: remote.subject ?? null,
+        chiefComplaint: remote.chiefComplaint ?? null,
         attachedDocuments: [],
         cachedAt: new Date().toISOString(),
         paymentStatus: null,

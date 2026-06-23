@@ -25,10 +25,14 @@ public sealed class OrganizationRepository : IOrganizationRepository
             .FirstOrDefaultAsync(o => o.Id == id, ct);
 
     public Task<Organization?> GetBySlugAsync(string slug, CancellationToken ct = default)
-        => _ctx.Organizations.FirstOrDefaultAsync(o => o.Slug == slug, ct);
+        => _ctx.Organizations
+            .Include(o => o.ClinicLinks).ThenInclude(l => l.Clinic)
+            .FirstOrDefaultAsync(o => o.Slug == slug, ct);
 
     public Task<Organization?> GetByInviteCodeAsync(string inviteCode, CancellationToken ct = default)
-        => _ctx.Organizations.FirstOrDefaultAsync(o => o.InviteCode == inviteCode, ct);
+        => _ctx.Organizations
+            .Include(o => o.ClinicLinks).ThenInclude(l => l.Clinic)
+            .FirstOrDefaultAsync(o => o.InviteCode == inviteCode, ct);
 
     public async Task AddAsync(Organization organization, CancellationToken ct = default)
         => await _ctx.Organizations.AddAsync(organization, ct);
