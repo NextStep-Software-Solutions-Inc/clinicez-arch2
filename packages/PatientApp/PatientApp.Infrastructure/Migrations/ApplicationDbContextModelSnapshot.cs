@@ -29,9 +29,18 @@ namespace PatientApp.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("AttachedFileIdsJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("attached_file_ids_json");
+
                     b.Property<DateTime>("CachedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("cached_at");
+
+                    b.Property<string>("ChiefComplaint")
+                        .HasColumnType("text")
+                        .HasColumnName("chief_complaint");
 
                     b.Property<Guid>("ClinicId")
                         .HasColumnType("uuid")
@@ -96,6 +105,10 @@ namespace PatientApp.Infrastructure.Migrations
                         .HasColumnType("character varying(30)")
                         .HasColumnName("status");
 
+                    b.Property<string>("Subject")
+                        .HasColumnType("text")
+                        .HasColumnName("subject");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -129,6 +142,11 @@ namespace PatientApp.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<string>("AttachedFileIdsJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("attached_file_ids_json");
 
                     b.Property<Guid>("ClientId")
                         .HasColumnType("uuid")
@@ -4364,6 +4382,77 @@ namespace PatientApp.Infrastructure.Migrations
                     b.ToTable("prescriptions", (string)null);
                 });
 
+            modelBuilder.Entity("PatientApp.Domain.Entities.ProviderAvailability", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ClinicHealthcareProviderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("clinic_healthcare_provider_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<int>("DayOfWeek")
+                        .HasColumnType("integer")
+                        .HasColumnName("day_of_week");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<TimeSpan>("EndTime")
+                        .HasColumnType("interval")
+                        .HasColumnName("end_time");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<TimeSpan>("StartTime")
+                        .HasColumnType("interval")
+                        .HasColumnName("start_time");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_provider_availabilities");
+
+                    b.HasIndex("ClinicHealthcareProviderId")
+                        .HasDatabaseName("ix_provider_availabilities_clinic_healthcare_provider_id");
+
+                    b.ToTable("provider_availabilities", (string)null);
+                });
+
             modelBuilder.Entity("PatientApp.Domain.Entities.SyncLog", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5290,6 +5379,18 @@ namespace PatientApp.Infrastructure.Migrations
                     b.Navigation("Patient");
                 });
 
+            modelBuilder.Entity("PatientApp.Domain.Entities.ProviderAvailability", b =>
+                {
+                    b.HasOne("PatientApp.Domain.Entities.ClinicHealthcareProvider", "ClinicHealthcareProvider")
+                        .WithMany("ProviderAvailabilities")
+                        .HasForeignKey("ClinicHealthcareProviderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_provider_availabilities_clinic_healthcare_providers_clinic_");
+
+                    b.Navigation("ClinicHealthcareProvider");
+                });
+
             modelBuilder.Entity("PatientApp.Domain.Entities.SyncLog", b =>
                 {
                     b.HasOne("PatientApp.Domain.Entities.Patient", "Patient")
@@ -5345,6 +5446,11 @@ namespace PatientApp.Infrastructure.Migrations
                     b.Navigation("OrganizationLinks");
 
                     b.Navigation("Services");
+                });
+
+            modelBuilder.Entity("PatientApp.Domain.Entities.ClinicHealthcareProvider", b =>
+                {
+                    b.Navigation("ProviderAvailabilities");
                 });
 
             modelBuilder.Entity("PatientApp.Domain.Entities.Consultation", b =>
