@@ -51,6 +51,7 @@ const FILTERS: Array<{ key: NotificationFilter; label: string }> = [
   { key: 'reminders', label: 'Reminders' },
   { key: 'clinic', label: 'Clinic' },
   { key: 'messages', label: 'Messages' },
+  { key: 'system', label: 'System' },
 ];
 
 const SWIPE_THRESHOLD = 80;

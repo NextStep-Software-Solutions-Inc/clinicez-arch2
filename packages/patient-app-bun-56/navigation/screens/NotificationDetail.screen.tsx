@@ -115,7 +115,21 @@ function getDeepLinkAction(
             // No dedicated messages screen yet; action omitted
             return null;
 
-        case 'system':
+        case 'system': {
+            const route = extraData?.route as string | undefined;
+            if (route === 'SettingsScreen') {
+                return {
+                    label: 'Go to Settings',
+                    iconIos: 'gearshape.fill',
+                    iconAndroid: 'settings',
+                    color: '#6B7280',
+                    navigate: (nav) => {
+                        nav.navigate('Main', { screen: 'SettingsScreen' } as any);
+                    },
+                };
+            }
+            return null;
+        }
         default:
             return null;
     }
