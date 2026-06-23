@@ -334,7 +334,7 @@ export default function ClinicDetailsScreen() {
                   </ThemedView>
                   {service.price !== undefined && service.price !== null ? (
                     <ThemedText style={[styles.servicePrice, { color: colors.primary }]}>
-                      ${service.price.toFixed(2)}
+                      PHP {service.price.toFixed(2)}
                     </ThemedText>
                   ) : (
                     <ThemedText style={[styles.servicePrice, { color: colors.text }]}>Free</ThemedText>

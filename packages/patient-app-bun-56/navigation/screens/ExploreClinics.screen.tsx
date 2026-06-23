@@ -324,37 +324,6 @@ export default function ExploreClinicsScreen() {
                             <ThemedText style={[styles.metaText, { color: colors.text }]}>Address: {item.address}</ThemedText>
                             <ThemedText style={[styles.metaText, { color: colors.text }]}>Appointments: {item.supportsAppointments ? 'Supported' : 'Not available'}</ThemedText>
 
-                            {item.healthcareProviders.length > 0 && (
-                                <ThemedView style={styles.providersRow}>
-                                    <ThemedText style={[styles.providersLabel, { color: colors.text }]}>Providers:</ThemedText>
-                                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.providersChips}>
-                                        {item.healthcareProviders.map((provider) => (
-                                            <Pressable
-                                                key={provider.id}
-                                                onPress={() =>
-                                                    navigation.navigate('Main', {
-                                                        screen: 'ProviderProfileScreen',
-                                                        params: {
-                                                            providerData: {
-                                                                ...provider,
-                                                                affiliatedClinics: [{ id: item.id, name: item.name, address: item.address, logoUrl: item.logoUrl ?? null, coverImageUrl: item.coverImageUrl ?? null }],
-                                                            },
-                                                        },
-                                                    })
-                                                }
-                                                style={({ pressed }) => [
-                                                    styles.providerChip,
-                                                    { borderColor: colors.border, backgroundColor: colors.card, opacity: pressed ? 0.7 : 1 },
-                                                ]}
-                                            >
-                                                <ThemedText style={styles.providerChipName} numberOfLines={1}>{provider.name}</ThemedText>
-                                                <ThemedText style={[styles.providerChipSpec, { color: colors.text }]} numberOfLines={1}>{provider.credentials[0]}</ThemedText>
-                                            </Pressable>
-                                        ))}
-                                    </ScrollView>
-                                </ThemedView>
-                            )}
-
                             <ThemedView style={styles.cardActionsRow}>
                                 <Pressable
                                     onPress={() => navigation.navigate('Main', { screen: 'ClinicDetailsScreen', params: { clinicId: item.id } })}

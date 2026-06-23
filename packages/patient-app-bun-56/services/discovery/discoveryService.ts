@@ -304,9 +304,7 @@ function buildProvidersForClinic(clinicId: string, clinicName: string, specialty
     });
 }
 
-function computeActiveMemberCount(featuredScore: number): number {
-    return 50 + Math.floor(featuredScore * 41.7);
-}
+
 
 function hasAllConsent(consent: ConsentSelection): boolean {
     return consent.acceptedDataSharing && consent.acceptedPrivacyPolicy && consent.acceptedTermsAndConditions;
@@ -451,7 +449,7 @@ async function loadCatalogSnapshot(patientId: string) {
             isVisible,
             unlockedByOrganizationIds,
             membershipStatus: parseMembershipStatus(membership?.status),
-            healthcareProviders: buildProvidersForClinic(clinic.id, clinic.name, clinic.specialties[0] ?? 'General Medicine'),
+            healthcareProviders: [],
             services: [],
         } satisfies ClinicDetail;
     });
@@ -590,7 +588,7 @@ function buildOrganizationPayload(row: Record<string, any>): OrganizationEntity 
         requiredShareFields: parseJsonArray<ShareableFieldKey>(String(row.requiredShareFieldsJson ?? '[]'), ['fullName', 'mobile']),
         partneredClinicIds: [],
         featuredScore: Number(row.featuredScore ?? 0),
-        activeMemberCount: computeActiveMemberCount(Number(row.featuredScore ?? 0)),
+        activeMemberCount: Number(row.activeMemberCount ?? 0),
     };
 }
 
