@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.DependencyInjection;
 using PatientApp.Api.Hubs;
 using PatientApp.Application.Common.Interfaces;
+using PatientApp.Domain.Interfaces;
 
 namespace PatientApp.Api.Services;
 
@@ -12,21 +14,49 @@ namespace PatientApp.Api.Services;
 public sealed class SignalRSyncNotificationService : ISyncNotificationService
 {
     private readonly IHubContext<SyncHub> _hubContext;
+    private readonly IPushNotificationService _pushNotificationService;
+    private readonly IServiceProvider _serviceProvider;
 
-    public SignalRSyncNotificationService(IHubContext<SyncHub> hubContext)
-        => _hubContext = hubContext;
+    public SignalRSyncNotificationService(
+        IHubContext<SyncHub> hubContext,
+        IPushNotificationService pushNotificationService,
+        IServiceProvider serviceProvider)
+    {
+        _hubContext = hubContext;
+        _pushNotificationService = pushNotificationService;
+        _serviceProvider = serviceProvider;
+    }
 
-    public Task NotifySyncCompletedAsync(
+    public async Task NotifySyncCompletedAsync(
         Guid patientId,
         int applied,
         int conflicts,
         CancellationToken cancellationToken = default)
-        => _hubContext.Clients
+    {
+        await _hubContext.Clients
             .Group(SyncHub.PatientGroup(patientId))
             .SendAsync(
                 "SyncCompleted",
                 new { Applied = applied, Conflicts = conflicts },
                 cancellationToken);
+
+        using var scope = _serviceProvider.CreateScope();
+        var deviceSessionRepository = scope.ServiceProvider.GetRequiredService<IDeviceSessionRepository>();
+        
+        var session = await deviceSessionRepository.GetActiveByPatientIdAsync(patientId, cancellationToken);
+        var title = "Sync Complete";
+        var body = "New data has arrived!";
+        
+        if (session != null && !string.IsNullOrWhiteSpace(session.PushToken))
+        {
+            await _pushNotificationService.SendPushNotificationAsync(
+                session.PushToken,
+                title,
+                body,
+                "sync_ready",
+                cancellationToken);
+        }
+    }
 
     public Task NotifySessionRevokedAsync(
         Guid patientId,

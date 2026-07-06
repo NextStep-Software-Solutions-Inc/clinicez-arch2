@@ -7,4 +7,5 @@ public sealed record RegisterDeviceSessionCommand(
     Guid PatientId,
     string DeviceId,
     string DeviceLabel,
-    string ClerkSessionId) : IRequest<RegisterDeviceSessionResponse>;
+    string ClerkSessionId,
+    string? PushToken) : IRequest<RegisterDeviceSessionResponse>;

@@ -20,6 +20,7 @@ using PatientApp.Infrastructure.Services.Jobs.Processors;
 using PatientApp.Infrastructure.Services.Session;
 using PatientApp.Infrastructure.Services.Storage;
 using PatientApp.Infrastructure.Services.Workers;
+using PatientApp.Infrastructure.Services.Notifications;
 using StackExchange.Redis;
 
 namespace PatientApp.Infrastructure;
@@ -101,6 +102,7 @@ public static class DependencyInjection
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<IBackgroundJobEnqueuer, HangfireJobEnqueuer>();
+        services.AddSingleton<IPushNotificationService, FirebasePushNotificationService>();
 
         // ── Sync entity processors ────────────────────────────────────────────
         // Core

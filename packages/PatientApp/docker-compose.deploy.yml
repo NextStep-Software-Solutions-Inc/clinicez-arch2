@@ -27,5 +27,6 @@ services:
       - R2__PublicUrl=${R2_PUBLIC_URL}
       - Hangfire__DashboardUsername=${HANGFIRE_DASHBOARD_USERNAME:-admin}
       - Hangfire__DashboardPassword=${HANGFIRE_DASHBOARD_PASSWORD:-changeme}
+      - Firebase__ServiceAccountJson=${FIREBASE_SERVICE_ACCOUNT_JSON}
       - Encryption__Enabled=false
     restart: unless-stopped

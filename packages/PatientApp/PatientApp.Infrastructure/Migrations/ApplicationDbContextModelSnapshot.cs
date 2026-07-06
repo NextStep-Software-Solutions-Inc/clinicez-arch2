@@ -840,6 +840,10 @@ namespace PatientApp.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("patient_id");
 
+                    b.Property<string>("PushToken")
+                        .HasColumnType("text")
+                        .HasColumnName("push_token");
+
                     b.Property<string>("RedisKey")
                         .IsRequired()
                         .HasMaxLength(256)

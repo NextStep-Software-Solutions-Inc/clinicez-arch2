@@ -30,11 +30,16 @@ public sealed class GetAppointmentsQueryHandler
             ?? throw new NotFoundException($"Patient '{request.PatientId}' was not found.");
 
         var appointments = await _appointmentRepository.GetByPatientAsync(patient.Id, cancellationToken);
-        var dtos = new List<AppointmentDto>();
+        
+        var uniqueClinicIds = appointments.Select(a => a.ClinicId).Distinct().ToList();
+        var clinics = await _clinicRepository.GetByIdsAsync(uniqueClinicIds, cancellationToken);
+        var clinicsDict = clinics.ToDictionary(c => c.Id);
+
+        var dtos = new List<AppointmentDto>(appointments.Count);
 
         foreach (var appt in appointments)
         {
-            var clinic = await _clinicRepository.GetByIdAsync(appt.ClinicId, cancellationToken);
+            clinicsDict.TryGetValue(appt.ClinicId, out var clinic);
             var provider = clinic?.HealthcareProviders.FirstOrDefault(p => p.Id == appt.ProviderId);
 
             dtos.Add(new AppointmentDto(

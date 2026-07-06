@@ -62,6 +62,7 @@ public sealed class RegisterDeviceSessionCommandHandler
             DeviceLabel = request.DeviceLabel,
             ClerkSessionId = request.ClerkSessionId,
             RedisKey = redisKey,
+            PushToken = request.PushToken,
             LastActiveAt = DateTime.UtcNow,
             IsRevoked = false,
         };

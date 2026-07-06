@@ -27,6 +27,17 @@ public sealed class ClinicRepository : IClinicRepository
             .Include(c => c.Services)
             .FirstOrDefaultAsync(c => c.Id == id, ct);
 
+    public async Task<IReadOnlyList<Clinic>> GetByIdsAsync(IEnumerable<Guid> ids, CancellationToken ct = default)
+    {
+        var idList = ids.ToList();
+        return await _ctx.Clinics
+            .Include(c => c.OrganizationLinks).ThenInclude(l => l.Organization)
+            .Include(c => c.HealthcareProviders)
+            .Include(c => c.Services)
+            .Where(c => idList.Contains(c.Id))
+            .ToListAsync(ct);
+    }
+
     public async Task<IReadOnlyList<Clinic>> GetByOrganizationAsync(Guid organizationId, CancellationToken ct = default)
         => await _ctx.Clinics
             .Where(c => c.OrganizationLinks.Any(l => l.OrganizationId == organizationId && l.IsActive))

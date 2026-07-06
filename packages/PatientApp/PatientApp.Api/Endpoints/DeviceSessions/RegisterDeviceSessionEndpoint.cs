@@ -9,7 +9,8 @@ namespace PatientApp.Api.Endpoints.DeviceSessions;
 public sealed record RegisterDeviceSessionRequest(
     string DeviceId,
     string DeviceLabel,
-    string ClerkSessionId);
+    string ClerkSessionId,
+    string? PushToken);
 
 public sealed class RegisterDeviceSessionEndpoint : IEndpoint
 {
@@ -25,7 +26,8 @@ public sealed class RegisterDeviceSessionEndpoint : IEndpoint
                     patientId,
                     request.DeviceId,
                     request.DeviceLabel,
-                    request.ClerkSessionId), ct);
+                    request.ClerkSessionId,
+                    request.PushToken), ct);
 
                 return Results.Created(
                     $"/api/v1/patients/{patientId}/sessions/{result.SessionId}",
