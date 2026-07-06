@@ -59,3 +59,19 @@ public sealed class PatientMentalHealthProfileConfiguration : IEntityTypeConfigu
         builder.Property(m => m.UpdatedBy).HasMaxLength(128);
     }
 }
+
+public sealed class PatientStorageProfileConfiguration : IEntityTypeConfiguration<PatientStorageProfile>
+{
+    public void Configure(EntityTypeBuilder<PatientStorageProfile> builder)
+    {
+        builder.HasKey(p => p.Id);
+        builder.HasIndex(p => p.PatientId).IsUnique();
+        
+        builder.Property(p => p.EncryptedMAK).HasMaxLength(1000);
+        builder.Property(p => p.QuotaBytes).IsRequired();
+        builder.Property(p => p.UsedBytes).IsRequired();
+        
+        builder.Property(p => p.CreatedBy).HasMaxLength(128).IsRequired();
+        builder.Property(p => p.UpdatedBy).HasMaxLength(128);
+    }
+}

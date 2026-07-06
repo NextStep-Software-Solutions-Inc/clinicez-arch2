@@ -1086,6 +1086,20 @@ namespace PatientApp.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("deleted_by");
 
+                    b.Property<string>("EncryptedHash")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("encrypted_hash");
+
+                    b.Property<long?>("EncryptedSizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("encrypted_size_bytes");
+
+                    b.Property<string>("EncryptionAlgorithm")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("encryption_algorithm");
+
                     b.Property<string>("EncryptionIvBase64")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
@@ -1162,6 +1176,10 @@ namespace PatientApp.Infrastructure.Migrations
                     b.Property<DateTime>("UploadedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("uploaded_at");
+
+                    b.Property<string>("WrappedKeyJson")
+                        .HasColumnType("text")
+                        .HasColumnName("wrapped_key_json");
 
                     b.Property<uint>("xmin")
                         .IsConcurrencyToken()
@@ -4085,6 +4103,77 @@ namespace PatientApp.Infrastructure.Migrations
                     b.ToTable("patient_social_histories", (string)null);
                 });
 
+            modelBuilder.Entity("PatientApp.Domain.Entities.PatientStorageProfile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<string>("EncryptedMAK")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("encrypted_mak");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("PatientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("patient_id");
+
+                    b.Property<long>("QuotaBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("quota_bytes");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("updated_by");
+
+                    b.Property<long>("UsedBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("used_bytes");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_patient_storage_profiles");
+
+                    b.HasIndex("PatientId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_patient_storage_profiles_patient_id");
+
+                    b.ToTable("patient_storage_profiles", (string)null);
+                });
+
             modelBuilder.Entity("PatientApp.Domain.Entities.PatientSurgicalHistory", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5334,6 +5423,18 @@ namespace PatientApp.Infrastructure.Migrations
                     b.Navigation("Patient");
                 });
 
+            modelBuilder.Entity("PatientApp.Domain.Entities.PatientStorageProfile", b =>
+                {
+                    b.HasOne("PatientApp.Domain.Entities.Patient", "Patient")
+                        .WithOne("StorageProfile")
+                        .HasForeignKey("PatientApp.Domain.Entities.PatientStorageProfile", "PatientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_patient_storage_profiles_patients_patient_id");
+
+                    b.Navigation("Patient");
+                });
+
             modelBuilder.Entity("PatientApp.Domain.Entities.PatientSurgicalHistory", b =>
                 {
                     b.HasOne("PatientApp.Domain.Entities.Patient", "Patient")
@@ -5549,6 +5650,8 @@ namespace PatientApp.Infrastructure.Migrations
                     b.Navigation("Pregnancies");
 
                     b.Navigation("SocialHistory");
+
+                    b.Navigation("StorageProfile");
 
                     b.Navigation("SurgicalHistories");
 

@@ -58,6 +58,7 @@ public sealed class Patient : BaseEntity, ISyncable
     public PatientMaleReproductive? MaleReproductive { get; set; }
     public PatientDentalVision? DentalVision { get; set; }
     public ICollection<FileFolder> FileFolders { get; set; } = [];
+    public PatientStorageProfile? StorageProfile { get; set; }
 
     // Navigation — clinical records (HCW entry, read-only for patient)
     public ICollection<VitalSigns> VitalSigns { get; set; } = [];

@@ -15,6 +15,8 @@ import FileMoveScreen from './screens/files/FileMove.screen';
 import FileViewerScreen from './screens/files/FileViewer.screen';
 import ExternalOpenConsentScreen from './screens/files/ExternalOpenConsent.screen';
 import StorageScreen from './screens/files/Storage.screen';
+import FRKSetupScreen from './screens/files/FRKSetup.screen';
+import FRKEntryScreen from './screens/files/FRKEntry.screen';
 import ExploreClinicsScreen from './screens/ExploreClinics.screen';
 import ExploreOrgsScreen from './screens/ExploreOrgs.screen';
 import OrganizationDetailsScreen from './screens/OrganizationDetails.screen';
@@ -145,6 +147,14 @@ const FilesStack = createNativeStackNavigator({
     ExternalOpenConsentScreen: createNativeStackScreen({
       screen: ExternalOpenConsentScreen,
       options: { title: 'Open in Another App', presentation: 'modal' },
+    }),
+    FRKSetupScreen: createNativeStackScreen({
+      screen: FRKSetupScreen,
+      options: { title: 'Recovery Key', presentation: 'modal' },
+    }),
+    FRKEntryScreen: createNativeStackScreen({
+      screen: FRKEntryScreen,
+      options: { title: 'Unlock', presentation: 'modal' },
     }),
   },
 });

@@ -40,6 +40,7 @@ if (app.Environment.IsDevelopment())
     app.MapScalarApiReference(opts => opts.WithTitle("ClinicEZ Patient App API"));
 }
 
+app.UseCors(policy => policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
 app.UseHttpsRedirection();
 app.UseExceptionHandler();
 

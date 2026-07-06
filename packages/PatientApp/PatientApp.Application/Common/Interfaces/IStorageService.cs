@@ -10,4 +10,10 @@ public interface IStorageService
 
     /// <summary>Returns the public CDN URL for a stored object.</summary>
     string GetPublicUrl(string key);
+
+    /// <summary>Generates a pre-signed URL for a client to upload a file directly to R2.</summary>
+    Task<string> GeneratePresignedUploadUrlAsync(string key, string contentType, TimeSpan expiresIn, CancellationToken cancellationToken = default);
+
+    /// <summary>Generates a pre-signed URL for a client to download a file securely from R2.</summary>
+    Task<string> GeneratePresignedDownloadUrlAsync(string key, TimeSpan expiresIn, CancellationToken cancellationToken = default);
 }

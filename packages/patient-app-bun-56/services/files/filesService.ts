@@ -3,12 +3,14 @@ import * as Crypto from 'expo-crypto';
 import { Directory, File, Paths, UploadType } from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
 import NetInfo from '@react-native-community/netinfo';
+import { mutate } from 'swr';
+import { DeviceEventEmitter } from 'react-native';
 import { db } from '@db/index';
 import { fileFolders } from '@db/schema/fileFolders';
 import { filesMetadata } from '@db/schema/filesMetadata';
 import { fileTypes } from '@db/schema/fileTypes';
 import { fileUploadConfig } from '@db/schema/fileUploadConfig';
-import { completeUpload, createUploadIntent, fetchFileConfig, hasFileApi } from './fileApiClient';
+import { completeUpload, createUploadIntent, fetchFileConfig, hasFileApi } from '../api/filesApi';
 import {
   DEFAULT_MAX_FILE_SIZE_BYTES,
   DEFAULT_USER_QUOTA_BYTES,
@@ -243,6 +245,7 @@ function toConfigValue(patientId: string, response?: FileApiConfigResponse) {
     usedStorageBytes: response?.usedStorageBytes ?? 0,
     nativePreviewExtensionsJson: JSON.stringify(response?.nativePreviewExtensions ?? DEFAULT_NATIVE_PREVIEW_EXTENSIONS),
     configVersion: response?.configVersion ?? 'local-defaults',
+    encryptedMak: response?.encryptedMak ?? null,
     fetchedAt: now(),
     serverUpdatedAt: response?.serverUpdatedAt ? new Date(response.serverUpdatedAt) : null,
   };
@@ -253,7 +256,7 @@ export async function refreshFileTypes(patientId: string, getToken?: () => Promi
 
   if (hasFileApi() && getToken) {
     try {
-      configResponse = await fetchFileConfig(getToken);
+      configResponse = await fetchFileConfig(patientId, getToken);
     } catch (error) {
       console.warn('Falling back to local file config:', error);
     }
@@ -403,6 +406,7 @@ export async function createFolder(patientId: string, name: string, parentId?: s
     parentId: parentId ?? null,
     name: trimmedName,
     syncStatus: hasFileApi() ? ('queued' as const) : ('local' as const),
+    syncOperation: 'insert' as const,
     createdAt: timestamp,
     updatedAt: timestamp,
   };
@@ -415,10 +419,38 @@ export async function renameFolder(patientId: string, folderId: string, name: st
   const trimmedName = name.trim();
   if (!trimmedName) throw new Error('Folder name is required.');
 
+  const [folder] = await db
+    .select()
+    .from(fileFolders)
+    .where(and(eq(fileFolders.patientId, patientId), eq(fileFolders.id, folderId)))
+    .limit(1);
+  if (!folder) return;
+
+  const op = folder.syncOperation === 'insert' ? 'insert' : 'update';
+
   await db
     .update(fileFolders)
-    .set({ name: trimmedName, updatedAt: now(), syncStatus: 'queued', syncError: null })
+    .set({ name: trimmedName, updatedAt: now(), syncStatus: 'queued', syncOperation: op, syncError: null })
     .where(and(eq(fileFolders.patientId, patientId), eq(fileFolders.id, folderId)));
+}
+
+export async function renameFile(patientId: string, fileId: string, name: string) {
+  const trimmedName = name.trim();
+  if (!trimmedName) throw new Error('File name is required.');
+
+  const [file] = await db
+    .select()
+    .from(filesMetadata)
+    .where(and(eq(filesMetadata.patientId, patientId), eq(filesMetadata.id, fileId)))
+    .limit(1);
+  if (!file) return;
+
+  const op = file.syncOperation === 'insert' ? 'insert' : 'update';
+
+  await db
+    .update(filesMetadata)
+    .set({ name: trimmedName, updatedAt: now(), syncStatus: 'queued', syncOperation: op, syncError: null })
+    .where(and(eq(filesMetadata.patientId, patientId), eq(filesMetadata.id, fileId)));
 }
 
 function collectDescendantFolderIds(folders: { id: string; parentId: string | null }[], folderId: string) {
@@ -452,16 +484,32 @@ export async function moveItem(
       throw new Error('A folder cannot be moved inside one of its subfolders.');
     }
 
+    const [folder] = await db
+      .select()
+      .from(fileFolders)
+      .where(and(eq(fileFolders.patientId, patientId), eq(fileFolders.id, itemId)))
+      .limit(1);
+    if (!folder) return;
+    const op = folder.syncOperation === 'insert' ? 'insert' : 'update';
+
     await db
       .update(fileFolders)
-      .set({ parentId: targetFolderId ?? null, updatedAt: now(), syncStatus: 'queued', syncError: null })
+      .set({ parentId: targetFolderId ?? null, updatedAt: now(), syncStatus: 'queued', syncOperation: op, syncError: null })
       .where(and(eq(fileFolders.patientId, patientId), eq(fileFolders.id, itemId)));
     return;
   }
 
+  const [file] = await db
+    .select()
+    .from(filesMetadata)
+    .where(and(eq(filesMetadata.patientId, patientId), eq(filesMetadata.id, itemId)))
+    .limit(1);
+  if (!file) return;
+  const op = file.syncOperation === 'insert' ? 'insert' : 'update';
+
   await db
     .update(filesMetadata)
-    .set({ folderId: targetFolderId ?? null, updatedAt: now(), syncStatus: 'queued', syncError: null })
+    .set({ folderId: targetFolderId ?? null, updatedAt: now(), syncStatus: 'queued', syncOperation: op, syncError: null })
     .where(and(eq(filesMetadata.patientId, patientId), eq(filesMetadata.id, itemId)));
 }
 
@@ -473,29 +521,41 @@ export async function deleteItem(patientId: string, itemKind: FileItemKind, item
     const folderIds = [itemId, ...collectDescendantFolderIds(folders, itemId)];
 
     await Promise.all(
-      folderIds.map((folderId) =>
-        db
+      folderIds.map(async (folderId) => {
+        const [f] = await db.select().from(fileFolders).where(eq(fileFolders.id, folderId)).limit(1);
+        if (!f) return;
+        const op = f.syncOperation === 'insert' && !f.serverId ? 'delete' : 'delete';
+        
+        return db
           .update(fileFolders)
-          .set({ deletedAt: timestamp, updatedAt: timestamp, syncStatus: 'queued' })
-          .where(and(eq(fileFolders.patientId, patientId), eq(fileFolders.id, folderId))),
-      ),
+          .set({ deletedAt: timestamp, updatedAt: timestamp, syncStatus: 'queued', syncOperation: op })
+          .where(and(eq(fileFolders.patientId, patientId), eq(fileFolders.id, folderId)));
+      }),
     );
 
     await Promise.all(
-      folderIds.map((folderId) =>
-        db
-          .update(filesMetadata)
-          .set({ deletedAt: timestamp, updatedAt: timestamp, syncStatus: 'queued' })
-          .where(and(eq(filesMetadata.patientId, patientId), eq(filesMetadata.folderId, folderId))),
-      ),
+      folderIds.map(async (folderId) => {
+        const fileRows = await db.select().from(filesMetadata).where(and(eq(filesMetadata.patientId, patientId), eq(filesMetadata.folderId, folderId)));
+        return Promise.all(fileRows.map(f => {
+            const op = f.syncOperation === 'insert' && !f.serverId ? 'delete' : 'delete';
+            return db
+              .update(filesMetadata)
+              .set({ deletedAt: timestamp, updatedAt: timestamp, syncStatus: 'queued', syncOperation: op })
+              .where(eq(filesMetadata.id, f.id));
+        }));
+      }),
     );
     return;
   }
 
-  await db
-    .update(filesMetadata)
-    .set({ deletedAt: timestamp, updatedAt: timestamp, syncStatus: 'queued' })
-    .where(and(eq(filesMetadata.patientId, patientId), eq(filesMetadata.id, itemId)));
+  const [file] = await db.select().from(filesMetadata).where(and(eq(filesMetadata.patientId, patientId), eq(filesMetadata.id, itemId))).limit(1);
+  if (file) {
+      const op = file.syncOperation === 'insert' && !file.serverId ? 'delete' : 'delete';
+      await db
+        .update(filesMetadata)
+        .set({ deletedAt: timestamp, updatedAt: timestamp, syncStatus: 'queued', syncOperation: op })
+        .where(and(eq(filesMetadata.patientId, patientId), eq(filesMetadata.id, itemId)));
+  }
 }
 
 function findBestFileType(
@@ -597,6 +657,7 @@ export async function importFiles(input: ImportFilesInput) {
       localEncryptedPath: encryptedFile.uri,
       cloudObjectKey: null,
       syncStatus: hasFileApi() ? 'queued' : 'local',
+      syncOperation: 'insert',
       encryptionAlgorithm: 'AES-256-GCM',
       encryptionKeyId: id,
       encryptionIvBase64: String(ivBase64),
@@ -701,14 +762,15 @@ export async function syncPendingFiles(
 
     try {
       await db.update(filesMetadata).set({ syncStatus: 'syncing', syncError: null }).where(eq(filesMetadata.id, file.id));
+      mutate((key: any) => Array.isArray(key) && key[0] === 'files-browser');
       const encryptedFile = new File(file.localEncryptedPath);
-      const intent = await createUploadIntent(getToken, {
+      const intent = await createUploadIntent(patientId, getToken, {
         clientFileId: file.id,
         name: file.name,
         fileTypeId: file.fileTypeId,
         folderId: file.folderId,
-        mimeType: file.mimeType,
-        extension: file.extension,
+        contentType: file.mimeType ?? 'application/octet-stream',
+        fileExtension: file.extension ?? '.bin',
         sizeBytes: file.sizeBytes,
         encryptedSizeBytes: file.encryptedSizeBytes ?? encryptedFile.size,
         encryptedHash: file.encryptedHash,
@@ -720,18 +782,28 @@ export async function syncPendingFiles(
         },
       });
 
-      const upload = await encryptedFile.upload(intent.uploadUrl, {
+      const task = encryptedFile.createUploadTask(intent.uploadUrl, {
         httpMethod: 'PUT',
         uploadType: UploadType.BINARY_CONTENT,
-        headers: intent.uploadHeaders ?? { 'Content-Type': 'application/octet-stream' },
+        headers: intent.uploadHeaders ?? { 'Content-Type': file.mimeType ?? 'application/octet-stream' },
+        onProgress: ({ bytesSent, totalBytes }) => {
+          if (totalBytes > 0) {
+            DeviceEventEmitter.emit('file-sync-progress', { 
+              fileId: file.id, 
+              progress: bytesSent / totalBytes 
+            });
+          }
+        }
       });
+
+      const upload = await task.uploadAsync();
 
       if (upload.status < 200 || upload.status >= 300) {
         throw new Error(`Cloud upload failed with status ${upload.status}.`);
       }
 
       const complete = intent.serverFileId
-        ? await completeUpload(getToken, intent.serverFileId, {
+        ? await completeUpload(patientId, getToken, intent.serverFileId, {
           clientFileId: file.id,
           cloudObjectKey: intent.cloudObjectKey,
           encryptedHash: file.encryptedHash,
@@ -760,6 +832,7 @@ export async function syncPendingFiles(
           syncError: error instanceof Error ? error.message : 'Sync failed.',
         })
         .where(eq(filesMetadata.id, file.id));
+      mutate((key: any) => Array.isArray(key) && key[0] === 'files-browser');
     }
   }
 

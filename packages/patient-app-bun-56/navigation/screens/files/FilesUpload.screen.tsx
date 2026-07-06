@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, ColorValue, Platform, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { ActivityIndicator, Alert, ColorValue, Platform, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
+import useSWR from 'swr';
 import {
   MaterialSymbol,
   SFSymbol,
@@ -55,21 +56,33 @@ export default function FilesUploadScreen({ route }: FilesScreenProps<'FilesUplo
   const [folderName, setFolderName] = useState('All files');
   const [isSaving, setIsSaving] = useState(false);
 
-  const load = useCallback(async () => {
-    const [types, value, folders] = await Promise.all([
-      refreshFileTypes(patientId, getToken),
-      getFileConfig(patientId, getToken),
-      listAllFolders(patientId),
-    ]);
-    setFileTypes(types);
-    setConfig(value);
-    setSelectedTypeId((current) => current ?? types[0]?.id ?? null);
-    setFolderName(folders.find((f) => f.id === folderId)?.name ?? 'All files');
-  }, [folderId, getToken, patientId]);
+  const { data: uploadConfig, error: uploadError } = useSWR(
+    ['files-upload-config', patientId],
+    async () => {
+      const [types, value, folders] = await Promise.all([
+        refreshFileTypes(patientId, getToken),
+        getFileConfig(patientId, getToken),
+        listAllFolders(patientId),
+      ]);
+      return { types, config: value, folders };
+    },
+    { revalidateOnFocus: false }
+  );
 
   useEffect(() => {
-    load().catch((error) => Alert.alert('Files not ready', error instanceof Error ? error.message : 'Unable to prepare your files.'));
-  }, [load]);
+    if (uploadConfig) {
+      setFileTypes(uploadConfig.types);
+      setConfig(uploadConfig.config);
+      setSelectedTypeId((current) => current ?? uploadConfig.types[0]?.id ?? null);
+      setFolderName(uploadConfig.folders.find((f) => f.id === folderId)?.name ?? 'All files');
+    }
+  }, [uploadConfig, folderId]);
+
+  useEffect(() => {
+    if (uploadError) {
+      Alert.alert('Files not ready', uploadError instanceof Error ? uploadError.message : 'Unable to prepare your files.');
+    }
+  }, [uploadError]);
 
   const totalSize = useMemo(
     () => pickedFiles.reduce((sum, item) => sum + (item.sizeBytes ?? item.file.size ?? 0), 0),
@@ -101,7 +114,14 @@ export default function FilesUploadScreen({ route }: FilesScreenProps<'FilesUplo
     setPickedFiles(
       result.assets.map((asset, index) => {
         const file = new File(asset.uri);
-        return { file, name: asset.fileName ?? `Medical photo ${index + 1}.jpg`, mimeType: asset.mimeType ?? file.type, sizeBytes: asset.fileSize ?? file.size };
+        const hasExtension = asset.fileName && asset.fileName.includes('.');
+        const resolvedName = hasExtension ? asset.fileName : file.name;
+        return { 
+          file, 
+          name: resolvedName ?? `Medical photo ${index + 1}.jpg`, 
+          mimeType: asset.mimeType ?? file.type, 
+          sizeBytes: asset.fileSize ?? file.size 
+        };
       }),
     );
   };
@@ -109,13 +129,26 @@ export default function FilesUploadScreen({ route }: FilesScreenProps<'FilesUplo
   const handleImport = async () => {
     setIsSaving(true);
     try {
-      await importFiles({ patientId, folderId: folderId ?? null, fileTypeId: selectedTypeId, files: pickedFiles, getToken });
+      // Clean up names before importing
+      const finalFiles = pickedFiles.map(f => ({
+          ...f,
+          name: f.name?.trim() || f.file.name
+      }));
+      await importFiles({ patientId, folderId: folderId ?? null, fileTypeId: selectedTypeId, files: finalFiles, getToken });
       navigation.goBack();
     } catch (error) {
       Alert.alert('Could not add file', error instanceof Error ? error.message : 'Unable to save this file.');
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const updateFileName = (index: number, newName: string) => {
+    setPickedFiles((current) => {
+      const next = [...current];
+      next[index] = { ...next[index], name: newName };
+      return next;
+    });
   };
 
   const usedPct = config && config.quotaBytes > 0 ? Math.min(1, config.usedStorageBytes / config.quotaBytes) : 0;
@@ -214,7 +247,13 @@ export default function FilesUploadScreen({ route }: FilesScreenProps<'FilesUplo
                     {Icon({ android: meta.android, ios: meta.ios, color: meta.color, size: 18 })}
                   </ThemedView>
                   <ThemedView style={styles.selectedBody}>
-                    <ThemedText style={styles.selectedName} numberOfLines={1}>{item.name ?? item.file.name}</ThemedText>
+                    <TextInput
+                      style={[styles.fileNameInput, { color: colors.text, borderBottomColor: colors.border }]}
+                      value={item.name ?? item.file.name}
+                      onChangeText={(text) => updateFileName(index, text)}
+                      placeholder="Enter file name"
+                      placeholderTextColor={colors.text + '50'}
+                    />
                     <ThemedText style={[styles.selectedMeta, { color: colors.text }]}>{formatBytes(item.sizeBytes ?? item.file.size)}</ThemedText>
                   </ThemedView>
                 </ThemedView>
@@ -320,8 +359,8 @@ const styles = StyleSheet.create({
   },
   selectedIcon: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   selectedBody: { flex: 1 },
-  selectedName: { fontSize: 14, fontWeight: '700' },
-  selectedMeta: { fontSize: 12, opacity: 0.6, marginTop: 2 },
+  fileNameInput: { fontSize: 14, fontWeight: '700', paddingVertical: 4, paddingHorizontal: 0, borderBottomWidth: StyleSheet.hairlineWidth },
+  selectedMeta: { fontSize: 12, opacity: 0.6, marginTop: 4 },
 
   emptyFiles: {
     borderRadius: 16,

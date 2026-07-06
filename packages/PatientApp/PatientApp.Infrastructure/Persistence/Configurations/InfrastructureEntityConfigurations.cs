@@ -16,9 +16,12 @@ public sealed class FileRecordConfiguration : IEntityTypeConfiguration<FileRecor
         builder.Property(f => f.Category).HasConversion<string>().HasMaxLength(30);
         builder.Property(f => f.SyncStatus).HasConversion<string>().HasMaxLength(20);
         builder.Property(f => f.SyncError).HasMaxLength(500);
+        builder.Property(f => f.EncryptionAlgorithm).HasMaxLength(50);
         builder.Property(f => f.EncryptionKeyId).HasMaxLength(100);
         builder.Property(f => f.EncryptionIvBase64).HasMaxLength(100);
         builder.Property(f => f.EncryptionTagBase64).HasMaxLength(100);
+        builder.Property(f => f.EncryptedHash).HasMaxLength(200);
+        builder.Property(f => f.WrappedKeyJson).HasColumnType("text");
         builder.Property(f => f.CreatedBy).HasMaxLength(128).IsRequired();
         builder.Property(f => f.UpdatedBy).HasMaxLength(128);
 

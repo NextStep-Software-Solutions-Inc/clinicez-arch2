@@ -91,6 +91,8 @@ public static class DependencyInjection
         services.AddScoped<IClinicMembershipRepository, ClinicMembershipRepository>();
         services.AddScoped<IBookingDraftRepository, BookingDraftRepository>();
         services.AddScoped<INotificationPreferencesRepository, NotificationPreferencesRepository>();
+        services.AddScoped<IPatientStorageProfileRepository, PatientStorageProfileRepository>();
+        services.AddScoped<IFileRecordRepository, FileRecordRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         // ── Application Services ──────────────────────────────────────────────

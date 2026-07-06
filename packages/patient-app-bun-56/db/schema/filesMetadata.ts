@@ -26,6 +26,11 @@ export const filesMetadata = sqliteTable('files_metadata', {
   })
     .notNull()
     .default('local'),
+  syncOperation: text('sync_operation', {
+    enum: ['insert', 'update', 'delete'],
+  })
+    .notNull()
+    .default('insert'),
   syncError: text('sync_error'),
   encryptionAlgorithm: text('encryption_algorithm').notNull().default('AES-256-GCM'),
   encryptionKeyId: text('encryption_key_id'),

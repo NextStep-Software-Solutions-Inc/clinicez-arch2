@@ -20,6 +20,7 @@ public sealed class ApplicationDbContext : DbContext
 
     // ── Patient identity & profile ──────────────────────────────────────────
     public DbSet<Patient> Patients => Set<Patient>();
+    public DbSet<PatientStorageProfile> PatientStorageProfiles => Set<PatientStorageProfile>();
     public DbSet<PatientGovernmentId> PatientGovernmentIds => Set<PatientGovernmentId>();
     public DbSet<PatientAddress> PatientAddresses => Set<PatientAddress>();
     public DbSet<EmergencyContact> EmergencyContacts => Set<EmergencyContact>();

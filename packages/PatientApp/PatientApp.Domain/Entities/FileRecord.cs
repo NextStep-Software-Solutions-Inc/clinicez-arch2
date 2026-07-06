@@ -24,7 +24,11 @@ public sealed class FileRecord : BaseEntity, ISyncable
     public DateTime UploadedAt { get; set; }
 
     // Client-side AES-256-GCM encryption metadata
+    public string? EncryptionAlgorithm { get; set; } = "AES-256-GCM";
     public string? EncryptionKeyId { get; set; }
     public string? EncryptionIvBase64 { get; set; }
     public string? EncryptionTagBase64 { get; set; }
+    public long? EncryptedSizeBytes { get; set; }
+    public string? EncryptedHash { get; set; }
+    public string? WrappedKeyJson { get; set; }
 }

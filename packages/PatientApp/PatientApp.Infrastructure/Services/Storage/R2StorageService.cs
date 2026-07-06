@@ -24,6 +24,7 @@ public sealed class R2StorageService : IStorageService, IAsyncDisposable
         {
             ServiceURL = $"https://{opts.AccountId}.r2.cloudflarestorage.com",
             ForcePathStyle = true,
+            AuthenticationRegion = "auto",
         };
 
         _s3Client = new AmazonS3Client(credentials, config);
@@ -60,6 +61,33 @@ public sealed class R2StorageService : IStorageService, IAsyncDisposable
     }
 
     public string GetPublicUrl(string key) => $"{_publicUrl}/{key}";
+
+    public Task<string> GeneratePresignedUploadUrlAsync(string key, string contentType, TimeSpan expiresIn, CancellationToken cancellationToken = default)
+    {
+        var request = new GetPreSignedUrlRequest
+        {
+            BucketName = _bucketName,
+            Key = key,
+            Verb = HttpVerb.PUT,
+            Expires = DateTime.UtcNow.Add(expiresIn),
+            ContentType = contentType
+        };
+
+        return Task.FromResult(_s3Client.GetPreSignedURL(request));
+    }
+
+    public Task<string> GeneratePresignedDownloadUrlAsync(string key, TimeSpan expiresIn, CancellationToken cancellationToken = default)
+    {
+        var request = new GetPreSignedUrlRequest
+        {
+            BucketName = _bucketName,
+            Key = key,
+            Verb = HttpVerb.GET,
+            Expires = DateTime.UtcNow.Add(expiresIn)
+        };
+
+        return Task.FromResult(_s3Client.GetPreSignedURL(request));
+    }
 
     public async ValueTask DisposeAsync()
     {

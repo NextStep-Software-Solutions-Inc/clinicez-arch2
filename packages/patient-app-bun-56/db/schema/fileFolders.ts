@@ -13,6 +13,11 @@ export const fileFolders = sqliteTable('file_folders', {
   })
     .notNull()
     .default('local'),
+  syncOperation: text('sync_operation', {
+    enum: ['insert', 'update', 'delete'],
+  })
+    .notNull()
+    .default('insert'),
   syncError: text('sync_error'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
