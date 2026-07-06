@@ -2,9 +2,11 @@ import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Platform,
   Pressable,
   RefreshControl,
   StyleSheet,
+  TextInput,
   View,
   Alert,
 } from 'react-native';
@@ -53,6 +55,7 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
   const [fabOpen, setFabOpen] = useState(false);
   const [alertModal, setAlertModal] = useState<{ title: string; message: string; icon?: string } | null>(null);
   const [query, setQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const { colors, dark } = theme;
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -67,17 +70,61 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
 
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerTitle: folderName,
+      headerLargeTitleEnabled: !isSearching,
+      headerTitle: isSearching ? () => (
+        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', width: '100%', paddingRight: 8 }}>
+            <TextInput
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Search files and folders…"
+                placeholderTextColor={colors.border}
+                autoFocus
+                style={{
+                    flex: 1,
+                    color: colors.text,
+                    fontSize: 16,
+                    paddingVertical: Platform.select({ ios: 6, android: 4 }),
+                    paddingHorizontal: 12,
+                    backgroundColor: colors.card,
+                    borderRadius: 10,
+                    borderWidth: StyleSheet.hairlineWidth,
+                    borderColor: colors.border,
+                    height: 36,
+                }}
+            />
+        </View>
+      ) : folderName,
       headerRight: () => (
-        <Pressable
-          onPress={() => navigation.navigate('StorageScreen', { folderId: folderId ?? null })}
-          style={({ pressed }) => [{ padding: 8, opacity: pressed ? 0.7 : 1 }]}
-        >
-          {Icon({ android: 'cloud', ios: 'icloud.and.arrow.up.fill', color: colors.primary, size: 22 })}
-        </Pressable>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 8 }}>
+            <Pressable
+                onPress={() => {
+                    if (isSearching) {
+                        setQuery('');
+                        setIsSearching(false);
+                    } else {
+                        setIsSearching(true);
+                    }
+                }}
+                style={({ pressed }) => [{ padding: 8, opacity: pressed ? 0.7 : 1 }]}
+            >
+                {isSearching ? (
+                    Icon({ android: 'close', ios: 'xmark', color: colors.text, size: 22 })
+                ) : (
+                    Icon({ android: 'search', ios: 'magnifyingglass', color: colors.text, size: 22 })
+                )}
+            </Pressable>
+            {!isSearching && (
+              <Pressable
+                onPress={() => navigation.navigate('StorageScreen', { folderId: folderId ?? null })}
+                style={({ pressed }) => [{ padding: 8, opacity: pressed ? 0.7 : 1 }]}
+              >
+                {Icon({ android: 'cloud', ios: 'icloud.and.arrow.up.fill', color: colors.primary, size: 22 })}
+              </Pressable>
+            )}
+        </View>
       ),
     });
-  }, [navigation, folderName, folderId, colors.primary]);
+  }, [navigation, folderName, folderId, colors, isSearching, query]);
 
   const items = useMemo<ListEntry[]>(() => {
     const folders = contents?.folders ?? [];
@@ -171,10 +218,7 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
           <FilesHeader
             contents={contents ?? null}
             folderId={folderId}
-            query={query}
-            isSearching={isRefreshing}
             isSyncing={isSyncing}
-            onChangeQuery={setQuery}
             onCreateFolder={createFolder}
             onOpenFolder={openFolder}
             onOpenRoot={openRoot}
@@ -192,7 +236,7 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
         }
         renderItem={({ item }) => {
           if ((item).kind === 'section') {
-            return <ThemedText style={styles.sectionHead}>{(item as SectionHeader).title}</ThemedText>;
+            return <ThemedText style={styles.sectionHead}>{item.title}</ThemedText>;
           }
           const bItem = item;
           return (
@@ -283,7 +327,6 @@ const createStyles = (theme: Theme) =>
       opacity: 0.5,
       letterSpacing: 0.7,
       textTransform: 'uppercase',
-      marginTop: 12,
       marginBottom: 8,
       marginLeft: 4,
     },

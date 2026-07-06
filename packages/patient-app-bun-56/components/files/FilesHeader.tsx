@@ -4,7 +4,7 @@ import { useTheme, Theme } from '@react-navigation/native';
 import ThemedText from '@ui/ThemedText';
 import ThemedView from '@ui/ThemedView';
 import { Icon } from './FileRow';
-import { FileFolder } from '../../services/files';
+import { FileFolder } from '@db/schema';
 
 export type BrowserContents = {
   breadcrumbs: FileFolder[];
@@ -14,15 +14,12 @@ export type BrowserContents = {
 const BRAND = '#7C3AED';
 
 export function FilesHeader({
-  contents, folderId, query, isSearching, isSyncing,
-  onChangeQuery, onCreateFolder, onOpenFolder, onOpenRoot, onOpenUpload, onSync,
+  contents, folderId, isSyncing,
+  onCreateFolder, onOpenFolder, onOpenRoot, onOpenUpload, onSync,
 }: {
   contents: BrowserContents | null;
   folderId?: string;
-  query: string;
-  isSearching: boolean;
   isSyncing: boolean;
-  onChangeQuery: (v: string) => void;
   onCreateFolder: () => void;
   onOpenFolder: (id: string) => void;
   onOpenRoot: () => void;
@@ -57,19 +54,7 @@ export function FilesHeader({
         </Pressable>
       )}
 
-      <ThemedView style={[styles.searchPill, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        {Icon({ android: 'search', ios: 'magnifyingglass', color: colors.text, size: 17 })}
-        <TextInput
-          value={query}
-          onChangeText={onChangeQuery}
-          placeholder="Search files and folders…"
-          placeholderTextColor={colors.text}
-          style={[styles.searchInput, { color: colors.text }]}
-          autoCapitalize="none"
-          returnKeyType="search"
-        />
-        {isSearching ? <ActivityIndicator size="small" color={colors.primary} /> : null}
-      </ThemedView>
+
 
       {hasCrumbs && (
         <ScrollView
@@ -113,7 +98,7 @@ export function FilesHeader({
 
 const createStyles = (theme: Theme) =>
   StyleSheet.create({
-    header: { gap: 12, marginBottom: 16 },
+    header: { gap: 12 },
     syncBanner: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -132,21 +117,7 @@ const createStyles = (theme: Theme) =>
     },
     syncTitle: { fontSize: 13, fontWeight: '700' },
     syncSub: { fontSize: 11, marginTop: 2, opacity: 0.85 },
-    searchPill: {
-      height: 48,
-      borderRadius: 999,
-      borderWidth: StyleSheet.hairlineWidth,
-      paddingHorizontal: 16,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.06,
-      shadowRadius: 4,
-      elevation: 1,
-    },
-    searchInput: { flex: 1, fontSize: 15 },
+
     crumbRow: { gap: 8, paddingVertical: 2 },
     crumb: {
       flexDirection: 'row',
