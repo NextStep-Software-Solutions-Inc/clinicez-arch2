@@ -252,7 +252,7 @@ export default function FilesUploadScreen({ route }: FilesScreenProps<'FilesUplo
                       value={item.name ?? item.file.name}
                       onChangeText={(text) => updateFileName(index, text)}
                       placeholder="Enter file name"
-                      placeholderTextColor={colors.text + '50'}
+                      placeholderTextColor={colors.text}
                     />
                     <ThemedText style={[styles.selectedMeta, { color: colors.text }]}>{formatBytes(item.sizeBytes ?? item.file.size)}</ThemedText>
                   </ThemedView>

@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, TextInput, View, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePatientId } from 'hooks/usePatientId';
@@ -19,6 +19,12 @@ export default function FRKEntryScreen({ route }: FilesScreenProps<'FRKEntryScre
   const { encryptedMAK } = route.params;
   const [frkInput, setFrkInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleFrkChange = (text: string) => {
+    const cleaned = text.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const formatted = cleaned.match(/.{1,4}/g)?.join('-') || cleaned;
+    setFrkInput(formatted.substring(0, 19));
+  };
 
   const handleSubmit = useCallback(async () => {
     const cleaned = frkInput.trim().toUpperCase();
@@ -41,34 +47,42 @@ export default function FRKEntryScreen({ route }: FilesScreenProps<'FRKEntryScre
   }, [frkInput, patientId, encryptedMAK, navigation]);
 
   return (
-    <ThemedView style={[styles.container, { paddingBottom: insets.bottom + 20 }]}>
-      <View style={styles.content}>
-        <ThemedText style={styles.title}>Unlock Files</ThemedText>
-        <ThemedText style={styles.subtitle}>
-          Please enter your 16-character File Recovery Key (FRK) to access your end-to-end encrypted files on this device.
-        </ThemedText>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled" bounces={false}>
+        <ThemedView style={[styles.container, { paddingBottom: insets.bottom + 20 }]}>
+          <View style={styles.content}>
+            <ThemedText style={styles.title}>Unlock Files</ThemedText>
+            <ThemedText style={styles.subtitle}>
+              Please enter your 16-character File Recovery Key (FRK) to access your end-to-end encrypted files on this device.
+            </ThemedText>
 
-        <View style={[styles.inputContainer, { borderColor: theme.colors.border }]}>
-          <TextInput
-            style={[styles.input, { color: theme.colors.text }]}
-            placeholder="ABCD-EFGH-IJKL-MNOP"
-            placeholderTextColor={theme.colors.text}
-            value={frkInput}
-            onChangeText={setFrkInput}
-            autoCapitalize="characters"
-            autoCorrect={false}
-          />
-        </View>
-      </View>
+            <View style={[styles.inputContainer, { borderColor: theme.colors.border }]}>
+              <TextInput
+                style={[styles.input, { color: theme.colors.text }]}
+                placeholder="ABCD-EFGH-IJKL-MNOP"
+                placeholderTextColor={theme.colors.text}
+                value={frkInput}
+                onChangeText={handleFrkChange}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                maxLength={19}
+              />
+            </View>
+          </View>
 
-      <Pressable onPress={handleSubmit} style={styles.submitBtn} disabled={isSubmitting}>
-        {isSubmitting ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <ThemedText style={styles.submitBtnText}>Unlock Files</ThemedText>
-        )}
-      </Pressable>
-    </ThemedView>
+          <Pressable onPress={handleSubmit} style={styles.submitBtn} disabled={isSubmitting}>
+            {isSubmitting ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <ThemedText style={styles.submitBtnText}>Unlock Files</ThemedText>
+            )}
+          </Pressable>
+        </ThemedView>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

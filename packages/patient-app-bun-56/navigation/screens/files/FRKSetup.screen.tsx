@@ -10,7 +10,7 @@ import type { FilesScreenProps } from './navigationTypes';
 const BRAND = '#7C3AED';
 
 export default function FRKSetupScreen({ route }: FilesScreenProps<'FRKSetupScreen'>) {
-  const navigation = useNavigation<'FRKSetupScreen' | any>();
+  const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { frk } = route.params;
   const [copied, setCopied] = useState(false);
