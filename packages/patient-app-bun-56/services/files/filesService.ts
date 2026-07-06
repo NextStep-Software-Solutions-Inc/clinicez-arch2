@@ -228,11 +228,22 @@ async function upsertFileTypes(rows: FileApiTypeResponse[]) {
   );
 }
 
-async function getUsedStorageBytes(patientId: string) {
+async function getLocalUnsyncedStorageBytes(patientId: string) {
   const rows = await db
     .select({ sizeBytes: filesMetadata.sizeBytes })
     .from(filesMetadata)
-    .where(and(eq(filesMetadata.patientId, patientId), isNull(filesMetadata.deletedAt)));
+    .where(
+      and(
+        eq(filesMetadata.patientId, patientId),
+        isNull(filesMetadata.deletedAt),
+        or(
+          eq(filesMetadata.syncStatus, 'queued'),
+          eq(filesMetadata.syncStatus, 'failed'),
+          eq(filesMetadata.syncStatus, 'syncing'),
+          eq(filesMetadata.syncStatus, 'local')
+        )
+      )
+    );
 
   return rows.reduce((total, row) => total + (row.sizeBytes ?? 0), 0);
 }
@@ -263,8 +274,10 @@ export async function refreshFileTypes(patientId: string, getToken?: () => Promi
   }
 
   await upsertFileTypes(configResponse?.fileTypes?.length ? configResponse.fileTypes : DEFAULT_FILE_TYPES);
-  const usedStorageBytes = await getUsedStorageBytes(patientId);
-  const configValue = { ...toConfigValue(patientId, configResponse), usedStorageBytes };
+  
+  const configValue = toConfigValue(patientId, configResponse);
+  
+  // We keep the server's usedStorageBytes in the database to remain synced across devices
   await db
     .insert(fileUploadConfig)
     .values(configValue)
@@ -280,17 +293,12 @@ export async function getFileConfig(patientId: string, getToken?: () => Promise<
   }
 
   const [config] = await db.select().from(fileUploadConfig).where(eq(fileUploadConfig.patientId, patientId)).limit(1);
-  const usedStorageBytes = await getUsedStorageBytes(patientId);
   const value = config ?? toConfigValue(patientId);
 
-  if (value.usedStorageBytes !== usedStorageBytes) {
-    await db
-      .update(fileUploadConfig)
-      .set({ usedStorageBytes, fetchedAt: value.fetchedAt })
-      .where(eq(fileUploadConfig.patientId, patientId));
-  }
-
-  return { ...value, usedStorageBytes };
+  // Dynamically add the local unsynced files so offline uploads are still counted properly in the UI
+  const unsyncedBytes = await getLocalUnsyncedStorageBytes(patientId);
+  
+  return { ...value, usedStorageBytes: value.usedStorageBytes + unsyncedBytes };
 }
 
 async function getFolderRows(patientId: string) {
