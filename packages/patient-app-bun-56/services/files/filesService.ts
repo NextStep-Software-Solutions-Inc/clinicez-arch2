@@ -1,8 +1,10 @@
 import { and, asc, desc, eq, isNull, or } from 'drizzle-orm';
 import * as Crypto from 'expo-crypto';
+import * as FileSystem from 'expo-file-system';
 import { Directory, File, Paths, UploadType } from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
 import NetInfo from '@react-native-community/netinfo';
+import { Buffer } from 'buffer';
 import { mutate } from 'swr';
 import { DeviceEventEmitter } from 'react-native';
 import { db } from '@db/index';
@@ -10,7 +12,7 @@ import { fileFolders } from '@db/schema/fileFolders';
 import { filesMetadata } from '@db/schema/filesMetadata';
 import { fileTypes } from '@db/schema/fileTypes';
 import { fileUploadConfig } from '@db/schema/fileUploadConfig';
-import { completeUpload, createUploadIntent, fetchFileConfig, hasFileApi } from '../api/filesApi';
+import { completeUpload, createUploadIntent, fetchFileConfig, fetchFiles, getFileDownloadUrl, hasFileApi } from '../api/filesApi';
 import {
   DEFAULT_MAX_FILE_SIZE_BYTES,
   DEFAULT_USER_QUOTA_BYTES,
@@ -694,17 +696,72 @@ export async function getFileById(patientId: string, fileId: string) {
   return file ?? null;
 }
 
-export async function preparePreviewFile(patientId: string, fileId: string): Promise<PreparedPreviewFile> {
+export async function preparePreviewFile(
+  patientId: string, 
+  fileId: string,
+  getToken?: () => Promise<string | null>
+): Promise<PreparedPreviewFile> {
   const file = await getFileById(patientId, fileId);
   if (!file) throw new Error('File not found.');
-  if (!file.localEncryptedPath) throw new Error('This file is not available offline yet.');
 
+  // If we don't have the file locally, download it on demand
+  if (!file.localEncryptedPath) {
+    if (!hasFileApi() || !getToken) {
+      throw new Error('This file is not available offline yet, and you are currently offline.');
+    }
+    
+    // Fetch S3 download URL
+    const { downloadUrl } = await getFileDownloadUrl(patientId, fileId, getToken);
+    
+    const storageDir = getPatientFilesDir(patientId);
+    ensureDirectory(storageDir);
+    const encryptedFile = new File(storageDir, `${fileId}.enc`);
+    
+    // Download the file from S3 to local storage using the classic FileSystem API
+    const result = await FileSystem.downloadAsync(downloadUrl, encryptedFile.uri);
+    
+    if (result.status < 200 || result.status >= 300) {
+      throw new Error(`Failed to download file: HTTP ${result.status}`);
+    }
+
+    // Update SQLite to point to the new local file
+    await db.update(filesMetadata)
+      .set({ localEncryptedPath: encryptedFile.uri })
+      .where(eq(filesMetadata.id, fileId));
+      
+    file.localEncryptedPath = encryptedFile.uri;
+  }
+
+  // We need to determine the AES key to decrypt the file.
+  // First, check if we have it natively stored in SecureStore (for files we uploaded)
+  let key: Crypto.AESEncryptionKey;
   const encodedKey = await SecureStore.getItemAsync(keyName(patientId, fileId));
-  if (!encodedKey) throw new Error('The local file key is missing. Sync restore is required.');
+  
+  if (encodedKey) {
+    key = await Crypto.AESEncryptionKey.import(encodedKey, 'base64');
+  } else if (file.serverWrappedKeyJson) {
+    // If not, it was synced from another device. We need to unwrap the key using our MAK.
+    const makEncoded = await SecureStore.getItemAsync(`${'patient_mak_key'}_${patientId}`);
+    if (!makEncoded) throw new Error('Master Access Key (MAK) missing. Please restart the app or setup your File Recovery Key.');
+    
+    const mak = await Crypto.AESEncryptionKey.import(makEncoded, 'base64');
+    
+    const parsed = JSON.parse(file.serverWrappedKeyJson);
+    const combinedBytes = new Uint8Array(Buffer.from(parsed.cipherText, 'base64'));
+    const keySealed = Crypto.AESSealedData.fromCombined(combinedBytes, { ivLength: 12, tagLength: 16 });
+    
+    // Decrypt the file's individual key using the MAK
+    const fileKeyEncoded = await Crypto.aesDecryptAsync(keySealed, mak, { output: 'base64' });
+    key = await Crypto.AESEncryptionKey.import(fileKeyEncoded, 'base64');
+    
+    // Cache it locally so we don't have to unwrap it next time
+    await SecureStore.setItemAsync(keyName(patientId, fileId), fileKeyEncoded);
+  } else {
+    throw new Error('The local file key is missing. Sync restore is required.');
+  }
 
   const encryptedFile = new File(file.localEncryptedPath);
   const encryptedBytes = await encryptedFile.bytes();
-  const key = await Crypto.AESEncryptionKey.import(encodedKey, 'base64');
   const sealed = Crypto.AESSealedData.fromCombined(encryptedBytes, { ivLength: 12, tagLength: 16 });
   const decrypted = await Crypto.aesDecryptAsync(sealed, key, { output: 'bytes' });
   const previewDir = getPatientPreviewDir(patientId);
@@ -751,6 +808,91 @@ export async function syncPendingFiles(
     return { synced: 0, failed: 0, skipped: true, reason: 'Device is offline.' };
   }
 
+  let synced = 0;
+  let failed = 0;
+
+  // Downstream sync
+  try {
+    const { folders, files } = await fetchFiles(patientId, getToken);
+    
+    for (const remoteFolder of folders) {
+      const existing = await getFolder(patientId, remoteFolder.id);
+      
+      const row = {
+        id: remoteFolder.id,
+        patientId,
+        parentId: remoteFolder.parentId ?? null,
+        name: remoteFolder.name,
+        syncStatus: 'synced' as const,
+        syncOperation: 'insert' as const,
+        createdAt: new Date(remoteFolder.createdAt),
+        updatedAt: new Date(remoteFolder.updatedAt),
+      };
+      
+      if (!existing) {
+        await db.insert(fileFolders).values(row);
+        synced++;
+      } else if (new Date(remoteFolder.updatedAt) > (existing.updatedAt ?? new Date(0))) {
+        await db.update(fileFolders).set({
+          name: row.name,
+          parentId: row.parentId,
+          updatedAt: row.updatedAt,
+          syncStatus: 'synced',
+        }).where(eq(fileFolders.id, remoteFolder.id));
+        synced++;
+      }
+    }
+
+    for (const remoteFile of files) {
+      const [existing] = await db.select().from(filesMetadata).where(eq(filesMetadata.id, remoteFile.id)).limit(1);
+      
+      if (!existing) {
+        await db.insert(filesMetadata).values({
+          id: remoteFile.id,
+          patientId,
+          clinicId: null,
+          folderId: remoteFile.folderId,
+          name: remoteFile.fileName,
+          type: null,
+          mimeType: remoteFile.mimeType,
+          extension: remoteFile.extension,
+          sizeBytes: remoteFile.sizeBytes,
+          encryptedSizeBytes: remoteFile.encryptedSizeBytes,
+          localEncryptedPath: null, // Will download on demand via preparePreviewFile
+          cloudObjectKey: null,
+          syncStatus: 'synced',
+          syncOperation: 'insert',
+          encryptionAlgorithm: remoteFile.encryptionAlgorithm,
+          encryptionKeyId: remoteFile.encryptionKeyId,
+          encryptionIvBase64: remoteFile.encryptionIvBase64,
+          encryptionTagBase64: remoteFile.encryptionTagBase64,
+          encryptedHash: remoteFile.encryptedHash,
+          serverWrappedKeyJson: remoteFile.wrappedKeyJson,
+          createdAt: new Date(remoteFile.createdAt),
+          updatedAt: new Date(remoteFile.updatedAt),
+          syncedAt: new Date(remoteFile.updatedAt),
+          serverId: remoteFile.id,
+        });
+        synced++;
+      } else if (new Date(remoteFile.updatedAt) > (existing.updatedAt ?? new Date(0))) {
+         await db.update(filesMetadata).set({
+            name: remoteFile.fileName,
+            folderId: remoteFile.folderId,
+            updatedAt: new Date(remoteFile.updatedAt),
+            syncStatus: 'synced',
+         }).where(eq(filesMetadata.id, remoteFile.id));
+         synced++;
+      }
+    }
+    
+    if (synced > 0) {
+      mutate((key: any) => Array.isArray(key) && key[0] === 'files-browser');
+    }
+  } catch (err) {
+    console.warn("Downstream sync failed", err);
+  }
+
+  // Upstream sync
   const pending = await db
     .select()
     .from(filesMetadata)
@@ -761,9 +903,6 @@ export async function syncPendingFiles(
         or(eq(filesMetadata.syncStatus, 'queued'), eq(filesMetadata.syncStatus, 'failed')),
       ),
     );
-
-  let synced = 0;
-  let failed = 0;
 
   for (const file of pending) {
     if (!file.localEncryptedPath) continue;

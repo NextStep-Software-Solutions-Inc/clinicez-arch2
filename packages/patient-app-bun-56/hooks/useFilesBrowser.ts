@@ -55,6 +55,11 @@ export function useFilesBrowser(patientId: string, folderId: string | null, quer
       // Fire-and-forget network sync so it doesn't block the instant SQLite read.
       // This enforces the offline-first architecture.
       refreshFileTypes(patientId, getToken).catch(console.log);
+      
+      // Silently sync down remote files (and push local queue) without blocking the UI
+      import('../services/files/filesService').then(({ syncPendingFiles }) => {
+        syncPendingFiles(patientId, getToken).catch(console.log);
+      });
 
       // Instantly load from local SQLite
       return listFolderContents(patientId, folderId, query, getToken);

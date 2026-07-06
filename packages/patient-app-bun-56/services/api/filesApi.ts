@@ -40,3 +40,24 @@ export function completeUpload(
   );
 }
 
+export function fetchFiles(
+  patientId: string,
+  getToken: () => Promise<string | null>,
+) {
+  return api.get<{ folders: any[]; files: any[] }>(
+    getToken,
+    `/patients/${patientId}/files`
+  );
+}
+
+export function getFileDownloadUrl(
+  patientId: string,
+  fileId: string,
+  getToken: () => Promise<string | null>,
+) {
+  return api.get<{ downloadUrl: string }>(
+    getToken,
+    `/patients/${patientId}/files/${fileId}/download-url`
+  );
+}
+
