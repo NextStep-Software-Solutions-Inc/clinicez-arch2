@@ -12,11 +12,11 @@ import { useTheme } from '@react-navigation/native';
 const BRAND = '#7C3AED';
 
 export default function FRKEntryScreen({ route }: FilesScreenProps<'FRKEntryScreen'>) {
-  const navigation = useNavigation<'FRKEntryScreen' | any>();
+  const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const patientId = usePatientId();
-  const { encryptedMak } = route.params;
+  const { encryptedMAK } = route.params;
   const [frkInput, setFrkInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -28,7 +28,7 @@ export default function FRKEntryScreen({ route }: FilesScreenProps<'FRKEntryScre
     }
     
     setIsSubmitting(true);
-    const success = await unlockMakWithFrk(patientId, cleaned, encryptedMak);
+    const success = await unlockMakWithFrk(patientId, cleaned, encryptedMAK);
     setIsSubmitting(false);
 
     if (success) {
@@ -38,7 +38,7 @@ export default function FRKEntryScreen({ route }: FilesScreenProps<'FRKEntryScre
     } else {
       Alert.alert('Error', 'The Recovery Key is incorrect. Please try again.');
     }
-  }, [frkInput, patientId, encryptedMak, navigation]);
+  }, [frkInput, patientId, encryptedMAK, navigation]);
 
   return (
     <ThemedView style={[styles.container, { paddingBottom: insets.bottom + 20 }]}>
@@ -52,7 +52,7 @@ export default function FRKEntryScreen({ route }: FilesScreenProps<'FRKEntryScre
           <TextInput
             style={[styles.input, { color: theme.colors.text }]}
             placeholder="ABCD-EFGH-IJKL-MNOP"
-            placeholderTextColor={theme.colors.text + '80'}
+            placeholderTextColor={theme.colors.text}
             value={frkInput}
             onChangeText={setFrkInput}
             autoCapitalize="characters"

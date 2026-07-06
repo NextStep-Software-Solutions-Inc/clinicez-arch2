@@ -7,7 +7,7 @@ import { initializeMakAndFrkIfNeeded } from '../services/files/frkService';
 
 export function useFrkCheck(patientId: string) {
   const { getToken } = useClerkAuth();
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation();
 
   useEffect(() => {
     let active = true;
@@ -15,9 +15,27 @@ export function useFrkCheck(patientId: string) {
       .then((res) => {
         if (!active) return;
         if (res.status === 'generated') {
-          navigation.navigate('FRKSetupScreen', { frk: res.frk });
+          navigation.navigate('Main', {
+            screen: 'BottomTabs',
+            params: {
+              screen: 'FilesScreen',
+              params: {
+                screen: 'FRKSetupScreen',
+                params: { frk: res.frk },
+              },
+            },
+          });
         } else if (res.status === 'needs_frk') {
-          navigation.navigate('FRKEntryScreen', { encryptedMak: res.encryptedMak });
+          navigation.navigate('Main', {
+            screen: 'BottomTabs',
+            params: {
+              screen: 'FilesScreen',
+              params: {
+                screen: 'FRKEntryScreen',
+                params: { encryptedMAK: res.encryptedMAK },
+              },
+            },
+          });
         }
       })
       .catch((err) => console.log('FRK check failed:', err));

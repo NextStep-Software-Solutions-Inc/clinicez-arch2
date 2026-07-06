@@ -14,7 +14,7 @@ export type FilesStackParamList = {
   ExternalOpenConsentScreen: { fileId: string };
   StorageScreen: { folderId?: string | null } | undefined;
   FRKSetupScreen: { frk: string };
-  FRKEntryScreen: { encryptedMak: string };
+  FRKEntryScreen: { encryptedMAK: string };
 };
 
 export type FilesScreenProps<RouteName extends keyof FilesStackParamList> =

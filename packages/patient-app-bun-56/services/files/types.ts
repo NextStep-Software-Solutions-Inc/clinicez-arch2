@@ -60,7 +60,7 @@ export interface FileApiConfigResponse {
   usedStorageBytes?: number;
   nativePreviewExtensions?: string[];
   configVersion?: string;
-  encryptedMak?: string;
+  encryptedMAK?: string;
   serverUpdatedAt?: number;
   fileTypes?: FileApiTypeResponse[];
 }

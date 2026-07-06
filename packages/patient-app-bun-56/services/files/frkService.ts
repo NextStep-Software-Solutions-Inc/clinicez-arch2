@@ -68,8 +68,8 @@ export async function initializeMakAndFrkIfNeeded(
   }
 
   // If we don't have MAK locally, but backend has EncryptedMAK, we need the user to enter FRK
-  if (config.encryptedMak) {
-    return { status: 'needs_frk' as const, encryptedMak: config.encryptedMak };
+  if (config.encryptedMAK) {
+    return { status: 'needs_frk' as const, encryptedMAK: config.encryptedMAK };
   }
 
   // If backend does NOT have EncryptedMAK, we need to generate one, encrypt it with a new FRK, and upload it
@@ -84,7 +84,7 @@ export async function initializeMakAndFrkIfNeeded(
   // Pass makEncoded (base64 string) directly, since BinaryInput accepts base64 strings
   const sealed = await Crypto.aesEncryptAsync(makEncoded, frkKey);
   
-  const encryptedMakJson = JSON.stringify({
+  const encryptedMAKJson = JSON.stringify({
     cipherText: await sealed.combined('base64'),
     iv: await sealed.iv('base64'),
     tag: await sealed.tag('base64'),
@@ -93,27 +93,27 @@ export async function initializeMakAndFrkIfNeeded(
 
   // Save to backend
   if (hasFileApi()) {
-      await saveFileConfig(patientId, getToken, encryptedMakJson);
+      await saveFileConfig(patientId, getToken, encryptedMAKJson);
   }
   
   // Save locally
   await SecureStore.setItemAsync(getMakSecureKey(patientId), makEncoded);
   await SecureStore.setItemAsync(getFrkSecureKey(patientId), newFrk);
 
-  // Update local DB to reflect the new encryptedMak
+  // Update local DB to reflect the new encryptedMAK
   await db
     .update(fileUploadConfig)
-    .set({ encryptedMak: encryptedMakJson })
+    .set({ encryptedMAK: encryptedMAKJson })
     .where(eq(fileUploadConfig.patientId, patientId));
 
   return { status: 'generated' as const, frk: newFrk };
 }
 
 // Process user-entered FRK
-export async function unlockMakWithFrk(patientId: string, frk: string, encryptedMakJson: string) {
+export async function unlockMakWithFrk(patientId: string, frk: string, encryptedMAKJson: string) {
   try {
     const frkKey = await deriveKeyFromFrk(frk);
-    const parsed = JSON.parse(encryptedMakJson);
+    const parsed = JSON.parse(encryptedMAKJson);
     const sealed = Crypto.AESSealedData.fromCombined(
       parsed.cipherText, 
       { ivLength: 12, tagLength: 16 }

@@ -327,6 +327,7 @@ const createStyles = (theme: Theme) =>
       opacity: 0.5,
       letterSpacing: 0.7,
       textTransform: 'uppercase',
+      marginTop: 12,
       marginBottom: 8,
       marginLeft: 4,
     },

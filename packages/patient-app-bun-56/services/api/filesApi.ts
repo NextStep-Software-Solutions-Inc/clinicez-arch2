@@ -14,9 +14,9 @@ export function fetchFileConfig(patientId: string, getToken: () => Promise<strin
 export function saveFileConfig(
   patientId: string,
   getToken: () => Promise<string | null>,
-  encryptedMak: string,
+  encryptedMAK: string,
 ) {
-  return api.post<{ success: true }>(getToken, `/patients/${patientId}/files/config`, { encryptedMak });
+  return api.post<{ success: true }>(getToken, `/patients/${patientId}/files/config`, { encryptedMAK });
 }
 
 export function createUploadIntent(

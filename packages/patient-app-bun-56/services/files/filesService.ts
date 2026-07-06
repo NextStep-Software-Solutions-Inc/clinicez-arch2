@@ -245,7 +245,7 @@ function toConfigValue(patientId: string, response?: FileApiConfigResponse) {
     usedStorageBytes: response?.usedStorageBytes ?? 0,
     nativePreviewExtensionsJson: JSON.stringify(response?.nativePreviewExtensions ?? DEFAULT_NATIVE_PREVIEW_EXTENSIONS),
     configVersion: response?.configVersion ?? 'local-defaults',
-    encryptedMak: response?.encryptedMak ?? null,
+    encryptedMAK: response?.encryptedMAK ?? null,
     fetchedAt: now(),
     serverUpdatedAt: response?.serverUpdatedAt ? new Date(response.serverUpdatedAt) : null,
   };
@@ -525,7 +525,7 @@ export async function deleteItem(patientId: string, itemKind: FileItemKind, item
         const [f] = await db.select().from(fileFolders).where(eq(fileFolders.id, folderId)).limit(1);
         if (!f) return;
         const op = f.syncOperation === 'insert' && !f.serverId ? 'delete' : 'delete';
-        
+
         return db
           .update(fileFolders)
           .set({ deletedAt: timestamp, updatedAt: timestamp, syncStatus: 'queued', syncOperation: op })
@@ -537,11 +537,11 @@ export async function deleteItem(patientId: string, itemKind: FileItemKind, item
       folderIds.map(async (folderId) => {
         const fileRows = await db.select().from(filesMetadata).where(and(eq(filesMetadata.patientId, patientId), eq(filesMetadata.folderId, folderId)));
         return Promise.all(fileRows.map(f => {
-            const op = f.syncOperation === 'insert' && !f.serverId ? 'delete' : 'delete';
-            return db
-              .update(filesMetadata)
-              .set({ deletedAt: timestamp, updatedAt: timestamp, syncStatus: 'queued', syncOperation: op })
-              .where(eq(filesMetadata.id, f.id));
+          const op = f.syncOperation === 'insert' && !f.serverId ? 'delete' : 'delete';
+          return db
+            .update(filesMetadata)
+            .set({ deletedAt: timestamp, updatedAt: timestamp, syncStatus: 'queued', syncOperation: op })
+            .where(eq(filesMetadata.id, f.id));
         }));
       }),
     );
@@ -550,11 +550,11 @@ export async function deleteItem(patientId: string, itemKind: FileItemKind, item
 
   const [file] = await db.select().from(filesMetadata).where(and(eq(filesMetadata.patientId, patientId), eq(filesMetadata.id, itemId))).limit(1);
   if (file) {
-      const op = file.syncOperation === 'insert' && !file.serverId ? 'delete' : 'delete';
-      await db
-        .update(filesMetadata)
-        .set({ deletedAt: timestamp, updatedAt: timestamp, syncStatus: 'queued', syncOperation: op })
-        .where(and(eq(filesMetadata.patientId, patientId), eq(filesMetadata.id, itemId)));
+    const op = file.syncOperation === 'insert' && !file.serverId ? 'delete' : 'delete';
+    await db
+      .update(filesMetadata)
+      .set({ deletedAt: timestamp, updatedAt: timestamp, syncStatus: 'queued', syncOperation: op })
+      .where(and(eq(filesMetadata.patientId, patientId), eq(filesMetadata.id, itemId)));
   }
 }
 
@@ -788,9 +788,9 @@ export async function syncPendingFiles(
         headers: intent.uploadHeaders ?? { 'Content-Type': file.mimeType ?? 'application/octet-stream' },
         onProgress: ({ bytesSent, totalBytes }) => {
           if (totalBytes > 0) {
-            DeviceEventEmitter.emit('file-sync-progress', { 
-              fileId: file.id, 
-              progress: bytesSent / totalBytes 
+            DeviceEventEmitter.emit('file-sync-progress', {
+              fileId: file.id,
+              progress: bytesSent / totalBytes
             });
           }
         }
