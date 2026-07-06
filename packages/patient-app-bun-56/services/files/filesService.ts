@@ -832,7 +832,7 @@ export async function syncPendingFiles(
       if (!existing) {
         await db.insert(fileFolders).values(row);
         synced++;
-      } else if (new Date(remoteFolder.updatedAt) > (existing.updatedAt ?? new Date(0))) {
+      } else if (existing.name !== row.name || existing.parentId !== row.parentId) {
         await db.update(fileFolders).set({
           name: row.name,
           parentId: row.parentId,
@@ -874,7 +874,7 @@ export async function syncPendingFiles(
           serverId: remoteFile.id,
         });
         synced++;
-      } else if (new Date(remoteFile.updatedAt) > (existing.updatedAt ?? new Date(0))) {
+      } else if (existing.name !== remoteFile.fileName || existing.folderId !== remoteFile.folderId) {
          await db.update(filesMetadata).set({
             name: remoteFile.fileName,
             folderId: remoteFile.folderId,
