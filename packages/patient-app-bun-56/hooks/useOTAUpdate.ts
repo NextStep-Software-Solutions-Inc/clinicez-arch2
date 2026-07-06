@@ -20,26 +20,22 @@ export function useOTAUpdate() {
         // Show an in-app alert informing the user
         Alert.alert(
           'Update Available',
-          'A new version of the app has been downloaded. Would you like to go to Settings to apply the update?',
+          'A new version of the app has been downloaded. Would you like to restart the app to apply the update now?',
           [
-            { text: 'Cancel', style: 'cancel' },
+            { text: 'Later', style: 'cancel' },
             {
-              text: 'Go to Settings',
+              text: 'Restart',
               onPress: () => {
-                const { navigationRef } = require('navigation/Navigation');
-                if (navigationRef.isReady()) {
-                  navigationRef.navigate('Main', { screen: 'SettingsScreen' });
-                }
+                Updates.reloadAsync();
               },
             },
           ]
         );
 
-        // Schedule a local push notification
-        // This will also be saved to the notification inbox as 'system' because of NotificationContext
+        // Schedule a local push notification if they choose 'Later'
         await safeAwait(scheduleLocalNotification(
           'App Update Available',
-          'A new update has been downloaded. Tap here to go to settings and apply it.',
+          'A new update has been downloaded. You can apply it anytime in Settings.',
           { route: 'SettingsScreen', type: 'system', category: 'system' }
         ));
       }
