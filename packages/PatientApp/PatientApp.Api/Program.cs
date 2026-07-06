@@ -10,6 +10,7 @@ using PatientApp.Api.Middleware;
 using PatientApp.Application;
 using PatientApp.Infrastructure;
 using Scalar.AspNetCore;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -32,6 +33,15 @@ builder.Services
     .AddApplicationServices()
     .AddInfrastructureServices(builder.Configuration, builder.Environment);
 
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    // Since we are deploying to an environment where we don't know the load balancer's IP,
+    // we clear the known networks/proxies to accept the forwarded headers.
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -40,6 +50,7 @@ if (app.Environment.IsDevelopment())
     app.MapScalarApiReference(opts => opts.WithTitle("ClinicEZ Patient App API"));
 }
 
+app.UseForwardedHeaders();
 app.UseCors(policy => policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
 app.UseHttpsRedirection();
 app.UseExceptionHandler();
