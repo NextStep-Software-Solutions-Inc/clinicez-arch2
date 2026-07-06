@@ -16,6 +16,11 @@ import {
   type NotificationPayload,
 } from 'services/notifications/notificationService';
 import { navigationRef } from 'navigation/Navigation';
+import { mutate } from 'swr';
+import { registerDeviceSessionOnBackend } from 'services/api/notificationsApi';
+import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
+import { randomUUID } from 'expo-crypto';
 
 export interface NotificationContextValue {
   unreadCount: number;
@@ -55,7 +60,7 @@ interface NotificationProviderProps {
 }
 
 export function NotificationProvider({ children }: NotificationProviderProps) {
-  const { internalPatientId: patientId } = useAuth();
+  const { internalPatientId: patientId, getToken } = useAuth();
 
   const [unreadCount, setUnreadCount] = useState(3);
   const [pushToken, setPushToken] = useState<string | null>(null);
@@ -79,14 +84,43 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
     if (!patientId) return false;
     const { token, status } = await registerForPushNotifications(patientId);
     setPermissionStatus(status);
-    if (token) setPushToken(token);
+    if (token) {
+      setPushToken(token);
+      let deviceId = await SecureStore.getItemAsync('DEVICE_ID');
+      if (!deviceId) {
+        deviceId = randomUUID();
+        await SecureStore.setItemAsync('DEVICE_ID', deviceId);
+      }
+      try {
+        await registerDeviceSessionOnBackend(getToken, patientId, deviceId, Platform.OS, token);
+      } catch (err) {
+        console.warn('Failed to register device session', err);
+      }
+    }
     return status === 'granted';
-  }, [patientId]);
+  }, [patientId, getToken]);
 
   useEffect(() => {
     // Check current permission status without prompting
-    ExpoNotifications.getPermissionsAsync().then(({ status }) => {
+    ExpoNotifications.getPermissionsAsync().then(async ({ status }) => {
       setPermissionStatus(status);
+      if (status === 'granted' && patientId) {
+        // Silently fetch/verify token and register session on startup
+        const { token } = await registerForPushNotifications(patientId);
+        if (token) {
+          setPushToken(token);
+          let deviceId = await SecureStore.getItemAsync('DEVICE_ID');
+          if (!deviceId) {
+            deviceId = randomUUID();
+            await SecureStore.setItemAsync('DEVICE_ID', deviceId);
+          }
+          try {
+            await registerDeviceSessionOnBackend(getToken, patientId, deviceId, Platform.OS, token);
+          } catch (err) {
+            console.warn('Failed to register device session on startup', err);
+          }
+        }
+      }
     });
 
     // Initial unread count (or zero when not signed in)
@@ -95,6 +129,16 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
     // Setup foreground listener: persist notification + refresh count
     const receivedSub = ExpoNotifications.addNotificationReceivedListener(async (notification) => {
       const raw = notification.request.content;
+      
+      // Instantly trigger revalidation for all active SWR hooks.
+      // This handles silent data refreshes and keeps the UI up to date for visible notifications.
+      mutate(() => true, undefined, { revalidate: true });
+
+      // If this is a silent push (no title, no body), we don't persist it in the inbox
+      if (!raw.title && !raw.body) {
+        return;
+      }
+
       const payload: NotificationPayload = {
         type: (raw.data?.type as any) ?? 'system',
         category: (raw.data?.category as any) ?? 'system',

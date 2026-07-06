@@ -125,7 +125,7 @@ export default function ProfileCard() {
         <View style={styles.avatarContainer}>
           {avatarSource ? (
             <Image
-              source={require('../assets/fallback_profile.png')}
+              source={require('../assets/fallback_profile.jpg')}
               style={[styles.avatar, { backgroundColor: colors.border }]}
               resizeMode="cover"
             />

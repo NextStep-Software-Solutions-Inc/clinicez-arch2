@@ -25,21 +25,22 @@ public sealed class FirebasePushNotificationService : IPushNotificationService
             {
                 if (!string.IsNullOrWhiteSpace(serviceAccountFilePath) && File.Exists(serviceAccountFilePath))
                 {
-                    _logger.LogInformation("Firebase:ServiceAccountFilePath provided. Using file {FilePath}.", serviceAccountFilePath);
+                    if (_logger.IsEnabled(LogLevel.Information))
+                    {
+                        _logger.LogInformation("Firebase:ServiceAccountFilePath provided. Using file {FilePath}.", serviceAccountFilePath);
+                    }
                     FirebaseApp.Create(new AppOptions
                     {
-                        Credential = GoogleCredential.FromFile(serviceAccountFilePath)
+                        Credential = Google.Apis.Auth.OAuth2.CredentialFactory.FromFile<Google.Apis.Auth.OAuth2.ServiceAccountCredential>(serviceAccountFilePath).ToGoogleCredential()
                     });
                 }
                 else if (!string.IsNullOrWhiteSpace(serviceAccountJson))
                 {
                     _logger.LogInformation("Firebase:ServiceAccountJson provided. Using raw JSON string.");
-#pragma warning disable CS0618
                     FirebaseApp.Create(new AppOptions
                     {
-                        Credential = GoogleCredential.FromJson(serviceAccountJson)
+                        Credential = Google.Apis.Auth.OAuth2.CredentialFactory.FromJson<Google.Apis.Auth.OAuth2.ServiceAccountCredential>(serviceAccountJson).ToGoogleCredential()
                     });
-#pragma warning restore CS0618
                 }
                 else
                 {
@@ -88,7 +89,10 @@ public sealed class FirebasePushNotificationService : IPushNotificationService
         try
         {
             string response = await FirebaseMessaging.DefaultInstance.SendAsync(message, cancellationToken);
-            _logger.LogInformation("Successfully sent push notification to token {Token}. MessageId: {MessageId}", token, response);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation("Successfully sent push notification to token {Token}. MessageId: {MessageId}", token, response);
+            }
         }
         catch (Exception ex)
         {

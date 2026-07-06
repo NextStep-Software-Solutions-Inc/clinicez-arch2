@@ -24,6 +24,7 @@ import UnlockScreen from './navigation/screens/Unlock.screen';
 import * as ExpoNotifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import { ErrorBoundary } from 'components/ui/ErrorBoundary';
+import { scheduleLocalNotification } from 'services/notifications/notificationService';
 
 // ─── Background notification task ─────────────────────────────────────────────
 // This task runs when a push notification is received while the app is
@@ -39,9 +40,23 @@ TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async ({ data, error }) => 
     console.error('[BackgroundNotification] Task error:', error);
     return;
   }
-  // data.notification is available here for custom background processing.
-  // For most apps the OS push delivery is sufficient; add any
-  // extra local DB writes or badge updates here as needed.
+  
+  const payload = data as any;
+  const raw = payload.notification?.request?.content;
+  if (!raw) return;
+  
+  const rawData = raw.data as Record<string, any>;
+  
+  // If a silent push contains title/body inside the data payload (significant change),
+  // we wake up and display it as a local follow-up notification.
+  if (rawData?.title && rawData?.body) {
+    await scheduleLocalNotification(
+      rawData.title,
+      rawData.body,
+      rawData,
+      null // Trigger immediately
+    );
+  }
 });
 
 // Show banners, sounds, and badges while app is in foreground

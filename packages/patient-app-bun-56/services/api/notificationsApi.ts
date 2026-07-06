@@ -92,3 +92,21 @@ export async function upsertNotificationPreferenceOnBackend(
         { pushEnabled, inAppEnabled },
     );
 }
+
+// ── Device Sessions API ───────────────────────────────────────────────────────
+
+export async function registerDeviceSessionOnBackend(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    deviceId: string,
+    platform: string,
+    pushToken: string,
+    appVersion?: string,
+    osVersion?: string,
+): Promise<void> {
+    return api.post<void>(
+        getToken,
+        `/patients/${patientId}/device-sessions`,
+        { deviceId, platform, pushToken, appVersion, osVersion }
+    );
+}

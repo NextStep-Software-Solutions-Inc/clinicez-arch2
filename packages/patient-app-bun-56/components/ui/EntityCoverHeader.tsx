@@ -51,7 +51,7 @@ export default function EntityCoverHeader({
       {/* Cover photo */}
       <View style={styles.coverWrapper}>
         <Image
-          source={require('../../assets/fallback_cover.png')}
+          source={require('../../assets/fallback_cover.jpg')}
           style={styles.cover}
           resizeMode="cover"
         />
@@ -85,7 +85,7 @@ export default function EntityCoverHeader({
       <View style={styles.logoShadow}>
         <View style={styles.logoWrapper}>
           <Image
-            source={require('../../assets/fallback_profile.png')}
+            source={require('../../assets/fallback_profile.jpg')}
             style={styles.logo}
             resizeMode="cover"
           />
