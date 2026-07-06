@@ -25,11 +25,8 @@ function toHex(buffer: ArrayBuffer) {
 }
 
 async function sha256(str: string) {
-  const bytes = new TextEncoder().encode(str);
-  const digestInput = new Uint8Array(new ArrayBuffer(bytes.byteLength));
-  digestInput.set(bytes);
-  const digest = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, digestInput);
-  return toHex(digest);
+  // Use digestStringAsync to avoid needing TextEncoder which is not available natively in React Native
+  return await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, str);
 }
 
 // Generate a random 16-character FRK (e.g. ABCD-EFGH-IJKL-MNOP)

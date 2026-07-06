@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, TextInput, View, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { usePatientId } from 'hooks/usePatientId';
 import ThemedText from '@ui/ThemedText';
 import ThemedView from '@ui/ThemedView';
@@ -14,6 +15,7 @@ const BRAND = '#7C3AED';
 export default function FRKEntryScreen({ route }: FilesScreenProps<'FRKEntryScreen'>) {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
+  const tabBarHeight = (useBottomTabBarHeight?.() || 96) + insets.bottom;
   const theme = useTheme();
   const patientId = usePatientId();
   const { encryptedMAK } = route.params;
@@ -51,8 +53,8 @@ export default function FRKEntryScreen({ route }: FilesScreenProps<'FRKEntryScre
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled" bounces={false}>
-        <ThemedView style={[styles.container, { paddingBottom: insets.bottom + 20 }]}>
+      <ScrollView contentContainerStyle={{ flexGrow: 1, paddingBottom: tabBarHeight } } keyboardShouldPersistTaps="handled" bounces={false} >
+        <ThemedView style={[styles.container]}>
           <View style={styles.content}>
             <ThemedText style={styles.title}>Unlock Files</ThemedText>
             <ThemedText style={styles.subtitle}>
