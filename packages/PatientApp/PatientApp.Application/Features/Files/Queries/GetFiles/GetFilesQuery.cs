@@ -8,7 +8,7 @@ public sealed record FileFolderDto(
     Guid? ParentId,
     string Name,
     DateTime CreatedAt,
-    DateTime UpdatedAt);
+    DateTime? UpdatedAt);
 
 public sealed record FileRecordDto(
     Guid Id,
@@ -28,7 +28,7 @@ public sealed record FileRecordDto(
     string? EncryptedHash,
     string? WrappedKeyJson,
     DateTime CreatedAt,
-    DateTime UpdatedAt);
+    DateTime? UpdatedAt);
 
 public sealed record GetFilesResponse(
     IReadOnlyList<FileFolderDto> Folders,
