@@ -111,8 +111,9 @@ export async function unlockMakWithFrk(patientId: string, frk: string, encrypted
   try {
     const frkKey = await deriveKeyFromFrk(frk);
     const parsed = JSON.parse(encryptedMAKJson);
+    const combinedBytes = new Uint8Array(Buffer.from(parsed.cipherText, 'base64'));
     const sealed = Crypto.AESSealedData.fromCombined(
-      parsed.cipherText, 
+      combinedBytes, 
       { ivLength: 12, tagLength: 16 }
     );
     const makEncoded = await Crypto.aesDecryptAsync(sealed, frkKey, { output: 'base64' });
