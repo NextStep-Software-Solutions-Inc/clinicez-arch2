@@ -1512,7 +1512,7 @@ export async function getClinicDetailOnline(
             activeMemberCount: org.activeMemberCount,
             addressHint: org.addressHint ?? undefined,
             requiredShareFields: parseJsonArray<ShareableFieldKey>(org.requiredShareFieldsJson, ['fullName', 'mobile']),
-            roles: parseJsonArray<any>(org.rolesJson, []),
+            roles: parseJsonArray(org.rolesJson, []),
             partneredClinicIds: [],
             privacyPolicyUrl: '',
             termsAndConditionsUrl: '',
