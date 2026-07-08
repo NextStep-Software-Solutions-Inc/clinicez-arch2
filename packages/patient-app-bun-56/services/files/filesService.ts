@@ -444,7 +444,7 @@ export async function renameFolder(patientId: string, folderId: string, name: st
     .limit(1);
   if (!folder) return;
 
-  const op = folder.syncOperation === 'insert' ? 'insert' : 'update';
+  const op = folder.syncOperation === 'insert' && !folder.serverId ? 'insert' : 'update';
 
   await db
     .update(fileFolders)
@@ -463,7 +463,7 @@ export async function renameFile(patientId: string, fileId: string, name: string
     .limit(1);
   if (!file) return;
 
-  const op = file.syncOperation === 'insert' ? 'insert' : 'update';
+  const op = file.syncOperation === 'insert' && !file.serverId ? 'insert' : 'update';
 
   await db
     .update(filesMetadata)
@@ -508,7 +508,7 @@ export async function moveItem(
       .where(and(eq(fileFolders.patientId, patientId), eq(fileFolders.id, itemId)))
       .limit(1);
     if (!folder) return;
-    const op = folder.syncOperation === 'insert' ? 'insert' : 'update';
+    const op = folder.syncOperation === 'insert' && !folder.serverId ? 'insert' : 'update';
 
     await db
       .update(fileFolders)
@@ -523,7 +523,7 @@ export async function moveItem(
     .where(and(eq(filesMetadata.patientId, patientId), eq(filesMetadata.id, itemId)))
     .limit(1);
   if (!file) return;
-  const op = file.syncOperation === 'insert' ? 'insert' : 'update';
+    const op = file.syncOperation === 'insert' && !file.serverId ? 'insert' : 'update';
 
   await db
     .update(filesMetadata)
@@ -838,9 +838,10 @@ export async function syncPendingFiles(
         parentId: remoteFolder.parentId ?? null,
         name: remoteFolder.name,
         syncStatus: 'synced' as const,
-        syncOperation: 'insert' as const,
+        syncOperation: 'update' as const,
         createdAt: new Date(remoteFolder.createdAt),
         updatedAt: new Date(remoteFolder.updatedAt),
+        serverId: remoteFolder.id,
       };
       
       if (!existing) {
@@ -849,6 +850,10 @@ export async function syncPendingFiles(
       } else if (existing.name !== row.name || existing.parentId !== row.parentId) {
         // Protect local pending changes from being overwritten by downstream pull
         if (existing.syncStatus === 'queued' || existing.syncStatus === 'failed' || existing.syncStatus === 'syncing') {
+          continue;
+        }
+        // Protect against eventual consistency: don't overwrite if local is newer
+        if (existing.updatedAt.getTime() > row.updatedAt.getTime()) {
           continue;
         }
         await db.update(fileFolders).set({
@@ -886,7 +891,7 @@ export async function syncPendingFiles(
           localEncryptedPath: null, // Will download on demand via preparePreviewFile
           cloudObjectKey: null,
           syncStatus: 'synced',
-          syncOperation: 'insert',
+          syncOperation: 'update',
           encryptionAlgorithm: remoteFile.encryptionAlgorithm,
           encryptionKeyId: remoteFile.encryptionKeyId,
           encryptionIvBase64: remoteFile.encryptionIvBase64,
@@ -905,6 +910,10 @@ export async function syncPendingFiles(
       ) {
          // Protect local pending changes from being overwritten by downstream pull
          if (existing.syncStatus === 'queued' || existing.syncStatus === 'failed' || existing.syncStatus === 'syncing') {
+           continue;
+         }
+         // Protect against eventual consistency: don't overwrite if local is newer
+         if (existing.updatedAt && existing.updatedAt.getTime() > new Date(remoteFile.updatedAt).getTime()) {
            continue;
          }
          await db.update(filesMetadata).set({
@@ -951,10 +960,11 @@ export async function syncPendingFiles(
   const syncRequests: SyncItemRequest[] = [];
   
   for (const folder of pendingFolders) {
+     const rawOp = folder.syncOperation === 'insert' && folder.serverId ? 'update' : folder.syncOperation;
      syncRequests.push({
         idempotencyKey: Crypto.randomUUID(),
         entityType: 'file_folder',
-        operation: folder.syncOperation === 'insert' ? 'create' : folder.syncOperation,
+        operation: rawOp === 'insert' ? 'create' : rawOp,
         clientTimestamp: (folder.updatedAt ?? new Date()).toISOString(),
         entityId: folder.id,
         payloadJson: JSON.stringify({
@@ -969,13 +979,14 @@ export async function syncPendingFiles(
   const uploadIntentFiles = [];
 
   for (const file of pendingFiles) {
-     if (file.syncOperation === 'insert') {
+     if (file.syncOperation === 'insert' && !file.serverId) {
          uploadIntentFiles.push(file);
      } else {
+         const op = file.syncOperation === 'insert' && file.serverId ? 'update' : file.syncOperation;
          syncRequests.push({
             idempotencyKey: Crypto.randomUUID(),
             entityType: 'file',
-            operation: file.syncOperation,
+            operation: op,
             clientTimestamp: (file.updatedAt ?? new Date()).toISOString(),
             entityId: file.id,
             payloadJson: JSON.stringify({

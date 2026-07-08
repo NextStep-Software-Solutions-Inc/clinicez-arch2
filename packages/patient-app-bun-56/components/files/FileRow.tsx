@@ -125,25 +125,27 @@ export function FileRow({
       dateStr,
     ].filter(Boolean).join('  ·  ');
 
+  const swipeableRef = React.useRef<any>(null);
+
   const renderRightActions = () => (
     <ThemedView style={styles.swipeWrap}>
       {!isFolder && (
-        <Pressable onPress={onShare} style={[styles.swipeBtn, { backgroundColor: getActionColors(dark).share.bg }]}>
+        <Pressable onPress={() => { swipeableRef.current?.close(); onShare(); }} style={[styles.swipeBtn, { backgroundColor: getActionColors(dark).share.bg }]}>
           {Icon({ android: 'share', ios: 'square.and.arrow.up', color: getActionColors(dark).share.fg, size: 18 })}
           <ThemedText style={[styles.swipeBtnLabel, { color: getActionColors(dark).share.fg }]}>Share</ThemedText>
         </Pressable>
       )}
-      <Pressable onPress={onMove} style={[styles.swipeBtn, { backgroundColor: getActionColors(dark).move.bg }]}>
+      <Pressable onPress={() => { swipeableRef.current?.close(); onMove(); }} style={[styles.swipeBtn, { backgroundColor: getActionColors(dark).move.bg }]}>
         {Icon({ android: 'drive_file_move', ios: 'folder', color: getActionColors(dark).move.fg, size: 18 })}
         <ThemedText style={[styles.swipeBtnLabel, { color: getActionColors(dark).move.fg }]}>Move</ThemedText>
       </Pressable>
       {onRename && (
-        <Pressable onPress={onRename} style={[styles.swipeBtn, { backgroundColor: getActionColors(dark).rename.bg }]}>
+        <Pressable onPress={() => { swipeableRef.current?.close(); onRename(); }} style={[styles.swipeBtn, { backgroundColor: getActionColors(dark).rename.bg }]}>
           {Icon({ android: 'edit', ios: 'pencil', color: getActionColors(dark).rename.fg, size: 18 })}
           <ThemedText style={[styles.swipeBtnLabel, { color: getActionColors(dark).rename.fg }]}>Rename</ThemedText>
         </Pressable>
       )}
-      <Pressable onPress={onDelete} style={[styles.swipeBtn, { backgroundColor: getActionColors(dark).delete.bg }]}>
+      <Pressable onPress={() => { swipeableRef.current?.close(); onDelete(); }} style={[styles.swipeBtn, { backgroundColor: getActionColors(dark).delete.bg }]}>
         {Icon({ android: 'delete', ios: 'trash', color: getActionColors(dark).delete.fg, size: 18 })}
         <ThemedText style={[styles.swipeBtnLabel, { color: getActionColors(dark).delete.fg }]}>Delete</ThemedText>
       </Pressable>
@@ -151,7 +153,7 @@ export function FileRow({
   );
 
   return (
-    <Swipeable renderRightActions={renderRightActions} overshootRight={false}>
+    <Swipeable ref={swipeableRef} renderRightActions={renderRightActions} overshootRight={false}>
       <Pressable
         onPress={onPress}
         accessibilityRole="button"

@@ -89,5 +89,6 @@ export function useFilesBrowser(patientId: string, folderId: string | null, quer
     isRefreshing: isValidating,
     error,
     refresh,
+    mutate,
   };
 }

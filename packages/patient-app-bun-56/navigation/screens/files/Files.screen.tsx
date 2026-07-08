@@ -30,6 +30,7 @@ import {
   preparePreviewFile,
   renameFile,
   renameFolder,
+  listFolderContents,
 } from '../../../services/files';
 import type { FilesScreenProps } from './navigationTypes';
 import ThemedView from '@ui/ThemedView';
@@ -68,8 +69,12 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
         await renameFile(patientId, renameTarget.id, newName);
       }
       setRenameTarget(null);
-      await refresh();
-      syncPendingFiles(patientId, getToken).then(refresh).catch(console.error);
+      // Instantly read from SQLite and update the UI directly
+      const newContents = await listFolderContents(patientId, folderId ?? null, query, getToken);
+      await mutate(newContents, { revalidate: false });
+      
+      // Now trigger background sync
+      syncPendingFiles(patientId, getToken).then(() => mutate()).catch(console.error);
     } catch (e) {
       setAlertModal({
         title: 'Error',
@@ -86,7 +91,7 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
 
   // ─── Custom Hooks (100% SoC) ──────────────────────────────────────────────────
   useFrkCheck(patientId);
-  const { contents, isLoading, isRefreshing, refresh } = useFilesBrowser(patientId, folderId ?? null, query);
+  const { contents, isLoading, isRefreshing, refresh, mutate } = useFilesBrowser(patientId, folderId ?? null, query);
 
   const folderName = folderId
     ? (contents?.breadcrumbs?.length ? contents.breadcrumbs[contents.breadcrumbs.length - 1].name : 'Folder')
@@ -168,7 +173,13 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
   const handleDelete = async (kind: FileItemKind, id: string) => {
     try {
       await deleteItem(patientId, kind, id);
-      refresh();
+      
+      // Instantly read from SQLite and update the UI directly
+      const newContents = await listFolderContents(patientId, folderId ?? null, query, getToken);
+      await mutate(newContents, { revalidate: false });
+      
+      // Now trigger background sync
+      syncPendingFiles(patientId, getToken).then(() => mutate()).catch(console.error);
     } catch (error) {
       setAlertModal({ title: 'Could not delete', message: error instanceof Error ? error.message : 'Unable to delete this item.', icon: '🗑️' });
     }

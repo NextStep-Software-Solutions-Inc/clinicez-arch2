@@ -1,0 +1,62 @@
+name: Publish OTA Update
+
+on:
+  push:
+    branches:
+      - '**'
+    tags:
+      - '*'
+    paths:
+      - 'packages/patient-app-bun-56/**'
+
+jobs:
+  update:
+    name: Publish update
+    type: run
+    steps:
+      - name: Check out repository
+        uses: eas/checkout
+
+      - name: Setup Node.js
+        uses: eas/use-node
+        with:
+          node-version: 22.x
+
+      - name: Setup Bun
+        run: npm install -g bun
+
+      - name: Install dependencies
+        working_directory: packages/patient-app-bun-56
+        run: bun install
+
+      - name: Publish OTA Update
+        working_directory: packages/patient-app-bun-56
+        run: |
+          git fetch --tags --quiet
+          
+          # EAS checkout can sometimes leave git in a detached HEAD state.
+          # We try to get the branch name robustly.
+          GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          if [ "$GIT_BRANCH" = "HEAD" ]; then
+            GIT_BRANCH=$(git branch -r --contains HEAD | grep -v HEAD | head -n 1 | sed 's/.*\///')
+          fi
+          
+          TAG=$(git tag --points-at HEAD | head -n 1)
+          TARGET_BRANCH="preview"
+          GIT_BRANCH=$(echo "$GIT_BRANCH" | xargs)
+          
+          if [[ "$GIT_BRANCH" == "main" || "$GIT_BRANCH" == "master" ]]; then
+            if [[ -n "$TAG" ]]; then
+              TARGET_BRANCH="production"
+            else
+              TARGET_BRANCH="staging"
+            fi
+          elif [[ "$GIT_BRANCH" == "develop" ]]; then
+            TARGET_BRANCH="development"
+          fi
+          
+          echo "Detected Git Branch: $GIT_BRANCH"
+          echo "Detected Git Tag: $TAG"
+          echo "Mapping to EAS Branch: $TARGET_BRANCH"
+          
+          eas update --branch "$TARGET_BRANCH" --non-interactive
