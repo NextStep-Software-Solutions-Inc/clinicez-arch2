@@ -29,7 +29,7 @@ internal sealed class SaveFileConfigCommandHandler : IRequestHandler<SaveFileCon
             {
                 PatientId = request.PatientId,
                 EncryptedMAK = request.EncryptedMAK,
-                QuotaBytes = 1024 * 1024 * 1024, // 1GB
+                QuotaBytes = 500 * 1024 * 1024, // 500MB
                 UsedBytes = 0
             };
             await _profileRepository.AddAsync(profile, cancellationToken);

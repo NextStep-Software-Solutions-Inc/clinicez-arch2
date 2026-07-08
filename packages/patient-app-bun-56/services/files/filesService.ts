@@ -238,24 +238,18 @@ async function upsertDocumentTypes(rows: DocumentTypeResponse[]) {
   );
 }
 
-async function getLocalUnsyncedStorageBytes(patientId: string) {
-  const rows = await db
-    .select({ sizeBytes: filesMetadata.sizeBytes })
+async function getLocalTotalStorageBytes(patientId: string) {
+  const files = await db
+    .select({ encryptedSizeBytes: filesMetadata.encryptedSizeBytes })
     .from(filesMetadata)
     .where(
       and(
         eq(filesMetadata.patientId, patientId),
-        isNull(filesMetadata.deletedAt),
-        or(
-          eq(filesMetadata.syncStatus, 'queued'),
-          eq(filesMetadata.syncStatus, 'failed'),
-          eq(filesMetadata.syncStatus, 'syncing'),
-          eq(filesMetadata.syncStatus, 'local')
-        )
+        isNull(filesMetadata.deletedAt)
       )
     );
-
-  return rows.reduce((total, row) => total + (row.sizeBytes ?? 0), 0);
+  
+  return files.reduce((acc, f) => acc + (f.encryptedSizeBytes ?? 0), 0);
 }
 
 function toConfigValue(patientId: string, response?: FileApiConfigResponse) {
@@ -287,7 +281,6 @@ export async function refreshDocumentTypes(patientId: string, getToken?: () => P
   
   const configValue = toConfigValue(patientId, configResponse);
   
-  // We keep the server's usedStorageBytes in the database to remain synced across devices
   await db
     .insert(fileUploadConfig)
     .values(configValue)
@@ -305,10 +298,10 @@ export async function getFileConfig(patientId: string, getToken?: () => Promise<
   const [config] = await db.select().from(fileUploadConfig).where(eq(fileUploadConfig.patientId, patientId)).limit(1);
   const value = config ?? toConfigValue(patientId);
 
-  // Dynamically add the local unsynced files so offline uploads are still counted properly in the UI
-  const unsyncedBytes = await getLocalUnsyncedStorageBytes(patientId);
+  // Use the local SQLite database as the source of truth for storage used
+  const localUsedBytes = await getLocalTotalStorageBytes(patientId);
   
-  return { ...value, usedStorageBytes: value.usedStorageBytes + unsyncedBytes };
+  return { ...value, usedStorageBytes: localUsedBytes };
 }
 
 async function getFolderRows(patientId: string) {
@@ -847,7 +840,7 @@ export async function syncPendingFiles(
       if (!existing) {
         await db.insert(fileFolders).values(row);
         synced++;
-      } else if (existing.name !== row.name || existing.parentId !== row.parentId) {
+      } else if (existing.name !== row.name || existing.parentId !== row.parentId || existing.deletedAt !== null) {
         // Protect local pending changes from being overwritten by downstream pull
         if (existing.syncStatus === 'queued' || existing.syncStatus === 'failed' || existing.syncStatus === 'syncing') {
           continue;
@@ -860,6 +853,7 @@ export async function syncPendingFiles(
           name: row.name,
           parentId: row.parentId,
           updatedAt: row.updatedAt,
+          deletedAt: null,
           syncStatus: 'synced',
         }).where(eq(fileFolders.id, remoteFolder.id));
         synced++;
@@ -906,7 +900,8 @@ export async function syncPendingFiles(
         synced++;
       } else if (
         existing.name !== remoteFile.fileName || 
-        existing.folderId !== (remoteFile.folderId ?? null)
+        existing.folderId !== (remoteFile.folderId ?? null) ||
+        existing.deletedAt !== null
       ) {
          // Protect local pending changes from being overwritten by downstream pull
          if (existing.syncStatus === 'queued' || existing.syncStatus === 'failed' || existing.syncStatus === 'syncing') {
@@ -919,6 +914,7 @@ export async function syncPendingFiles(
          await db.update(filesMetadata).set({
            name: remoteFile.fileName,
            folderId: remoteFile.folderId ?? null,
+           deletedAt: null,
            syncStatus: 'synced',
          }).where(eq(filesMetadata.id, remoteFile.id));
          synced++;
@@ -1005,21 +1001,15 @@ export async function syncPendingFiles(
           await pushSyncPayload(getToken, patientId, syncRequests);
           
           for (const folder of pendingFolders) {
-              if (folder.syncOperation === 'delete') {
-                  await db.delete(fileFolders).where(eq(fileFolders.id, folder.id));
-              } else {
-                  await db.update(fileFolders).set({ syncStatus: 'synced', syncError: null }).where(eq(fileFolders.id, folder.id));
-              }
+              await db.update(fileFolders).set({ syncStatus: 'synced', syncError: null }).where(eq(fileFolders.id, folder.id));
           }
 
           for (const file of pendingFiles) {
               if (file.syncOperation !== 'insert') {
                   if (file.syncOperation === 'delete') {
                       await cleanupPreviewCache(patientId, file.id);
-                      await db.delete(filesMetadata).where(eq(filesMetadata.id, file.id));
-                  } else {
-                      await db.update(filesMetadata).set({ syncStatus: 'synced', syncError: null }).where(eq(filesMetadata.id, file.id));
                   }
+                  await db.update(filesMetadata).set({ syncStatus: 'synced', syncError: null }).where(eq(filesMetadata.id, file.id));
               }
           }
           synced += syncRequests.length;
@@ -1037,6 +1027,17 @@ export async function syncPendingFiles(
       await db.update(filesMetadata).set({ syncStatus: 'syncing', syncError: null }).where(eq(filesMetadata.id, file.id));
       mutate((key: any) => Array.isArray(key) && key[0] === 'files-browser');
       const encryptedFile = new File(file.localEncryptedPath);
+      let wrappedKeyJson = '';
+      const fileKeyEncoded = await SecureStore.getItemAsync(keyName(patientId, file.id));
+      if (fileKeyEncoded) {
+        const makEncoded = await SecureStore.getItemAsync(`${'patient_mak_key'}_${patientId}`);
+        if (makEncoded) {
+          const mak = await Crypto.AESEncryptionKey.import(makEncoded, 'base64');
+          const sealed = await Crypto.aesEncryptAsync(fileKeyEncoded, mak);
+          wrappedKeyJson = JSON.stringify({ cipherText: await sealed.combined('base64') });
+        }
+      }
+
       const intent = await createUploadIntent(patientId, getToken, {
         fileId: file.id,
         documentTypeId: file.documentTypeId,
@@ -1050,7 +1051,7 @@ export async function syncPendingFiles(
         encryptionTagBase64: file.encryptionTagBase64,
         encryptedSizeBytes: file.encryptedSizeBytes ?? encryptedFile.size,
         encryptedHash: file.encryptedHash,
-        wrappedKeyJson: ''
+        wrappedKeyJson
       });
 
       const task = encryptedFile.createUploadTask(intent.uploadUrl, {
