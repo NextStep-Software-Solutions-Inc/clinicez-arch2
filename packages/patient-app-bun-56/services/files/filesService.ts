@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, inArray, isNull, or } from 'drizzle-orm';
 import * as Crypto from 'expo-crypto';
+import * as FileSystemLegacy from 'expo-file-system/legacy';
 import * as FileSystem from 'expo-file-system';
 import { Directory, File, Paths, UploadType } from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
@@ -725,7 +726,7 @@ export async function preparePreviewFile(
     const encryptedFile = new File(storageDir, `${fileId}.enc`);
     
     // Download the file from S3 to local storage using the classic FileSystem API
-    const result = await FileSystem.downloadAsync(downloadUrl, encryptedFile.uri);
+    const result = await FileSystemLegacy.downloadAsync(downloadUrl, encryptedFile.uri);
     
     if (result.status < 200 || result.status >= 300) {
       throw new Error(`Failed to download file: HTTP ${result.status}`);
@@ -846,6 +847,10 @@ export async function syncPendingFiles(
         await db.insert(fileFolders).values(row);
         synced++;
       } else if (existing.name !== row.name || existing.parentId !== row.parentId) {
+        // Protect local pending changes from being overwritten by downstream pull
+        if (existing.syncStatus === 'queued' || existing.syncStatus === 'failed' || existing.syncStatus === 'syncing') {
+          continue;
+        }
         await db.update(fileFolders).set({
           name: row.name,
           parentId: row.parentId,
@@ -898,11 +903,14 @@ export async function syncPendingFiles(
         existing.name !== remoteFile.fileName || 
         existing.folderId !== (remoteFile.folderId ?? null)
       ) {
+         // Protect local pending changes from being overwritten by downstream pull
+         if (existing.syncStatus === 'queued' || existing.syncStatus === 'failed' || existing.syncStatus === 'syncing') {
+           continue;
+         }
          await db.update(filesMetadata).set({
-            name: remoteFile.fileName,
-            folderId: remoteFile.folderId ?? null,
-            updatedAt: new Date(remoteFile.updatedAt),
-            syncStatus: 'synced',
+           name: remoteFile.fileName,
+           folderId: remoteFile.folderId ?? null,
+           syncStatus: 'synced',
          }).where(eq(filesMetadata.id, remoteFile.id));
          synced++;
       }

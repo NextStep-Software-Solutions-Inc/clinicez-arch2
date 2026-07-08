@@ -8,7 +8,7 @@ import { CircularProgress } from '../ui/CircularProgress';
 import { FileBrowserFile, FileBrowserFolder, formatBytes } from '../../services/files';
 
 type BrowserItem = FileBrowserFolder | FileBrowserFile;
-type ActionType = 'share' | 'move' | 'delete';
+type ActionType = 'share' | 'move' | 'delete' | 'rename';
 
 const getActionColors = (isDark: boolean): Record<ActionType, { bg: string; fg: string }> => ({
   share: {
@@ -22,6 +22,10 @@ const getActionColors = (isDark: boolean): Record<ActionType, { bg: string; fg: 
   delete: {
     bg: isDark ? '#CD7F71' : '#FEE2E2',
     fg: isDark ? '#69251F' : '#991B1B'
+  },
+  rename: {
+    bg: isDark ? '#4B5563' : '#E5E7EB',
+    fg: isDark ? '#D1D5DB' : '#374151'
   },
 });
 
@@ -77,13 +81,14 @@ function StatusDot({ status }: { status: string }) {
 }
 
 export function FileRow({
-  item, onPress, onMove, onDelete, onShare, onErrorPress
+  item, onPress, onMove, onDelete, onShare, onRename, onErrorPress
 }: {
   item: BrowserItem;
   onPress: () => void;
   onMove: () => void;
   onDelete: () => void;
   onShare: () => void;
+  onRename?: () => void;
   onErrorPress?: () => void;
 }) {
   const theme = useTheme();
@@ -132,6 +137,12 @@ export function FileRow({
         {Icon({ android: 'drive_file_move', ios: 'folder', color: getActionColors(dark).move.fg, size: 18 })}
         <ThemedText style={[styles.swipeBtnLabel, { color: getActionColors(dark).move.fg }]}>Move</ThemedText>
       </Pressable>
+      {onRename && (
+        <Pressable onPress={onRename} style={[styles.swipeBtn, { backgroundColor: getActionColors(dark).rename.bg }]}>
+          {Icon({ android: 'edit', ios: 'pencil', color: getActionColors(dark).rename.fg, size: 18 })}
+          <ThemedText style={[styles.swipeBtnLabel, { color: getActionColors(dark).rename.fg }]}>Rename</ThemedText>
+        </Pressable>
+      )}
       <Pressable onPress={onDelete} style={[styles.swipeBtn, { backgroundColor: getActionColors(dark).delete.bg }]}>
         {Icon({ android: 'delete', ios: 'trash', color: getActionColors(dark).delete.fg, size: 18 })}
         <ThemedText style={[styles.swipeBtnLabel, { color: getActionColors(dark).delete.fg }]}>Delete</ThemedText>

@@ -58,14 +58,14 @@ export async function initializeMakAndFrkIfNeeded(
 ) {
   let config = await getFileConfig(patientId, getToken);
   
-  // Do we have the MAK locally?
+  // Do we have the MAK locally and backend has it?
   const localMak = await SecureStore.getItemAsync(getMakSecureKey(patientId));
-  if (localMak) {
+  if (localMak && config.encryptedMAK) {
     return { status: 'ready' as const }; // we are good!
   }
 
   // If we don't have MAK locally, but backend has EncryptedMAK, we need the user to enter FRK
-  if (config.encryptedMAK) {
+  if (!localMak && config.encryptedMAK) {
     return { status: 'needs_frk' as const, encryptedMAK: config.encryptedMAK };
   }
 
@@ -73,9 +73,12 @@ export async function initializeMakAndFrkIfNeeded(
   const newFrk = generateFrk();
   const frkKey = await deriveKeyFromFrk(newFrk);
   
-  // Generate random MAK
-  const mak = await Crypto.AESEncryptionKey.generate(Crypto.AESKeySize.AES256);
-  const makEncoded = await mak.encoded('base64');
+  // Use existing MAK if we have it, otherwise generate random MAK
+  let makEncoded = localMak;
+  if (!makEncoded) {
+    const mak = await Crypto.AESEncryptionKey.generate(Crypto.AESKeySize.AES256);
+    makEncoded = await mak.encoded('base64');
+  }
   
   // Encrypt MAK with FRK
   // Pass makEncoded (base64 string) directly, since BinaryInput accepts base64 strings

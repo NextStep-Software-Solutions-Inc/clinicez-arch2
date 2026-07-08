@@ -17,6 +17,7 @@ import * as Sharing from 'expo-sharing';
 import EmptyState from '@ui/EmptyState';
 import ThemedText from '@ui/ThemedText';
 import CustomAlertModal from '../../../components/ui/CustomAlertModal';
+import RenameModal from '../../../components/ui/RenameModal';
 import { usePatientId } from 'hooks/usePatientId';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
@@ -27,6 +28,8 @@ import {
   deleteItem,
   syncPendingFiles,
   preparePreviewFile,
+  renameFile,
+  renameFolder,
 } from '../../../services/files';
 import type { FilesScreenProps } from './navigationTypes';
 import ThemedView from '@ui/ThemedView';
@@ -54,6 +57,27 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
   
   const [fabOpen, setFabOpen] = useState(false);
   const [alertModal, setAlertModal] = useState<{ title: string; message: string; icon?: string } | null>(null);
+  const [renameTarget, setRenameTarget] = useState<{ kind: 'file' | 'folder', id: string, initialName: string } | null>(null);
+
+  const handleRenameSave = async (newName: string) => {
+    if (!renameTarget) return;
+    try {
+      if (renameTarget.kind === 'folder') {
+        await renameFolder(patientId, renameTarget.id, newName);
+      } else {
+        await renameFile(patientId, renameTarget.id, newName);
+      }
+      setRenameTarget(null);
+      await refresh();
+      syncPendingFiles(patientId, getToken).then(refresh).catch(console.error);
+    } catch (e) {
+      setAlertModal({
+        title: 'Error',
+        message: e instanceof Error ? e.message : 'Unable to rename item.',
+        icon: '⚠️'
+      });
+    }
+  };
   const [query, setQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -261,6 +285,9 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
                   icon: '❌',
                 });
               }}
+              onRename={() => {
+                setRenameTarget({ kind: bItem.kind as 'file' | 'folder', id: bItem.id, initialName: bItem.name });
+              }}
               onMove={() =>
                 navigation.navigate('FileMoveScreen', {
                   itemKind: bItem.kind,
@@ -304,6 +331,14 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
           {Icon({ android: fabOpen ? 'close' : 'add', ios: fabOpen ? 'xmark' : 'plus', color: '#fff', size: 28 })}
         </Pressable>
       </View>
+
+      <RenameModal
+        visible={renameTarget !== null}
+        onClose={() => setRenameTarget(null)}
+        initialName={renameTarget?.initialName ?? ''}
+        onSave={handleRenameSave}
+        title={renameTarget?.kind === 'folder' ? 'Rename folder' : 'Rename file'}
+      />
 
       <CustomAlertModal
         visible={alertModal !== null}

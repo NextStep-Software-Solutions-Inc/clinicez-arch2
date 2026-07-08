@@ -12,6 +12,7 @@ import { useAuth as useAppAuth } from 'contexts/AuthContext';
 import * as Sharing from 'expo-sharing';
 import Pdf from 'react-native-pdf';
 import ThemedText from '@ui/ThemedText';
+import { useAuth as useClerkAuth } from '@clerk/expo';
 import { usePatientId } from 'hooks/usePatientId';
 import { cleanupPreviewCache, preparePreviewFile } from '../../../services/files';
 import type { PreparedPreviewFile } from '../../../services/files';
@@ -29,13 +30,14 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
   const navigation = useNavigation('FileViewerScreen');
   const patientId = usePatientId();
   const { runWithAutoLockPaused } = useAppAuth();
+  const { getToken } = useClerkAuth();
   const { fileId } = route.params;
   const [preview, setPreview] = useState<PreparedPreviewFile | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
-    preparePreviewFile(patientId, fileId)
+    preparePreviewFile(patientId, fileId, getToken)
       .then((value) => {
         if (!mounted) return;
         setPreview(value);

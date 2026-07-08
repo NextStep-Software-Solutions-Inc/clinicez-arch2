@@ -48,11 +48,11 @@ export default function FRKSetupScreen({ route }: FilesScreenProps<'FRKSetupScre
         <Pressable onPress={copyToClipboard} style={styles.copyBtn}>
           <ThemedText style={styles.copyBtnText}>{copied ? 'Copied!' : 'Copy to Clipboard'}</ThemedText>
         </Pressable>
-      </View>
 
-      <Pressable onPress={handleContinue} style={styles.continueBtn}>
-        <ThemedText style={styles.continueBtnText}>I have saved my key</ThemedText>
-      </Pressable>
+        <Pressable onPress={handleContinue} style={styles.continueBtn}>
+          <ThemedText style={styles.continueBtnText}>I have saved my key</ThemedText>
+        </Pressable>
+      </View>
     </ThemedView>
   );
 }
