@@ -70,10 +70,17 @@ export function useFilesBrowser(patientId: string, folderId: string | null, quer
   );
 
   const refresh = useCallback(async () => {
-    // Force retry failed files on manual pull-to-refresh
-    const { syncPendingFiles } = await import('../services/files/filesService');
-    await syncPendingFiles(patientId, getToken, true).catch(console.log);
-    return mutate();
+    // Optimistically update the UI by reading the latest SQLite state immediately
+    const mutatePromise = mutate();
+    
+    // Force retry failed files on manual pull-to-refresh (don't block the UI)
+    import('../services/files/filesService').then(({ syncPendingFiles }) => {
+      syncPendingFiles(patientId, getToken, true)
+        .then(() => mutate()) // Mutate again after network sync completes
+        .catch(console.log);
+    });
+
+    return mutatePromise;
   }, [mutate, patientId, getToken]);
 
   return {
