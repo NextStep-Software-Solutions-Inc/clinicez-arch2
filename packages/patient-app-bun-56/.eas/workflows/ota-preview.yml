@@ -13,4 +13,4 @@ jobs:
     type: update
     environment: preview
     params:
-      branch: preview
+      branch: ${{ github.ref_name || 'preview' }}
