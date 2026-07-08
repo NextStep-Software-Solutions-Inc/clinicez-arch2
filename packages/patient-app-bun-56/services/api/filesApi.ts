@@ -24,16 +24,15 @@ export function createUploadIntent(
   getToken: () => Promise<string | null>,
   payload: Record<string, unknown>,
 ) {
-  return api.post<FileUploadIntentResponse>(getToken, `/patients/${patientId}/files/uploads/presigned-url`, payload);
+  return api.post<FileUploadIntentResponse>(getToken, `/patients/${patientId}/files/uploads/intent`, payload);
 }
 
 export function completeUpload(
   patientId: string,
   getToken: () => Promise<string | null>,
-  serverFileId: string, // Unused but kept for signature compatibility
   payload: Record<string, unknown>,
 ) {
-  return api.post<{ success: true; serverUpdatedAt?: number; wrappedKeyJson?: string }>(
+  return api.post<{ fileId: string }>(
     getToken,
     `/patients/${patientId}/files/uploads/complete`,
     payload

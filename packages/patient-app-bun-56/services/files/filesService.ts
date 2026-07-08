@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, or } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, or } from 'drizzle-orm';
 import * as Crypto from 'expo-crypto';
 import * as FileSystem from 'expo-file-system';
 import { Directory, File, Paths, UploadType } from 'expo-file-system';
@@ -13,6 +13,7 @@ import { filesMetadata } from '@db/schema/filesMetadata';
 import { fileTypes } from '@db/schema/fileTypes';
 import { fileUploadConfig } from '@db/schema/fileUploadConfig';
 import { completeUpload, createUploadIntent, fetchFileConfig, fetchFiles, getFileDownloadUrl, hasFileApi } from '../api/filesApi';
+import { pushSyncPayload, type SyncItemRequest } from '../api/patientApi';
 import {
   DEFAULT_MAX_FILE_SIZE_BYTES,
   DEFAULT_USER_QUOTA_BYTES,
@@ -798,6 +799,7 @@ export async function cleanupPreviewCache(patientId: string, fileId?: string) {
 export async function syncPendingFiles(
   patientId: string,
   getToken?: () => Promise<string | null>,
+  retryFailed: boolean = false
 ): Promise<SyncPendingFilesResult> {
   if (!hasFileApi() || !getToken) {
     return { synced: 0, failed: 0, skipped: true, reason: 'File API URL is not configured.' };
@@ -816,6 +818,11 @@ export async function syncPendingFiles(
     const { folders, files } = await fetchFiles(patientId, getToken);
     
     for (const remoteFolder of folders) {
+      if (remoteFolder.isDeleted) {
+        await db.delete(fileFolders).where(eq(fileFolders.id, remoteFolder.id));
+        continue;
+      }
+
       const existing = await getFolder(patientId, remoteFolder.id);
       
       const row = {
@@ -844,6 +851,12 @@ export async function syncPendingFiles(
     }
 
     for (const remoteFile of files) {
+      if (remoteFile.isDeleted) {
+        await cleanupPreviewCache(patientId, remoteFile.id);
+        await db.delete(filesMetadata).where(eq(filesMetadata.id, remoteFile.id));
+        continue;
+      }
+
       const [existing] = await db.select().from(filesMetadata).where(eq(filesMetadata.id, remoteFile.id)).limit(1);
       
       if (!existing) {
@@ -851,7 +864,7 @@ export async function syncPendingFiles(
           id: remoteFile.id,
           patientId,
           clinicId: null,
-          folderId: remoteFile.folderId,
+          folderId: remoteFile.folderId ?? null,
           name: remoteFile.fileName,
           type: null,
           mimeType: remoteFile.mimeType,
@@ -874,10 +887,13 @@ export async function syncPendingFiles(
           serverId: remoteFile.id,
         });
         synced++;
-      } else if (existing.name !== remoteFile.fileName || existing.folderId !== remoteFile.folderId) {
+      } else if (
+        existing.name !== remoteFile.fileName || 
+        existing.folderId !== (remoteFile.folderId ?? null)
+      ) {
          await db.update(filesMetadata).set({
             name: remoteFile.fileName,
-            folderId: remoteFile.folderId,
+            folderId: remoteFile.folderId ?? null,
             updatedAt: new Date(remoteFile.updatedAt),
             syncStatus: 'synced',
          }).where(eq(filesMetadata.id, remoteFile.id));
@@ -893,18 +909,102 @@ export async function syncPendingFiles(
   }
 
   // Upstream sync
-  const pending = await db
+  const pendingFolders = await db
+    .select()
+    .from(fileFolders)
+    .where(
+      and(
+        eq(fileFolders.patientId, patientId),
+        retryFailed 
+          ? or(eq(fileFolders.syncStatus, 'queued'), eq(fileFolders.syncStatus, 'failed'))
+          : eq(fileFolders.syncStatus, 'queued'),
+      ),
+    );
+
+  const pendingFiles = await db
     .select()
     .from(filesMetadata)
     .where(
       and(
         eq(filesMetadata.patientId, patientId),
-        isNull(filesMetadata.deletedAt),
-        or(eq(filesMetadata.syncStatus, 'queued'), eq(filesMetadata.syncStatus, 'failed')),
+        retryFailed 
+          ? or(eq(filesMetadata.syncStatus, 'queued'), eq(filesMetadata.syncStatus, 'failed'))
+          : eq(filesMetadata.syncStatus, 'queued'),
       ),
     );
 
-  for (const file of pending) {
+  const syncRequests: SyncItemRequest[] = [];
+  
+  for (const folder of pendingFolders) {
+     syncRequests.push({
+        idempotencyKey: crypto.randomUUID(),
+        entityType: 'file_folder',
+        operation: folder.syncOperation,
+        clientTimestamp: (folder.updatedAt ?? new Date()).toISOString(),
+        entityId: folder.id,
+        payloadJson: JSON.stringify({
+            clientId: crypto.randomUUID(),
+            parentId: folder.parentId,
+            name: folder.name,
+            updatedAt: (folder.updatedAt ?? new Date()).toISOString()
+        })
+     });
+  }
+
+  const uploadIntentFiles = [];
+
+  for (const file of pendingFiles) {
+     if (file.syncOperation === 'insert') {
+         uploadIntentFiles.push(file);
+     } else {
+         syncRequests.push({
+            idempotencyKey: crypto.randomUUID(),
+            entityType: 'file',
+            operation: file.syncOperation,
+            clientTimestamp: (file.updatedAt ?? new Date()).toISOString(),
+            entityId: file.id,
+            payloadJson: JSON.stringify({
+                clientId: crypto.randomUUID(),
+                folderId: file.folderId,
+                fileName: file.name,
+                updatedAt: (file.updatedAt ?? new Date()).toISOString()
+            })
+         });
+     }
+  }
+
+  // Send Bulk Sync for Metadata and Deletes
+  if (syncRequests.length > 0) {
+      try {
+          await pushSyncPayload(getToken, patientId, syncRequests);
+          
+          for (const folder of pendingFolders) {
+              if (folder.syncOperation === 'delete') {
+                  await db.delete(fileFolders).where(eq(fileFolders.id, folder.id));
+              } else {
+                  await db.update(fileFolders).set({ syncStatus: 'synced', syncError: null }).where(eq(fileFolders.id, folder.id));
+              }
+          }
+
+          for (const file of pendingFiles) {
+              if (file.syncOperation !== 'insert') {
+                  if (file.syncOperation === 'delete') {
+                      await cleanupPreviewCache(patientId, file.id);
+                      await db.delete(filesMetadata).where(eq(filesMetadata.id, file.id));
+                  } else {
+                      await db.update(filesMetadata).set({ syncStatus: 'synced', syncError: null }).where(eq(filesMetadata.id, file.id));
+                  }
+              }
+          }
+          synced += syncRequests.length;
+          mutate((key: any) => Array.isArray(key) && key[0] === 'files-browser');
+      } catch (err) {
+          failed += syncRequests.length;
+          console.warn("Bulk sync push failed", err);
+      }
+  }
+
+  for (const file of uploadIntentFiles) {
     if (!file.localEncryptedPath) continue;
 
     try {
@@ -912,21 +1012,17 @@ export async function syncPendingFiles(
       mutate((key: any) => Array.isArray(key) && key[0] === 'files-browser');
       const encryptedFile = new File(file.localEncryptedPath);
       const intent = await createUploadIntent(patientId, getToken, {
-        clientFileId: file.id,
-        name: file.name,
-        fileTypeId: file.fileTypeId,
         folderId: file.folderId,
+        originalName: file.name,
         contentType: file.mimeType ?? 'application/octet-stream',
-        fileExtension: file.extension ?? '.bin',
         sizeBytes: file.sizeBytes,
+        encryptionAlgorithm: file.encryptionAlgorithm,
+        encryptionKeyId: file.encryptionKeyId,
+        encryptionIvBase64: file.encryptionIvBase64,
+        encryptionTagBase64: file.encryptionTagBase64,
         encryptedSizeBytes: file.encryptedSizeBytes ?? encryptedFile.size,
         encryptedHash: file.encryptedHash,
-        encryption: {
-          algorithm: file.encryptionAlgorithm,
-          ivBase64: file.encryptionIvBase64,
-          tagBase64: file.encryptionTagBase64,
-          keyId: file.encryptionKeyId,
-        },
+        wrappedKeyJson: ''
       });
 
       const task = encryptedFile.createUploadTask(intent.uploadUrl, {
@@ -949,13 +1045,9 @@ export async function syncPendingFiles(
         throw new Error(`Cloud upload failed with status ${upload.status}.`);
       }
 
-      const complete = intent.serverFileId
-        ? await completeUpload(patientId, getToken, intent.serverFileId, {
-          clientFileId: file.id,
-          cloudObjectKey: intent.cloudObjectKey,
-          encryptedHash: file.encryptedHash,
-        })
-        : undefined;
+      const complete = await completeUpload(patientId, getToken, {
+          fileId: intent.fileId
+        });
 
       await db
         .update(filesMetadata)
@@ -963,10 +1055,10 @@ export async function syncPendingFiles(
           syncStatus: 'synced',
           syncError: null,
           syncedAt: now(),
-          serverId: intent.serverFileId ?? file.serverId,
-          cloudObjectKey: intent.cloudObjectKey ?? file.cloudObjectKey,
-          serverWrappedKeyJson: complete?.wrappedKeyJson ?? intent.wrappedKeyJson ?? file.serverWrappedKeyJson,
-          serverUpdatedAt: complete?.serverUpdatedAt ? new Date(complete.serverUpdatedAt) : now(),
+          serverId: complete.fileId,
+          cloudObjectKey: intent.storageKey ?? intent.cloudObjectKey ?? file.cloudObjectKey,
+          serverWrappedKeyJson: intent.wrappedKeyJson ?? file.serverWrappedKeyJson,
+          serverUpdatedAt: now(),
         })
         .where(eq(filesMetadata.id, file.id));
       synced += 1;

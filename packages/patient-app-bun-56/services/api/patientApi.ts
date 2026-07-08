@@ -88,6 +88,7 @@ export interface SyncItemRequest {
     /** ISO-8601 UTC */
     clientTimestamp: string;
     payloadJson: string | null;
+    entityId?: string;
 }
 
 export interface PushSyncAck {

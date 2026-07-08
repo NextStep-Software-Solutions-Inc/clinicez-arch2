@@ -89,6 +89,24 @@ public sealed class R2StorageService : IStorageService, IAsyncDisposable
         return Task.FromResult(_s3Client.GetPreSignedURL(request));
     }
 
+    public async Task<bool> ObjectExistsAsync(string key, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var request = new GetObjectMetadataRequest
+            {
+                BucketName = _bucketName,
+                Key = key
+            };
+            await _s3Client.GetObjectMetadataAsync(request, cancellationToken);
+            return true;
+        }
+        catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         _s3Client.Dispose();

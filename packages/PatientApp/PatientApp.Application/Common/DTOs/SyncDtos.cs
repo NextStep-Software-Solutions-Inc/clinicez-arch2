@@ -6,8 +6,9 @@ public sealed record SyncItemRequest(
     Guid IdempotencyKey,
     string EntityType,
     SyncOperation Operation,
-    DateTime ClientTimestamp,   // Must be UTC
-    string? PayloadJson);       // Null for Delete operations
+    DateTime ClientTimestamp,
+    string? PayloadJson,
+    Guid? EntityId = null);
 
 public sealed record PushSyncAckDto(
     int Accepted,

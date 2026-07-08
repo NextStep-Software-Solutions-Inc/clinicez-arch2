@@ -9,13 +9,26 @@ public sealed class GenerateUploadUrlEndpoint : IEndpoint
 {
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
-        app.MapPost("/patients/{patientId:guid}/files/uploads/presigned-url", async (
+        app.MapPost("/patients/{patientId:guid}/files/uploads/intent", async (
                 Guid patientId,
                 GenerateUploadUrlRequest request,
                 ISender sender,
                 CancellationToken ct) =>
             {
-                var response = await sender.Send(new GenerateUploadUrlCommand(patientId, request.ContentType, request.FileExtension), ct);
+                var response = await sender.Send(new GenerateUploadUrlCommand(
+                    patientId,
+                    request.FolderId,
+                    request.OriginalName,
+                    request.ContentType,
+                    request.SizeBytes,
+                    request.EncryptionAlgorithm,
+                    request.EncryptionKeyId,
+                    request.EncryptionIvBase64,
+                    request.EncryptionTagBase64,
+                    request.EncryptedSizeBytes,
+                    request.EncryptedHash,
+                    request.WrappedKeyJson
+                ), ct);
                 return Results.Ok(ApiResponse<GenerateUploadUrlResponse>.Success(response));
             })
             .WithTags("Files")
@@ -26,4 +39,16 @@ public sealed class GenerateUploadUrlEndpoint : IEndpoint
     }
 }
 
-public sealed record GenerateUploadUrlRequest(string ContentType, string FileExtension);
+public sealed record GenerateUploadUrlRequest(
+    Guid? FolderId,
+    string OriginalName,
+    string ContentType,
+    long SizeBytes,
+    string EncryptionAlgorithm,
+    string EncryptionKeyId,
+    string EncryptionIvBase64,
+    string EncryptionTagBase64,
+    long EncryptedSizeBytes,
+    string EncryptedHash,
+    string WrappedKeyJson
+);

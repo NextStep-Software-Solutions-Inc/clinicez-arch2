@@ -79,8 +79,10 @@ export interface FileApiTypeResponse {
 }
 
 export interface FileUploadIntentResponse {
+  fileId: string;
   uploadUrl: string;
   uploadHeaders?: Record<string, string>;
+  storageKey?: string;
   cloudObjectKey?: string;
   serverFileId?: string;
   wrappedKeyJson?: string;

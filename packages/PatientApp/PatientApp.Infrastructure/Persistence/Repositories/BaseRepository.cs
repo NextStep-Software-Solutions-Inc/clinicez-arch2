@@ -27,6 +27,11 @@ public abstract class BaseRepository<T> : IBaseRepository<T> where T : BaseEntit
         return await DbSet.Where(predicate).ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<T>> FindWithDeletedAsync(System.Linq.Expressions.Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default)
+    {
+        return await DbSet.IgnoreQueryFilters().Where(predicate).ToListAsync(cancellationToken);
+    }
+
     public async Task AddAsync(T entity, CancellationToken cancellationToken = default)
         => await DbSet.AddAsync(entity, cancellationToken);
 

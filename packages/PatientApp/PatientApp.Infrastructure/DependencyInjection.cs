@@ -136,9 +136,11 @@ public static class DependencyInjection
         services.AddScoped<ISyncEntityProcessor, PatientDentalVisionSyncProcessor>();
         // Files
         services.AddScoped<ISyncEntityProcessor, FileFolderSyncProcessor>();
+        services.AddScoped<ISyncEntityProcessor, FileRecordSyncProcessor>();
 
         // ── Hangfire job implementation ────────────────────────────────────────
         services.AddScoped<ISyncPayloadJob, SyncPayloadJobProcessor>();
+        services.AddScoped<IFileUploadReconciliationJob, FileUploadReconciliationJob>();
 
         // ── Clerk JWT Bearer Authentication ───────────────────────────────────
         var clerkAuthority = configuration["Clerk:Authority"]

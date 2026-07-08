@@ -1,35 +1,93 @@
-using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using PatientApp.Application.Common.Constants;
 using PatientApp.Domain.Entities;
-using PatientApp.Infrastructure.Persistence;
+using PatientApp.Domain.Enums;
+using PatientApp.Domain.Interfaces;
+using PatientApp.Infrastructure.Services.Jobs;
 
 namespace PatientApp.Infrastructure.Services.Jobs.Processors;
 
-internal sealed class FileFolderPayload
+public sealed class FileFolderSyncProcessor : ISyncEntityProcessor
 {
-    public Guid ClientId { get; set; }
-    public Guid PatientId { get; set; }
-    public Guid? ParentId { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public DateTime UpdatedAt { get; set; }
-}
+    private readonly IFileFolderRepository _folderRepository;
 
-internal sealed class FileFolderSyncProcessor
-    : SimpleListSyncProcessor<FileFolder, FileFolderPayload>
-{
-    public FileFolderSyncProcessor(ApplicationDbContext ctx) : base(ctx) { }
-    public override string EntityType => SyncableEntityTypes.FileFolder;
+    private static readonly JsonSerializerOptions JsonOptions =
+        new() { PropertyNameCaseInsensitive = true };
 
-    protected override async Task<FileFolder?> FindExistingAsync(FileFolderPayload p, Guid? id, CancellationToken ct)
-        => id.HasValue ? await Context.FileFolders.FindAsync([id.Value], ct)
-            : await Context.FileFolders.FirstOrDefaultAsync(e => e.ClientId == p.ClientId, ct);
+    public FileFolderSyncProcessor(IFileFolderRepository folderRepository)
+        => _folderRepository = folderRepository;
 
-    protected override FileFolder CreateFromPayload(FileFolderPayload p) => new()
-        { ClientId = p.ClientId, PatientId = p.PatientId, ParentId = p.ParentId, Name = p.Name };
+    public string EntityType => SyncableEntityTypes.FileFolder;
 
-    protected override void ApplyUpdate(FileFolder e, FileFolderPayload p)
-        { e.ParentId = p.ParentId; e.Name = p.Name; }
+    public async Task<SyncProcessResult> ProcessAsync(SyncLog log, CancellationToken ct)
+    {
+        if (log.Operation == SyncOperation.Delete)
+        {
+            if (!log.EntityId.HasValue)
+                return SyncProcessResult.Rejected("EntityId is required for Delete operations.");
 
-    protected override DateTime GetPayloadTimestamp(FileFolderPayload p) => p.UpdatedAt;
-    protected override void SetEntityId(SyncLog log, FileFolder e) => log.EntityId = e.Id;
+            var toDelete = await _folderRepository.GetByIdAsync(log.EntityId.Value, ct);
+            if (toDelete is null) return SyncProcessResult.Success(); // Idempotent
+
+            _folderRepository.Delete(toDelete);
+            return SyncProcessResult.Success();
+        }
+
+        if (string.IsNullOrWhiteSpace(log.PayloadJson))
+            return SyncProcessResult.Rejected("PayloadJson is required for Create and Update operations.");
+
+        var payload = JsonSerializer.Deserialize<FileFolderSyncPayload>(log.PayloadJson, JsonOptions);
+        if (payload is null)
+            return SyncProcessResult.Rejected("Failed to deserialize FileFolder payload.");
+
+        if (log.Operation == SyncOperation.Create)
+        {
+            if (!log.EntityId.HasValue)
+                return SyncProcessResult.Rejected("EntityId is required for FileFolder Create operations.");
+
+            var existing = await _folderRepository.GetByIdAsync(log.EntityId.Value, ct);
+            if (existing is not null)
+                return SyncProcessResult.Success();
+
+            var folder = new FileFolder
+            {
+                Id = log.EntityId.Value,
+                PatientId = log.PatientId,
+                ClientId = payload.ClientId,
+                ParentId = payload.ParentId,
+                Name = payload.Name,
+                SyncStatus = FileSyncStatus.Synced
+            };
+
+            await _folderRepository.AddAsync(folder, ct);
+            return SyncProcessResult.Success();
+        }
+
+        if (log.Operation == SyncOperation.Update)
+        {
+            if (!log.EntityId.HasValue)
+                return SyncProcessResult.Rejected("EntityId is required for FileFolder Update operations.");
+
+            var folder = await _folderRepository.GetByIdAsync(log.EntityId.Value, ct);
+
+            if (folder is null)
+                return SyncProcessResult.Conflict("FileFolder no longer exists on the server.");
+
+            var serverTimestamp = folder.UpdatedAt ?? folder.CreatedAt;
+            if (payload.UpdatedAt < serverTimestamp)
+            {
+                return SyncProcessResult.Conflict(
+                    $"Server version is newer. Client={payload.UpdatedAt:O}, Server={serverTimestamp:O}. Server version retained.");
+            }
+
+            folder.Name = payload.Name;
+            folder.ParentId = payload.ParentId;
+            folder.SyncStatus = FileSyncStatus.Synced;
+            
+            _folderRepository.Update(folder);
+            return SyncProcessResult.Success();
+        }
+
+        return SyncProcessResult.Rejected($"Unsupported operation: {log.Operation}");
+    }
 }

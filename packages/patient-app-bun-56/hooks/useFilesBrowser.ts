@@ -69,9 +69,12 @@ export function useFilesBrowser(patientId: string, folderId: string | null, quer
     }
   );
 
-  const refresh = useCallback(() => {
+  const refresh = useCallback(async () => {
+    // Force retry failed files on manual pull-to-refresh
+    const { syncPendingFiles } = await import('../services/files/filesService');
+    await syncPendingFiles(patientId, getToken, true).catch(console.log);
     return mutate();
-  }, [mutate]);
+  }, [mutate, patientId, getToken]);
 
   return {
     contents: data,

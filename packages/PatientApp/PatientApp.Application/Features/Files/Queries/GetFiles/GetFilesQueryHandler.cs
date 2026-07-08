@@ -1,5 +1,6 @@
 using CLINICEZ.Shared.Exceptions;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using PatientApp.Domain.Interfaces;
 
 namespace PatientApp.Application.Features.Files.Queries.GetFiles;
@@ -27,17 +28,19 @@ public sealed class GetFilesQueryHandler : IRequestHandler<GetFilesQuery, GetFil
         if (patient == null)
             throw new NotFoundException($"Patient with ID {request.PatientId} not found.");
 
-        var allFolders = await _folderRepository.FindAsync(f => f.PatientId == request.PatientId, cancellationToken);
+        var allFolders = await _folderRepository.FindWithDeletedAsync(f => f.PatientId == request.PatientId, cancellationToken);
+        
         var foldersDto = allFolders.Select(f => new FileFolderDto(
                 f.Id,
                 f.ClientId,
                 f.ParentId,
                 f.Name,
                 f.CreatedAt,
-                f.UpdatedAt))
+                f.IsDeleted ? f.DeletedAt : f.UpdatedAt,
+                f.IsDeleted)) // Pass DeletedAt if IsDeleted so client knows it changed
             .ToList();
 
-        var allFiles = await _fileRepository.FindAsync(f => f.PatientId == request.PatientId, cancellationToken);
+        var allFiles = await _fileRepository.FindWithDeletedAsync(f => f.PatientId == request.PatientId, cancellationToken);
         var filesDto = allFiles.Select(f => new FileRecordDto(
                 f.Id,
                 f.ClientId,
@@ -56,7 +59,8 @@ public sealed class GetFilesQueryHandler : IRequestHandler<GetFilesQuery, GetFil
                 f.EncryptedHash,
                 f.WrappedKeyJson,
                 f.CreatedAt,
-                f.UpdatedAt))
+                f.IsDeleted ? f.DeletedAt : f.UpdatedAt,
+                f.IsDeleted))
             .ToList();
 
         return new GetFilesResponse(foldersDto, filesDto);

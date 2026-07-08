@@ -56,6 +56,7 @@ public sealed class PushSyncPayloadCommandHandler : IRequestHandler<PushSyncPayl
                 ServerTimestamp = now,
                 Status = SyncStatus.Pending,
                 PayloadJson = item.PayloadJson,
+                EntityId = item.EntityId,
             }).ToList();
 
             await _syncLogRepository.AddRangeAsync(logs, cancellationToken);

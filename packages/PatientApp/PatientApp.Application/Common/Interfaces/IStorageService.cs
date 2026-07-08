@@ -16,4 +16,7 @@ public interface IStorageService
 
     /// <summary>Generates a pre-signed URL for a client to download a file securely from R2.</summary>
     Task<string> GeneratePresignedDownloadUrlAsync(string key, TimeSpan expiresIn, CancellationToken cancellationToken = default);
+
+    /// <summary>Checks if an object exists in R2.</summary>
+    Task<bool> ObjectExistsAsync(string key, CancellationToken cancellationToken = default);
 }

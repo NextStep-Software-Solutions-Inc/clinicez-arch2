@@ -72,6 +72,11 @@ app.UseHangfireDashboard("/hangfire", new DashboardOptions
     IsReadOnlyFunc = _ => !app.Environment.IsDevelopment(),
 });
 
+RecurringJob.AddOrUpdate<PatientApp.Infrastructure.Services.Jobs.IFileUploadReconciliationJob>(
+    "reconcile-file-uploads",
+    job => job.ReconcilePendingUploadsAsync(CancellationToken.None),
+    "*/15 * * * *"); // Run every 15 minutes
+
 // Auto-maps all IEndpoint implementations under /api/v1
 app.MapApiEndpoints();
 
