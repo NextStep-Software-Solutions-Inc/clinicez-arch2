@@ -19,7 +19,7 @@ public sealed record FileRecordDto(
     string? MimeType,
     string? Extension,
     long SizeBytes,
-    string Category,
+    Guid DocumentTypeId,
     DateTime UploadedAt,
     string? EncryptionAlgorithm,
     string? EncryptionKeyId,

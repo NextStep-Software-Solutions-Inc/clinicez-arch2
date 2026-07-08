@@ -1,7 +1,7 @@
 import type { File as ExpoFile } from 'expo-file-system';
 import type { FileFolder } from '@db/schema/fileFolders';
 import type { FileMetadata } from '@db/schema/filesMetadata';
-import type { FileType } from '@db/schema/fileTypes';
+import type { DocumentType } from '@db/schema/documentTypes';
 import type { FileUploadConfig } from '@db/schema/fileUploadConfig';
 
 export const DEFAULT_MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
@@ -27,7 +27,7 @@ export interface FileBrowserContents {
   folders: FileBrowserFolder[];
   files: FileBrowserFile[];
   config: FileUploadConfig;
-  fileTypes: FileType[];
+  documentTypes: DocumentType[];
   pendingSyncCount: number;
 }
 
@@ -41,7 +41,7 @@ export interface PickedFileInput {
 export interface ImportFilesInput {
   patientId: string;
   folderId?: string | null;
-  fileTypeId?: string | null;
+  documentTypeId?: string | null;
   files: PickedFileInput[];
   getToken?: () => Promise<string | null>;
 }
@@ -62,19 +62,19 @@ export interface FileApiConfigResponse {
   configVersion?: string;
   encryptedMAK?: string;
   serverUpdatedAt?: number;
-  fileTypes?: FileApiTypeResponse[];
+  documentTypes?: DocumentTypeResponse[];
 }
 
-export interface FileApiTypeResponse {
+export interface DocumentTypeResponse {
   id: string;
   code: string;
   label: string;
-  description?: string | null;
-  supportedExtensions?: string[];
-  supportedMimeTypes?: string[];
-  nativePreviewKind?: FilePreviewKind;
-  isActive?: boolean;
-  sortOrder?: number;
+  description?: string;
+  supportedExtensions: string[];
+  supportedMimeTypes: string[];
+  nativePreviewKind: string;
+  sortOrder: number;
+  isActive: boolean;
   serverUpdatedAt?: number;
 }
 

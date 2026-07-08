@@ -17,6 +17,8 @@ public sealed class GenerateUploadUrlEndpoint : IEndpoint
             {
                 var response = await sender.Send(new GenerateUploadUrlCommand(
                     patientId,
+                    request.FileId,
+                    request.DocumentTypeId,
                     request.FolderId,
                     request.OriginalName,
                     request.ContentType,
@@ -40,6 +42,8 @@ public sealed class GenerateUploadUrlEndpoint : IEndpoint
 }
 
 public sealed record GenerateUploadUrlRequest(
+    Guid? FileId,
+    Guid DocumentTypeId,
     Guid? FolderId,
     string OriginalName,
     string ContentType,

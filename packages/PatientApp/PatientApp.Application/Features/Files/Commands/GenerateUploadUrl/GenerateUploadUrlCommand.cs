@@ -6,6 +6,8 @@ namespace PatientApp.Application.Features.Files.Commands.GenerateUploadUrl;
 
 public sealed record GenerateUploadUrlCommand(
     Guid PatientId,
+    Guid? FileId,
+    Guid DocumentTypeId,
     Guid? FolderId,
     string OriginalName,
     string ContentType,
@@ -38,7 +40,7 @@ internal sealed class GenerateUploadUrlCommandHandler : IRequestHandler<Generate
     public async Task<GenerateUploadUrlResponse> Handle(GenerateUploadUrlCommand request, CancellationToken cancellationToken)
     {
         var fileExtension = System.IO.Path.GetExtension(request.OriginalName);
-        var fileId = Guid.NewGuid();
+        var fileId = request.FileId ?? Guid.NewGuid();
         var storageKey = $"patients/{request.PatientId}/files/{fileId}{fileExtension}";
 
         var fileRecord = new PatientApp.Domain.Entities.FileRecord
@@ -52,7 +54,7 @@ internal sealed class GenerateUploadUrlCommandHandler : IRequestHandler<Generate
             Extension = fileExtension,
             SizeBytes = request.SizeBytes,
             UploadedAt = DateTime.UtcNow,
-            Category = PatientApp.Domain.Enums.FileCategory.Other,
+            DocumentTypeId = request.DocumentTypeId,
             SyncStatus = PatientApp.Domain.Enums.FileSyncStatus.Syncing,
             
             EncryptionAlgorithm = request.EncryptionAlgorithm,

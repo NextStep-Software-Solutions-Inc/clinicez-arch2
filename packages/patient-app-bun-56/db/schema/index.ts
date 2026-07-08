@@ -30,7 +30,7 @@ export * from './clinicOrganizationLinks';
 export * from './clinics';
 export * from './bookingDrafts';
 export * from './fileFolders';
-export * from './fileTypes';
+export * from './documentTypes';
 export * from './fileUploadConfig';
 export * from './filesMetadata';
 

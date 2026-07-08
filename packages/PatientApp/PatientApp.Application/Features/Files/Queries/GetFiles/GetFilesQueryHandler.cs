@@ -49,7 +49,7 @@ public sealed class GetFilesQueryHandler : IRequestHandler<GetFilesQuery, GetFil
                 f.MimeType,
                 f.Extension,
                 f.SizeBytes,
-                f.Category.ToString(),
+                f.DocumentTypeId,
                 f.UploadedAt,
                 f.EncryptionAlgorithm,
                 f.EncryptionKeyId,

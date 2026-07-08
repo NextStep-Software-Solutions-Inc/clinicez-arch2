@@ -18,7 +18,8 @@ public sealed class FileRecord : BaseEntity, ISyncable
     public long SizeBytes { get; set; }
     /// <summary>R2 object key — the authoritative storage location.</summary>
     public string StorageKey { get; set; } = string.Empty;
-    public FileCategory Category { get; set; }
+    public Guid DocumentTypeId { get; set; }
+    public DocumentType DocumentType { get; set; } = null!;
     public FileSyncStatus SyncStatus { get; set; } = FileSyncStatus.Local;
     public string? SyncError { get; set; }
     public DateTime UploadedAt { get; set; }

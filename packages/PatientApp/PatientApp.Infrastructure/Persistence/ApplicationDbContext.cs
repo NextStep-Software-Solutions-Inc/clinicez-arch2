@@ -81,6 +81,7 @@ public sealed class ApplicationDbContext : DbContext
     public DbSet<DeviceSession> DeviceSessions => Set<DeviceSession>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<NotificationPreferences> NotificationPreferences => Set<NotificationPreferences>();
+    public DbSet<DocumentType> DocumentTypes => Set<DocumentType>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

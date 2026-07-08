@@ -40,7 +40,7 @@ const DEFAULT_META: TMeta = { color: '#6B7280', android: 'description', ios: 'do
 function fileMeta(item: FileBrowserFile): TMeta {
   if (item.previewKind === 'image') return { color: '#EC4899', android: 'image', ios: 'photo.fill' };
   if (item.previewKind === 'pdf') return { color: '#EF4444', android: 'picture_as_pdf', ios: 'doc.richtext.fill' };
-  return TYPE_META[item.fileTypeId ?? ''] ?? DEFAULT_META;
+  return TYPE_META[item.documentTypeId ?? ''] ?? DEFAULT_META;
 }
 
 export function Icon({

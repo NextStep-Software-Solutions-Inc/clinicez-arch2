@@ -880,6 +880,191 @@ namespace PatientApp.Infrastructure.Migrations
                     b.ToTable("device_sessions", (string)null);
                 });
 
+            modelBuilder.Entity("PatientApp.Domain.Entities.DocumentType", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("description");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("label");
+
+                    b.Property<string>("NativePreviewKind")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("native_preview_kind");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.Property<string>("SupportedExtensionsJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("supported_extensions_json");
+
+                    b.Property<string>("SupportedMimeTypesJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("supported_mime_types_json");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_document_types");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_document_types_code");
+
+                    b.ToTable("document_types", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("11111111-1111-1111-1111-111111111111"),
+                            Code = "xray",
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "system",
+                            Description = "Radiology images and x-ray reports.",
+                            IsActive = true,
+                            IsDeleted = false,
+                            Label = "X-ray",
+                            NativePreviewKind = "image",
+                            SortOrder = 10,
+                            SupportedExtensionsJson = "[\"jpg\",\"jpeg\",\"png\",\"pdf\",\"dcm\"]",
+                            SupportedMimeTypesJson = "[\"image/*\",\"application/pdf\"]"
+                        },
+                        new
+                        {
+                            Id = new Guid("22222222-2222-2222-2222-222222222222"),
+                            Code = "lab-result",
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "system",
+                            Description = "Laboratory result PDFs or images.",
+                            IsActive = true,
+                            IsDeleted = false,
+                            Label = "Lab result",
+                            NativePreviewKind = "pdf",
+                            SortOrder = 20,
+                            SupportedExtensionsJson = "[\"pdf\",\"jpg\",\"jpeg\",\"png\"]",
+                            SupportedMimeTypesJson = "[\"application/pdf\",\"image/*\"]"
+                        },
+                        new
+                        {
+                            Id = new Guid("33333333-3333-3333-3333-333333333333"),
+                            Code = "medical-certificate",
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "system",
+                            Description = "Medical certificates and fit-to-work documents.",
+                            IsActive = true,
+                            IsDeleted = false,
+                            Label = "Medical certificate",
+                            NativePreviewKind = "pdf",
+                            SortOrder = 30,
+                            SupportedExtensionsJson = "[\"pdf\",\"jpg\",\"jpeg\",\"png\",\"doc\",\"docx\"]",
+                            SupportedMimeTypesJson = "[\"application/pdf\",\"image/*\",\"application/msword\"]"
+                        },
+                        new
+                        {
+                            Id = new Guid("44444444-4444-4444-4444-444444444444"),
+                            Code = "prescription",
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "system",
+                            Description = "Prescription scans, images, and PDFs.",
+                            IsActive = true,
+                            IsDeleted = false,
+                            Label = "Prescription",
+                            NativePreviewKind = "pdf",
+                            SortOrder = 40,
+                            SupportedExtensionsJson = "[\"pdf\",\"jpg\",\"jpeg\",\"png\"]",
+                            SupportedMimeTypesJson = "[\"application/pdf\",\"image/*\"]"
+                        },
+                        new
+                        {
+                            Id = new Guid("55555555-5555-5555-5555-555555555555"),
+                            Code = "id",
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "system",
+                            Description = "IDs and identity verification documents.",
+                            IsActive = true,
+                            IsDeleted = false,
+                            Label = "Government ID",
+                            NativePreviewKind = "image",
+                            SortOrder = 50,
+                            SupportedExtensionsJson = "[\"pdf\",\"jpg\",\"jpeg\",\"png\"]",
+                            SupportedMimeTypesJson = "[\"application/pdf\",\"image/*\"]"
+                        },
+                        new
+                        {
+                            Id = new Guid("66666666-6666-6666-6666-666666666666"),
+                            Code = "other",
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "system",
+                            Description = "Any other medical documents.",
+                            IsActive = true,
+                            IsDeleted = false,
+                            Label = "Other medical file",
+                            NativePreviewKind = "external",
+                            SortOrder = 999,
+                            SupportedExtensionsJson = "[\"pdf\",\"jpg\",\"jpeg\",\"png\"]",
+                            SupportedMimeTypesJson = "[\"application/pdf\",\"image/*\"]"
+                        });
+                });
+
             modelBuilder.Entity("PatientApp.Domain.Entities.EmergencyContact", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1058,12 +1243,6 @@ namespace PatientApp.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<string>("Category")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)")
-                        .HasColumnName("category");
-
                     b.Property<Guid>("ClientId")
                         .HasColumnType("uuid")
                         .HasColumnName("client_id");
@@ -1089,6 +1268,10 @@ namespace PatientApp.Infrastructure.Migrations
                     b.Property<string>("DeletedBy")
                         .HasColumnType("text")
                         .HasColumnName("deleted_by");
+
+                    b.Property<Guid>("DocumentTypeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("document_type_id");
 
                     b.Property<string>("EncryptedHash")
                         .HasMaxLength(200)
@@ -1193,6 +1376,9 @@ namespace PatientApp.Infrastructure.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_file_records");
+
+                    b.HasIndex("DocumentTypeId")
+                        .HasDatabaseName("ix_file_records_document_type_id");
 
                     b.HasIndex("FolderId")
                         .HasDatabaseName("ix_file_records_folder_id");
@@ -5072,6 +5258,13 @@ namespace PatientApp.Infrastructure.Migrations
 
             modelBuilder.Entity("PatientApp.Domain.Entities.FileRecord", b =>
                 {
+                    b.HasOne("PatientApp.Domain.Entities.DocumentType", "DocumentType")
+                        .WithMany()
+                        .HasForeignKey("DocumentTypeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_file_records_document_types_document_type_id");
+
                     b.HasOne("PatientApp.Domain.Entities.FileFolder", "Folder")
                         .WithMany("Files")
                         .HasForeignKey("FolderId")
@@ -5084,6 +5277,8 @@ namespace PatientApp.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_file_records_patients_patient_id");
+
+                    b.Navigation("DocumentType");
 
                     b.Navigation("Folder");
 

@@ -1412,7 +1412,7 @@ export async function clearAllData(currentPatientId?: string, clerkUserId?: stri
         schema.clinics,
         schema.bookingDrafts,
         schema.fileFolders,
-        schema.fileTypes,
+        schema.documentTypes,
         schema.fileUploadConfig,
         schema.filesMetadata,
         schema.vitalSigns,

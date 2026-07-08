@@ -1,7 +1,7 @@
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { clinics } from './clinics';
 import { fileFolders } from './fileFolders';
-import { fileTypes } from './fileTypes';
+import { documentTypes } from './documentTypes';
 import { patients } from './patients';
 
 // Files Metadata - attached clinical documents and patient-owned uploads.
@@ -10,7 +10,7 @@ export const filesMetadata = sqliteTable('files_metadata', {
   patientId: text('patient_id').references(() => patients.id, { onDelete: 'cascade' }),
   clinicId: text('clinic_id').references(() => clinics.id),
   folderId: text('folder_id').references(() => fileFolders.id),
-  fileTypeId: text('file_type_id').references(() => fileTypes.id),
+  documentTypeId: text('document_type_id').references(() => documentTypes.id).notNull(),
   name: text('name').notNull(),
   type: text('type'),
   mimeType: text('mime_type'),

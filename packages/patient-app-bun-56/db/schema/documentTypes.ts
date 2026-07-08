@@ -1,6 +1,6 @@
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
-export const fileTypes = sqliteTable('file_types', {
+export const documentTypes = sqliteTable('document_types', {
   id: text('id').primaryKey(),
   code: text('code').notNull(),
   label: text('label').notNull(),
@@ -18,5 +18,5 @@ export const fileTypes = sqliteTable('file_types', {
   serverUpdatedAt: integer('server_updated_at', { mode: 'timestamp_ms' }),
 });
 
-export type FileType = typeof fileTypes.$inferSelect;
-export type NewFileType = typeof fileTypes.$inferInsert;
+export type DocumentType = typeof documentTypes.$inferSelect;
+export type NewDocumentType = typeof documentTypes.$inferInsert;

@@ -10,7 +10,7 @@ import { DeviceEventEmitter } from 'react-native';
 import { db } from '@db/index';
 import { fileFolders } from '@db/schema/fileFolders';
 import { filesMetadata } from '@db/schema/filesMetadata';
-import { fileTypes } from '@db/schema/fileTypes';
+import { documentTypes } from '@db/schema/documentTypes';
 import { fileUploadConfig } from '@db/schema/fileUploadConfig';
 import { completeUpload, createUploadIntent, fetchFileConfig, fetchFiles, getFileDownloadUrl, hasFileApi } from '../api/filesApi';
 import { pushSyncPayload, type SyncItemRequest } from '../api/patientApi';
@@ -18,7 +18,7 @@ import {
   DEFAULT_MAX_FILE_SIZE_BYTES,
   DEFAULT_USER_QUOTA_BYTES,
   FileApiConfigResponse,
-  FileApiTypeResponse,
+  DocumentTypeResponse,
   FileBrowserContents,
   FileBrowserFile,
   FileBrowserFolder,
@@ -33,9 +33,9 @@ const FILES_DIR = 'clinicez-files';
 const PREVIEW_DIR = 'clinicez-file-previews';
 const DEFAULT_NATIVE_PREVIEW_EXTENSIONS = ['jpg', 'jpeg', 'png', 'heic', 'webp', 'pdf'];
 
-const DEFAULT_FILE_TYPES: FileApiTypeResponse[] = [
+const DEFAULT_FILE_TYPES: DocumentTypeResponse[] = [
   {
-    id: 'file-type-xray',
+    id: '11111111-1111-1111-1111-111111111111',
     code: 'xray',
     label: 'X-ray',
     description: 'Radiology images and x-ray reports.',
@@ -43,9 +43,10 @@ const DEFAULT_FILE_TYPES: FileApiTypeResponse[] = [
     supportedMimeTypes: ['image/*', 'application/pdf'],
     nativePreviewKind: 'image',
     sortOrder: 10,
+    isActive: true,
   },
   {
-    id: 'file-type-lab-result',
+    id: '22222222-2222-2222-2222-222222222222',
     code: 'lab-result',
     label: 'Lab result',
     description: 'Laboratory result PDFs or images.',
@@ -53,9 +54,10 @@ const DEFAULT_FILE_TYPES: FileApiTypeResponse[] = [
     supportedMimeTypes: ['application/pdf', 'image/*'],
     nativePreviewKind: 'pdf',
     sortOrder: 20,
+    isActive: true,
   },
   {
-    id: 'file-type-medical-certificate',
+    id: '33333333-3333-3333-3333-333333333333',
     code: 'medical-certificate',
     label: 'Medical certificate',
     description: 'Medical certificates and fit-to-work documents.',
@@ -63,9 +65,10 @@ const DEFAULT_FILE_TYPES: FileApiTypeResponse[] = [
     supportedMimeTypes: ['application/pdf', 'image/*', 'application/msword'],
     nativePreviewKind: 'pdf',
     sortOrder: 30,
+    isActive: true,
   },
   {
-    id: 'file-type-prescription',
+    id: '44444444-4444-4444-4444-444444444444',
     code: 'prescription',
     label: 'Prescription',
     description: 'Prescription scans, images, and PDFs.',
@@ -73,9 +76,10 @@ const DEFAULT_FILE_TYPES: FileApiTypeResponse[] = [
     supportedMimeTypes: ['application/pdf', 'image/*'],
     nativePreviewKind: 'pdf',
     sortOrder: 40,
+    isActive: true,
   },
   {
-    id: 'file-type-id',
+    id: '55555555-5555-5555-5555-555555555555',
     code: 'id',
     label: 'Government ID',
     description: 'IDs and identity verification documents.',
@@ -83,9 +87,10 @@ const DEFAULT_FILE_TYPES: FileApiTypeResponse[] = [
     supportedMimeTypes: ['application/pdf', 'image/*'],
     nativePreviewKind: 'image',
     sortOrder: 50,
+    isActive: true,
   },
   {
-    id: 'file-type-other',
+    id: '66666666-6666-6666-6666-666666666666',
     code: 'other',
     label: 'Other medical file',
     description: 'Other health-related documents.',
@@ -93,6 +98,7 @@ const DEFAULT_FILE_TYPES: FileApiTypeResponse[] = [
     supportedMimeTypes: ['*/*'],
     nativePreviewKind: 'external',
     sortOrder: 100,
+    isActive: true,
   },
 ];
 
@@ -184,7 +190,7 @@ function getPreviewKind(extension: string, mimeType: string | null | undefined):
   return 'external';
 }
 
-function getTypeLabel(typeId: string | null | undefined, types: Awaited<ReturnType<typeof getCachedFileTypes>>) {
+function getTypeLabel(typeId: string | null | undefined, types: Awaited<ReturnType<typeof getCachedDocumentTypes>>) {
   return types.find((type) => type.id === typeId)?.label ?? 'Medical file';
 }
 
@@ -201,14 +207,14 @@ async function sha256(bytes: Uint8Array) {
   return toHex(digest);
 }
 
-async function getCachedFileTypes() {
-  const rows = await db.select().from(fileTypes).orderBy(asc(fileTypes.sortOrder), asc(fileTypes.label));
+async function getCachedDocumentTypes() {
+  const rows = await db.select().from(documentTypes).orderBy(asc(documentTypes.sortOrder), asc(documentTypes.label));
   if (rows.length) return rows;
-  await upsertFileTypes(DEFAULT_FILE_TYPES);
-  return db.select().from(fileTypes).orderBy(asc(fileTypes.sortOrder), asc(fileTypes.label));
+  await upsertDocumentTypes(DEFAULT_FILE_TYPES);
+  return db.select().from(documentTypes).orderBy(asc(documentTypes.sortOrder), asc(documentTypes.label));
 }
 
-async function upsertFileTypes(rows: FileApiTypeResponse[]) {
+async function upsertDocumentTypes(rows: DocumentTypeResponse[]) {
   const timestamp = now();
   await Promise.all(
     rows.map((row) => {
@@ -219,14 +225,14 @@ async function upsertFileTypes(rows: FileApiTypeResponse[]) {
         description: row.description ?? null,
         supportedExtensionsJson: JSON.stringify(row.supportedExtensions ?? []),
         supportedMimeTypesJson: JSON.stringify(row.supportedMimeTypes ?? []),
-        nativePreviewKind: row.nativePreviewKind ?? 'external',
+        nativePreviewKind: (row.nativePreviewKind ?? 'external') as any,
         isActive: row.isActive ?? true,
         sortOrder: row.sortOrder ?? 0,
         fetchedAt: timestamp,
         serverUpdatedAt: row.serverUpdatedAt ? new Date(row.serverUpdatedAt) : null,
       };
 
-      return db.insert(fileTypes).values(value).onConflictDoUpdate({ target: fileTypes.id, set: value });
+      return db.insert(documentTypes).values(value).onConflictDoUpdate({ target: documentTypes.id, set: value });
     }),
   );
 }
@@ -265,7 +271,7 @@ function toConfigValue(patientId: string, response?: FileApiConfigResponse) {
   };
 }
 
-export async function refreshFileTypes(patientId: string, getToken?: () => Promise<string | null>) {
+export async function refreshDocumentTypes(patientId: string, getToken?: () => Promise<string | null>) {
   let configResponse: FileApiConfigResponse | undefined;
 
   if (hasFileApi() && getToken) {
@@ -276,7 +282,7 @@ export async function refreshFileTypes(patientId: string, getToken?: () => Promi
     }
   }
 
-  await upsertFileTypes(configResponse?.fileTypes?.length ? configResponse.fileTypes : DEFAULT_FILE_TYPES);
+  await upsertDocumentTypes(configResponse?.documentTypes?.length ? configResponse.documentTypes : DEFAULT_FILE_TYPES);
   
   const configValue = toConfigValue(patientId, configResponse);
   
@@ -286,13 +292,13 @@ export async function refreshFileTypes(patientId: string, getToken?: () => Promi
     .values(configValue)
     .onConflictDoUpdate({ target: fileUploadConfig.patientId, set: configValue });
 
-  return getCachedFileTypes();
+  return getCachedDocumentTypes();
 }
 
 export async function getFileConfig(patientId: string, getToken?: () => Promise<string | null>) {
   const cached = await db.select().from(fileUploadConfig).where(eq(fileUploadConfig.patientId, patientId)).limit(1);
   if (!cached[0]) {
-    await refreshFileTypes(patientId, getToken);
+    await refreshDocumentTypes(patientId, getToken);
   }
 
   const [config] = await db.select().from(fileUploadConfig).where(eq(fileUploadConfig.patientId, patientId)).limit(1);
@@ -349,7 +355,7 @@ export async function listFolderContents(
       .orderBy(desc(filesMetadata.updatedAt), desc(filesMetadata.createdAt)),
     getFolderRows(patientId),
     getFileConfig(patientId, getToken),
-    getCachedFileTypes(),
+    getCachedDocumentTypes(),
     db
       .select({ id: filesMetadata.id })
       .from(filesMetadata)
@@ -379,7 +385,7 @@ export async function listFolderContents(
     .map((file) => ({
       ...file,
       kind: 'file',
-      typeLabel: getTypeLabel(file.fileTypeId, types),
+      typeLabel: getTypeLabel(file.documentTypeId, types),
       previewKind: getPreviewKind(file.extension ?? '', file.mimeType),
     }));
 
@@ -388,7 +394,7 @@ export async function listFolderContents(
     folders: browserFolders,
     files: browserFiles,
     config,
-    fileTypes: types,
+    documentTypes: types,
     pendingSyncCount: pendingRows.length,
   };
 }
@@ -573,7 +579,7 @@ function findBestFileType(
   selectedTypeId: string | null | undefined,
   extension: string,
   mimeType: string,
-  types: Awaited<ReturnType<typeof getCachedFileTypes>>,
+  types: Awaited<ReturnType<typeof getCachedDocumentTypes>>,
 ) {
   const selected = types.find((type) => type.id === selectedTypeId);
   if (selected) return selected;
@@ -590,7 +596,7 @@ function findBestFileType(
 export async function importFiles(input: ImportFilesInput) {
   if (!input.files.length) throw new Error('Choose at least one file to upload.');
 
-  const [config, types] = await Promise.all([getFileConfig(input.patientId, input.getToken), getCachedFileTypes()]);
+  const [config, types] = await Promise.all([getFileConfig(input.patientId, input.getToken), getCachedDocumentTypes()]);
   const incomingSize = input.files.reduce((total, item) => total + (item.sizeBytes ?? item.file.size ?? 0), 0);
 
   if (input.files.some((item) => (item.sizeBytes ?? item.file.size ?? 0) > config.maxFileSizeBytes)) {
@@ -638,7 +644,7 @@ export async function importFiles(input: ImportFilesInput) {
     const sourceName = makeUniqueName(requestedName);
     const extension = normalizeExtension(source.extension || extensionFromName(sourceName));
     const mimeType = picked.mimeType ?? source.type ?? mimeFromExtension(extension);
-    const fileType = findBestFileType(input.fileTypeId, extension, mimeType, types);
+    const fileType = findBestFileType(input.documentTypeId, extension, mimeType, types);
     const plaintext = await source.bytes();
     const key = await Crypto.AESEncryptionKey.generate(Crypto.AESKeySize.AES256);
     const sealed = await Crypto.aesEncryptAsync(plaintext, key);
@@ -658,7 +664,7 @@ export async function importFiles(input: ImportFilesInput) {
       patientId: input.patientId,
       clinicId: null,
       folderId: input.folderId ?? null,
-      fileTypeId: fileType?.id ?? null,
+      documentTypeId: fileType?.id ?? null,
       name: sourceName,
       type: fileType?.code ?? null,
       mimeType,
@@ -865,6 +871,7 @@ export async function syncPendingFiles(
           patientId,
           clinicId: null,
           folderId: remoteFile.folderId ?? null,
+          documentTypeId: remoteFile.documentTypeId,
           name: remoteFile.fileName,
           type: null,
           mimeType: remoteFile.mimeType,
@@ -960,7 +967,7 @@ export async function syncPendingFiles(
          syncRequests.push({
             idempotencyKey: Crypto.randomUUID(),
             entityType: 'file',
-            operation: file.syncOperation === 'insert' ? 'create' : file.syncOperation,
+            operation: file.syncOperation,
             clientTimestamp: (file.updatedAt ?? new Date()).toISOString(),
             entityId: file.id,
             payloadJson: JSON.stringify({
@@ -1012,6 +1019,8 @@ export async function syncPendingFiles(
       mutate((key: any) => Array.isArray(key) && key[0] === 'files-browser');
       const encryptedFile = new File(file.localEncryptedPath);
       const intent = await createUploadIntent(patientId, getToken, {
+        fileId: file.id,
+        documentTypeId: file.documentTypeId,
         folderId: file.folderId,
         originalName: file.name,
         contentType: file.mimeType ?? 'application/octet-stream',

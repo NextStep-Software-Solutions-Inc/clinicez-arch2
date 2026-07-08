@@ -19,6 +19,15 @@ export function saveFileConfig(
   return api.post<{ success: true }>(getToken, `/patients/${patientId}/files/config`, { encryptedMAK });
 }
 
+export interface CreateUploadIntentRequest {
+  fileId: string;
+  documentTypeId: string;
+  folderId?: string;
+  originalName: string;
+  contentType: string;
+  sizeBytes: number;
+}
+
 export function createUploadIntent(
   patientId: string,
   getToken: () => Promise<string | null>,

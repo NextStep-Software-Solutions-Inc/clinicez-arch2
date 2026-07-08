@@ -16,7 +16,7 @@ import * as ImagePicker from 'expo-image-picker';
 import ThemedText from '@ui/ThemedText';
 import ThemedView from '@ui/ThemedView';
 import { usePatientId } from 'hooks/usePatientId';
-import { formatBytes, getFileConfig, getTypeExtensions, importFiles, listAllFolders, refreshFileTypes } from '../../../services/files';
+import { formatBytes, getFileConfig, getTypeExtensions, importFiles, listAllFolders, refreshDocumentTypes } from '../../../services/files';
 import type { PickedFileInput } from '../../../services/files';
 import type { FilesScreenProps } from './navigationTypes';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -50,7 +50,7 @@ export default function FilesUploadScreen({ route }: FilesScreenProps<'FilesUplo
   const { runWithAutoLockPaused } = useAppAuth();
   const folderId = route.params?.folderId;
   const [pickedFiles, setPickedFiles] = useState<PickedFileInput[]>([]);
-  const [fileTypes, setFileTypes] = useState<Awaited<ReturnType<typeof refreshFileTypes>>>([]);
+  const [documentTypes, setDocumentTypes] = useState<Awaited<ReturnType<typeof refreshDocumentTypes>>>([]);
   const [config, setConfig] = useState<Awaited<ReturnType<typeof getFileConfig>> | null>(null);
   const [selectedTypeId, setSelectedTypeId] = useState<string | null>(null);
   const [folderName, setFolderName] = useState('All files');
@@ -60,7 +60,7 @@ export default function FilesUploadScreen({ route }: FilesScreenProps<'FilesUplo
     ['files-upload-config', patientId],
     async () => {
       const [types, value, folders] = await Promise.all([
-        refreshFileTypes(patientId, getToken),
+        refreshDocumentTypes(patientId, getToken),
         getFileConfig(patientId, getToken),
         listAllFolders(patientId),
       ]);
@@ -71,10 +71,10 @@ export default function FilesUploadScreen({ route }: FilesScreenProps<'FilesUplo
 
   useEffect(() => {
     if (uploadConfig) {
-      setFileTypes(uploadConfig.types);
+      setDocumentTypes(uploadConfig.types);
       setConfig(uploadConfig.config);
       setSelectedTypeId((current) => current ?? uploadConfig.types[0]?.id ?? null);
-      setFolderName(uploadConfig.folders.find((f) => f.id === folderId)?.name ?? 'All files');
+      setFolderName(uploadConfig.folders.find((f: any) => f.id === folderId)?.name ?? 'All files');
     }
   }, [uploadConfig, folderId]);
 
@@ -134,7 +134,7 @@ export default function FilesUploadScreen({ route }: FilesScreenProps<'FilesUplo
           ...f,
           name: f.name?.trim() || f.file.name
       }));
-      await importFiles({ patientId, folderId: folderId ?? null, fileTypeId: selectedTypeId, files: finalFiles, getToken });
+      await importFiles({ patientId, folderId: folderId ?? null, documentTypeId: selectedTypeId, files: finalFiles, getToken });
       navigation.goBack();
     } catch (error) {
       Alert.alert('Could not add file', error instanceof Error ? error.message : 'Unable to save this file.');
@@ -201,11 +201,10 @@ export default function FilesUploadScreen({ route }: FilesScreenProps<'FilesUplo
         ))}
       </ThemedView>
 
-      {/* Type selector */}
       <ThemedView style={styles.section}>
         <ThemedText style={styles.sectionTitle}>Document type</ThemedText>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.typeList}>
-          {fileTypes.map((type) => {
+          {documentTypes.map((type: any) => {
             const selected = type.id === selectedTypeId;
             const meta = typeMeta(type.id);
             return (

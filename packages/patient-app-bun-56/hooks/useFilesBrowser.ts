@@ -2,7 +2,7 @@ import useSWR from 'swr';
 import { useCallback, useEffect } from 'react';
 import { useAuth as useClerkAuth } from '@clerk/expo';
 import { useNavigation } from '@react-navigation/native';
-import { listFolderContents, refreshFileTypes } from '../services/files/filesService';
+import { listFolderContents, refreshDocumentTypes } from '../services/files/filesService';
 import { initializeMakAndFrkIfNeeded } from '../services/files/frkService';
 
 export function useFrkCheck(patientId: string) {
@@ -54,7 +54,7 @@ export function useFilesBrowser(patientId: string, folderId: string | null, quer
     async () => {
       // Fire-and-forget network sync so it doesn't block the instant SQLite read.
       // This enforces the offline-first architecture.
-      refreshFileTypes(patientId, getToken).catch(console.log);
+      refreshDocumentTypes(patientId, getToken).catch(console.log);
       
       // Silently sync down remote files (and push local queue) without blocking the UI
       import('../services/files/filesService').then(({ syncPendingFiles }) => {

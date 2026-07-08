@@ -95,6 +95,7 @@ public static class DependencyInjection
         services.AddScoped<IPatientStorageProfileRepository, PatientStorageProfileRepository>();
         services.AddScoped<IFileFolderRepository, FileFolderRepository>();
         services.AddScoped<IFileRecordRepository, FileRecordRepository>();
+        services.AddScoped<IDocumentTypeRepository, DocumentTypeRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         // ── Application Services ──────────────────────────────────────────────
