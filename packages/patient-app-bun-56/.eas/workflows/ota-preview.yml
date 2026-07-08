@@ -1,0 +1,26 @@
+name: Preview OTA Update
+
+on:
+  push:
+    branches:
+      - '**'
+      - '!main'
+      - '!develop'
+
+jobs:
+  update:
+    name: Publish Preview
+    environment: preview
+    steps:
+      - name: Check out repository
+        uses: eas/checkout
+      - name: Setup Node.js
+        uses: eas/use-node
+        with:
+          node-version: 22.x
+      - name: Setup Bun
+        run: npm install -g bun
+      - name: Install dependencies
+        run: bun install
+      - name: Publish Update
+        run: eas update --profile preview --branch preview --non-interactive
