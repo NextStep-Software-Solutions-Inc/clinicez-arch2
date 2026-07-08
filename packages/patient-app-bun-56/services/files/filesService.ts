@@ -101,7 +101,7 @@ function now() {
 }
 
 function makeId(prefix: string) {
-  return `${prefix}-${Crypto.randomUUID()}`;
+  return Crypto.randomUUID();
 }
 
 const KEY_PREFIX = 'patient_file_key';
@@ -937,13 +937,13 @@ export async function syncPendingFiles(
   
   for (const folder of pendingFolders) {
      syncRequests.push({
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey: Crypto.randomUUID(),
         entityType: 'file_folder',
-        operation: folder.syncOperation,
+        operation: folder.syncOperation === 'insert' ? 'create' : folder.syncOperation,
         clientTimestamp: (folder.updatedAt ?? new Date()).toISOString(),
         entityId: folder.id,
         payloadJson: JSON.stringify({
-            clientId: crypto.randomUUID(),
+            clientId: Crypto.randomUUID(),
             parentId: folder.parentId,
             name: folder.name,
             updatedAt: (folder.updatedAt ?? new Date()).toISOString()
@@ -958,13 +958,13 @@ export async function syncPendingFiles(
          uploadIntentFiles.push(file);
      } else {
          syncRequests.push({
-            idempotencyKey: crypto.randomUUID(),
+            idempotencyKey: Crypto.randomUUID(),
             entityType: 'file',
-            operation: file.syncOperation,
+            operation: file.syncOperation === 'insert' ? 'create' : file.syncOperation,
             clientTimestamp: (file.updatedAt ?? new Date()).toISOString(),
             entityId: file.id,
             payloadJson: JSON.stringify({
-                clientId: crypto.randomUUID(),
+                clientId: Crypto.randomUUID(),
                 folderId: file.folderId,
                 fileName: file.name,
                 updatedAt: (file.updatedAt ?? new Date()).toISOString()
