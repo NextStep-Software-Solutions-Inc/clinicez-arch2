@@ -5,14 +5,14 @@ on:
     branches:
       - development
     paths:
-      - 'Portal/**'
+      - 'MainPortalBE/**'
       - 'CLINICEZ.Shared/**'
       - .github/workflows/deploy-tenant-api-dev.yml
   pull_request:
     branches:
       - development
     paths:
-      - 'Portal/**'
+      - 'MainPortalBE/**'
       - 'CLINICEZ.Shared/**'
       - .github/workflows/deploy-tenant-api-dev.yml
   workflow_dispatch:
@@ -51,7 +51,7 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         context: .
-        file: Portal/Dockerfile
+        file: MainPortalBE/Dockerfile
         push: true
         tags: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.CONTAINER_NAME }}:${{ env.IMAGE_TAG }}
 
