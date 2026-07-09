@@ -69,14 +69,7 @@ export default function PinModal({ visible, title = 'Enter PIN', subtitle, onSuc
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onDismiss}>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerSpacer} />
-          <Pressable onPress={onDismiss} accessibilityLabel="Cancel" style={styles.cancelButton}>
-            <ThemedText style={[styles.cancelText, { color: colors.primary }]}>Cancel</ThemedText>
-          </Pressable>
-        </View>
-
+       
         {/* Title */}
         <View style={styles.titleSection}>
           <ThemedText style={styles.title}>{title}</ThemedText>
@@ -108,6 +101,21 @@ export default function PinModal({ visible, title = 'Enter PIN', subtitle, onSuc
 
         {/* Keypad */}
         <NumericKeypad onPress={handleDigit} onDelete={handleDelete} />
+         <View style={styles.cancel}>
+          <Pressable onPress={onDismiss} accessibilityLabel="Cancel" style={{
+            padding: 12,
+            borderRadius: 16,
+            borderWidth: 1,
+            borderColor: colors.border,
+            backgroundColor: colors.border,
+            width: 200,
+            alignItems: 'center',
+            justifyContent: 'center',
+            
+          }}>
+            <ThemedText style={[styles.cancelText, { color: colors.text }]}>Cancel</ThemedText>
+          </Pressable>
+        </View>
       </View>
     </Modal>
   );
@@ -116,22 +124,20 @@ export default function PinModal({ visible, title = 'Enter PIN', subtitle, onSuc
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 16,
     gap: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  header: {
+  cancel: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 16,
     position: 'relative',
+    paddingTop: 32,
   },
-  headerSpacer: {
-    flex: 1,
-  },
-  cancelButton: {
-    padding: 8,
-  },
+ 
+
   cancelText: {
     fontSize: 16,
   },

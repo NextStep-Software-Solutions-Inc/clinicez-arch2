@@ -1,5 +1,5 @@
 import useSWR from 'swr';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useAuth as useClerkAuth } from '@clerk/expo';
 import { useNavigation } from '@react-navigation/native';
 import { listFolderContents, refreshDocumentTypes } from '../services/files/filesService';
@@ -8,10 +8,15 @@ import { initializeMakAndFrkIfNeeded } from '../services/files/frkService';
 export function useFrkCheck(patientId: string) {
   const { getToken } = useClerkAuth();
   const navigation = useNavigation();
+  const getTokenRef = useRef(getToken);
+
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
 
   useEffect(() => {
     let active = true;
-    initializeMakAndFrkIfNeeded(patientId, getToken)
+    initializeMakAndFrkIfNeeded(patientId, getTokenRef.current)
       .then((res) => {
         if (!active) return;
         if (res.status === 'generated') {
@@ -43,7 +48,7 @@ export function useFrkCheck(patientId: string) {
     return () => {
       active = false;
     };
-  }, [patientId, getToken, navigation]);
+  }, [patientId, navigation]);
 }
 
 export function useFilesBrowser(patientId: string, folderId: string | null, query: string = '') {

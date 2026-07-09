@@ -130,3 +130,40 @@ export async function unlockMakWithFrk(patientId: string, frk: string, encrypted
     return false;
   }
 }
+
+// Regenerate FRK (assumes MAK is already available locally)
+export async function regenerateFrk(patientId: string, getToken: () => Promise<string | null>): Promise<string> {
+  const localMak = await SecureStore.getItemAsync(getMakSecureKey(patientId));
+  if (!localMak) {
+    throw new Error('Cannot regenerate FRK: No Master Access Key found on this device.');
+  }
+
+  const newFrk = generateFrk();
+  const frkKey = await deriveKeyFromFrk(newFrk);
+  
+  // Encrypt existing local MAK with the new FRK
+  const sealed = await Crypto.aesEncryptAsync(localMak, frkKey);
+  
+  const encryptedMAKJson = JSON.stringify({
+    cipherText: await sealed.combined('base64'),
+    iv: await sealed.iv('base64'),
+    tag: await sealed.tag('base64'),
+    algorithm: 'AES-256-GCM'
+  });
+
+  // Save to backend
+  if (hasFileApi()) {
+      await saveFileConfig(patientId, getToken, encryptedMAKJson);
+  }
+  
+  // Save new FRK locally
+  await SecureStore.setItemAsync(getFrkSecureKey(patientId), newFrk);
+
+  // Update local DB
+  await db
+    .update(fileUploadConfig)
+    .set({ encryptedMAK: encryptedMAKJson })
+    .where(eq(fileUploadConfig.patientId, patientId));
+
+  return newFrk;
+}

@@ -13,6 +13,7 @@ interface CustomAlertModalProps {
   icon?: string;
   onConfirm?: () => void;
   confirmText?: string;
+  cancelText?: string;
   destructive?: boolean;
 }
 
@@ -27,6 +28,7 @@ export default function CustomAlertModal({
   icon = '⚠️',
   onConfirm,
   confirmText = 'Confirm',
+  cancelText = 'Cancel',
   destructive = false,
 }: CustomAlertModalProps) {
   const { colors } = useTheme();
@@ -62,7 +64,7 @@ export default function CustomAlertModal({
                   { backgroundColor: String(colors.text) + '11', opacity: pressed ? 0.7 : 1 },
                 ]}
               >
-                <ThemedText style={[styles.buttonText, { color: colors.text }]}>Cancel</ThemedText>
+                <ThemedText style={[styles.buttonText, { color: colors.text }]}>{cancelText}</ThemedText>
               </Pressable>
               
               <Pressable

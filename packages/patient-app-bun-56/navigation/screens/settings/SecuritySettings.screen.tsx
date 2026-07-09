@@ -3,8 +3,13 @@ import { ScrollView, Alert, Platform } from 'react-native';
 import { useNavigation, useTheme } from '@react-navigation/native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useAuth } from 'contexts/AuthContext';
+import { useAuth as useClerkAuth } from '@clerk/expo';
+import { usePatientId } from 'hooks/usePatientId';
+import * as Clipboard from 'expo-clipboard';
 import { SettingsRow, SettingsSection } from '@ui/SettingsItem';
 import PinModal from '@ui/PinModal';
+import CustomAlertModal from '@ui/CustomAlertModal';
+import { regenerateFrk } from '../../../services/files/frkService';
 
 const LOCK_TIMEOUT_OPTIONS = [
   { label: 'Immediately', value: 0 },
@@ -24,6 +29,13 @@ export default function SecuritySettingsScreen() {
   const [biometricLabel, setBiometricLabel] = useState('Biometrics');
   const [pinModalVisible, setPinModalVisible] = useState(false);
   const [pendingBiometricValue, setPendingBiometricValue] = useState<boolean | null>(null);
+  const [regenerateFrkPending, setRegenerateFrkPending] = useState(false);
+  const [frkConfirmModalVisible, setFrkConfirmModalVisible] = useState(false);
+  const [frkSuccessModalVisible, setFrkSuccessModalVisible] = useState(false);
+  const [newGeneratedFrk, setNewGeneratedFrk] = useState('');
+
+  const { getToken } = useClerkAuth();
+  const patientId = usePatientId();
 
   useEffect(() => {
     (async () => {
@@ -51,7 +63,20 @@ export default function SecuritySettingsScreen() {
     if (pendingBiometricValue !== null) {
       await setBiometricsEnabled(pendingBiometricValue);
       setPendingBiometricValue(null);
+    } else if (regenerateFrkPending) {
+      setRegenerateFrkPending(false);
+      try {
+        const newFrk = await regenerateFrk(patientId, getToken);
+        setNewGeneratedFrk(newFrk);
+        setFrkSuccessModalVisible(true);
+      } catch (err: any) {
+        Alert.alert('Error', err.message || 'Failed to regenerate Recovery Key.');
+      }
     }
+  };
+
+  const requestFrkRegeneration = () => {
+    setFrkConfirmModalVisible(true);
   };
 
   const handleLockNow = () => {
@@ -144,6 +169,20 @@ export default function SecuritySettingsScreen() {
         />
       </SettingsSection>
 
+      {/* End-to-End Encryption */}
+      <SettingsSection
+        title="End-to-End Encryption"
+        footer="Your File Recovery Key (FRK) is required to restore your encrypted files on a new device."
+      >
+        <SettingsRow
+          title="Regenerate Recovery Key"
+          icon={{ android: 'vpn_key', ios: 'key.icloud.fill' }}
+          iconColor="#F59E0B"
+          right={{ type: 'none' }}
+          onPress={requestFrkRegeneration}
+        />
+      </SettingsSection>
+
       {/* Session */}
       <SettingsSection
         title="Session"
@@ -166,12 +205,43 @@ export default function SecuritySettingsScreen() {
       <PinModal
         visible={pinModalVisible}
         title="Confirm PIN"
-        subtitle={`Enter your PIN to ${pendingBiometricValue ? 'enable' : 'disable'} ${biometricLabel}.`}
+        subtitle={regenerateFrkPending ? 'Enter your PIN to regenerate your File Recovery Key.' : `Enter your PIN to ${pendingBiometricValue ? 'enable' : 'disable'} ${biometricLabel}.`}
         onSuccess={handlePinSuccess}
         onDismiss={() => {
           setPinModalVisible(false);
           setPendingBiometricValue(null);
+          setRegenerateFrkPending(false);
         }}
+      />
+
+      <CustomAlertModal
+        visible={frkConfirmModalVisible}
+        title="Regenerate Recovery Key?"
+        message="This will invalidate your current File Recovery Key. Any backups of the old key will no longer work to recover your files on a new device.\n\nAre you sure you want to proceed?"
+        icon="⚠️"
+        onClose={() => setFrkConfirmModalVisible(false)}
+        onConfirm={() => {
+          setFrkConfirmModalVisible(false);
+          setRegenerateFrkPending(true);
+          setPinModalVisible(true);
+        }}
+        confirmText="Regenerate"
+        cancelText="Cancel"
+        destructive
+      />
+
+      <CustomAlertModal
+        visible={frkSuccessModalVisible}
+        title="Recovery Key Regenerated"
+        message={`Your new File Recovery Key is:\n\n${newGeneratedFrk}\n\nPlease write this down immediately. Your old key will no longer work.`}
+        icon="🔑"
+        onClose={() => setFrkSuccessModalVisible(false)}
+        onConfirm={async () => {
+          await Clipboard.setStringAsync(newGeneratedFrk);
+          setFrkSuccessModalVisible(false);
+        }}
+        confirmText="Copy to Clipboard"
+        cancelText="Done"
       />
     </ScrollView>
   );

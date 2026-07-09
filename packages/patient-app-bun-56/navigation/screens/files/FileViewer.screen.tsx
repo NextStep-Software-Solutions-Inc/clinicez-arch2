@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ColorValue, Image, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, ColorValue, Platform, Pressable, StyleSheet, View, Modal } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import ZoomableImage from '../../../components/ui/ZoomableImage';
 import {
   MaterialSymbol,
   SFSymbol,
@@ -41,6 +43,7 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
   const [error, setError] = useState<string | null>(null);
   const [renameModalOpen, setRenameModalOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [isFullScreen, setIsFullScreen] = useState(false);
   
   const insets = useSafeAreaInsets();
   let tabBarHeight = 0;
@@ -141,9 +144,13 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
     <View style={[styles.viewer, { backgroundColor: colors.background }]}>
       <View style={styles.previewSurface}>
         {preview.previewKind === 'image' ? (
-          <Image source={{ uri: preview.uri }} resizeMode="contain" style={styles.image} />
+          <ZoomableImage uri={preview.uri} />
         ) : preview.previewKind === 'pdf' ? (
-          <Pdf source={{ uri: preview.uri }} style={styles.pdf} trustAllCerts={false} />
+          <Pdf 
+            source={{ uri: preview.uri }} 
+            style={styles.pdf} 
+            trustAllCerts={false} 
+          />
         ) : (
           <View style={styles.center}>
             {Icon({ android: 'draft', ios: 'doc.fill', color: colors.text, size: 64 })}
@@ -156,6 +163,10 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
       </View>
       <View style={[styles.floatingToolbarWrap, { paddingBottom: Math.max(insets.bottom, tabBarHeight) + 24 }]}>
         <View style={[styles.floatingToolbar, { backgroundColor: colors.card, shadowColor: '#000' }]}>
+        <Pressable onPress={() => setIsFullScreen(true)} style={styles.toolbarBtn}>
+          {Icon({ android: 'fullscreen', ios: 'arrow.up.left.and.arrow.down.right', color: colors.text, size: 22 })}
+          <ThemedText style={styles.toolbarLabel}>Full Screen</ThemedText>
+        </Pressable>
         <Pressable onPress={handleShare} style={styles.toolbarBtn}>
           {Icon({ android: 'share', ios: 'square.and.arrow.up', color: colors.text, size: 22 })}
           <ThemedText style={styles.toolbarLabel}>Share</ThemedText>
@@ -168,12 +179,31 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
           {Icon({ android: 'edit', ios: 'pencil', color: colors.text, size: 22 })}
           <ThemedText style={styles.toolbarLabel}>Rename</ThemedText>
         </Pressable>
-        <Pressable onPress={handleDelete} style={styles.toolbarBtn}>
-          {Icon({ android: 'delete', ios: 'trash', color: '#EF4444', size: 22 })}
-          <ThemedText style={[styles.toolbarLabel, { color: '#EF4444' }]}>Delete</ThemedText>
-        </Pressable>
+          <Pressable onPress={handleDelete} style={styles.toolbarBtn}>
+            {Icon({ android: 'delete', ios: 'trash', color: '#EF4444', size: 22 })}
+            <ThemedText style={[styles.toolbarLabel, { color: '#EF4444' }]}>Delete</ThemedText>
+          </Pressable>
         </View>
       </View>
+
+      <Modal visible={isFullScreen} transparent={false} onRequestClose={() => setIsFullScreen(false)} animationType="fade">
+        <GestureHandlerRootView style={{ flex: 1, backgroundColor: '#000' }}>
+          <View style={{ position: 'absolute', top: Math.max(insets.top, 20) + 16, right: 16, zIndex: 100 }}>
+            <Pressable onPress={() => setIsFullScreen(false)} style={{ padding: 8, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20 }}>
+              {Icon({ android: 'close', ios: 'xmark', color: '#fff', size: 24 })}
+            </Pressable>
+          </View>
+          {preview.previewKind === 'image' ? (
+            <ZoomableImage uri={preview.uri} />
+          ) : preview.previewKind === 'pdf' ? (
+            <Pdf 
+              source={{ uri: preview.uri }} 
+              style={[styles.pdf, { backgroundColor: '#000' }]} 
+              trustAllCerts={false} 
+            />
+          ) : null}
+        </GestureHandlerRootView>
+      </Modal>
 
       {renameModalOpen && fileMetadata && (
         <RenameModal

@@ -185,10 +185,14 @@ function mimeFromExtension(extension: string) {
 }
 
 function extensionFromMime(mimeType: string) {
+  if (!mimeType) return '';
   if (mimeType.includes('pdf')) return 'pdf';
   if (mimeType.includes('jpeg') || mimeType.includes('jpg')) return 'jpg';
   if (mimeType.includes('png')) return 'png';
   if (mimeType.includes('heic')) return 'heic';
+  if (mimeType.includes('gif')) return 'gif';
+  if (mimeType.includes('webp')) return 'webp';
+  if (mimeType.startsWith('image/') || mimeType === 'image') return 'jpg'; // Fallback for generic images
   if (mimeType.includes('word') || mimeType.includes('msword')) return 'docx';
   if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) return 'xlsx';
   if (mimeType.includes('zip')) return 'zip';
@@ -875,7 +879,7 @@ export async function preparePreviewFile(
     finalName = `${finalName}.${extension}`;
   }
 
-  const previewFileName = extension ? `${file.id}.${extension}` : file.id;
+  const previewFileName = extension ? `${file.id}.${Date.now()}.${extension}` : `${file.id}.${Date.now()}`;
   const previewFile = new File(previewDir, previewFileName);
   previewFile.write(decrypted);
 
@@ -926,106 +930,114 @@ export async function syncPendingFiles(
     const { folders, files } = await fetchFiles(patientId, getToken);
     
     for (const remoteFolder of folders) {
-      if (remoteFolder.isDeleted) {
-        await db.delete(fileFolders).where(eq(fileFolders.id, remoteFolder.id));
-        continue;
-      }
+      try {
+        if (remoteFolder.isDeleted) {
+          await db.delete(fileFolders).where(eq(fileFolders.id, remoteFolder.id));
+          continue;
+        }
 
-      const existing = await getFolder(patientId, remoteFolder.id);
-      
-      const row = {
-        id: remoteFolder.id,
-        patientId,
-        parentId: remoteFolder.parentId ?? null,
-        name: remoteFolder.name,
-        syncStatus: 'synced' as const,
-        syncOperation: 'update' as const,
-        createdAt: new Date(remoteFolder.createdAt),
-        updatedAt: new Date(remoteFolder.updatedAt),
-        serverId: remoteFolder.id,
-      };
-      
-      if (!existing) {
-        await db.insert(fileFolders).values(row);
-        synced++;
-      } else if (existing.name !== row.name || existing.parentId !== row.parentId || existing.deletedAt !== null) {
-        // Protect local pending changes from being overwritten by downstream pull
-        if (existing.syncStatus === 'queued' || existing.syncStatus === 'failed' || existing.syncStatus === 'syncing') {
-          continue;
+        const existing = await getFolder(patientId, remoteFolder.id);
+        
+        const row = {
+          id: remoteFolder.id,
+          patientId,
+          parentId: remoteFolder.parentId ?? null,
+          name: remoteFolder.name,
+          syncStatus: 'synced' as const,
+          syncOperation: 'update' as const,
+          createdAt: new Date(remoteFolder.createdAt),
+          updatedAt: new Date(remoteFolder.updatedAt ?? remoteFolder.createdAt),
+          serverId: remoteFolder.id,
+        };
+        
+        if (!existing) {
+          await db.insert(fileFolders).values(row);
+          synced++;
+        } else if (existing.name !== row.name || existing.parentId !== row.parentId || existing.deletedAt !== null) {
+          // Protect local pending changes from being overwritten by downstream pull
+          if (existing.syncStatus === 'queued' || existing.syncStatus === 'failed' || existing.syncStatus === 'syncing') {
+            continue;
+          }
+          // Protect against eventual consistency: don't overwrite if local is newer
+          if (existing.updatedAt.getTime() > row.updatedAt.getTime()) {
+            continue;
+          }
+          await db.update(fileFolders).set({
+            name: row.name,
+            parentId: row.parentId,
+            updatedAt: row.updatedAt,
+            deletedAt: null,
+            syncStatus: 'synced',
+          }).where(eq(fileFolders.id, remoteFolder.id));
+          synced++;
         }
-        // Protect against eventual consistency: don't overwrite if local is newer
-        if (existing.updatedAt.getTime() > row.updatedAt.getTime()) {
-          continue;
-        }
-        await db.update(fileFolders).set({
-          name: row.name,
-          parentId: row.parentId,
-          updatedAt: row.updatedAt,
-          deletedAt: null,
-          syncStatus: 'synced',
-        }).where(eq(fileFolders.id, remoteFolder.id));
-        synced++;
+      } catch (err) {
+        console.warn(`Failed to downstream sync folder ${remoteFolder.id}`, err);
       }
     }
 
     for (const remoteFile of files) {
-      if (remoteFile.isDeleted) {
-        await cleanupPreviewCache(patientId, remoteFile.id);
-        await db.delete(filesMetadata).where(eq(filesMetadata.id, remoteFile.id));
-        continue;
-      }
+      try {
+        if (remoteFile.isDeleted) {
+          await cleanupPreviewCache(patientId, remoteFile.id);
+          await db.delete(filesMetadata).where(eq(filesMetadata.id, remoteFile.id));
+          continue;
+        }
 
-      const [existing] = await db.select().from(filesMetadata).where(eq(filesMetadata.id, remoteFile.id)).limit(1);
-      
-      if (!existing) {
-        await db.insert(filesMetadata).values({
-          id: remoteFile.id,
-          patientId,
-          clinicId: null,
-          folderId: remoteFile.folderId ?? null,
-          documentTypeId: remoteFile.documentTypeId,
-          name: remoteFile.fileName,
-          type: null,
-          mimeType: remoteFile.mimeType,
-          extension: remoteFile.extension,
-          sizeBytes: remoteFile.sizeBytes,
-          encryptedSizeBytes: remoteFile.encryptedSizeBytes,
-          localEncryptedPath: null, // Will download on demand via preparePreviewFile
-          cloudObjectKey: null,
-          syncStatus: 'synced',
-          syncOperation: 'update',
-          encryptionAlgorithm: remoteFile.encryptionAlgorithm,
-          encryptionKeyId: remoteFile.encryptionKeyId,
-          encryptionIvBase64: remoteFile.encryptionIvBase64,
-          encryptionTagBase64: remoteFile.encryptionTagBase64,
-          encryptedHash: remoteFile.encryptedHash,
-          serverWrappedKeyJson: remoteFile.wrappedKeyJson,
-          createdAt: new Date(remoteFile.createdAt),
-          updatedAt: new Date(remoteFile.updatedAt),
-          syncedAt: new Date(remoteFile.updatedAt),
-          serverId: remoteFile.id,
-        });
-        synced++;
-      } else if (
-        existing.name !== remoteFile.fileName || 
-        existing.folderId !== (remoteFile.folderId ?? null) ||
-        existing.deletedAt !== null
-      ) {
-         // Protect local pending changes from being overwritten by downstream pull
-         if (existing.syncStatus === 'queued' || existing.syncStatus === 'failed' || existing.syncStatus === 'syncing') {
-           continue;
-         }
-         // Protect against eventual consistency: don't overwrite if local is newer
-         if (existing.updatedAt && existing.updatedAt.getTime() > new Date(remoteFile.updatedAt).getTime()) {
-           continue;
-         }
-         await db.update(filesMetadata).set({
-           name: remoteFile.fileName,
-           folderId: remoteFile.folderId ?? null,
-           deletedAt: null,
-           syncStatus: 'synced',
-         }).where(eq(filesMetadata.id, remoteFile.id));
-         synced++;
+        const [existing] = await db.select().from(filesMetadata).where(eq(filesMetadata.id, remoteFile.id)).limit(1);
+        
+        if (!existing) {
+          await db.insert(filesMetadata).values({
+            id: remoteFile.id,
+            patientId,
+            clinicId: null,
+            folderId: remoteFile.folderId ?? null,
+            documentTypeId: remoteFile.documentTypeId,
+            name: remoteFile.fileName,
+            type: null,
+            mimeType: remoteFile.mimeType,
+            extension: remoteFile.extension,
+            sizeBytes: remoteFile.sizeBytes,
+            encryptedSizeBytes: remoteFile.encryptedSizeBytes,
+            localEncryptedPath: null, // Will download on demand via preparePreviewFile
+            cloudObjectKey: null,
+            syncStatus: 'synced',
+            syncOperation: 'update',
+            encryptionAlgorithm: remoteFile.encryptionAlgorithm,
+            encryptionKeyId: remoteFile.encryptionKeyId,
+            encryptionIvBase64: remoteFile.encryptionIvBase64,
+            encryptionTagBase64: remoteFile.encryptionTagBase64,
+            encryptedHash: remoteFile.encryptedHash,
+            serverWrappedKeyJson: remoteFile.wrappedKeyJson,
+            createdAt: new Date(remoteFile.createdAt),
+            updatedAt: new Date(remoteFile.updatedAt),
+            syncedAt: new Date(remoteFile.updatedAt),
+            serverId: remoteFile.id,
+          });
+          synced++;
+        } else if (
+          existing.name !== remoteFile.fileName || 
+          existing.folderId !== (remoteFile.folderId ?? null) ||
+          existing.deletedAt !== null
+        ) {
+           // Protect local pending changes from being overwritten by downstream pull
+           if (existing.syncStatus === 'queued' || existing.syncStatus === 'failed' || existing.syncStatus === 'syncing') {
+             continue;
+           }
+           // Protect against eventual consistency: don't overwrite if local is newer
+           if (existing.updatedAt && existing.updatedAt.getTime() > new Date(remoteFile.updatedAt).getTime()) {
+             continue;
+           }
+           await db.update(filesMetadata).set({
+             name: remoteFile.fileName,
+             folderId: remoteFile.folderId ?? null,
+             deletedAt: null,
+             syncStatus: 'synced',
+           }).where(eq(filesMetadata.id, remoteFile.id));
+           synced++;
+        }
+      } catch (err) {
+        console.warn(`Failed to downstream sync file ${remoteFile.id}`, err);
       }
     }
     
@@ -1113,12 +1125,15 @@ export async function syncPendingFiles(
           }
 
           for (const file of pendingFiles) {
-              if (file.syncOperation !== 'insert') {
-                  if (file.syncOperation === 'delete') {
-                      await cleanupPreviewCache(patientId, file.id);
-                  }
-                  await db.update(filesMetadata).set({ syncStatus: 'synced', syncError: null }).where(eq(filesMetadata.id, file.id));
+              // If it's an insert without a serverId, it's a binary upload (handled below)
+              if (file.syncOperation === 'insert' && !file.serverId) {
+                  continue;
               }
+              
+              if (file.syncOperation === 'delete') {
+                  await cleanupPreviewCache(patientId, file.id);
+              }
+              await db.update(filesMetadata).set({ syncStatus: 'synced', syncError: null }).where(eq(filesMetadata.id, file.id));
           }
           synced += syncRequests.length;
           mutate((key: any) => Array.isArray(key) && key[0] === 'files-browser');

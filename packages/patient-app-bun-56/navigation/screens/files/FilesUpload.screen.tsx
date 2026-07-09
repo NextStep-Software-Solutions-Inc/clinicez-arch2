@@ -119,7 +119,7 @@ export default function FilesUploadScreen({ route }: FilesScreenProps<'FilesUplo
         return { 
           file, 
           name: resolvedName ?? `Medical photo ${index + 1}.jpg`, 
-          mimeType: asset.mimeType ?? file.type, 
+          mimeType: asset.mimeType ?? file.type ?? (asset.type === 'image' ? 'image/jpeg' : (asset.type === 'video' ? 'video/mp4' : undefined)), 
           sizeBytes: asset.fileSize ?? file.size 
         };
       }),
