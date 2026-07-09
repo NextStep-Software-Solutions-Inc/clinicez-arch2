@@ -11,6 +11,9 @@ interface CustomAlertModalProps {
   message: string;
   buttonText?: string;
   icon?: string;
+  onConfirm?: () => void;
+  confirmText?: string;
+  destructive?: boolean;
 }
 
 const { width } = Dimensions.get('window');
@@ -22,6 +25,9 @@ export default function CustomAlertModal({
   message,
   buttonText = 'OK',
   icon = '⚠️',
+  onConfirm,
+  confirmText = 'Confirm',
+  destructive = false,
 }: CustomAlertModalProps) {
   const { colors } = useTheme();
 
@@ -45,16 +51,42 @@ export default function CustomAlertModal({
             {message}
           </ThemedText>
 
-          {/* Action Button */}
-          <Pressable
-            onPress={onClose}
-            style={({ pressed }) => [
-              styles.button,
-              { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 },
-            ]}
-          >
-            <ThemedText style={styles.buttonText}>{buttonText}</ThemedText>
-          </Pressable>
+          {/* Action Buttons */}
+          {onConfirm ? (
+            <View style={styles.buttonRow}>
+              <Pressable
+                onPress={onClose}
+                style={({ pressed }) => [
+                  styles.button,
+                  styles.flexButton,
+                  { backgroundColor: String(colors.text) + '11', opacity: pressed ? 0.7 : 1 },
+                ]}
+              >
+                <ThemedText style={[styles.buttonText, { color: colors.text }]}>Cancel</ThemedText>
+              </Pressable>
+              
+              <Pressable
+                onPress={onConfirm}
+                style={({ pressed }) => [
+                  styles.button,
+                  styles.flexButton,
+                  { backgroundColor: destructive ? '#EF4444' : colors.primary, opacity: pressed ? 0.8 : 1 },
+                ]}
+              >
+                <ThemedText style={styles.buttonText}>{confirmText}</ThemedText>
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable
+              onPress={onClose}
+              style={({ pressed }) => [
+                styles.button,
+                { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 },
+              ]}
+            >
+              <ThemedText style={styles.buttonText}>{buttonText}</ThemedText>
+            </Pressable>
+          )}
         </ThemedView>
       </View>
     </Modal>
@@ -110,6 +142,14 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    width: '100%',
+    gap: 12,
+  },
+  flexButton: {
+    flex: 1,
   },
   buttonText: {
     color: '#FFFFFF',

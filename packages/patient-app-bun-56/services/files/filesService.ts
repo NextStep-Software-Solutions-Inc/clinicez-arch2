@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, or } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, or, isNotNull } from 'drizzle-orm';
 import * as Crypto from 'expo-crypto';
 import * as FileSystemLegacy from 'expo-file-system/legacy';
 import * as FileSystem from 'expo-file-system';
@@ -190,6 +190,20 @@ function extensionFromMime(mimeType: string) {
   if (mimeType.includes('png')) return 'png';
   if (mimeType.includes('heic')) return 'heic';
   if (mimeType.includes('word') || mimeType.includes('msword')) return 'docx';
+  if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) return 'xlsx';
+  if (mimeType.includes('zip')) return 'zip';
+  if (mimeType.includes('csv')) return 'csv';
+  if (mimeType.includes('text/plain')) return 'txt';
+  if (mimeType.includes('video/mp4')) return 'mp4';
+  if (mimeType.includes('video/quicktime')) return 'mov';
+  if (mimeType.includes('audio/mpeg')) return 'mp3';
+  if (mimeType.includes('audio/wav')) return 'wav';
+  
+  // Fallback to the subtype, e.g., "application/zip" -> "zip", "text/csv" -> "csv"
+  const subtype = mimeType.split('/')[1];
+  if (subtype && !subtype.includes('.') && !subtype.includes('+') && !subtype.includes('-')) {
+    return subtype; // reasonable fallback for "image/gif" -> "gif", etc.
+  }
   return '';
 }
 
@@ -345,7 +359,7 @@ export async function listFolderContents(
   const normalizedQuery = query.trim().toLowerCase();
   const parentFilter = folderId ? eq(fileFolders.parentId, folderId) : isNull(fileFolders.parentId);
   const fileFolderFilter = folderId ? eq(filesMetadata.folderId, folderId) : isNull(filesMetadata.folderId);
-  const [folders, fileRows, allFolders, config, types, pendingRows] = await Promise.all([
+  const [folders, fileRows, allFolders, config, types, pendingRows, allFileFolderIds] = await Promise.all([
     db
       .select()
       .from(fileFolders)
@@ -369,13 +383,23 @@ export async function listFolderContents(
           or(eq(filesMetadata.syncStatus, 'queued'), eq(filesMetadata.syncStatus, 'failed')),
         ),
       ),
+    db
+      .select({ folderId: filesMetadata.folderId })
+      .from(filesMetadata)
+      .where(
+        and(
+          eq(filesMetadata.patientId, patientId),
+          isNull(filesMetadata.deletedAt),
+          isNotNull(filesMetadata.folderId)
+        )
+      )
   ]);
 
   const childCounts = new Map<string, number>();
   for (const folder of allFolders) {
     if (folder.parentId) childCounts.set(folder.parentId, (childCounts.get(folder.parentId) ?? 0) + 1);
   }
-  for (const file of fileRows) {
+  for (const file of allFileFolderIds) {
     if (file.folderId) childCounts.set(file.folderId, (childCounts.get(file.folderId) ?? 0) + 1);
   }
 
@@ -394,6 +418,66 @@ export async function listFolderContents(
 
   return {
     breadcrumbs: await getBreadcrumbs(patientId, folderId),
+    folders: browserFolders,
+    files: browserFiles,
+    config,
+    documentTypes: types,
+    pendingSyncCount: pendingRows.length,
+  };
+}
+
+export async function getStorageOverview(
+  patientId: string,
+  getToken?: () => Promise<string | null>,
+): Promise<FileBrowserContents> {
+  const [allFolders, allFiles, config, types, pendingRows] = await Promise.all([
+    db
+      .select()
+      .from(fileFolders)
+      .where(and(eq(fileFolders.patientId, patientId), isNull(fileFolders.deletedAt)))
+      .orderBy(asc(fileFolders.name)),
+    db
+      .select()
+      .from(filesMetadata)
+      .where(and(eq(filesMetadata.patientId, patientId), isNull(filesMetadata.deletedAt)))
+      .orderBy(desc(filesMetadata.updatedAt), desc(filesMetadata.createdAt)),
+    getFileConfig(patientId, getToken),
+    getCachedDocumentTypes(),
+    db
+      .select({ id: filesMetadata.id })
+      .from(filesMetadata)
+      .where(
+        and(
+          eq(filesMetadata.patientId, patientId),
+          isNull(filesMetadata.deletedAt),
+          or(eq(filesMetadata.syncStatus, 'queued'), eq(filesMetadata.syncStatus, 'failed')),
+        ),
+      ),
+  ]);
+
+  const childCounts = new Map<string, number>();
+  for (const folder of allFolders) {
+    if (folder.parentId) childCounts.set(folder.parentId, (childCounts.get(folder.parentId) ?? 0) + 1);
+  }
+  for (const file of allFiles) {
+    if (file.folderId) childCounts.set(file.folderId, (childCounts.get(file.folderId) ?? 0) + 1);
+  }
+
+  const browserFolders: FileBrowserFolder[] = allFolders.map((folder) => ({
+    ...folder,
+    kind: 'folder',
+    childCount: childCounts.get(folder.id) ?? 0,
+  }));
+
+  const browserFiles: FileBrowserFile[] = allFiles.map((file) => ({
+    ...file,
+    kind: 'file',
+    typeLabel: getTypeLabel(file.documentTypeId, types),
+    previewKind: getPreviewKind(file.extension ?? '', file.mimeType),
+  }));
+
+  return {
+    breadcrumbs: [],
     folders: browserFolders,
     files: browserFiles,
     config,
@@ -784,14 +868,15 @@ export async function preparePreviewFile(
   if (!extension && file.mimeType) {
     extension = extensionFromMime(file.mimeType);
   }
-  extension = extension || 'bin';
+  extension = extension || '';
 
   let finalName = file.name;
-  if (!extensionFromName(finalName) && extension && extension !== 'bin') {
+  if (!extensionFromName(finalName) && extension) {
     finalName = `${finalName}.${extension}`;
   }
 
-  const previewFile = new File(previewDir, `${file.id}.${extension}`);
+  const previewFileName = extension ? `${file.id}.${extension}` : file.id;
+  const previewFile = new File(previewDir, previewFileName);
   previewFile.write(decrypted);
 
   return {

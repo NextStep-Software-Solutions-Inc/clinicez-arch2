@@ -7,9 +7,10 @@ import ThemedText from '@ui/ThemedText';
 import ThemedView from '@ui/ThemedView';
 import { usePatientId } from 'hooks/usePatientId';
 import { useAuth as useClerkAuth } from '@clerk/expo';
-import { listFolderContents, formatBytes } from '../../../services/files';
+import { formatBytes, getStorageOverview } from '../../../services/files';
 import type { FilesScreenProps } from './navigationTypes';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import CustomAlertModal from '../../../components/ui/CustomAlertModal';
 
 const BRAND = '#7C3AED';
 
@@ -37,7 +38,7 @@ function iconForFile(f: any) {
 }
 
 // ─── Hero card ────────────────────────────────────────────────────────────────
-function StorageHero({ used, total, pending }: { used: number; total: number; pending: number }) {
+function StorageHero({ used, total, pending, onUpgrade }: { used: number; total: number; pending: number; onUpgrade: () => void }) {
   const pct = total > 0 ? Math.min(1, used / total) : 0;
   const pctInt = Math.round(pct * 100);
   const isHigh = pct > 0.85;
@@ -66,7 +67,7 @@ function StorageHero({ used, total, pending }: { used: number; total: number; pe
           </ThemedView>
         </ThemedView>
         <Pressable
-          onPress={() => Alert.alert('Upgrade', 'Upgrade to unlock more storage.')}
+          onPress={onUpgrade}
           style={({ pressed }) => [styles.upgradeBtn, { opacity: pressed ? 0.85 : 1 }]}
         >
           <ThemedText style={[styles.upgradeBtnText, { color: BRAND }]}>Upgrade</ThemedText>
@@ -164,15 +165,16 @@ export default function StorageScreen({ route }: FilesScreenProps<'StorageScreen
 
   const [contents, setContents] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await listFolderContents(patientId, folderId, '', getTokenRef.current);
+      const data = await getStorageOverview(patientId, getTokenRef.current);
       setContents(data);
     } catch { setContents(null); }
     finally { setLoading(false); }
-  }, [patientId, folderId]);
+  }, [patientId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -213,7 +215,7 @@ export default function StorageScreen({ route }: FilesScreenProps<'StorageScreen
         <ThemedView style={styles.loadingWrap}><ActivityIndicator size="large" color={BRAND} /></ThemedView>
       ) : (
         <>
-          <StorageHero used={stats.used} total={stats.total} pending={stats.pending} />
+          <StorageHero used={stats.used} total={stats.total} pending={stats.pending} onUpgrade={() => setUpgradeModalOpen(true)} />
 
           <StatPills
             filesCount={stats.filesCount}
@@ -286,6 +288,14 @@ export default function StorageScreen({ route }: FilesScreenProps<'StorageScreen
           </ThemedView>
         </>
       )}
+
+      <CustomAlertModal
+        visible={upgradeModalOpen}
+        title="Coming Soon"
+        message="Upgrade options will be available in a future update."
+        icon="🚀"
+        onClose={() => setUpgradeModalOpen(false)}
+      />
     </ScrollView>
   );
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { MaterialSymbol, SFSymbol, useNavigation, useTheme } from '@react-navigation/native';
 import { useAuth as useAppAuth } from 'contexts/AuthContext';
+import { useAuth as useClerkAuth } from '@clerk/expo';
 import * as Sharing from 'expo-sharing';
 import ThemedText from '@ui/ThemedText';
 import ThemedView from '@ui/ThemedView';
@@ -15,6 +16,7 @@ export default function ExternalOpenConsentScreen({ route }: FilesScreenProps<'E
   const { colors, dark } = useTheme();
   const navigation = useNavigation('ExternalOpenConsentScreen');
   const patientId = usePatientId();
+  const { getToken } = useClerkAuth();
   const { runWithAutoLockPaused } = useAppAuth();
   const { fileId } = route.params;
   const [fileName, setFileName] = useState('File');
@@ -30,7 +32,7 @@ export default function ExternalOpenConsentScreen({ route }: FilesScreenProps<'E
     try {
       const available = await Sharing.isAvailableAsync();
       if (!available) { Alert.alert('No app available', 'This device cannot open this file with another app.'); return; }
-      const preview = await preparePreviewFile(patientId, fileId);
+      const preview = await preparePreviewFile(patientId, fileId, getToken);
       await runWithAutoLockPaused(() => Sharing.shareAsync(preview.uri, { mimeType: preview.mimeType, dialogTitle: preview.name }));
       navigation.goBack();
     } catch (error) {

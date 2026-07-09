@@ -209,12 +209,12 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
         setAlertModal({ title: 'No app available', message: 'This device cannot share files with other apps.', icon: '🚫' });
         return;
       }
-      const preview = await preparePreviewFile(patientId, fileId);
+      const preview = await preparePreviewFile(patientId, fileId, getToken);
       await runWithAutoLockPaused(() => Sharing.shareAsync(preview.uri, { mimeType: preview.mimeType, dialogTitle: preview.name }));
     } catch (error) {
       setAlertModal({ title: 'Could not share file', message: error instanceof Error ? error.message : 'Unable to share this file.', icon: '⚠️' });
     }
-  }, [patientId, runWithAutoLockPaused]);
+  }, [patientId, runWithAutoLockPaused, getToken]);
 
   const openUpload = useCallback(() => { navigation.navigate('FilesUploadScreen', { folderId: folderId ?? null }); }, [folderId, navigation]);
   const createFolder = useCallback(() => { navigation.navigate('FileFolderFormScreen', { parentId: folderId ?? null }); }, [folderId, navigation]);
@@ -280,13 +280,8 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
               onPress={() => {
                 if (bItem.kind === 'folder') {
                   navigation.push('FilesBrowserScreen', { folderId: bItem.id });
-                } else if (
-                  (bItem as FileBrowserFile).previewKind === 'image' ||
-                  (bItem as FileBrowserFile).previewKind === 'pdf'
-                ) {
-                  navigation.navigate('FileViewerScreen', { fileId: bItem.id });
                 } else {
-                  navigation.navigate('ExternalOpenConsentScreen', { fileId: bItem.id });
+                  navigation.navigate('FileViewerScreen', { fileId: bItem.id });
                 }
               }}
               onErrorPress={() => {
