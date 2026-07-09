@@ -1,90 +1,54 @@
-# ClinicEZ Web App
+# MainPortalFE
 
-Next.js application for ClinicEZ marketing, onboarding, and tenant management. This package lives inside the ClinicEZ monorepo under `packages/web-app`.
+MainPortalFE is the centralized web frontend application for the ClinicEZ ecosystem. It provides the unified administrative and user portal interface, built on a highly modern, performant web stack.
 
-- Framework: Next.js (App Router)
-- Styling: Tailwind CSS v4
-- Language: TypeScript
+## Architecture & Tech Stack
 
-For overall architecture and workflows, see the root README at `../../README.md`.
+This project is built using bleeding-edge React and Next.js features, optimized for maximum speed and developer experience.
 
-## Prerequisites
-
-- Node.js 18+ (20+ recommended)
-- Package manager: pnpm (recommended) or npm/yarn
-
-## Quick Start
-
-From the monorepo root:
-
-```bash
-cd packages/web-app
-pnpm install
-pnpm dev
-```
-
-Open <http://localhost:3000> in your browser.
-
-## Scripts
-
-- `pnpm dev` – Start the dev server (Turbopack)
-- `pnpm build` – Build for production
-- `pnpm start` – Start the production server
-- `pnpm lint` – Run linting
-
-If you prefer npm or yarn:
-
-```bash
-npm run dev   # or
-yarn dev
-```
+- **Framework**: [Next.js 16 (App Router)](https://nextjs.org/)
+- **Core Library**: [React 19](https://react.dev/)
+- **Package Manager**: [Bun](https://bun.sh/) (for ultra-fast dependency resolution and execution)
+- **Bundler**: Turbopack (`next dev --turbo`)
+- **Styling**: Tailwind CSS & [shadcn/ui](https://ui.shadcn.com/) (built on Radix UI)
+- **Authentication**: [Clerk](https://clerk.com/)
+- **API Communication**: Fetches data from the `MainPortalBE` Minimal API.
 
 ## Project Structure
 
-```text
-packages/web-app/
-  public/       # Static assets
-  src/
-    app/          # Next.js App Router routes, layouts, metadata
-    components/ # UI components (e.g., Shell, SearchPaginatedList)
-    lib/        # Utilities and helpers
-    hooks/      # React hooks
-    actions/    # Server/actions modules
-  next.config.ts
-  tsconfig.json
-  postcss.config.mjs
-  tailwind config files
-```
+- `src/app`: Contains the Next.js App Router definitions, pages, and layouts.
+- `src/components`: Reusable React components (UI elements, layout wrappers, and domain-specific components).
+- `src/lib`: Utility functions and third-party integrations (e.g., Clerk helpers).
+- `src/proxy.ts`: The Next.js Edge proxy file replacing the legacy `middleware.ts` for route protection.
 
-## Development Notes
+## Getting Started
 
-- This app is part of a monorepo. Keep shared logic inside package-local folders unless a true shared package is introduced.
-- Follow TypeScript and ESLint rules defined in this package.
-- UI images used in mock data (Unsplash) should be production-safe, royalty-free links.
+### Prerequisites
 
-## Deploying to Vercel (Monorepo)
+Ensure you have [Bun](https://bun.sh/) installed on your local machine.
 
-When deploying with Vercel, make sure the project root is set to this package folder.
+### Installation & Running Locally
 
-- Root Directory: `packages/web-app`
-- Install Command: `pnpm install` (or your preferred manager)
-- Build Command: `pnpm build`
-- Output Directory: `.next` (default for Next.js)
+1. Navigate to the frontend directory:
+   ```bash
+   cd packages/MainPortalFE
+   ```
 
-Tips:
+2. Install dependencies via Bun:
+   ```bash
+   bun install
+   ```
 
-- Using the CLI from the repo root: `vercel --cwd packages/web-app`
-- Or `cd packages/web-app && vercel`
-- In the Vercel dashboard: Project Settings → General → Root Directory → `packages/web-app`
+3. Start the development server using Turbopack:
+   ```bash
+   bun run dev
+   ```
 
-### Troubleshooting
+4. The application will be available at `http://localhost:3000`.
 
-Error: "The specified Root Directory \"packages\\web-app\" does not exist."
+## Scripts
 
-- Ensure your Vercel project is linked to the monorepo and the Root Directory is exactly `packages/web-app`.
-- If using the CLI, run it from `packages/web-app` or pass `--cwd packages/web-app`.
-- Verify the folder exists in the deployed branch and is not excluded by `.vercelignore`/`.gitignore`.
-
-## Contributing
-
-See `../../CONTRIBUTING.md` for contribution guidelines.
+- `bun run dev`: Starts the Next.js dev server with Turbopack enabled for instantaneous HMR.
+- `bun run build`: Builds the production bundle using the Next.js compiler.
+- `bun run start`: Starts the production server.
+- `bun run lint`: Runs ESLint to check for code quality issues.
