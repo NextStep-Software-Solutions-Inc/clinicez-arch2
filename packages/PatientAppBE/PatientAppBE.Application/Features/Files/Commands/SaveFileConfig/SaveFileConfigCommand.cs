@@ -1,4 +1,4 @@
-using Clinic EZ.Shared.Interfaces;
+using CLINICEZ.Shared.Interfaces;
 using MediatR;
 using PatientAppBE.Domain.Entities;
 using PatientAppBE.Domain.Interfaces;

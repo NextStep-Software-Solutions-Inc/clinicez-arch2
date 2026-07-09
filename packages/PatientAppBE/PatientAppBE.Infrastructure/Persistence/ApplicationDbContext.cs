@@ -1,5 +1,5 @@
 using System.Linq.Expressions;
-using Clinic EZ.Shared.Interfaces;
+using CLINICEZ.Shared.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using PatientAppBE.Domain.Common;
 using PatientAppBE.Domain.Entities;

@@ -1,6 +1,13 @@
 import { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, Activity, ShieldCheck, Zap, Users } from "lucide-react";
+import { ArrowRight, Smartphone, HeartPulse, Stethoscope } from "lucide-react";
+import { FeaturesCarousel } from "./_components/FeaturesCarousel";
+import { MobileAppStoreButtons } from "./_components/MobileAppStoreButtons";
+import { LandingIntegrations } from "./_components/LandingIntegrations";
+import { LandingWorkflow } from "./_components/LandingWorkflow";
+import { LandingTestimonials } from "./_components/LandingTestimonials";
+import { LandingFAQ } from "./_components/LandingFAQ";
+import { LandingCTA } from "./_components/LandingCTA";
 
 export const metadata: Metadata = {
   title: "Clinic EZ | The Modern Healthcare Portal",
@@ -9,11 +16,11 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Clinic EZ | The Modern Healthcare Portal",
     description: "Next-generation clinic management and healthcare administration.",
-    url: "https://clinicez.com",
+    url: "https://clinicez.net",
     siteName: "Clinic EZ",
     images: [
       {
-        url: "https://clinicez.com/og-image.png",
+        url: "https://clinicez.net/og-image.png",
         width: 1200,
         height: 630,
       }
@@ -25,7 +32,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Clinic EZ | The Modern Healthcare Portal",
     description: "Next-generation clinic management and healthcare administration.",
-    images: ["https://clinicez.com/og-image.png"],
+    images: ["https://clinicez.net/og-image.png"],
   },
 };
 
@@ -68,56 +75,63 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Features Grid (Glassmorphism) */}
+      <LandingIntegrations />
+      <FeaturesCarousel />
+      <LandingWorkflow />
+
+      {/* Mobile Apps Section */}
       <section className="py-24 px-6 lg:px-8 max-w-7xl mx-auto w-full relative z-10">
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="text-center mb-16">
+          <h2 className="text-3xl md:text-5xl font-extrabold tracking-tight mb-4">
+            Powerful Mobile Apps
+          </h2>
+          <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+            Experience Clinic EZ natively on your iOS and Android devices. Beautifully designed for both patients and healthcare providers.
+          </p>
+        </div>
+
+        <div className="flex flex-col md:flex-row gap-8 items-stretch">
           
-          <div className="group relative overflow-hidden rounded-3xl border border-border/50 bg-background/40 backdrop-blur-xl p-8 transition-all hover:shadow-2xl hover:shadow-primary/10 hover:-translate-y-1">
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-            <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center mb-6 text-primary">
-              <Activity className="h-6 w-6" />
+          {/* Patient App Card */}
+          <div className="flex-1 relative overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent p-8 md:p-12 transition-all hover:shadow-2xl hover:shadow-primary/10 hover:-translate-y-1">
+            <div className="absolute top-[-10%] right-[-10%] p-8 opacity-10 pointer-events-none">
+              <HeartPulse className="w-64 h-64 text-primary" />
             </div>
-            <h3 className="text-xl font-bold mb-3">Real-time Analytics</h3>
-            <p className="text-muted-foreground text-sm leading-relaxed">
-              Monitor patient flow, resource allocation, and financials with millisecond precision in your dashboard.
-            </p>
+            <div className="relative z-10 flex flex-col h-full">
+              <div className="h-16 w-16 rounded-2xl bg-primary flex items-center justify-center mb-8 text-primary-foreground shadow-lg shadow-primary/25">
+                <Smartphone className="h-8 w-8" />
+              </div>
+              <h3 className="text-3xl font-bold mb-4">Clinic EZ for Patients</h3>
+              <p className="text-muted-foreground text-lg mb-8 max-w-md leading-relaxed flex-grow">
+                Book appointments, securely view lab results, chat with your doctors, and manage your family's health records—all from the palm of your hand.
+              </p>
+              <MobileAppStoreButtons />
+            </div>
           </div>
 
-          <div className="group relative overflow-hidden rounded-3xl border border-border/50 bg-background/40 backdrop-blur-xl p-8 transition-all hover:shadow-2xl hover:shadow-primary/10 hover:-translate-y-1">
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-            <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center mb-6 text-primary">
-              <ShieldCheck className="h-6 w-6" />
+          {/* Provider App Card */}
+          <div className="flex-1 relative overflow-hidden rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent p-8 md:p-12 transition-all hover:shadow-2xl hover:shadow-emerald-500/10 hover:-translate-y-1">
+            <div className="absolute top-[-10%] right-[-10%] p-8 opacity-10 pointer-events-none">
+              <Stethoscope className="w-64 h-64 text-emerald-500" />
             </div>
-            <h3 className="text-xl font-bold mb-3">Enterprise Security</h3>
-            <p className="text-muted-foreground text-sm leading-relaxed">
-              HIPAA compliant architecture powered by Clerk authentication and robust tenant isolation.
-            </p>
-          </div>
-
-          <div className="group relative overflow-hidden rounded-3xl border border-border/50 bg-background/40 backdrop-blur-xl p-8 transition-all hover:shadow-2xl hover:shadow-primary/10 hover:-translate-y-1">
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-            <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center mb-6 text-primary">
-              <Zap className="h-6 w-6" />
+            <div className="relative z-10 flex flex-col h-full">
+              <div className="h-16 w-16 rounded-2xl bg-emerald-500 flex items-center justify-center mb-8 text-white shadow-lg shadow-emerald-500/25">
+                <Smartphone className="h-8 w-8" />
+              </div>
+              <h3 className="text-3xl font-bold mb-4">Clinic EZ for Providers</h3>
+              <p className="text-muted-foreground text-lg mb-8 max-w-md leading-relaxed flex-grow">
+                Manage your schedule on the go, conduct high-quality telehealth calls, prescribe medications, and access patient histories securely anytime, anywhere.
+              </p>
+              <MobileAppStoreButtons />
             </div>
-            <h3 className="text-xl font-bold mb-3">Turbopack Speed</h3>
-            <p className="text-muted-foreground text-sm leading-relaxed">
-              Built on Next.js 16. Experience instant page loads and seamless optimistic UI updates.
-            </p>
-          </div>
-
-          <div className="group relative overflow-hidden rounded-3xl border border-border/50 bg-background/40 backdrop-blur-xl p-8 transition-all hover:shadow-2xl hover:shadow-primary/10 hover:-translate-y-1">
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-            <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center mb-6 text-primary">
-              <Users className="h-6 w-6" />
-            </div>
-            <h3 className="text-xl font-bold mb-3">Multi-tenant Ready</h3>
-            <p className="text-muted-foreground text-sm leading-relaxed">
-              Manage multiple clinics, laboratories, and pharmacies under a single, unified organizational roof.
-            </p>
           </div>
 
         </div>
       </section>
+
+      <LandingTestimonials />
+      <LandingFAQ />
+      <LandingCTA />
     </main>
   );
 }

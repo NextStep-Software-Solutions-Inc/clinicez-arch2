@@ -64,4 +64,4 @@ npx expo start
 2. **Containerized Tenancy**: Every clinic can have its own isolated containerized backend (PatientAppBE), providing flexibility and security for on-premise or cloud deployments.
 3. **Centralized Administration**: Clinics register and manage their infrastructure through the MainPortalFE, which is powered by MainPortalBE.
 
-*This unified codebase guarantees consistent types, shared libraries (via Clinic EZ.Shared), and a powerful developer experience.*
+*This unified codebase guarantees consistent types, shared libraries (via CLINICEZ.Shared), and a powerful developer experience.*

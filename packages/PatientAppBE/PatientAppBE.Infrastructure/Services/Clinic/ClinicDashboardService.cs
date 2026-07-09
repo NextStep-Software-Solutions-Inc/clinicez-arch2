@@ -1,6 +1,6 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
-using Clinic EZ.Shared.Exceptions;
+using CLINICEZ.Shared.Exceptions;
 using Microsoft.Extensions.Logging;
 using PatientAppBE.Application.Common.DTOs;
 using PatientAppBE.Application.Common.Interfaces;

@@ -1,6 +1,9 @@
 using MainPortalBE.Api;
 using MainPortalBE.Application;
 using MainPortalBE.Infrastructure;
+using MainPortalBE.Infrastructure.Persistence;
+using MainPortalBE.Domain.Interfaces;
+using Microsoft.EntityFrameworkCore;
 using Hangfire;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -36,11 +39,11 @@ builder.Services
         };
         options.Events = new JwtBearerEvents
         {
-            //OnAuthenticationFailed = context =>
-            //{
-            //    Console.WriteLine($"JWT AUTH FAILURE: Token validation failed with exception: {context.Exception.Message}");
-            //    return Task.CompletedTask;
-            //},
+            OnAuthenticationFailed = context =>
+            {
+                Console.WriteLine($"JWT AUTH FAILURE: Token validation failed with exception: {context.Exception.Message}");
+                return Task.CompletedTask;
+            },
             // Additional validation for AZP claim
             OnTokenValidated = context =>
             {
@@ -66,6 +69,20 @@ builder.Services
 
 var app = builder.Build();
 bool isDevelopment = app.Environment.IsDevelopment();
+
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+    // Apply clean migrations
+    dbContext.Database.Migrate();
+
+    if (isDevelopment)
+    {
+        var seeders = scope.ServiceProvider.GetServices<IBaseSeeder>();
+        foreach (var seeder in seeders) seeder.SeedAsync().GetAwaiter().GetResult();
+    }
+}
 
 // Configure the HTTP request pipeline.
 if (isDevelopment)

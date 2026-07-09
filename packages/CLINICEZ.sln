@@ -15,7 +15,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MainPortalBE.Domain", "Main
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MainPortalBE.Infrastructure", "MainPortalBE\MainPortalBE.Infrastructure\MainPortalBE.Infrastructure.csproj", "{321A5556-1744-486C-B072-1DD04CDFC690}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clinic EZ.Shared", "Clinic EZ.Shared\Clinic EZ.Shared.csproj", "{12345678-1234-1234-1234-123456789ABC}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CLINICEZ.Shared", "CLINICEZ.Shared\CLINICEZ.Shared.csproj", "{12345678-1234-1234-1234-123456789ABC}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dashboard.Api", "Dashboard\Dashboard.Api\Dashboard.Api.csproj", "{F8C1C8F8-9E31-3495-01EA-53DA0ABACA9D}"
 EndProject

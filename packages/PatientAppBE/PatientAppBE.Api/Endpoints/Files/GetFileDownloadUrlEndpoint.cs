@@ -1,4 +1,4 @@
-using Clinic EZ.Shared.Common;
+using CLINICEZ.Shared.Common;
 using MediatR;
 using PatientAppBE.Api.Abstractions;
 using PatientAppBE.Application.Features.Files.Queries.GetFileDownloadUrl;

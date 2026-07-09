@@ -7,7 +7,7 @@ COPY ["Dashboard/Dashboard.Api/Dashboard.Api.csproj", "Dashboard/Dashboard.Api/"
 COPY ["Dashboard/Dashboard.Application/Dashboard.Application.csproj", "Dashboard/Dashboard.Application/"]
 COPY ["Dashboard/Dashboard.Domain/Dashboard.Domain.csproj", "Dashboard/Dashboard.Domain/"]
 COPY ["Dashboard/Dashboard.Infrastructure/Dashboard.Infrastructure.csproj", "Dashboard/Dashboard.Infrastructure/"]
-COPY ["Clinic EZ.Shared/Clinic EZ.Shared.csproj", "Clinic EZ.Shared/"]
+COPY ["CLINICEZ.Shared/CLINICEZ.Shared.csproj", "CLINICEZ.Shared/"]
 
 RUN dotnet restore "Dashboard/Dashboard.Api/Dashboard.Api.csproj"
 

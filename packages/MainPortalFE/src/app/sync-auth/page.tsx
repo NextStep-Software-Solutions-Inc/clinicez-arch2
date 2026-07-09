@@ -1,28 +1,31 @@
 import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
+import { tenantService } from '@/services/tenant.service';
 
 export default async function SyncAuthPage() {
-    const { userId } = await auth();
+    const { userId, getToken } = await auth();
 
     if (!userId) {
         redirect('/sign-in');
     }
 
-    // TODO: In the future, this is where we call the BE to fetch the tenant details for this userId from the DB.
-    // const response = await fetch(`http://localhost:5245/api/users/${userId}/tenant`);
-    // const data = await response.json();
-    
-    // For now, we mock the logic.
-    // If the user has a tenant, redirect to /[tenant]/dashboard
-    // If the user does not have a tenant, redirect to /tenants/register
-    
-    const hasTenant = false; // Mocking: user doesn't have a tenant yet
-    
-    if (hasTenant) {
-        // const tenantId = data.tenantId;
-        const tenantId = 'demo-tenant';
-        redirect(`/${tenantId}/dashboard`);
-    } else {
-        redirect('/tenants/register');
+    let tenantSlug: string | null = null;
+
+    try {
+        const token = await getToken();
+        const tenant = await tenantService.getTenantByOwner(userId, token);
+
+        if (tenant && tenant.tenantSlug) {
+            tenantSlug = tenant.tenantSlug;
+        }
+    } catch (err) {
+        console.error("Error syncing auth:", err);
     }
+    
+    if (tenantSlug) {
+        redirect(`/${tenantSlug}/dashboard`);
+    }
+
+    // If we reach here, it means the user doesn't have a tenant or the API call failed/returned 404
+    redirect('/tenants/register');
 }

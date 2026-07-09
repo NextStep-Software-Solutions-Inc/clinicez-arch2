@@ -1,5 +1,5 @@
 using System.Security.Claims;
-using Clinic EZ.Shared.Interfaces;
+using CLINICEZ.Shared.Interfaces;
 using Microsoft.AspNetCore.Http;
 
 namespace PatientAppBE.Infrastructure.Services.Auth;

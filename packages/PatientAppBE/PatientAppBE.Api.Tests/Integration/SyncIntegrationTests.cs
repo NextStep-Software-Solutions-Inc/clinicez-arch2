@@ -1,6 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
-using Clinic EZ.Shared.Common;
+using CLINICEZ.Shared.Common;
 using FluentAssertions;
 using PatientAppBE.Api.Tests.Infrastructure;
 using PatientAppBE.Application.Common.DTOs;

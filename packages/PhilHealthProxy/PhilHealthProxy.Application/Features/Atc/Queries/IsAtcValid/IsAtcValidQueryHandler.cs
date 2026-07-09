@@ -1,5 +1,5 @@
-using Clinic EZ.Shared.Common;
-using Clinic EZ.Shared.Exceptions;
+using CLINICEZ.Shared.Common;
+using CLINICEZ.Shared.Exceptions;
 using MediatR;
 using PhilHealthProxy.Application.Common;
 using PhilHealthProxy.Domain.Interfaces;

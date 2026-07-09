@@ -1,4 +1,4 @@
-using Clinic EZ.Shared.Exceptions;
+using CLINICEZ.Shared.Exceptions;
 using FluentAssertions;
 using NSubstitute;
 using PhilHealthProxy.Application.Features.Token.Queries.GetToken;

@@ -1,4 +1,4 @@
-namespace Clinic EZ.Shared.Common;
+namespace CLINICEZ.Shared.Common;
 
 public class PaginatedApiResponse<T>(List<T> data, int pageNumber, int pageSize, int totalCount)
 {

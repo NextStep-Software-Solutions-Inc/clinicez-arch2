@@ -1,22 +1,46 @@
 "use client";
 
 import { useState } from "react";
-import { Building2, User, Globe, ChevronRight, CheckCircle2 } from "lucide-react";
+import { Building2, User, Globe, ChevronRight, CheckCircle2, Lock } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { tenantService } from "@/services/tenant.service";
 
 export function TenantRegistrationClient() {
   const [step, setStep] = useState(1);
   const router = useRouter();
 
+  const [formData, setFormData] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    password: "",
+    clinicName: "",
+    tenantSlug: "",
+    facilityType: "Outpatient Clinic"
+  });
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const handleNext = () => {
     if (step < 3) setStep(step + 1);
   };
 
-  const handleComplete = () => {
-    // In a real scenario, this would call our backend to provision the tenant
-    // and then redirect to the dashboard.
-    router.push("/demo-tenant/dashboard");
+  const handleComplete = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      await tenantService.registerTenant(formData);
+      
+      // Redirect to sign in page
+      router.push("/sign-in?registered=true");
+    } catch (err: any) {
+      setError(err.message);
+      setStep(1); // Go back to start if error
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -77,6 +101,12 @@ export function TenantRegistrationClient() {
               ))}
             </div>
 
+            {error && (
+              <div className="mb-6 p-4 bg-red-50 text-red-600 text-sm rounded-md border border-red-200">
+                {error}
+              </div>
+            )}
+
             {/* Step 1: Admin Details */}
             {step === 1 && (
               <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
@@ -86,16 +116,29 @@ export function TenantRegistrationClient() {
                 </div>
                 
                 <div className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Full Name</label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
-                      <input type="text" className="h-11 w-full rounded-md border border-input bg-background pl-10 pr-3 text-sm focus-visible:ring-2 focus-visible:ring-primary" placeholder="Dr. John Doe" />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">First Name</label>
+                      <div className="relative">
+                        <User className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
+                        <input type="text" value={formData.firstName} onChange={(e) => setFormData({...formData, firstName: e.target.value})} className="h-11 w-full rounded-md border border-input bg-background pl-10 pr-3 text-sm focus-visible:ring-2 focus-visible:ring-primary" placeholder="John" />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Last Name</label>
+                      <input type="text" value={formData.lastName} onChange={(e) => setFormData({...formData, lastName: e.target.value})} className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-primary" placeholder="Doe" />
                     </div>
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Professional Email</label>
-                    <input type="email" className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-primary" placeholder="admin@clinic.com" />
+                    <input type="email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-primary" placeholder="admin@clinic.com" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Password</label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
+                      <input type="password" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} className="h-11 w-full rounded-md border border-input bg-background pl-10 pr-3 text-sm focus-visible:ring-2 focus-visible:ring-primary" placeholder="••••••••" />
+                    </div>
                   </div>
                 </div>
 
@@ -118,20 +161,20 @@ export function TenantRegistrationClient() {
                     <label className="text-sm font-medium">Clinic / Hospital Name</label>
                     <div className="relative">
                       <Building2 className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
-                      <input type="text" className="h-11 w-full rounded-md border border-input bg-background pl-10 pr-3 text-sm focus-visible:ring-2 focus-visible:ring-primary" placeholder="City General Hospital" />
+                      <input type="text" value={formData.clinicName} onChange={(e) => setFormData({...formData, clinicName: e.target.value})} className="h-11 w-full rounded-md border border-input bg-background pl-10 pr-3 text-sm focus-visible:ring-2 focus-visible:ring-primary" placeholder="City General Hospital" />
                     </div>
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Tenant Slug (URL)</label>
                     <div className="relative flex items-center">
                       <Globe className="absolute left-3 h-5 w-5 text-muted-foreground" />
-                      <span className="absolute left-10 text-sm text-muted-foreground">clinicez.com/</span>
-                      <input type="text" className="h-11 w-full rounded-md border border-input bg-background pl-[135px] pr-3 text-sm focus-visible:ring-2 focus-visible:ring-primary font-mono" placeholder="city-general" />
+                      <span className="absolute left-10 text-sm text-muted-foreground">clinicez.net/</span>
+                      <input type="text" value={formData.tenantSlug} onChange={(e) => setFormData({...formData, tenantSlug: e.target.value})} className="h-11 w-full rounded-md border border-input bg-background pl-[135px] pr-3 text-sm focus-visible:ring-2 focus-visible:ring-primary font-mono" placeholder="city-general" />
                     </div>
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Facility Type</label>
-                    <select className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-primary">
+                    <select value={formData.facilityType} onChange={(e) => setFormData({...formData, facilityType: e.target.value})} className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-primary">
                       <option>Outpatient Clinic</option>
                       <option>Hospital</option>
                       <option>Laboratory</option>
@@ -156,7 +199,11 @@ export function TenantRegistrationClient() {
               <div className="space-y-6 text-center animate-in fade-in slide-in-from-right-4 duration-500">
                 <div className="flex justify-center mb-6">
                   <div className="h-20 w-20 rounded-full bg-emerald-100 flex items-center justify-center">
-                    <CheckCircle2 className="h-10 w-10 text-emerald-600" />
+                    {isLoading ? (
+                      <div className="h-10 w-10 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="h-10 w-10 text-emerald-600" />
+                    )}
                   </div>
                 </div>
                 
@@ -166,11 +213,11 @@ export function TenantRegistrationClient() {
                 </p>
 
                 <div className="flex gap-4 mt-6">
-                  <button onClick={() => setStep(2)} className="w-1/3 h-11 inline-flex items-center justify-center rounded-md border border-input bg-background text-sm font-medium hover:bg-muted transition-colors">
+                  <button onClick={() => setStep(2)} disabled={isLoading} className="w-1/3 h-11 inline-flex items-center justify-center rounded-md border border-input bg-background text-sm font-medium hover:bg-muted transition-colors disabled:opacity-50">
                     Back
                   </button>
-                  <button onClick={handleComplete} className="w-2/3 h-11 inline-flex items-center justify-center rounded-md bg-primary text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
-                    Provision Workspace
+                  <button onClick={handleComplete} disabled={isLoading} className="w-2/3 h-11 inline-flex items-center justify-center rounded-md bg-primary text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50">
+                    {isLoading ? "Provisioning..." : "Provision Workspace"}
                   </button>
                 </div>
               </div>

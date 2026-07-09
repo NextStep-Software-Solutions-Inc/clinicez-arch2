@@ -6,14 +6,14 @@ on:
       - development
     paths:
       - 'MainPortalBE/**'
-      - 'Clinic EZ.Shared/**'
+      - 'CLINICEZ.Shared/**'
       - .github/workflows/deploy-tenant-api-dev.yml
   pull_request:
     branches:
       - development
     paths:
       - 'MainPortalBE/**'
-      - 'Clinic EZ.Shared/**'
+      - 'CLINICEZ.Shared/**'
       - .github/workflows/deploy-tenant-api-dev.yml
   workflow_dispatch:
     inputs:

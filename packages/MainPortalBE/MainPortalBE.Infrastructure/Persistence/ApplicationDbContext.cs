@@ -10,10 +10,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     : DbContext(options)
 {
     public DbSet<ExampleEntity> ExampleEntities { get; set; }
+    public DbSet<Tenant> Tenants { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        const string schemaName = "MainPortalBE";
+        const string schemaName = "main";
         modelBuilder.HasDefaultSchema(schemaName);
 
         foreach (var entity in modelBuilder.Model.GetEntityTypes())
@@ -50,6 +51,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         // Example entity configuration
         modelBuilder.Entity<ExampleEntity>()
             .HasIndex(e => e.Name)
+            .IsUnique();
+
+        modelBuilder.Entity<Tenant>()
+            .HasIndex(t => t.TenantSlug)
             .IsUnique();
 
         base.OnModelCreating(modelBuilder);

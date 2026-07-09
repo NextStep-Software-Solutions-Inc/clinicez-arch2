@@ -1,5 +1,5 @@
-using Clinic EZ.Shared.Exceptions;
-using Clinic EZ.Shared.Interfaces;
+using CLINICEZ.Shared.Exceptions;
+using CLINICEZ.Shared.Interfaces;
 using MediatR;
 using PatientAppBE.Application.Common.Interfaces;
 using PatientAppBE.Domain.Interfaces;

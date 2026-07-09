@@ -7,7 +7,7 @@ COPY ["PatientAppBE/PatientAppBE.Api/PatientAppBE.Api.csproj", "PatientAppBE/Pat
 COPY ["PatientAppBE/PatientAppBE.Application/PatientAppBE.Application.csproj", "PatientAppBE/PatientAppBE.Application/"]
 COPY ["PatientAppBE/PatientAppBE.Domain/PatientAppBE.Domain.csproj", "PatientAppBE/PatientAppBE.Domain/"]
 COPY ["PatientAppBE/PatientAppBE.Infrastructure/PatientAppBE.Infrastructure.csproj", "PatientAppBE/PatientAppBE.Infrastructure/"]
-COPY ["Clinic EZ.Shared/Clinic EZ.Shared.csproj", "Clinic EZ.Shared/"]
+COPY ["CLINICEZ.Shared/CLINICEZ.Shared.csproj", "CLINICEZ.Shared/"]
 
 RUN dotnet restore "PatientAppBE/PatientAppBE.Api/PatientAppBE.Api.csproj"
 

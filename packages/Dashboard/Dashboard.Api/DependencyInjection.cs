@@ -1,4 +1,4 @@
-﻿using Clinic EZ.Shared.Middlewares;
+﻿using CLINICEZ.Shared.Middlewares;
 
 namespace Dashboard.Api;
 

@@ -8,11 +8,11 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Solutions | Clinic EZ",
     description: "Tailored healthcare management solutions for Clinics, Hospitals, and Pharmacies.",
-    url: "https://clinicez.com/solution",
+    url: "https://clinicez.net/solution",
     siteName: "Clinic EZ",
     images: [
       {
-        url: "https://clinicez.com/og-solutions.png",
+        url: "https://clinicez.net/og-solutions.png",
         width: 1200,
         height: 630,
       }
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Solutions | Clinic EZ",
     description: "Tailored healthcare management solutions for Clinics, Hospitals, and Pharmacies.",
-    images: ["https://clinicez.com/og-solutions.png"],
+    images: ["https://clinicez.net/og-solutions.png"],
   },
 };
 

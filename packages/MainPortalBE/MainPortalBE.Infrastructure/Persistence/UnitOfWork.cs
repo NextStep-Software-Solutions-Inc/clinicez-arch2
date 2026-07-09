@@ -9,11 +9,13 @@ public sealed class UnitOfWork : IUnitOfWork, IDisposable
     private readonly ApplicationDbContext _context;
 
     public IExampleRepository ExampleRepository { get; }
+    public ITenantRepository TenantRepository { get; }
 
-    public UnitOfWork(ApplicationDbContext context, ISieveProcessor sieveProcessor)
+    public UnitOfWork(ApplicationDbContext context, IExampleRepository exampleRepository, ITenantRepository tenantRepository)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
-        ExampleRepository = new ExampleRepository(_context, sieveProcessor);
+        ExampleRepository = exampleRepository;
+        TenantRepository = tenantRepository;
     }
 
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

@@ -1,5 +1,5 @@
 ﻿using Dashboard.Domain.Entities;
-using Clinic EZ.Shared.Common;
+using CLINICEZ.Shared.Common;
 using MediatR;
 
 namespace Dashboard.Application.Features.Products.Queries.GetProducts;

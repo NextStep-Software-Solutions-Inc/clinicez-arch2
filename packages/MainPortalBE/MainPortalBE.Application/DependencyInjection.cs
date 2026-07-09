@@ -1,7 +1,7 @@
+using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using Sieve.Services;
 using System.Reflection;
-
 namespace MainPortalBE.Application;
 
 public static class DependencyInjection
@@ -9,8 +9,12 @@ public static class DependencyInjection
     public static IServiceCollection AddApplicationServices(this IServiceCollection services)
     {
         services.AddScoped<ISieveProcessor, SieveProcessor>();
+        services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly());
         services.AddMediatR(config =>
-            config.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly()));
+        {
+            config.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly());
+            config.AddBehavior(typeof(MediatR.IPipelineBehavior<,>), typeof(Common.Behaviors.ValidationBehavior<,>));
+        });
 
         services.AddCors(options =>
         {

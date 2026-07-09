@@ -4,7 +4,6 @@ import * as React from "react"
 import { useParams } from "next/navigation"
 import {
   IconBuilding,
-  IconCreditCard,
   IconDashboard,
   IconHospital,
   IconInnerShadowTop,
@@ -26,53 +25,48 @@ import {
 } from "@/components/ui/sidebar"
 import { NavSecondary } from "./nav-secondary"
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+export function AppSidebar({ clinicName = "Clinic EZ", user, ...props }: { clinicName?: string, user?: any } & React.ComponentProps<typeof Sidebar>) {
   const params = useParams();
   const tenant = params.tenant as string || "demo-tenant";
 
   const data = {
-    user: {
+    user: user || {
       name: "Dr. Admin",
-      email: "admin@clinicez.com",
+      email: "admin@clinicez.net",
       avatar: "/avatars/shadcn.jpg",
     },
     navMain: [
       {
         title: "Overview",
-        url: `/${tenant}/dashboard/overview`,
+        url: `/dashboard/overview`,
         icon: IconDashboard,
       },
       {
         title: "Clinics",
-        url: `/${tenant}/dashboard/clinics`,
+        url: `/dashboard/clinics`,
         icon: IconHospital,
       },
       {
         title: "Organizations",
-        url: `/${tenant}/dashboard/organizations`,
+        url: `/dashboard/organizations`,
         icon: IconBuilding,
       },
       {
         title: "Laboratories",
-        url: `/${tenant}/dashboard/laboratories`,
+        url: `/dashboard/laboratories`,
         icon: IconTestPipe,
       },
       {
         title: "Pharmacies",
-        url: `/${tenant}/dashboard/pharmacies`,
+        url: `/dashboard/pharmacies`,
         icon: IconPill,
       },
     ],
     navSecondary: [
       {
         title: "Settings",
-        url: `/${tenant}/dashboard/settings`,
+        url: `/dashboard/settings`,
         icon: IconSettings,
-      },
-      {
-        title: "Billing",
-        url: `/${tenant}/dashboard/billing`,
-        icon: IconCreditCard,
       },
     ],
   }
@@ -88,7 +82,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             >
               <a href={`/${tenant}/dashboard`}>
                 <IconInnerShadowTop className="!size-5 text-primary" />
-                <span className="text-base font-bold text-foreground">Clinic EZ</span>
+                <span className="text-base font-bold text-foreground truncate">{clinicName} | Clinic EZ</span>
               </a>
             </SidebarMenuButton>
           </SidebarMenuItem>

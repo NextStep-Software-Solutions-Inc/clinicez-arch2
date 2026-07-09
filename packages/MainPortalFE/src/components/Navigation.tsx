@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Menu, X, Stethoscope } from "lucide-react";
 import { usePathname } from "next/navigation";
+import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
 
 export function Navigation() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -46,18 +47,29 @@ export function Navigation() {
 
         {/* Desktop Actions */}
         <div className="hidden md:flex items-center gap-4">
-          <Link
-            href="/sign-in"
-            className="text-sm font-medium text-foreground hover:text-primary transition-colors"
-          >
-            Log in
-          </Link>
-          <Link
-            href="/tenants/register"
-            className="inline-flex h-9 items-center justify-center rounded-full bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm shadow-primary/20 hover:bg-primary/90 transition-colors"
-          >
-            Get Started
-          </Link>
+          <SignedOut>
+            <Link
+              href="/sign-in"
+              className="text-sm font-medium text-foreground hover:text-primary transition-colors"
+            >
+              Log in
+            </Link>
+            <Link
+              href="/tenants/register"
+              className="inline-flex h-9 items-center justify-center rounded-full bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm shadow-primary/20 hover:bg-primary/90 transition-colors"
+            >
+              Get Started
+            </Link>
+          </SignedOut>
+          <SignedIn>
+            <Link
+              href="/sync-auth"
+              className="text-sm font-medium text-foreground hover:text-primary transition-colors mr-2"
+            >
+              Dashboard
+            </Link>
+            <UserButton afterSignOutUrl="/" />
+          </SignedIn>
         </div>
 
         {/* Mobile Menu Toggle */}
@@ -86,20 +98,34 @@ export function Navigation() {
               </Link>
             ))}
             <div className="h-px bg-border my-2" />
-            <Link
-              href="/sign-in"
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="text-base font-medium text-foreground py-2"
-            >
-              Log in
-            </Link>
-            <Link
-              href="/tenants/register"
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="inline-flex h-11 items-center justify-center rounded-md bg-primary px-4 text-base font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors mt-2"
-            >
-              Get Started
-            </Link>
+            <SignedOut>
+              <Link
+                href="/sign-in"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="text-base font-medium text-foreground py-2"
+              >
+                Log in
+              </Link>
+              <Link
+                href="/tenants/register"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="inline-flex h-11 items-center justify-center rounded-md bg-primary px-4 text-base font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors mt-2"
+              >
+                Get Started
+              </Link>
+            </SignedOut>
+            <SignedIn>
+              <div className="flex items-center gap-4 py-2">
+                <UserButton afterSignOutUrl="/" />
+                <Link
+                  href="/sync-auth"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="text-base font-medium text-foreground"
+                >
+                  Dashboard
+                </Link>
+              </div>
+            </SignedIn>
           </div>
         </div>
       )}

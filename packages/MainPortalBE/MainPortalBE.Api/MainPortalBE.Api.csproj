@@ -23,7 +23,7 @@
   <ItemGroup>
     <ProjectReference Include="..\MainPortalBE.Application\MainPortalBE.Application.csproj" />
     <ProjectReference Include="..\MainPortalBE.Infrastructure\MainPortalBE.Infrastructure.csproj" />
-    <ProjectReference Include="..\..\Clinic EZ.Shared\Clinic EZ.Shared.csproj" />
+    <ProjectReference Include="..\..\CLINICEZ.Shared\CLINICEZ.Shared.csproj" />
   </ItemGroup>
 
   <ItemGroup>

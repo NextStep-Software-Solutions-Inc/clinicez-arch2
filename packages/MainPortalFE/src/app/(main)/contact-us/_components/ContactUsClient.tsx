@@ -27,9 +27,10 @@ export function ContactUsClient() {
             <div>
               <h3 className="text-xl font-bold mb-2">Our Headquarters</h3>
               <p className="text-muted-foreground leading-relaxed">
-                123 Innovation Drive<br />
-                Tech Hub, Metro Manila<br />
-                Philippines 1200
+                San Juan 2, Sto Nino<br />
+                Lapasan, Cagayan de Oro City<br />
+                Misamis Oriental<br />
+                Philippines 9000
               </p>
             </div>
           </div>
@@ -41,8 +42,8 @@ export function ContactUsClient() {
             <div>
               <h3 className="text-xl font-bold mb-2">Email Us</h3>
               <p className="text-muted-foreground leading-relaxed">
-                support@clinicez.com<br />
-                sales@clinicez.com
+                connect@nextstep-software.com<br />
+                sales@nextstep-software.com
               </p>
             </div>
           </div>
@@ -54,8 +55,8 @@ export function ContactUsClient() {
             <div>
               <h3 className="text-xl font-bold mb-2">Call Us</h3>
               <p className="text-muted-foreground leading-relaxed">
-                +63 (2) 8123 4567<br />
-                Mon - Fri, 9am - 6pm (PHT)
+                +63 (965) 429-7640<br />
+                Mon - Fri, 8am - 5pm (PHT)
               </p>
             </div>
           </div>

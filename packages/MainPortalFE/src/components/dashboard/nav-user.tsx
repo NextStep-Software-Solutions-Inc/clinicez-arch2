@@ -1,5 +1,10 @@
 "use client"
 
+import Link from "next/link"
+import { useState } from "react"
+import { useParams } from "next/navigation"
+import { SignOutButton, useClerk } from "@clerk/nextjs"
+
 import {
   IconCreditCard,
   IconDotsVertical,
@@ -22,6 +27,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+
 import {
   SidebarMenu,
   SidebarMenuButton,
@@ -39,8 +45,11 @@ export function NavUser({
   }
 }) {
   const { isMobile } = useSidebar()
+  const { tenant } = useParams<{ tenant: string }>()
+  const { openUserProfile } = useClerk()
 
   return (
+    <>
     <SidebarMenu>
       <SidebarMenuItem>
         <DropdownMenu>
@@ -84,13 +93,13 @@ export function NavUser({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => { window.location.hash = "#/"; openUserProfile(); }}>
                 <IconUserCircle />
                 Account
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => { window.location.hash = "#/billing"; openUserProfile(); }}>
                 <IconCreditCard />
-                Billing
+                Subscription Plans
               </DropdownMenuItem>
               <DropdownMenuItem>
                 <IconNotification />
@@ -98,13 +107,16 @@ export function NavUser({
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <IconLogout />
-              Log out
-            </DropdownMenuItem>
+            <SignOutButton>
+              <DropdownMenuItem>
+                <IconLogout />
+                Log out
+              </DropdownMenuItem>
+            </SignOutButton>
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>
     </SidebarMenu>
+    </>
   )
 }

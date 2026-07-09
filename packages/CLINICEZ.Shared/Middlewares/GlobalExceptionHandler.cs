@@ -1,15 +1,18 @@
-﻿using System.Net;
-using Clinic EZ.Shared.Common;
-using Clinic EZ.Shared.Exceptions;
+using System.Net;
+using CLINICEZ.Shared.Common;
+using CLINICEZ.Shared.Exceptions;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http;
 
-namespace Clinic EZ.Shared.Middlewares;
+namespace CLINICEZ.Shared.Middlewares;
 
 public class GlobalExceptionHandler : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
+        // ── Unwrap Clerk SDK Errors ─────────────────────────────────────────
+        exception = ClerkExceptionParser.TryUnwrap(exception);
+
         var (statusCode, genericCode) = exception switch
         {
             ValidationException          => ((int)HttpStatusCode.BadRequest,            "VALIDATION_ERROR"),

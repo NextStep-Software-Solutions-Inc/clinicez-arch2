@@ -1,7 +1,8 @@
 import { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, ClipboardList, Syringe, CalendarDays, Receipt, Users, Stethoscope } from "lucide-react";
-
+import { ArrowRight } from "lucide-react";
+import { products } from "@/constants/products";
+import Icon from "@/components/Icon";
 export const metadata: Metadata = {
   title: "Products | Clinic EZ",
   description: "Explore the Clinic EZ product ecosystem.",
@@ -9,11 +10,11 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Products | Clinic EZ",
     description: "Explore the Clinic EZ product ecosystem.",
-    url: "https://clinicez.com/products",
+    url: "https://clinicez.net/products",
     siteName: "Clinic EZ",
     images: [
       {
-        url: "https://clinicez.com/og-products.png",
+        url: "https://clinicez.net/og-products.png",
         width: 1200,
         height: 630,
       }
@@ -25,48 +26,11 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Products | Clinic EZ",
     description: "Explore the Clinic EZ product ecosystem.",
-    images: ["https://clinicez.com/og-products.png"],
+    images: ["https://clinicez.net/og-products.png"],
   },
 };
 
-const products = [
-  {
-    name: "Patient Management (EMR)",
-    icon: Users,
-    description: "Centralized electronic medical records with complete patient history, allergies, and ongoing treatments accessible instantly.",
-    href: "/products/emr"
-  },
-  {
-    name: "Smart Scheduling",
-    icon: CalendarDays,
-    description: "Automated appointment booking, conflict resolution, and SMS reminders to drastically reduce patient no-shows.",
-    href: "/products/scheduling"
-  },
-  {
-    name: "E-Prescriptions",
-    icon: Syringe,
-    description: "Digitally sign and send prescriptions directly to partnered pharmacies or print them with QR validation.",
-    href: "/products/prescriptions"
-  },
-  {
-    name: "Billing & Invoicing",
-    icon: Receipt,
-    description: "Integrated financial module supporting multi-currency, PhilHealth processing, and automated tax calculations.",
-    href: "/products/billing"
-  },
-  {
-    name: "Clinical Notes",
-    icon: ClipboardList,
-    description: "Customizable charting templates for different specialties ensuring fast and compliant clinical documentation.",
-    href: "/products/notes"
-  },
-  {
-    name: "Teleconsultation",
-    icon: Stethoscope,
-    description: "Secure, WebRTC-powered high definition video calls integrated directly into the patient's appointment window.",
-    href: "/products/telehealth"
-  }
-];
+
 
 export default function ProductsPage() {
   return (
@@ -85,25 +49,24 @@ export default function ProductsPage() {
 
       <section className="py-12 px-6 lg:px-8 max-w-7xl mx-auto w-full mb-24">
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {products.map((product, index) => {
-            const Icon = product.icon;
+          {products.map((product) => {
             return (
               <div 
-                key={index} 
+                key={product.id} 
                 className="group flex flex-col rounded-3xl border border-border bg-card p-8 transition-all hover:border-primary/50 hover:shadow-xl hover:shadow-primary/5"
               >
-                <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary mb-6 transition-transform group-hover:scale-110">
-                  <Icon className="h-6 w-6" />
+                <div className={`h-12 w-12 rounded-2xl bg-${product.primaryColor}/10 flex items-center justify-center text-${product.primaryColor} mb-6 transition-transform group-hover:scale-110`}>
+                  <Icon name={product.icon} className="h-6 w-6" />
                 </div>
                 
-                <h3 className="text-xl font-bold mb-3">{product.name}</h3>
+                <h3 className="text-xl font-bold mb-3">{product.title}</h3>
                 <p className="text-muted-foreground text-sm leading-relaxed mb-8 flex-grow">
                   {product.description}
                 </p>
 
                 <Link 
-                  href={product.href}
-                  className="inline-flex items-center text-sm font-semibold text-primary hover:text-primary/80 transition-colors"
+                  href={`/products/${product.slug}`}
+                  className={`inline-flex items-center text-sm font-semibold text-${product.primaryColor} hover:opacity-80 transition-opacity`}
                 >
                   Learn more
                   <ArrowRight className="ml-1 h-4 w-4 transition-transform group-hover:translate-x-1" />

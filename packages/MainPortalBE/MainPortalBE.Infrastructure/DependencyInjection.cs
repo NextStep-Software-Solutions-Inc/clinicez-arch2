@@ -1,4 +1,5 @@
-using Clinic EZ.Shared.Interfaces;
+using Clerk.BackendAPI;
+using CLINICEZ.Shared.Interfaces;
 using MainPortalBE.Domain.Interfaces;
 using MainPortalBE.Infrastructure.Persistence;
 using MainPortalBE.Infrastructure.Persistence.Interceptors;
@@ -22,11 +23,17 @@ public static class DependencyInjection
     {
         var connectionString = configuration.GetConnectionString("DefaultConnection");
 
+        services.AddSingleton(new ClerkBackendApi(bearerAuth: configuration["Clerk:SecretKey"] ?? throw new InvalidOperationException("Clerk SecretKey is missing.")));
+
         services.AddHttpContextAccessor();
 
         services.AddDbContext<ApplicationDbContext>((sp, options) =>
         {
-            options.UseNpgsql(connectionString);
+            options.UseNpgsql(connectionString, npgsqlOptions => 
+            {
+                npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "main");
+            }).ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+            
             options.AddInterceptors(sp.GetRequiredService<SoftDeleteInterceptor>());
         });
 
@@ -36,6 +43,7 @@ public static class DependencyInjection
 
         // Register repositories and Unit of Work
         services.AddScoped<IExampleRepository, ExampleRepository>();
+        services.AddScoped<ITenantRepository, TenantRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddHttpContextAccessor();
 
@@ -46,16 +54,6 @@ public static class DependencyInjection
             .UsePostgreSqlStorage(c => c.UseNpgsqlConnection(connectionString)));
 
         services.AddHangfireServer();
-        if (env != null && env.IsDevelopment())
-        {
-            using var scope = services.BuildServiceProvider().CreateScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            dbContext.Database.Migrate();
-
-            var seeders = scope.ServiceProvider.GetServices<IBaseSeeder>();
-            foreach (var seeder in seeders)
-                seeder.SeedAsync().GetAwaiter().GetResult();
-        }
         return services;
     }
 }

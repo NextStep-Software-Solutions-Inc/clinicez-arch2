@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace MainPortalBE.Infrastructure.Persistence.Interceptors;
 
-using Clinic EZ.Shared.Interfaces;
+using CLINICEZ.Shared.Interfaces;
 
 public class SoftDeleteInterceptor(ICurrentUserService currentUser) : SaveChangesInterceptor
 {

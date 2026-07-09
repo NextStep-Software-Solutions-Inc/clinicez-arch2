@@ -1,4 +1,4 @@
-namespace Clinic EZ.Shared.Exceptions;
+namespace CLINICEZ.Shared.Exceptions;
 
 public class UnauthorizedException : Exception
 {

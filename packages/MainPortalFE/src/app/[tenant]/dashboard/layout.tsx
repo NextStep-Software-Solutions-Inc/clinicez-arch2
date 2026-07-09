@@ -2,8 +2,38 @@ import { AppSidebar } from "@/components/dashboard/app-sidebar";
 import CreateResourceDialog from "@/components/dashboard/CreateResourceDialog";
 import { SiteHeader } from "@/components/dashboard/site-header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { auth, currentUser } from "@clerk/nextjs/server";
+import { tenantService } from "@/services/tenant.service";
 
-export default function TenantDashboardLayout({ children }: { children: React.ReactNode }) {
+export default async function TenantDashboardLayout({ children }: { children: React.ReactNode }) {
+    const { userId, getToken } = await auth();
+    let clinicName = "Unknown Clinic";
+    let userDetails = {
+        name: "Unknown User",
+        email: "",
+        avatar: "",
+    };
+    
+    if (userId) {
+        const user = await currentUser();
+        if (user) {
+            userDetails = {
+                name: `${user.firstName || ""} ${user.lastName || ""}`.trim() || "User",
+                email: user.emailAddresses[0]?.emailAddress || "",
+                avatar: user.imageUrl || "",
+            };
+        }
+        try {
+            const token = await getToken();
+            const tenant = await tenantService.getTenantByOwner(userId, token);
+            if (tenant) {
+                clinicName = tenant.clinicName;
+            }
+        } catch (e) {
+            console.error("Failed to fetch tenant for layout", e);
+        }
+    }
+
     return (
         <>
             <SidebarProvider
@@ -14,7 +44,7 @@ export default function TenantDashboardLayout({ children }: { children: React.Re
                     } as React.CSSProperties
                 }
             >
-                <AppSidebar variant="inset" />
+                <AppSidebar variant="inset" clinicName={clinicName} user={userDetails} />
                 <SidebarInset className="overflow-auto">
                     <SiteHeader />
                     <div className="flex flex-1 flex-col">

@@ -1,4 +1,4 @@
-namespace Clinic EZ.Shared.Common;
+namespace CLINICEZ.Shared.Common;
 
 /// <summary>
 /// A single structured error item surfaced to the client.
