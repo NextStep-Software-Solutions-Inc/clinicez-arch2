@@ -1,4 +1,4 @@
-using CLINICEZ.Shared.Interfaces;
+using Clinic EZ.Shared.Interfaces;
 using MainPortalBE.Domain.Interfaces;
 using MainPortalBE.Infrastructure.Persistence;
 using MainPortalBE.Infrastructure.Persistence.Interceptors;

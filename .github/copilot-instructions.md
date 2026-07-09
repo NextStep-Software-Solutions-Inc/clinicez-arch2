@@ -1,7 +1,7 @@
 ## Component Usage
 
 - Always use `ThemedView` and `ThemedText` components instead of the default `View` and `Text` for all UI code except for the web-app, to ensure a unified component view across the project.
-# Copilot Instructions for ClinicEZ Monorepo
+# Copilot Instructions for Clinic EZ Monorepo
 
 ## Big Picture Architecture
 - **Monorepo Structure:** All projects live under `packages/`. Each package is a separate app or service (e.g., `patient-app`, `web-frontend`, `backend-mobile`).

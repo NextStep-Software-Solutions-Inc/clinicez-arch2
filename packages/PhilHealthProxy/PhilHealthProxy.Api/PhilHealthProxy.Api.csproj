@@ -20,7 +20,7 @@
   <ItemGroup>
     <ProjectReference Include="..\PhilHealthProxy.Application\PhilHealthProxy.Application.csproj" />
     <ProjectReference Include="..\PhilHealthProxy.Infrastructure\PhilHealthProxy.Infrastructure.csproj" />
-    <ProjectReference Include="..\..\CLINICEZ.Shared\CLINICEZ.Shared.csproj" />
+    <ProjectReference Include="..\..\Clinic EZ.Shared\Clinic EZ.Shared.csproj" />
   </ItemGroup>
 
 </Project>

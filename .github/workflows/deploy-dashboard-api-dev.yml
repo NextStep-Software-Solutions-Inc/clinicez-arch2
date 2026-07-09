@@ -1,20 +1,20 @@
-name: Deploy CLINICEZ API to DigitalOcean Droplet (Dev)
+name: Deploy Clinic EZ API to DigitalOcean Droplet (Dev)
 
 on:
   push:
     branches:
       - development
     paths:
-      - 'CLINICEZ/**'
-      - 'CLINICEZ.Shared/**'
-      - .github/workflows/deploy-clinicez-api-dev.yml
+      - 'Clinic EZ/**'
+      - 'Clinic EZ.Shared/**'
+      - .github/workflows/deploy-Clinic EZ-api-dev.yml
   pull_request:
     branches:
       - development
     paths:
-      - 'CLINICEZ/**'
-      - 'CLINICEZ.Shared/**'
-      - .github/workflows/deploy-clinicez-api-dev.yml
+      - 'Clinic EZ/**'
+      - 'Clinic EZ.Shared/**'
+      - .github/workflows/deploy-Clinic EZ-api-dev.yml
   workflow_dispatch:
     inputs:
       reason:
@@ -24,7 +24,7 @@ on:
         type: string
 
 env:
-    CONTAINER_NAME: clinicez-api
+    CONTAINER_NAME: Clinic EZ-api
     IMAGE_TAG: dev
     ENVIRONMENT: Development
 
@@ -51,7 +51,7 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         context: .
-        file: CLINICEZ/Dockerfile
+        file: Clinic EZ/Dockerfile
         push: true
         tags: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.CONTAINER_NAME }}:${{ env.IMAGE_TAG }}
 
@@ -85,6 +85,6 @@ jobs:
             --memory=384m \
             -p 72:8080 \
             -e ASPNETCORE_ENVIRONMENT=${{ env.ENVIRONMENT }} \
-            -e ConnectionStrings__DefaultConnection="${{ secrets.CLINICEZ_DB_CONNECTION_STRING }}" \
+            -e ConnectionStrings__DefaultConnection="${{ secrets.Clinic EZ_DB_CONNECTION_STRING }}" \
             --restart unless-stopped \
             ${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.CONTAINER_NAME }}:${{ env.IMAGE_TAG }}

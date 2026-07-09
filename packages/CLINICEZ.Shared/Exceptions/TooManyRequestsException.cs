@@ -1,4 +1,4 @@
-namespace CLINICEZ.Shared.Exceptions;
+namespace Clinic EZ.Shared.Exceptions;
 
 public class TooManyRequestsException : Exception
 {

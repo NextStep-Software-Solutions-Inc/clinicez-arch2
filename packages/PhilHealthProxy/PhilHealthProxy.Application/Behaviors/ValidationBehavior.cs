@@ -5,7 +5,7 @@ namespace PhilHealthProxy.Application.Behaviors;
 
 /// <summary>
 /// MediatR pipeline behavior that runs all registered FluentValidation validators
-/// before every handler. Throws <see cref="CLINICEZ.Shared.Exceptions.ValidationException"/>
+/// before every handler. Throws <see cref="Clinic EZ.Shared.Exceptions.ValidationException"/>
 /// on failure so the shared <c>GlobalExceptionHandler</c> returns HTTP 400 with
 /// field-level error details.
 /// </summary>
@@ -39,6 +39,6 @@ public sealed class ValidationBehavior<TRequest, TResponse>(
                 g => g.Key,
                 g => g.Select(f => f.ErrorMessage).ToArray());
 
-        throw new CLINICEZ.Shared.Exceptions.ValidationException("One or more validation errors occurred.", errors);
+        throw new Clinic EZ.Shared.Exceptions.ValidationException("One or more validation errors occurred.", errors);
     }
 }

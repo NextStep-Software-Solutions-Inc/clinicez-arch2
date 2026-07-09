@@ -1,6 +1,6 @@
 ﻿using Dashboard.Domain.Entities;
 using Dashboard.Domain.Interfaces;
-using CLINICEZ.Shared.Common;
+using Clinic EZ.Shared.Common;
 using MediatR;
 using Sieve.Models;
 

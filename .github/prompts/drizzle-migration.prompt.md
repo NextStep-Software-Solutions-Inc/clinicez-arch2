@@ -5,7 +5,7 @@ agent: "agent"
 argument-hint: "Describe the table or column to add (e.g. 'medications table with name, dosage, patientId')"
 tools: [read, edit, search]
 ---
-You are adding a new Drizzle ORM table or column to the ClinicEZ Patient App schema at `packages/patient-app/`.
+You are adding a new Drizzle ORM table or column to the Clinic EZ Patient App schema at `packages/patient-app/`.
 
 ## Steps
 

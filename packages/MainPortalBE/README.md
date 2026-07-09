@@ -1,6 +1,6 @@
 # MainPortalBE
 
-MainPortalBE is the centralized .NET 10 backend service for the ClinicEZ Web Portal. It manages cross-tenant data, handles clinic onboarding, coordinates centralized administration, and powers the `MainPortalFE`.
+MainPortalBE is the centralized .NET 10 backend service for the Clinic EZ Web Portal. It manages cross-tenant data, handles clinic onboarding, coordinates centralized administration, and powers the `MainPortalFE`.
 
 ## Architecture
 
@@ -45,6 +45,6 @@ This project is built using **Clean Architecture** principles and utilizes a **M
 A `Dockerfile` is provided at the root of `MainPortalBE` for containerized deployment.
 
 ```bash
-docker build -t clinicez-mainportal-be -f Dockerfile .
-docker run -p 8080:8080 clinicez-mainportal-be
+docker build -t Clinic EZ-mainportal-be -f Dockerfile .
+docker run -p 8080:8080 Clinic EZ-mainportal-be
 ```

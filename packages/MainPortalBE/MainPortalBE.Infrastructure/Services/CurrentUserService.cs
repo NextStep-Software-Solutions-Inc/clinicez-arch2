@@ -1,4 +1,4 @@
-using CLINICEZ.Shared.Interfaces;
+using Clinic EZ.Shared.Interfaces;
 using Microsoft.AspNetCore.Http;
 using System.Security.Claims;
 

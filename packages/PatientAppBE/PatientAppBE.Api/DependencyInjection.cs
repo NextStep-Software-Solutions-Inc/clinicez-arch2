@@ -1,4 +1,4 @@
-using CLINICEZ.Shared.Middlewares;
+using Clinic EZ.Shared.Middlewares;
 using Microsoft.Extensions.DependencyInjection;
 using PatientAppBE.Api.Extensions;
 using PatientAppBE.Api.Infrastructure;

@@ -8,7 +8,7 @@ export default function SolutionPage() {
             <HeroBackground path={MainBackgroundImage} opacity={0.3} />
             <section className="w-full">
                 <div className="max-w-2xl w-full mx-auto text-center my-12">
-                    <h1 className="text-4xl md:text-5xl font-medium tracking-tight text-primary mt-16 drop-shadow-sm">ClinicEZ Solutions</h1>
+                    <h1 className="text-4xl md:text-5xl font-medium tracking-tight text-primary mt-16 drop-shadow-sm">Clinic EZ Solutions</h1>
                     <p className="text-lg md:text-xl text-gray-600 my-4">Modern modules for every clinic workflow. Designed for speed, security, and simplicity.</p>
                     <div className="flex justify-center gap-4 mb-2">
                         <span className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">OPD</span>

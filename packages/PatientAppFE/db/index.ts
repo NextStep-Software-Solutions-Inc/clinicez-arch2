@@ -5,7 +5,7 @@ import { syncQueue } from './schema/syncQueue';
 import { randomUUID } from 'expo-crypto';
 
 const APP_VARIANT = process.env.APP_VARIANT ?? 'production';
-const expo = SQLite.openDatabaseSync(`clinicez_patient_${APP_VARIANT}.db`);
+const expo = SQLite.openDatabaseSync(`Clinic EZ_patient_${APP_VARIANT}.db`);
 
 export const originalDb = drizzle(expo, { schema });
 
@@ -58,7 +58,7 @@ async function handleInterceptWrite(tableName: string, operation: 'create' | 'up
   if (!entityType) return;
 
   let entityId = values.id || values.clientId;
-  
+
   if (!entityId && condition) {
     entityId = extractIdFromCondition(condition);
   }
@@ -97,7 +97,7 @@ async function handleInterceptWrite(tableName: string, operation: 'create' | 'up
 
     await originalDb.insert(syncQueue).values(syncItem);
     console.log(`[DB Interceptor] Successfully queued ${operation} for ${entityType} (${entityId})`);
-    
+
     if (globalSyncTrigger) {
       globalSyncTrigger();
     }
@@ -196,13 +196,13 @@ function wrapInsertBuilder(builder: any, table: any) {
 export const db = new Proxy(originalDb, {
   get(target, prop, receiver) {
     if (prop === 'insert') {
-      return function(table: any) {
+      return function (table: any) {
         const builder = target.insert(table);
         return wrapInsertBuilder(builder, table);
       };
     }
     if (prop === 'update') {
-      return function(table: any) {
+      return function (table: any) {
         const builder = target.update(table);
         return wrapUpdateBuilder(builder, table);
       };

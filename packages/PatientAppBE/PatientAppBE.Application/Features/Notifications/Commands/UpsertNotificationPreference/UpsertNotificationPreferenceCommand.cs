@@ -1,4 +1,4 @@
-using CLINICEZ.Shared.Exceptions;
+using Clinic EZ.Shared.Exceptions;
 using MediatR;
 using PatientAppBE.Application.Common.DTOs;
 using PatientAppBE.Domain.Enums;
@@ -27,7 +27,7 @@ public sealed class UpsertNotificationPreferenceCommandHandler
             ?? throw new NotFoundException($"Patient '{request.PatientId}' was not found.");
 
         if (!Enum.TryParse<NotificationCategory>(request.Category, true, out var category))
-            throw new CLINICEZ.Shared.Exceptions.BadRequestException($"Unknown notification category: '{request.Category}'.");
+            throw new Clinic EZ.Shared.Exceptions.BadRequestException($"Unknown notification category: '{request.Category}'.");
 
         var pref = await _prefRepo.GetByPatientAndCategoryAsync(request.PatientId, category, cancellationToken);
 

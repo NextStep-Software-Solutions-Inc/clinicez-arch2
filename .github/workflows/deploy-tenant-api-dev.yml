@@ -1,4 +1,4 @@
-name: Deploy CLINICEZ Tenant Management API to DigitalOcean Droplet (Dev)
+name: Deploy Clinic EZ Tenant Management API to DigitalOcean Droplet (Dev)
 
 on:
   push:
@@ -6,14 +6,14 @@ on:
       - development
     paths:
       - 'MainPortalBE/**'
-      - 'CLINICEZ.Shared/**'
+      - 'Clinic EZ.Shared/**'
       - .github/workflows/deploy-tenant-api-dev.yml
   pull_request:
     branches:
       - development
     paths:
       - 'MainPortalBE/**'
-      - 'CLINICEZ.Shared/**'
+      - 'Clinic EZ.Shared/**'
       - .github/workflows/deploy-tenant-api-dev.yml
   workflow_dispatch:
     inputs:
@@ -24,7 +24,7 @@ on:
         type: string
 
 env:
-    CONTAINER_NAME: clinicez-tenant-management-api
+    CONTAINER_NAME: Clinic EZ-tenant-management-api
     IMAGE_TAG: dev
     ENVIRONMENT: Development
 
@@ -85,6 +85,6 @@ jobs:
             --memory=384m \
             -p 71:8080 \
             -e ASPNETCORE_ENVIRONMENT=${{ env.ENVIRONMENT }} \
-            -e ConnectionStrings__DefaultConnection="${{ secrets.CLINICEZ_MANAGEMENT_DB_CONNECTION_STRING }}" \
+            -e ConnectionStrings__DefaultConnection="${{ secrets.Clinic EZ_MANAGEMENT_DB_CONNECTION_STRING }}" \
             --restart unless-stopped \
             ${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.CONTAINER_NAME }}:${{ env.IMAGE_TAG }}

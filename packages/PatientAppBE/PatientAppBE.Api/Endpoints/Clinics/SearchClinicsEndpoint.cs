@@ -1,4 +1,4 @@
-using CLINICEZ.Shared.Common;
+using Clinic EZ.Shared.Common;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using PatientAppBE.Api.Abstractions;

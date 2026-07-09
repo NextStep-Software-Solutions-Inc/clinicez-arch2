@@ -1,4 +1,4 @@
-# ClinicEZ Patient App — Backend API Reference
+# Clinic EZ Patient App — Backend API Reference
 
 > **Base URL (Development):** `http://localhost:5154/api/v1`  
 > **Authentication:** All endpoints require a valid Clerk JWT: `Authorization: Bearer <token>`  
@@ -946,8 +946,8 @@ Show the organisation details and its linked clinics **before** the patient conf
     "name": "Metro Manila Senior Care Network",
     "description": "A private patient community for senior care coordination.",
     "isPublic": false,
-    "privacyPolicyUrl": "https://clinicez.app/privacy/metro-manila-senior-care-20",
-    "termsAndConditionsUrl": "https://clinicez.app/terms/metro-manila-senior-care-20",
+    "privacyPolicyUrl": "https://Clinic EZ.app/privacy/metro-manila-senior-care-20",
+    "termsAndConditionsUrl": "https://Clinic EZ.app/terms/metro-manila-senior-care-20",
     "requiredShareFieldsJson": "[\"fullName\",\"dateOfBirth\",\"mobile\"]",
     "rolesJson": "[{\"id\":\"member\",\"name\":\"Member\"},{\"id\":\"volunteer\",\"name\":\"Volunteer\"}]",
     "featuredScore": 100,
@@ -1078,9 +1078,9 @@ Returns full clinic info, linked organisations, and the requesting patient's mem
     "address": "Metro Manila, Philippines",
     "isPublic": true,
     "supportsAppointments": true,
-    "baseUrl": "https://family-medicine-metro-manila-1.clinicez.local",
-    "privacyPolicyUrl": "https://clinicez.app/privacy/family-medicine-metro-manila-1",
-    "termsAndConditionsUrl": "https://clinicez.app/terms/family-medicine-metro-manila-1",
+    "baseUrl": "https://family-medicine-metro-manila-1.Clinic EZ.local",
+    "privacyPolicyUrl": "https://Clinic EZ.app/privacy/family-medicine-metro-manila-1",
+    "termsAndConditionsUrl": "https://Clinic EZ.app/terms/family-medicine-metro-manila-1",
     "specialtiesJson": "[\"Family Medicine\",\"Telehealth\"]",
     "requiredShareFieldsJson": "[\"fullName\",\"mobile\",\"email\"]",
     "featuredScore": 100,
@@ -1199,7 +1199,7 @@ backend proxy.
 Proxies the appointment list request to a specific clinic's backend. The mobile reads
 `baseUrl` from its local `clinics` SQLite table.
 
-**Query params:** `?clinicBaseUrl=https://family-medicine-metro-manila-1.clinicez.local`
+**Query params:** `?clinicBaseUrl=https://family-medicine-metro-manila-1.Clinic EZ.local`
 
 **200 OK**
 

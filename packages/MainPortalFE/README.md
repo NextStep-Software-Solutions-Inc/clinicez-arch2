@@ -1,6 +1,6 @@
 # MainPortalFE
 
-MainPortalFE is the centralized web frontend application for the ClinicEZ ecosystem. It provides the unified administrative and user portal interface, built on a highly modern, performant web stack.
+MainPortalFE is the centralized web frontend application for the Clinic EZ ecosystem. It provides the unified administrative and user portal interface, built on a highly modern, performant web stack.
 
 ## Architecture & Tech Stack
 

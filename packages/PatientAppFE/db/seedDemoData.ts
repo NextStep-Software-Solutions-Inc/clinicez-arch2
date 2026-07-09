@@ -106,10 +106,10 @@ async function ensureClinicRows(patientId: string) {
             coverImageUrl: 'https://picsum.photos/seed/demo-city-health-cover/400/180',
             isPublic: true,
             supportsAppointments: true,
-            baseUrl: 'https://city-health.demo.clinicez.local',
+            baseUrl: 'https://city-health.demo.Clinic EZ.local',
             inviteCode: 'CITY-DEMO-01',
-            privacyPolicyUrl: 'https://clinicez.app/privacy/city-health-demo',
-            termsAndConditionsUrl: 'https://clinicez.app/terms/city-health-demo',
+            privacyPolicyUrl: 'https://Clinic EZ.app/privacy/city-health-demo',
+            termsAndConditionsUrl: 'https://Clinic EZ.app/terms/city-health-demo',
             specialtiesJson: JSON.stringify(['Family Medicine', 'Primary Care']),
             requiredShareFieldsJson: JSON.stringify(['fullName', 'mobile', 'email']),
             joinedAt,
@@ -123,10 +123,10 @@ async function ensureClinicRows(patientId: string) {
             coverImageUrl: 'https://picsum.photos/seed/demo-riverside-cover/400/180',
             isPublic: true,
             supportsAppointments: true,
-            baseUrl: 'https://riverside-diagnostics.demo.clinicez.local',
+            baseUrl: 'https://riverside-diagnostics.demo.Clinic EZ.local',
             inviteCode: 'RIVER-DEMO-02',
-            privacyPolicyUrl: 'https://clinicez.app/privacy/riverside-demo',
-            termsAndConditionsUrl: 'https://clinicez.app/terms/riverside-demo',
+            privacyPolicyUrl: 'https://Clinic EZ.app/privacy/riverside-demo',
+            termsAndConditionsUrl: 'https://Clinic EZ.app/terms/riverside-demo',
             specialtiesJson: JSON.stringify(['Diagnostics', 'Imaging']),
             requiredShareFieldsJson: JSON.stringify(['fullName', 'dateOfBirth', 'mobile']),
             joinedAt,
@@ -1177,7 +1177,7 @@ export async function seedDemoHealthRecords(patientId: string, clerkUserId: stri
 async function ensureAppointmentRows(patientId: string, primaryClinicId: string, secondaryClinicId: string) {
     const now = new Date();
     const DAY_MS = 24 * 60 * 60 * 1000;
-    
+
     const CLINIC_PRIMARY = {
         id: primaryClinicId,
         name: 'City Health Center - OPD',
@@ -1437,7 +1437,7 @@ export async function clearAllData(currentPatientId?: string, clerkUserId?: stri
         for (const table of tables) {
             await tx.delete(table);
         }
-        
+
         if (currentPatientId && clerkUserId) {
             const now = new Date();
             await tx.insert(schema.patients).values({
@@ -1458,7 +1458,7 @@ export async function clearAllData(currentPatientId?: string, clerkUserId?: stri
                 updatedAt: now,
             });
         }
-        
+
         await tx.run(sql`PRAGMA foreign_keys = ON`);
     });
 }

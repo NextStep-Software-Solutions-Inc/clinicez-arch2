@@ -38,14 +38,14 @@ export default function AboutSettingsScreen() {
           icon={{ android: 'privacy_tip', ios: 'hand.raised.fill' }}
           iconColor="#3B82F6"
           right={{ type: 'chevron' }}
-          onPress={() => openUrl('https://clinicez.app/privacy')}
+          onPress={() => openUrl('https://Clinic EZ.app/privacy')}
         />
         <SettingsRow
           title="Terms of Service"
           icon={{ android: 'description', ios: 'doc.text.fill' }}
           iconColor="#6B7280"
           right={{ type: 'chevron' }}
-          onPress={() => openUrl('https://clinicez.app/terms')}
+          onPress={() => openUrl('https://Clinic EZ.app/terms')}
         />
       </SettingsSection>
 
@@ -55,7 +55,7 @@ export default function AboutSettingsScreen() {
           icon={{ android: 'support_agent', ios: 'person.fill.questionmark' }}
           iconColor="#10B981"
           right={{ type: 'chevron' }}
-          onPress={() => openUrl('mailto:support@clinicez.app?subject=ClinicEZ%20Support')}
+          onPress={() => openUrl('mailto:support@clinicez.net?subject=Clinic EZ%20Support')}
         />
         <SettingsRow
           title="Report a Bug"
@@ -64,7 +64,7 @@ export default function AboutSettingsScreen() {
           right={{ type: 'chevron' }}
           onPress={() =>
             openUrl(
-              `mailto:support@clinicez.app?subject=Bug%20Report%20v${APP_VERSION}&body=Describe%20the%20issue%3A%0A%0ASteps%20to%20reproduce%3A%0A%0AExpected%20behavior%3A`,
+              `mailto:support@clinicez.net?subject=Bug%20Report%20v${APP_VERSION}&body=Describe%20the%20issue%3A%0A%0ASteps%20to%20reproduce%3A%0A%0AExpected%20behavior%3A`,
             )
           }
         />

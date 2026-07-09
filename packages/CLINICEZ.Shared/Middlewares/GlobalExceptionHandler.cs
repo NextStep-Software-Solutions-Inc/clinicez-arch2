@@ -1,10 +1,10 @@
 ﻿using System.Net;
-using CLINICEZ.Shared.Common;
-using CLINICEZ.Shared.Exceptions;
+using Clinic EZ.Shared.Common;
+using Clinic EZ.Shared.Exceptions;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http;
 
-namespace CLINICEZ.Shared.Middlewares;
+namespace Clinic EZ.Shared.Middlewares;
 
 public class GlobalExceptionHandler : IExceptionHandler
 {

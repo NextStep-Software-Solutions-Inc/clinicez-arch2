@@ -21,7 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Dashboard.Application\Dashboard.Application.csproj" />
     <ProjectReference Include="..\Dashboard.Infrastructure\Dashboard.Infrastructure.csproj" />
-    <ProjectReference Include="..\..\CLINICEZ.Shared\CLINICEZ.Shared.csproj" />
+    <ProjectReference Include="..\..\Clinic EZ.Shared\Clinic EZ.Shared.csproj" />
   </ItemGroup>
 
 </Project>

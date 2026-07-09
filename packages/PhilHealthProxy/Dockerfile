@@ -7,7 +7,7 @@ COPY ["PhilHealthProxy/PhilHealthProxy.Api/PhilHealthProxy.Api.csproj", "PhilHea
 COPY ["PhilHealthProxy/PhilHealthProxy.Application/PhilHealthProxy.Application.csproj", "PhilHealthProxy/PhilHealthProxy.Application/"]
 COPY ["PhilHealthProxy/PhilHealthProxy.Domain/PhilHealthProxy.Domain.csproj", "PhilHealthProxy/PhilHealthProxy.Domain/"]
 COPY ["PhilHealthProxy/PhilHealthProxy.Infrastructure/PhilHealthProxy.Infrastructure.csproj", "PhilHealthProxy/PhilHealthProxy.Infrastructure/"]
-COPY ["CLINICEZ.Shared/CLINICEZ.Shared.csproj", "CLINICEZ.Shared/"]
+COPY ["Clinic EZ.Shared/Clinic EZ.Shared.csproj", "Clinic EZ.Shared/"]
 
 RUN dotnet restore "PhilHealthProxy/PhilHealthProxy.Api/PhilHealthProxy.Api.csproj"
 

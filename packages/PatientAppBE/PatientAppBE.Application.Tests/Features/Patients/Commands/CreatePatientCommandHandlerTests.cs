@@ -1,4 +1,4 @@
-using CLINICEZ.Shared.Exceptions;
+using Clinic EZ.Shared.Exceptions;
 using FluentAssertions;
 using NSubstitute;
 using PatientAppBE.Application.Features.Patients.Commands.CreatePatient;

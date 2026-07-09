@@ -1,4 +1,4 @@
-using CLINICEZ.Shared.Common;
+using Clinic EZ.Shared.Common;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using PhilHealthProxy.Application.Common;

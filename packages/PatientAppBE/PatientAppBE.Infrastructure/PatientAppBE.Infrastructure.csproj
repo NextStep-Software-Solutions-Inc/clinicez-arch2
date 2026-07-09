@@ -2,7 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PatientAppBE.Application\PatientAppBE.Application.csproj" />
-    <ProjectReference Include="..\..\CLINICEZ.Shared\CLINICEZ.Shared.csproj" />
+    <ProjectReference Include="..\..\Clinic EZ.Shared\Clinic EZ.Shared.csproj" />
   </ItemGroup>
 
   <ItemGroup>

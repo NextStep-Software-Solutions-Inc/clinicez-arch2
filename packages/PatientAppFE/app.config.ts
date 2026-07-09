@@ -29,9 +29,9 @@ export default ({ config }: ConfigContext): ExpoConfig =>
     },
     ios: {
         supportsTablet: true,
-        bundleIdentifier: 'com.nextstepsoftware.clinicez.patient',
+        bundleIdentifier: 'com.nextstepsoftware.Clinic EZ.patient',
         infoPlist: {
-            NSFaceIDUsageDescription: 'ClinicEZ uses Face ID to unlock your account securely.',
+            NSFaceIDUsageDescription: 'Clinic EZ uses Face ID to unlock your account securely.',
         },
     },
     android: {
@@ -42,7 +42,7 @@ export default ({ config }: ConfigContext): ExpoConfig =>
             monochromeImage: './assets/android-icon-monochrome.png',
         },
         predictiveBackGestureEnabled: false,
-        package: 'com.nextstepsoftware.clinicez.patient',
+        package: 'com.nextstepsoftware.Clinic EZ.patient',
         // ⬇ Place your google-services.json at the project root before running
         //   an EAS build or `expo run:android` on a physical device.
         //   Without this file push tokens will not be issued on Android.

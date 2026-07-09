@@ -25,7 +25,7 @@ public static class DependencyInjection
             options.AddPolicy("production", policy =>
             {
                 policy
-                    .WithOrigins("https://clinicez-portal-pro.vercel.app")
+                    .WithOrigins("https://Clinic EZ-portal-pro.vercel.app")
                     .AllowAnyHeader()
                     .AllowAnyMethod();
             });

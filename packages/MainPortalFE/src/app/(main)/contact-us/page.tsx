@@ -6,7 +6,7 @@ import { ContactUsForm } from "@/components/ContactUsForm";
 
 export const metadata: Metadata = {
   title: "Contact Us | Clinic EZ V2",
-  description: "Get in touch with ClinicEZ for any inquiries, support, or feedback.",
+  description: "Get in touch with Clinic EZ for any inquiries, support, or feedback.",
 }
 
 export default function ContactUsPage() {

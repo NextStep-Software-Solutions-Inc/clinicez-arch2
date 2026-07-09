@@ -4,7 +4,7 @@ import { BsSlack } from "react-icons/bs";
 import { FaFacebook, FaTwitter } from "react-icons/fa6";
 import { Separator } from "./ui/separator";
 import Image from "next/image";
-import ClinicEzLogo from "../../public/clinic-ez_logo.svg";
+import ClinicEZLogo from "../../public/clinic-ez_logo.svg";
 
 const footerLinks = [
   { title: "About", link: "#" },
@@ -63,7 +63,7 @@ export default function RootFooter() {
         <div className="flex flex-col justify-center items-center space-y-8">
           <Link href="/">
             <Image
-              src={ClinicEzLogo}
+              src={ClinicEZLogo}
               width={120}
               height={120}
               alt="logo"
@@ -101,7 +101,7 @@ export default function RootFooter() {
 
           <p className="text-center text-sm text-gray-600">
             <span>&copy; Copyright {fullYear} </span>
-            <span>Nextstep Software Solutions Inc.</span>, All rights reserved.
+            <span>Nextstep Software Corporation</span>, All rights reserved.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center items-center pt-4">

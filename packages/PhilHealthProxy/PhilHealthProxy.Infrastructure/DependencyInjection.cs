@@ -38,7 +38,7 @@ public static class DependencyInjection
         services.AddSingleton<IPhilHealthTokenCache, PhilHealthTokenCache>();
 
         services.AddDataProtection()
-            .SetApplicationName("CLINICEZ.PhilHealthProxy");
+            .SetApplicationName("Clinic EZ.PhilHealthProxy");
 
         if (env is not null && env.IsDevelopment())
         {

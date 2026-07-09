@@ -1,4 +1,4 @@
-using CLINICEZ.Shared.Exceptions;
+using Clinic EZ.Shared.Exceptions;
 using MediatR;
 using PatientAppBE.Domain.Entities;
 using PatientAppBE.Domain.Interfaces;

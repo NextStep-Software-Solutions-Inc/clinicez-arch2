@@ -22,7 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PatientAppBE.Infrastructure\PatientAppBE.Infrastructure.csproj" />
-    <ProjectReference Include="..\..\CLINICEZ.Shared\CLINICEZ.Shared.csproj" />
+    <ProjectReference Include="..\..\Clinic EZ.Shared\Clinic EZ.Shared.csproj" />
   </ItemGroup>
 
 </Project>

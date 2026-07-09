@@ -388,7 +388,7 @@ export async function seedMockNotifications(patientId: string): Promise<void> {
           type: 'clinic_announcement' as const,
           category: 'clinic',
           title: 'Clinic Maintenance Notice',
-          body: 'ClinicEZ Marikina will be closed on Jun 17 for scheduled maintenance.',
+          body: 'Clinic EZ Marikina will be closed on Jun 17 for scheduled maintenance.',
         },
       },
       // ── Messages ──────────────────────────────────────────────────────────────
@@ -420,7 +420,7 @@ export async function seedMockNotifications(patientId: string): Promise<void> {
           type: 'system' as const,
           category: 'system',
           title: 'App Updated',
-          body: "ClinicEZ has been updated to version 2.1. Check out what's new.",
+          body: "Clinic EZ has been updated to version 2.1. Check out what's new.",
         },
       },
       {
@@ -429,7 +429,7 @@ export async function seedMockNotifications(patientId: string): Promise<void> {
         payload: {
           type: 'system' as const,
           category: 'system',
-          title: 'Welcome to ClinicEZ',
+          title: 'Welcome to Clinic EZ',
           body: 'Your account is set up. Start by connecting to a clinic near you.',
         },
       },

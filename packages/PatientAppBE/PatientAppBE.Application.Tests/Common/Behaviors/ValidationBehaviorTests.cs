@@ -56,7 +56,7 @@ public sealed class ValidationBehaviorTests
             await behavior.Handle(new ValidatableRequest(""), next, CancellationToken.None);
 
         // Assert
-        var assertion = await act.Should().ThrowAsync<CLINICEZ.Shared.Exceptions.ValidationException>();
+        var assertion = await act.Should().ThrowAsync<Clinic EZ.Shared.Exceptions.ValidationException>();
         assertion.Which.Errors.Should().ContainKey("Name");
     }
 

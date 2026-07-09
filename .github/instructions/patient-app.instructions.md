@@ -1,5 +1,5 @@
 ---
-description: "Always-on rules for the ClinicEZ Patient App (Expo/React Native). Covers component conventions, file placement, DB patterns, and styling. Applied automatically to all files in packages/patient-app/."
+description: "Always-on rules for the Clinic EZ Patient App (Expo/React Native). Covers component conventions, file placement, DB patterns, and styling. Applied automatically to all files in packages/patient-app/."
 applyTo: "packages/patient-app/**"
 ---
 ## Component Rules

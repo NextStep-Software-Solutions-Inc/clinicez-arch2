@@ -7,7 +7,7 @@ import Suspend from "@/components/Suspend"
 
 export const metadata: Metadata = {
   title: "Healthcare Providers | Clinic EZ V2",
-  description: "ClinicEZ has multiple connections to healthcare providers, allowing for seamless integration and management of healthcare operations.",
+  description: "Clinic EZ has multiple connections to healthcare providers, allowing for seamless integration and management of healthcare operations.",
 }
 
 // Healthcare provider page

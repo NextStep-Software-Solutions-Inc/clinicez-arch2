@@ -1,4 +1,4 @@
-using CLINICEZ.Shared.Middlewares;
+using Clinic EZ.Shared.Middlewares;
 using MainPortalBE.Api.Extensions;
 namespace MainPortalBE.Api;
 

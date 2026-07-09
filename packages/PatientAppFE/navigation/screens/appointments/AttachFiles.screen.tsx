@@ -162,7 +162,7 @@ export default function AttachFilesScreen({ route }: Props) {
                     <ThemedText style={styles.emptyIcon}>📂</ThemedText>
                     <ThemedText style={styles.emptyTitle}>No files yet</ThemedText>
                     <ThemedText style={[styles.emptySubtitle, { color: colors.text }]}>
-                        Upload files to your ClinicEZ storage first, then you can attach them to appointments.
+                        Upload files to your Clinic EZ storage first, then you can attach them to appointments.
                     </ThemedText>
                     <Pressable
                         onPress={handleUploadNew}

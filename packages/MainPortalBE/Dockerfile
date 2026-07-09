@@ -7,7 +7,7 @@ COPY ["Portal/MainPortalBE.Api/MainPortalBE.Api.csproj", "Portal/MainPortalBE.Ap
 COPY ["Portal/MainPortalBE.Application/MainPortalBE.Application.csproj", "Portal/MainPortalBE.Application/"]
 COPY ["Portal/MainPortalBE.Domain/MainPortalBE.Domain.csproj", "Portal/MainPortalBE.Domain/"]
 COPY ["Portal/MainPortalBE.Infrastructure/MainPortalBE.Infrastructure.csproj", "Portal/MainPortalBE.Infrastructure/"]
-COPY ["CLINICEZ.Shared/CLINICEZ.Shared.csproj", "CLINICEZ.Shared/"]
+COPY ["Clinic EZ.Shared/Clinic EZ.Shared.csproj", "Clinic EZ.Shared/"]
 
 RUN dotnet restore "Portal/MainPortalBE.Api/MainPortalBE.Api.csproj"
 

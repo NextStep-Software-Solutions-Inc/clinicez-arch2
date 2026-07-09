@@ -1,4 +1,4 @@
-using CLINICEZ.Shared.Exceptions;
+using Clinic EZ.Shared.Exceptions;
 using FluentAssertions;
 using NSubstitute;
 using PhilHealthProxy.Application.Features.UploadStatus.Queries.CheckUploadStatus;

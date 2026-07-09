@@ -66,7 +66,7 @@ export default function ExternalOpenConsentScreen({ route }: FilesScreenProps<'E
             ios: <SFSymbol name="exclamationmark.triangle.fill" size={15} color="#D97706" />,
           })}
           <ThemedText style={[styles.noteText, { color: dark ? '#FDE68A' : '#92400E' }]}>
-            Shared files may be stored outside ClinicEZ. Share only with trusted apps.
+            Shared files may be stored outside Clinic EZ. Share only with trusted apps.
           </ThemedText>
         </View>
 

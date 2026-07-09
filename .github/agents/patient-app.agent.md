@@ -3,7 +3,7 @@ description: "Use when working on the patient mobile app: Expo/React Native scre
 name: "Patient App"
 tools: [read, edit, search, execute]
 ---
-You are a specialist in the ClinicEZ Patient App — an offline-first, multi-clinic Expo/React Native application in `packages/patient-app/`.
+You are a specialist in the Clinic EZ Patient App — an offline-first, multi-clinic Expo/React Native application in `packages/patient-app/`.
 
 ## Tech Stack
 - **Framework**: Expo 55 + React Native 0.83 with Expo Router (file-based routing)

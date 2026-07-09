@@ -33,7 +33,7 @@ export const products: Product[] = [
         options: [
             {
                 id: "patient-android",
-                url: "https://play.google.com/store/apps/details?id=com.clinicez.patient",
+                url: "https://play.google.com/store/apps/details?id=com.Clinic EZ.patient",
                 label: "Android",
                 icon: "smartphone",
                 version: "v2.3.1",
@@ -44,7 +44,7 @@ export const products: Product[] = [
             },
             {
                 id: "patient-ios",
-                url: "https://apps.apple.com/ph/app/clinicez-patient/id6478954321",
+                url: "https://apps.apple.com/ph/app/Clinic EZ-patient/id6478954321",
                 label: "iOS",
                 icon: "apple",
                 version: "v2.3.1",
@@ -65,7 +65,7 @@ export const products: Product[] = [
         options: [
             {
                 id: "clinic-android",
-                url: "https://play.google.com/store/apps/details?id=com.clinicez.clinic",
+                url: "https://play.google.com/store/apps/details?id=com.Clinic EZ.clinic",
                 label: "Android",
                 icon: "smartphone",
                 version: "v1.8.0",
@@ -76,7 +76,7 @@ export const products: Product[] = [
             },
             {
                 id: "clinic-ios",
-                url: "https://apps.apple.com/ph/app/clinicez-clinic/id6478954322",
+                url: "https://apps.apple.com/ph/app/Clinic EZ-clinic/id6478954322",
                 label: "iOS",
                 icon: "apple",
                 version: "v1.8.0",
@@ -97,7 +97,7 @@ export const products: Product[] = [
         options: [
             {
                 id: "server-docker",
-                url: "/downloads/clinicez-backend-v4.0.2.zip",
+                url: "/downloads/Clinic EZ-backend-v4.0.2.zip",
                 label: "Docker Container",
                 icon: "package",
                 version: "v4.0.2",
@@ -111,7 +111,7 @@ export const products: Product[] = [
 ];
 
 export const installationManual = {
-    url: "/downloads/clinicez-installation-manual.pdf",
+    url: "/downloads/Clinic EZ-installation-manual.pdf",
     title: "Installation Manual",
     description: "Comprehensive setup guide for all platforms",
     version: "v2.1",

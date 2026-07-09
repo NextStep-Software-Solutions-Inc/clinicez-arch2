@@ -1,4 +1,4 @@
-using CLINICEZ.Shared.Interfaces;
+using Clinic EZ.Shared.Interfaces;
 using Hangfire;
 using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Authentication.JwtBearer;

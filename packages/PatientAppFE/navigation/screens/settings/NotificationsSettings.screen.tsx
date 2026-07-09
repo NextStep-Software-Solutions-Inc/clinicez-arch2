@@ -127,7 +127,7 @@ export default function NotificationsSettingsScreen() {
   const handleSendTestNotification = async () => {
     await scheduleLocalNotification(
       'Test Notification',
-      'This is a test notification from ClinicEZ. 🎉',
+      'This is a test notification from Clinic EZ. 🎉',
       { type: 'system', category: 'system' },
     );
   };

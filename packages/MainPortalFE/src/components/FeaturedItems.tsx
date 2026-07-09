@@ -71,8 +71,8 @@ const topFeatures: Record<string, FeaturedItemProps[]> = {
       },
     },
     {
-      title: "Interested in ClinicEZ?",
-      description: "Schedule a personalized demo to see how ClinicEZ can streamline your healthcare operations.",
+      title: "Interested in Clinic EZ?",
+      description: "Schedule a personalized demo to see how Clinic EZ can streamline your healthcare operations.",
       input: {
         type: "email",
         placeholder: "Enter your email address",

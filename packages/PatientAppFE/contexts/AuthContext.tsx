@@ -233,7 +233,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const authenticateWithBiometrics = async (): Promise<'success' | 'fallback' | 'error'> => {
     try {
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Unlock ClinicEZ',
+        promptMessage: 'Unlock Clinic EZ',
         fallbackLabel: 'Use PIN',
         disableDeviceFallback: true,
       });

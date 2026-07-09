@@ -22,12 +22,12 @@ export async function generateMetadata({ params }: ProductDetailsPageProps) {
 
     if (!productDetails) {
         return {
-            title: "Product Not Found - ClinicEZ",
+            title: "Product Not Found - Clinic EZ",
         };
     }
 
     return {
-        title: `${productDetails.title} - ClinicEZ`,
+        title: `${productDetails.title} - Clinic EZ`,
         description: productDetails.description,
     };
 }

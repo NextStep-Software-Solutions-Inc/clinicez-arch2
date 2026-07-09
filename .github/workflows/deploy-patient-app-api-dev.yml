@@ -7,7 +7,7 @@ on:
       - patient-app-be/feature/init
     paths:
       - 'packages/PatientAppBE/**'
-      - 'packages/CLINICEZ.Shared/**'
+      - 'packages/Clinic EZ.Shared/**'
       - '.github/workflows/deploy-patient-app-api-dev.yml'
   workflow_dispatch:
     inputs:
@@ -21,7 +21,7 @@ env:
   IMAGE_NAME: patientapp-api
   IMAGE_TAG: dev
   CONTAINER_NAME: patientapp-api
-  DEPLOY_DIR: /opt/clinicez/patientapp
+  DEPLOY_DIR: /opt/Clinic EZ/patientapp
   ENVIRONMENT: Development
 
 jobs:

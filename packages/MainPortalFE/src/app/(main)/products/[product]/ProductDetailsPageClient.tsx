@@ -311,7 +311,7 @@ export function ProductDetailsPageClient({ product }: ProductDetailsPageClientPr
                                             <div className="space-y-2">
                                                 <h5 className="font-medium">Contact Support</h5>
                                                 <div className="space-y-1 text-sm text-muted-foreground">
-                                                    <p>📧 support@clinicez.com</p>
+                                                    <p>📧 support@clinicez.net</p>
                                                     <p>📞 +1 (555) 123-4567</p>
                                                     <p>💬 Live Chat Available</p>
                                                 </div>

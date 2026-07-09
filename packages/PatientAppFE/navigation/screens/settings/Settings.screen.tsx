@@ -173,7 +173,7 @@ export default function SettingsScreen() {
       {/* About */}
       <SettingsSection title="About">
         <SettingsRow
-          title="About ClinicEZ"
+          title="About Clinic EZ"
           icon={{ android: 'info', ios: 'info.circle.fill' }}
           iconColor="#6B7280"
           right={{ type: 'chevron' }}

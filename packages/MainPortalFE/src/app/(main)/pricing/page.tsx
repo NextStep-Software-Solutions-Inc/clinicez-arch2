@@ -6,7 +6,7 @@ import FeaturedItems from "@/components/FeaturedItems"
 
 export const metadata: Metadata = {
   title: "Pricing | Clinic EZ V2",
-  description: "ClinicEZ offers competitive pricing plans for healthcare providers, ensuring value and quality.",
+  description: "Clinic EZ offers competitive pricing plans for healthcare providers, ensuring value and quality.",
 }
 
 export default function PricingPage() {

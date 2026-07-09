@@ -1,6 +1,6 @@
 # API Integration & Architecture Guide
 
-This guide establishes the **Predictable Service Layer Pattern** to be used across the ClinicEZ mobile application. It ensures an enterprise-grade, highly maintainable, and strictly separated architecture.
+This guide establishes the **Predictable Service Layer Pattern** to be used across the Clinic EZ mobile application. It ensures an enterprise-grade, highly maintainable, and strictly separated architecture.
 
 ## 1. 100% Separation of Concerns
 

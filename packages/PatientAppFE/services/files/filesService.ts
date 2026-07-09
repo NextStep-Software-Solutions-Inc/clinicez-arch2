@@ -30,8 +30,8 @@ import {
   SyncPendingFilesResult,
 } from './types';
 
-const FILES_DIR = 'clinicez-files';
-const PREVIEW_DIR = 'clinicez-file-previews';
+const FILES_DIR = 'Clinic EZ-files';
+const PREVIEW_DIR = 'Clinic EZ-file-previews';
 const DEFAULT_NATIVE_PREVIEW_EXTENSIONS = ['jpg', 'jpeg', 'png', 'heic', 'webp', 'pdf'];
 
 const DEFAULT_FILE_TYPES: DocumentTypeResponse[] = [
@@ -202,7 +202,7 @@ function extensionFromMime(mimeType: string) {
   if (mimeType.includes('video/quicktime')) return 'mov';
   if (mimeType.includes('audio/mpeg')) return 'mp3';
   if (mimeType.includes('audio/wav')) return 'wav';
-  
+
   // Fallback to the subtype, e.g., "application/zip" -> "zip", "text/csv" -> "csv"
   const subtype = mimeType.split('/')[1];
   if (subtype && !subtype.includes('.') && !subtype.includes('+') && !subtype.includes('-')) {
@@ -275,7 +275,7 @@ async function getLocalTotalStorageBytes(patientId: string) {
         isNull(filesMetadata.deletedAt)
       )
     );
-  
+
   return files.reduce((acc, f) => acc + (f.encryptedSizeBytes ?? 0), 0);
 }
 
@@ -305,9 +305,9 @@ export async function refreshDocumentTypes(patientId: string, getToken?: () => P
   }
 
   await upsertDocumentTypes(configResponse?.documentTypes?.length ? configResponse.documentTypes : DEFAULT_FILE_TYPES);
-  
+
   const configValue = toConfigValue(patientId, configResponse);
-  
+
   await db
     .insert(fileUploadConfig)
     .values(configValue)
@@ -327,7 +327,7 @@ export async function getFileConfig(patientId: string, getToken?: () => Promise<
 
   // Use the local SQLite database as the source of truth for storage used
   const localUsedBytes = await getLocalTotalStorageBytes(patientId);
-  
+
   return { ...value, usedStorageBytes: localUsedBytes };
 }
 
@@ -613,7 +613,7 @@ export async function moveItem(
     .where(and(eq(filesMetadata.patientId, patientId), eq(filesMetadata.id, itemId)))
     .limit(1);
   if (!file) return;
-    const op = file.syncOperation === 'insert' && !file.serverId ? 'insert' : 'update';
+  const op = file.syncOperation === 'insert' && !file.serverId ? 'insert' : 'update';
 
   await db
     .update(filesMetadata)
@@ -735,7 +735,7 @@ export async function importFiles(input: ImportFilesInput) {
     const sourceName = makeUniqueName(requestedName);
     let extension = normalizeExtension(source.extension || extensionFromName(sourceName));
     const mimeType = picked.mimeType ?? source.type ?? mimeFromExtension(extension);
-    
+
     if (!extension && mimeType) {
       extension = extensionFromMime(mimeType);
     }
@@ -799,7 +799,7 @@ export async function getFileById(patientId: string, fileId: string) {
 }
 
 export async function preparePreviewFile(
-  patientId: string, 
+  patientId: string,
   fileId: string,
   getToken?: () => Promise<string | null>
 ): Promise<PreparedPreviewFile> {
@@ -811,17 +811,17 @@ export async function preparePreviewFile(
     if (!hasFileApi() || !getToken) {
       throw new Error('This file is not available offline yet, and you are currently offline.');
     }
-    
+
     // Fetch S3 download URL
     const { downloadUrl } = await getFileDownloadUrl(patientId, fileId, getToken);
-    
+
     const storageDir = getPatientFilesDir(patientId);
     ensureDirectory(storageDir);
     const encryptedFile = new File(storageDir, `${fileId}.enc`);
-    
+
     // Download the file from S3 to local storage using the classic FileSystem API
     const result = await FileSystemLegacy.downloadAsync(downloadUrl, encryptedFile.uri);
-    
+
     if (result.status < 200 || result.status >= 300) {
       throw new Error(`Failed to download file: HTTP ${result.status}`);
     }
@@ -830,7 +830,7 @@ export async function preparePreviewFile(
     await db.update(filesMetadata)
       .set({ localEncryptedPath: encryptedFile.uri })
       .where(eq(filesMetadata.id, fileId));
-      
+
     file.localEncryptedPath = encryptedFile.uri;
   }
 
@@ -838,24 +838,24 @@ export async function preparePreviewFile(
   // First, check if we have it natively stored in SecureStore (for files we uploaded)
   let key: Crypto.AESEncryptionKey;
   const encodedKey = await SecureStore.getItemAsync(keyName(patientId, fileId));
-  
+
   if (encodedKey) {
     key = await Crypto.AESEncryptionKey.import(encodedKey, 'base64');
   } else if (file.serverWrappedKeyJson) {
     // If not, it was synced from another device. We need to unwrap the key using our MAK.
     const makEncoded = await SecureStore.getItemAsync(`${'patient_mak_key'}_${patientId}`);
     if (!makEncoded) throw new Error('Master Access Key (MAK) missing. Please restart the app or setup your File Recovery Key.');
-    
+
     const mak = await Crypto.AESEncryptionKey.import(makEncoded, 'base64');
-    
+
     const parsed = JSON.parse(file.serverWrappedKeyJson);
     const combinedBytes = new Uint8Array(Buffer.from(parsed.cipherText, 'base64'));
     const keySealed = Crypto.AESSealedData.fromCombined(combinedBytes, { ivLength: 12, tagLength: 16 });
-    
+
     // Decrypt the file's individual key using the MAK
     const fileKeyEncoded = await Crypto.aesDecryptAsync(keySealed, mak, { output: 'base64' });
     key = await Crypto.AESEncryptionKey.import(fileKeyEncoded, 'base64');
-    
+
     // Cache it locally so we don't have to unwrap it next time
     await SecureStore.setItemAsync(keyName(patientId, fileId), fileKeyEncoded);
   } else {
@@ -928,7 +928,7 @@ export async function syncPendingFiles(
   // Downstream sync
   try {
     const { folders, files } = await fetchFiles(patientId, getToken);
-    
+
     for (const remoteFolder of folders) {
       try {
         if (remoteFolder.isDeleted) {
@@ -937,7 +937,7 @@ export async function syncPendingFiles(
         }
 
         const existing = await getFolder(patientId, remoteFolder.id);
-        
+
         const row = {
           id: remoteFolder.id,
           patientId,
@@ -949,7 +949,7 @@ export async function syncPendingFiles(
           updatedAt: new Date(remoteFolder.updatedAt ?? remoteFolder.createdAt),
           serverId: remoteFolder.id,
         };
-        
+
         if (!existing) {
           await db.insert(fileFolders).values(row);
           synced++;
@@ -985,7 +985,7 @@ export async function syncPendingFiles(
         }
 
         const [existing] = await db.select().from(filesMetadata).where(eq(filesMetadata.id, remoteFile.id)).limit(1);
-        
+
         if (!existing) {
           await db.insert(filesMetadata).values({
             id: remoteFile.id,
@@ -1016,31 +1016,31 @@ export async function syncPendingFiles(
           });
           synced++;
         } else if (
-          existing.name !== remoteFile.fileName || 
+          existing.name !== remoteFile.fileName ||
           existing.folderId !== (remoteFile.folderId ?? null) ||
           existing.deletedAt !== null
         ) {
-           // Protect local pending changes from being overwritten by downstream pull
-           if (existing.syncStatus === 'queued' || existing.syncStatus === 'failed' || existing.syncStatus === 'syncing') {
-             continue;
-           }
-           // Protect against eventual consistency: don't overwrite if local is newer
-           if (existing.updatedAt && existing.updatedAt.getTime() > new Date(remoteFile.updatedAt).getTime()) {
-             continue;
-           }
-           await db.update(filesMetadata).set({
-             name: remoteFile.fileName,
-             folderId: remoteFile.folderId ?? null,
-             deletedAt: null,
-             syncStatus: 'synced',
-           }).where(eq(filesMetadata.id, remoteFile.id));
-           synced++;
+          // Protect local pending changes from being overwritten by downstream pull
+          if (existing.syncStatus === 'queued' || existing.syncStatus === 'failed' || existing.syncStatus === 'syncing') {
+            continue;
+          }
+          // Protect against eventual consistency: don't overwrite if local is newer
+          if (existing.updatedAt && existing.updatedAt.getTime() > new Date(remoteFile.updatedAt).getTime()) {
+            continue;
+          }
+          await db.update(filesMetadata).set({
+            name: remoteFile.fileName,
+            folderId: remoteFile.folderId ?? null,
+            deletedAt: null,
+            syncStatus: 'synced',
+          }).where(eq(filesMetadata.id, remoteFile.id));
+          synced++;
         }
       } catch (err) {
         console.warn(`Failed to downstream sync file ${remoteFile.id}`, err);
       }
     }
-    
+
     if (synced > 0) {
       mutate((key: any) => Array.isArray(key) && key[0] === 'files-browser');
     }
@@ -1055,7 +1055,7 @@ export async function syncPendingFiles(
     .where(
       and(
         eq(fileFolders.patientId, patientId),
-        retryFailed 
+        retryFailed
           ? or(eq(fileFolders.syncStatus, 'queued'), eq(fileFolders.syncStatus, 'failed'))
           : eq(fileFolders.syncStatus, 'queued'),
       ),
@@ -1067,80 +1067,80 @@ export async function syncPendingFiles(
     .where(
       and(
         eq(filesMetadata.patientId, patientId),
-        retryFailed 
+        retryFailed
           ? or(eq(filesMetadata.syncStatus, 'queued'), eq(filesMetadata.syncStatus, 'failed'))
           : eq(filesMetadata.syncStatus, 'queued'),
       ),
     );
 
   const syncRequests: SyncItemRequest[] = [];
-  
+
   for (const folder of pendingFolders) {
-     const rawOp = folder.syncOperation === 'insert' && folder.serverId ? 'update' : folder.syncOperation;
-     syncRequests.push({
-        idempotencyKey: Crypto.randomUUID(),
-        entityType: 'file_folder',
-        operation: rawOp === 'insert' ? 'create' : rawOp,
-        clientTimestamp: (folder.updatedAt ?? new Date()).toISOString(),
-        entityId: folder.id,
-        payloadJson: JSON.stringify({
-            clientId: Crypto.randomUUID(),
-            parentId: folder.parentId,
-            name: folder.name,
-            updatedAt: (folder.updatedAt ?? new Date()).toISOString()
-        })
-     });
+    const rawOp = folder.syncOperation === 'insert' && folder.serverId ? 'update' : folder.syncOperation;
+    syncRequests.push({
+      idempotencyKey: Crypto.randomUUID(),
+      entityType: 'file_folder',
+      operation: rawOp === 'insert' ? 'create' : rawOp,
+      clientTimestamp: (folder.updatedAt ?? new Date()).toISOString(),
+      entityId: folder.id,
+      payloadJson: JSON.stringify({
+        clientId: Crypto.randomUUID(),
+        parentId: folder.parentId,
+        name: folder.name,
+        updatedAt: (folder.updatedAt ?? new Date()).toISOString()
+      })
+    });
   }
 
   const uploadIntentFiles = [];
 
   for (const file of pendingFiles) {
-     if (file.syncOperation === 'insert' && !file.serverId) {
-         uploadIntentFiles.push(file);
-     } else {
-         const op = file.syncOperation === 'insert' && file.serverId ? 'update' : file.syncOperation;
-         syncRequests.push({
-            idempotencyKey: Crypto.randomUUID(),
-            entityType: 'file',
-            operation: op,
-            clientTimestamp: (file.updatedAt ?? new Date()).toISOString(),
-            entityId: file.id,
-            payloadJson: JSON.stringify({
-                clientId: Crypto.randomUUID(),
-                folderId: file.folderId,
-                fileName: file.name,
-                updatedAt: (file.updatedAt ?? new Date()).toISOString()
-            })
-         });
-     }
+    if (file.syncOperation === 'insert' && !file.serverId) {
+      uploadIntentFiles.push(file);
+    } else {
+      const op = file.syncOperation === 'insert' && file.serverId ? 'update' : file.syncOperation;
+      syncRequests.push({
+        idempotencyKey: Crypto.randomUUID(),
+        entityType: 'file',
+        operation: op,
+        clientTimestamp: (file.updatedAt ?? new Date()).toISOString(),
+        entityId: file.id,
+        payloadJson: JSON.stringify({
+          clientId: Crypto.randomUUID(),
+          folderId: file.folderId,
+          fileName: file.name,
+          updatedAt: (file.updatedAt ?? new Date()).toISOString()
+        })
+      });
+    }
   }
 
   // Send Bulk Sync for Metadata and Deletes
   if (syncRequests.length > 0) {
-      try {
-          await pushSyncPayload(getToken, patientId, syncRequests);
-          
-          for (const folder of pendingFolders) {
-              await db.update(fileFolders).set({ syncStatus: 'synced', syncError: null }).where(eq(fileFolders.id, folder.id));
-          }
+    try {
+      await pushSyncPayload(getToken, patientId, syncRequests);
 
-          for (const file of pendingFiles) {
-              // If it's an insert without a serverId, it's a binary upload (handled below)
-              if (file.syncOperation === 'insert' && !file.serverId) {
-                  continue;
-              }
-              
-              if (file.syncOperation === 'delete') {
-                  await cleanupPreviewCache(patientId, file.id);
-              }
-              await db.update(filesMetadata).set({ syncStatus: 'synced', syncError: null }).where(eq(filesMetadata.id, file.id));
-          }
-          synced += syncRequests.length;
-          mutate((key: any) => Array.isArray(key) && key[0] === 'files-browser');
-      } catch (err) {
-          failed += syncRequests.length;
-          console.warn("Bulk sync push failed", err);
+      for (const folder of pendingFolders) {
+        await db.update(fileFolders).set({ syncStatus: 'synced', syncError: null }).where(eq(fileFolders.id, folder.id));
       }
+
+      for (const file of pendingFiles) {
+        // If it's an insert without a serverId, it's a binary upload (handled below)
+        if (file.syncOperation === 'insert' && !file.serverId) {
+          continue;
+        }
+
+        if (file.syncOperation === 'delete') {
+          await cleanupPreviewCache(patientId, file.id);
+        }
+        await db.update(filesMetadata).set({ syncStatus: 'synced', syncError: null }).where(eq(filesMetadata.id, file.id));
+      }
+      synced += syncRequests.length;
+      mutate((key: any) => Array.isArray(key) && key[0] === 'files-browser');
+    } catch (err) {
+      failed += syncRequests.length;
+      console.warn("Bulk sync push failed", err);
+    }
   }
 
   for (const file of uploadIntentFiles) {
@@ -1198,8 +1198,8 @@ export async function syncPendingFiles(
       }
 
       const complete = await completeUpload(patientId, getToken, {
-          fileId: intent.fileId
-        });
+        fileId: intent.fileId
+      });
 
       await db
         .update(filesMetadata)

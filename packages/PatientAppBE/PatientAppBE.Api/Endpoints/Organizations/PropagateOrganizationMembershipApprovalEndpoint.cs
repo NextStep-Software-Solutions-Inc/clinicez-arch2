@@ -1,4 +1,4 @@
-using CLINICEZ.Shared.Common;
+using Clinic EZ.Shared.Common;
 using MediatR;
 using PatientAppBE.Api.Abstractions;
 using PatientAppBE.Application.Features.Organizations.Commands.PropagateOrganizationMembershipApproval;

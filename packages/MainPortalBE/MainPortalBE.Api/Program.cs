@@ -71,7 +71,7 @@ bool isDevelopment = app.Environment.IsDevelopment();
 if (isDevelopment)
 {
     app.MapOpenApi();
-    app.MapScalarApiReference(opts => opts.WithTitle("ClinicEZ Main Portal API"));
+    app.MapScalarApiReference(opts => opts.WithTitle("Clinic EZ Main Portal API"));
 }
 
 // 4. Add middleware

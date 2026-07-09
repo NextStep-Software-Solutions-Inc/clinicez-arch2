@@ -1,5 +1,5 @@
 using System.Globalization;
-using CLINICEZ.Shared.Interfaces;
+using Clinic EZ.Shared.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using PatientAppBE.Application.Common.Interfaces;

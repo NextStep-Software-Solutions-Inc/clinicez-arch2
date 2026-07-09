@@ -1,6 +1,6 @@
-# ClinicEZ Architecture
+# Clinic EZ Architecture
 
-Welcome to the **ClinicEZ** monorepo! This repository houses the entire next-generation architecture for the ClinicEZ platform, providing a seamless, multi-tenant solution for modern clinics.
+Welcome to the **Clinic EZ** monorepo! This repository houses the entire next-generation architecture for the Clinic EZ platform, providing a seamless, multi-tenant solution for modern clinics.
 
 ## ?? Platform Ecosystem
 
@@ -12,7 +12,7 @@ The mobile application designed specifically for patients. Built with Expo and R
 - Synced automatically with the backend when online.
 
 ### 2. MainPortalFE (Web Portal & Marketing)
-The official ClinicEZ website and web portal, built using **Next.js 16** (with Turbopack) and **Bun**. 
+The official Clinic EZ website and web portal, built using **Next.js 16** (with Turbopack) and **Bun**. 
 - Serves as the landing page and marketing site.
 - Handles tenant onboarding, clinic registration, and administration.
 - Provides a unified web experience across desktop and mobile browsers.
@@ -64,4 +64,4 @@ npx expo start
 2. **Containerized Tenancy**: Every clinic can have its own isolated containerized backend (PatientAppBE), providing flexibility and security for on-premise or cloud deployments.
 3. **Centralized Administration**: Clinics register and manage their infrastructure through the MainPortalFE, which is powered by MainPortalBE.
 
-*This unified codebase guarantees consistent types, shared libraries (via CLINICEZ.Shared), and a powerful developer experience.*
+*This unified codebase guarantees consistent types, shared libraries (via Clinic EZ.Shared), and a powerful developer experience.*

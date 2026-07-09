@@ -147,11 +147,11 @@ export function ProductsPageClient() {
                         Need Help Getting Started?
                     </h3>
                     <p className="text-muted-foreground mb-6 max-w-2xl mx-auto">
-                        Our support team is ready to help you set up and configure ClinicEZ for your healthcare practice.
+                        Our support team is ready to help you set up and configure Clinic EZ for your healthcare practice.
                         Get expert assistance with installation, training, and customization.
                     </p>
                     <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
-                        <span>📧 support@clinicez.com</span>
+                        <span>📧 support@clinicez.net</span>
                         <span>•</span>
                         <span>📞 +1 (555) 123-4567</span>
                         <span>•</span>
