@@ -36,7 +36,7 @@ public sealed class GetFilesQueryHandler : IRequestHandler<GetFilesQuery, GetFil
                 f.ParentId,
                 f.Name,
                 f.CreatedAt,
-                f.IsDeleted ? f.DeletedAt : f.UpdatedAt,
+                f.IsDeleted ? f.DeletedAt : (f.UpdatedAt ?? f.CreatedAt),
                 f.IsDeleted)) // Pass DeletedAt if IsDeleted so client knows it changed
             .ToList();
 
@@ -59,7 +59,7 @@ public sealed class GetFilesQueryHandler : IRequestHandler<GetFilesQuery, GetFil
                 f.EncryptedHash,
                 f.WrappedKeyJson,
                 f.CreatedAt,
-                f.IsDeleted ? f.DeletedAt : f.UpdatedAt,
+                f.IsDeleted ? f.DeletedAt : (f.UpdatedAt ?? f.CreatedAt),
                 f.IsDeleted))
             .ToList();
 
