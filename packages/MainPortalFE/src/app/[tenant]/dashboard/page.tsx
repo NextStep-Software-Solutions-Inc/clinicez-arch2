@@ -1,25 +1,11 @@
 import { redirect } from "next/navigation";
 
-// Replace this with your real tenant check logic
-function hasTenant() {
-    // TODO: Replace with actual tenant check (e.g. from session, API, etc.)
-    return true;
-}
-
-export default function TenantDashboardEntry() {
-    if (typeof window !== "undefined") {
-        // Client-side redirect
-        if (hasTenant()) {
-            redirect("/tenants/dashboard/overview");
-        } else {
-            redirect("/tenants/register");
-        }
-        return null;
-    }
-    // SSR fallback (Next.js will handle redirect on server)
-    if (hasTenant()) {
-        redirect("/tenants/dashboard/overview");
-    } else {
-        redirect("/tenants/register");
-    }
+export default async function TenantDashboardEntry({ params }: { params: Promise<{ tenant: string }> }) {
+    const { tenant } = await params;
+    
+    // In a real application, you might verify if this tenant exists 
+    // or if the user has access to it here.
+    
+    // Redirect to the overview page by default
+    redirect(`/${tenant}/dashboard/overview`);
 }

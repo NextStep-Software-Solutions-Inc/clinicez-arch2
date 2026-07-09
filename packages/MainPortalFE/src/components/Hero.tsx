@@ -40,7 +40,7 @@ const heroFeaturedItems: Record<string, HeroFeaturedProps> = {
       },
       {
         text: "Watch free demo",
-        href: "https://www.youtube.com/@ClinicEZ",
+        href: "https://www.youtube.com/@Clinic EZ",
         icon: <FaCirclePlay fill="hsl(var(--primary)" size={24} />,
         variant: "outline",
       },
@@ -58,7 +58,7 @@ const heroFeaturedItems: Record<string, HeroFeaturedProps> = {
       },
       {
         text: "Watch free demo",
-        href: "https://www.youtube.com/@ClinicEZ",
+        href: "https://www.youtube.com/@Clinic EZ",
         variant: "outline",
       },
     ],

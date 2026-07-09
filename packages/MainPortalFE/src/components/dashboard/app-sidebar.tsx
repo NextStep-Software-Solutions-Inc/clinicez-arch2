@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useParams } from "next/navigation"
 import {
   IconBuilding,
   IconCreditCard,
@@ -25,54 +26,57 @@ import {
 } from "@/components/ui/sidebar"
 import { NavSecondary } from "./nav-secondary"
 
-const data = {
-  user: {
-    name: "shadcn",
-    email: "m@example.com",
-    avatar: "/avatars/shadcn.jpg",
-  },
-  navMain: [
-    {
-      title: "Overview",
-      url: "/dashboard/overview",
-      icon: IconDashboard,
-    },
-    {
-      title: "Clinics",
-      url: "/dashboard/clinics",
-      icon: IconHospital,
-    },
-    {
-      title: "Organizations",
-      url: "/dashboard/organizations",
-      icon: IconBuilding,
-    },
-    {
-      title: "Laboratories",
-      url: "/dashboard/laboratories",
-      icon: IconTestPipe,
-    },
-    {
-      title: "Pharmacies",
-      url: "/dashboard/pharmacies",
-      icon: IconPill,
-    },
-  ],
-  navSecondary: [
-    {
-      title: "Settings",
-      url: "/dashboard/settings",
-      icon: IconSettings,
-    },
-    {
-      title: "Billing",
-      url: "/dashboard/billing",
-      icon: IconCreditCard,
-    },
-  ],
-}
-
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const params = useParams();
+  const tenant = params.tenant as string || "demo-tenant";
+
+  const data = {
+    user: {
+      name: "Dr. Admin",
+      email: "admin@clinicez.com",
+      avatar: "/avatars/shadcn.jpg",
+    },
+    navMain: [
+      {
+        title: "Overview",
+        url: `/${tenant}/dashboard/overview`,
+        icon: IconDashboard,
+      },
+      {
+        title: "Clinics",
+        url: `/${tenant}/dashboard/clinics`,
+        icon: IconHospital,
+      },
+      {
+        title: "Organizations",
+        url: `/${tenant}/dashboard/organizations`,
+        icon: IconBuilding,
+      },
+      {
+        title: "Laboratories",
+        url: `/${tenant}/dashboard/laboratories`,
+        icon: IconTestPipe,
+      },
+      {
+        title: "Pharmacies",
+        url: `/${tenant}/dashboard/pharmacies`,
+        icon: IconPill,
+      },
+    ],
+    navSecondary: [
+      {
+        title: "Settings",
+        url: `/${tenant}/dashboard/settings`,
+        icon: IconSettings,
+      },
+      {
+        title: "Billing",
+        url: `/${tenant}/dashboard/billing`,
+        icon: IconCreditCard,
+      },
+    ],
+  }
+
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader>
@@ -82,9 +86,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               asChild
               className="data-[slot=sidebar-menu-button]:!p-1.5"
             >
-              <a href="#">
-                <IconInnerShadowTop className="!size-5" />
-                <span className="text-base font-semibold">Acme Inc.</span>
+              <a href={`/${tenant}/dashboard`}>
+                <IconInnerShadowTop className="!size-5 text-primary" />
+                <span className="text-base font-bold text-foreground">Clinic EZ</span>
               </a>
             </SidebarMenuButton>
           </SidebarMenuItem>

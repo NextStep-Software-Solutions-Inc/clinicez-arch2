@@ -1,43 +1,33 @@
-import HeroFeatured from "@/components/Hero";
-import HeroBackground from "@/components/HeroBackground";
-import SecondaryBackgroundImage from "../../../../public/assets/secondary-background.png"
 import { Metadata } from "next";
-import { ContactUsForm } from "@/components/ContactUsForm";
+import { ContactUsClient } from "./_components/ContactUsClient";
 
 export const metadata: Metadata = {
-  title: "Contact Us | Clinic EZ V2",
-  description: "Get in touch with Clinic EZ for any inquiries, support, or feedback.",
-}
+  title: "Contact Us | Clinic EZ",
+  description: "Get in touch with the Clinic EZ team.",
+  keywords: ["contact Clinic EZ", "customer support", "healthcare software support", "sales inquiry"],
+  openGraph: {
+    title: "Contact Us | Clinic EZ",
+    description: "Get in touch with the Clinic EZ team.",
+    url: "https://clinicez.com/contact-us",
+    siteName: "Clinic EZ",
+    images: [
+      {
+        url: "https://clinicez.com/og-contact.png",
+        width: 1200,
+        height: 630,
+      }
+    ],
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Contact Us | Clinic EZ",
+    description: "Get in touch with the Clinic EZ team.",
+    images: ["https://clinicez.com/og-contact.png"],
+  },
+};
 
 export default function ContactUsPage() {
-  return (
-    <main>
-      <section className="flex items-center justify-center min-h-screen">
-        <HeroBackground path={SecondaryBackgroundImage} opacity={0.3} />
-        <div className="container mx-auto px-4 py-16">
-          <div className="max-w-6xl mx-auto">
-            {/* Mobile Layout */}
-            <div className="lg:hidden space-y-8">
-              <div className="max-w-lg mx-auto">
-                <HeroFeatured page="contact" />
-              </div>
-              <div className="max-w-lg mx-auto">
-                <ContactUsForm />
-              </div>
-            </div>
-
-            {/* Desktop Layout */}
-            <div className="hidden lg:grid lg:grid-cols-2 gap-12 items-center">
-              <div className="space-y-8">
-                <HeroFeatured page="contact" />
-              </div>
-              <div className="flex justify-center lg:justify-end">
-                <ContactUsForm />
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-    </main>
-  );
+  return <ContactUsClient />;
 }

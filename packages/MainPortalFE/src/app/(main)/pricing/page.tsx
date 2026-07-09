@@ -1,22 +1,33 @@
-import HeroBackground from "@/components/HeroBackground"
-import { Metadata } from "next"
-import MainBackgroundImage from "../../../../public/assets/main-background.png"
-import HeroFeatured from "@/components/Hero"
-import FeaturedItems from "@/components/FeaturedItems"
+import { Metadata } from "next";
+import { PricingClient } from "./_components/PricingClient";
 
 export const metadata: Metadata = {
-  title: "Pricing | Clinic EZ V2",
-  description: "Clinic EZ offers competitive pricing plans for healthcare providers, ensuring value and quality.",
-}
+  title: "Pricing | Clinic EZ",
+  description: "Simple, transparent pricing for healthcare management.",
+  keywords: ["pricing", "software cost", "healthcare IT cost", "Clinic EZ pricing", "EMR subscription"],
+  openGraph: {
+    title: "Pricing | Clinic EZ",
+    description: "Simple, transparent pricing for healthcare management.",
+    url: "https://clinicez.com/pricing",
+    siteName: "Clinic EZ",
+    images: [
+      {
+        url: "https://clinicez.com/og-pricing.png",
+        width: 1200,
+        height: 630,
+      }
+    ],
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Pricing | Clinic EZ",
+    description: "Simple, transparent pricing for healthcare management.",
+    images: ["https://clinicez.com/og-pricing.png"],
+  },
+};
 
 export default function PricingPage() {
-  return (
-    <main>
-      <section className="flex flex-col items-center justify-center min-h-screen">
-        <HeroBackground path={MainBackgroundImage} opacity={0.3} />
-        <HeroFeatured page="pricing" />
-      </section>
-      <FeaturedItems page="pricing" />
-    </main>
-  )
+  return <PricingClient />;
 }
