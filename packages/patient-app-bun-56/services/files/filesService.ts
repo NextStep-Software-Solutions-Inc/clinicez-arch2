@@ -184,6 +184,15 @@ function mimeFromExtension(extension: string) {
   }
 }
 
+function extensionFromMime(mimeType: string) {
+  if (mimeType.includes('pdf')) return 'pdf';
+  if (mimeType.includes('jpeg') || mimeType.includes('jpg')) return 'jpg';
+  if (mimeType.includes('png')) return 'png';
+  if (mimeType.includes('heic')) return 'heic';
+  if (mimeType.includes('word') || mimeType.includes('msword')) return 'docx';
+  return '';
+}
+
 function getPreviewKind(extension: string, mimeType: string | null | undefined): FilePreviewKind {
   const normalized = normalizeExtension(extension);
   if (mimeType?.startsWith('image/') || ['jpg', 'jpeg', 'png', 'heic', 'webp'].includes(normalized)) return 'image';
@@ -636,8 +645,12 @@ export async function importFiles(input: ImportFilesInput) {
     const source = picked.file;
     const requestedName = picked.name ?? source.name ?? `Upload ${importedIds.length + 1}`;
     const sourceName = makeUniqueName(requestedName);
-    const extension = normalizeExtension(source.extension || extensionFromName(sourceName));
+    let extension = normalizeExtension(source.extension || extensionFromName(sourceName));
     const mimeType = picked.mimeType ?? source.type ?? mimeFromExtension(extension);
+    
+    if (!extension && mimeType) {
+      extension = extensionFromMime(mimeType);
+    }
     const fileType = findBestFileType(input.documentTypeId, extension, mimeType, types);
     const plaintext = await source.bytes();
     const key = await Crypto.AESEncryptionKey.generate(Crypto.AESKeySize.AES256);
@@ -767,13 +780,23 @@ export async function preparePreviewFile(
   const decrypted = await Crypto.aesDecryptAsync(sealed, key, { output: 'bytes' });
   const previewDir = getPatientPreviewDir(patientId);
   ensureDirectory(previewDir);
-  const extension = normalizeExtension(file.extension) || extensionFromName(file.name) || 'bin';
+  let extension = normalizeExtension(file.extension) || extensionFromName(file.name);
+  if (!extension && file.mimeType) {
+    extension = extensionFromMime(file.mimeType);
+  }
+  extension = extension || 'bin';
+
+  let finalName = file.name;
+  if (!extensionFromName(finalName) && extension && extension !== 'bin') {
+    finalName = `${finalName}.${extension}`;
+  }
+
   const previewFile = new File(previewDir, `${file.id}.${extension}`);
   previewFile.write(decrypted);
 
   return {
     uri: previewFile.uri,
-    name: file.name,
+    name: finalName,
     mimeType: file.mimeType ?? mimeFromExtension(extension),
     extension,
     previewKind: getPreviewKind(extension, file.mimeType),
