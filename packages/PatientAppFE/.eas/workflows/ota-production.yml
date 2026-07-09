@@ -1,0 +1,14 @@
+name: Production OTA Update
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  update:
+    name: Publish Production
+    type: update
+    environment: production
+    params:
+      branch: production

@@ -4,7 +4,7 @@ services:
   patientapp-api:
     build:
       context: .
-      dockerfile: PatientApp/Dockerfile
+      dockerfile: PatientAppBE/Dockerfile
     container_name: patientapp-api
     ports:
       - "5100:8080"
