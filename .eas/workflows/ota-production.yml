@@ -8,15 +8,7 @@ on:
 jobs:
   update:
     name: Publish Production
+    type: update
     environment: production
-    steps:
-      - name: Check out repository
-        uses: eas/checkout
-      - name: Setup Bun
-        run: npm install -g bun
-      - name: Install dependencies
-        working_directory: packages/patient-app-bun-56
-        run: bun install
-      - name: Publish Update
-        working_directory: packages/patient-app-bun-56
-        run: eas update --profile production --branch production --non-interactive
+    params:
+      branch: production
