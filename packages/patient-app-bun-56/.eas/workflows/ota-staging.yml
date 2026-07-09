@@ -1,0 +1,22 @@
+name: Staging OTA Update
+
+on:
+  push:
+    branches:
+      - 'main'
+
+jobs:
+  update:
+    name: Publish Staging
+    environment: preview
+    steps:
+      - name: Check out repository
+        uses: eas/checkout
+      - name: Setup Bun
+        run: npm install -g bun
+      - name: Install dependencies
+        working_directory: packages/patient-app-bun-56
+        run: bun install
+      - name: Publish Update
+        working_directory: packages/patient-app-bun-56
+        run: eas update --profile staging --branch staging --non-interactive
