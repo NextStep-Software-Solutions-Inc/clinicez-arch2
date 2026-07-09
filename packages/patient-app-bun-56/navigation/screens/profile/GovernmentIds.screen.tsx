@@ -14,7 +14,7 @@ import ProfileSaveBar from 'components/profile/ProfileSaveBar';
 import { randomUUID } from 'expo-crypto';
 import { usePatientId } from 'hooks/usePatientId';
 
-type PhilhealthCategory = 'Member' | 'Dependent' | 'Indigent' | 'SeniorCitizen' | 'PWD';
+type PhilhealthCategory = 'MM' | 'DD';
 type DisabilityType = 'Physical' | 'Sensory' | 'Intellectual' | 'Psychosocial';
 type HmoPlanType = 'Individual' | 'Group' | 'Family';
 
@@ -38,11 +38,8 @@ type FormValues = {
 };
 
 const PHILHEALTH_CATEGORY_OPTIONS = [
-  { label: 'Member', value: 'Member' },
-  { label: 'Dependent', value: 'Dependent' },
-  { label: 'Indigent', value: 'Indigent' },
-  { label: 'Senior Citizen', value: 'SeniorCitizen' },
-  { label: 'PWD', value: 'PWD' },
+  { label: 'MM - Member', value: 'MM' },
+  { label: 'DD - Dependent', value: 'DD' },
 ];
 
 const DISABILITY_TYPE_OPTIONS = [
@@ -57,6 +54,34 @@ const HMO_PLAN_TYPE_OPTIONS = [
   { label: 'Family', value: 'Family' },
   { label: 'Group', value: 'Group' },
 ];
+
+const formatPhilhealthId = (value: string) => {
+  const digits = value.replace(/\D/g, '').slice(0, 12);
+  let res = '';
+  if (digits.length > 0) res += digits.slice(0, 2);
+  if (digits.length > 2) res += '-' + digits.slice(2, 11);
+  if (digits.length > 11) res += '-' + digits.slice(11, 12);
+  return res;
+};
+
+const formatSssNumber = (value: string) => {
+  const digits = value.replace(/\D/g, '').slice(0, 10);
+  let res = '';
+  if (digits.length > 0) res += digits.slice(0, 2);
+  if (digits.length > 2) res += '-' + digits.slice(2, 9);
+  if (digits.length > 9) res += '-' + digits.slice(9, 10);
+  return res;
+};
+
+const formatTinNumber = (value: string) => {
+  const digits = value.replace(/\D/g, '').slice(0, 12);
+  let res = '';
+  if (digits.length > 0) res += digits.slice(0, 3);
+  if (digits.length > 3) res += '-' + digits.slice(3, 6);
+  if (digits.length > 6) res += '-' + digits.slice(6, 9);
+  if (digits.length > 9) res += '-' + digits.slice(9, 12);
+  return res;
+};
 
 export default function GovernmentIdsScreen() {
   const patientId = usePatientId();
@@ -147,7 +172,7 @@ export default function GovernmentIdsScreen() {
       <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <ProfileSectionHeader title="PhilHealth" />
         <Controller control={control} name="philhealthId" render={({ field }) => (
-          <ProfileFormField label="PhilHealth ID" value={field.value} onChangeText={field.onChange} keyboardType="numeric" placeholder="00-000000000-0" />
+          <ProfileFormField label="PhilHealth ID" value={field.value} onChangeText={(text) => field.onChange(formatPhilhealthId(text))} keyboardType="numeric" placeholder="00-000000000-0" maxLength={14} />
         )} />
         <Controller control={control} name="philhealthCategory" render={({ field }) => (
           <ProfileFormField
@@ -160,7 +185,7 @@ export default function GovernmentIdsScreen() {
 
         <ProfileSectionHeader title="Other Government IDs" />
         <Controller control={control} name="sssNumber" render={({ field }) => (
-          <ProfileFormField label="SSS Number" value={field.value} onChangeText={field.onChange} keyboardType="numeric" placeholder="00-0000000-0" />
+          <ProfileFormField label="SSS Number" value={field.value} onChangeText={(text) => field.onChange(formatSssNumber(text))} keyboardType="numeric" placeholder="00-0000000-0" maxLength={12} />
         )} />
         <Controller control={control} name="gsisNumber" render={({ field }) => (
           <ProfileFormField label="GSIS Number" value={field.value} onChangeText={field.onChange} placeholder="Optional" />
@@ -169,7 +194,7 @@ export default function GovernmentIdsScreen() {
           <ProfileFormField label="Pag-IBIG (HDMF) Number" value={field.value} onChangeText={field.onChange} keyboardType="numeric" />
         )} />
         <Controller control={control} name="tinNumber" render={({ field }) => (
-          <ProfileFormField label="TIN Number" value={field.value} onChangeText={field.onChange} keyboardType="numeric" placeholder="000-000-000-000" />
+          <ProfileFormField label="TIN Number" value={field.value} onChangeText={(text) => field.onChange(formatTinNumber(text))} keyboardType="numeric" placeholder="000-000-000-000" maxLength={15} />
         )} />
         <Controller control={control} name="seniorCitizenId" render={({ field }) => (
           <ProfileFormField label="Senior Citizen ID" value={field.value} onChangeText={field.onChange} placeholder="Optional" />

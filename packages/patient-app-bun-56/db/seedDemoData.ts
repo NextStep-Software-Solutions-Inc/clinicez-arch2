@@ -561,7 +561,7 @@ export async function seedDemoHealthRecords(patientId: string, clerkUserId: stri
         id: demoId(patientId, 'government-ids'),
         patientId,
         philhealthId: '12-345678901-2',
-        philhealthCategory: 'Member',
+        philhealthCategory: 'MM',
         sssNumber: '34-1234567-8',
         gsisNumber: '11-234567890-1',
         pagibigId: '1234-5678-9012',

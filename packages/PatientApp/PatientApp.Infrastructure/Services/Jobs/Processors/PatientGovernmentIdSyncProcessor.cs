@@ -24,6 +24,7 @@ internal sealed class GovernmentIdPayload
     public DateOnly? ExpiresAt { get; set; }
     // Flat PhilHealth / multi-ID fields (when mobile sends the whole row)
     public string? PhilhealthId { get; set; }
+    public string? PhilhealthCategory { get; set; }
     public string? SssNumber { get; set; }
     public string? GsisNumber { get; set; }
     public string? PagibigId { get; set; }
@@ -54,6 +55,7 @@ internal sealed class PatientGovernmentIdSyncProcessor
                 ClientId = p.ClientId, PatientId = p.PatientId,
                 IdType = Enum.TryParse<GovernmentIdType>(p.IdType, true, out var t) ? t : GovernmentIdType.PhilSys,
                 IdNumber = p.IdNumber, IssuedAt = p.IssuedAt, ExpiresAt = p.ExpiresAt,
+                PhilhealthCategory = p.PhilhealthCategory
             };
         }
         // Otherwise use the first non-null ID from the flat record
@@ -62,6 +64,7 @@ internal sealed class PatientGovernmentIdSyncProcessor
         {
             ClientId = p.ClientId, PatientId = p.PatientId,
             IdType = type, IdNumber = number ?? string.Empty,
+            PhilhealthCategory = type == GovernmentIdType.PhilHealth ? p.PhilhealthCategory : null
         };
     }
 
@@ -73,11 +76,13 @@ internal sealed class PatientGovernmentIdSyncProcessor
             e.IdNumber = p.IdNumber;
             e.IssuedAt = p.IssuedAt;
             e.ExpiresAt = p.ExpiresAt;
+            if (e.IdType == GovernmentIdType.PhilHealth) e.PhilhealthCategory = p.PhilhealthCategory;
             return;
         }
         var (type, number) = ResolveFirstId(p);
         e.IdType = type;
         e.IdNumber = number ?? e.IdNumber;
+        if (type == GovernmentIdType.PhilHealth) e.PhilhealthCategory = p.PhilhealthCategory;
     }
 
     private static (GovernmentIdType type, string? number) ResolveFirstId(GovernmentIdPayload p)

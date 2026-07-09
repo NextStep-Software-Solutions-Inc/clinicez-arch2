@@ -11,7 +11,7 @@ export const patientGovernmentIds = sqliteTable('patient_government_ids', {
   // PhilHealth
   philhealthId: text('philhealth_id'),
   philhealthCategory: text('philhealth_category', {
-    enum: ['Member', 'Dependent', 'Indigent', 'SeniorCitizen', 'PWD'],
+    enum: ['MM', 'DD'],
   }),
   // Other government IDs
   sssNumber: text('sss_number'),

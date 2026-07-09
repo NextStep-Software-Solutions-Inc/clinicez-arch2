@@ -2867,6 +2867,10 @@ namespace PatientApp.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("patient_id");
 
+                    b.Property<string>("PhilhealthCategory")
+                        .HasColumnType("text")
+                        .HasColumnName("philhealth_category");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");

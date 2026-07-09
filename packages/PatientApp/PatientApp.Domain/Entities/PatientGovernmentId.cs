@@ -13,4 +13,5 @@ public sealed class PatientGovernmentId : BaseEntity, ISyncable
     public string IdNumber { get; set; } = string.Empty;
     public DateOnly? IssuedAt { get; set; }
     public DateOnly? ExpiresAt { get; set; }
+    public string? PhilhealthCategory { get; set; }
 }
