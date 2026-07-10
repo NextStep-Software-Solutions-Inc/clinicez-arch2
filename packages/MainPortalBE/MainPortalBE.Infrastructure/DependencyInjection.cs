@@ -1,6 +1,7 @@
 using Clerk.BackendAPI;
 using CLINICEZ.Shared.Interfaces;
 using MainPortalBE.Domain.Interfaces;
+using MainPortalBE.Application.Interfaces;
 using MainPortalBE.Infrastructure.Persistence;
 using MainPortalBE.Infrastructure.Persistence.Interceptors;
 using MainPortalBE.Infrastructure.Persistence.Repositories;
@@ -11,6 +12,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using MainPortalBE.Infrastructure.Xendit;
 
 namespace MainPortalBE.Infrastructure;
 
@@ -29,11 +31,11 @@ public static class DependencyInjection
 
         services.AddDbContext<ApplicationDbContext>((sp, options) =>
         {
-            options.UseNpgsql(connectionString, npgsqlOptions => 
+            options.UseNpgsql(connectionString, npgsqlOptions =>
             {
                 npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "main");
             }).ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
-            
+
             options.AddInterceptors(sp.GetRequiredService<SoftDeleteInterceptor>());
         });
 
@@ -42,10 +44,16 @@ public static class DependencyInjection
         services.AddScoped<SoftDeleteInterceptor>();
 
         // Register repositories and Unit of Work
+        services.AddScoped<IApplicationDbContext>(provider => provider.GetRequiredService<ApplicationDbContext>());
         services.AddScoped<IExampleRepository, ExampleRepository>();
         services.AddScoped<ITenantRepository, TenantRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<IXenditBillingService, XenditBillingService>();
+        services.AddScoped<ITenantFeatureGuard, TenantFeatureGuard>();
         services.AddHttpContextAccessor();
+
+        // Register Xendit Typed HTTP Client with Resilience
+        services.AddXenditClient();
 
         // Add Hangfire
         services.AddHangfire(config => config

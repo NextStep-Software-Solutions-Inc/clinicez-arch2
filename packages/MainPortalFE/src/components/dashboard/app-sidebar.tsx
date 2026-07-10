@@ -10,6 +10,7 @@ import {
   IconPill,
   IconSettings,
   IconTestPipe,
+  IconCreditCard,
 } from "@tabler/icons-react"
 
 import { NavMain } from "@/components/dashboard/nav-main"
@@ -67,6 +68,11 @@ export function AppSidebar({ clinicName = "Clinic EZ", user, ...props }: { clini
         title: "Settings",
         url: `/dashboard/settings`,
         icon: IconSettings,
+      },
+      {
+        title: "Billing",
+        url: `/dashboard/billing`,
+        icon: IconCreditCard,
       },
     ],
   }

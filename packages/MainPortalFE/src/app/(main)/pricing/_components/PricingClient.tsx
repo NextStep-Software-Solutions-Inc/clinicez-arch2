@@ -1,54 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CheckCircle2 } from "lucide-react";
+import { billingService } from "@/services/billing.service";
 
-export function PricingClient() {
+export function PricingClient({ 
+  onAction, 
+  loadingTier 
+}: { 
+  onAction?: (tierName: string) => void;
+  loadingTier?: string | null;
+} = {}) {
   const [isAnnual, setIsAnnual] = useState(true);
+  const [tiers, setTiers] = useState<any[]>([]);
+  const [isLoadingPlans, setIsLoadingPlans] = useState(true);
 
-  const tiers = [
-    {
-      name: "Starter",
-      description: "Perfect for independent practitioners starting out.",
-      priceMonthly: 49,
-      priceAnnually: 39,
-      features: [
-        "Up to 500 Patients",
-        "Basic EMR & Scheduling",
-        "1 Practitioner Account",
-        "Email Support"
-      ],
-      highlighted: false
-    },
-    {
-      name: "Professional",
-      description: "Ideal for growing clinics with multiple staff members.",
-      priceMonthly: 129,
-      priceAnnually: 99,
-      features: [
-        "Unlimited Patients",
-        "Advanced EMR & Billing",
-        "Up to 5 Practitioners",
-        "Teleconsultation Module",
-        "Priority 24/7 Support"
-      ],
-      highlighted: true
-    },
-    {
-      name: "Enterprise",
-      description: "Custom solutions for hospitals and large networks.",
-      priceMonthly: "Custom",
-      priceAnnually: "Custom",
-      features: [
-        "Unlimited Everything",
-        "Custom API Integrations",
-        "Dedicated Account Manager",
-        "On-premise Deployment Options",
-        "White-labeling"
-      ],
-      highlighted: false
+  useEffect(() => {
+    async function loadPlans() {
+      try {
+        const data = await billingService.getPlans();
+        if (data && Array.isArray(data)) {
+          setTiers(data);
+        }
+      } catch (err) {
+        console.error("Failed to load plans", err);
+      } finally {
+        setIsLoadingPlans(false);
+      }
     }
-  ];
+    loadPlans();
+  }, []);
 
   return (
     <main className="flex flex-col min-h-screen bg-background relative overflow-hidden">
@@ -80,6 +61,9 @@ export function PricingClient() {
         </div>
 
         {/* Pricing Cards */}
+        {isLoadingPlans ? (
+          <div className="flex justify-center py-20">Loading plans...</div>
+        ) : (
         <div className="grid md:grid-cols-3 gap-8 text-left">
           {tiers.map((tier, index) => (
             <div 
@@ -119,16 +103,30 @@ export function PricingClient() {
                 ))}
               </ul>
 
-              <button className={`w-full rounded-full px-4 py-3 text-sm font-semibold transition-colors ${
-                tier.highlighted 
-                  ? 'bg-primary text-primary-foreground hover:bg-primary/90' 
-                  : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
-              }`}>
-                {tier.name === 'Enterprise' ? 'Contact Sales' : 'Get Started'}
+              <button 
+                onClick={() => {
+                  if (tier.requiresCheckout && onAction) {
+                    onAction(tier.id);
+                  } else if (tier.id === "enterprise") {
+                    window.location.href = "mailto:sales@clinicez.net";
+                  }
+                }}
+                disabled={loadingTier === tier.id || (!tier.requiresCheckout && tier.id !== "enterprise" && !onAction)}
+                className={`w-full rounded-full px-4 py-3 text-sm font-semibold transition-colors ${
+                  tier.highlighted 
+                    ? 'bg-primary text-primary-foreground hover:bg-primary/90' 
+                    : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
+                } ${loadingTier === tier.id ? 'opacity-70 cursor-not-allowed' : ''}`}>
+                {loadingTier === tier.id 
+                  ? 'Loading...' 
+                  : tier.requiresCheckout && onAction
+                    ? `Subscribe to ${tier.name}` 
+                    : tier.id === 'enterprise' ? 'Contact Sales' : 'Get Started'}
               </button>
             </div>
           ))}
         </div>
+        )}
       </section>
     </main>
   );
