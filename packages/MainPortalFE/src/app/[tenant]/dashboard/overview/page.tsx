@@ -1,7 +1,14 @@
+import { Metadata } from "next";
 import { ChartAreaInteractive } from "@/components/dashboard/chart-area-interactive";
 import { DataTable } from "@/components/dashboard/data-table";
 import { SectionCards } from "@/components/dashboard/section-cards";
 import data from "@/app/[tenant]/dashboard/data.json";
+
+export const metadata: Metadata = {
+  title: "Dashboard Overview | Clinic EZ",
+  description: "View clinic analytics, statistics, patient admissions, and reports in the Clinic EZ Dashboard.",
+  keywords: ["clinic dashboard", "health statistics", "patient analytics", "Clinic EZ dashboard"],
+};
 
 export default function OverviewPage() {
     return (

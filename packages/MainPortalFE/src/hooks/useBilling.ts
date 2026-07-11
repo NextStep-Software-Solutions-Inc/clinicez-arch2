@@ -2,7 +2,11 @@ import useSWR from "swr"
 import { billingService, BillingPlan, BillingInfo } from "@/services/billing.service"
 
 export function usePlans() {
-  const { data, error, isLoading, mutate } = useSWR<BillingPlan[]>("/billing/plans", () => billingService.getPlans())
+  const { data, error, isLoading, mutate } = useSWR<BillingPlan[]>(
+    "/billing/plans", 
+    () => billingService.getPlans(),
+    { suspense: typeof window !== "undefined" }
+  )
   return {
     plans: data || [],
     isLoading,
@@ -17,7 +21,8 @@ export function useBillingInfo(tenantId: string) {
     () => billingService.getBillingInfo(tenantId),
     {
       revalidateOnFocus: true,
-      dedupingInterval: 2000
+      dedupingInterval: 2000,
+      suspense: typeof window !== "undefined"
     }
   )
   return {

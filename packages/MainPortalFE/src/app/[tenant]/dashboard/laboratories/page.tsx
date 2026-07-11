@@ -1,4 +1,11 @@
+import { Metadata } from "next";
 import LaboratoryTable from "@/components/dashboard/LaboratoryTable";
+
+export const metadata: Metadata = {
+  title: "My Laboratories | Clinic EZ Dashboard",
+  description: "Manage clinical diagnostic laboratory branches, tests, and partnerships.",
+  keywords: ["laboratories", "lab management", "clinic labs", "Clinic EZ laboratories"],
+};
 
 export default function LaboratoriesPage() {
     return (

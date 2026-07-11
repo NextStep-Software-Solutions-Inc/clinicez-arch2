@@ -1,4 +1,11 @@
+import { Metadata } from "next";
 import ClinicTable from "@/components/dashboard/ClinicTable";
+
+export const metadata: Metadata = {
+  title: "My Clinics | Clinic EZ Dashboard",
+  description: "View, edit, and configure your clinic locations and settings in Clinic EZ.",
+  keywords: ["my clinics", "clinic management", "clinic locations", "Clinic EZ clinics"],
+};
 
 export default function ClinicsPage() {
     return (

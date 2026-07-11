@@ -1,4 +1,11 @@
+import { Metadata } from "next";
 import OrganizationTable from "@/components/dashboard/OrganizationTable";
+
+export const metadata: Metadata = {
+  title: "Partner Organizations | Clinic EZ Dashboard",
+  description: "Manage partner organizations, hospital networks, healthcare providers, and external integrations.",
+  keywords: ["organizations", "partner organizations", "hospital networks", "Clinic EZ organizations"],
+};
 
 export default function OrganizationsPage() {
     return (

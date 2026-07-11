@@ -18,29 +18,31 @@ export function PricingClient({
     <main className="flex flex-col min-h-screen bg-background relative overflow-hidden">
       <div className="absolute top-[20%] left-[50%] -translate-x-1/2 w-[60%] h-[40%] rounded-full bg-primary/10 blur-[120px] pointer-events-none -z-10" />
 
-      <section className="pt-32 pb-16 px-6 lg:px-8 text-center max-w-3xl mx-auto">
-        <h1 className="text-4xl font-extrabold tracking-tight sm:text-6xl mb-6">
-          Simple, transparent pricing.
-        </h1>
-        <p className="text-lg text-muted-foreground mb-10">
-          No hidden fees. No surprise charges. Just powerful software to run your healthcare business.
-        </p>
+      <section className="pt-32 pb-16 px-6 lg:px-8 w-full max-w-6xl mx-auto">
+        <div className="text-center max-w-3xl mx-auto">
+          <h1 className="text-4xl font-extrabold tracking-tight sm:text-6xl mb-6">
+            Simple, transparent pricing.
+          </h1>
+          <p className="text-lg text-muted-foreground mb-10">
+            No hidden fees. No surprise charges. Just powerful software to run your healthcare business.
+          </p>
 
-        {/* Billing Toggle */}
-        <div className="flex items-center justify-center gap-4 mb-16">
-          <span className={`text-sm font-semibold ${!isAnnual ? 'text-foreground' : 'text-muted-foreground'}`}>Monthly</span>
-          <button 
-            onClick={() => setIsAnnual(!isAnnual)}
-            className="relative inline-flex h-8 w-16 shrink-0 cursor-pointer items-center justify-center rounded-full bg-primary/20 transition-colors focus:outline-none"
-          >
-            <span className="sr-only">Toggle billing period</span>
-            <span 
-              className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-primary shadow transition-transform ${isAnnual ? 'translate-x-4' : '-translate-x-4'}`} 
-            />
-          </button>
-          <span className={`text-sm font-semibold ${isAnnual ? 'text-foreground' : 'text-muted-foreground'}`}>
-            Annually <span className="ml-1.5 inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">Save 20%</span>
-          </span>
+          {/* Billing Toggle */}
+          <div className="flex items-center justify-center gap-4 mb-16">
+            <span className={`text-sm font-semibold ${!isAnnual ? 'text-foreground' : 'text-muted-foreground'}`}>Monthly</span>
+            <button 
+              onClick={() => setIsAnnual(!isAnnual)}
+              className="relative inline-flex h-8 w-16 shrink-0 cursor-pointer items-center justify-center rounded-full bg-primary/20 transition-colors focus:outline-none"
+            >
+              <span className="sr-only">Toggle billing period</span>
+              <span 
+                className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-primary shadow transition-transform ${isAnnual ? 'translate-x-4' : '-translate-x-4'}`} 
+              />
+            </button>
+            <span className={`text-sm font-semibold ${isAnnual ? 'text-foreground' : 'text-muted-foreground'}`}>
+              Annually <span className="ml-1.5 inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">Save 20%</span>
+            </span>
+          </div>
         </div>
 
         {/* Pricing Cards */}
@@ -68,9 +70,9 @@ export function PricingClient({
               
               <div className="mb-8">
                 {typeof tier.priceMonthly === 'number' ? (
-                  <div className="flex items-baseline text-5xl font-extrabold">
+                  <div className="flex flex-wrap items-baseline text-4xl md:text-3xl lg:text-4xl xl:text-5xl font-extrabold">
                     ₱{Number(isAnnual ? tier.priceAnnually : tier.priceMonthly).toLocaleString()}
-                    <span className="ml-1 text-xl font-medium text-muted-foreground">/mo</span>
+                    <span className="ml-1 text-base md:text-sm lg:text-base xl:text-xl font-medium text-muted-foreground">/mo</span>
                   </div>
                 ) : (
                   <div className="text-4xl font-extrabold">{tier.priceMonthly}</div>
