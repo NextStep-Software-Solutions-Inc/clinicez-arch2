@@ -230,7 +230,7 @@ export default function InvoiceDetailsDialog({
             Print Invoice
           </Button>
         </DialogFooter>
-      </Dialog>
+      </DialogContent>
     </Dialog>
   )
 }
