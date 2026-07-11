@@ -13,6 +13,7 @@ public class SubscriptionPlan : BaseEntity
     public decimal PriceAnnually { get; set; }
     public bool IsHighlighted { get; set; }
     public bool RequiresCheckout { get; set; }
+    public string? XenditPlanId { get; set; }
 
     public ICollection<SubscriptionPlanFeature> Features { get; set; } = new List<SubscriptionPlanFeature>();
 }

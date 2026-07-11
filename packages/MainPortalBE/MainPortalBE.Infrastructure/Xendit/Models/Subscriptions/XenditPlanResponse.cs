@@ -5,6 +5,13 @@ using System.Text.Json.Serialization;
 
 namespace MainPortalBE.Infrastructure.Xendit.Models.Subscriptions;
 
+public class XenditAction
+{
+    [JsonPropertyName("action")] public string Action { get; set; } = string.Empty;
+    [JsonPropertyName("url")] public string Url { get; set; } = string.Empty;
+    [JsonPropertyName("method")] public string Method { get; set; } = string.Empty;
+}
+
 public class XenditPlanResponse
 {
     [JsonPropertyName("id")] public string Id { get; set; } = string.Empty;
@@ -18,6 +25,7 @@ public class XenditPlanResponse
     [JsonPropertyName("success_return_url")] public string? SuccessReturnUrl { get; set; }
     [JsonPropertyName("failure_return_url")] public string? FailureReturnUrl { get; set; }
     [JsonPropertyName("status")] public string Status { get; set; } = string.Empty;
+    [JsonPropertyName("actions")] public List<XenditAction>? Actions { get; set; }
     [JsonPropertyName("metadata")] public Dictionary<string, object>? Metadata { get; set; }
     [JsonPropertyName("created")] public DateTime Created { get; set; }
     [JsonPropertyName("updated")] public DateTime Updated { get; set; }

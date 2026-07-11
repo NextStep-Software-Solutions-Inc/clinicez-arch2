@@ -27,7 +27,7 @@ public class GetBillingPlansQueryHandler(IApplicationDbContext context) : IReque
     {
         var plans = await context.SubscriptionPlans
             .Include(p => p.Features)
-            .OrderBy(p => p.PriceMonthly)
+            .OrderBy(p => p.PriceMonthly == 0 ? 999999 : p.PriceMonthly)
             .ToListAsync(cancellationToken);
 
         return plans.Select(p => new BillingPlanDto(

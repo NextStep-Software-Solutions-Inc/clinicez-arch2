@@ -23,6 +23,74 @@ namespace MainPortalBE.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("MainPortalBE.Domain.Entities.BillingInvoice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("InvoiceNumber")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsAnnual")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PlanSlug")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("XenditInvoiceId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("XenditInvoiceId")
+                        .IsUnique();
+
+                    b.ToTable("BillingInvoices", "main");
+                });
+
             modelBuilder.Entity("MainPortalBE.Domain.Entities.ExampleEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -65,6 +133,72 @@ namespace MainPortalBE.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("ExampleEntities", "main");
+                });
+
+            modelBuilder.Entity("MainPortalBE.Domain.Entities.PaymentReceipt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<decimal>("AmountPaid")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("ExpiryDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("InvoiceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("PaidAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PaymentMethod")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ReceiptNumber")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InvoiceId")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("PaymentReceipts", "main");
                 });
 
             modelBuilder.Entity("MainPortalBE.Domain.Entities.SubscriptionPlan", b =>
@@ -120,6 +254,9 @@ namespace MainPortalBE.Infrastructure.Migrations
                     b.Property<string>("UpdatedBy")
                         .HasColumnType("text");
 
+                    b.Property<string>("XenditPlanId")
+                        .HasColumnType("text");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Slug")
@@ -131,35 +268,35 @@ namespace MainPortalBE.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("11111111-1111-1111-1111-111111111111"),
-                            CreatedAt = new DateTime(2026, 7, 10, 3, 25, 33, 182, DateTimeKind.Utc).AddTicks(2089),
+                            CreatedAt = new DateTime(2026, 7, 10, 0, 0, 0, 0, DateTimeKind.Utc),
                             CreatedBy = "",
                             Description = "Perfect for small individual clinics.",
                             IsDeleted = false,
                             IsHighlighted = false,
                             Name = "Starter",
-                            PriceAnnually = 39m,
-                            PriceMonthly = 49m,
+                            PriceAnnually = 2340m,
+                            PriceMonthly = 2940m,
                             RequiresCheckout = true,
                             Slug = "starter"
                         },
                         new
                         {
                             Id = new Guid("22222222-2222-2222-2222-222222222222"),
-                            CreatedAt = new DateTime(2026, 7, 10, 3, 25, 33, 182, DateTimeKind.Utc).AddTicks(2414),
+                            CreatedAt = new DateTime(2026, 7, 10, 0, 0, 0, 0, DateTimeKind.Utc),
                             CreatedBy = "",
                             Description = "Ideal for growing medical practices.",
                             IsDeleted = false,
                             IsHighlighted = true,
                             Name = "Professional",
-                            PriceAnnually = 99m,
-                            PriceMonthly = 129m,
+                            PriceAnnually = 5940m,
+                            PriceMonthly = 7740m,
                             RequiresCheckout = true,
                             Slug = "pro"
                         },
                         new
                         {
                             Id = new Guid("33333333-3333-3333-3333-333333333333"),
-                            CreatedAt = new DateTime(2026, 7, 10, 3, 25, 33, 182, DateTimeKind.Utc).AddTicks(2417),
+                            CreatedAt = new DateTime(2026, 7, 10, 0, 0, 0, 0, DateTimeKind.Utc),
                             CreatedBy = "",
                             Description = "For large hospitals and clinic networks.",
                             IsDeleted = false,
@@ -221,7 +358,7 @@ namespace MainPortalBE.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("11111111-0000-0000-0000-000000000001"),
-                            CreatedAt = new DateTime(2026, 7, 10, 3, 25, 33, 183, DateTimeKind.Utc).AddTicks(886),
+                            CreatedAt = new DateTime(2026, 7, 10, 0, 0, 0, 0, DateTimeKind.Utc),
                             CreatedBy = "",
                             DisplayOrder = 1,
                             IsDeleted = false,
@@ -231,7 +368,7 @@ namespace MainPortalBE.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("11111111-0000-0000-0000-000000000002"),
-                            CreatedAt = new DateTime(2026, 7, 10, 3, 25, 33, 183, DateTimeKind.Utc).AddTicks(894),
+                            CreatedAt = new DateTime(2026, 7, 10, 0, 0, 0, 0, DateTimeKind.Utc),
                             CreatedBy = "",
                             DisplayOrder = 2,
                             IsDeleted = false,
@@ -241,7 +378,7 @@ namespace MainPortalBE.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("11111111-0000-0000-0000-000000000003"),
-                            CreatedAt = new DateTime(2026, 7, 10, 3, 25, 33, 183, DateTimeKind.Utc).AddTicks(896),
+                            CreatedAt = new DateTime(2026, 7, 10, 0, 0, 0, 0, DateTimeKind.Utc),
                             CreatedBy = "",
                             DisplayOrder = 3,
                             IsDeleted = false,
@@ -251,7 +388,7 @@ namespace MainPortalBE.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("11111111-0000-0000-0000-000000000004"),
-                            CreatedAt = new DateTime(2026, 7, 10, 3, 25, 33, 183, DateTimeKind.Utc).AddTicks(898),
+                            CreatedAt = new DateTime(2026, 7, 10, 0, 0, 0, 0, DateTimeKind.Utc),
                             CreatedBy = "",
                             DisplayOrder = 4,
                             IsDeleted = false,
@@ -261,7 +398,7 @@ namespace MainPortalBE.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("22222222-0000-0000-0000-000000000001"),
-                            CreatedAt = new DateTime(2026, 7, 10, 3, 25, 33, 183, DateTimeKind.Utc).AddTicks(900),
+                            CreatedAt = new DateTime(2026, 7, 10, 0, 0, 0, 0, DateTimeKind.Utc),
                             CreatedBy = "",
                             DisplayOrder = 1,
                             IsDeleted = false,
@@ -271,7 +408,7 @@ namespace MainPortalBE.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("22222222-0000-0000-0000-000000000002"),
-                            CreatedAt = new DateTime(2026, 7, 10, 3, 25, 33, 183, DateTimeKind.Utc).AddTicks(901),
+                            CreatedAt = new DateTime(2026, 7, 10, 0, 0, 0, 0, DateTimeKind.Utc),
                             CreatedBy = "",
                             DisplayOrder = 2,
                             IsDeleted = false,
@@ -281,7 +418,7 @@ namespace MainPortalBE.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("22222222-0000-0000-0000-000000000003"),
-                            CreatedAt = new DateTime(2026, 7, 10, 3, 25, 33, 183, DateTimeKind.Utc).AddTicks(902),
+                            CreatedAt = new DateTime(2026, 7, 10, 0, 0, 0, 0, DateTimeKind.Utc),
                             CreatedBy = "",
                             DisplayOrder = 3,
                             IsDeleted = false,
@@ -291,7 +428,7 @@ namespace MainPortalBE.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("22222222-0000-0000-0000-000000000004"),
-                            CreatedAt = new DateTime(2026, 7, 10, 3, 25, 33, 183, DateTimeKind.Utc).AddTicks(904),
+                            CreatedAt = new DateTime(2026, 7, 10, 0, 0, 0, 0, DateTimeKind.Utc),
                             CreatedBy = "",
                             DisplayOrder = 4,
                             IsDeleted = false,
@@ -301,7 +438,7 @@ namespace MainPortalBE.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("33333333-0000-0000-0000-000000000001"),
-                            CreatedAt = new DateTime(2026, 7, 10, 3, 25, 33, 183, DateTimeKind.Utc).AddTicks(905),
+                            CreatedAt = new DateTime(2026, 7, 10, 0, 0, 0, 0, DateTimeKind.Utc),
                             CreatedBy = "",
                             DisplayOrder = 1,
                             IsDeleted = false,
@@ -311,7 +448,7 @@ namespace MainPortalBE.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("33333333-0000-0000-0000-000000000002"),
-                            CreatedAt = new DateTime(2026, 7, 10, 3, 25, 33, 183, DateTimeKind.Utc).AddTicks(906),
+                            CreatedAt = new DateTime(2026, 7, 10, 0, 0, 0, 0, DateTimeKind.Utc),
                             CreatedBy = "",
                             DisplayOrder = 2,
                             IsDeleted = false,
@@ -321,7 +458,7 @@ namespace MainPortalBE.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("33333333-0000-0000-0000-000000000003"),
-                            CreatedAt = new DateTime(2026, 7, 10, 3, 25, 33, 183, DateTimeKind.Utc).AddTicks(907),
+                            CreatedAt = new DateTime(2026, 7, 10, 0, 0, 0, 0, DateTimeKind.Utc),
                             CreatedBy = "",
                             DisplayOrder = 3,
                             IsDeleted = false,
@@ -331,7 +468,7 @@ namespace MainPortalBE.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("33333333-0000-0000-0000-000000000004"),
-                            CreatedAt = new DateTime(2026, 7, 10, 3, 25, 33, 183, DateTimeKind.Utc).AddTicks(909),
+                            CreatedAt = new DateTime(2026, 7, 10, 0, 0, 0, 0, DateTimeKind.Utc),
                             CreatedBy = "",
                             DisplayOrder = 4,
                             IsDeleted = false,
@@ -347,8 +484,17 @@ namespace MainPortalBE.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasDefaultValueSql("gen_random_uuid()");
 
+                    b.Property<string>("BusinessType")
+                        .HasColumnType("text");
+
+                    b.Property<string>("City")
+                        .HasColumnType("text");
+
                     b.Property<string>("ClinicName")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Country")
                         .HasColumnType("text");
 
                     b.Property<DateTime>("CreatedAt")
@@ -387,6 +533,21 @@ namespace MainPortalBE.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("PhoneNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PostalCode")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Province")
+                        .HasColumnType("text");
+
+                    b.Property<string>("StreetLine1")
+                        .HasColumnType("text");
+
+                    b.Property<string>("StreetLine2")
+                        .HasColumnType("text");
+
                     b.Property<string>("SubscriptionId")
                         .IsRequired()
                         .HasColumnType("text");
@@ -399,8 +560,14 @@ namespace MainPortalBE.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("TaxId")
+                        .HasColumnType("text");
+
                     b.Property<string>("TenantSlug")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("TradingName")
                         .HasColumnType("text");
 
                     b.Property<DateTime?>("UpdatedAt")
@@ -419,6 +586,36 @@ namespace MainPortalBE.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("Tenants", "main");
+                });
+
+            modelBuilder.Entity("MainPortalBE.Domain.Entities.BillingInvoice", b =>
+                {
+                    b.HasOne("MainPortalBE.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("MainPortalBE.Domain.Entities.PaymentReceipt", b =>
+                {
+                    b.HasOne("MainPortalBE.Domain.Entities.BillingInvoice", "Invoice")
+                        .WithOne()
+                        .HasForeignKey("MainPortalBE.Domain.Entities.PaymentReceipt", "InvoiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MainPortalBE.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Invoice");
+
+                    b.Navigation("Tenant");
                 });
 
             modelBuilder.Entity("MainPortalBE.Domain.Entities.SubscriptionPlanFeature", b =>

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { CheckCircle2 } from "lucide-react";
-import { billingService } from "@/services/billing.service";
+import { usePlans } from "@/hooks/useBilling";
 
 export function PricingClient({ 
   onAction, 
@@ -12,24 +12,7 @@ export function PricingClient({
   loadingTier?: string | null;
 } = {}) {
   const [isAnnual, setIsAnnual] = useState(true);
-  const [tiers, setTiers] = useState<any[]>([]);
-  const [isLoadingPlans, setIsLoadingPlans] = useState(true);
-
-  useEffect(() => {
-    async function loadPlans() {
-      try {
-        const data = await billingService.getPlans();
-        if (data && Array.isArray(data)) {
-          setTiers(data);
-        }
-      } catch (err) {
-        console.error("Failed to load plans", err);
-      } finally {
-        setIsLoadingPlans(false);
-      }
-    }
-    loadPlans();
-  }, []);
+  const { plans: tiers, isLoading: isLoadingPlans } = usePlans();
 
   return (
     <main className="flex flex-col min-h-screen bg-background relative overflow-hidden">
@@ -86,7 +69,7 @@ export function PricingClient({
               <div className="mb-8">
                 {typeof tier.priceMonthly === 'number' ? (
                   <div className="flex items-baseline text-5xl font-extrabold">
-                    ${isAnnual ? tier.priceAnnually : tier.priceMonthly}
+                    ₱{Number(isAnnual ? tier.priceAnnually : tier.priceMonthly).toLocaleString()}
                     <span className="ml-1 text-xl font-medium text-muted-foreground">/mo</span>
                   </div>
                 ) : (
