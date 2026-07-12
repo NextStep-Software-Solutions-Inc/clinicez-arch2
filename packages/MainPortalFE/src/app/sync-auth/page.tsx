@@ -9,23 +9,13 @@ export default async function SyncAuthPage() {
         redirect('/sign-in');
     }
 
-    let tenantSlug: string | null = null;
+    const token = await getToken();
+    const tenant = await tenantService.getTenantByOwner(userId, token);
 
-    try {
-        const token = await getToken();
-        const tenant = await tenantService.getTenantByOwner(userId, token);
-
-        if (tenant && tenant.tenantSlug) {
-            tenantSlug = tenant.tenantSlug;
-        }
-    } catch (err) {
-        console.error("Error syncing auth:", err);
-    }
-    
-    if (tenantSlug) {
-        redirect(`/${tenantSlug}/dashboard`);
+    if (tenant && tenant.tenantSlug) {
+        redirect(`/${tenant.tenantSlug}/dashboard`);
     }
 
-    // If we reach here, it means the user doesn't have a tenant or the API call failed/returned 404
+    // If we reach here, it means the user doesn't have a tenant (404 was caught in tenantService and returned null)
     redirect('/tenants/register');
 }
