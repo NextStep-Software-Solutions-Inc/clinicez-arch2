@@ -1,4 +1,17 @@
+using MainPortalBE.Api;
+using MainPortalBE.Application;
+using MainPortalBE.Infrastructure;
+using MainPortalBE.Infrastructure.Persistence;
+using MainPortalBE.Domain.Interfaces;
+using Microsoft.EntityFrameworkCore;
+using Hangfire;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.IdentityModel.Tokens;
 using System.Security.Claims;
+using System.Linq;
+using Scalar.AspNetCore;
+using MainPortalBE.Api.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 var env = builder.Environment;
