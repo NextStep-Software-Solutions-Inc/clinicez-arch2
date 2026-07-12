@@ -1,16 +1,4 @@
-using MainPortalBE.Api;
-using MainPortalBE.Application;
-using MainPortalBE.Infrastructure;
-using MainPortalBE.Infrastructure.Persistence;
-using MainPortalBE.Domain.Interfaces;
-using Microsoft.EntityFrameworkCore;
-using Hangfire;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.IdentityModel.Tokens;
 using System.Security.Claims;
-using Scalar.AspNetCore;
-using MainPortalBE.Api.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 var env = builder.Environment;
@@ -50,7 +38,19 @@ builder.Services
                 var azp = context.Principal?.FindFirstValue("azp");
                 var authorizedParties = builder.Configuration.GetSection("Clerk:AuthorizedParties").Get<List<string>>();
 
-                if (string.IsNullOrEmpty(azp) || authorizedParties == null || !authorizedParties.Contains(azp))
+                bool isAuthorized = false;
+
+                if (!string.IsNullOrEmpty(azp) && authorizedParties != null)
+                {
+                    isAuthorized = authorizedParties.Any(party => 
+                        party == azp || 
+                        (party.Contains('*') && System.Text.RegularExpressions.Regex.IsMatch(
+                            azp, 
+                            "^" + System.Text.RegularExpressions.Regex.Escape(party).Replace("\\*", ".*") + "$", 
+                            System.Text.RegularExpressions.RegexOptions.IgnoreCase)));
+                }
+
+                if (!isAuthorized)
                 {
                     context.Fail("AZP Claim is invalid or missing");
                 }

@@ -21,9 +21,10 @@ public static class DependencyInjection
             options.AddPolicy("development", policy =>
             {
                 policy
-                    .AllowAnyOrigin()
+                    .SetIsOriginAllowed(origin => true)
                     .AllowAnyHeader()
-                    .AllowAnyMethod();
+                    .AllowAnyMethod()
+                    .AllowCredentials();
             });
 
             options.AddPolicy("production", policy =>
