@@ -36,6 +36,7 @@ public sealed class GenerateUploadUrlEndpoint : IEndpoint
             .WithTags("Files")
             .WithName("GenerateUploadUrl")
             .WithSummary("Generate a pre-signed URL for uploading a file directly to R2")
+            .WithDescription("Creates a new file entry in the database and generates a pre-signed Cloudflare R2 upload URL for the client to upload the file directly.")
             .Produces<ApiResponse<GenerateUploadUrlResponse>>(StatusCodes.Status200OK)
             .RequireAuthorization();
     }

@@ -21,6 +21,7 @@ public sealed class SaveFileConfigEndpoint : IEndpoint
             .WithTags("Files")
             .WithName("SaveFileConfig")
             .WithSummary("Save E2EE config (EncryptedMAK) for the current patient")
+            .WithDescription("Saves the client-side end-to-end encryption configuration (specifically the Encrypted Master Key) for the patient.")
             .Produces<ApiResponse<object>>(StatusCodes.Status200OK)
             .RequireAuthorization();
     }

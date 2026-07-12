@@ -20,6 +20,7 @@ public sealed class GetAvailableSlotsEndpoint : IEndpoint
         .WithTags("Appointments")
         .WithName("GetAvailableSlots")
         .WithSummary("Get available appointment slots for a specific provider on a given date.")
+        .WithDescription("Fetches a list of available time slots for a specified provider at a clinic on a particular date.")
         .Produces<ApiResponse<object>>(StatusCodes.Status200OK);
     }
 }

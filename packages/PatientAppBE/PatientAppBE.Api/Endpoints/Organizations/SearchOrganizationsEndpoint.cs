@@ -25,6 +25,7 @@ public sealed class SearchOrganizationsEndpoint : IEndpoint
             .WithTags("Discovery")
             .WithName("SearchOrganizations")
             .WithSummary("Search the organization discovery catalogue. Always fetches latest when online.")
+            .WithDescription("Searches the directory catalog for organizations. Supports filtering by patient ID and query query, with pagination.")
             .Produces<ApiResponse<DiscoveryPagedDto<OrganizationSummaryDto>>>(StatusCodes.Status200OK)
             .RequireAuthorization();
     }

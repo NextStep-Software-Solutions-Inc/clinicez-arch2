@@ -24,6 +24,7 @@ public sealed class CancelOrganizationMembershipEndpoint : IEndpoint
             .WithTags("Memberships")
             .WithName("CancelOrganizationMembership")
             .WithSummary("Cancel an organization membership request or active membership")
+            .WithDescription("Cancels an active organization membership or a pending membership request for a patient.")
             .Produces<ApiResponse<bool>>(StatusCodes.Status200OK)
             .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
             .RequireAuthorization();

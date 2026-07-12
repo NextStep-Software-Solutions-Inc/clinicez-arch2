@@ -20,6 +20,7 @@ public sealed class GetFilesEndpoint : IEndpoint
             .WithTags("Files")
             .WithName("GetFiles")
             .WithSummary("Get all files and folders for a patient")
+            .WithDescription("Retrieves a list of all files and folders registered for a patient.")
             .Produces<ApiResponse<GetFilesResponse>>(StatusCodes.Status200OK)
             .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
             .RequireAuthorization();

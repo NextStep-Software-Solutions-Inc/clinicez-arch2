@@ -20,13 +20,19 @@ public class DocumentTypeEndpoints : IEndpoint
         {
             var result = await mediator.Send(new GetDocumentTypesQuery());
             return Results.Ok(result);
-        });
+        })
+        .WithName("GetDocumentTypes")
+        .WithDescription("Retrieves all document types.")
+        .WithTags("Document Types");
 
         group.MapPost("/", async (CreateDocumentTypeCommand command, IMediator mediator) =>
         {
             var id = await mediator.Send(command);
             return Results.Created($"/api/v1/document-types/{id}", id);
-        });
+        })
+        .WithName("CreateDocumentType")
+        .WithDescription("Creates a new document type.")
+        .WithTags("Document Types");
 
         group.MapPut("/{id:guid}", async (Guid id, UpdateDocumentTypeCommand command, IMediator mediator) =>
         {
@@ -34,12 +40,18 @@ public class DocumentTypeEndpoints : IEndpoint
             
             var success = await mediator.Send(command);
             return success ? Results.NoContent() : Results.NotFound();
-        });
+        })
+        .WithName("UpdateDocumentType")
+        .WithDescription("Updates an existing document type.")
+        .WithTags("Document Types");
 
         group.MapDelete("/{id:guid}", async (Guid id, IMediator mediator) =>
         {
             var success = await mediator.Send(new DeleteDocumentTypeCommand(id));
             return success ? Results.NoContent() : Results.NotFound();
-        });
+        })
+        .WithName("DeleteDocumentType")
+        .WithDescription("Deletes a document type by its unique ID.")
+        .WithTags("Document Types");
     }
 }

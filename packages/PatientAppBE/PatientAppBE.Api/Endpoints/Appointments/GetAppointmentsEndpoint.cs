@@ -21,6 +21,7 @@ public sealed class GetAppointmentsEndpoint : IEndpoint
             .WithTags("Appointments")
             .WithName("GetAppointments")
             .WithSummary("Get a patient's appointments across all joined clinics")
+            .WithDescription("Retrieves all appointments for a patient across all clinics they have joined.")
             .Produces<ApiResponse<AppointmentsResponse>>(StatusCodes.Status200OK)
             .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
             .ProducesValidationProblem()

@@ -15,6 +15,8 @@ public sealed class GetTenantByOwnerEndpoint : IEndpoint
             if (result == null) return Results.NotFound();
             return Results.Ok(result);
         })
+        .WithName("GetTenantByOwner")
+        .WithDescription("Retrieves the tenant details associated with the specified owner user ID.")
         .WithTags("Users")
         .RequireAuthorization();
     }

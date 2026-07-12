@@ -24,6 +24,7 @@ public sealed class PushAppointmentsWebhookEndpoint : IEndpoint
             .WithTags("Webhooks")
             .WithName("PushAppointmentsWebhook")
             .WithSummary("Receive appointments pushed from a clinic dashboard")
+            .WithDescription("Callback webhook endpoint that receives updated appointment data pushed directly from a clinic dashboard.")
             .Produces<ApiResponse<bool>>(StatusCodes.Status202Accepted)
             .ProducesValidationProblem()
             .RequireAuthorization(); // Webhooks usually use a generic service-to-service token or specific auth.

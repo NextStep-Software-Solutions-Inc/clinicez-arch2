@@ -22,6 +22,7 @@ public sealed class GetSyncStatusEndpoint : IEndpoint
             .WithTags("Sync")
             .WithName("GetSyncStatus")
             .WithSummary("Get the sync processing status and recent log entries for a patient")
+            .WithDescription("Retrieves the processing status, last sync timestamp, and log audit trail of offline-to-online synchronizations for a patient.")
             .Produces<ApiResponse<SyncStatusDto>>(StatusCodes.Status200OK)
             .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
             .RequireAuthorization();

@@ -26,6 +26,7 @@ public sealed class SearchClinicsEndpoint : IEndpoint
             .WithTags("Discovery")
             .WithName("SearchClinics")
             .WithSummary("Search clinics. Filter by organizationId to see clinics in a joined organization.")
+            .WithDescription("Searches the directory of clinics. Supports filtering by organization and patient ID, with support for pagination.")
             .Produces<ApiResponse<DiscoveryPagedDto<ClinicSummaryDto>>>(StatusCodes.Status200OK)
             .RequireAuthorization();
     }

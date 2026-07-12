@@ -27,6 +27,7 @@ public sealed class PropagateOrganizationMembershipApprovalEndpoint : IEndpoint
             .WithTags("Internal")
             .WithName("PropagateOrganizationMembershipApproval")
             .WithSummary("Propagate organization membership approval state from Admin Dashboard")
+            .WithDescription("Updates and propagates the approval state of an organization membership from the Admin Dashboard down to the Patient App Backend.")
             .Produces<ApiResponse<bool>>(StatusCodes.Status200OK)
             .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
             .Produces<ApiResponse<object>>(StatusCodes.Status409Conflict);

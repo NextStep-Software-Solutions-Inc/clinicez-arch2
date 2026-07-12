@@ -19,6 +19,7 @@ public sealed class GetOrganizationRolesEndpoint : IEndpoint
             .WithTags("Organizations")
             .WithName("GetOrganizationRoles")
             .WithSummary("Get roles available for a specific organization")
+            .WithDescription("Retrieves the user roles available in a specific organization by its unique ID.")
             .Produces<ApiResponse<IReadOnlyList<OrganizationRoleDto>>>(StatusCodes.Status200OK);
     }
 }

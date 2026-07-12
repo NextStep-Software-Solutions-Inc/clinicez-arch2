@@ -29,6 +29,7 @@ public sealed class PushSyncPayloadEndpoint : IEndpoint
             .WithTags("Sync")
             .WithName("PushSyncPayload")
             .WithSummary("Push a batch of offline changes to be queued and processed by the server")
+            .WithDescription("Pushes a batch of locally queued offline modifications from the mobile client to the server for asynchronous processing.")
             .Produces<ApiResponse<PushSyncAckDto>>(StatusCodes.Status202Accepted)
             .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
             .ProducesValidationProblem()

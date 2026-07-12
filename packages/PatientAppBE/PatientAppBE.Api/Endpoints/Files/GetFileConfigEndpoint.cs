@@ -20,6 +20,7 @@ public sealed class GetFileConfigEndpoint : IEndpoint
             .WithTags("Files")
             .WithName("GetFileConfig")
             .WithSummary("Get E2EE config and storage quota for the current patient")
+            .WithDescription("Retrieves the client-side end-to-end encryption configuration (like Encrypted Master Key) and storage quota metrics for a patient.")
             .Produces<ApiResponse<FileConfigDto>>(StatusCodes.Status200OK)
             .RequireAuthorization();
     }

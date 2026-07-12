@@ -21,6 +21,7 @@ public sealed class GetPatientProfileEndpoint : IEndpoint
             .WithTags("Patients")
             .WithName("GetPatientProfile")
             .WithSummary("Get the full profile (demographics, addresses, emergency contacts) for a patient")
+            .WithDescription("Retrieves a slim demographic profile summary including the patient ID, basic contact details, addresses, and emergency contacts.")
             .Produces<ApiResponse<PatientProfileDto>>(StatusCodes.Status200OK)
             .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
             .RequireAuthorization();

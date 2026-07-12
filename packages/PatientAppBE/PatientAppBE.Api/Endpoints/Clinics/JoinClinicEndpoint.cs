@@ -29,6 +29,7 @@ public sealed class JoinClinicEndpoint : IEndpoint
             .WithTags("Memberships")
             .WithName("JoinClinic")
             .WithSummary("Join a clinic directly (consent only — no invite code required)")
+            .WithDescription("Creates a new clinic membership for a patient directly, accepting the required privacy, terms, and data sharing consents.")
             .Produces<ApiResponse<Guid>>(StatusCodes.Status201Created)
             .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
             .Produces<ApiResponse<object>>(StatusCodes.Status409Conflict)

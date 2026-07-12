@@ -38,6 +38,7 @@ public sealed class RegisterDeviceSessionEndpoint : IEndpoint
             .WithTags("Device Sessions")
             .WithName("RegisterDeviceSession")
             .WithSummary("Register the current device as the single active session for a patient")
+            .WithDescription("Registers the device identity, push notification token, and Clerk session for a patient. Revokes any existing active sessions.")
             .Produces<ApiResponse<RegisterDeviceSessionResponse>>(StatusCodes.Status201Created)
             .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
             .ProducesValidationProblem()

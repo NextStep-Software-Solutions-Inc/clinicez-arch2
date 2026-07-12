@@ -23,6 +23,7 @@ public sealed class CompleteFileUploadEndpoint : IEndpoint
             .WithTags("Files")
             .WithName("CompleteFileUpload")
             .WithSummary("Complete a file upload by transitioning its status to Synced")
+            .WithDescription("Updates the status of a pending upload to completed, finalizing the file tracking records on the server.")
             .Produces<ApiResponse<CompleteFileUploadResponse>>(StatusCodes.Status200OK)
             .RequireAuthorization();
     }

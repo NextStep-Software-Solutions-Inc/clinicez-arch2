@@ -21,6 +21,7 @@ public sealed class MarkNotificationReadEndpoint : IEndpoint
             .WithTags("Notifications")
             .WithName("MarkNotificationRead")
             .WithSummary("Mark a single notification as read")
+            .WithDescription("Marks a specific notification as read by its unique ID for the patient.")
             .Produces(StatusCodes.Status204NoContent)
             .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
             .RequireAuthorization();
@@ -40,6 +41,7 @@ public sealed class MarkAllNotificationsReadEndpoint : IEndpoint
             .WithTags("Notifications")
             .WithName("MarkAllNotificationsRead")
             .WithSummary("Mark all notifications as read for a patient")
+            .WithDescription("Marks all notifications as read for the specified patient.")
             .Produces(StatusCodes.Status204NoContent)
             .RequireAuthorization();
     }
@@ -58,6 +60,7 @@ public sealed class GetNotificationPreferencesEndpoint : IEndpoint
             .WithTags("Notifications")
             .WithName("GetNotificationPreferences")
             .WithSummary("Get all notification category preferences for a patient")
+            .WithDescription("Retrieves the notification settings and preferences (e.g. push or in-app enabled) across categories for the patient.")
             .Produces<ApiResponse<IReadOnlyList<NotificationPreferenceDto>>>(StatusCodes.Status200OK)
             .RequireAuthorization();
     }
@@ -81,6 +84,7 @@ public sealed class UpsertNotificationPreferenceEndpoint : IEndpoint
             .WithTags("Notifications")
             .WithName("UpsertNotificationPreference")
             .WithSummary("Set push/in-app preference for a notification category. Creates if not exists.")
+            .WithDescription("Updates or creates the push and in-app notification preferences for a specific category.")
             .Produces<ApiResponse<NotificationPreferenceDto>>(StatusCodes.Status200OK)
             .Produces<ApiResponse<object>>(StatusCodes.Status400BadRequest)
             .RequireAuthorization();

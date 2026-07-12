@@ -26,6 +26,7 @@ public sealed class GetNotificationsEndpoint : IEndpoint
             .WithTags("Notifications")
             .WithName("GetNotifications")
             .WithSummary("Get paginated notifications for a patient")
+            .WithDescription("Retrieves a paginated list of push or in-app notifications for the patient, with an option to filter for unread only.")
             .Produces<ApiResponse<NotificationListDto>>(StatusCodes.Status200OK)
             .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
             .RequireAuthorization();

@@ -24,6 +24,7 @@ public sealed class GetPatientByClerkIdEndpoint : IEndpoint
             .WithTags("Patients")
             .WithName("GetPatientByClerkId")
             .WithSummary("Look up a patient by their Clerk user ID (used during app sign-in)")
+            .WithDescription("Resolves the patient's internal profile ID and core summary info from their Clerk identity ID.")
             .Produces<ApiResponse<PatientSummaryDto>>(StatusCodes.Status200OK)
             .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
             .RequireAuthorization();

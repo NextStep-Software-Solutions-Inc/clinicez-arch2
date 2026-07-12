@@ -32,6 +32,7 @@ public sealed class JoinOrganizationEndpoint : IEndpoint
             .WithTags("Memberships")
             .WithName("JoinOrganization")
             .WithSummary("Join an organization using an invite code")
+            .WithDescription("Creates a new organization membership request for a patient using an invite code and registering privacy/data consents.")
             .Produces<ApiResponse<OrganizationMembershipDto>>(StatusCodes.Status201Created)
             .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
             .Produces<ApiResponse<object>>(StatusCodes.Status409Conflict)

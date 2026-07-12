@@ -24,6 +24,7 @@ public sealed class CancelClinicMembershipEndpoint : IEndpoint
             .WithTags("Memberships")
             .WithName("CancelClinicMembership")
             .WithSummary("Cancel a clinic membership request or active membership")
+            .WithDescription("Cancels an active clinic membership or a pending membership request for a patient.")
             .Produces<ApiResponse<bool>>(StatusCodes.Status200OK)
             .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
             .RequireAuthorization();

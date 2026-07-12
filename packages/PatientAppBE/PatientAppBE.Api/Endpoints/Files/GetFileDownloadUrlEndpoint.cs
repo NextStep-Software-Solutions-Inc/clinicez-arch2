@@ -21,6 +21,7 @@ public sealed class GetFileDownloadUrlEndpoint : IEndpoint
             .WithTags("Files")
             .WithName("GetFileDownloadUrl")
             .WithSummary("Generate a pre-signed URL for securely downloading a file from R2")
+            .WithDescription("Generates a secure, pre-signed download URL for a file stored in Cloudflare R2 storage.")
             .Produces<ApiResponse<GetFileDownloadUrlResponse>>(StatusCodes.Status200OK)
             .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
             .RequireAuthorization();

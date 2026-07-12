@@ -21,6 +21,7 @@ public sealed class GetClinicDetailEndpoint : IEndpoint
             .WithTags("Discovery")
             .WithName("GetClinicDetail")
             .WithSummary("Get full clinic details including linked organizations and current patient membership status")
+            .WithDescription("Retrieves detailed information about a clinic, including associated organizations and the membership status for the requesting patient.")
             .Produces<ApiResponse<ClinicDetailDto>>(StatusCodes.Status200OK)
             .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
             .RequireAuthorization();

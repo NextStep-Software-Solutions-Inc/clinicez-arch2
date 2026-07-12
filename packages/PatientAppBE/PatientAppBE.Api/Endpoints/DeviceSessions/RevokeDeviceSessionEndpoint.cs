@@ -20,6 +20,7 @@ public sealed class RevokeDeviceSessionEndpoint : IEndpoint
             .WithTags("Device Sessions")
             .WithName("RevokeDeviceSession")
             .WithSummary("Revoke the active device session for a patient (logout)")
+            .WithDescription("Revokes the active device session for the specified patient, logging them out of the system.")
             .Produces(StatusCodes.Status204NoContent)
             .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
             .RequireAuthorization();

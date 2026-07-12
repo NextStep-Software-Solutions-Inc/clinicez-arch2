@@ -41,6 +41,7 @@ public sealed class CreatePatientEndpoint : IEndpoint
             .WithTags("Patients")
             .WithName("CreatePatient")
             .WithSummary("Create a new patient profile linked to a Clerk user")
+            .WithDescription("Creates a patient profile in the backend database linked to a Clerk identity after onboarding.")
             .Produces<ApiResponse<Guid>>(StatusCodes.Status201Created)
             .Produces<ApiResponse<object>>(StatusCodes.Status409Conflict)
             .ProducesValidationProblem()

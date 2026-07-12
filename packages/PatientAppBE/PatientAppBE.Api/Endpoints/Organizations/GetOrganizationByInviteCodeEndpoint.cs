@@ -21,6 +21,7 @@ public sealed class GetOrganizationByInviteCodeEndpoint : IEndpoint
             .WithTags("Discovery")
             .WithName("GetOrganizationByInviteCode")
             .WithSummary("Look up an organization by its invite code before the patient joins")
+            .WithDescription("Retrieves organization preview details based on an invitation code prior to joining.")
             .Produces<ApiResponse<OrganizationDetailDto>>(StatusCodes.Status200OK)
             .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
             .RequireAuthorization();

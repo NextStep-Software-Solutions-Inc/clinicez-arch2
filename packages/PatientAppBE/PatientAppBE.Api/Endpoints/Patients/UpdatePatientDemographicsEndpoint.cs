@@ -66,6 +66,7 @@ public sealed class UpdatePatientDemographicsEndpoint : IEndpoint
                 "DIRECT write — for Dashboard / admin use only. " +
                 "Mobile clients MUST use POST /patients/{id}/sync instead, " +
                 "which goes through the Hangfire queue, conflict resolution, and SyncLog audit trail.")
+            .WithDescription("Allows direct updates to the patient's demographics. Admin/Dashboard use only; mobile clients should write via Sync queue.")
             .Produces(StatusCodes.Status204NoContent)
             .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
             .ProducesValidationProblem()

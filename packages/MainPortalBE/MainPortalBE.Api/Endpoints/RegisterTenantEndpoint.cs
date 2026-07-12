@@ -13,6 +13,8 @@ public sealed class RegisterTenantEndpoint : IEndpoint
             var result = await sender.Send(command, cancellationToken);
             return Results.Ok(new { ClerkUserId = result });
         })
+        .WithName("RegisterTenant")
+        .WithDescription("Registers a new tenant profile and returns the associated Clerk user ID.")
         .WithTags("Tenants")
         .AllowAnonymous();
     }
