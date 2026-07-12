@@ -34,4 +34,11 @@ public class Tenant : BaseEntity
     public string? TradingName { get; set; }
     public string? BusinessType { get; set; }
     public string? TaxId { get; set; }
+
+    // Telemetry Usage & Limits
+    public int ClinicalBranchesCount { get; set; } = 1;
+    public int StaffAccountsCount { get; set; } = 3;
+    public int ActivePatientRecordsCount { get; set; } = 25;
+    public int MonthlyApiQuotaUsed { get; set; } = 500;
+    public int MonthlyApiQuotaLimit { get; set; } = 10000;
 }

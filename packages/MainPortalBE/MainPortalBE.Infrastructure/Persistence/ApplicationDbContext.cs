@@ -16,6 +16,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<SubscriptionPlanFeature> SubscriptionPlanFeatures { get; set; }
     public DbSet<PaymentReceipt> PaymentReceipts { get; set; }
     public DbSet<BillingInvoice> BillingInvoices { get; set; }
+    public DbSet<BlogArticle> BlogArticles { get; set; }
+    public DbSet<AdminRole> AdminRoles { get; set; }
+    public DbSet<AdminUser> AdminUsers { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -76,6 +79,18 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasIndex(i => i.XenditInvoiceId)
             .IsUnique();
 
+        modelBuilder.Entity<BlogArticle>()
+            .HasIndex(b => b.Slug)
+            .IsUnique();
+
+        modelBuilder.Entity<AdminRole>()
+            .Property(r => r.Permissions)
+            .Metadata
+            .SetValueComparer(new Microsoft.EntityFrameworkCore.ChangeTracking.ValueComparer<List<string>>(
+                (c1, c2) => c1 == null && c2 == null || c1 != null && c2 != null && System.Linq.Enumerable.SequenceEqual(c1, c2),
+                c => c.Aggregate(0, (a, v) => HashCode.Combine(a, v.GetHashCode())),
+                c => c.ToList()));
+
         modelBuilder.Entity<BillingInvoice>()
             .HasOne(i => i.Tenant)
             .WithMany()
@@ -95,6 +110,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .OnDelete(DeleteBehavior.Restrict);
 
         Seeders.SubscriptionPlanSeeder.Seed(modelBuilder);
+        Seeders.AdminRBACSeeder.Seed(modelBuilder);
+        Seeders.BlogSeeder.Seed(modelBuilder);
 
         base.OnModelCreating(modelBuilder);
     }
