@@ -44,4 +44,4 @@ jobs:
         run: bunx tsc --noEmit
 
       - name: Build the project
-        run: bunx next build
+        run: bun build
