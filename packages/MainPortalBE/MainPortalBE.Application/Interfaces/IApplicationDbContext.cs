@@ -13,6 +13,9 @@ public interface IApplicationDbContext
     DbSet<SubscriptionPlanFeature> SubscriptionPlanFeatures { get; }
     DbSet<PaymentReceipt> PaymentReceipts { get; }
     DbSet<BillingInvoice> BillingInvoices { get; }
+    DbSet<BlogArticle> BlogArticles { get; }
+    DbSet<AdminRole> AdminRoles { get; }
+    DbSet<AdminUser> AdminUsers { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }
