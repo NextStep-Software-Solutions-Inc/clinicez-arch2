@@ -1,0 +1,1481 @@
+# Clinic EZ Patient App — Backend API Reference
+
+> **Base URL (Development):** `http://localhost:5154/api/v1`  
+> **Authentication:** All endpoints require a valid Clerk JWT: `Authorization: Bearer <token>`  
+> **Content-Type:** `application/json` for all request bodies.  
+> **Interactive docs (Dev):** `http://localhost:5154/scalar/v1`  
+> **Hangfire dashboard (Dev):** `http://localhost:5154/hangfire`
+
+Every response is wrapped in `ApiResponse<T>`:
+
+```json
+{
+  "succeeded": true,
+  "message": null,
+  "data": { "...": "..." },
+  "errors": []
+}
+```
+
+---
+
+## Standard Error Shape
+
+Field-level errors (validation):
+
+```json
+{
+  "succeeded": false,
+  "message": "One or more validation errors occurred.",
+  "data": null,
+  "errors": [
+    { "field": "firstName", "code": "REQUIRED_FIELD_MISSING", "message": "First name is required." },
+    { "field": "email",     "code": "INVALID_FIELD_FORMAT",   "message": "Email address is not valid." }
+  ]
+}
+```
+
+Non-field errors (404, 409, 503 …) — `field` is `null`:
+
+```json
+{
+  "succeeded": false,
+  "message": "Patient 'abc' was not found.",
+  "data": null,
+  "errors": [{ "field": null, "code": "NOT_FOUND", "message": "Patient 'abc' was not found." }]
+}
+```
+
+### Error code reference
+
+| Code | HTTP | Meaning |
+|---|---|---|
+| `VALIDATION_ERROR` | 400 | Field-level validation failure |
+| `BAD_REQUEST` | 400 | General bad request |
+| `UNAUTHORIZED` | 401 | Missing or invalid JWT |
+| `FORBIDDEN` | 403 | Authenticated but not allowed |
+| `NOT_FOUND` | 404 | Resource does not exist |
+| `CONFLICT` | 409 | Duplicate or state conflict |
+| `TOO_MANY_REQUESTS` | 429 | Rate limit exceeded |
+| `SERVICE_UNAVAILABLE` | 503 | Upstream clinic API unavailable |
+| `INTERNAL_ERROR` | 500 | Unexpected server error |
+
+---
+
+## Enum serialisation
+
+All enum values are serialised as **camelCase lowercase strings** — matching the mobile app's
+expectations. Examples:
+
+| C# enum | JSON wire value |
+|---|---|
+| `SexType.Male` | `"male"` |
+| `BloodType.ABPositive` | `"aBPositive"` |
+| `AppointmentStatus.ActionRequired` | `"actionRequired"` |
+| `NotificationCategory.Appointments` | `"appointments"` |
+| `SyncStatus.ConflictResolved` | `"conflictResolved"` |
+
+---
+
+## Patients
+
+### `POST /api/v1/patients` — Create profile
+
+Called **once** on first sign-in. `clerkUserId` links the patient row to the Clerk identity for
+all subsequent look-ups.
+
+**Request body**
+
+```json
+{
+  "clerkUserId": "user_2abc123",
+  "firstName": "Juan",
+  "middleName": null,
+  "lastName": "Dela Cruz",
+  "suffix": null,
+  "sex": "male",
+  "dateOfBirth": "1990-05-15",
+  "nationality": "Filipino"
+}
+```
+
+**201 Created** — `data` is the server-assigned patient UUID. Persist it in `SecureStore`.
+
+```json
+{
+  "succeeded": true,
+  "message": "Patient profile created.",
+  "data": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "errors": []
+}
+```
+
+**Errors**
+
+| Status | Code | When |
+|---|---|---|
+| 400 | `VALIDATION_ERROR` | `firstName`, `lastName`, or `clerkUserId` missing; invalid `sex` or `dateOfBirth` |
+| 409 | `CONFLICT` | A profile already exists for this `clerkUserId` |
+
+---
+
+### `GET /api/v1/patients/by-clerk/{clerkUserId}` — Look up by Clerk ID
+
+Called on every sign-in to retrieve the patient UUID. Returns 404 for first-time users —
+use that signal to start the onboarding flow.
+
+**200 OK**
+
+```json
+{
+  "succeeded": true,
+  "data": {
+    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "firstName": "Juan",
+    "middleName": null,
+    "lastName": "Dela Cruz",
+    "suffix": null,
+    "sex": "male",
+    "dateOfBirth": "1990-05-15",
+    "placeOfBirth": "Manila",
+    "bloodType": "oPositive",
+    "civilStatus": "single",
+    "nationality": "Filipino",
+    "ethnicity": null,
+    "religion": "Roman Catholic",
+    "primaryLanguage": "Filipino",
+    "educationLevel": "college",
+    "mobile": "+639171234567",
+    "altPhone": null,
+    "email": "juan@example.com",
+    "messengerHandle": null,
+    "avatarUrl": null,
+    "consentToShareInfo": true
+  },
+  "errors": []
+}
+```
+
+**404** — not found; begin onboarding → `POST /patients`.
+
+---
+
+### `GET /api/v1/patients/{id}` — Slim profile
+
+Returns demographics + addresses + emergency contacts. Suitable for dashboards and list views.
+
+**200 OK**
+
+```json
+{
+  "succeeded": true,
+  "data": {
+    "demographics": {
+      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "firstName": "Juan",
+      "middleName": null,
+      "lastName": "Dela Cruz",
+      "sex": "male",
+      "dateOfBirth": "1990-05-15",
+      "placeOfBirth": "Manila",
+      "bloodType": "oPositive",
+      "civilStatus": "married",
+      "nationality": "Filipino",
+      "mobile": "+639171234567",
+      "email": "juan@example.com",
+      "consentToShareInfo": true
+    },
+    "addresses": [
+      {
+        "id": "addr-uuid",
+        "clientId": "client-uuid",
+        "type": "home",
+        "street": "123 Rizal St",
+        "barangay": "Sampaloc",
+        "city": "Manila",
+        "province": "Metro Manila",
+        "zipCode": "1008",
+        "country": "Philippines",
+        "isPrimary": true,
+        "updatedAt": "2026-06-17T10:00:00Z"
+      }
+    ],
+    "emergencyContacts": [
+      {
+        "id": "ec-uuid",
+        "clientId": "client-uuid",
+        "fullName": "Maria Dela Cruz",
+        "relationship": "Mother",
+        "mobile": "+639179876543",
+        "altPhone": null,
+        "isPrimary": true,
+        "updatedAt": "2026-06-17T10:00:00Z"
+      }
+    ]
+  },
+  "errors": []
+}
+```
+
+---
+
+### `GET /api/v1/patients/{id}/full-record` — Complete record (device hydration)
+
+Returns **all 22 ISyncable entity categories** in a single request.
+Call this on **first install or re-install** to seed local SQLite from server state.
+After the initial hydration, use `POST /sync` for all subsequent writes.
+
+> ⚠️ This is an expensive query. Do **not** call it on every app-foreground event.
+> Use `revalidateOnFocus: false` in the SWR hook (`usePatientFullRecord`).
+
+**200 OK** — only the first few categories shown; all arrays follow the same shape:
+
+```json
+{
+  "succeeded": true,
+  "data": {
+    "demographics": {
+      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "firstName": "Juan",
+      "lastName": "Dela Cruz",
+      "sex": "male",
+      "dateOfBirth": "1990-05-15",
+      "placeOfBirth": "Manila",
+      "bloodType": "oPositive",
+      "civilStatus": "single",
+      "nationality": "Filipino",
+      "religion": "Roman Catholic",
+      "primaryLanguage": "Filipino",
+      "educationLevel": "college",
+      "mobile": "+639171234567",
+      "email": "juan@example.com",
+      "consentToShareInfo": true
+    },
+
+    "governmentIds": [
+      {
+        "id": "gov-uuid",
+        "clientId": "client-uuid",
+        "idType": "philSys",
+        "idNumber": "1234-5678-9012",
+        "issuedAt": "2020-01-01",
+        "expiresAt": null,
+        "updatedAt": "2026-06-17T10:00:00Z"
+      }
+    ],
+
+    "addresses": [
+      {
+        "id": "addr-uuid",
+        "clientId": "client-uuid",
+        "type": "home",
+        "street": "123 Rizal St",
+        "barangay": "Sampaloc",
+        "city": "Manila",
+        "province": "Metro Manila",
+        "zipCode": "1008",
+        "country": "Philippines",
+        "isPrimary": true,
+        "updatedAt": "2026-06-17T10:00:00Z"
+      }
+    ],
+
+    "emergencyContacts": [
+      {
+        "id": "ec-uuid",
+        "clientId": "client-uuid",
+        "fullName": "Maria Dela Cruz",
+        "relationship": "Mother",
+        "mobile": "+639179876543",
+        "altPhone": null,
+        "isPrimary": true,
+        "updatedAt": "2026-06-17T10:00:00Z"
+      }
+    ],
+
+    "healthcareProviders": [
+      {
+        "id": "hp-uuid",
+        "clientId": "client-uuid",
+        "providerType": "primaryCare",
+        "name": "Dr. Santos",
+        "specialty": "Family Medicine",
+        "clinicHospital": "St. Luke's Medical Center",
+        "phone": "+63291234567",
+        "updatedAt": "2026-06-17T10:00:00Z"
+      }
+    ],
+
+    "allergies": [
+      {
+        "id": "allergy-uuid",
+        "clientId": "client-uuid",
+        "allergenName": "Penicillin",
+        "allergyType": "drug",
+        "severity": "severe",
+        "reaction": "Anaphylaxis",
+        "onsetDate": "2010-03-15",
+        "notes": null,
+        "updatedAt": "2026-06-17T10:00:00Z"
+      }
+    ],
+
+    "medications": [
+      {
+        "id": "med-uuid",
+        "clientId": "client-uuid",
+        "medicationName": "Metformin",
+        "genericName": "Metformin HCl",
+        "dosage": "500mg",
+        "frequency": "Twice daily",
+        "route": "Oral",
+        "startDate": "2024-01-01",
+        "endDate": null,
+        "isCurrentlyTaking": true,
+        "prescribedBy": "Dr. Reyes",
+        "purpose": "Type 2 Diabetes management",
+        "notes": null,
+        "updatedAt": "2026-06-17T10:00:00Z"
+      }
+    ],
+
+    "surgicalHistories": [
+      {
+        "id": "surg-uuid",
+        "clientId": "client-uuid",
+        "procedureName": "Appendectomy",
+        "surgeonName": "Dr. Garcia",
+        "hospital": "Philippine General Hospital",
+        "surgeryDate": "2015-08-20",
+        "anesthesiaType": "General",
+        "complications": null,
+        "notes": null,
+        "updatedAt": "2026-06-17T10:00:00Z"
+      }
+    ],
+
+    "pastIllnesses": [
+      {
+        "id": "ill-uuid",
+        "clientId": "client-uuid",
+        "illnessName": "Dengue Fever",
+        "diagnosedAt": "2018-07-01",
+        "resolvedAt": "2018-07-21",
+        "treatmentReceived": "IV fluids, paracetamol",
+        "notes": null,
+        "updatedAt": "2026-06-17T10:00:00Z"
+      }
+    ],
+
+    "chronicConditions": [
+      {
+        "id": "chronic-uuid",
+        "clientId": "client-uuid",
+        "conditionName": "Type 2 Diabetes Mellitus",
+        "diagnosedAt": "2023-06-01",
+        "isControlled": true,
+        "treatmentNotes": "Lifestyle modification + Metformin",
+        "currentMedications": "Metformin 500mg BID",
+        "updatedAt": "2026-06-17T10:00:00Z"
+      }
+    ],
+
+    "familyHistories": [
+      {
+        "id": "fam-uuid",
+        "clientId": "client-uuid",
+        "relation": "mother",
+        "conditionName": "Hypertension",
+        "ageOfOnset": 55,
+        "isDeceased": false,
+        "notes": null,
+        "updatedAt": "2026-06-17T10:00:00Z"
+      }
+    ],
+
+    "immunizationsSelf": [
+      {
+        "id": "imm-uuid",
+        "clientId": "client-uuid",
+        "immunizationCategory": "other",
+        "vaccineName": "COVID-19 Booster (Moderna)",
+        "doseNumber": "Booster 1",
+        "lotNumber": "AB1234",
+        "date": "2022-10-15",
+        "administeredBy": "RHU Manila",
+        "updatedAt": "2026-06-17T10:00:00Z"
+      }
+    ],
+
+    "disabilities": [
+      {
+        "id": "dis-uuid",
+        "clientId": "client-uuid",
+        "bodyPart": "Left leg",
+        "classification": "Physical — locomotor",
+        "isPwdCertified": true,
+        "updatedAt": "2026-06-17T10:00:00Z"
+      }
+    ],
+
+    "travelHistories": [
+      {
+        "id": "travel-uuid",
+        "clientId": "client-uuid",
+        "destination": "Japan",
+        "cityProvince": "Tokyo",
+        "departureDate": "2024-04-01",
+        "returnDate": "2024-04-10",
+        "purpose": "leisure",
+        "illnessDuringAfterTravel": null,
+        "updatedAt": "2026-06-17T10:00:00Z"
+      }
+    ],
+
+    "contraceptiveHistories": [
+      {
+        "id": "contra-uuid",
+        "clientId": "client-uuid",
+        "method": "Oral Contraceptive Pill",
+        "isCurrent": false,
+        "dateStarted": "2019-01-01",
+        "reasonForStopping": "Planning pregnancy",
+        "updatedAt": "2026-06-17T10:00:00Z"
+      }
+    ],
+
+    "pregnancies": [
+      {
+        "id": "preg-uuid",
+        "clientId": "client-uuid",
+        "year": 2022,
+        "outcome": "Live birth",
+        "gestationalAgeWeeks": 38,
+        "deliveryType": "NSD",
+        "birthWeightKg": 3.2,
+        "complications": null,
+        "facility": "St. Luke's Medical Center",
+        "updatedAt": "2026-06-17T10:00:00Z"
+      }
+    ],
+
+    "socialHistory": {
+      "id": "sh-uuid",
+      "clientId": "client-uuid",
+      "smokingStatus": "neverSmoked",
+      "cigsPerDay": null,
+      "packYears": null,
+      "quitDate": null,
+      "otherTobaccoProducts": null,
+      "alcoholUse": "occasional",
+      "alcoholType": "Beer",
+      "alcoholFrequencyDaysPerWeek": 1,
+      "alcoholQuantityPerOccasion": 2,
+      "usesSubstances": false,
+      "substanceName": null,
+      "substanceRoute": null,
+      "substanceFrequency": null,
+      "activityLevel": "moderatelyActive",
+      "exerciseType": "Walking / jogging",
+      "exerciseFrequencyDaysPerWeek": 3,
+      "dietPattern": "Regular Filipino diet",
+      "foodRestrictions": null,
+      "sleepAvgHours": 7.0,
+      "sleepQuality": "good",
+      "isSexuallyActive": true,
+      "waterIntake": "8 glasses/day",
+      "occupationalHazards": null,
+      "updatedAt": "2026-06-17T10:00:00Z"
+    },
+
+    "occupation": {
+      "id": "occ-uuid",
+      "clientId": "client-uuid",
+      "occupation": "Software Engineer",
+      "employer": "Acme Corp",
+      "industry": "Information Technology",
+      "workEnvironment": "office",
+      "yearsInOccupation": 5,
+      "hazardExposure": null,
+      "updatedAt": "2026-06-17T10:00:00Z"
+    },
+
+    "obstetricProfile": {
+      "id": "ob-uuid",
+      "clientId": "client-uuid",
+      "gravida": 2,
+      "para": 1,
+      "abortusCount": 1,
+      "livingChildren": 1,
+      "lastMenstrualPeriod": "2026-05-15",
+      "menarche": "2005-01-01",
+      "isPregnant": false,
+      "menstrualCycleLengthDays": 28,
+      "hasDysmenorrhea": false,
+      "notes": null,
+      "updatedAt": "2026-06-17T10:00:00Z"
+    },
+
+    "maleReproductive": null,
+
+    "dentalVision": {
+      "id": "dv-uuid",
+      "clientId": "client-uuid",
+      "dentistName": "Dr. Lim",
+      "dentistClinic": "Smile Dental Clinic",
+      "orthodonticDevice": null,
+      "eyeDoctorName": "Dr. Cruz",
+      "correctiveLenses": "glasses",
+      "updatedAt": "2026-06-17T10:00:00Z"
+    },
+
+    "mentalHealthProfile": {
+      "id": "mh-uuid",
+      "clientId": "client-uuid",
+      "hasDiagnosis": true,
+      "diagnosisName": "Generalized Anxiety Disorder",
+      "isOnMedication": false,
+      "medicationName": null,
+      "therapistName": "Dr. Tan",
+      "therapyType": "Cognitive Behavioural Therapy (CBT)",
+      "sessionFrequency": "Biweekly",
+      "notes": null,
+      "updatedAt": "2026-06-17T10:00:00Z"
+    }
+  },
+  "errors": []
+}
+```
+
+---
+
+### `PUT /api/v1/patients/{id}/demographics` — Direct demographics update
+
+> ⚠️ **Dashboard / admin use only.**  
+> Mobile clients **must** use `POST /sync` to preserve:
+>
+> - the `SyncLog` audit trail
+> - Last-Write-Wins conflict resolution
+> - Hangfire automatic retry on failure
+
+**Request body**
+
+```json
+{
+  "firstName": "Juan",
+  "middleName": null,
+  "lastName": "Dela Cruz",
+  "suffix": null,
+  "sex": "male",
+  "dateOfBirth": "1990-05-15",
+  "placeOfBirth": "Manila",
+  "civilStatus": "married",
+  "bloodType": "oPositive",
+  "nationality": "Filipino",
+  "ethnicity": null,
+  "religion": "Roman Catholic",
+  "primaryLanguage": "Filipino",
+  "educationLevel": "college",
+  "mobile": "+639171234567",
+  "altPhone": null,
+  "email": "juan@example.com",
+  "messengerHandle": null,
+  "consentToShareInfo": true
+}
+```
+
+**204 No Content**
+
+---
+
+## Sync
+
+### `POST /api/v1/patients/{patientId}/sync` — Push offline changes
+
+The **primary write path for the mobile app.**  
+Accepts a batch of up to **500 items**. The server acknowledges receipt immediately (202)
+and processes each item in the background via Hangfire with automatic retry.
+
+**Key rules**
+
+| Rule | Detail |
+|---|---|
+| `clientId` | Device-generated UUID. Guarantees idempotency — the same item can be submitted multiple times safely. |
+| `clientTimestamp` | Must be **UTC ISO-8601**. Rejected if more than 5 minutes in the future. |
+| `payloadJson` | Full serialised entity at time of change. Set to `null` for `delete` operations. |
+| Conflict resolution | **Last-Write-Wins** — if `clientTimestamp < server.updatedAt`, server retains its version and records a `conflictResolved` log entry. |
+| Duplicate detection | Items with a `clientId` already in `SyncLog` are counted as `alreadyProcessed` (not re-processed). |
+
+**Supported `entityType` values**
+
+```
+patient                        patient_government_ids
+patient_addresses              emergency_contacts
+patient_healthcare_providers   patient_allergies
+patient_medications            patient_surgical_history
+patient_past_illnesses         patient_chronic_conditions
+patient_family_history         patient_immunizations_self
+patient_disabilities           patient_social_history
+patient_occupation             patient_travel_history
+patient_obstetric_profile      patient_pregnancies
+patient_contraceptive_history  patient_male_reproductive
+patient_dental_vision          patient_mental_health_profile
+file                           file_folder
+clinic_memberships             organization_memberships
+booking_drafts                 notification_preferences
+```
+
+**Request body — mixed batch (3 entity types)**
+
+```json
+{
+  "items": [
+    {
+      "clientId": "550e8400-e29b-41d4-a716-446655440000",
+      "entityType": "patient",
+      "operation": "update",
+      "clientTimestamp": "2026-06-17T14:30:00.000Z",
+      "payloadJson": "{\"clientId\":\"550e8400-e29b-41d4-a716-446655440000\",\"patientId\":\"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\"firstName\":\"Juan\",\"lastName\":\"Dela Cruz\",\"nationality\":\"Filipino\",\"updatedAt\":\"2026-06-17T14:30:00.000Z\"}"
+    },
+    {
+      "clientId": "660e8400-e29b-41d4-a716-446655440001",
+      "entityType": "patient_allergies",
+      "operation": "create",
+      "clientTimestamp": "2026-06-17T14:31:00.000Z",
+      "payloadJson": "{\"clientId\":\"660e8400-e29b-41d4-a716-446655440001\",\"patientId\":\"3fa85f64-5717-4562-b3fc-2c963f66afa6\",\"allergenName\":\"Shellfish\",\"allergyType\":\"food\",\"severity\":\"moderate\",\"reaction\":\"Hives\",\"updatedAt\":\"2026-06-17T14:31:00.000Z\"}"
+    },
+    {
+      "clientId": "770e8400-e29b-41d4-a716-446655440002",
+      "entityType": "patient_allergies",
+      "operation": "delete",
+      "clientTimestamp": "2026-06-17T14:32:00.000Z",
+      "payloadJson": null
+    }
+  ]
+}
+```
+
+**202 Accepted**
+
+```json
+{
+  "succeeded": true,
+  "message": "Accepted 2 item(s). 1 already processed.",
+  "data": {
+    "accepted": 2,
+    "alreadyProcessed": 1,
+    "acknowledgedAt": "2026-06-17T14:32:05.123Z"
+  },
+  "errors": []
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `accepted` | Items queued for Hangfire background processing |
+| `alreadyProcessed` | Duplicate `clientId` found in SyncLog — safely ignored |
+| `acknowledgedAt` | Server timestamp of this acknowledgment |
+
+**Validation errors — 400**
+
+```json
+{
+  "errors": [
+    { "field": "Items[1].EntityType", "code": "SYNC_ENTITY_TYPE_UNKNOWN",
+      "message": "Entity type 'unknown_type' is not a syncable type." },
+    { "field": "Items[2].ClientTimestamp", "code": "FUTURE_DATE_NOT_ALLOWED",
+      "message": "ClientTimestamp cannot be more than 5 minutes in the future." }
+  ]
+}
+```
+
+---
+
+### `GET /api/v1/patients/{patientId}/sync/status` — Sync log
+
+Returns recent sync log entries. Use for debugging stuck or failed items.
+
+**Query params:** `?take=50` (default 50)
+
+**200 OK**
+
+```json
+{
+  "succeeded": true,
+  "data": {
+    "pendingCount": 0,
+    "appliedCount": 47,
+    "rejectedCount": 1,
+    "recentItems": [
+      {
+        "clientId": "550e8400-e29b-41d4-a716-446655440000",
+        "entityType": "patient",
+        "operation": "update",
+        "status": "applied",
+        "clientTimestamp": "2026-06-17T14:30:00.000Z",
+        "serverTimestamp": "2026-06-17T14:30:05.123Z",
+        "conflictDetail": null
+      },
+      {
+        "clientId": "770e8400-e29b-41d4-a716-446655440002",
+        "entityType": "patient_allergies",
+        "operation": "delete",
+        "status": "conflictResolved",
+        "clientTimestamp": "2026-06-17T14:32:00.000Z",
+        "serverTimestamp": "2026-06-17T14:32:01.500Z",
+        "conflictDetail": "Server version is newer. Client=2026-06-17T14:32:00Z, Server=2026-06-17T14:32:01Z. Server version retained."
+      }
+    ]
+  },
+  "errors": []
+}
+```
+
+**Status values:** `pending` | `applied` | `rejected` | `conflictResolved`
+
+---
+
+## Device Sessions
+
+### `POST /api/v1/patients/{patientId}/sessions` — Register device
+
+Registers this device as the only active session. Any existing session on another device is
+revoked synchronously; that device receives `SessionRevoked` via SignalR.
+
+**Request body**
+
+```json
+{
+  "deviceId": "expo-device-id-or-uuid",
+  "deviceLabel": "iPhone 15 Pro",
+  "clerkSessionId": "sess_2xyz789"
+}
+```
+
+**201 Created**
+
+```json
+{
+  "succeeded": true,
+  "message": "Device session registered. Any previous session has been revoked.",
+  "data": {
+    "sessionId": "srv-session-uuid",
+    "deviceId": "expo-device-id-or-uuid",
+    "deviceLabel": "iPhone 15 Pro",
+    "issuedAt": "2026-06-17T08:00:00.000Z"
+  },
+  "errors": []
+}
+```
+
+---
+
+### `DELETE /api/v1/patients/{patientId}/sessions` — Logout
+
+Revokes the active session in both Redis and the database. The connected device receives
+`SessionRevoked` via SignalR.
+
+**204 No Content**
+
+---
+
+## Notifications
+
+### `GET /api/v1/patients/{patientId}/notifications`
+
+**Query params**
+
+| Param | Type | Default | Description |
+|---|---|---|---|
+| `unreadOnly` | `bool` | `false` | Return only unread notifications |
+| `skip` | `int` | `0` | Pagination offset |
+| `take` | `int` | `30` | Page size |
+
+**200 OK**
+
+```json
+{
+  "succeeded": true,
+  "data": {
+    "items": [
+      {
+        "id": "notif-uuid",
+        "type": "appointmentReminder",
+        "category": "appointments",
+        "title": "Appointment Tomorrow",
+        "body": "Your appointment with Dr. Santos is tomorrow at 9:00 AM.",
+        "isRead": false,
+        "readAt": null,
+        "expiresAt": "2026-06-19T09:00:00.000Z",
+        "sourceId": "appt-uuid",
+        "payload": "{\"appointmentId\":\"appt-uuid\",\"clinicId\":\"clinic-uuid\"}",
+        "createdAt": "2026-06-17T10:00:00.000Z"
+      }
+    ],
+    "unreadCount": 3,
+    "totalCount": 1
+  },
+  "errors": []
+}
+```
+
+**Notification types**
+`appointmentReminder` | `clinicAnnouncement` | `medicationReminder` | `labResult` | `newMessage` | `system` | `syncConflict`
+
+**Notification categories**
+`appointments` | `reminders` | `clinic` | `messages` | `system`
+
+---
+
+### `PATCH /api/v1/patients/{patientId}/notifications/{notificationId}/read`
+
+**204 No Content**
+
+---
+
+### `POST /api/v1/patients/{patientId}/notifications/mark-all-read`
+
+**204 No Content**
+
+---
+
+### `GET /api/v1/patients/{patientId}/notification-preferences`
+
+**200 OK**
+
+```json
+{
+  "succeeded": true,
+  "data": [
+    { "id": "pref-uuid-1", "category": "appointments", "pushEnabled": true,  "inAppEnabled": true  },
+    { "id": "pref-uuid-2", "category": "reminders",    "pushEnabled": true,  "inAppEnabled": true  },
+    { "id": "pref-uuid-3", "category": "clinic",       "pushEnabled": false, "inAppEnabled": true  },
+    { "id": "pref-uuid-4", "category": "messages",     "pushEnabled": true,  "inAppEnabled": true  },
+    { "id": "pref-uuid-5", "category": "system",       "pushEnabled": false, "inAppEnabled": true  }
+  ],
+  "errors": []
+}
+```
+
+---
+
+### `PUT /api/v1/patients/{patientId}/notification-preferences/{category}`
+
+`category` = `appointments` | `reminders` | `clinic` | `messages` | `system`
+
+Creates the preference row if it doesn't exist; updates it if it does.
+
+**Request body**
+
+```json
+{ "pushEnabled": false, "inAppEnabled": true }
+```
+
+**200 OK**
+
+```json
+{
+  "succeeded": true,
+  "data": { "id": "pref-uuid-3", "category": "clinic", "pushEnabled": false, "inAppEnabled": true },
+  "errors": []
+}
+```
+
+---
+
+## Discovery — Organizations
+
+### `GET /api/v1/organizations` — Search catalogue
+
+**Query params**
+
+| Param | Type | Default | Description |
+|---|---|---|---|
+| `q` | `string` | — | Name search (case-insensitive) |
+| `skip` | `int` | `0` | Pagination offset |
+| `take` | `int` | `20` | Page size |
+
+Results are ordered by `featuredScore DESC, name ASC`.
+
+**200 OK**
+
+```json
+{
+  "succeeded": true,
+  "data": {
+    "items": [
+      {
+        "id": "org-uuid",
+        "slug": "metro-manila-family-wellness-1",
+        "name": "Metro Manila Family Wellness Network",
+        "description": "A public patient community for Metro Manila members who want coordinated care.",
+        "isPublic": true,
+        "logoUrl": "https://picsum.photos/seed/org-logo-0/80/80",
+        "coverImageUrl": "https://picsum.photos/seed/org-cover-0/400/180",
+        "addressHint": "Metro Manila",
+        "featuredScore": 120,
+        "activeMemberCount": 342,
+        "requiredShareFieldsJson": "[\"fullName\",\"mobile\",\"email\"]",
+        "rolesJson": "[{\"id\":\"member\",\"name\":\"Member\",\"description\":\"General community access.\"}]"
+      }
+    ],
+    "totalCount": 120,
+    "skip": 0,
+    "take": 20
+  },
+  "errors": []
+}
+```
+
+---
+
+### `GET /api/v1/organizations/by-invite/{inviteCode}` — Preview by invite code
+
+Show the organisation details and its linked clinics **before** the patient confirms joining.
+
+**Example:** `GET /api/v1/organizations/by-invite/INV-0020`
+
+**200 OK**
+
+```json
+{
+  "succeeded": true,
+  "data": {
+    "id": "org-uuid",
+    "slug": "metro-manila-senior-care-20",
+    "name": "Metro Manila Senior Care Network",
+    "description": "A private patient community for senior care coordination.",
+    "isPublic": false,
+    "privacyPolicyUrl": "https://Clinic EZ.app/privacy/metro-manila-senior-care-20",
+    "termsAndConditionsUrl": "https://Clinic EZ.app/terms/metro-manila-senior-care-20",
+    "requiredShareFieldsJson": "[\"fullName\",\"dateOfBirth\",\"mobile\"]",
+    "rolesJson": "[{\"id\":\"member\",\"name\":\"Member\"},{\"id\":\"volunteer\",\"name\":\"Volunteer\"}]",
+    "featuredScore": 100,
+    "activeMemberCount": 87,
+    "linkedClinics": [
+      {
+        "id": "clinic-uuid",
+        "name": "Metro Manila Family Medicine Clinic",
+        "address": "Metro Manila, Philippines",
+        "isPublic": true,
+        "supportsAppointments": true,
+        "specialtiesJson": "[\"Family Medicine\",\"Telehealth\"]",
+        "featuredScore": 100
+      }
+    ]
+  },
+  "errors": []
+}
+```
+
+**404** — invite code is invalid or expired.
+
+---
+
+### `POST /api/v1/patients/{patientId}/organization-memberships` — Join organisation
+
+Validates the invite code, resolves `roleId` against the org's `rolesJson`, and creates the membership.
+
+**Request body**
+
+```json
+{
+  "inviteCode": "INV-0020",
+  "roleId": "member",
+  "consentPrivacyPolicy": true,
+  "consentTermsAndConditions": true,
+  "consentDataSharing": true
+}
+```
+
+**201 Created**
+
+```json
+{
+  "succeeded": true,
+  "message": "Joined organization successfully.",
+  "data": {
+    "id": "membership-uuid",
+    "organizationId": "org-uuid",
+    "organizationName": "Metro Manila Senior Care Network",
+    "roleId": "member",
+    "roleName": "Member",
+    "status": "active",
+    "consentDataSharing": true,
+    "consentedAt": "2026-06-17T08:00:00.000Z",
+    "createdAt": "2026-06-17T08:00:00.000Z"
+  },
+  "errors": []
+}
+```
+
+**404** — invite code not found.  
+**409** — already a member of this organisation.
+
+---
+
+## Discovery — Clinics
+
+### `GET /api/v1/clinics` — Search catalogue
+
+**Query params**
+
+| Param | Type | Default | Description |
+|---|---|---|---|
+| `q` | `string` | — | Name search |
+| `organizationId` | `uuid` | — | Scope to clinics linked to this org |
+| `skip` | `int` | `0` | Pagination offset |
+| `take` | `int` | `20` | Page size |
+
+Pass `organizationId` to show only the clinics accessible through a joined organisation.
+
+**200 OK**
+
+```json
+{
+  "succeeded": true,
+  "data": {
+    "items": [
+      {
+        "id": "clinic-uuid",
+        "name": "Metro Manila Family Medicine Clinic",
+        "description": "A public family medicine clinic for online consultations.",
+        "address": "Metro Manila, Philippines",
+        "isPublic": true,
+        "supportsAppointments": true,
+        "logoUrl": "https://picsum.photos/seed/clinic-logo-0/80/80",
+        "coverImageUrl": "https://picsum.photos/seed/clinic-cover-0/400/180",
+        "specialtiesJson": "[\"Family Medicine\",\"Telehealth\"]",
+        "requiredShareFieldsJson": "[\"fullName\",\"mobile\",\"email\"]",
+        "featuredScore": 100
+      }
+    ],
+    "totalCount": 120,
+    "skip": 0,
+    "take": 20
+  },
+  "errors": []
+}
+```
+
+---
+
+### `GET /api/v1/clinics/{clinicId}` — Clinic detail
+
+Returns full clinic info, linked organisations, and the requesting patient's membership status.
+
+**Query params:** `?forPatientId={patientId}` (optional — include to populate `membershipStatus`)
+
+**200 OK**
+
+```json
+{
+  "succeeded": true,
+  "data": {
+    "id": "clinic-uuid",
+    "name": "Metro Manila Family Medicine Clinic",
+    "description": "A public family medicine clinic.",
+    "address": "Metro Manila, Philippines",
+    "isPublic": true,
+    "supportsAppointments": true,
+    "baseUrl": "https://family-medicine-metro-manila-1.Clinic EZ.local",
+    "privacyPolicyUrl": "https://Clinic EZ.app/privacy/family-medicine-metro-manila-1",
+    "termsAndConditionsUrl": "https://Clinic EZ.app/terms/family-medicine-metro-manila-1",
+    "specialtiesJson": "[\"Family Medicine\",\"Telehealth\"]",
+    "requiredShareFieldsJson": "[\"fullName\",\"mobile\",\"email\"]",
+    "featuredScore": 100,
+    "linkedOrganizations": [
+      {
+        "id": "org-uuid",
+        "name": "Metro Manila Senior Care Network",
+        "isPublic": false,
+        "featuredScore": 100,
+        "activeMemberCount": 87
+      }
+    ],
+    "membershipStatus": "active"
+  },
+  "errors": []
+}
+```
+
+`membershipStatus`: `"pending"` | `"active"` | `null` (not joined)
+
+**404** — clinic not found.
+
+---
+
+### `POST /api/v1/patients/{patientId}/clinic-memberships` — Join clinic
+
+Patients join clinics directly — **consent only, no invite code required**.
+
+**Request body**
+
+```json
+{
+  "clinicId": "clinic-uuid",
+  "consentPrivacyPolicy": true,
+  "consentTermsAndConditions": true,
+  "consentDataSharing": true
+}
+```
+
+**201 Created** — `data` is the new membership server UUID.
+
+```json
+{
+  "succeeded": true,
+  "message": "Joined clinic successfully.",
+  "data": "membership-server-uuid",
+  "errors": []
+}
+```
+
+**404** — clinic not found.  
+**409** — already a member of this clinic.
+
+---
+
+## Booking Drafts
+
+### `POST /api/v1/patients/{patientId}/booking-drafts` — Create draft
+
+Creates an appointment request. The draft can be submitted to the clinic later.
+
+**Request body**
+
+```json
+{
+  "clinicId": "clinic-uuid",
+  "organizationId": null,
+  "preferredDate": "2026-07-15",
+  "preferredTime": "09:00",
+  "reason": "Annual physical exam",
+  "notes": "Please prepare CBC and lipid panel results if available.",
+  "shareFieldsJson": "[\"fullName\",\"dateOfBirth\",\"mobile\",\"philhealthId\"]"
+}
+```
+
+**201 Created** — `data` is the new booking draft UUID.
+
+```json
+{
+  "succeeded": true,
+  "data": "booking-draft-uuid",
+  "errors": []
+}
+```
+
+---
+
+### `POST /api/v1/patients/{patientId}/booking-drafts/{draftId}/submit` — Submit to clinic
+
+Forwards the booking request to the target Clinic Dashboard API through the PatientApp
+backend proxy.
+
+> **Note:** The Clinic Dashboard booking API is not yet fully developed. This endpoint
+> currently returns a synthetic `PENDING-{draftId}` reference until the Dashboard is ready.
+
+**202 Accepted**
+
+```json
+{
+  "succeeded": true,
+  "message": "Booking submitted to clinic.",
+  "data": "PENDING-3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "errors": []
+}
+```
+
+**404** — draft not found or does not belong to this patient.  
+**409** — draft has already been submitted.
+
+---
+
+## Appointments
+
+### `GET /api/v1/patients/{patientId}/clinic-appointments` — Proxy appointments
+
+Proxies the appointment list request to a specific clinic's backend. The mobile reads
+`baseUrl` from its local `clinics` SQLite table.
+
+**Query params:** `?clinicBaseUrl=https://family-medicine-metro-manila-1.Clinic EZ.local`
+
+**200 OK**
+
+```json
+{
+  "succeeded": true,
+  "data": {
+    "items": [
+      {
+        "id": "appt-uuid",
+        "clinicId": "clinic-uuid",
+        "clinicName": "Metro Manila Family Medicine Clinic",
+        "provider": {
+          "id": "prov-uuid",
+          "name": "Dr. Reyes",
+          "specialty": "Family Medicine",
+          "avatarUrl": null
+        },
+        "serviceType": "Annual Physical Exam",
+        "scheduledAt": "2026-07-15T01:00:00.000Z",
+        "durationMinutes": 30,
+        "status": "confirmed",
+        "notes": null
+      }
+    ],
+    "totalCount": 1
+  },
+  "errors": []
+}
+```
+
+**Appointment statuses:** `pending` | `confirmed` | `cancelled` | `completed` | `noShow` | `actionRequired`
+
+**503** — the clinic backend is unreachable (Polly retries exhausted). Display cached appointments if available.
+
+---
+
+## Real-Time: SignalR Hub
+
+**Hub URL:** `ws://localhost:5154/hubs/sync`  
+**Auth:** Pass the Clerk JWT via `accessTokenFactory`. The server joins the client to
+`sync:patient:{patientId}` automatically on connect.
+
+### Events pushed by the server
+
+**`SyncCompleted`** — fired when Hangfire finishes processing a sync batch.
+
+```json
+{ "applied": 3, "conflicts": 1 }
+```
+
+- `applied` — items successfully written to the server.
+- `conflicts` — items skipped because the server version was newer (Last-Write-Wins).
+  Call `GET /sync/status` to surface details for the conflicted items.
+
+**`SessionRevoked`** — fired when another device registers or the user logs out remotely.
+
+```json
+{ "reason": "A new device has signed in to your account. This session has been revoked." }
+```
+
+Mobile action: clear local session, navigate to the sign-in screen.
+
+### TypeScript example
+
+```typescript
+import * as signalR from '@microsoft/signalr';
+
+const connection = new signalR.HubConnectionBuilder()
+  .withUrl('http://localhost:5154/hubs/sync', {
+    accessTokenFactory: async () => getToken(),
+  })
+  .withAutomaticReconnect()
+  .build();
+
+connection.on('SyncCompleted', ({ applied, conflicts }) => {
+  console.log(`Sync done: ${applied} applied, ${conflicts} conflicts`);
+  if (conflicts > 0) {
+    fetchSyncStatus(); // show conflict badge in UI
+  }
+});
+
+connection.on('SessionRevoked', ({ reason }) => {
+  console.warn('Session revoked:', reason);
+  clearSecureStore();
+  router.replace('/sign-in');
+});
+
+await connection.start();
+```
+
+---
+
+## Hangfire Dashboard
+
+**URL:** `http://localhost:5154/hangfire`  
+**Auth:** HTTP Basic (`Hangfire:DashboardUsername` / `Hangfire:DashboardPassword` from user-secrets).  
+**Mode:** Read-only in Production; full control in Development.
+
+Use the dashboard to inspect queued / failed sync jobs and trigger manual retries.
+
+---
+
+## E2E Encryption (Production only)
+
+When `Encryption:Enabled=true`, every API payload is AES-256-GCM encrypted.
+
+Mobile sends an encrypted request:
+
+```
+X-Encrypted: 1
+Content-Type: application/json
+
+{ "payload": "<base64(nonce[12] + ciphertext[n] + tag[16])>" }
+```
+
+Server responds with an encrypted body:
+
+```json
+{ "payload": "<base64(nonce[12] + ciphertext[n] + tag[16])>" }
+```
+
+In Development (`Encryption:Enabled=false`), the middleware is not registered — plain JSON
+in and out for full debuggability with Scalar, curl, and React Native dev tools.
+
+```bash
+# Generate a production key (run once, store securely)
+openssl rand -base64 32
+# → set as: ENCRYPTION__BASE64KEY environment variable
+```
+
+---
+
+## Mobile Integration: End-to-End Flow Examples
+
+### First sign-in
+
+```
+1. Clerk sign-in  →  JWT + clerkUserId
+2. GET /patients/by-clerk/{clerkUserId}
+   → 404?  → onboarding → POST /patients  → store patientId in SecureStore
+   → 200?  → read patientId from response.data.id
+3. POST /patients/{id}/sessions                 (register this device)
+4. GET  /patients/{id}/full-record              (hydrate all 22 entity categories into SQLite)
+5. Connect ws://localhost:5154/hubs/sync        (listen for SyncCompleted + SessionRevoked)
+```
+
+### Return sign-in
+
+```
+1. Clerk sign-in  →  JWT
+2. GET /patients/by-clerk/{clerkUserId}  →  patientId
+3. POST /patients/{id}/sessions
+4. POST /patients/{id}/sync              (flush pending syncQueue rows)
+5. Connect to /hubs/sync
+```
+
+### Offline edit → push on connectivity restored
+
+```typescript
+// 1. Always write to local SQLite first (offline-first)
+const newAllergyId = randomUUID();
+await db.insert(patientAllergies).values({
+  id: newAllergyId,
+  patientId,
+  allergenName: 'Shellfish',
+  allergyType: 'food',
+  severity: 'moderate',
+  reaction: 'Hives',
+  createdAt: new Date(),
+  updatedAt: new Date(),
+});
+
+// 2. Enqueue in syncQueue
+const clientId = randomUUID();
+await db.insert(syncQueue).values({
+  id: clientId,
+  entityType: 'patient_allergies',
+  entityId: newAllergyId,
+  operation: 'create',
+  payloadJson: JSON.stringify({
+    clientId,
+    patientId,
+    allergenName: 'Shellfish',
+    allergyType: 'food',
+    severity: 'moderate',
+    reaction: 'Hives',
+    updatedAt: new Date().toISOString(),
+  }),
+  status: 'pending',
+  retryCount: 0,
+  createdAt: new Date(),
+});
+
+// 3. When NetInfo reports connectivity:
+const pending = await db.select().from(syncQueue)
+  .where(eq(syncQueue.status, 'pending'));
+
+const ack = await pushSyncPayload(getToken, patientId, pending.map(item => ({
+  clientId: item.id,
+  entityType: item.entityType,
+  operation: item.operation,
+  clientTimestamp: new Date(item.createdAt).toISOString(),
+  payloadJson: item.payloadJson,
+})));
+
+// 4. Mark accepted items as syncing (Hangfire is now processing)
+await db.update(syncQueue)
+  .set({ status: 'syncing' })
+  .where(inArray(syncQueue.id, pending.map(i => i.id)));
+
+// 5. SignalR SyncCompleted fires when Hangfire finishes
+connection.on('SyncCompleted', async () => {
+  await db.update(syncQueue)
+    .set({ status: 'synced' })
+    .where(eq(syncQueue.status, 'syncing'));
+});
+```
+
+### ApiError handling in screens
+
+```typescript
+import { ApiError } from '@/services/api';
+
+try {
+  const ack = await pushSyncPayload(getToken, patientId, items);
+} catch (err) {
+  if (err instanceof ApiError) {
+    // Single toast with all error messages
+    showToast(err.userMessage);
+
+    // First error only (most common case)
+    showToast(err.firstMessage);
+
+    // React Hook Form field-level errors
+    Object.entries(err.fieldErrors).forEach(([field, msg]) => {
+      form.setError(field, { message: msg });
+    });
+
+    // Handle specific status codes
+    if (err.status === 401) router.replace('/sign-in');
+    if (err.status === 409) showConflictBanner();
+    if (err.status === 503) showOfflineFallback();
+  }
+}
+```
+
+### SWR hooks (reactive UI)
+
+```typescript
+import {
+  usePatientByClerkId,
+  usePatientFullRecord,
+  useNotifications,
+  useOrganizations,
+  useClinics,
+  useSubmitBooking,
+} from '@/services/api';
+
+// Look up patient on sign-in screen
+const { data: patient, isLoading } = usePatientByClerkId(getToken, clerkUserId);
+
+// Hydrate device on first install (called once, not on every focus)
+const { data: fullRecord } = usePatientFullRecord(getToken, patientId);
+
+// Notification badge count
+const { data: notifs } = useNotifications(getToken, patientId, { unreadOnly: true, take: 1 });
+const unreadCount = notifs?.unreadCount ?? 0;
+
+// Search organisations
+const { data: orgs } = useOrganizations(getToken, searchQuery);
+
+// Filter clinics by joined organisation
+const { data: clinics } = useClinics(getToken, undefined, organizationId);
+
+// Submit booking (mutation)
+const { trigger: submitBooking, isMutating } = useSubmitBooking(getToken, patientId, draftId);
+await submitBooking();
+```

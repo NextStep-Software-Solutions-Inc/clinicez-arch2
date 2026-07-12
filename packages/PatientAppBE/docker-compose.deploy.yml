@@ -1,0 +1,32 @@
+# docker-compose.deploy.yml
+# Deploy compose for PatientApp API on DigitalOcean Droplet (Dev environment).
+#
+# - PostgreSQL: external (pg.dev.nextstep-software.com)
+# - Redis:      external (managed Redis cloud service)
+# - API:        this file manages only the patientapp-api container
+#
+# All secrets are injected via .env written at deploy time by GitHub Actions.
+
+services:
+
+  # ─── Patient App API ──────────────────────────────────────────────────────────
+  patientapp-api:
+    image: ${IMAGE_NAME:-patientapp-api}:${IMAGE_TAG:-dev}
+    container_name: patientapp-api
+    ports:
+      - "5100:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
+      - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}
+      - ConnectionStrings__Redis=${REDIS_CONNECTION_STRING}
+      - Clerk__Authority=${CLERK_AUTHORITY}
+      - R2__AccountId=${R2_ACCOUNT_ID}
+      - R2__BucketName=${R2_BUCKET_NAME}
+      - R2__AccessKeyId=${R2_ACCESS_KEY_ID}
+      - R2__SecretAccessKey=${R2_SECRET_ACCESS_KEY}
+      - R2__PublicUrl=${R2_PUBLIC_URL}
+      - Hangfire__DashboardUsername=${HANGFIRE_DASHBOARD_USERNAME:-admin}
+      - Hangfire__DashboardPassword=${HANGFIRE_DASHBOARD_PASSWORD:-changeme}
+      - Firebase__ServiceAccountJson=${FIREBASE_SERVICE_ACCOUNT_JSON}
+      - Encryption__Enabled=false
+    restart: unless-stopped

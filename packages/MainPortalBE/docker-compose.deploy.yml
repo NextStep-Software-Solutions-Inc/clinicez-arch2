@@ -1,0 +1,20 @@
+# docker-compose.deploy.yml
+# Deploy compose for Main Portal API on DigitalOcean Droplet (Dev environment).
+#
+# All secrets are injected via .env written at deploy time by GitHub Actions.
+
+services:
+
+  # ─── Main Portal API ──────────────────────────────────────────────────────────
+  mainportal-api:
+    image: ${IMAGE_NAME:-clinicez-mainportal-api}:${IMAGE_TAG:-dev}
+    container_name: clinicez-mainportal-api
+    ports:
+      - "5200:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
+      - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}
+      - Clerk__SecretKey=${CLERK_SECRET_KEY}
+      - Xendit__SecretKey=${XENDIT_SECRET_KEY}
+      - Xendit__CallbackToken=${XENDIT_CALLBACK_TOKEN}
+    restart: unless-stopped

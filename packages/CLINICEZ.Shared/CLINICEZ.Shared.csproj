@@ -1,17 +1,19 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
   <ItemGroup>
-    <FrameworkReference Include="Microsoft.AspNetCore.App" Version="9.0.0" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="EFCore.BulkExtensions" Version="9.0.1" />
+    <!-- Version-matched to EF Core: net9 consumers keep 9.x; net10 consumers use 10.x -->
+    <PackageReference Include="EFCore.BulkExtensions" Version="9.0.1" Condition="'$(TargetFramework)' == 'net9.0'" />
+    <PackageReference Include="EFCore.BulkExtensions" Version="10.0.1" Condition="'$(TargetFramework)' == 'net10.0'" />
     <PackageReference Include="Sieve" Version="2.5.5" />
   </ItemGroup>
 

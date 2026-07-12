@@ -1,11 +1,11 @@
 ## Component Usage
 
 - Always use `ThemedView` and `ThemedText` components instead of the default `View` and `Text` for all UI code except for the web-app, to ensure a unified component view across the project.
-# Copilot Instructions for ClinicEZ Monorepo
+# Copilot Instructions for Clinic EZ Monorepo
 
 ## Big Picture Architecture
 - **Monorepo Structure:** All projects live under `packages/`. Each package is a separate app or service (e.g., `patient-app`, `web-frontend`, `backend-mobile`).
-- **Mobile Apps:** Built with Expo/React Native. Patient app is local-first (WatermelonDB), supports multiple clinics, and syncs to a per-clinic backend (on-premise or cloud, containerized via Docker).
+- **Mobile Apps:** Built with Expo/React Native. Patient app is local-first (Expo SQLite + Drizzle ORM), supports multiple clinics, and syncs to a per-clinic backend (on-premise or cloud, containerized via Docker).
 - **Web Frontend:** (Planned) Cross-platform (mobile/desktop) for marketing, onboarding, and tenant management.
 - **Backends:** Each clinic has its own backend (containerized, deployed by tenant). Mobile and web may use separate backends.
 - **Onboarding Flow:** Patients join clinics via invite code/email or search. Clinics deploy their own backend and register its URL.
@@ -19,7 +19,7 @@
 ## Project-Specific Conventions
 - **All code must live in `packages/`** (including web, mobile, and backend projects).
 - **File-based routing** is used in Expo apps (see `app/` in `patient-app`).
-- **Local-first/offline-first** patterns in mobile: always use WatermelonDB for local storage, sync logic is per-clinic.
+- **Local-first/offline-first** patterns in mobile: always use Expo SQLite + Drizzle ORM for local storage, with a queue-based sync engine per clinic.
 - **Multi-clinic support:** Patient app must allow switching between clinics in-session.
 - **Containerized backends:** All tenant backends are distributed as Docker images with config download via web onboarding.
 

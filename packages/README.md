@@ -1,6 +1,6 @@
-# CLINICEZ: Enterprise Resource Planning
+# Clinic EZ: Enterprise Resource Planning
 
-A comprehensive, multi-tenant Enterprise Resource Planning (ERP) platform designed for both government structures and private institutions. CLINICEZ integrates a suite of applications to manage the full lifecycle of organizational resources, from planning and procurement to supply and asset management.
+A comprehensive, multi-tenant Enterprise Resource Planning (ERP) platform designed for both government structures and private institutions. Clinic EZ integrates a suite of applications to manage the full lifecycle of organizational resources, from planning and procurement to supply and asset management.
 
 ## Project Structure
 
@@ -58,10 +58,10 @@ This project uses User Secrets to store the database connection string during de
 3. Set the connection string (replace with your own credentials):
 
     ```bash
-    dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Database=CLINICEZ_Db;Username=postgres;Password=your_password"
+    dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Database=Clinic EZ_Db;Username=postgres;Password=your_password"
     ```
 
-4. Repeat the process for the `Portal/CLINICEZ.Portal.Api` project.
+4. Repeat the process for the `Portal/Clinic EZ.Portal.Api` project.
 
 ### 3. Database Migrations
 
@@ -81,9 +81,9 @@ Repeat for the Portal service as needed.
 
 ### 4. Running the Application
 
-Open the CLINICEZ.sln file in your IDE (e.g., Visual Studio).
+Open the Clinic EZ.sln file in your IDE (e.g., Visual Studio).
 
-Set CLINICEZ.Api as the startup project.
+Set Clinic EZ.Api as the startup project.
 
 Run the application.
 

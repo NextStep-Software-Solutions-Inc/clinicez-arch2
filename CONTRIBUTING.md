@@ -1,6 +1,6 @@
-# Contributing to ClinicEZ Monorepo
+# Contributing to Clinic EZ Monorepo
 
-Thank you for your interest in contributing to the ClinicEZ project! This repository is a monorepo containing multiple projects (packages) with different frameworks and languages. To ensure a high-quality, maintainable codebase, please follow these guidelines:
+Thank you for your interest in contributing to the Clinic EZ project! This repository is a monorepo containing multiple projects (packages) with different frameworks and languages. To ensure a high-quality, maintainable codebase, please follow these guidelines:
 
 ## General Guidelines
 

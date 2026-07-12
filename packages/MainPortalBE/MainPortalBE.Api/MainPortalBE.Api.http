@@ -1,0 +1,6 @@
+@MainPortalBE.Api_HostAddress = http://localhost:5230
+
+GET {{MainPortalBE.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

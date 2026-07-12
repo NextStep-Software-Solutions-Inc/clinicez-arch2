@@ -4,8 +4,9 @@ on:
   push:
     branches:
       - development
+      # - patient-app-be/feature/init
     paths:
-      - 'packages/PatientApp/**'
+      - 'packages/PatientAppBE/**'
       - 'packages/CLINICEZ.Shared/**'
       - '.github/workflows/deploy-patient-app-api-dev.yml'
   workflow_dispatch:
@@ -20,7 +21,7 @@ env:
   IMAGE_NAME: patientapp-api
   IMAGE_TAG: dev
   CONTAINER_NAME: patientapp-api
-  DEPLOY_DIR: /opt/clinicez/patientapp
+  DEPLOY_DIR: /opt/Clinic EZ/patientapp
   ENVIRONMENT: Development
 
 jobs:
@@ -41,7 +42,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: packages
-          file: packages/PatientApp/Dockerfile
+          file: packages/PatientAppBE/Dockerfile
           push: false
           load: true
           tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
@@ -71,6 +72,27 @@ jobs:
       - name: Checkout code (for compose file)
         uses: actions/checkout@v4
 
+      - name: Create .env file
+        env:
+          ASPNETCORE_ENVIRONMENT: ${{ env.ENVIRONMENT }}
+          CONNECTION_STRING: ${{ secrets.PATIENTAPP_DB_CONNECTION_STRING }}
+          REDIS_CONNECTION_STRING: ${{ secrets.PATIENTAPP_REDIS_CONNECTION_STRING }}
+          CLERK_AUTHORITY: ${{ secrets.PATIENTAPP_CLERK_AUTHORITY }}
+          R2_ACCOUNT_ID: ${{ secrets.PATIENTAPP_R2_ACCOUNT_ID }}
+          R2_BUCKET_NAME: ${{ secrets.PATIENTAPP_R2_BUCKET_NAME }}
+          R2_ACCESS_KEY_ID: ${{ secrets.PATIENTAPP_R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.PATIENTAPP_R2_SECRET_ACCESS_KEY }}
+          R2_PUBLIC_URL: ${{ secrets.PATIENTAPP_R2_PUBLIC_URL }}
+          HANGFIRE_DASHBOARD_USERNAME: ${{ secrets.PATIENTAPP_HANGFIRE_USERNAME }}
+          HANGFIRE_DASHBOARD_PASSWORD: ${{ secrets.PATIENTAPP_HANGFIRE_PASSWORD }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.PATIENTAPP_FIREBASE_JSON }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          IMAGE_TAG: ${{ env.IMAGE_TAG }}
+        run: |
+          for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING REDIS_CONNECTION_STRING CLERK_AUTHORITY R2_ACCOUNT_ID R2_BUCKET_NAME R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_PUBLIC_URL HANGFIRE_DASHBOARD_USERNAME HANGFIRE_DASHBOARD_PASSWORD FIREBASE_SERVICE_ACCOUNT_JSON IMAGE_NAME IMAGE_TAG; do
+            echo "$var=$(printenv $var)" >> packages/PatientAppBE/.env
+          done
+
       - name: Download Docker image artifact
         uses: actions/download-artifact@v4
         with:
@@ -83,7 +105,7 @@ jobs:
           username: ${{ secrets.DO_DROPLET_USER }}
           key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
           passphrase: ${{ secrets.DO_SSH_PASSPHRASE }}
-          script: mkdir -p ${{ env.DEPLOY_DIR }}
+          script: mkdir -p "${{ env.DEPLOY_DIR }}"
 
       - name: Transfer Docker image via SCP
         uses: appleboy/scp-action@v0.1.7
@@ -95,14 +117,14 @@ jobs:
           source: patientapp-api.tar.gz
           target: ${{ env.DEPLOY_DIR }}
 
-      - name: Transfer docker-compose file via SCP
+      - name: Transfer docker-compose and .env files via SCP
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.DO_DROPLET_IP }}
           username: ${{ secrets.DO_DROPLET_USER }}
           key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
           passphrase: ${{ secrets.DO_SSH_PASSPHRASE }}
-          source: packages/PatientApp/docker-compose.deploy.yml
+          source: "packages/PatientAppBE/docker-compose.deploy.yml,packages/PatientAppBE/.env"
           target: ${{ env.DEPLOY_DIR }}
           strip_components: 2
 
@@ -115,27 +137,10 @@ jobs:
           passphrase: ${{ secrets.DO_SSH_PASSPHRASE }}
           script: |
             set -e
-            cd ${{ env.DEPLOY_DIR }}
+            cd "${{ env.DEPLOY_DIR }}"
 
             echo "==> Loading Docker image..."
             docker load < patientapp-api.tar.gz
-
-            echo "==> Writing .env file..."
-            cat > .env << 'ENVEOF'
-              ASPNETCORE_ENVIRONMENT=${{ env.ENVIRONMENT }}
-              CONNECTION_STRING=${{ secrets.PATIENTAPP_DB_CONNECTION_STRING }}
-              REDIS_CONNECTION_STRING=${{ secrets.PATIENTAPP_REDIS_CONNECTION_STRING }}
-              CLERK_AUTHORITY=${{ secrets.PATIENTAPP_CLERK_AUTHORITY }}
-              R2_ACCOUNT_ID=${{ secrets.PATIENTAPP_R2_ACCOUNT_ID }}
-              R2_BUCKET_NAME=${{ secrets.PATIENTAPP_R2_BUCKET_NAME }}
-              R2_ACCESS_KEY_ID=${{ secrets.PATIENTAPP_R2_ACCESS_KEY_ID }}
-              R2_SECRET_ACCESS_KEY=${{ secrets.PATIENTAPP_R2_SECRET_ACCESS_KEY }}
-              R2_PUBLIC_URL=${{ secrets.PATIENTAPP_R2_PUBLIC_URL }}
-              HANGFIRE_DASHBOARD_USERNAME=${{ secrets.PATIENTAPP_HANGFIRE_USERNAME }}
-              HANGFIRE_DASHBOARD_PASSWORD=${{ secrets.PATIENTAPP_HANGFIRE_PASSWORD }}
-              IMAGE_NAME=${{ env.IMAGE_NAME }}
-              IMAGE_TAG=${{ env.IMAGE_TAG }}
-              ENVEOF
 
             echo "==> Deploying with docker compose..."
             docker compose -f docker-compose.deploy.yml up -d --force-recreate
