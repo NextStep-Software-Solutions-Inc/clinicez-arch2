@@ -3,8 +3,8 @@ name: Deploy Clinic EZ Main Portal API to DigitalOcean Droplet (Dev)
 on:
   push:
     branches:
-      # - development
-      - patient-app-be/feature/init
+      - development
+      # - patient-app-be/feature/init
     paths:
       - 'packages/MainPortalBE/**'
       - 'packages/CLINICEZ.Shared/**'
