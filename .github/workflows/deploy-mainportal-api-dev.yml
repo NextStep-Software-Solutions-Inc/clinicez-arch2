@@ -124,7 +124,7 @@ jobs:
         username: ${{ secrets.DO_DROPLET_USER }}
         key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
         passphrase: ${{ secrets.DO_SSH_PASSPHRASE }}
-        script: mkdir -p ${{ env.DEPLOY_DIR }}
+        script: mkdir -p "${{ env.DEPLOY_DIR }}"
 
     - name: Transfer Docker image via SCP
       uses: appleboy/scp-action@v0.1.7
@@ -156,7 +156,7 @@ jobs:
         passphrase: ${{ secrets.DO_SSH_PASSPHRASE }}
         script: |
           set -e
-          cd ${{ env.DEPLOY_DIR }}
+          cd "${{ env.DEPLOY_DIR }}"
 
           echo "==> Loading Docker image..."
           docker load < mainportal-api.tar.gz
