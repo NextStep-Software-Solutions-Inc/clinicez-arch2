@@ -117,7 +117,7 @@ export default function SecuritySettingsScreen() {
             icon={{ android: 'lock', ios: 'lock.fill' }}
             iconColor="#3B82F6"
             right={{ type: 'chevron' }}
-            onPress={() => navigation.navigate('ChangePINScreen' as never)}
+            onPress={() => navigation.navigate('Main', { screen: 'ChangePINScreen' })}
           />
         </SettingsSection>
       </ScrollView>
@@ -158,7 +158,7 @@ export default function SecuritySettingsScreen() {
           icon={{ android: 'password', ios: 'key.fill' }}
           iconColor="#8B5CF6"
           right={{ type: 'chevron' }}
-          onPress={() => navigation.navigate('ChangePINScreen' as never)}
+          onPress={() => navigation.navigate('Main', { screen: 'ChangePINScreen' })}
         />
         <SettingsRow
           title="Lock App Now"

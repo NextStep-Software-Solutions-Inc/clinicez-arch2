@@ -40,8 +40,6 @@ export default function SettingsScreen() {
     }
   };
 
-  const navigate = (screen: string) => navigation.navigate(screen as never);
-
   const handleLogout = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
@@ -59,7 +57,7 @@ export default function SettingsScreen() {
     if (hasPIN) {
       setChangePwdPinVisible(true);
     } else {
-      navigate('ChangePasswordScreen');
+      navigation.navigate('Main', { screen: 'ChangePasswordScreen' });
     }
   };
 
@@ -90,7 +88,7 @@ export default function SettingsScreen() {
           icon={{ android: 'security', ios: 'lock.shield.fill' }}
           iconColor="#10B981"
           right={{ type: 'chevron' }}
-          onPress={() => navigate('SecuritySettingsScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'SecuritySettingsScreen' })}
         />
         {hasPIN && (
           <SettingsRow
@@ -98,7 +96,7 @@ export default function SettingsScreen() {
             icon={{ android: 'password', ios: 'key.fill' }}
             iconColor="#8B5CF6"
             right={{ type: 'chevron' }}
-            onPress={() => navigate('ChangePINScreen')}
+            onPress={() => navigation.navigate('Main', { screen: 'ChangePINScreen' })}
           />
         )}
         <SettingsRow
@@ -118,7 +116,7 @@ export default function SettingsScreen() {
           icon={{ android: 'palette', ios: 'paintpalette.fill' }}
           iconColor="#F59E0B"
           right={{ type: 'chevron' }}
-          onPress={() => navigate('AppearanceSettingsScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'AppearanceSettingsScreen' })}
         />
       </SettingsSection>
 
@@ -130,7 +128,7 @@ export default function SettingsScreen() {
           icon={{ android: 'notifications', ios: 'bell.fill' }}
           iconColor="#3B82F6"
           right={{ type: 'chevron' }}
-          onPress={() => navigate('NotificationsSettingsScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'NotificationsSettingsScreen' })}
         />
       </SettingsSection>
 
@@ -177,7 +175,7 @@ export default function SettingsScreen() {
           icon={{ android: 'info', ios: 'info.circle.fill' }}
           iconColor="#6B7280"
           right={{ type: 'chevron' }}
-          onPress={() => navigate('AboutSettingsScreen')}
+          onPress={() => navigation.navigate('Main', { screen: 'AboutSettingsScreen' })}
         />
       </SettingsSection>
 
@@ -189,7 +187,7 @@ export default function SettingsScreen() {
             icon={{ android: 'code', ios: 'hammer.fill' }}
             iconColor="#EC4899"
             right={{ type: 'chevron' }}
-            onPress={() => navigate('DebugSettingsScreen')}
+            onPress={() => navigation.navigate('Main', { screen: 'DebugSettingsScreen' })}
           />
         </SettingsSection>
       )}
@@ -200,7 +198,7 @@ export default function SettingsScreen() {
         subtitle="Enter your PIN before changing your password."
         onSuccess={() => {
           setChangePwdPinVisible(false);
-          navigate('ChangePasswordScreen');
+          navigation.navigate('Main', { screen: 'ChangePasswordScreen' });
         }}
         onDismiss={() => setChangePwdPinVisible(false)}
       />
