@@ -10,6 +10,8 @@ using PatientAppBE.Infrastructure.Persistence;
 using Testcontainers.PostgreSql;
 using Testcontainers.Redis;
 
+[assembly: Xunit.CollectionBehavior(DisableTestParallelization = true)]
+
 namespace PatientAppBE.Api.Tests.Infrastructure;
 
 /// <summary>
@@ -34,6 +36,21 @@ public sealed class PatientAppWebApplicationFactory
         await _postgres.StartAsync();
         await _redis.StartAsync();
 
+        // Inject container connection strings and stub secrets via environment variables
+        // to guarantee they override the appsettings.json file-based sources.
+        Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", _postgres.GetConnectionString() + ";SSL Mode=Disable;Trust Server Certificate=true");
+        Environment.SetEnvironmentVariable("ConnectionStrings__Redis", _redis.GetConnectionString());
+        Environment.SetEnvironmentVariable("Clerk__Authority", "https://test.clerk.accounts.dev");
+        Environment.SetEnvironmentVariable("Clerk__Audience", "test");
+        Environment.SetEnvironmentVariable("Encryption__Enabled", "false");
+        Environment.SetEnvironmentVariable("Hangfire__DashboardUsername", "admin");
+        Environment.SetEnvironmentVariable("Hangfire__DashboardPassword", "admin");
+        Environment.SetEnvironmentVariable("R2__AccountId", "test-account");
+        Environment.SetEnvironmentVariable("R2__BucketName", "test-bucket");
+        Environment.SetEnvironmentVariable("R2__AccessKeyId", "test-key");
+        Environment.SetEnvironmentVariable("R2__SecretAccessKey", "test-secret");
+        Environment.SetEnvironmentVariable("R2__PublicUrl", "https://test.r2.dev");
+
         // Trigger host build then run migrations against the test container
         await using var scope = Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -45,31 +62,25 @@ public sealed class PatientAppWebApplicationFactory
         Dispose();  // stop the test server first, then stop containers
         await _postgres.DisposeAsync();
         await _redis.DisposeAsync();
+
+        // Clear injected environment variables
+        Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", null);
+        Environment.SetEnvironmentVariable("ConnectionStrings__Redis", null);
+        Environment.SetEnvironmentVariable("Clerk__Authority", null);
+        Environment.SetEnvironmentVariable("Clerk__Audience", null);
+        Environment.SetEnvironmentVariable("Encryption__Enabled", null);
+        Environment.SetEnvironmentVariable("Hangfire__DashboardUsername", null);
+        Environment.SetEnvironmentVariable("Hangfire__DashboardPassword", null);
+        Environment.SetEnvironmentVariable("R2__AccountId", null);
+        Environment.SetEnvironmentVariable("R2__BucketName", null);
+        Environment.SetEnvironmentVariable("R2__AccessKeyId", null);
+        Environment.SetEnvironmentVariable("R2__SecretAccessKey", null);
+        Environment.SetEnvironmentVariable("R2__PublicUrl", null);
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
-
-        // Inject container connection strings and stub secrets before the host builds
-        builder.ConfigureAppConfiguration((_, config) =>
-        {
-            config.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:DefaultConnection"]  = _postgres.GetConnectionString(),
-                ["ConnectionStrings:Redis"]              = _redis.GetConnectionString(),
-                ["Clerk:Authority"]                      = "https://test.clerk.accounts.dev",
-                ["Clerk:Audience"]                       = "test",
-                ["Encryption:Enabled"]                   = "false",
-                ["Hangfire:DashboardUsername"]            = "admin",
-                ["Hangfire:DashboardPassword"]            = "admin",
-                ["R2:AccountId"]                         = "test-account",
-                ["R2:BucketName"]                        = "test-bucket",
-                ["R2:AccessKeyId"]                       = "test-key",
-                ["R2:SecretAccessKey"]                   = "test-secret",
-                ["R2:PublicUrl"]                         = "https://test.r2.dev",
-            });
-        });
 
         // Override services AFTER the app has registered everything
         builder.ConfigureTestServices(services =>
@@ -90,6 +101,10 @@ public sealed class PatientAppWebApplicationFactory
             var existing = services.SingleOrDefault(d => d.ServiceType == typeof(IBackgroundJobEnqueuer));
             if (existing is not null) services.Remove(existing);
             services.AddScoped<IBackgroundJobEnqueuer, NoOpJobEnqueuer>();
+
+            // Remove ClinicPingBackgroundService so it doesn't query database during startup/migrations
+            var clinicPingService = services.FirstOrDefault(d => d.ImplementationType == typeof(PatientAppBE.Infrastructure.Services.Workers.ClinicPingBackgroundService));
+            if (clinicPingService is not null) services.Remove(clinicPingService);
         });
     }
 }

@@ -40,7 +40,7 @@ public sealed class SyncIntegrationTests : IClassFixture<PatientAppWebApplicatio
             new
             {
                 IdempotencyKey = idempotencyKey ?? Guid.NewGuid(),
-                EntityType = "Patient",
+                EntityType = "patient",
                 Operation = (int)SyncOperation.Update,
                 ClientTimestamp = DateTime.UtcNow.AddSeconds(-10),
                 PayloadJson = $$"""{"clientId":"{{patientId}}","firstName":"Updated","lastName":"Name","updatedAt":"{{DateTime.UtcNow.AddSeconds(-10):O}}"}""",
