@@ -3,21 +3,21 @@ FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 
 # Copy csproj files and restore dependencies
-COPY ["Dashboard/Dashboard.Api/Dashboard.Api.csproj", "Dashboard/Dashboard.Api/"]
-COPY ["Dashboard/Dashboard.Application/Dashboard.Application.csproj", "Dashboard/Dashboard.Application/"]
-COPY ["Dashboard/Dashboard.Domain/Dashboard.Domain.csproj", "Dashboard/Dashboard.Domain/"]
-COPY ["Dashboard/Dashboard.Infrastructure/Dashboard.Infrastructure.csproj", "Dashboard/Dashboard.Infrastructure/"]
+COPY ["ClinicDashboardBE/ClinicDashboardBE.Api/ClinicDashboardBE.Api.csproj", "ClinicDashboardBE/ClinicDashboardBE.Api/"]
+COPY ["ClinicDashboardBE/ClinicDashboardBE.Application/ClinicDashboardBE.Application.csproj", "ClinicDashboardBE/ClinicDashboardBE.Application/"]
+COPY ["ClinicDashboardBE/ClinicDashboardBE.Domain/ClinicDashboardBE.Domain.csproj", "ClinicDashboardBE/ClinicDashboardBE.Domain/"]
+COPY ["ClinicDashboardBE/ClinicDashboardBE.Infrastructure/ClinicDashboardBE.Infrastructure.csproj", "ClinicDashboardBE/ClinicDashboardBE.Infrastructure/"]
 COPY ["CLINICEZ.Shared/CLINICEZ.Shared.csproj", "CLINICEZ.Shared/"]
 
-RUN dotnet restore "Dashboard/Dashboard.Api/Dashboard.Api.csproj"
+RUN dotnet restore "ClinicDashboardBE/ClinicDashboardBE.Api/ClinicDashboardBE.Api.csproj"
 
 # Copy everything else and build
 COPY . .
-WORKDIR "/src/Dashboard/Dashboard.Api"
-RUN dotnet build "Dashboard.Api.csproj" -c Release -o /app/build
+WORKDIR "/src/ClinicDashboardBE/ClinicDashboardBE.Api"
+RUN dotnet build "ClinicDashboardBE.Api.csproj" -c Release -o /app/build
 
 # Publish the application
-RUN dotnet publish "Dashboard.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "ClinicDashboardBE.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 # Use the official ASP.NET Core runtime image
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
@@ -29,4 +29,4 @@ EXPOSE 8080
 EXPOSE 443
 
 # Set the entry point
-ENTRYPOINT ["dotnet", "Dashboard.Api.dll"]
+ENTRYPOINT ["dotnet", "ClinicDashboardBE.Api.dll"]

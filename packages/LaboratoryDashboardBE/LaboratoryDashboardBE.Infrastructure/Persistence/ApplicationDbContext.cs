@@ -5,13 +5,13 @@ using MassTransit;
 
 namespace LaboratoryDashboardBE.Infrastructure.Persistence;
 
-public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : DbContext(options)
+public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options, Microsoft.Extensions.Configuration.IConfiguration configuration) : DbContext(options)
 {
     public DbSet<Product> Products { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        const string schemaName = "catalog";
+        var schemaName = configuration["DbSchema"] ?? "catalog";
         modelBuilder.HasDefaultSchema(schemaName);
 
         foreach (var entity in modelBuilder.Model.GetEntityTypes())

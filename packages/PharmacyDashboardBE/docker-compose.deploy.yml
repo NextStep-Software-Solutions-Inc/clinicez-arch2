@@ -1,0 +1,17 @@
+# docker-compose.deploy.yml
+# Deploy compose for Pharmacy Dashboard API on DigitalOcean Droplet (Dev environment).
+
+services:
+  pharmacy-dashboard-api:
+    image: ${IMAGE_NAME:-clinicez-pharmacy-dashboard-api}:${IMAGE_TAG:-dev}
+    container_name: clinicez-pharmacy-dashboard-api
+    ports:
+      - "5600:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
+      - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}
+      - DbSchema=pharmacy_dashboard
+      - RabbitMq__Host=${RABBITMQ_HOST:-conn-rabbitmq.dev.nextstep-software.com}
+      - RabbitMq__Username=${RABBITMQ_USERNAME:-rabbitmq}
+      - RabbitMq__Password=${RABBITMQ_PASSWORD:-nextstep-rabbitmq-2o2G}
+    restart: unless-stopped

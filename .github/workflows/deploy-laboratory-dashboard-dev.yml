@@ -1,0 +1,152 @@
+name: Deploy Laboratory Dashboard API to DigitalOcean Droplet (Dev)
+
+on:
+  push:
+    branches:
+      - development
+    paths:
+      - 'packages/LaboratoryDashboardBE/**'
+      - 'packages/CLINICEZ.Shared/**'
+      - '.github/workflows/deploy-laboratory-dashboard-dev.yml'
+  pull_request:
+    branches:
+      - development
+    paths:
+      - 'packages/LaboratoryDashboardBE/**'
+      - 'packages/CLINICEZ.Shared/**'
+      - '.github/workflows/deploy-laboratory-dashboard-dev.yml'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual deployment'
+        required: false
+        default: 'Manual deployment'
+        type: string
+
+env:
+  IMAGE_NAME: clinicez-laboratory-dashboard-api
+  IMAGE_TAG: dev
+  CONTAINER_NAME: clinicez-laboratory-dashboard-api
+  DEPLOY_DIR: "/opt/Clinic EZ/laboratory-dashboard"
+  ENVIRONMENT: Development
+
+jobs:
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    environment: Development
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: packages
+        file: packages/LaboratoryDashboardBE/Dockerfile
+        push: false
+        load: true
+        tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Save Docker image to tar.gz
+      run: |
+        docker save ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} | gzip > laboratory-dashboard-api.tar.gz
+        echo "Image size: $(du -sh laboratory-dashboard-api.tar.gz | cut -f1)"
+
+    - name: Upload image artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: laboratory-dashboard-docker-image
+        path: laboratory-dashboard-api.tar.gz
+        retention-days: 1
+
+  deploy:
+    name: Deploy to DigitalOcean Droplet
+    runs-on: ubuntu-latest
+    environment: Development
+    needs: build
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+
+    steps:
+    - name: Checkout code (for compose file)
+      uses: actions/checkout@v4
+
+    - name: Create .env file
+      env:
+        ASPNETCORE_ENVIRONMENT: ${{ env.ENVIRONMENT }}
+        CONNECTION_STRING: ${{ secrets.PATIENTAPP_DB_CONNECTION_STRING }}
+        RABBITMQ_HOST: ${{ vars.CLINICEZ_RABBITMQ_HOST }}
+        RABBITMQ_USERNAME: ${{ vars.CLINICEZ_RABBITMQ_USERNAME }}
+        RABBITMQ_PASSWORD: ${{ secrets.CLINICEZ_RABBITMQ_PASSWORD }}
+        IMAGE_NAME: ${{ env.IMAGE_NAME }}
+        IMAGE_TAG: ${{ env.IMAGE_TAG }}
+      run: |
+        for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING RABBITMQ_HOST RABBITMQ_USERNAME RABBITMQ_PASSWORD IMAGE_NAME IMAGE_TAG; do
+          echo "$var=$(printenv $var)" >> packages/LaboratoryDashboardBE/.env
+        done
+
+    - name: Download Docker image artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: laboratory-dashboard-docker-image
+
+    - name: Ensure deploy directory exists on droplet
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.DO_DROPLET_IP }}
+        username: ${{ secrets.DO_DROPLET_USER }}
+        key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
+        passphrase: ${{ secrets.DO_SSH_PASSPHRASE }}
+        script: mkdir -p "${{ env.DEPLOY_DIR }}"
+
+    - name: Transfer Docker image via SCP
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.DO_DROPLET_IP }}
+        username: ${{ secrets.DO_DROPLET_USER }}
+        key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
+        passphrase: ${{ secrets.DO_SSH_PASSPHRASE }}
+        source: laboratory-dashboard-api.tar.gz
+        target: ${{ env.DEPLOY_DIR }}
+
+    - name: Transfer docker-compose and .env files via SCP
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.DO_DROPLET_IP }}
+        username: ${{ secrets.DO_DROPLET_USER }}
+        key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
+        passphrase: ${{ secrets.DO_SSH_PASSPHRASE }}
+        source: "packages/LaboratoryDashboardBE/docker-compose.deploy.yml,packages/LaboratoryDashboardBE/.env"
+        target: ${{ env.DEPLOY_DIR }}
+        strip_components: 2
+
+    - name: Load image and deploy on droplet
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.DO_DROPLET_IP }}
+        username: ${{ secrets.DO_DROPLET_USER }}
+        key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
+        passphrase: ${{ secrets.DO_SSH_PASSPHRASE }}
+        script: |
+          set -e
+          cd "${{ env.DEPLOY_DIR }}"
+
+          echo "==> Loading Docker image..."
+          docker load < laboratory-dashboard-api.tar.gz
+
+          echo "==> Deploying with docker compose..."
+          docker compose -f docker-compose.deploy.yml up -d --force-recreate
+
+          echo "==> Cleaning up old images..."
+          docker image prune -f
+
+          echo "==> Verifying container is running..."
+          docker ps --filter "name=${{ env.CONTAINER_NAME }}" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+          echo "==> Deployment complete!"

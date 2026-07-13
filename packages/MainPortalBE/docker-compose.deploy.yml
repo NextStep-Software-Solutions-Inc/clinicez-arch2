@@ -17,4 +17,7 @@ services:
       - Clerk__SecretKey=${CLERK_SECRET_KEY}
       - Xendit__SecretKey=${XENDIT_SECRET_KEY}
       - Xendit__CallbackToken=${XENDIT_CALLBACK_TOKEN}
+      - RabbitMq__Host=${RABBITMQ_HOST}
+      - RabbitMq__Username=${RABBITMQ_USERNAME}
+      - RabbitMq__Password=${RABBITMQ_PASSWORD}
     restart: unless-stopped
