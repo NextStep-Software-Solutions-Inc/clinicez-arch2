@@ -19,15 +19,18 @@ public class XenditBillingService : IXenditBillingService
 {
     private readonly ApplicationDbContext _context;
     private readonly IXenditApiClient _xenditClient;
+    private readonly IConfiguration _configuration;
 
-    public XenditBillingService(ApplicationDbContext context, IXenditApiClient xenditClient)
+    public XenditBillingService(ApplicationDbContext context, IXenditApiClient xenditClient, IConfiguration configuration)
     {
         _context = context;
         _xenditClient = xenditClient;
+        _configuration = configuration;
     }
 
     public async Task<string> CreateCheckoutSessionAsync(string tenantIdOrSlug, string planId, bool isAnnual, CancellationToken cancellationToken = default)
     {
+        var frontendBaseUrl = (_configuration["FrontendBaseUrl"] ?? "http://localhost:3000").TrimEnd('/');
         var tenant = await _context.Tenants.FirstOrDefaultAsync(t => t.Id.ToString() == tenantIdOrSlug || t.TenantSlug == tenantIdOrSlug, cancellationToken)
             ?? throw new Exception("Tenant not found.");
 
@@ -138,8 +141,8 @@ public class XenditBillingService : IXenditBillingService
             Amount = isAnnual ? (long)(plan.PriceAnnually * 12) : (long)plan.PriceMonthly,
             Currency = "PHP",
             Description = isAnnual ? $"{tenant.ClinicName} - {plan.Name} Plan Subscription (Annually)" : $"{tenant.ClinicName} - {plan.Name} Plan Subscription (Monthly)",
-            SuccessReturnUrl = $"http://localhost:3000/{tenant.TenantSlug}/dashboard/billing",
-            FailureReturnUrl = $"http://localhost:3000/{tenant.TenantSlug}/dashboard/billing",
+            SuccessReturnUrl = $"{frontendBaseUrl}/{tenant.TenantSlug}/dashboard/billing",
+            FailureReturnUrl = $"{frontendBaseUrl}/{tenant.TenantSlug}/dashboard/billing",
             Schedule = new Xendit.Models.Subscriptions.XenditScheduleRequest
             {
                 ReferenceId = $"sch-{tenant.Id}-{Guid.NewGuid()}",
@@ -218,16 +221,17 @@ public class XenditBillingService : IXenditBillingService
             }
         }
 
-        return redirectUrl ?? $"http://localhost:3000/{tenant.TenantSlug}/dashboard/billing";
+        return redirectUrl ?? $"{frontendBaseUrl}/{tenant.TenantSlug}/dashboard/billing";
     }
 
     public async Task<string> GetCustomerPortalUrlAsync(string tenantIdOrSlug, CancellationToken cancellationToken = default)
     {
+        var frontendBaseUrl = (_configuration["FrontendBaseUrl"] ?? "http://localhost:3000").TrimEnd('/');
         var tenant = await _context.Tenants.FirstOrDefaultAsync(t => t.Id.ToString() == tenantIdOrSlug || t.TenantSlug == tenantIdOrSlug, cancellationToken)
             ?? throw new Exception("Tenant not found");
 
         // Since Xendit does not have a Stripe-like customer portal, we redirect the user to the local billing history/details page
-        return $"http://localhost:3000/{tenant.TenantSlug}/dashboard/billing";
+        return $"{frontendBaseUrl}/{tenant.TenantSlug}/dashboard/billing";
     }
 
     public async Task<bool> CancelSubscriptionAsync(string tenantIdOrSlug, CancellationToken cancellationToken = default)
