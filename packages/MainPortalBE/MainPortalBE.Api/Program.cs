@@ -87,8 +87,50 @@ using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-    // Apply clean migrations
-    dbContext.Database.Migrate();
+    try
+    {
+        // Apply clean migrations
+        dbContext.Database.Migrate();
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[Migration Error] Exception type: {ex.GetType().FullName}");
+        Console.WriteLine($"[Migration Error] Exception message: {ex.Message}");
+        try
+        {
+            var services = ((Microsoft.EntityFrameworkCore.Infrastructure.IInfrastructure<IServiceProvider>)dbContext).Instance;
+            var modelDiffer = (Microsoft.EntityFrameworkCore.Migrations.IMigrationsModelDiffer)services.GetService(typeof(Microsoft.EntityFrameworkCore.Migrations.IMigrationsModelDiffer))!;
+            var migrationsAssembly = (Microsoft.EntityFrameworkCore.Migrations.IMigrationsAssembly)services.GetService(typeof(Microsoft.EntityFrameworkCore.Migrations.IMigrationsAssembly))!;
+            var modelRuntimeInitializer = (Microsoft.EntityFrameworkCore.Infrastructure.IModelRuntimeInitializer)services.GetService(typeof(Microsoft.EntityFrameworkCore.Infrastructure.IModelRuntimeInitializer))!;
+            
+            var currentModel = dbContext.Model.GetRelationalModel();
+            var snapshotModel = migrationsAssembly.ModelSnapshot?.Model;
+            Microsoft.EntityFrameworkCore.Metadata.IRelationalModel? snapshotRelationalModel = null;
+
+            if (snapshotModel is Microsoft.EntityFrameworkCore.Metadata.IMutableModel mutableModel)
+            {
+                snapshotModel = mutableModel.FinalizeModel();
+            }
+
+            if (snapshotModel is not null)
+            {
+                snapshotModel = modelRuntimeInitializer.Initialize(snapshotModel);
+                snapshotRelationalModel = snapshotModel.GetRelationalModel();
+            }
+
+            var diffs = modelDiffer.GetDifferences(snapshotRelationalModel, currentModel);
+            Console.WriteLine($"[Migration Error] Detected {diffs.Count} model differences:");
+            foreach (var diff in diffs)
+            {
+                Console.WriteLine($" - Operation: {diff.GetType().Name} : {diff}");
+            }
+        }
+        catch (Exception diagEx)
+        {
+            Console.WriteLine($"[Migration Error] Failed to extract EF diagnostics: {diagEx.Message}");
+        }
+        throw;
+    }
 
     if (isDevelopment)
     {
