@@ -39,6 +39,7 @@ public static class DependencyInjection
             });
 
             options.AddInterceptors(sp.GetRequiredService<SoftDeleteInterceptor>());
+            options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
         });
 
         // Current user service backed by IHttpContextAccessor
