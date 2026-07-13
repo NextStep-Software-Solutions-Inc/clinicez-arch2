@@ -16,6 +16,7 @@ public interface IApplicationDbContext
     DbSet<BlogArticle> BlogArticles { get; }
     DbSet<AdminRole> AdminRoles { get; }
     DbSet<AdminUser> AdminUsers { get; }
+    DbSet<Facility> Facilities { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

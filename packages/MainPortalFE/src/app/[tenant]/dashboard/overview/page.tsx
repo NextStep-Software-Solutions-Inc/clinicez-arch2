@@ -5,9 +5,9 @@ import { SectionCards } from "@/components/dashboard/section-cards";
 import data from "@/app/[tenant]/dashboard/data.json";
 
 export const metadata: Metadata = {
-  title: "Dashboard Overview | Clinic EZ",
-  description: "View clinic analytics, statistics, patient admissions, and reports in the Clinic EZ Dashboard.",
-  keywords: ["clinic dashboard", "health statistics", "patient analytics", "Clinic EZ dashboard"],
+  title: "Workspace Overview | Clinic EZ Workspace",
+  description: "View tenant workspace analytics, clinical stats, and site reports in the Clinic EZ Workspace Console.",
+  keywords: ["tenant workspace", "workspace overview", "health statistics", "Clinic EZ workspace"],
 };
 
 export default function OverviewPage() {

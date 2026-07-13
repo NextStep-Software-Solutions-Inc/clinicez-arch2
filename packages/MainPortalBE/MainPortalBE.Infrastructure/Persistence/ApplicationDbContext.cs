@@ -2,6 +2,7 @@ using MainPortalBE.Application.Interfaces;
 using MainPortalBE.Domain.Common;
 using MainPortalBE.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using MassTransit;
 using Microsoft.EntityFrameworkCore.Metadata;
 using System.Linq.Expressions;
 
@@ -19,6 +20,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<BlogArticle> BlogArticles { get; set; }
     public DbSet<AdminRole> AdminRoles { get; set; }
     public DbSet<AdminUser> AdminUsers { get; set; }
+    public DbSet<Facility> Facilities { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -109,9 +111,23 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasForeignKey(r => r.TenantId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        modelBuilder.Entity<Facility>(entity =>
+        {
+            entity.Property(e => e.FacilityType).HasConversion<string>();
+            entity.Property(e => e.Status).HasConversion<string>();
+            entity.HasOne(e => e.Tenant)
+                .WithMany()
+                .HasForeignKey(e => e.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         Seeders.SubscriptionPlanSeeder.Seed(modelBuilder);
         Seeders.AdminRBACSeeder.Seed(modelBuilder);
         Seeders.BlogSeeder.Seed(modelBuilder);
+
+        modelBuilder.AddInboxStateEntity();
+        modelBuilder.AddOutboxStateEntity();
+        modelBuilder.AddOutboxMessageEntity();
 
         base.OnModelCreating(modelBuilder);
     }

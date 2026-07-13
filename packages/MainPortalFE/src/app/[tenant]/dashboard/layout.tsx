@@ -4,9 +4,24 @@ import { SiteHeader } from "@/components/dashboard/site-header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { tenantService } from "@/services/tenant.service";
+import { redirect } from "next/navigation";
 
-export default async function TenantDashboardLayout({ children }: { children: React.ReactNode }) {
+export default async function TenantDashboardLayout({ 
+    children,
+    params,
+}: { 
+    children: React.ReactNode;
+    params: Promise<{ tenant: string }>;
+}) {
     const { userId, getToken } = await auth();
+    
+    if (!userId) {
+        redirect("/sign-in");
+    }
+
+    const resolvedParams = await params;
+    const routeTenantSlug = resolvedParams.tenant;
+
     let clinicName = "Unknown Clinic";
     let userDetails = {
         name: "Unknown User",
@@ -14,24 +29,32 @@ export default async function TenantDashboardLayout({ children }: { children: Re
         avatar: "",
     };
     
-    if (userId) {
-        const user = await currentUser();
-        if (user) {
-            userDetails = {
-                name: `${user.firstName || ""} ${user.lastName || ""}`.trim() || "User",
-                email: user.emailAddresses[0]?.emailAddress || "",
-                avatar: user.imageUrl || "",
-            };
-        }
-        try {
-            const token = await getToken();
-            const tenant = await tenantService.getTenantByOwner(userId, token);
-            if (tenant) {
-                clinicName = tenant.clinicName;
+    const user = await currentUser();
+    if (user) {
+        userDetails = {
+            name: `${user.firstName || ""} ${user.lastName || ""}`.trim() || "User",
+            email: user.emailAddresses[0]?.emailAddress || "",
+            avatar: user.imageUrl || "",
+        };
+    }
+
+    try {
+        const token = await getToken();
+        const tenant = await tenantService.getTenantByOwner(userId, token);
+        
+        // Protect layout boundary: only workspace owner has access
+        if (!tenant || tenant.tenantSlug !== routeTenantSlug) {
+            if (tenant?.tenantSlug) {
+                redirect(`/${tenant.tenantSlug}/dashboard/overview`);
+            } else {
+                redirect("/tenants/register");
             }
-        } catch (e) {
-            console.error("Failed to fetch tenant for layout", e);
         }
+        
+        clinicName = tenant.clinicName;
+    } catch (e) {
+        console.error("Failed to fetch tenant for layout", e);
+        redirect("/tenants/register");
     }
 
     return (

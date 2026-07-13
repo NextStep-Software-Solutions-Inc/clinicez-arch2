@@ -10,4 +10,9 @@
     <PackageReference Include="Sieve" Version="2.5.5" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\CLINICEZ.Shared\CLINICEZ.Shared.csproj" />
+  </ItemGroup>
+
 </Project>
+

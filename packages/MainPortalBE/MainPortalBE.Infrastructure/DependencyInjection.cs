@@ -1,7 +1,9 @@
 using Clerk.BackendAPI;
 using CLINICEZ.Shared.Interfaces;
 using MainPortalBE.Domain.Interfaces;
+using MassTransit;
 using MainPortalBE.Application.Interfaces;
+using MainPortalBE.Application.Features.Admin.Consumers;
 using MainPortalBE.Infrastructure.Persistence;
 using MainPortalBE.Infrastructure.Persistence.Interceptors;
 using MainPortalBE.Infrastructure.Persistence.Repositories;
@@ -62,6 +64,29 @@ public static class DependencyInjection
             .UsePostgreSqlStorage(c => c.UseNpgsqlConnection(connectionString)));
 
         services.AddHangfireServer();
+
+        services.AddMassTransit(x =>
+        {
+            x.AddConsumer<FacilityProvisionedEventConsumer>();
+
+            x.AddEntityFrameworkOutbox<ApplicationDbContext>(o =>
+            {
+                o.UsePostgres();
+                o.UseBusOutbox();
+            });
+
+            x.UsingRabbitMq((context, cfg) =>
+            {
+                cfg.Host(configuration["RabbitMq:Host"] ?? "localhost", configuration["RabbitMq:VirtualHost"] ?? "/", h =>
+                {
+                    h.Username(configuration["RabbitMq:Username"] ?? "rabbitmq");
+					h.Password(configuration["RabbitMq:Password"] ?? "nextstep-rabbitmq-2o2G");
+                });
+
+                cfg.ConfigureEndpoints(context);
+            });
+        });
+
         return services;
     }
 }

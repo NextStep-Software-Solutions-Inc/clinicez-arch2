@@ -43,24 +43,30 @@ export function AppSidebar({ clinicName = "Clinic EZ", user, ...props }: { clini
         icon: IconDashboard,
       },
       {
-        title: "Clinics",
-        url: `/dashboard/clinics`,
-        icon: IconHospital,
-      },
-      {
-        title: "Organizations",
-        url: `/dashboard/organizations`,
+        title: "Facilities",
         icon: IconBuilding,
-      },
-      {
-        title: "Laboratories",
-        url: `/dashboard/laboratories`,
-        icon: IconTestPipe,
-      },
-      {
-        title: "Pharmacies",
-        url: `/dashboard/pharmacies`,
-        icon: IconPill,
+        items: [
+          {
+            title: "Clinics",
+            url: `/dashboard/clinics`,
+            icon: IconHospital,
+          },
+          {
+            title: "Organizations",
+            url: `/dashboard/organizations`,
+            icon: IconBuilding,
+          },
+          {
+            title: "Laboratories",
+            url: `/dashboard/laboratories`,
+            icon: IconTestPipe,
+          },
+          {
+            title: "Pharmacies",
+            url: `/dashboard/pharmacies`,
+            icon: IconPill,
+          },
+        ]
       },
     ],
     navSecondary: [
@@ -88,7 +94,7 @@ export function AppSidebar({ clinicName = "Clinic EZ", user, ...props }: { clini
             >
               <a href={`/${tenant}/dashboard`}>
                 <IconInnerShadowTop className="!size-5 text-primary" />
-                <span className="text-base font-bold text-foreground truncate">{clinicName} | Clinic EZ</span>
+                <span className="text-base font-bold text-foreground truncate">{clinicName} | Workspace</span>
               </a>
             </SidebarMenuButton>
           </SidebarMenuItem>
