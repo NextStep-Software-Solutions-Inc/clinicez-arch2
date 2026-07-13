@@ -58,7 +58,12 @@ public class XenditBillingService : IXenditBillingService
 
         if (string.IsNullOrEmpty(frontendBaseUrl))
         {
-            frontendBaseUrl = (_configuration["FrontendBaseUrl"] ?? "http://localhost:3000").TrimEnd('/');
+            var configUrl = _configuration["FrontendBaseUrl"];
+            if (string.IsNullOrEmpty(configUrl))
+            {
+                throw new InvalidOperationException("Could not determine the frontend redirect base URL from request headers (Origin/Referer) or configuration (FrontendBaseUrl).");
+            }
+            frontendBaseUrl = configUrl.TrimEnd('/');
         }
 
         var tenant = await _context.Tenants.FirstOrDefaultAsync(t => t.Id.ToString() == tenantIdOrSlug || t.TenantSlug == tenantIdOrSlug, cancellationToken)
@@ -277,7 +282,12 @@ public class XenditBillingService : IXenditBillingService
 
         if (string.IsNullOrEmpty(frontendBaseUrl))
         {
-            frontendBaseUrl = (_configuration["FrontendBaseUrl"] ?? "http://localhost:3000").TrimEnd('/');
+            var configUrl = _configuration["FrontendBaseUrl"];
+            if (string.IsNullOrEmpty(configUrl))
+            {
+                throw new InvalidOperationException("Could not determine the frontend redirect base URL from request headers (Origin/Referer) or configuration (FrontendBaseUrl).");
+            }
+            frontendBaseUrl = configUrl.TrimEnd('/');
         }
 
         var tenant = await _context.Tenants.FirstOrDefaultAsync(t => t.Id.ToString() == tenantIdOrSlug || t.TenantSlug == tenantIdOrSlug, cancellationToken)
