@@ -13,8 +13,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace MainPortalBE.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260712050053_AddWaveAmbrayAdmin")]
-    partial class AddWaveAmbrayAdmin
+    [Migration("20260713071429_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -276,6 +276,9 @@ namespace MainPortalBE.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("BannerUrl")
+                        .HasColumnType("text");
+
                     b.Property<string>("Category")
                         .IsRequired()
                         .HasColumnType("text");
@@ -325,12 +328,119 @@ namespace MainPortalBE.Infrastructure.Migrations
                     b.Property<string>("UpdatedBy")
                         .HasColumnType("text");
 
+                    b.Property<int>("Views")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Slug")
                         .IsUnique();
 
                     b.ToTable("BlogArticles", "main");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("b1111111-1111-1111-1111-111111111111"),
+                            Author = "Dr. Raymond Santos",
+                            BannerUrl = "https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&w=1200&q=80",
+                            Category = "Guides",
+                            Content = "# Streamlining Clinic Operations with Clinic EZ\r\n\r\nModern medical practices require speed, accuracy, and compliance. In the Philippines, managing a clinic involves balancing patient check-ins, medical histories, prescription writing, and complex billing systems like **PhilHealth** and **HMO claims**.\r\n\r\nHere is how **Clinic EZ** acts as a unified operating system for your healthcare practice:\r\n\r\n## 1. Multi-Branch Operations\r\nWhether you operate a single pediatric clinic in Manila or a network of diagnostic facilities across Luzon, Clinic EZ lets you manage all your branches from a single unified workspace.\r\n\r\n- **Centralized Registry**: Keep patient files in sync across all clinic sites.\r\n- **Granular Access**: Grant receptionists, nurses, and doctors custom permissions specific to their workspace.\r\n\r\n## 2. Advanced EHR & Prescriptions\r\nForget about looking through paper charts. Clinic EZ's Electronic Health Record (EHR) module allows doctors to view consultation histories, track vitals, and issue digital prescriptions securely.\r\n\r\n> \"The transition to digital records saved our clinic over 15 hours of paperwork every single week.\"  \r\n> *— Dr. Santos, Cardinal Medical Group*\r\n\r\n## 3. Simplified Billing & HMO Integration\r\nClinic EZ maps directly to local payment methods, Starter/Pro tiers, and compiles PhilHealth-ready claims so you can avoid processing bottlenecks and collect fees without delay.\r\n\r\n### Key Benefits\r\n* **Reduced errors** in prescription filling.\r\n* **Instant notifications** for diagnostic lab test availability.\r\n* **Seamless scheduling** that avoids overbookings.",
+                            CreatedAt = new DateTime(2026, 7, 12, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            IsDeleted = false,
+                            PublishedAt = new DateTime(2026, 7, 12, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Slug = "streamlining-clinic-operations",
+                            Status = "Published",
+                            Summary = "Discover how Clinic EZ simplifies patient onboarding, scheduling, and billing for modern healthcare clinics in the Philippines.",
+                            Title = "Streamlining Clinic Operations with Clinic EZ",
+                            Views = 342
+                        },
+                        new
+                        {
+                            Id = new Guid("b2222222-2222-2222-2222-222222222222"),
+                            Author = "Wave Ambray",
+                            BannerUrl = "https://images.unsplash.com/photo-1579154204601-01588f351167?auto=format&fit=crop&w=1200&q=80",
+                            Category = "Health Tech",
+                            Content = "# The Future of Integrated Laboratory Information Systems\r\n\r\nMedical diagnostics form the backbone of clinical decision-making. Yet, many diagnostic facilities and laboratory centers still operate in isolation from main hospital clinics, requiring manual printouts and scan uploads.\r\n\r\nIntegrating your **Laboratory Information System (LIS)** with the primary care portal bridges this gap.\r\n\r\n## Real-Time Diagnostic Sync\r\nWhen a doctor orders a blood chemistry panel or an X-ray, the request is instantly transmitted to the laboratory department. \r\n\r\n1. **Order Reception**: Laboratory staff process the request on their dedicated dashboard.\r\n2. **Result Entry**: Test results, references, and PDF files are uploaded directly.\r\n3. **Instant Alerts**: The ordering physician receives a push notification when results are ready.\r\n\r\n## Security and Compliance\r\nMaintaining data privacy is critical. All diagnostic records in Clinic EZ are encrypted in transit and at rest, aligning fully with the **Data Privacy Act of 2012** (RA 10173).\r\n\r\n## Scalability\r\nFrom community laboratories to centralized medical networks, integrated LIS speeds up diagnostics and boosts patient trust.",
+                            CreatedAt = new DateTime(2026, 7, 12, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            IsDeleted = false,
+                            PublishedAt = new DateTime(2026, 7, 12, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Slug = "future-integrated-laboratories",
+                            Status = "Published",
+                            Summary = "How linking laboratory workflows directly to patient electronic health records reduces errors and speeds up diagnosis cycles.",
+                            Title = "The Future of Integrated Laboratory Information Systems",
+                            Views = 198
+                        },
+                        new
+                        {
+                            Id = new Guid("b3333333-3333-3333-3333-333333333333"),
+                            Author = "Carla Mendoza, RPh",
+                            BannerUrl = "https://images.unsplash.com/photo-1586015555751-63bb77f4322a?auto=format&fit=crop&w=1200&q=80",
+                            Category = "Product Updates",
+                            Content = "# Optimizing Pharmacy Dispensing & Inventory Control\r\n\r\nManaging pharmacy inventory demands precision. Dispensing the wrong dosage or running out of critical maintenance medications can disrupt patient treatments and hurt your bottom line.\r\n\r\nClinic EZ's pharmacy module brings control back to pharmacists:\r\n\r\n## Integrated Prescription Dispensing\r\nWhen a physician issues a digital prescription in a Clinic EZ clinic, it shows up on the pharmacy terminal. This removes illegible handwriting errors and accelerates dispensing cycles.\r\n\r\n### Dynamic Inventory Control\r\n* **Auto-Deductions**: Inventory counts auto-decrement as items are sold.\r\n* **Low Stock Alerts**: Configure thresholds to get notified when items need restocking.\r\n* **Batch Tracking**: Track expiry dates easily to minimize waste.\r\n\r\n## Multi-Store Sync\r\nManage stock transfers between different branches smoothly. See which branch has a specific medication in real-time, reducing customer wait times and maximizing sales.",
+                            CreatedAt = new DateTime(2026, 7, 12, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            IsDeleted = false,
+                            PublishedAt = new DateTime(2026, 7, 12, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Slug = "optimizing-pharmacy-dispensing",
+                            Status = "Published",
+                            Summary = "A comprehensive guide on managing medicine inventory levels, prescription dispenses, and organizational compliance across branches.",
+                            Title = "Optimizing Pharmacy Dispensing & Inventory Control",
+                            Views = 254
+                        },
+                        new
+                        {
+                            Id = new Guid("b4444444-4444-4444-4444-444444444444"),
+                            Author = "Dr. Raymond Santos",
+                            BannerUrl = "https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=1200&q=80",
+                            Category = "Health Tech",
+                            Content = "# Clinic EZ: Your Accredited PhilHealth Konsulta & Yakap Ready EMR\r\n\r\nFor healthcare providers in the Philippines, compliance with government health programs is no longer optional. Under the **Universal Health Care (UHC) Act**, the PhilHealth Konsulta and **Yakap** packages aim to provide primary care access to every Filipino. \r\n\r\nTo participate, clinics must use an accredited **Electronic Medical Record (EMR)** system to report consultations.\r\n\r\nHere is how **Clinic EZ** simplifies PhilHealth Yakap compliance:\r\n\r\n## 1. Accredited EMR Compliance\r\nClinic EZ is accredited to integrate directly with PhilHealth's reporting endpoints. Patient records, consult notes, and diagnoses are securely packaged and formatted according to PhilHealth requirements.\r\n\r\n## 2. Integrated PhilHealth Proxy\r\nSubmitting claims manually is slow. Clinic EZ features a built-in PhilHealth Proxy layer that automatically uploads and verifies claims directly from your EMR workspace.\r\n\r\n- **Instant eligibility verification** for patients.\r\n- **Auto-populated consultation forms** (Annex A2) to reduce human error.\r\n- **Fast submission** of SOAP notes and ICD-10 codes.\r\n\r\n## 3. Simplified Primary Care Checklists\r\nThe Yakap program requires specific clinical workflows. Clinic EZ's custom templates guide doctors through the mandatory checklists:\r\n\r\n* **Comprehensive profile check** (vitals, family history).\r\n* **ICD-10 clinical diagnosis mappings** built directly into the record.\r\n* **Accredited e-prescriptions** linked directly to partner pharmacies.\r\n\r\nTransitioning to a Yakap-accredited EMR like Clinic EZ ensures compliance, speeds up reimbursement times, and lets you focus on patient care.",
+                            CreatedAt = new DateTime(2026, 7, 12, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            IsDeleted = false,
+                            PublishedAt = new DateTime(2026, 7, 12, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Slug = "philhealth-yakap-ready-emr",
+                            Status = "Published",
+                            Summary = "How Clinic EZ helps healthcare providers comply with PhilHealth Konsulta and Yakap requirements, simplify claims, and automate patient records.",
+                            Title = "Clinic EZ: Your Accredited PhilHealth Konsulta & Yakap Ready EMR",
+                            Views = 412
+                        },
+                        new
+                        {
+                            Id = new Guid("b5555555-5555-5555-5555-555555555555"),
+                            Author = "Dr. Raymond Santos",
+                            BannerUrl = "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=1200&q=80",
+                            Category = "Guides",
+                            Content = "# Accreditation Roadmap: How Clinics Can Become PhilHealth Konsulta Providers\r\n\r\nExpanding primary healthcare services is a priority under the Universal Health Care (UHC) law. The **PhilHealth Konsulta** program provides access to primary care consultations, laboratory diagnostic services, and selected outpatient medicines.\r\n\r\nFor clinics aiming to become accredited Konsulta providers, here is a factual checklist:\r\n\r\n## Step 1: Self-Assessment & Registration\r\nFacilities must submit their application to the local PhilHealth Regional Office (PRO). Key requirements include:\r\n- A valid **DOH License to Operate** (LTO) for primary care facilities or medical clinics.\r\n- Professional credentials of affiliated medical staff (PRC licenses, board certifications).\r\n\r\n## Step 2: Physical & Manpower Compliance\r\nAccredited facilities must house basic diagnostics equipment and support staff:\r\n1. **Manpower**: At least one primary care physician and supporting nursing or administrative personnel.\r\n2. **Infrastructure**: Dedicated consultation rooms, clean patient waiting areas, and secure medical storage.\r\n3. **Services**: Capacity to perform or outsource basic lab diagnostics (CBC, urinalysis, fasting blood sugar, sputum microscopy).\r\n\r\n## Step 3: Accredited EMR Integration\r\nManual reporting is prohibited under the program. Accredited clinics must use a certified **Electronic Medical Record (EMR)** provider like **Clinic EZ** to synchronize consultation details and register patient profiles.\r\n\r\nAccreditation not only elevates the standard of care but also provides facilities with predictable capitation payments, enabling sustainable operations.",
+                            CreatedAt = new DateTime(2026, 7, 12, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            IsDeleted = false,
+                            PublishedAt = new DateTime(2026, 7, 12, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Slug = "philhealth-konsulta-accreditation-roadmap",
+                            Status = "Published",
+                            Summary = "A step-by-step roadmap detailing registration, equipment compliance, and EMR integration checklists for primary care facilities.",
+                            Title = "Accreditation Roadmap: How Clinics Can Become PhilHealth Konsulta Providers",
+                            Views = 312
+                        },
+                        new
+                        {
+                            Id = new Guid("b6666666-6666-6666-6666-666666666666"),
+                            Author = "Wave Ambray",
+                            BannerUrl = "https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=1200&q=80",
+                            Category = "Health Tech",
+                            Content = "# How Digital Lab Orders & PACS Integrations Speed Up Primary Care Diagnostics\r\n\r\nIn traditional primary care clinics, requesting laboratory tests or imaging scans involves writing a paper requisition slip, handing it to the patient, and waiting for the printed result to be returned. This manual workflow introduces diagnostic delays and increases administrative overhead.\r\n\r\nDirect digital integrations bridge this gap:\r\n\r\n## Direct Digital Requisitions\r\nWith an integrated EMR, physicians submit diagnostic requests directly to affiliated laboratory systems.\r\n- **Accurate mapping**: Requisition codes match specific diagnostic instruments, removing transcription errors.\r\n- **Specimen Tracking**: Specimen collection is barcoded and tracked in real-time.\r\n\r\n## PACS & DICOM Image Sync\r\nFor radiology (X-ray, MRI, ultrasound), integrating the EMR with a **Picture Archiving and Communication System (PACS)** allows doctors to view medical images directly from the patient's record.\r\n- Avoids manual CD copying or printing film.\r\n- Radiologists input reports directly into the shared portal.\r\n- Primary care physicians review reports and images side-by-side during consultations.\r\n\r\nIntegrating digital lab requests and PACS workflows speeds up patient diagnostics and improves care coordination.",
+                            CreatedAt = new DateTime(2026, 7, 12, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            IsDeleted = false,
+                            PublishedAt = new DateTime(2026, 7, 12, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Slug = "lab-orders-pacs-primary-care",
+                            Status = "Published",
+                            Summary = "Analyzing how direct digital lab transmissions from primary care physicians to diagnostic centers reduce error rates and cut diagnostic turnaround times.",
+                            Title = "How Digital Lab Orders & PACS Integrations Speed Up Primary Care Diagnostics",
+                            Views = 215
+                        });
                 });
 
             modelBuilder.Entity("MainPortalBE.Domain.Entities.ExampleEntity", b =>
@@ -375,6 +485,57 @@ namespace MainPortalBE.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("ExampleEntities", "main");
+                });
+
+            modelBuilder.Entity("MainPortalBE.Domain.Entities.Facility", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FacilityType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("Facilities", "main");
                 });
 
             modelBuilder.Entity("MainPortalBE.Domain.Entities.PaymentReceipt", b =>
@@ -726,6 +887,9 @@ namespace MainPortalBE.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasDefaultValueSql("gen_random_uuid()");
 
+                    b.Property<int>("ActivePatientRecordsCount")
+                        .HasColumnType("integer");
+
                     b.Property<string>("BusinessType")
                         .HasColumnType("text");
 
@@ -735,6 +899,9 @@ namespace MainPortalBE.Infrastructure.Migrations
                     b.Property<string>("ClinicName")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<int>("ClinicalBranchesCount")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Country")
                         .HasColumnType("text");
@@ -771,6 +938,12 @@ namespace MainPortalBE.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int>("MonthlyApiQuotaLimit")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MonthlyApiQuotaUsed")
+                        .HasColumnType("integer");
+
                     b.Property<string>("OwnerId")
                         .IsRequired()
                         .HasColumnType("text");
@@ -783,6 +956,9 @@ namespace MainPortalBE.Infrastructure.Migrations
 
                     b.Property<string>("Province")
                         .HasColumnType("text");
+
+                    b.Property<int>("StaffAccountsCount")
+                        .HasColumnType("integer");
 
                     b.Property<string>("StreetLine1")
                         .HasColumnType("text");
@@ -830,6 +1006,174 @@ namespace MainPortalBE.Infrastructure.Migrations
                     b.ToTable("Tenants", "main");
                 });
 
+            modelBuilder.Entity("MassTransit.EntityFrameworkCoreIntegration.InboxState", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime?>("Consumed")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ConsumerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("Delivered")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ExpirationTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("LastSequenceNumber")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("LockId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ReceiveCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("Received")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("bytea");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Delivered");
+
+                    b.ToTable("InboxState", "main");
+                });
+
+            modelBuilder.Entity("MassTransit.EntityFrameworkCoreIntegration.OutboxMessage", b =>
+                {
+                    b.Property<long>("SequenceNumber")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("SequenceNumber"));
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<Guid?>("ConversationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CorrelationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DestinationAddress")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime?>("EnqueueTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ExpirationTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FaultAddress")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("Headers")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("InboxConsumerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("InboxMessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("InitiatorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("MessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("MessageType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("OutboxId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Properties")
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ResponseAddress")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime>("SentTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SourceAddress")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.HasKey("SequenceNumber");
+
+                    b.HasIndex("EnqueueTime");
+
+                    b.HasIndex("ExpirationTime");
+
+                    b.HasIndex("OutboxId", "SequenceNumber")
+                        .IsUnique();
+
+                    b.HasIndex("InboxMessageId", "InboxConsumerId", "SequenceNumber")
+                        .IsUnique();
+
+                    b.ToTable("OutboxMessage", "main");
+                });
+
+            modelBuilder.Entity("MassTransit.EntityFrameworkCoreIntegration.OutboxState", b =>
+                {
+                    b.Property<Guid>("OutboxId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("Created")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("Delivered")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("LastSequenceNumber")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("LockId")
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("bytea");
+
+                    b.HasKey("OutboxId");
+
+                    b.HasIndex("Created");
+
+                    b.ToTable("OutboxState", "main");
+                });
+
             modelBuilder.Entity("MainPortalBE.Domain.Entities.AdminUser", b =>
                 {
                     b.HasOne("MainPortalBE.Domain.Entities.AdminRole", "Role")
@@ -847,6 +1191,17 @@ namespace MainPortalBE.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("MainPortalBE.Domain.Entities.Facility", b =>
+                {
+                    b.HasOne("MainPortalBE.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Tenant");
@@ -880,6 +1235,18 @@ namespace MainPortalBE.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("SubscriptionPlan");
+                });
+
+            modelBuilder.Entity("MassTransit.EntityFrameworkCoreIntegration.OutboxMessage", b =>
+                {
+                    b.HasOne("MassTransit.EntityFrameworkCoreIntegration.OutboxState", null)
+                        .WithMany()
+                        .HasForeignKey("OutboxId");
+
+                    b.HasOne("MassTransit.EntityFrameworkCoreIntegration.InboxState", null)
+                        .WithMany()
+                        .HasForeignKey("InboxMessageId", "InboxConsumerId")
+                        .HasPrincipalKey("MessageId", "ConsumerId");
                 });
 
             modelBuilder.Entity("MainPortalBE.Domain.Entities.SubscriptionPlan", b =>
