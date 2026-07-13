@@ -55,11 +55,12 @@ jobs:
       run: dotnet tool install --global dotnet-ef --version 10.0.2
 
     - name: Try to generate debug migration
+      working-directory: packages/MainPortalBE/MainPortalBE.Infrastructure
       env:
         ConnectionStrings__DefaultConnection: ${{ secrets.CLINICEZ_MAINPORTAL_DB_CONNECTION_STRING }}
       run: |
-        dotnet ef migrations add DebugInspect --project packages/MainPortalBE/MainPortalBE.Infrastructure --startup-project packages/MainPortalBE/MainPortalBE.Api || true
-        cat packages/MainPortalBE/MainPortalBE.Infrastructure/Migrations/*DebugInspect.cs || echo "No debug migration found"
+        dotnet ef migrations add DebugInspect --startup-project ../MainPortalBE.Api || true
+        cat Migrations/*DebugInspect.cs || echo "No debug migration found"
 
   build:
     name: Build Docker Image
