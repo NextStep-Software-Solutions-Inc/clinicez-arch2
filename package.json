@@ -1,0 +1,7 @@
+{
+  "name": "clinicez-monorepo",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ]
+}

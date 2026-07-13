@@ -432,7 +432,7 @@ export async function rescheduleAppointment(
 }
 
 import { fetchAvailableSlotsLive } from '../api/appointmentsApi';
-import { safeRun } from '../../utils/safe';
+import { safeRun } from '@shared/safe';
 
 /**
  * Fetches available time slots for a clinic on a given date.

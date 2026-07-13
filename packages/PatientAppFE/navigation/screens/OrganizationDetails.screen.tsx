@@ -9,7 +9,7 @@ import EmptyState from '@ui/EmptyState';
 import { SkeletonCard } from '@ui/Skeleton';
 import EntityCoverHeader from '@ui/EntityCoverHeader';
 import { useOfflineAlert } from 'contexts/OfflineAlertContext';
-import { safeAwait } from 'utils/safe';
+import { safeAwait } from '@shared/safe';
 import { usePatientId } from 'hooks/usePatientId';
 import {
   getOrganizationDetail,

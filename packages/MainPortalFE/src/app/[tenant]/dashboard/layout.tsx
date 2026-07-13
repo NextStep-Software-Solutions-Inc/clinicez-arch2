@@ -3,18 +3,19 @@ import CreateResourceDialog from "@/components/dashboard/CreateResourceDialog";
 import { SiteHeader } from "@/components/dashboard/site-header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { auth, currentUser } from "@clerk/nextjs/server";
-import { tenantService } from "@/services/tenant.service";
+import { tenantService, TenantDto } from "@/services/tenant.service";
 import { redirect } from "next/navigation";
+import { safeAwait } from "@shared/safe";
 
-export default async function TenantDashboardLayout({ 
+export default async function TenantDashboardLayout({
     children,
     params,
-}: { 
+}: {
     children: React.ReactNode;
     params: Promise<{ tenant: string }>;
 }) {
     const { userId, getToken } = await auth();
-    
+
     if (!userId) {
         redirect("/sign-in");
     }
@@ -28,7 +29,7 @@ export default async function TenantDashboardLayout({
         email: "",
         avatar: "",
     };
-    
+
     const user = await currentUser();
     if (user) {
         userDetails = {
@@ -38,24 +39,28 @@ export default async function TenantDashboardLayout({
         };
     }
 
-    try {
-        const token = await getToken();
-        const tenant = await tenantService.getTenantByOwner(userId, token);
-        
-        // Protect layout boundary: only workspace owner has access
-        if (!tenant || tenant.tenantSlug !== routeTenantSlug) {
-            if (tenant?.tenantSlug) {
-                redirect(`/${tenant.tenantSlug}/dashboard/overview`);
-            } else {
-                redirect("/tenants/register");
-            }
-        }
-        
-        clinicName = tenant.clinicName;
-    } catch (e) {
-        console.error("Failed to fetch tenant for layout", e);
+    const [token, tokenErr] = await safeAwait(getToken());
+    if (tokenErr) {
+        console.error("Failed to fetch tenant for layout", tokenErr);
         redirect("/tenants/register");
     }
+
+    const [tenant, tenantErr] = await safeAwait(tenantService.getTenantByOwner(userId, token));
+    if (tenantErr) {
+        console.error("Failed to fetch tenant for layout", tenantErr);
+        redirect("/tenants/register");
+    }
+
+    // Protect layout boundary: only workspace owner has access
+    if (!tenant || tenant.tenantSlug !== routeTenantSlug) {
+        if (tenant?.tenantSlug) {
+            redirect(`/${tenant.tenantSlug}/dashboard/overview`);
+        } else {
+            redirect("/tenants/register");
+        }
+    }
+
+    clinicName = tenant.clinicName;
 
     return (
         <>

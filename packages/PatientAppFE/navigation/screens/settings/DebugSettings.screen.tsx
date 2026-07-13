@@ -7,7 +7,7 @@ import { useAuth } from 'contexts/AuthContext';
 import { seedDemoHealthRecords, clearAllData } from '@db/seedDemoData';
 import { seedCatalog } from 'services/discovery/discoveryService';
 import { seedMockNotifications } from 'services/notifications/notificationService';
-import { safeAwait } from 'utils/safe';
+import { safeAwait } from '@shared/safe';
 
 // Only show this screen in development builds
 if (!__DEV__) {

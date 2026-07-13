@@ -13,7 +13,7 @@ import { format, parseISO } from 'date-fns';
 import ThemedText from '@ui/ThemedText';
 import ThemedView from '@ui/ThemedView';
 import { useOfflineAlert } from 'contexts/OfflineAlertContext';
-import { safeAwait } from 'utils/safe';
+import { safeAwait } from '@shared/safe';
 import WeeklyDatePicker from 'components/appointments/WeeklyDatePicker';
 import TimeSlotPicker from 'components/appointments/TimeSlotPicker';
 import { db } from '@db/index';

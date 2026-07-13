@@ -1,0 +1,7 @@
+{
+  "name": "@shared/safe",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./safe.ts",
+  "types": "./safe.ts"
+}

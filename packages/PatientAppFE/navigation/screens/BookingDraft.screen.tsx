@@ -38,7 +38,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import NetInfo from '@react-native-community/netinfo';
 import { useAuth as useClerkAuth } from '@clerk/expo';
 import { useOfflineAlert } from 'contexts/OfflineAlertContext';
-import { safeAwait } from 'utils/safe';
+import { safeAwait } from '@shared/safe';
 import ThemedText from '@ui/ThemedText';
 import ThemedView from '@ui/ThemedView';
 import { SkeletonCard } from '@ui/Skeleton';

@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { Alert } from 'react-native';
 import * as Updates from 'expo-updates';
 import { scheduleLocalNotification } from 'services/notifications/notificationService';
-import { safeAwait } from 'utils/safe';
+import { safeAwait } from '@shared/safe';
 
 export function useOTAUpdate() {
   useEffect(() => {

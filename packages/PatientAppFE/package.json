@@ -47,7 +47,8 @@
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "4.25.2",
     "react-native-worklets": "^0.9.1",
-    "swr": "^2.4.1"
+    "swr": "^2.4.1",
+    "@shared/safe": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "~19.2.3",

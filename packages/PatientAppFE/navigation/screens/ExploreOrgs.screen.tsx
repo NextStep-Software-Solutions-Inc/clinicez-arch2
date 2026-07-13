@@ -20,7 +20,7 @@ import ThemedView from '@ui/ThemedView';
 import { useAuth as useClerkAuth } from '@clerk/expo';
 import NetInfo from '@react-native-community/netinfo';
 import { useOfflineAlert } from 'contexts/OfflineAlertContext';
-import { safeAwait } from 'utils/safe';
+import { safeAwait } from '@shared/safe';
 import { usePatientId } from 'hooks/usePatientId';
 import {
     getShareFieldLabel,

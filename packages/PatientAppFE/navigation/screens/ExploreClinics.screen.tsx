@@ -20,7 +20,7 @@ import EntityMediaCardHeader from '@ui/EntityMediaCardHeader';
 import ThemedText from '@ui/ThemedText';
 import ThemedView from '@ui/ThemedView';
 import { useOfflineAlert } from 'contexts/OfflineAlertContext';
-import { safeAwait } from 'utils/safe';
+import { safeAwait } from '@shared/safe';
 import { usePatientId } from 'hooks/usePatientId';
 import {
     getShareFieldLabel,
