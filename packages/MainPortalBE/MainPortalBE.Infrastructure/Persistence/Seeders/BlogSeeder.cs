@@ -1,16 +1,27 @@
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 using MainPortalBE.Domain.Entities;
+using MainPortalBE.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
 namespace MainPortalBE.Infrastructure.Persistence.Seeders;
 
-public static class BlogSeeder
+public class BlogSeeder : IBaseSeeder
 {
-    public static void Seed(ModelBuilder modelBuilder)
+    private readonly ApplicationDbContext _context;
+
+    public BlogSeeder(ApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task SeedAsync(CancellationToken cancellationToken = default)
     {
         var seedDate = new DateTime(2026, 7, 12, 0, 0, 0, DateTimeKind.Utc);
 
-        modelBuilder.Entity<BlogArticle>().HasData(
+        var blogs = new[]
+        {
             new BlogArticle
             {
                 Id = Guid.Parse("b1111111-1111-1111-1111-111111111111"),
@@ -225,6 +236,16 @@ For radiology (X-ray, MRI, ultrasound), integrating the EMR with a **Picture Arc
 
 Integrating digital lab requests and PACS workflows speeds up patient diagnostics and improves care coordination."
             }
-        );
+        };
+
+        foreach (var blog in blogs)
+        {
+            if (!await _context.BlogArticles.AnyAsync(b => b.Id == blog.Id, cancellationToken))
+            {
+                _context.BlogArticles.Add(blog);
+            }
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
     }
 }

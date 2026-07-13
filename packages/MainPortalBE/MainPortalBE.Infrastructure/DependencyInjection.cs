@@ -39,8 +39,12 @@ public static class DependencyInjection
             });
 
             options.AddInterceptors(sp.GetRequiredService<SoftDeleteInterceptor>());
-            options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
         });
+
+        // Register seeders for runtime database initialization
+        services.AddScoped<MainPortalBE.Domain.Interfaces.IBaseSeeder, MainPortalBE.Infrastructure.Persistence.Seeders.SubscriptionPlanSeeder>();
+        services.AddScoped<MainPortalBE.Domain.Interfaces.IBaseSeeder, MainPortalBE.Infrastructure.Persistence.Seeders.AdminRBACSeeder>();
+        services.AddScoped<MainPortalBE.Domain.Interfaces.IBaseSeeder, MainPortalBE.Infrastructure.Persistence.Seeders.BlogSeeder>();
 
         // Current user service backed by IHttpContextAccessor
         services.AddScoped<ICurrentUserService, CurrentUserService>();

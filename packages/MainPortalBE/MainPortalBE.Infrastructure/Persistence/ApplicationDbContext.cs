@@ -121,10 +121,6 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        Seeders.SubscriptionPlanSeeder.Seed(modelBuilder);
-        Seeders.AdminRBACSeeder.Seed(modelBuilder);
-        Seeders.BlogSeeder.Seed(modelBuilder);
-
         modelBuilder.AddInboxStateEntity();
         modelBuilder.AddOutboxStateEntity();
         modelBuilder.AddOutboxMessageEntity();

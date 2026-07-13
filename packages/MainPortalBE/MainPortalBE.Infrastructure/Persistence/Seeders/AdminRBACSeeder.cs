@@ -1,14 +1,24 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using MainPortalBE.Domain.Constants;
 using MainPortalBE.Domain.Entities;
+using MainPortalBE.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
 namespace MainPortalBE.Infrastructure.Persistence.Seeders;
 
-public static class AdminRBACSeeder
+public class AdminRBACSeeder : IBaseSeeder
 {
-    public static void Seed(ModelBuilder modelBuilder)
+    private readonly ApplicationDbContext _context;
+
+    public AdminRBACSeeder(ApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task SeedAsync(CancellationToken cancellationToken = default)
     {
         var seedDate = new DateTime(2026, 7, 12, 0, 0, 0, DateTimeKind.Utc);
         
@@ -16,8 +26,8 @@ public static class AdminRBACSeeder
         var supportStaffRoleId = Guid.Parse("55555555-5555-5555-5555-555555555555");
         var contentWriterRoleId = Guid.Parse("66666666-6666-6666-6666-666666666666");
 
-        // 1. Seed Roles
-        modelBuilder.Entity<AdminRole>().HasData(
+        var roles = new[]
+        {
             new AdminRole
             {
                 Id = superAdminRoleId,
@@ -45,14 +55,22 @@ public static class AdminRBACSeeder
                 CreatedAt = seedDate,
                 CreatedBy = "System"
             }
-        );
+        };
 
-        // 2. Seed Default Admin Users
-        modelBuilder.Entity<AdminUser>().HasData(
+        foreach (var role in roles)
+        {
+            if (!await _context.AdminRoles.AnyAsync(r => r.Id == role.Id, cancellationToken))
+            {
+                _context.AdminRoles.Add(role);
+            }
+        }
+
+        var users = new[]
+        {
             new AdminUser
             {
                 Id = Guid.Parse("77777777-7777-7777-7777-777777777777"),
-                ClerkUserId = "", // Link dynamically on first login
+                ClerkUserId = "",
                 Email = "admin@clinicez.net",
                 FullName = "System Super Admin",
                 RoleId = superAdminRoleId,
@@ -63,7 +81,7 @@ public static class AdminRBACSeeder
             new AdminUser
             {
                 Id = Guid.Parse("88888888-8888-8888-8888-888888888888"),
-                ClerkUserId = "", // Link dynamically on first login
+                ClerkUserId = "",
                 Email = "staff@clinicez.net",
                 FullName = "Support Operator",
                 RoleId = supportStaffRoleId,
@@ -74,7 +92,7 @@ public static class AdminRBACSeeder
             new AdminUser
             {
                 Id = Guid.Parse("99999999-9999-9999-9999-999999999999"),
-                ClerkUserId = "", // Link dynamically on first login
+                ClerkUserId = "",
                 Email = "wave.ambray@nextstep-software.com",
                 FullName = "Wave Ambray",
                 RoleId = superAdminRoleId,
@@ -82,6 +100,16 @@ public static class AdminRBACSeeder
                 CreatedAt = seedDate,
                 CreatedBy = "System"
             }
-        );
+        };
+
+        foreach (var user in users)
+        {
+            if (!await _context.AdminUsers.AnyAsync(u => u.Id == user.Id, cancellationToken))
+            {
+                _context.AdminUsers.Add(user);
+            }
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
     }
 }
