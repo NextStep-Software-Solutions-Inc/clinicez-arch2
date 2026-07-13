@@ -23,7 +23,7 @@ public class ApplicationDbContextFactory : IDesignTimeDbContextFactory<Applicati
 
         if (string.IsNullOrEmpty(connectionString))
         {
-            throw new InvalidOperationException("Could not find a connection string named 'DefaultConnection'.");
+            connectionString = "Host=localhost;Database=dummy;Username=dummy;Password=dummy";
         }
 
         var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>();
