@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, ReactNode } from "react";
+import { ReactNode } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { setupAxiosInterceptors, apiClient } from "@/transport/apiClient";
 import { SWRConfig } from "swr";
@@ -13,9 +13,7 @@ export function ApiProvider({ children }: ApiProviderProps) {
   const { getToken } = useAuth();
 
   // Initialize Axios Interceptors with the Clerk getToken function
-  useEffect(() => {
-    setupAxiosInterceptors(getToken);
-  }, [getToken]);
+  setupAxiosInterceptors(getToken);
 
   return (
     <SWRConfig
