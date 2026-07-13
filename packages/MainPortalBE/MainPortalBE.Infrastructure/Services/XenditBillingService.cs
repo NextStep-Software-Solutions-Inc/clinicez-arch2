@@ -12,6 +12,7 @@ using System.Collections.Generic;
 using MainPortalBE.Infrastructure.Xendit;
 using MainPortalBE.Infrastructure.Xendit.Models.Invoices;
 using MainPortalBE.Domain.Entities;
+using Microsoft.AspNetCore.Http;
 
 namespace MainPortalBE.Infrastructure.Services;
 
@@ -20,17 +21,46 @@ public class XenditBillingService : IXenditBillingService
     private readonly ApplicationDbContext _context;
     private readonly IXenditApiClient _xenditClient;
     private readonly IConfiguration _configuration;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
-    public XenditBillingService(ApplicationDbContext context, IXenditApiClient xenditClient, IConfiguration configuration)
+    public XenditBillingService(
+        ApplicationDbContext context, 
+        IXenditApiClient xenditClient, 
+        IConfiguration configuration,
+        IHttpContextAccessor httpContextAccessor)
     {
         _context = context;
         _xenditClient = xenditClient;
         _configuration = configuration;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     public async Task<string> CreateCheckoutSessionAsync(string tenantIdOrSlug, string planId, bool isAnnual, CancellationToken cancellationToken = default)
     {
-        var frontendBaseUrl = (_configuration["FrontendBaseUrl"] ?? "http://localhost:3000").TrimEnd('/');
+        string? frontendBaseUrl = null;
+        var httpContext = _httpContextAccessor.HttpContext;
+        if (httpContext != null)
+        {
+            string? origin = httpContext.Request.Headers["Origin"];
+            if (!string.IsNullOrEmpty(origin))
+            {
+                frontendBaseUrl = origin.TrimEnd('/');
+            }
+            else
+            {
+                string? referer = httpContext.Request.Headers["Referer"];
+                if (!string.IsNullOrEmpty(referer) && Uri.TryCreate(referer, UriKind.Absolute, out var refererUri))
+                {
+                    frontendBaseUrl = $"{refererUri.Scheme}://{refererUri.Authority}";
+                }
+            }
+        }
+
+        if (string.IsNullOrEmpty(frontendBaseUrl))
+        {
+            frontendBaseUrl = (_configuration["FrontendBaseUrl"] ?? "http://localhost:3000").TrimEnd('/');
+        }
+
         var tenant = await _context.Tenants.FirstOrDefaultAsync(t => t.Id.ToString() == tenantIdOrSlug || t.TenantSlug == tenantIdOrSlug, cancellationToken)
             ?? throw new Exception("Tenant not found.");
 
@@ -226,7 +256,30 @@ public class XenditBillingService : IXenditBillingService
 
     public async Task<string> GetCustomerPortalUrlAsync(string tenantIdOrSlug, CancellationToken cancellationToken = default)
     {
-        var frontendBaseUrl = (_configuration["FrontendBaseUrl"] ?? "http://localhost:3000").TrimEnd('/');
+        string? frontendBaseUrl = null;
+        var httpContext = _httpContextAccessor.HttpContext;
+        if (httpContext != null)
+        {
+            string? origin = httpContext.Request.Headers["Origin"];
+            if (!string.IsNullOrEmpty(origin))
+            {
+                frontendBaseUrl = origin.TrimEnd('/');
+            }
+            else
+            {
+                string? referer = httpContext.Request.Headers["Referer"];
+                if (!string.IsNullOrEmpty(referer) && Uri.TryCreate(referer, UriKind.Absolute, out var refererUri))
+                {
+                    frontendBaseUrl = $"{refererUri.Scheme}://{refererUri.Authority}";
+                }
+            }
+        }
+
+        if (string.IsNullOrEmpty(frontendBaseUrl))
+        {
+            frontendBaseUrl = (_configuration["FrontendBaseUrl"] ?? "http://localhost:3000").TrimEnd('/');
+        }
+
         var tenant = await _context.Tenants.FirstOrDefaultAsync(t => t.Id.ToString() == tenantIdOrSlug || t.TenantSlug == tenantIdOrSlug, cancellationToken)
             ?? throw new Exception("Tenant not found");
 
