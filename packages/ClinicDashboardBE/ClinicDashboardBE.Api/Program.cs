@@ -1,3 +1,4 @@
+using Scalar.AspNetCore;
 using ClinicDashboardBE.Api;
 using ClinicDashboardBE.Application;
 using ClinicDashboardBE.Infrastructure;
@@ -20,8 +21,8 @@ var app = builder.Build();
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    app.MapOpenApi();
+    app.MapScalarApiReference(opts => opts.WithTitle("Clinic EZ Clinic Dashboard API"));
 }
 
 // 4. Add middleware
@@ -33,5 +34,6 @@ app.UseHangfireDashboard(); // Add Hangfire Dashboard endpoint
 app.MapControllers();
 
 app.Run();
+
 
 

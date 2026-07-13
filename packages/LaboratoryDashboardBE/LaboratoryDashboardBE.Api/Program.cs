@@ -1,3 +1,4 @@
+using Scalar.AspNetCore;
 using LaboratoryDashboardBE.Api;
 using LaboratoryDashboardBE.Application;
 using LaboratoryDashboardBE.Infrastructure;
@@ -20,8 +21,8 @@ var app = builder.Build();
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    app.MapOpenApi();
+    app.MapScalarApiReference(opts => opts.WithTitle("Clinic EZ Laboratory Dashboard API"));
 }
 
 // 4. Add middleware
@@ -33,6 +34,7 @@ app.UseHangfireDashboard(); // Add Hangfire Dashboard endpoint
 app.MapControllers();
 
 app.Run();
+
 
 
 

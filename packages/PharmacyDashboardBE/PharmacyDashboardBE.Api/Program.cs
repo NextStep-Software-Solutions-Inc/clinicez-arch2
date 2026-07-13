@@ -1,3 +1,4 @@
+using Scalar.AspNetCore;
 using PharmacyDashboardBE.Api;
 using PharmacyDashboardBE.Application;
 using PharmacyDashboardBE.Infrastructure;
@@ -20,8 +21,8 @@ var app = builder.Build();
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    app.MapOpenApi();
+    app.MapScalarApiReference(opts => opts.WithTitle("Clinic EZ Pharmacy Dashboard API"));
 }
 
 // 4. Add middleware
@@ -33,6 +34,7 @@ app.UseHangfireDashboard(); // Add Hangfire Dashboard endpoint
 app.MapControllers();
 
 app.Run();
+
 
 
 
