@@ -10,7 +10,6 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
       - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}
-      - DbSchema=clinic_dashboard
       - RabbitMq__Host=${RABBITMQ_HOST:-conn-rabbitmq.dev.nextstep-software.com}
       - RabbitMq__Username=${RABBITMQ_USERNAME:-rabbitmq}
       - RabbitMq__Password=${RABBITMQ_PASSWORD:-nextstep-rabbitmq-2o2G}
