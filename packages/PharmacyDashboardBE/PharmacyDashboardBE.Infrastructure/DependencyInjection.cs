@@ -21,7 +21,11 @@ public static class DependencyInjection
     {
         var connectionString = configuration.GetConnectionString("DefaultConnection");
 
-        var schemaName = configuration["DbSchema"] ?? "catalog";
+        var schemaName = configuration["DbSchema"];
+        if (string.IsNullOrEmpty(schemaName))
+        {
+            throw new InvalidOperationException("DbSchema configuration value is required but was not specified.");
+        }
 
         services.AddDbContext<ApplicationDbContext>(options =>
             options.UseNpgsql(connectionString, npgsqlOptions =>
@@ -71,6 +75,7 @@ public static class DependencyInjection
         return services;
     }
 }
+
 
 
 

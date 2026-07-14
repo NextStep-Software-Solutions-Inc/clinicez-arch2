@@ -13,11 +13,11 @@ namespace PharmacyDashboardBE.Infrastructure.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.EnsureSchema(
-                name: "catalog");
+                name: "pharmacy_dashboard");
 
             migrationBuilder.CreateTable(
                 name: "InboxState",
-                schema: "catalog",
+                schema: "pharmacy_dashboard",
                 columns: table => new
                 {
                     Id = table.Column<long>(type: "bigint", nullable: false)
@@ -41,7 +41,7 @@ namespace PharmacyDashboardBE.Infrastructure.Migrations
 
             migrationBuilder.CreateTable(
                 name: "OutboxState",
-                schema: "catalog",
+                schema: "pharmacy_dashboard",
                 columns: table => new
                 {
                     OutboxId = table.Column<Guid>(type: "uuid", nullable: false),
@@ -58,7 +58,7 @@ namespace PharmacyDashboardBE.Infrastructure.Migrations
 
             migrationBuilder.CreateTable(
                 name: "Products",
-                schema: "catalog",
+                schema: "pharmacy_dashboard",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
@@ -80,7 +80,7 @@ namespace PharmacyDashboardBE.Infrastructure.Migrations
 
             migrationBuilder.CreateTable(
                 name: "OutboxMessage",
-                schema: "catalog",
+                schema: "pharmacy_dashboard",
                 columns: table => new
                 {
                     SequenceNumber = table.Column<long>(type: "bigint", nullable: false)
@@ -112,52 +112,52 @@ namespace PharmacyDashboardBE.Infrastructure.Migrations
                     table.ForeignKey(
                         name: "FK_OutboxMessage_InboxState_InboxMessageId_InboxConsumerId",
                         columns: x => new { x.InboxMessageId, x.InboxConsumerId },
-                        principalSchema: "catalog",
+                        principalSchema: "pharmacy_dashboard",
                         principalTable: "InboxState",
                         principalColumns: new[] { "MessageId", "ConsumerId" });
                     table.ForeignKey(
                         name: "FK_OutboxMessage_OutboxState_OutboxId",
                         column: x => x.OutboxId,
-                        principalSchema: "catalog",
+                        principalSchema: "pharmacy_dashboard",
                         principalTable: "OutboxState",
                         principalColumn: "OutboxId");
                 });
 
             migrationBuilder.CreateIndex(
                 name: "IX_InboxState_Delivered",
-                schema: "catalog",
+                schema: "pharmacy_dashboard",
                 table: "InboxState",
                 column: "Delivered");
 
             migrationBuilder.CreateIndex(
                 name: "IX_OutboxMessage_EnqueueTime",
-                schema: "catalog",
+                schema: "pharmacy_dashboard",
                 table: "OutboxMessage",
                 column: "EnqueueTime");
 
             migrationBuilder.CreateIndex(
                 name: "IX_OutboxMessage_ExpirationTime",
-                schema: "catalog",
+                schema: "pharmacy_dashboard",
                 table: "OutboxMessage",
                 column: "ExpirationTime");
 
             migrationBuilder.CreateIndex(
                 name: "IX_OutboxMessage_InboxMessageId_InboxConsumerId_SequenceNumber",
-                schema: "catalog",
+                schema: "pharmacy_dashboard",
                 table: "OutboxMessage",
                 columns: new[] { "InboxMessageId", "InboxConsumerId", "SequenceNumber" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_OutboxMessage_OutboxId_SequenceNumber",
-                schema: "catalog",
+                schema: "pharmacy_dashboard",
                 table: "OutboxMessage",
                 columns: new[] { "OutboxId", "SequenceNumber" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_OutboxState_Created",
-                schema: "catalog",
+                schema: "pharmacy_dashboard",
                 table: "OutboxState",
                 column: "Created");
         }
@@ -167,19 +167,19 @@ namespace PharmacyDashboardBE.Infrastructure.Migrations
         {
             migrationBuilder.DropTable(
                 name: "OutboxMessage",
-                schema: "catalog");
+                schema: "pharmacy_dashboard");
 
             migrationBuilder.DropTable(
                 name: "Products",
-                schema: "catalog");
+                schema: "pharmacy_dashboard");
 
             migrationBuilder.DropTable(
                 name: "InboxState",
-                schema: "catalog");
+                schema: "pharmacy_dashboard");
 
             migrationBuilder.DropTable(
                 name: "OutboxState",
-                schema: "catalog");
+                schema: "pharmacy_dashboard");
         }
     }
 }

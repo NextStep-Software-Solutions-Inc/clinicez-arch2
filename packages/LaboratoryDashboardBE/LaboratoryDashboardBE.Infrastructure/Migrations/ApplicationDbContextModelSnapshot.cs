@@ -17,7 +17,7 @@ namespace LaboratoryDashboardBE.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasDefaultSchema("catalog")
+                .HasDefaultSchema("laboratory_dashboard")
                 .HasAnnotation("ProductVersion", "10.0.9")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
@@ -67,7 +67,7 @@ namespace LaboratoryDashboardBE.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Products", "catalog");
+                    b.ToTable("Products", "laboratory_dashboard");
                 });
 
             modelBuilder.Entity("MassTransit.EntityFrameworkCoreIntegration.InboxState", b =>
@@ -114,7 +114,7 @@ namespace LaboratoryDashboardBE.Infrastructure.Migrations
 
                     b.HasIndex("Delivered");
 
-                    b.ToTable("InboxState", "catalog");
+                    b.ToTable("InboxState", "laboratory_dashboard");
                 });
 
             modelBuilder.Entity("MassTransit.EntityFrameworkCoreIntegration.OutboxMessage", b =>
@@ -205,7 +205,7 @@ namespace LaboratoryDashboardBE.Infrastructure.Migrations
                     b.HasIndex("InboxMessageId", "InboxConsumerId", "SequenceNumber")
                         .IsUnique();
 
-                    b.ToTable("OutboxMessage", "catalog");
+                    b.ToTable("OutboxMessage", "laboratory_dashboard");
                 });
 
             modelBuilder.Entity("MassTransit.EntityFrameworkCoreIntegration.OutboxState", b =>
@@ -235,7 +235,7 @@ namespace LaboratoryDashboardBE.Infrastructure.Migrations
 
                     b.HasIndex("Created");
 
-                    b.ToTable("OutboxState", "catalog");
+                    b.ToTable("OutboxState", "laboratory_dashboard");
                 });
 
             modelBuilder.Entity("MassTransit.EntityFrameworkCoreIntegration.OutboxMessage", b =>

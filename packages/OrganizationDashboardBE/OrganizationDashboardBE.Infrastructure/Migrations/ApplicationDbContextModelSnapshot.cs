@@ -17,7 +17,7 @@ namespace OrganizationDashboardBE.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasDefaultSchema("catalog")
+                .HasDefaultSchema("organization_dashboard")
                 .HasAnnotation("ProductVersion", "10.0.9")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
@@ -67,7 +67,7 @@ namespace OrganizationDashboardBE.Infrastructure.Migrations
 
                     b.HasIndex("Delivered");
 
-                    b.ToTable("InboxState", "catalog");
+                    b.ToTable("InboxState", "organization_dashboard");
                 });
 
             modelBuilder.Entity("MassTransit.EntityFrameworkCoreIntegration.OutboxMessage", b =>
@@ -158,7 +158,7 @@ namespace OrganizationDashboardBE.Infrastructure.Migrations
                     b.HasIndex("InboxMessageId", "InboxConsumerId", "SequenceNumber")
                         .IsUnique();
 
-                    b.ToTable("OutboxMessage", "catalog");
+                    b.ToTable("OutboxMessage", "organization_dashboard");
                 });
 
             modelBuilder.Entity("MassTransit.EntityFrameworkCoreIntegration.OutboxState", b =>
@@ -188,7 +188,7 @@ namespace OrganizationDashboardBE.Infrastructure.Migrations
 
                     b.HasIndex("Created");
 
-                    b.ToTable("OutboxState", "catalog");
+                    b.ToTable("OutboxState", "organization_dashboard");
                 });
 
             modelBuilder.Entity("OrganizationDashboardBE.Domain.Entities.Product", b =>
@@ -235,7 +235,7 @@ namespace OrganizationDashboardBE.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Products", "catalog");
+                    b.ToTable("Products", "organization_dashboard");
                 });
 
             modelBuilder.Entity("MassTransit.EntityFrameworkCoreIntegration.OutboxMessage", b =>

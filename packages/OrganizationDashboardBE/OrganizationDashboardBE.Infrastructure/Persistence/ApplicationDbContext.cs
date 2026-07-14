@@ -11,7 +11,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        var schemaName = configuration["DbSchema"] ?? "catalog";
+        var schemaName = configuration["DbSchema"];
+        if (string.IsNullOrEmpty(schemaName))
+        {
+            throw new InvalidOperationException("DbSchema configuration value is required but was not specified.");
+        }
         modelBuilder.HasDefaultSchema(schemaName);
 
         foreach (var entity in modelBuilder.Model.GetEntityTypes())
@@ -45,6 +49,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         base.OnModelCreating(modelBuilder);
     }
 }
+
 
 
 

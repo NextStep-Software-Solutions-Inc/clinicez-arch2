@@ -4,7 +4,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace OrganizationDashboardBE.Infrastructure.Migrations
+namespace LaboratoryDashboardBE.Infrastructure.Migrations
 {
     /// <inheritdoc />
     public partial class InitialCreate : Migration
@@ -13,11 +13,11 @@ namespace OrganizationDashboardBE.Infrastructure.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.EnsureSchema(
-                name: "catalog");
+                name: "laboratory_dashboard");
 
             migrationBuilder.CreateTable(
                 name: "InboxState",
-                schema: "catalog",
+                schema: "laboratory_dashboard",
                 columns: table => new
                 {
                     Id = table.Column<long>(type: "bigint", nullable: false)
@@ -41,7 +41,7 @@ namespace OrganizationDashboardBE.Infrastructure.Migrations
 
             migrationBuilder.CreateTable(
                 name: "OutboxState",
-                schema: "catalog",
+                schema: "laboratory_dashboard",
                 columns: table => new
                 {
                     OutboxId = table.Column<Guid>(type: "uuid", nullable: false),
@@ -58,7 +58,7 @@ namespace OrganizationDashboardBE.Infrastructure.Migrations
 
             migrationBuilder.CreateTable(
                 name: "Products",
-                schema: "catalog",
+                schema: "laboratory_dashboard",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
@@ -80,7 +80,7 @@ namespace OrganizationDashboardBE.Infrastructure.Migrations
 
             migrationBuilder.CreateTable(
                 name: "OutboxMessage",
-                schema: "catalog",
+                schema: "laboratory_dashboard",
                 columns: table => new
                 {
                     SequenceNumber = table.Column<long>(type: "bigint", nullable: false)
@@ -112,52 +112,52 @@ namespace OrganizationDashboardBE.Infrastructure.Migrations
                     table.ForeignKey(
                         name: "FK_OutboxMessage_InboxState_InboxMessageId_InboxConsumerId",
                         columns: x => new { x.InboxMessageId, x.InboxConsumerId },
-                        principalSchema: "catalog",
+                        principalSchema: "laboratory_dashboard",
                         principalTable: "InboxState",
                         principalColumns: new[] { "MessageId", "ConsumerId" });
                     table.ForeignKey(
                         name: "FK_OutboxMessage_OutboxState_OutboxId",
                         column: x => x.OutboxId,
-                        principalSchema: "catalog",
+                        principalSchema: "laboratory_dashboard",
                         principalTable: "OutboxState",
                         principalColumn: "OutboxId");
                 });
 
             migrationBuilder.CreateIndex(
                 name: "IX_InboxState_Delivered",
-                schema: "catalog",
+                schema: "laboratory_dashboard",
                 table: "InboxState",
                 column: "Delivered");
 
             migrationBuilder.CreateIndex(
                 name: "IX_OutboxMessage_EnqueueTime",
-                schema: "catalog",
+                schema: "laboratory_dashboard",
                 table: "OutboxMessage",
                 column: "EnqueueTime");
 
             migrationBuilder.CreateIndex(
                 name: "IX_OutboxMessage_ExpirationTime",
-                schema: "catalog",
+                schema: "laboratory_dashboard",
                 table: "OutboxMessage",
                 column: "ExpirationTime");
 
             migrationBuilder.CreateIndex(
                 name: "IX_OutboxMessage_InboxMessageId_InboxConsumerId_SequenceNumber",
-                schema: "catalog",
+                schema: "laboratory_dashboard",
                 table: "OutboxMessage",
                 columns: new[] { "InboxMessageId", "InboxConsumerId", "SequenceNumber" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_OutboxMessage_OutboxId_SequenceNumber",
-                schema: "catalog",
+                schema: "laboratory_dashboard",
                 table: "OutboxMessage",
                 columns: new[] { "OutboxId", "SequenceNumber" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_OutboxState_Created",
-                schema: "catalog",
+                schema: "laboratory_dashboard",
                 table: "OutboxState",
                 column: "Created");
         }
@@ -167,19 +167,19 @@ namespace OrganizationDashboardBE.Infrastructure.Migrations
         {
             migrationBuilder.DropTable(
                 name: "OutboxMessage",
-                schema: "catalog");
+                schema: "laboratory_dashboard");
 
             migrationBuilder.DropTable(
                 name: "Products",
-                schema: "catalog");
+                schema: "laboratory_dashboard");
 
             migrationBuilder.DropTable(
                 name: "InboxState",
-                schema: "catalog");
+                schema: "laboratory_dashboard");
 
             migrationBuilder.DropTable(
                 name: "OutboxState",
-                schema: "catalog");
+                schema: "laboratory_dashboard");
         }
     }
 }
