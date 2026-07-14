@@ -37,8 +37,15 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(e => e.Sku).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Price).HasPrecision(18, 2);
         });
+
+        modelBuilder.AddInboxStateEntity();
+        modelBuilder.AddOutboxStateEntity();
+        modelBuilder.AddOutboxMessageEntity();
+
+        base.OnModelCreating(modelBuilder);
     }
 }
+
 
 
 
