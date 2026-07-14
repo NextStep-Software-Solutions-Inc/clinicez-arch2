@@ -24,10 +24,13 @@ public static class DependencyInjection
         var schemaName = configuration["DbSchema"] ?? "catalog";
 
         services.AddDbContext<ApplicationDbContext>(options =>
+        {
             options.UseNpgsql(connectionString, npgsqlOptions =>
             {
                 npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", schemaName);
-            }));
+            });
+            options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+        });
         // Register repositories and Unit of Work
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
@@ -71,6 +74,7 @@ public static class DependencyInjection
         return services;
     }
 }
+
 
 
 
