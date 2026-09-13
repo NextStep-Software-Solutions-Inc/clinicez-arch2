@@ -1,15 +1,15 @@
-# docker-compose.deploy.yml
-# Deploy compose for Portal API on Server (Dev environment).
+# docker-compose.yml
+# Deploy compose for Organization API on Server (Dev environment).
 #
 # All secrets are injected via .env written at deploy time by GitHub Actions.
 # No host ports exposed; routed via npm-default (NPM) and connected to data-network.
 
-name: clinicez-portal-api
+name: clinicez-organization-api
 
 services:
-  portal-api:
-    image: ${IMAGE_NAME:-clinicez-portal-api}:${IMAGE_TAG:-dev}
-    container_name: clinicez-portal-api
+  organization-api:
+    image: ${IMAGE_NAME:-clinicez-organization-api}:${IMAGE_TAG:-dev}
+    container_name: clinicez-organization-api
     labels:
       - "project=clinicez"
       - "environment=dev"
@@ -21,9 +21,6 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
       - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}
-      - Clerk__SecretKey=${CLERK_SECRET_KEY}
-      - Xendit__SecretKey=${XENDIT_SECRET_KEY}
-      - Xendit__CallbackToken=${XENDIT_CALLBACK_TOKEN}
       - RabbitMq__Host=${RABBITMQ_HOST}
       - RabbitMq__Username=${RABBITMQ_USERNAME}
       - RabbitMq__Password=${RABBITMQ_PASSWORD}

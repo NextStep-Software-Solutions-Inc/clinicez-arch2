@@ -156,7 +156,7 @@ jobs:
         username: ${{ secrets.SSH_USER }}
         key: ${{ secrets.SSH_KEY }}
         passphrase: ${{ secrets.SSH_PASSPHRASE }}
-        source: "services/portal-api/docker-compose.deploy.yml,services/portal-api/.env"
+        source: "services/portal-api/docker-compose.yml,services/portal-api/.env"
         target: ${{ vars.DEPLOY_DIR || env.DEPLOY_DIR }}
         strip_components: 2
 
@@ -179,7 +179,7 @@ jobs:
           docker load < portal-api.tar.gz
 
           echo "==> Deploying with docker compose..."
-          docker compose -f docker-compose.deploy.yml up -d --force-recreate
+          docker compose up -d --force-recreate
 
           echo "==> Cleaning up old images..."
           docker image prune -f

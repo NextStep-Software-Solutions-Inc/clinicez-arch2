@@ -1,15 +1,15 @@
-# docker-compose.deploy.yml
-# Deploy compose for Pharmacy API on Server (Dev environment).
+# docker-compose.yml
+# Deploy compose for Laboratory API on Server (Dev environment).
 #
 # All secrets are injected via .env written at deploy time by GitHub Actions.
 # No host ports exposed; routed via npm-default (NPM) and connected to data-network.
 
-name: clinicez-pharmacy-api
+name: clinicez-laboratory-api
 
 services:
-  pharmacy-api:
-    image: ${IMAGE_NAME:-clinicez-pharmacy-api}:${IMAGE_TAG:-dev}
-    container_name: clinicez-pharmacy-api
+  laboratory-api:
+    image: ${IMAGE_NAME:-clinicez-laboratory-api}:${IMAGE_TAG:-dev}
+    container_name: clinicez-laboratory-api
     labels:
       - "project=clinicez"
       - "environment=dev"

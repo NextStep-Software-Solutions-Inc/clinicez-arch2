@@ -122,7 +122,7 @@ jobs:
         username: ${{ secrets.SSH_USER }}
         key: ${{ secrets.SSH_KEY }}
         passphrase: ${{ secrets.SSH_PASSPHRASE }}
-        source: "services/laboratory-api/docker-compose.deploy.yml,services/laboratory-api/.env"
+        source: "services/laboratory-api/docker-compose.yml,services/laboratory-api/.env"
         target: ${{ env.DEPLOY_DIR }}
         strip_components: 2
 
@@ -145,7 +145,7 @@ jobs:
           docker load < laboratory-api.tar.gz
 
           echo "==> Deploying with docker compose..."
-          docker compose -f docker-compose.deploy.yml up -d --force-recreate
+          docker compose up -d --force-recreate
 
           echo "==> Cleaning up old images..."
           docker image prune -f

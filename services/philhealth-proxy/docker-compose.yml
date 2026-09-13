@@ -1,15 +1,15 @@
-# docker-compose.deploy.yml
-# Deploy compose for Organization API on Server (Dev environment).
+# docker-compose.yml
+# Deploy compose for PhilHealth Proxy on Server (Dev environment).
 #
 # All secrets are injected via .env written at deploy time by GitHub Actions.
 # No host ports exposed; routed via npm-default (NPM) and connected to data-network.
 
-name: clinicez-organization-api
+name: clinicez-philhealth-proxy
 
 services:
-  organization-api:
-    image: ${IMAGE_NAME:-clinicez-organization-api}:${IMAGE_TAG:-dev}
-    container_name: clinicez-organization-api
+  philhealth-proxy:
+    image: ${IMAGE_NAME:-clinicez-philhealth-proxy}:${IMAGE_TAG:-dev}
+    container_name: clinicez-philhealth-proxy
     labels:
       - "project=clinicez"
       - "environment=dev"
@@ -21,9 +21,6 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
       - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}
-      - RabbitMq__Host=${RABBITMQ_HOST}
-      - RabbitMq__Username=${RABBITMQ_USERNAME}
-      - RabbitMq__Password=${RABBITMQ_PASSWORD}
     restart: unless-stopped
 
 networks:
