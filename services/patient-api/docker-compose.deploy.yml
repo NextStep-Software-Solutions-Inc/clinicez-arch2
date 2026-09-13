@@ -1,12 +1,12 @@
 # docker-compose.deploy.yml
 # Deploy compose for Patient API on Server (Dev environment).
 #
-# - PostgreSQL: external (pg.dev.nextstep-software.com)
-# - Redis:      external (managed Redis cloud service)
+# - PostgreSQL: external (pg.dev.nextstep-software.com or internal postgres)
+# - Redis:      external (managed Redis or internal redis)
 # - API:        this file manages only the patient-api container
 #
 # All secrets are injected via .env written at deploy time by GitHub Actions.
-# No host ports exposed; routed via clinicez-net and reverse proxy (NPM).
+# No host ports exposed; routed via npm-default (NPM) and connected to data-network.
 
 name: clinicez-patient-api
 
@@ -17,8 +17,11 @@ services:
     labels:
       - "project=clinicez"
       - "environment=dev"
+    expose:
+      - "8080"
     networks:
-      - clinicez-net
+      - data-network
+      - npm-default
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
       - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}
@@ -36,6 +39,7 @@ services:
     restart: unless-stopped
 
 networks:
-  clinicez-net:
-    name: clinicez-net
+  data-network:
+    external: true
+  npm-default:
     external: true

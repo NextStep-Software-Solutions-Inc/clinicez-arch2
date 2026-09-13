@@ -2,7 +2,7 @@
 # Deploy compose for Laboratory API on Server (Dev environment).
 #
 # All secrets are injected via .env written at deploy time by GitHub Actions.
-# No host ports exposed; routed via clinicez-net and reverse proxy (NPM).
+# No host ports exposed; routed via npm-default (NPM) and connected to data-network.
 
 name: clinicez-laboratory-api
 
@@ -13,8 +13,11 @@ services:
     labels:
       - "project=clinicez"
       - "environment=dev"
+    expose:
+      - "8080"
     networks:
-      - clinicez-net
+      - data-network
+      - npm-default
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
       - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}
@@ -24,6 +27,7 @@ services:
     restart: unless-stopped
 
 networks:
-  clinicez-net:
-    name: clinicez-net
+  data-network:
+    external: true
+  npm-default:
     external: true

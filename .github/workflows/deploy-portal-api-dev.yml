@@ -27,7 +27,7 @@ env:
   IMAGE_NAME: clinicez-portal-api
   IMAGE_TAG: dev
   CONTAINER_NAME: clinicez-portal-api
-  DEPLOY_DIR: /opt/clinicez/portal-api
+  DEPLOY_DIR: /opt/docker-stack/clinicez-portal-api
   ENVIRONMENT: Development
 
 jobs:
@@ -171,8 +171,9 @@ jobs:
           set -e
           cd "${{ env.DEPLOY_DIR }}"
 
-          echo "==> Ensuring clinicez-net network exists..."
-          docker network inspect clinicez-net >/dev/null 2>&1 || docker network create clinicez-net
+          echo "==> Ensuring networks exist..."
+          docker network inspect npm-default >/dev/null 2>&1 || docker network create npm-default
+          docker network inspect data-network >/dev/null 2>&1 || docker network create data-network
 
           echo "==> Loading Docker image..."
           docker load < portal-api.tar.gz
