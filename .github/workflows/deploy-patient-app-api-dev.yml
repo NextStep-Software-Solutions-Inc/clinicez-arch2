@@ -6,15 +6,15 @@ on:
       - development
       # - patient-app-be/feature/init
     paths:
-      - 'packages/PatientAppBE/**'
-      - 'packages/CLINICEZ.Shared/**'
+      - 'services/patient-api/**'
+      - 'packages/shared-dotnet/**'
       - '.github/workflows/deploy-patient-app-api-dev.yml'
   pull_request:
     branches:
       - development
     paths:
-      - 'packages/PatientAppBE/**'
-      - 'packages/CLINICEZ.Shared/**'
+      - 'services/patient-api/**'
+      - 'packages/shared-dotnet/**'
       - '.github/workflows/deploy-patient-app-api-dev.yml'
   workflow_dispatch:
     inputs:
@@ -48,8 +48,8 @@ jobs:
       - name: Build Docker image
         uses: docker/build-push-action@v5
         with:
-          context: packages
-          file: packages/PatientAppBE/Dockerfile
+          context: .
+          file: services/patient-api/Dockerfile
           push: false
           load: true
           tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
@@ -97,7 +97,7 @@ jobs:
           IMAGE_TAG: ${{ env.IMAGE_TAG }}
         run: |
           for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING REDIS_CONNECTION_STRING CLERK_AUTHORITY R2_ACCOUNT_ID R2_BUCKET_NAME R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_PUBLIC_URL HANGFIRE_DASHBOARD_USERNAME HANGFIRE_DASHBOARD_PASSWORD FIREBASE_SERVICE_ACCOUNT_JSON IMAGE_NAME IMAGE_TAG; do
-            echo "$var=$(printenv $var)" >> packages/PatientAppBE/.env
+            echo "$var=$(printenv $var)" >> services/patient-api/.env
           done
 
       - name: Download Docker image artifact
@@ -131,7 +131,7 @@ jobs:
           username: ${{ secrets.DO_DROPLET_USER }}
           key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
           passphrase: ${{ secrets.DO_SSH_PASSPHRASE }}
-          source: "packages/PatientAppBE/docker-compose.deploy.yml,packages/PatientAppBE/.env"
+          source: "services/patient-api/docker-compose.deploy.yml,services/patient-api/.env"
           target: ${{ env.DEPLOY_DIR }}
           strip_components: 2
 

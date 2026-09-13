@@ -1,6 +1,6 @@
 ---
-description: "Always-on rules for the Clinic EZ Patient App (Expo/React Native). Covers component conventions, file placement, DB patterns, and styling. Applied automatically to all files in packages/patient-app/."
-applyTo: "packages/patient-app/**"
+description: "Always-on rules for the Clinic EZ Patient App (Expo/React Native). Covers component conventions, file placement, DB patterns, and styling. Applied automatically to all files in apps/patient-app/."
+applyTo: "apps/patient-app/**"
 ---
 ## Component Rules
 - ALWAYS use `ThemedView` and `ThemedText` instead of bare `View` and `Text`.
@@ -23,7 +23,7 @@ applyTo: "packages/patient-app/**"
 ## Database (Drizzle ORM)
 - All table definitions go in `db/schema/`. Export every table from `db/schema/index.ts`.
 - Always infer types: `typeof table.$inferSelect` / `typeof table.$inferInsert`. Never write manual type definitions for DB rows.
-- After adding or changing schema, remind the user to run `yarn drizzle-kit generate` in `packages/patient-app/`.
+- After adding or changing schema, remind the user to run `yarn drizzle-kit generate` in `apps/patient-app/`.
 - Never edit files in `drizzle/` — they are auto-generated.
 
 ## Sync / Offline-First
@@ -35,6 +35,6 @@ applyTo: "packages/patient-app/**"
 - PIN and tokens must be stored via `secureStorage` (expo-secure-store). Never use AsyncStorage for secrets.
 
 ## Verification
-After every change, run in `packages/patient-app/`:
+After every change, run in `apps/patient-app/`:
 - `yarn lint` — Biome formatter + linter
 - `yarn typecheck` — TypeScript strict mode check

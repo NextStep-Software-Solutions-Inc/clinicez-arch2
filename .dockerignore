@@ -1,0 +1,14 @@
+**/.git
+**/.gitignore
+**/.vs
+**/.vscode
+**/.idea
+**/bin
+**/obj
+**/node_modules
+**/.next
+**/.expo
+**/dist
+**/build
+*.user
+*.suo

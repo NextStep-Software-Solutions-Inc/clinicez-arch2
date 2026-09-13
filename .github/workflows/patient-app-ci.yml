@@ -6,20 +6,20 @@ on:
       - development
       - main
     paths:
-      - 'packages/PatientAppFE/**'
+      - 'apps/patient-app/**'
       - '.github/workflows/patient-app-ci.yml'
   pull_request:
     branches:
       - development
       - main
     paths:
-      - 'packages/PatientAppFE/**'
+      - 'apps/patient-app/**'
       - '.github/workflows/patient-app-ci.yml'
   workflow_dispatch:
 
 defaults:
   run:
-    working-directory: packages/PatientAppFE
+    working-directory: apps/patient-app
 
 jobs:
   lint-and-typecheck:

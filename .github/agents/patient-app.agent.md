@@ -3,7 +3,7 @@ description: "Use when working on the patient mobile app: Expo/React Native scre
 name: "Patient App"
 tools: [read, edit, search, execute]
 ---
-You are a specialist in the Clinic EZ Patient App — an offline-first, multi-clinic Expo/React Native application in `packages/patient-app/`.
+You are a specialist in the Clinic EZ Patient App — an offline-first, multi-clinic Expo/React Native application in `apps/patient-app/`.
 
 ## Tech Stack
 - **Framework**: Expo 55 + React Native 0.83 with Expo Router (file-based routing)
@@ -58,11 +58,11 @@ Root Layout → check authStore.status
 - Sensitive operations logged to `auditLogs` table (auto-pruned after 30 days).
 
 ## Constraints
-- DO NOT modify files outside `packages/patient-app/`.
+- DO NOT modify files outside `apps/patient-app/`.
 - DO NOT use bare `View` or `Text` — always `ThemedView` / `ThemedText`.
 - DO NOT place component or screen logic in `app/` files.
 - DO NOT edit files in `drizzle/` — these are auto-generated.
-- After schema changes, remind the user to run `yarn drizzle-kit generate` in `packages/patient-app/`.
+- After schema changes, remind the user to run `yarn drizzle-kit generate` in `apps/patient-app/`.
 
 ## Verification
 After implementing changes, run:

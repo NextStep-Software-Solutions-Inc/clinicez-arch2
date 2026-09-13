@@ -6,15 +6,15 @@ on:
       - development
       # - patient-app-be/feature/init
     paths:
-      - 'packages/MainPortalBE/**'
-      - 'packages/CLINICEZ.Shared/**'
+      - 'services/portal-api/**'
+      - 'packages/shared-dotnet/**'
       - '.github/workflows/deploy-mainportal-api-dev.yml'
   pull_request:
     branches:
       - development
     paths:
-      - 'packages/MainPortalBE/**'
-      - 'packages/CLINICEZ.Shared/**'
+      - 'services/portal-api/**'
+      - 'packages/shared-dotnet/**'
       - '.github/workflows/deploy-mainportal-api-dev.yml'
   workflow_dispatch:
     inputs:
@@ -46,16 +46,16 @@ jobs:
         dotnet-version: '10.0'
 
     - name: Restore dependencies
-      run: dotnet restore packages/CLINICEZ.sln
+      run: dotnet restore CLINICEZ.sln
 
     - name: Run unit tests
-      run: dotnet test packages/MainPortalBE/MainPortalBE.Tests/MainPortalBE.Tests.csproj --no-restore
+      run: dotnet test services/portal-api/MainPortalBE.Tests/MainPortalBE.Tests.csproj --no-restore
 
     - name: Install dotnet-ef
       run: dotnet tool install --global dotnet-ef --version 10.0.2
 
     - name: Try to generate debug migration
-      working-directory: packages/MainPortalBE/MainPortalBE.Infrastructure
+      working-directory: services/portal-api/MainPortalBE.Infrastructure
       env:
         ConnectionStrings__DefaultConnection: ${{ secrets.CLINICEZ_MAINPORTAL_DB_CONNECTION_STRING }}
       run: |
@@ -78,8 +78,8 @@ jobs:
     - name: Build Docker image
       uses: docker/build-push-action@v5
       with:
-        context: packages
-        file: packages/MainPortalBE/Dockerfile
+        context: .
+        file: services/portal-api/Dockerfile
         push: false
         load: true
         tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
@@ -123,7 +123,7 @@ jobs:
         RABBITMQ_PASSWORD: ${{ secrets.CLINICEZ_RABBITMQ_PASSWORD }}
       run: |
         for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING CLERK_SECRET_KEY XENDIT_SECRET_KEY XENDIT_CALLBACK_TOKEN IMAGE_NAME IMAGE_TAG RABBITMQ_HOST RABBITMQ_USERNAME RABBITMQ_PASSWORD; do
-          echo "$var=$(printenv $var)" >> packages/MainPortalBE/.env
+          echo "$var=$(printenv $var)" >> services/portal-api/.env
         done
 
     - name: Download Docker image artifact
@@ -157,7 +157,7 @@ jobs:
         username: ${{ secrets.DO_DROPLET_USER }}
         key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
         passphrase: ${{ secrets.DO_SSH_PASSPHRASE }}
-        source: "packages/MainPortalBE/docker-compose.deploy.yml,packages/MainPortalBE/.env"
+        source: "services/portal-api/docker-compose.deploy.yml,services/portal-api/.env"
         target: ${{ env.DEPLOY_DIR }}
         strip_components: 2
 

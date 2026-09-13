@@ -5,15 +5,15 @@ on:
     branches:
       - development
     paths:
-      - 'packages/PharmacyDashboardBE/**'
-      - 'packages/CLINICEZ.Shared/**'
+      - 'services/pharmacy-api/**'
+      - 'packages/shared-dotnet/**'
       - '.github/workflows/deploy-pharmacy-dashboard-dev.yml'
   pull_request:
     branches:
       - development
     paths:
-      - 'packages/PharmacyDashboardBE/**'
-      - 'packages/CLINICEZ.Shared/**'
+      - 'services/pharmacy-api/**'
+      - 'packages/shared-dotnet/**'
       - '.github/workflows/deploy-pharmacy-dashboard-dev.yml'
   workflow_dispatch:
     inputs:
@@ -46,8 +46,8 @@ jobs:
     - name: Build Docker image
       uses: docker/build-push-action@v5
       with:
-        context: packages
-        file: packages/PharmacyDashboardBE/Dockerfile
+        context: .
+        file: services/pharmacy-api/Dockerfile
         push: false
         load: true
         tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
@@ -88,7 +88,7 @@ jobs:
         IMAGE_TAG: ${{ env.IMAGE_TAG }}
       run: |
         for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING RABBITMQ_HOST RABBITMQ_USERNAME RABBITMQ_PASSWORD IMAGE_NAME IMAGE_TAG; do
-          echo "$var=$(printenv $var)" >> packages/PharmacyDashboardBE/.env
+          echo "$var=$(printenv $var)" >> services/pharmacy-api/.env
         done
 
     - name: Download Docker image artifact
@@ -122,7 +122,7 @@ jobs:
         username: ${{ secrets.DO_DROPLET_USER }}
         key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
         passphrase: ${{ secrets.DO_SSH_PASSPHRASE }}
-        source: "packages/PharmacyDashboardBE/docker-compose.deploy.yml,packages/PharmacyDashboardBE/.env"
+        source: "services/pharmacy-api/docker-compose.deploy.yml,services/pharmacy-api/.env"
         target: ${{ env.DEPLOY_DIR }}
         strip_components: 2
 

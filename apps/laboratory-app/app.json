@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "Clinic EZ Laboratory App",
+    "slug": "clinicez-laboratory-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    }
+  }
+}

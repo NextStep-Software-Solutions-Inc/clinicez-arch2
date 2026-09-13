@@ -12,7 +12,7 @@
 
 ## Developer Workflows
 - **Install/Run:** Use `yarn` in each package (e.g., `yarn install`, `yarn start`).
-- **Reset Patient App:** `yarn run reset-project` in `packages/patient-app` resets starter code.
+- **Reset Patient App:** `yarn run reset-project` in `apps/patient-app` resets starter code.
 - **No global build/test scripts:** Each package manages its own scripts and dependencies.
 - **No node_modules in VCS:** All `node_modules` are gitignored at all levels.
 
@@ -29,9 +29,9 @@
 - **No monolithic backend:** Each clinic is isolated for data privacy and deployment flexibility.
 
 ## Examples & Key Files
-- `packages/patient-app/README.md`: Details on local-first, multi-clinic, onboarding, and dev workflow.
-- `packages/patient-app/app/`: File-based routing for Expo.
-- `packages/patient-app/scripts/reset-project.js`: Project reset logic.
+- `apps/patient-app/README.md`: Details on local-first, multi-clinic, onboarding, and dev workflow.
+- `apps/patient-app/app/`: File-based routing for Expo.
+- `apps/patient-app/scripts/reset-project.js`: Project reset logic.
 - `README.md` (root): Monorepo structure, architecture, and getting started for all apps.
 
 

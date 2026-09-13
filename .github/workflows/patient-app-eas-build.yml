@@ -32,7 +32,7 @@ on:
 
 defaults:
   run:
-    working-directory: packages/PatientAppFE
+    working-directory: apps/patient-app
 
 env:
   EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}

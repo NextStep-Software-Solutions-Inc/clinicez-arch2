@@ -2,6 +2,16 @@
   "name": "clinicez-monorepo",
   "private": true,
   "workspaces": [
+    "apps/*",
     "packages/*"
-  ]
+  ],
+  "scripts": {
+    "lint:portal": "bun --filter @clinicez/portal-web lint",
+    "typecheck:patient": "bun --filter @clinicez/patient-app typecheck",
+    "typecheck:clinic": "bun --filter @clinicez/clinic-app typecheck",
+    "typecheck:lab": "bun --filter @clinicez/laboratory-app typecheck",
+    "typecheck:pharmacy": "bun --filter @clinicez/pharmacy-app typecheck",
+    "typecheck:all": "bun run typecheck:patient && bun run typecheck:clinic && bun run typecheck:lab && bun run typecheck:pharmacy",
+    "build:portal": "bun --filter @clinicez/portal-web build"
+  }
 }

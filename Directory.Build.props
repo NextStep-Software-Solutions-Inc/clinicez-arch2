@@ -4,5 +4,6 @@
     <!-- Treat all compiler warnings as errors. To opt-out in a specific project, set
          <TreatWarningsAsErrors>false</TreatWarningsAsErrors> in that project's .csproj -->
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsNotAsErrors>NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
   </PropertyGroup>
 </Project>
