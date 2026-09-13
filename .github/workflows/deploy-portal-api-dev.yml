@@ -147,7 +147,7 @@ jobs:
         key: ${{ secrets.SSH_KEY }}
         passphrase: ${{ secrets.SSH_PASSPHRASE }}
         source: portal-api.tar.gz
-        target: ${{ env.DEPLOY_DIR }}
+        target: ${{ vars.DEPLOY_DIR || env.DEPLOY_DIR }}
 
     - name: Transfer docker-compose and .env files via SCP
       uses: appleboy/scp-action@v0.1.7
@@ -157,7 +157,7 @@ jobs:
         key: ${{ secrets.SSH_KEY }}
         passphrase: ${{ secrets.SSH_PASSPHRASE }}
         source: "services/portal-api/docker-compose.deploy.yml,services/portal-api/.env"
-        target: ${{ env.DEPLOY_DIR }}
+        target: ${{ vars.DEPLOY_DIR || env.DEPLOY_DIR }}
         strip_components: 2
 
     - name: Load image and deploy on server
@@ -170,6 +170,9 @@ jobs:
         script: |
           set -e
           cd "${{ env.DEPLOY_DIR }}"
+
+          echo "==> Ensuring clinicez-net network exists..."
+          docker network inspect clinicez-net >/dev/null 2>&1 || docker network create clinicez-net
 
           echo "==> Loading Docker image..."
           docker load < portal-api.tar.gz

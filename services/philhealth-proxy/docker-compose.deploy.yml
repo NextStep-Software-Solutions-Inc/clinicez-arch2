@@ -2,14 +2,25 @@
 # Deploy compose for PhilHealth Proxy on Server (Dev environment).
 #
 # All secrets are injected via .env written at deploy time by GitHub Actions.
+# No host ports exposed; routed via clinicez-net and reverse proxy (NPM).
+
+name: clinicez-philhealth-proxy
 
 services:
   philhealth-proxy:
     image: ${IMAGE_NAME:-clinicez-philhealth-proxy}:${IMAGE_TAG:-dev}
     container_name: clinicez-philhealth-proxy
-    ports:
-      - "5700:8080"
+    labels:
+      - "project=clinicez"
+      - "environment=dev"
+    networks:
+      - clinicez-net
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
       - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}
     restart: unless-stopped
+
+networks:
+  clinicez-net:
+    name: clinicez-net
+    external: true

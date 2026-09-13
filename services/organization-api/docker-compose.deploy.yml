@@ -2,13 +2,19 @@
 # Deploy compose for Organization API on Server (Dev environment).
 #
 # All secrets are injected via .env written at deploy time by GitHub Actions.
+# No host ports exposed; routed via clinicez-net and reverse proxy (NPM).
+
+name: clinicez-organization-api
 
 services:
   organization-api:
     image: ${IMAGE_NAME:-clinicez-organization-api}:${IMAGE_TAG:-dev}
     container_name: clinicez-organization-api
-    ports:
-      - "5500:8080"
+    labels:
+      - "project=clinicez"
+      - "environment=dev"
+    networks:
+      - clinicez-net
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
       - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}
@@ -16,3 +22,8 @@ services:
       - RabbitMq__Username=${RABBITMQ_USERNAME}
       - RabbitMq__Password=${RABBITMQ_PASSWORD}
     restart: unless-stopped
+
+networks:
+  clinicez-net:
+    name: clinicez-net
+    external: true

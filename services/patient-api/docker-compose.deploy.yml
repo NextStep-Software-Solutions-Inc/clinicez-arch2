@@ -6,15 +6,19 @@
 # - API:        this file manages only the patient-api container
 #
 # All secrets are injected via .env written at deploy time by GitHub Actions.
+# No host ports exposed; routed via clinicez-net and reverse proxy (NPM).
+
+name: clinicez-patient-api
 
 services:
-
-  # ─── Patient API ───────────────────────────────────────────────────────────────
   patient-api:
     image: ${IMAGE_NAME:-clinicez-patient-api}:${IMAGE_TAG:-dev}
     container_name: clinicez-patient-api
-    ports:
-      - "5100:8080"
+    labels:
+      - "project=clinicez"
+      - "environment=dev"
+    networks:
+      - clinicez-net
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
       - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}
@@ -30,3 +34,8 @@ services:
       - Firebase__ServiceAccountJson=${FIREBASE_SERVICE_ACCOUNT_JSON}
       - Encryption__Enabled=false
     restart: unless-stopped
+
+networks:
+  clinicez-net:
+    name: clinicez-net
+    external: true

@@ -144,6 +144,9 @@ jobs:
             set -e
             cd "${{ env.DEPLOY_DIR }}"
 
+            echo "==> Ensuring clinicez-net network exists..."
+            docker network inspect clinicez-net >/dev/null 2>&1 || docker network create clinicez-net
+
             echo "==> Loading Docker image..."
             docker load < patient-api.tar.gz
 

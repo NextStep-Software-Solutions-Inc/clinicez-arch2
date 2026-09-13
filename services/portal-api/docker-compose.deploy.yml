@@ -2,15 +2,19 @@
 # Deploy compose for Portal API on Server (Dev environment).
 #
 # All secrets are injected via .env written at deploy time by GitHub Actions.
+# No host ports exposed; routed via clinicez-net and reverse proxy (NPM).
+
+name: clinicez-portal-api
 
 services:
-
-  # ─── Portal API ──────────────────────────────────────────────────────────
   portal-api:
     image: ${IMAGE_NAME:-clinicez-portal-api}:${IMAGE_TAG:-dev}
     container_name: clinicez-portal-api
-    ports:
-      - "5200:8080"
+    labels:
+      - "project=clinicez"
+      - "environment=dev"
+    networks:
+      - clinicez-net
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
       - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}
@@ -21,3 +25,8 @@ services:
       - RabbitMq__Username=${RABBITMQ_USERNAME}
       - RabbitMq__Password=${RABBITMQ_PASSWORD}
     restart: unless-stopped
+
+networks:
+  clinicez-net:
+    name: clinicez-net
+    external: true
