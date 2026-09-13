@@ -6,21 +6,21 @@ WORKDIR /src
 COPY ["Directory.Build.props", "./"]
 
 # Copy csproj files and restore dependencies
-COPY ["services/laboratory-api/LaboratoryDashboardBE.Api/LaboratoryDashboardBE.Api.csproj", "services/laboratory-api/LaboratoryDashboardBE.Api/"]
-COPY ["services/laboratory-api/LaboratoryDashboardBE.Application/LaboratoryDashboardBE.Application.csproj", "services/laboratory-api/LaboratoryDashboardBE.Application/"]
-COPY ["services/laboratory-api/LaboratoryDashboardBE.Domain/LaboratoryDashboardBE.Domain.csproj", "services/laboratory-api/LaboratoryDashboardBE.Domain/"]
-COPY ["services/laboratory-api/LaboratoryDashboardBE.Infrastructure/LaboratoryDashboardBE.Infrastructure.csproj", "services/laboratory-api/LaboratoryDashboardBE.Infrastructure/"]
-COPY ["packages/shared-dotnet/CLINICEZ.Shared.csproj", "packages/shared-dotnet/"]
+COPY ["services/laboratory-api/ClinicEz.Laboratory.Api/ClinicEz.Laboratory.Api.csproj", "services/laboratory-api/ClinicEz.Laboratory.Api/"]
+COPY ["services/laboratory-api/ClinicEz.Laboratory.Application/ClinicEz.Laboratory.Application.csproj", "services/laboratory-api/ClinicEz.Laboratory.Application/"]
+COPY ["services/laboratory-api/ClinicEz.Laboratory.Domain/ClinicEz.Laboratory.Domain.csproj", "services/laboratory-api/ClinicEz.Laboratory.Domain/"]
+COPY ["services/laboratory-api/ClinicEz.Laboratory.Infrastructure/ClinicEz.Laboratory.Infrastructure.csproj", "services/laboratory-api/ClinicEz.Laboratory.Infrastructure/"]
+COPY ["packages/shared-dotnet/ClinicEz.Shared.csproj", "packages/shared-dotnet/"]
 
-RUN dotnet restore "services/laboratory-api/LaboratoryDashboardBE.Api/LaboratoryDashboardBE.Api.csproj"
+RUN dotnet restore "services/laboratory-api/ClinicEz.Laboratory.Api/ClinicEz.Laboratory.Api.csproj"
 
 # Copy everything else and build
 COPY . .
-WORKDIR "/src/services/laboratory-api/LaboratoryDashboardBE.Api"
-RUN dotnet build "LaboratoryDashboardBE.Api.csproj" -c Release -o /app/build
+WORKDIR "/src/services/laboratory-api/ClinicEz.Laboratory.Api"
+RUN dotnet build "ClinicEz.Laboratory.Api.csproj" -c Release -o /app/build
 
 # Publish the application
-RUN dotnet publish "LaboratoryDashboardBE.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "ClinicEz.Laboratory.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 # Use the official ASP.NET Core runtime image
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
@@ -32,4 +32,4 @@ EXPOSE 8080
 EXPOSE 443
 
 # Set the entry point
-ENTRYPOINT ["dotnet", "LaboratoryDashboardBE.Api.dll"]
+ENTRYPOINT ["dotnet", "ClinicEz.Laboratory.Api.dll"]

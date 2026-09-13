@@ -6,21 +6,21 @@ WORKDIR /src
 COPY ["Directory.Build.props", "./"]
 
 # Copy csproj files and restore dependencies
-COPY ["services/organization-api/OrganizationDashboardBE.Api/OrganizationDashboardBE.Api.csproj", "services/organization-api/OrganizationDashboardBE.Api/"]
-COPY ["services/organization-api/OrganizationDashboardBE.Application/OrganizationDashboardBE.Application.csproj", "services/organization-api/OrganizationDashboardBE.Application/"]
-COPY ["services/organization-api/OrganizationDashboardBE.Domain/OrganizationDashboardBE.Domain.csproj", "services/organization-api/OrganizationDashboardBE.Domain/"]
-COPY ["services/organization-api/OrganizationDashboardBE.Infrastructure/OrganizationDashboardBE.Infrastructure.csproj", "services/organization-api/OrganizationDashboardBE.Infrastructure/"]
-COPY ["packages/shared-dotnet/CLINICEZ.Shared.csproj", "packages/shared-dotnet/"]
+COPY ["services/organization-api/ClinicEz.Organization.Api/ClinicEz.Organization.Api.csproj", "services/organization-api/ClinicEz.Organization.Api/"]
+COPY ["services/organization-api/ClinicEz.Organization.Application/ClinicEz.Organization.Application.csproj", "services/organization-api/ClinicEz.Organization.Application/"]
+COPY ["services/organization-api/ClinicEz.Organization.Domain/ClinicEz.Organization.Domain.csproj", "services/organization-api/ClinicEz.Organization.Domain/"]
+COPY ["services/organization-api/ClinicEz.Organization.Infrastructure/ClinicEz.Organization.Infrastructure.csproj", "services/organization-api/ClinicEz.Organization.Infrastructure/"]
+COPY ["packages/shared-dotnet/ClinicEz.Shared.csproj", "packages/shared-dotnet/"]
 
-RUN dotnet restore "services/organization-api/OrganizationDashboardBE.Api/OrganizationDashboardBE.Api.csproj"
+RUN dotnet restore "services/organization-api/ClinicEz.Organization.Api/ClinicEz.Organization.Api.csproj"
 
 # Copy everything else and build
 COPY . .
-WORKDIR "/src/services/organization-api/OrganizationDashboardBE.Api"
-RUN dotnet build "OrganizationDashboardBE.Api.csproj" -c Release -o /app/build
+WORKDIR "/src/services/organization-api/ClinicEz.Organization.Api"
+RUN dotnet build "ClinicEz.Organization.Api.csproj" -c Release -o /app/build
 
 # Publish the application
-RUN dotnet publish "OrganizationDashboardBE.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "ClinicEz.Organization.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 # Use the official ASP.NET Core runtime image
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
@@ -32,4 +32,4 @@ EXPOSE 8080
 EXPOSE 443
 
 # Set the entry point
-ENTRYPOINT ["dotnet", "OrganizationDashboardBE.Api.dll"]
+ENTRYPOINT ["dotnet", "ClinicEz.Organization.Api.dll"]

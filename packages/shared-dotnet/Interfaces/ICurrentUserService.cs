@@ -1,4 +1,4 @@
-namespace CLINICEZ.Shared.Interfaces;
+namespace ClinicEz.Shared.Interfaces;
 
 public interface ICurrentUserService
 {

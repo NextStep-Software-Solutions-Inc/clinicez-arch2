@@ -1,7 +1,7 @@
 using System.Text.Json;
-using CLINICEZ.Shared.Exceptions;
+using ClinicEz.Shared.Exceptions;
 
-namespace CLINICEZ.Shared.Exceptions;
+namespace ClinicEz.Shared.Exceptions;
 
 public static class ClerkExceptionParser
 {

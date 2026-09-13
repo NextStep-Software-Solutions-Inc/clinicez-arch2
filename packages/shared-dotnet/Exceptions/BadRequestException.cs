@@ -1,4 +1,4 @@
-namespace CLINICEZ.Shared.Exceptions;
+namespace ClinicEz.Shared.Exceptions;
 
 public class BadRequestException : Exception
 {

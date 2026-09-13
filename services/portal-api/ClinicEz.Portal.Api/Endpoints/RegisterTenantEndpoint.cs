@@ -1,0 +1,21 @@
+using ClinicEz.Portal.Api.Abstractions;
+using ClinicEz.Portal.Application.Features.Tenants.Commands.RegisterTenant;
+using MediatR;
+
+namespace ClinicEz.Portal.Api.Endpoints;
+
+public sealed class RegisterTenantEndpoint : IEndpoint
+{
+    public void MapEndpoint(IEndpointRouteBuilder app)
+    {
+        app.MapPost("/tenants/register", async (RegisterTenantCommand command, ISender sender, CancellationToken cancellationToken) =>
+        {
+            var result = await sender.Send(command, cancellationToken);
+            return Results.Ok(new { ClerkUserId = result });
+        })
+        .WithName("RegisterTenant")
+        .WithDescription("Registers a new tenant profile and returns the associated Clerk user ID.")
+        .WithTags("Tenants")
+        .AllowAnonymous();
+    }
+}

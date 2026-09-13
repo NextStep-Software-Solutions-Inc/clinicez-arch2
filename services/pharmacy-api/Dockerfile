@@ -6,21 +6,21 @@ WORKDIR /src
 COPY ["Directory.Build.props", "./"]
 
 # Copy csproj files and restore dependencies
-COPY ["services/pharmacy-api/PharmacyDashboardBE.Api/PharmacyDashboardBE.Api.csproj", "services/pharmacy-api/PharmacyDashboardBE.Api/"]
-COPY ["services/pharmacy-api/PharmacyDashboardBE.Application/PharmacyDashboardBE.Application.csproj", "services/pharmacy-api/PharmacyDashboardBE.Application/"]
-COPY ["services/pharmacy-api/PharmacyDashboardBE.Domain/PharmacyDashboardBE.Domain.csproj", "services/pharmacy-api/PharmacyDashboardBE.Domain/"]
-COPY ["services/pharmacy-api/PharmacyDashboardBE.Infrastructure/PharmacyDashboardBE.Infrastructure.csproj", "services/pharmacy-api/PharmacyDashboardBE.Infrastructure/"]
-COPY ["packages/shared-dotnet/CLINICEZ.Shared.csproj", "packages/shared-dotnet/"]
+COPY ["services/pharmacy-api/ClinicEz.Pharmacy.Api/ClinicEz.Pharmacy.Api.csproj", "services/pharmacy-api/ClinicEz.Pharmacy.Api/"]
+COPY ["services/pharmacy-api/ClinicEz.Pharmacy.Application/ClinicEz.Pharmacy.Application.csproj", "services/pharmacy-api/ClinicEz.Pharmacy.Application/"]
+COPY ["services/pharmacy-api/ClinicEz.Pharmacy.Domain/ClinicEz.Pharmacy.Domain.csproj", "services/pharmacy-api/ClinicEz.Pharmacy.Domain/"]
+COPY ["services/pharmacy-api/ClinicEz.Pharmacy.Infrastructure/ClinicEz.Pharmacy.Infrastructure.csproj", "services/pharmacy-api/ClinicEz.Pharmacy.Infrastructure/"]
+COPY ["packages/shared-dotnet/ClinicEz.Shared.csproj", "packages/shared-dotnet/"]
 
-RUN dotnet restore "services/pharmacy-api/PharmacyDashboardBE.Api/PharmacyDashboardBE.Api.csproj"
+RUN dotnet restore "services/pharmacy-api/ClinicEz.Pharmacy.Api/ClinicEz.Pharmacy.Api.csproj"
 
 # Copy everything else and build
 COPY . .
-WORKDIR "/src/services/pharmacy-api/PharmacyDashboardBE.Api"
-RUN dotnet build "PharmacyDashboardBE.Api.csproj" -c Release -o /app/build
+WORKDIR "/src/services/pharmacy-api/ClinicEz.Pharmacy.Api"
+RUN dotnet build "ClinicEz.Pharmacy.Api.csproj" -c Release -o /app/build
 
 # Publish the application
-RUN dotnet publish "PharmacyDashboardBE.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "ClinicEz.Pharmacy.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 # Use the official ASP.NET Core runtime image
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
@@ -32,4 +32,4 @@ EXPOSE 8080
 EXPOSE 443
 
 # Set the entry point
-ENTRYPOINT ["dotnet", "PharmacyDashboardBE.Api.dll"]
+ENTRYPOINT ["dotnet", "ClinicEz.Pharmacy.Api.dll"]

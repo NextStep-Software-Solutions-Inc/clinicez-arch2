@@ -6,21 +6,21 @@ WORKDIR /src
 COPY ["Directory.Build.props", "./"]
 
 # Copy csproj files and restore dependencies
-COPY ["services/clinic-api/ClinicDashboardBE.Api/ClinicDashboardBE.Api.csproj", "services/clinic-api/ClinicDashboardBE.Api/"]
-COPY ["services/clinic-api/ClinicDashboardBE.Application/ClinicDashboardBE.Application.csproj", "services/clinic-api/ClinicDashboardBE.Application/"]
-COPY ["services/clinic-api/ClinicDashboardBE.Domain/ClinicDashboardBE.Domain.csproj", "services/clinic-api/ClinicDashboardBE.Domain/"]
-COPY ["services/clinic-api/ClinicDashboardBE.Infrastructure/ClinicDashboardBE.Infrastructure.csproj", "services/clinic-api/ClinicDashboardBE.Infrastructure/"]
-COPY ["packages/shared-dotnet/CLINICEZ.Shared.csproj", "packages/shared-dotnet/"]
+COPY ["services/clinic-api/ClinicEz.Clinic.Api/ClinicEz.Clinic.Api.csproj", "services/clinic-api/ClinicEz.Clinic.Api/"]
+COPY ["services/clinic-api/ClinicEz.Clinic.Application/ClinicEz.Clinic.Application.csproj", "services/clinic-api/ClinicEz.Clinic.Application/"]
+COPY ["services/clinic-api/ClinicEz.Clinic.Domain/ClinicEz.Clinic.Domain.csproj", "services/clinic-api/ClinicEz.Clinic.Domain/"]
+COPY ["services/clinic-api/ClinicEz.Clinic.Infrastructure/ClinicEz.Clinic.Infrastructure.csproj", "services/clinic-api/ClinicEz.Clinic.Infrastructure/"]
+COPY ["packages/shared-dotnet/ClinicEz.Shared.csproj", "packages/shared-dotnet/"]
 
-RUN dotnet restore "services/clinic-api/ClinicDashboardBE.Api/ClinicDashboardBE.Api.csproj"
+RUN dotnet restore "services/clinic-api/ClinicEz.Clinic.Api/ClinicEz.Clinic.Api.csproj"
 
 # Copy everything else and build
 COPY . .
-WORKDIR "/src/services/clinic-api/ClinicDashboardBE.Api"
-RUN dotnet build "ClinicDashboardBE.Api.csproj" -c Release -o /app/build
+WORKDIR "/src/services/clinic-api/ClinicEz.Clinic.Api"
+RUN dotnet build "ClinicEz.Clinic.Api.csproj" -c Release -o /app/build
 
 # Publish the application
-RUN dotnet publish "ClinicDashboardBE.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "ClinicEz.Clinic.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 # Use the official ASP.NET Core runtime image
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
@@ -32,4 +32,4 @@ EXPOSE 8080
 EXPOSE 443
 
 # Set the entry point
-ENTRYPOINT ["dotnet", "ClinicDashboardBE.Api.dll"]
+ENTRYPOINT ["dotnet", "ClinicEz.Clinic.Api.dll"]

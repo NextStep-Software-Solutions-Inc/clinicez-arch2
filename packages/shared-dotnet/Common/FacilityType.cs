@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace CLINICEZ.Shared.Common;
+namespace ClinicEz.Shared.Common;
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum FacilityType

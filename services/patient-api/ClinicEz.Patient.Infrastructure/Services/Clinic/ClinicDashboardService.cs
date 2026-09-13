@@ -1,0 +1,108 @@
+using System.Net.Http.Headers;
+using System.Text.Json;
+using ClinicEz.Shared.Exceptions;
+using Microsoft.Extensions.Logging;
+using ClinicEz.Patient.Application.Common.DTOs;
+using ClinicEz.Patient.Application.Common.Interfaces;
+
+namespace ClinicEz.Patient.Infrastructure.Services.Clinic;
+
+public sealed class ClinicDashboardService : IClinicDashboardService
+{
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ILogger<ClinicDashboardService> _logger;
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+    };
+
+    public ClinicDashboardService(IHttpClientFactory httpClientFactory, ILogger<ClinicDashboardService> logger)
+    {
+        _httpClientFactory = httpClientFactory;
+        _logger = logger;
+    }
+
+    public async Task<ClinicAppointmentsResponse> GetAppointmentsAsync(
+        string clinicBaseUrl,
+        Guid patientId,
+        string bearerToken,
+        CancellationToken cancellationToken = default)
+    {
+        var requestUrl = $"{clinicBaseUrl.TrimEnd('/')}/api/v1/appointments?patientId={patientId}";
+
+        _logger.LogDebug("Fetching appointments for patient {PatientId} from {Url}", patientId, requestUrl);
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient("ClinicDashboard");
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+            var response = await client.SendAsync(request, cancellationToken);
+            response.EnsureSuccessStatusCode();
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            var result = await JsonSerializer.DeserializeAsync<ClinicAppointmentsResponse>(
+                stream, JsonOptions, cancellationToken);
+
+            return result ?? new ClinicAppointmentsResponse([], 0);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "HTTP error calling Clinic Dashboard at {BaseUrl}", clinicBaseUrl);
+            throw new ServiceUnavailableException(
+                $"The Clinic Dashboard at '{clinicBaseUrl}' is unavailable. Please try again later.");
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning("Request to Clinic Dashboard at {BaseUrl} timed out.", clinicBaseUrl);
+            throw new ServiceUnavailableException(
+                $"The request to the Clinic Dashboard at '{clinicBaseUrl}' timed out.");
+        }
+    }
+
+    public async Task<string?> SubmitBookingAsync(
+        string clinicBaseUrl, Guid patientId, Guid bookingDraftId,
+        string shareFieldsJson, string attachedFileIdsJson, string bearerToken, CancellationToken cancellationToken = default)
+    {
+        var httpClient = _httpClientFactory.CreateClient();
+        httpClient.BaseAddress = new Uri(clinicBaseUrl);
+        if (!string.IsNullOrWhiteSpace(bearerToken))
+        {
+            httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
+        }
+
+        var payload = new
+        {
+            PatientId = patientId,
+            BookingDraftId = bookingDraftId,
+            ShareFieldsJson = shareFieldsJson,
+            AttachedFileIdsJson = attachedFileIdsJson
+        };
+
+        _logger.LogInformation(
+            "Booking submission stub: patient {PatientId} draft {DraftId} → {BaseUrl}",
+            patientId, bookingDraftId, clinicBaseUrl);
+
+        return await Task.FromResult($"PENDING-{bookingDraftId:N}");
+    }
+
+    public async Task<bool> PingClinicAsync(string clinicBaseUrl, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("ClinicDashboard");
+            var url = $"{clinicBaseUrl.TrimEnd('/')}/api/v1/sync/ping";
+            var response = await client.PostAsync(url, null, cancellationToken);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to ping clinic {ClinicBaseUrl}", clinicBaseUrl);
+            return false;
+        }
+    }
+}

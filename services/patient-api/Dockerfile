@@ -6,21 +6,21 @@ WORKDIR /src
 COPY ["Directory.Build.props", "./"]
 
 # Copy project files individually to leverage Docker layer caching during restore
-COPY ["services/patient-api/PatientAppBE.Api/PatientAppBE.Api.csproj", "services/patient-api/PatientAppBE.Api/"]
-COPY ["services/patient-api/PatientAppBE.Application/PatientAppBE.Application.csproj", "services/patient-api/PatientAppBE.Application/"]
-COPY ["services/patient-api/PatientAppBE.Domain/PatientAppBE.Domain.csproj", "services/patient-api/PatientAppBE.Domain/"]
-COPY ["services/patient-api/PatientAppBE.Infrastructure/PatientAppBE.Infrastructure.csproj", "services/patient-api/PatientAppBE.Infrastructure/"]
-COPY ["packages/shared-dotnet/CLINICEZ.Shared.csproj", "packages/shared-dotnet/"]
+COPY ["services/patient-api/ClinicEz.Patient.Api/ClinicEz.Patient.Api.csproj", "services/patient-api/ClinicEz.Patient.Api/"]
+COPY ["services/patient-api/ClinicEz.Patient.Application/ClinicEz.Patient.Application.csproj", "services/patient-api/ClinicEz.Patient.Application/"]
+COPY ["services/patient-api/ClinicEz.Patient.Domain/ClinicEz.Patient.Domain.csproj", "services/patient-api/ClinicEz.Patient.Domain/"]
+COPY ["services/patient-api/ClinicEz.Patient.Infrastructure/ClinicEz.Patient.Infrastructure.csproj", "services/patient-api/ClinicEz.Patient.Infrastructure/"]
+COPY ["packages/shared-dotnet/ClinicEz.Shared.csproj", "packages/shared-dotnet/"]
 
-RUN dotnet restore "services/patient-api/PatientAppBE.Api/PatientAppBE.Api.csproj"
+RUN dotnet restore "services/patient-api/ClinicEz.Patient.Api/ClinicEz.Patient.Api.csproj"
 
 # Copy source and build
 COPY . .
-WORKDIR "/src/services/patient-api/PatientAppBE.Api"
-RUN dotnet build "PatientAppBE.Api.csproj" -c Release -o /app/build
+WORKDIR "/src/services/patient-api/ClinicEz.Patient.Api"
+RUN dotnet build "ClinicEz.Patient.Api.csproj" -c Release -o /app/build
 
 # Stage 2: Publish
-RUN dotnet publish "PatientAppBE.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "ClinicEz.Patient.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 # Stage 3: Final runtime image
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
@@ -34,4 +34,4 @@ COPY --from=build /app/publish .
 EXPOSE 8080
 EXPOSE 443
 
-ENTRYPOINT ["dotnet", "PatientAppBE.Api.dll"]
+ENTRYPOINT ["dotnet", "ClinicEz.Patient.Api.dll"]

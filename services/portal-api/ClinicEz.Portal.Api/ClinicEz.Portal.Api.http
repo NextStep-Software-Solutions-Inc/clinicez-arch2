@@ -1,0 +1,6 @@
+@ClinicEz.Portal.Api_HostAddress = http://localhost:5230
+
+GET {{ClinicEz.Portal.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

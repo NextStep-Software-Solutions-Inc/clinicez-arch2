@@ -1,6 +1,6 @@
 using System;
 
-namespace CLINICEZ.Shared.Common;
+namespace ClinicEz.Shared.Common;
 
 public record FacilityCreatedEvent
 {

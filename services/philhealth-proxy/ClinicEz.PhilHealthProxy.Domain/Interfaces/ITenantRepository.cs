@@ -1,0 +1,8 @@
+using ClinicEz.PhilHealthProxy.Domain.Entities;
+
+namespace ClinicEz.PhilHealthProxy.Domain.Interfaces;
+
+public interface ITenantRepository
+{
+    Task<PhilHealthTenant?> GetByTenantIdAsync(Guid tenantId, CancellationToken cancellationToken = default);
+}
