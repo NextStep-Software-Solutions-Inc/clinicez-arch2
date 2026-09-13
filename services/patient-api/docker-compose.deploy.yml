@@ -1,18 +1,18 @@
 # docker-compose.deploy.yml
-# Deploy compose for PatientApp API on DigitalOcean Droplet (Dev environment).
+# Deploy compose for Patient API on Server (Dev environment).
 #
 # - PostgreSQL: external (pg.dev.nextstep-software.com)
 # - Redis:      external (managed Redis cloud service)
-# - API:        this file manages only the patientapp-api container
+# - API:        this file manages only the patient-api container
 #
 # All secrets are injected via .env written at deploy time by GitHub Actions.
 
 services:
 
-  # ─── Patient App API ──────────────────────────────────────────────────────────
-  patientapp-api:
-    image: ${IMAGE_NAME:-patientapp-api}:${IMAGE_TAG:-dev}
-    container_name: patientapp-api
+  # ─── Patient API ───────────────────────────────────────────────────────────────
+  patient-api:
+    image: ${IMAGE_NAME:-clinicez-patient-api}:${IMAGE_TAG:-dev}
+    container_name: clinicez-patient-api
     ports:
       - "5100:8080"
     environment:

@@ -1,0 +1,15 @@
+# docker-compose.deploy.yml
+# Deploy compose for PhilHealth Proxy on Server (Dev environment).
+#
+# All secrets are injected via .env written at deploy time by GitHub Actions.
+
+services:
+  philhealth-proxy:
+    image: ${IMAGE_NAME:-clinicez-philhealth-proxy}:${IMAGE_TAG:-dev}
+    container_name: clinicez-philhealth-proxy
+    ports:
+      - "5700:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
+      - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}
+    restart: unless-stopped

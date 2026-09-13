@@ -1,16 +1,18 @@
 # docker-compose.deploy.yml
-# Deploy compose for Laboratory Dashboard API on DigitalOcean Droplet (Dev environment).
+# Deploy compose for Laboratory API on Server (Dev environment).
+#
+# All secrets are injected via .env written at deploy time by GitHub Actions.
 
 services:
-  laboratory-dashboard-api:
-    image: ${IMAGE_NAME:-clinicez-laboratory-dashboard-api}:${IMAGE_TAG:-dev}
-    container_name: clinicez-laboratory-dashboard-api
+  laboratory-api:
+    image: ${IMAGE_NAME:-clinicez-laboratory-api}:${IMAGE_TAG:-dev}
+    container_name: clinicez-laboratory-api
     ports:
       - "5400:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
       - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}
-      - RabbitMq__Host=${RABBITMQ_HOST:-conn-rabbitmq.dev.nextstep-software.com}
-      - RabbitMq__Username=${RABBITMQ_USERNAME:-rabbitmq}
-      - RabbitMq__Password=${RABBITMQ_PASSWORD:-nextstep-rabbitmq-2o2G}
+      - RabbitMq__Host=${RABBITMQ_HOST}
+      - RabbitMq__Username=${RABBITMQ_USERNAME}
+      - RabbitMq__Password=${RABBITMQ_PASSWORD}
     restart: unless-stopped

@@ -1,0 +1,49 @@
+name: Backend CI
+
+on:
+  push:
+    branches:
+      - development
+      - main
+    paths:
+      - 'services/**'
+      - 'packages/shared-dotnet/**'
+      - 'CLINICEZ.sln'
+      - 'Directory.Build.props'
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    branches:
+      - development
+      - main
+    paths:
+      - 'services/**'
+      - 'packages/shared-dotnet/**'
+      - 'CLINICEZ.sln'
+      - 'Directory.Build.props'
+      - '.github/workflows/backend-ci.yml'
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: Build and Test .NET Solution
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up .NET SDKs
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: |
+          9.0.x
+          10.0.x
+
+    - name: Restore dependencies
+      run: dotnet restore CLINICEZ.sln
+
+    - name: Build solution
+      run: dotnet build CLINICEZ.sln --no-restore --configuration Release
+
+    - name: Run unit and integration tests
+      run: dotnet test CLINICEZ.sln --no-build --configuration Release --verbosity normal

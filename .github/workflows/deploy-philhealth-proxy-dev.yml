@@ -1,20 +1,20 @@
-name: Deploy Clinic Dashboard API to DigitalOcean Droplet (Dev)
+name: Deploy PhilHealth Proxy (Dev)
 
 on:
   push:
     branches:
       - development
     paths:
-      - 'services/clinic-api/**'
+      - 'services/philhealth-proxy/**'
       - 'packages/shared-dotnet/**'
-      - '.github/workflows/deploy-clinic-dashboard-dev.yml'
+      - '.github/workflows/deploy-philhealth-proxy-dev.yml'
   pull_request:
     branches:
       - development
     paths:
-      - 'services/clinic-api/**'
+      - 'services/philhealth-proxy/**'
       - 'packages/shared-dotnet/**'
-      - '.github/workflows/deploy-clinic-dashboard-dev.yml'
+      - '.github/workflows/deploy-philhealth-proxy-dev.yml'
   workflow_dispatch:
     inputs:
       reason:
@@ -24,10 +24,10 @@ on:
         type: string
 
 env:
-  IMAGE_NAME: clinicez-clinic-dashboard-api
+  IMAGE_NAME: clinicez-philhealth-proxy
   IMAGE_TAG: dev
-  CONTAINER_NAME: clinicez-clinic-dashboard-api
-  DEPLOY_DIR: "/opt/Clinic EZ/clinic-dashboard"
+  CONTAINER_NAME: clinicez-philhealth-proxy
+  DEPLOY_DIR: "/opt/clinicez/philhealth-proxy"
   ENVIRONMENT: Development
 
 jobs:
@@ -47,7 +47,7 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         context: .
-        file: services/clinic-api/Dockerfile
+        file: services/philhealth-proxy/Dockerfile
         push: false
         load: true
         tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
@@ -56,18 +56,18 @@ jobs:
 
     - name: Save Docker image to tar.gz
       run: |
-        docker save ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} | gzip > clinic-dashboard-api.tar.gz
-        echo "Image size: $(du -sh clinic-dashboard-api.tar.gz | cut -f1)"
+        docker save ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} | gzip > philhealth-proxy.tar.gz
+        echo "Image size: $(du -sh philhealth-proxy.tar.gz | cut -f1)"
 
     - name: Upload image artifact
       uses: actions/upload-artifact@v4
       with:
-        name: clinic-dashboard-docker-image
-        path: clinic-dashboard-api.tar.gz
+        name: philhealth-proxy-docker-image
+        path: philhealth-proxy.tar.gz
         retention-days: 1
 
   deploy:
-    name: Deploy to DigitalOcean Droplet
+    name: Deploy to Server
     runs-on: ubuntu-latest
     environment: Development
     needs: build
@@ -80,65 +80,62 @@ jobs:
     - name: Create .env file
       env:
         ASPNETCORE_ENVIRONMENT: ${{ env.ENVIRONMENT }}
-        CONNECTION_STRING: ${{ secrets.PATIENTAPP_DB_CONNECTION_STRING }}
-        RABBITMQ_HOST: ${{ vars.CLINICEZ_RABBITMQ_HOST }}
-        RABBITMQ_USERNAME: ${{ vars.CLINICEZ_RABBITMQ_USERNAME }}
-        RABBITMQ_PASSWORD: ${{ secrets.CLINICEZ_RABBITMQ_PASSWORD }}
+        CONNECTION_STRING: ${{ secrets.PHILHEALTH_DB_CONNECTION_STRING }}
         IMAGE_NAME: ${{ env.IMAGE_NAME }}
         IMAGE_TAG: ${{ env.IMAGE_TAG }}
       run: |
-        for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING RABBITMQ_HOST RABBITMQ_USERNAME RABBITMQ_PASSWORD IMAGE_NAME IMAGE_TAG; do
-          echo "$var=$(printenv $var)" >> services/clinic-api/.env
+        for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING IMAGE_NAME IMAGE_TAG; do
+          echo "$var=$(printenv $var)" >> services/philhealth-proxy/.env
         done
 
     - name: Download Docker image artifact
       uses: actions/download-artifact@v4
       with:
-        name: clinic-dashboard-docker-image
+        name: philhealth-proxy-docker-image
 
-    - name: Ensure deploy directory exists on droplet
+    - name: Ensure deploy directory exists on server
       uses: appleboy/ssh-action@v1.0.3
       with:
-        host: ${{ secrets.DO_DROPLET_IP }}
-        username: ${{ secrets.DO_DROPLET_USER }}
-        key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
-        passphrase: ${{ secrets.DO_SSH_PASSPHRASE }}
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USER }}
+        key: ${{ secrets.SSH_KEY }}
+        passphrase: ${{ secrets.SSH_PASSPHRASE }}
         script: mkdir -p "${{ env.DEPLOY_DIR }}"
 
     - name: Transfer Docker image via SCP
       uses: appleboy/scp-action@v0.1.7
       with:
-        host: ${{ secrets.DO_DROPLET_IP }}
-        username: ${{ secrets.DO_DROPLET_USER }}
-        key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
-        passphrase: ${{ secrets.DO_SSH_PASSPHRASE }}
-        source: clinic-dashboard-api.tar.gz
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USER }}
+        key: ${{ secrets.SSH_KEY }}
+        passphrase: ${{ secrets.SSH_PASSPHRASE }}
+        source: philhealth-proxy.tar.gz
         target: ${{ env.DEPLOY_DIR }}
 
     - name: Transfer docker-compose and .env files via SCP
       uses: appleboy/scp-action@v0.1.7
       with:
-        host: ${{ secrets.DO_DROPLET_IP }}
-        username: ${{ secrets.DO_DROPLET_USER }}
-        key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
-        passphrase: ${{ secrets.DO_SSH_PASSPHRASE }}
-        source: "services/clinic-api/docker-compose.deploy.yml,services/clinic-api/.env"
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USER }}
+        key: ${{ secrets.SSH_KEY }}
+        passphrase: ${{ secrets.SSH_PASSPHRASE }}
+        source: "services/philhealth-proxy/docker-compose.deploy.yml,services/philhealth-proxy/.env"
         target: ${{ env.DEPLOY_DIR }}
         strip_components: 2
 
-    - name: Load image and deploy on droplet
+    - name: Load image and deploy on server
       uses: appleboy/ssh-action@v1.0.3
       with:
-        host: ${{ secrets.DO_DROPLET_IP }}
-        username: ${{ secrets.DO_DROPLET_USER }}
-        key: ${{ secrets.DO_SSH_PRIVATE_KEY }}
-        passphrase: ${{ secrets.DO_SSH_PASSPHRASE }}
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USER }}
+        key: ${{ secrets.SSH_KEY }}
+        passphrase: ${{ secrets.SSH_PASSPHRASE }}
         script: |
           set -e
           cd "${{ env.DEPLOY_DIR }}"
 
           echo "==> Loading Docker image..."
-          docker load < clinic-dashboard-api.tar.gz
+          docker load < philhealth-proxy.tar.gz
 
           echo "==> Deploying with docker compose..."
           docker compose -f docker-compose.deploy.yml up -d --force-recreate
