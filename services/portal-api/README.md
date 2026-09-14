@@ -1,50 +1,53 @@
-# MainPortalBE
+# Clinic EZ Portal API (`portal-api`)
 
-MainPortalBE is the centralized .NET 10 backend service for the Clinic EZ Web Portal. It manages cross-tenant data, handles clinic onboarding, coordinates centralized administration, and powers the `MainPortalFE`.
+The Portal API is the centralized .NET 10 control-plane backend service for the Clinic EZ ecosystem. It manages cross-tenant data, handles clinic onboarding, coordinates centralized administration and licensing, handles billing via Xendit, and powers the `@clinicez/portal-web` application.
 
 ## Architecture
 
-This project is built using **Clean Architecture** principles and utilizes a **Minimal API** design. It is functionally aligned with the `PatientAppBE` architecture to ensure optimal code reuse and maintainability.
+This service is built using **Clean Architecture** principles and utilizes ASP.NET Core **Minimal APIs**.
 
 ### Key Technologies
-- **.NET 10**: The latest framework for high-performance cross-platform services.
-- **Minimal APIs**: Lightweight `IEndpoint` abstractions for route handling.
+- **.NET 10**: High-performance cross-platform runtime.
+- **Minimal APIs**: Lightweight endpoint routing via `IEndpoint` abstractions.
 - **Scalar**: Modern OpenAPI reference UI (`Scalar.AspNetCore`).
-- **Entity Framework Core**: ORM for database access.
-- **Hangfire**: Background job processing.
-- **JWT / Clerk Integration**: Secure authentication and authorization.
+- **Entity Framework Core 10**: ORM for PostgreSQL database access.
+- **Clerk Integration**: Secure authentication and JWT verification.
+- **Xendit Integration**: Subscription and invoicing payment lifecycle.
+- **MassTransit / RabbitMQ**: Event publishing across the microservices mesh.
+- **Shared Package**: References `ClinicEz.Shared` (`packages/shared-dotnet`).
 
 ## Project Structure
 
-- `MainPortalBE.Api`: The entry point. Contains the Minimal API endpoints, middleware, and dependency injection configuration.
-- `MainPortalBE.Application`: Contains the core business logic, interfaces, and CQRS handlers.
-- `MainPortalBE.Domain`: Contains the enterprise domain models, entities, and enums.
-- `MainPortalBE.Infrastructure`: Contains data access implementation, external API integrations, and database contexts.
+- `ClinicEz.Portal.Api`: The entry point. Contains Minimal API endpoints, middleware, Scalar setup, and DI registration.
+- `ClinicEz.Portal.Application`: Core application logic, CQRS commands/queries, validation behaviors, and interfaces.
+- `ClinicEz.Portal.Domain`: Domain models, entities, enums, and repository abstractions.
+- `ClinicEz.Portal.Infrastructure`: Data access implementations, PostgreSQL EF Core `ApplicationDbContext`, migrations, seeders, and external client integrations.
+- `ClinicEz.Portal.Tests`: Unit and integration tests.
 
 ## Getting Started
 
 ### Prerequisites
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
+- Running PostgreSQL database instance
 
 ### Running Locally
 
 1. Navigate to the API directory:
    ```bash
-   cd MainPortalBE.Api
+   cd services/portal-api/ClinicEz.Portal.Api
    ```
 
-2. Restore dependencies and run the project:
+2. Restore dependencies and run:
    ```bash
    dotnet run
    ```
 
-3. The API will start on the configured local ports (usually `https://localhost:7xxx`). Navigate to `/scalar` in your browser to view the interactive API documentation.
+3. The API will start on configured local ports. Navigate to `/scalar/v1` in your browser to view interactive API documentation.
 
 ## Docker Deployment
 
-A `Dockerfile` is provided at the root of `MainPortalBE` for containerized deployment.
+A multi-stage `Dockerfile` is provided at the service root:
 
 ```bash
-docker build -t Clinic EZ-mainportal-be -f Dockerfile .
-docker run -p 8080:8080 Clinic EZ-mainportal-be
+docker build -t clinicez-portal-api:dev -f services/portal-api/Dockerfile .
 ```

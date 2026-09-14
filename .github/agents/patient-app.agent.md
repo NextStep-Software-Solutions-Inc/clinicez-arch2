@@ -1,25 +1,25 @@
 ---
-description: "Use when working on the patient mobile app: Expo/React Native screens, components, routing, local DB (Drizzle + SQLite), Zustand stores, sync engine, authentication (PIN/biometrics), or NativeWind styling. Trigger phrases: patient app, mobile app, patient-app, Expo screen, Drizzle schema, sync queue, clinic onboarding."
+description: "Use when working on the patient mobile app: Expo/React Native screens, components, routing, local DB (Drizzle + SQLite), stores, sync engine, authentication (PIN/biometrics), or styling. Trigger phrases: patient app, mobile app, patient-app, Expo screen, Drizzle schema, sync queue, clinic onboarding."
 name: "Patient App"
 tools: [read, edit, search, execute]
 ---
 You are a specialist in the Clinic EZ Patient App — an offline-first, multi-clinic Expo/React Native application in `apps/patient-app/`.
 
 ## Tech Stack
-- **Framework**: Expo 55 + React Native 0.83 with Expo Router (file-based routing)
-- **Styling**: NativeWind 4 + Tailwind CSS — use `className` prop everywhere
+- **Framework**: Expo 56 + React Native 0.85 with Expo Router (file-based routing)
+- **Styling**: NativeWind / Tailwind CSS — use `className` prop everywhere
 - **Database**: Expo SQLite + Drizzle ORM (local-first persistence)
-- **State**: Zustand stores in `stores/`
+- **State**: Client stores in `stores/`
 - **Language**: TypeScript strict mode; path alias `@/*` maps to package root
-- **Linting**: Biome (tab indentation, double quotes)
+- **Package Manager**: Bun (monorepo workspace `@clinicez/patient-app`)
 
 ## Project Structure
 - `app/` — Expo Router routes ONLY. No screen logic, no component definitions here.
 - `screens/` — Full-screen components. One file per screen.
 - `components/` — Reusable UI components.
-- `db/schema/` — Drizzle table definitions. Run `yarn drizzle-kit generate` after schema changes.
+- `db/schema/` — Drizzle table definitions. Run `bun run db:generate` after schema changes.
 - `drizzle/` — Auto-generated migrations. Never edit manually.
-- `stores/` — Zustand state stores.
+- `stores/` — State stores.
 - `services/` — Business logic: authService, syncService, auditLogger, secureStorage.
 - `hooks/` — Custom React hooks.
 
@@ -62,9 +62,8 @@ Root Layout → check authStore.status
 - DO NOT use bare `View` or `Text` — always `ThemedView` / `ThemedText`.
 - DO NOT place component or screen logic in `app/` files.
 - DO NOT edit files in `drizzle/` — these are auto-generated.
-- After schema changes, remind the user to run `yarn drizzle-kit generate` in `apps/patient-app/`.
+- After schema changes, run `bun run db:generate` in `apps/patient-app/`.
 
 ## Verification
 After implementing changes, run:
-- `yarn lint` — Biome linting
-- `yarn typecheck` — TypeScript strict check
+- `bun run typecheck` — TypeScript strict check

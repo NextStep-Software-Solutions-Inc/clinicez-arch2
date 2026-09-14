@@ -34,6 +34,7 @@ jobs:
   test:
     name: Run Unit Tests
     runs-on: ubuntu-latest
+    environment: Development
 
     steps:
     - name: Checkout code
@@ -137,7 +138,7 @@ jobs:
         username: ${{ secrets.SSH_USER }}
         key: ${{ secrets.SSH_KEY }}
         passphrase: ${{ secrets.SSH_PASSPHRASE }}
-        script: mkdir -p "${{ env.DEPLOY_DIR }}"
+        script: mkdir -p "${{ vars.DEPLOY_DIR || env.DEPLOY_DIR }}"
 
     - name: Transfer Docker image via SCP
       uses: appleboy/scp-action@v0.1.7
@@ -169,7 +170,7 @@ jobs:
         passphrase: ${{ secrets.SSH_PASSPHRASE }}
         script: |
           set -e
-          cd "${{ env.DEPLOY_DIR }}"
+          cd "${{ vars.DEPLOY_DIR || env.DEPLOY_DIR }}"
 
           echo "==> Ensuring networks exist..."
           docker network inspect npm-default >/dev/null 2>&1 || docker network create npm-default

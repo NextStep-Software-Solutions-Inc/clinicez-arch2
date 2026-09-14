@@ -1,44 +1,99 @@
-## Component Usage
-
-- Always use `ThemedView` and `ThemedText` components instead of the default `View` and `Text` for all UI code except for the web-app, to ensure a unified component view across the project.
 # Copilot Instructions for Clinic EZ Monorepo
 
-## Big Picture Architecture
-- **Monorepo Structure:** All projects live under `packages/`. Each package is a separate app or service (e.g., `patient-app`, `web-frontend`, `backend-mobile`).
-- **Mobile Apps:** Built with Expo/React Native. Patient app is local-first (Expo SQLite + Drizzle ORM), supports multiple clinics, and syncs to a per-clinic backend (on-premise or cloud, containerized via Docker).
-- **Web Frontend:** (Planned) Cross-platform (mobile/desktop) for marketing, onboarding, and tenant management.
-- **Backends:** Each clinic has its own backend (containerized, deployed by tenant). Mobile and web may use separate backends.
-- **Onboarding Flow:** Patients join clinics via invite code/email or search. Clinics deploy their own backend and register its URL.
-
-## Developer Workflows
-- **Install/Run:** Use `yarn` in each package (e.g., `yarn install`, `yarn start`).
-- **Reset Patient App:** `yarn run reset-project` in `apps/patient-app` resets starter code.
-- **No global build/test scripts:** Each package manages its own scripts and dependencies.
-- **No node_modules in VCS:** All `node_modules` are gitignored at all levels.
-
-## Project-Specific Conventions
-- **All code must live in `packages/`** (including web, mobile, and backend projects).
-- **File-based routing** is used in Expo apps (see `app/` in `patient-app`).
-- **Local-first/offline-first** patterns in mobile: always use Expo SQLite + Drizzle ORM for local storage, with a queue-based sync engine per clinic.
-- **Multi-clinic support:** Patient app must allow switching between clinics in-session.
-- **Containerized backends:** All tenant backends are distributed as Docker images with config download via web onboarding.
-
-## Integration & Communication
-- **Mobile <-> Backend:** Sync via REST/GraphQL (implementation-specific per backend). Each clinic's backend URL is registered during onboarding.
-- **Web <-> Backend:** (Planned) Web frontend communicates with its own backend for onboarding, marketing, and admin.
-- **No monolithic backend:** Each clinic is isolated for data privacy and deployment flexibility.
-
-## Examples & Key Files
-- `apps/patient-app/README.md`: Details on local-first, multi-clinic, onboarding, and dev workflow.
-- `apps/patient-app/app/`: File-based routing for Expo.
-- `apps/patient-app/scripts/reset-project.js`: Project reset logic.
-- `README.md` (root): Monorepo structure, architecture, and getting started for all apps.
-
-
-## Coding Principles
- - All AI-generated code must always adhere to SOLID principles and the DRY (Don't Repeat Yourself) design pattern.
- - Ensure code is modular, maintainable, and avoids duplication.
- - See `CONTRIBUTING.md` and per-package `COPILOT.md` for more details.
+Welcome to the **Clinic EZ** monorepo. Follow these guidelines and conventions whenever creating, modifying, or refactoring code.
 
 ---
-For new packages, follow the structure and conventions above. When in doubt, check the root and package READMEs for examples.
+
+## 🏛️ Monorepo Architecture
+
+The monorepo is divided into three distinct layers:
+
+```text
+clinicez/
+├── apps/                                  # All frontend client applications
+│   ├── portal-web/                        # Next.js 16 Web Portal (SuperAdmin, Tenant Console, Marketing)
+│   ├── patient-app/                       # Universal React Native Expo App (iOS, Android, Web)
+│   ├── clinic-app/                        # Operational Clinic App (Web, Desktop, Tablet)
+│   ├── laboratory-app/                    # Operational Laboratory App (LIS, Diagnostics)
+│   └── pharmacy-app/                      # Operational Pharmacy App (PMS, Inventory)
+│
+├── services/                              # All backend microservices (.NET 10 / ASP.NET Core)
+│   ├── portal-api/                        # Central Control Plane (Tenants, Licensing, Xendit Billing)
+│   ├── patient-api/                       # Patient EHR, Sync Engine, Hangfire Background Queue
+│   ├── clinic-api/                        # Clinic EHR, Consultations, Triage
+│   ├── laboratory-api/                    # Laboratory Information System (LIS)
+│   ├── organization-api/                  # Healthcare Organization & Umbrella Network Management
+│   ├── pharmacy-api/                      # Pharmacy Inventory, Dispensary, Formulary
+│   └── philhealth-proxy/                  # PhilHealth Konsulta Integration Gateway
+│
+├── packages/                              # Shared cross-cutting libraries
+│   ├── shared-dotnet/                     # C# Shared Library (ClinicEz.Shared: ApiResponse, Events, Exceptions)
+│   └── shared-ts/                         # TypeScript Shared Library (@shared/safe utilities)
+│
+├── CLINICEZ.sln                           # Master .NET Solution file (all services + shared-dotnet + tests)
+├── Directory.Build.props                  # Centralized MSBuild configuration
+└── package.json                           # Bun workspace root (apps/*, packages/*)
+```
+
+---
+
+## 🛠️ Tooling & Workflows
+
+### TypeScript & Frontend Apps (`apps/*`, `packages/shared-ts`)
+- **Package Manager**: **Bun** is strictly enforced. Never use npm or yarn.
+- **Root Scripts**:
+  - `bun run typecheck:all` — Runs TypeScript checks across all 4 Expo apps.
+  - `bun run lint:portal` — Lints `@clinicez/portal-web`.
+  - `bun run build:portal` — Production build for `@clinicez/portal-web`.
+- **Monorepo Dependency Imports**: Internal libraries are referenced via workspace protocol (e.g. `"@shared/safe": "workspace:*"`).
+
+### .NET Backend Services (`services/*`, `packages/shared-dotnet`)
+- **Framework**: .NET 10 (with .NET 9 for `philhealth-proxy`).
+- **Solution File**: `CLINICEZ.sln` includes all 36 projects across all services, test projects, and `ClinicEz.Shared`.
+- **Build & Test**:
+  - Restore: `dotnet restore CLINICEZ.sln`
+  - Build: `dotnet build CLINICEZ.sln --no-restore`
+  - Test: `dotnet test CLINICEZ.sln --no-build`
+- **Naming & Namespaces**: Follows the strict convention `ClinicEz.<Service>.<Layer>` (e.g., `ClinicEz.Portal.Api`, `ClinicEz.Patient.Application`).
+
+---
+
+## 🧩 Architectural & Coding Conventions
+
+### 1. Backend Services (`services/*`)
+- **Clean Architecture**: Strictly maintain the 4-layer separation:
+  - `Api`: Minimal API endpoints implementing `IEndpoint`, Program.cs, middleware, Scalar OpenAPI.
+  - `Application`: CQRS Commands/Queries, MediatR/FluentValidation behaviors, service interfaces.
+  - `Domain`: Pure entities, value objects, domain events, repository interfaces. No external dependencies.
+  - `Infrastructure`: EF Core `ApplicationDbContext`, migrations, repositories, external API clients, message consumers.
+- **API Response Wrapper**: Always return responses using `ApiResponse<T>` from `ClinicEz.Shared`.
+- **Database & Migration Tooling**: Use EF Core 10 with PostgreSQL (`CLINICEZ_<SERVICE>_DB`).
+- **Event Mesh**: Use MassTransit over RabbitMQ for cross-service events.
+
+### 2. Client & Mobile Applications (`apps/*`)
+- **Expo Router**: Route files in `app/` should only define routes. Keep screen and component logic in `screens/` and `components/`.
+- **Themed UI Components**: In React Native apps, always use `ThemedView` and `ThemedText` components instead of bare `View` and `Text`.
+- **Local-First & Sync**: Patient and operational apps use local SQLite via Drizzle ORM. Mutations are enqueued in `syncQueue` and pushed to the corresponding service asynchronously.
+- **Next.js Web Portal (`apps/portal-web`)**: Uses Next.js 16 App Router, React 19, Tailwind CSS v4, and Radix UI (`shadcn/ui`). Route protection is handled via `src/proxy.ts`.
+
+---
+
+## 🐳 Containerization & Deployment Conventions
+
+- **Target Server Directory**: `/opt/docker-stack/clinicez-<service>/`.
+- **Compose Files**: Each service uses standard `docker-compose.yml` (no `.deploy.yml` suffix).
+- **Networks**: Services connect to two external networks:
+  - `npm-default`: Ingress via Nginx Proxy Manager (routes to container port `8080` without host port exposure).
+  - `data-network`: Internal access to `postgres`, `rabbitmq`, and `redis`.
+- **Container Names & Labels**:
+  - `container_name: clinicez-<service>`
+  - `labels: ["project=clinicez", "environment=dev"]`
+  - `expose: ["8080"]`
+
+---
+
+## 🎯 Code Quality & Principles
+
+1. **SOLID & DRY**: Always design for single responsibility, open/closed extension, and zero duplication.
+2. **Type Safety**: Strictly typed TypeScript with zero `any` unless explicitly required by external un-typed libraries. In C#, utilize nullable reference types (`<Nullable>enable</Nullable>`).
+3. **No Dead Code**: Do not leave commented-out code, temporary debug scripts, or unused imports in production files.

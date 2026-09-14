@@ -103,7 +103,7 @@ jobs:
         username: ${{ secrets.SSH_USER }}
         key: ${{ secrets.SSH_KEY }}
         passphrase: ${{ secrets.SSH_PASSPHRASE }}
-        script: mkdir -p "${{ env.DEPLOY_DIR }}"
+        script: mkdir -p "${{ vars.DEPLOY_DIR || env.DEPLOY_DIR }}"
 
     - name: Transfer Docker image via SCP
       uses: appleboy/scp-action@v0.1.7
@@ -113,7 +113,7 @@ jobs:
         key: ${{ secrets.SSH_KEY }}
         passphrase: ${{ secrets.SSH_PASSPHRASE }}
         source: laboratory-api.tar.gz
-        target: ${{ env.DEPLOY_DIR }}
+        target: ${{ vars.DEPLOY_DIR || env.DEPLOY_DIR }}
 
     - name: Transfer docker-compose and .env files via SCP
       uses: appleboy/scp-action@v0.1.7
@@ -123,7 +123,7 @@ jobs:
         key: ${{ secrets.SSH_KEY }}
         passphrase: ${{ secrets.SSH_PASSPHRASE }}
         source: "services/laboratory-api/docker-compose.yml,services/laboratory-api/.env"
-        target: ${{ env.DEPLOY_DIR }}
+        target: ${{ vars.DEPLOY_DIR || env.DEPLOY_DIR }}
         strip_components: 2
 
     - name: Load image and deploy on server
@@ -135,7 +135,7 @@ jobs:
         passphrase: ${{ secrets.SSH_PASSPHRASE }}
         script: |
           set -e
-          cd "${{ env.DEPLOY_DIR }}"
+          cd "${{ vars.DEPLOY_DIR || env.DEPLOY_DIR }}"
 
           echo "==> Ensuring networks exist..."
           docker network inspect npm-default >/dev/null 2>&1 || docker network create npm-default

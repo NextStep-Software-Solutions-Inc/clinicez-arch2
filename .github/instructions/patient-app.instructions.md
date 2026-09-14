@@ -10,7 +10,7 @@ applyTo: "apps/patient-app/**"
 - `app/` — Expo Router route files ONLY. No JSX component definitions, no screen logic.
 - `screens/` — Full-screen components (one file per screen).
 - `components/` — Reusable UI components.
-- `stores/` — Zustand stores only.
+- `stores/` — State stores (e.g. Zustand).
 - `services/` — Business logic (auth, sync, audit, storage).
 - `hooks/` — Custom React hooks.
 
@@ -18,12 +18,12 @@ applyTo: "apps/patient-app/**"
 - Use `@/` path alias for all internal imports. Never use relative `../../` paths across directory boundaries.
 
 ## Styling
-- Use `className` prop with Tailwind/NativeWind classes for all styling. Avoid inline `style` objects unless required by a third-party component.
+- Use `className` prop with Tailwind/NativeWind classes for styling. Avoid inline `style` objects unless required by a third-party component.
 
 ## Database (Drizzle ORM)
 - All table definitions go in `db/schema/`. Export every table from `db/schema/index.ts`.
 - Always infer types: `typeof table.$inferSelect` / `typeof table.$inferInsert`. Never write manual type definitions for DB rows.
-- After adding or changing schema, remind the user to run `yarn drizzle-kit generate` in `apps/patient-app/`.
+- After adding or changing schema, run `bun run db:generate` in `apps/patient-app/`.
 - Never edit files in `drizzle/` — they are auto-generated.
 
 ## Sync / Offline-First
@@ -35,6 +35,5 @@ applyTo: "apps/patient-app/**"
 - PIN and tokens must be stored via `secureStorage` (expo-secure-store). Never use AsyncStorage for secrets.
 
 ## Verification
-After every change, run in `apps/patient-app/`:
-- `yarn lint` — Biome formatter + linter
-- `yarn typecheck` — TypeScript strict mode check
+After every change, run in `apps/patient-app/` (or from monorepo root):
+- `bun run typecheck` — TypeScript strict mode check

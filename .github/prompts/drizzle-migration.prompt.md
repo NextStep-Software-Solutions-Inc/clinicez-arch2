@@ -30,7 +30,7 @@ You are adding a new Drizzle ORM table or column to the Clinic EZ Patient App sc
 5. **Remind about migration** — After all edits, output this reminder:
    > Run the following in `apps/patient-app/` to generate the migration:
    > ```
-   > yarn drizzle-kit generate
+   > bun run db:generate
    > ```
    > Then restart the Expo dev server so the new migration is applied on next app launch.
 

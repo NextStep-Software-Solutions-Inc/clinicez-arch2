@@ -18,7 +18,7 @@ The source database is read-only from the tool's perspective. The target databas
 ## Run
 
 ```powershell
-dotnet run --project packages\PatientApp\PatientApp.MigrationTool\PatientApp.MigrationTool.csproj
+dotnet run --project services\patient-api\ClinicEz.Patient.MigrationTool\ClinicEz.Patient.MigrationTool.csproj
 ```
 
 Open the printed local URL, sign in with `PATIENTAPP_MIGRATION_ADMIN_KEY`, then run:
