@@ -40,17 +40,19 @@ export default function QuickCreateDialog({ trigger }: QuickCreateDialogProps) {
                         Please select the type of resource you want to create.
                     </DialogDescription>
                 </DialogHeader>
-                <div className="grid grid-cols-3 gap-6 mt-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mt-4">
                     <Each of={options} render={({ value, label, icon: Icon }) => (
                         <Card
                             onClick={() => handleCreate(value)}
-                            className="group cursor-pointer border-2 border-transparent hover:border-primary/50 hover:bg-teal-50/50 hover:shadow-lg active:ring-2 active:ring-primary/100 active:scale-95 transition-all duration-200 ease-linear flex flex-col items-center justify-center py-6 px-2 rounded-xl"
+                            className="group cursor-pointer border-2 border-border/60 hover:border-primary/50 hover:bg-teal-50/50 dark:hover:bg-teal-950/20 hover:shadow-md active:ring-2 active:ring-primary active:scale-95 transition-all duration-200 ease-linear flex flex-col items-center justify-center p-4 sm:py-6 sm:px-2 rounded-2xl text-center"
                         >
-                            <CardHeader className="flex flex-col items-center gap-2">
-                                <div className="flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 group-hover:bg-primary/20 mb-2">
-                                    <Icon className="h-7 w-7 text-primary/80 group-hover:text-primary/90" />
+                            <CardHeader className="flex flex-col items-center gap-2 p-0 w-full">
+                                <div className="flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 group-hover:bg-primary/20 mb-1">
+                                    <Icon className="h-6 w-6 sm:h-7 sm:w-7 text-primary/80 group-hover:text-primary/90" />
                                 </div>
-                                <CardTitle className="text-lg font-semibold text-center group-hover:text-primary/100">{label}</CardTitle>
+                                <CardTitle className="text-sm sm:text-base font-semibold text-center group-hover:text-primary tracking-tight">
+                                    {label}
+                                </CardTitle>
                             </CardHeader>
                         </Card>
                     )} />

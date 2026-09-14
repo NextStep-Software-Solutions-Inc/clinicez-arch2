@@ -42,22 +42,24 @@ export default function BillingDashboardClient({ tenantId }: { tenantId: string 
   }
 
   return (
-    <div className="w-full flex-1 flex flex-col gap-8 p-8 max-w-6xl mx-auto animate-in fade-in-50 duration-300">
+    <div className="w-full flex-1 flex flex-col gap-6 sm:gap-8 p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto animate-in fade-in-50 duration-300">
       {/* Title Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-6">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight">Billing & Subscriptions</h1>
-          <p className="text-muted-foreground mt-1">Manage your clinic plan details, payment settings, and download receipts.</p>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Billing & Subscriptions</h1>
+          <p className="text-muted-foreground text-xs sm:text-sm mt-1">Manage your clinic plan details, payment settings, and download receipts.</p>
         </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full space-y-6">
-        <TabsList className="grid grid-cols-2 md:inline-flex w-full md:w-auto h-auto p-1 bg-muted/65 rounded-xl border">
-          <TabsTrigger value="plans" className="px-6 py-2 text-xs font-semibold">Plans & Subscription</TabsTrigger>
-          <TabsTrigger value="billing" className="px-6 py-2 text-xs font-semibold">Billing History</TabsTrigger>
-          <TabsTrigger value="organization" className="px-6 py-2 text-xs font-semibold">Organization Details</TabsTrigger>
-          <TabsTrigger value="payment" className="px-6 py-2 text-xs font-semibold">Payment Method</TabsTrigger>
-        </TabsList>
+        <div className="w-full overflow-x-auto pb-1.5 no-scrollbar -mx-1 px-1">
+          <TabsList className="inline-flex w-auto min-w-full sm:min-w-0 justify-start h-auto p-1 bg-muted/65 rounded-xl border flex-nowrap gap-1">
+            <TabsTrigger value="plans" className="px-4 sm:px-6 py-2 text-xs font-semibold shrink-0 whitespace-nowrap">Plans & Subscription</TabsTrigger>
+            <TabsTrigger value="billing" className="px-4 sm:px-6 py-2 text-xs font-semibold shrink-0 whitespace-nowrap">Billing History</TabsTrigger>
+            <TabsTrigger value="organization" className="px-4 sm:px-6 py-2 text-xs font-semibold shrink-0 whitespace-nowrap">Organization Details</TabsTrigger>
+            <TabsTrigger value="payment" className="px-4 sm:px-6 py-2 text-xs font-semibold shrink-0 whitespace-nowrap">Payment Method</TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* 1. PLANS TAB CONTENT */}
         <TabsContent value="plans" className="space-y-8 outline-none">

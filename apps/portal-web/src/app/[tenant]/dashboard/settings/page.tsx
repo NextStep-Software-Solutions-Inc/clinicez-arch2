@@ -45,30 +45,32 @@ export default function SettingsPage() {
     };
 
     return (
-        <div className="w-full flex-1 flex flex-col gap-8 p-8 max-w-6xl mx-auto animate-in fade-in-50 duration-300">
+        <div className="w-full flex-1 flex flex-col gap-6 sm:gap-8 p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto animate-in fade-in-50 duration-300">
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-6">
                 <div>
-                    <h1 className="text-3xl font-extrabold tracking-tight">Settings</h1>
-                    <p className="text-muted-foreground mt-1">Configure your workspace preferences, profile metadata, and system security.</p>
+                    <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Settings</h1>
+                    <p className="text-muted-foreground text-xs sm:text-sm mt-1">Configure your workspace preferences, profile metadata, and system security.</p>
                 </div>
             </div>
 
             <Tabs defaultValue="general" className="w-full space-y-6">
-                <TabsList className="grid grid-cols-3 md:inline-flex w-full md:w-auto h-auto p-1 bg-muted/65 rounded-xl border">
-                    <TabsTrigger value="general" className="px-6 py-2 text-xs font-semibold flex items-center gap-1.5">
-                        <IconSettings className="h-3.5 w-3.5" />
-                        General
-                    </TabsTrigger>
-                    <TabsTrigger value="profile" className="px-6 py-2 text-xs font-semibold flex items-center gap-1.5">
-                        <IconUser className="h-3.5 w-3.5" />
-                        Profile Info
-                    </TabsTrigger>
-                    <TabsTrigger value="limits" className="px-6 py-2 text-xs font-semibold flex items-center gap-1.5">
-                        <IconLayersIntersect className="h-3.5 w-3.5" />
-                        Limits & Allocations
-                    </TabsTrigger>
-                </TabsList>
+                <div className="w-full overflow-x-auto pb-1.5 no-scrollbar -mx-1 px-1">
+                    <TabsList className="inline-flex w-auto min-w-full sm:min-w-0 justify-start h-auto p-1 bg-muted/65 rounded-xl border flex-nowrap gap-1">
+                        <TabsTrigger value="general" className="px-4 sm:px-6 py-2 text-xs font-semibold flex items-center gap-1.5 shrink-0 whitespace-nowrap">
+                            <IconSettings className="h-3.5 w-3.5 shrink-0" />
+                            General
+                        </TabsTrigger>
+                        <TabsTrigger value="profile" className="px-4 sm:px-6 py-2 text-xs font-semibold flex items-center gap-1.5 shrink-0 whitespace-nowrap">
+                            <IconUser className="h-3.5 w-3.5 shrink-0" />
+                            Profile Info
+                        </TabsTrigger>
+                        <TabsTrigger value="limits" className="px-4 sm:px-6 py-2 text-xs font-semibold flex items-center gap-1.5 shrink-0 whitespace-nowrap">
+                            <IconLayersIntersect className="h-3.5 w-3.5 shrink-0" />
+                            Limits & Allocations
+                        </TabsTrigger>
+                    </TabsList>
+                </div>
 
                 {/* 1. GENERAL TAB CONTENT */}
                 <TabsContent value="general" className="space-y-6 outline-none">
