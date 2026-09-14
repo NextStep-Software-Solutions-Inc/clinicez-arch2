@@ -129,7 +129,7 @@ export function TenantRegistrationClient() {
       {/* Decorative background */}
       <div className="absolute top-0 right-0 w-[50%] h-full bg-gradient-to-l from-primary/5 to-transparent pointer-events-none -z-10" />
 
-      <div className="flex w-full max-w-6xl mx-auto items-center justify-center p-6 lg:p-12">
+      <div className="flex w-full max-w-6xl mx-auto items-center justify-center px-3 py-6 sm:px-6 sm:py-8 lg:p-12">
         {/* Left Side: Context / Info */}
         <div className="hidden lg:flex flex-col w-1/2 pr-16 justify-center">
           <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-sm font-semibold text-primary mb-8 w-fit">
@@ -163,7 +163,7 @@ export function TenantRegistrationClient() {
 
         {/* Right Side: Setup Wizard / Form */}
         <div className="w-full lg:w-1/2">
-          <div className="rounded-3xl border border-border bg-card/70 backdrop-blur-2xl p-8 lg:p-12 shadow-2xl shadow-primary/5">
+          <div className="rounded-2xl sm:rounded-3xl border border-border bg-card/70 backdrop-blur-2xl p-4 sm:p-8 lg:p-12 shadow-2xl shadow-primary/5">
             {error && (
               <div className="mb-6 p-4 bg-destructive/10 text-destructive text-sm rounded-xl border border-destructive/20 animate-in fade-in duration-200">
                 {error}
@@ -174,9 +174,9 @@ export function TenantRegistrationClient() {
             {isSignedIn ? (
               <div className="space-y-6 animate-in fade-in duration-300">
                 {/* User identity badge */}
-                <div className="flex items-center justify-between p-3.5 bg-primary/5 rounded-2xl border border-primary/15 mb-2">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-primary/15 flex items-center justify-center text-primary font-bold text-sm">
+                <div className="flex items-center justify-between gap-2 p-3 sm:p-3.5 bg-primary/5 rounded-2xl border border-primary/15 mb-2">
+                  <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                    <div className="h-10 w-10 rounded-full bg-primary/15 flex items-center justify-center text-primary font-bold text-sm shrink-0 overflow-hidden">
                       {user?.imageUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={user.imageUrl} alt={user.fullName || "User"} className="h-10 w-10 rounded-full object-cover" />
@@ -184,19 +184,19 @@ export function TenantRegistrationClient() {
                         (user?.firstName?.[0] || "U").toUpperCase()
                       )}
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-sm font-semibold text-foreground">
+                        <span className="text-sm font-semibold text-foreground truncate">
                           {user?.fullName || user?.firstName || "Healthcare Administrator"}
                         </span>
-                        <ShieldCheck className="h-4 w-4 text-primary" />
+                        <ShieldCheck className="h-4 w-4 text-primary shrink-0" />
                       </div>
-                      <span className="text-xs text-muted-foreground">
+                      <p className="text-xs text-muted-foreground truncate">
                         {user?.primaryEmailAddress?.emailAddress}
-                      </span>
+                      </p>
                     </div>
                   </div>
-                  <span className="text-[11px] font-semibold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 px-2.5 py-0.5 rounded-full">
+                  <span className="text-[11px] font-semibold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 px-2.5 py-0.5 rounded-full shrink-0">
                     Verified
                   </span>
                 </div>
@@ -220,7 +220,7 @@ export function TenantRegistrationClient() {
                         value={formData.name}
                         onChange={(e) => handleNameChange(e.target.value)}
                         className="h-11 w-full rounded-xl border border-input bg-background pl-10 pr-3 text-sm focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-                        placeholder="e.g. Dr. Jane Smith Practice or Metro Health Group"
+                        placeholder="e.g. Dr. Jane Smith Practice"
                         required
                         disabled={isLoading}
                       />
@@ -231,19 +231,19 @@ export function TenantRegistrationClient() {
                     <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                       Workspace URL Identifier
                     </label>
-                    <div className="relative flex items-center">
-                      <Globe className="absolute left-3 h-5 w-5 text-muted-foreground" />
-                      <span className="absolute left-10 text-sm font-medium text-muted-foreground select-none">
-                        clinicez.net/
+                    <div className="flex items-center rounded-xl border border-input bg-background overflow-hidden focus-within:ring-2 focus-within:ring-primary">
+                      <span className="flex items-center gap-1.5 pl-3 pr-2 text-xs sm:text-sm font-medium text-muted-foreground bg-muted/30 h-11 border-r border-input/60 select-none shrink-0">
+                        <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <span>clinicez.net/</span>
                       </span>
                       <input
                         type="text"
                         value={formData.tenantSlug}
                         onChange={(e) => {
                           setSlugManuallyEdited(true);
-                          setFormData({ ...formData, tenantSlug: e.target.value.toLowerCase() });
+                          setFormData({ ...formData, tenantSlug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "") });
                         }}
-                        className="h-11 w-full rounded-xl border border-input bg-background pl-[118px] pr-3 text-sm font-mono focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+                        className="h-11 flex-1 bg-transparent px-3 text-sm font-mono text-foreground placeholder:text-muted-foreground/60 focus:outline-none min-w-0"
                         placeholder="my-workplace"
                         required
                         disabled={isLoading}
@@ -418,17 +418,19 @@ export function TenantRegistrationClient() {
 
                       <div className="space-y-2">
                         <label className="text-xs font-bold text-muted-foreground uppercase">Workspace URL Identifier</label>
-                        <div className="relative flex items-center">
-                          <Globe className="absolute left-3 h-5 w-5 text-muted-foreground" />
-                          <span className="absolute left-10 text-sm font-medium text-muted-foreground">clinicez.net/</span>
+                        <div className="flex items-center rounded-xl border border-input bg-background overflow-hidden focus-within:ring-2 focus-within:ring-primary">
+                          <span className="flex items-center gap-1.5 pl-3 pr-2 text-xs sm:text-sm font-medium text-muted-foreground bg-muted/30 h-11 border-r border-input/60 select-none shrink-0">
+                            <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
+                            <span>clinicez.net/</span>
+                          </span>
                           <input
                             type="text"
                             value={formData.tenantSlug}
                             onChange={(e) => {
                               setSlugManuallyEdited(true);
-                              setFormData({ ...formData, tenantSlug: e.target.value.toLowerCase() });
+                              setFormData({ ...formData, tenantSlug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "") });
                             }}
-                            className="h-11 w-full rounded-xl border border-input bg-background pl-[118px] pr-3 text-sm font-mono focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+                            className="h-11 flex-1 bg-transparent px-3 text-sm font-mono text-foreground placeholder:text-muted-foreground/60 focus:outline-none min-w-0"
                             placeholder="apex-health"
                           />
                         </div>

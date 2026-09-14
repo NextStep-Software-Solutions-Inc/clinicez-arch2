@@ -11,23 +11,25 @@ export default function SignInPage() {
       <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-accent/40 blur-[120px] pointer-events-none -z-10" />
 
       {/* Top Header Logo */}
-      <header className="w-full max-w-7xl mx-auto px-6 py-6 flex items-center justify-between z-10">
-        <Link href="/" className="flex items-center gap-2.5 group">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary transition-all group-hover:bg-primary group-hover:text-primary-foreground shadow-sm">
+      <header className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6 flex items-center justify-between z-10">
+        <Link href="/" className="flex items-center gap-2.5 group shrink-0">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary transition-all group-hover:bg-primary group-hover:text-primary-foreground shadow-sm shrink-0">
             <Stethoscope className="h-5 w-5" />
           </div>
-          <span className="text-xl font-bold tracking-tight text-foreground">Clinic EZ</span>
+          <span className="text-xl font-bold tracking-tight text-foreground whitespace-nowrap">
+            Clinic EZ
+          </span>
         </Link>
         <Link 
           href="/sign-up" 
-          className="text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
+          className="inline-flex items-center justify-center rounded-full bg-primary/10 hover:bg-primary/20 text-primary font-semibold text-xs sm:text-sm px-3.5 py-1.5 transition-all shrink-0"
         >
-          Don&apos;t have an account? <span className="text-primary hover:underline">Get Started</span>
+          Get Started
         </Link>
       </header>
 
       {/* Main Split Layout */}
-      <main className="flex-1 flex w-full max-w-7xl mx-auto items-center justify-center px-6 py-8 sm:py-12 z-10">
+      <main className="flex-1 flex w-full max-w-7xl mx-auto items-center justify-center px-3 sm:px-6 py-4 sm:py-8 lg:py-12 z-10">
         <div className="flex w-full items-center justify-center gap-12 lg:gap-16">
           {/* Left Side: Brand Context (Desktop Only) */}
           <div className="hidden lg:flex flex-col w-1/2 pr-6">
@@ -71,7 +73,7 @@ export default function SignInPage() {
 
           {/* Right Side: Custom Form Card */}
           <div className="w-full lg:w-1/2 flex justify-center">
-            <div className="w-full max-w-md rounded-3xl border border-border bg-card/70 backdrop-blur-2xl p-7 sm:p-10 shadow-2xl shadow-primary/5">
+            <div className="w-full max-w-md rounded-2xl sm:rounded-3xl border border-border bg-card/70 backdrop-blur-2xl p-5 sm:p-8 lg:p-10 shadow-2xl shadow-primary/5">
               <Suspense fallback={
                 <div className="h-72 flex items-center justify-center">
                   <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
