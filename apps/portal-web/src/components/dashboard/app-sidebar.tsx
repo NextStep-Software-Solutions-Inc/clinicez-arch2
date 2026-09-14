@@ -26,9 +26,19 @@ import {
 } from "@/components/ui/sidebar"
 import { NavSecondary } from "./nav-secondary"
 
-export function AppSidebar({ clinicName = "Clinic EZ", user, ...props }: { clinicName?: string, user?: any } & React.ComponentProps<typeof Sidebar>) {
+export function AppSidebar({ 
+  name, 
+  clinicName = "Clinic EZ", 
+  user, 
+  ...props 
+}: { 
+  name?: string; 
+  clinicName?: string; 
+  user?: any 
+} & React.ComponentProps<typeof Sidebar>) {
   const params = useParams();
   const tenant = params.tenant as string || "demo-tenant";
+  const displayName = name || clinicName;
 
   const data = {
     user: user || {
@@ -94,7 +104,7 @@ export function AppSidebar({ clinicName = "Clinic EZ", user, ...props }: { clini
             >
               <a href={`/${tenant}/dashboard`}>
                 <IconInnerShadowTop className="!size-5 text-primary" />
-                <span className="text-base font-bold text-foreground truncate">{clinicName} | Workspace</span>
+                <span className="text-base font-bold text-foreground truncate">{displayName} | Workspace</span>
               </a>
             </SidebarMenuButton>
           </SidebarMenuItem>

@@ -19,8 +19,10 @@ export interface AdminAnalyticsDto {
 
 export interface AdminTenantDto {
   id: string;
+  name: string;
   clinicName: string;
   tenantSlug: string;
+  tenantType: string;
   facilityType: string;
   ownerName: string;
   email: string;
@@ -28,6 +30,7 @@ export interface AdminTenantDto {
   subscriptionStatus: string;
   subscriptionPlanId: string;
   isAnnual: boolean;
+  facilitiesCount: number;
   clinicalBranchesCount: number;
   staffAccountsCount: number;
   activePatientRecordsCount: number;
@@ -37,8 +40,10 @@ export interface AdminTenantDto {
 
 export interface AdminLeadDto {
   id: string;
+  name: string;
   clinicName: string;
   tenantSlug: string;
+  tenantType: string;
   facilityType: string;
   ownerName: string;
   email: string;
@@ -94,22 +99,36 @@ export const adminService = {
 
   getTenants: async (): Promise<AdminTenantDto[]> => {
     const res = await apiClient.get<AdminTenantDto[]>("/admin/tenants");
-    return res.data;
+    return res.data.map(t => ({
+      ...t,
+      name: t.name || (t as any).clinicName || "",
+      clinicName: t.name || (t as any).clinicName || "",
+      tenantType: t.tenantType || (t as any).facilityType || "Workplace",
+      facilityType: t.tenantType || (t as any).facilityType || "Workplace",
+      facilitiesCount: t.facilitiesCount ?? (t as any).clinicalBranchesCount ?? 0,
+      clinicalBranchesCount: t.facilitiesCount ?? (t as any).clinicalBranchesCount ?? 0,
+    }));
   },
 
   getTenantById: async (id: string): Promise<AdminTenantDto | undefined> => {
-    const res = await apiClient.get<AdminTenantDto[]>("/admin/tenants");
-    return res.data.find(t => t.id === id);
+    const tenants = await adminService.getTenants();
+    return tenants.find(t => t.id === id);
   },
 
   getTenantBySlug: async (slug: string): Promise<AdminTenantDto | undefined> => {
-    const res = await apiClient.get<AdminTenantDto[]>("/admin/tenants");
-    return res.data.find(t => t.tenantSlug === slug);
+    const tenants = await adminService.getTenants();
+    return tenants.find(t => t.tenantSlug === slug);
   },
 
   getLeads: async (): Promise<AdminLeadDto[]> => {
     const res = await apiClient.get<AdminLeadDto[]>("/admin/leads");
-    return res.data;
+    return res.data.map(l => ({
+      ...l,
+      name: l.name || (l as any).clinicName || "",
+      clinicName: l.name || (l as any).clinicName || "",
+      tenantType: l.tenantType || (l as any).facilityType || "Workplace",
+      facilityType: l.tenantType || (l as any).facilityType || "Workplace",
+    }));
   },
 
   toggleSubscription: async (id: string): Promise<any> => {
@@ -118,13 +137,18 @@ export const adminService = {
   },
 
   updateTenantUsage: async (id: string, usage: {
-    clinicalBranchesCount: number;
+    facilitiesCount?: number;
+    clinicalBranchesCount?: number;
     staffAccountsCount: number;
     activePatientRecordsCount: number;
     monthlyApiQuotaUsed: number;
     monthlyApiQuotaLimit: number;
   }): Promise<any> => {
-    const res = await apiClient.post<any>(`/admin/tenants/${id}/usage`, usage);
+    const payload = {
+      ...usage,
+      facilitiesCount: usage.facilitiesCount ?? usage.clinicalBranchesCount ?? 0,
+    };
+    const res = await apiClient.post<any>(`/admin/tenants/${id}/usage`, payload);
     return res.data;
   },
 

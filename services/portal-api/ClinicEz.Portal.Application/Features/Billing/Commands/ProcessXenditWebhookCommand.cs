@@ -139,7 +139,7 @@ public class ProcessXenditWebhookCommandHandler : IRequestHandler<ProcessXenditW
             if (firstTenant != null)
             {
                 tenantIdStr = firstTenant.Id.ToString();
-                Console.WriteLine($"[Webhook] [Test Fallback] Tenant ID resolved to first database tenant: {firstTenant.ClinicName}");
+                Console.WriteLine($"[Webhook] [Test Fallback] Tenant ID resolved to first database tenant: {firstTenant.Name}");
             }
         }
 
@@ -164,7 +164,7 @@ public class ProcessXenditWebhookCommandHandler : IRequestHandler<ProcessXenditW
         }
 
         await _context.SaveChangesAsync(cancellationToken);
-        Console.WriteLine($"[Webhook] Subscription {subscriptionId} active for tenant: {tenant.ClinicName}");
+        Console.WriteLine($"[Webhook] Subscription {subscriptionId} active for tenant: {tenant.Name}");
         return true;
     }
 
@@ -187,7 +187,7 @@ public class ProcessXenditWebhookCommandHandler : IRequestHandler<ProcessXenditW
 
         tenant.SubscriptionStatus = "CANCELLED";
         await _context.SaveChangesAsync(cancellationToken);
-        Console.WriteLine($"[Webhook] Subscription {subscriptionId} cancelled for tenant: {tenant.ClinicName}");
+        Console.WriteLine($"[Webhook] Subscription {subscriptionId} cancelled for tenant: {tenant.Name}");
         return true;
     }
 
@@ -245,7 +245,7 @@ public class ProcessXenditWebhookCommandHandler : IRequestHandler<ProcessXenditW
             if (firstTenant != null)
             {
                 tenantIdStr = firstTenant.Id.ToString();
-                Console.WriteLine($"[Webhook] [Test Fallback] Tenant ID resolved to first database tenant: {firstTenant.ClinicName}");
+                Console.WriteLine($"[Webhook] [Test Fallback] Tenant ID resolved to first database tenant: {firstTenant.Name}");
             }
         }
 
@@ -326,7 +326,7 @@ public class ProcessXenditWebhookCommandHandler : IRequestHandler<ProcessXenditW
         _context.PaymentReceipts.Add(receipt);
         await _context.SaveChangesAsync(cancellationToken);
 
-        Console.WriteLine($"[Webhook] Payment Receipt saved for {tenant.ClinicName}. Invoice ID: {invoiceId}, Amount: {currency} {amountVal}");
+        Console.WriteLine($"[Webhook] Payment Receipt saved for {tenant.Name}. Invoice ID: {invoiceId}, Amount: {currency} {amountVal}");
         return true;
     }
 
@@ -373,7 +373,7 @@ public class ProcessXenditWebhookCommandHandler : IRequestHandler<ProcessXenditW
                 Console.WriteLine($"[Webhook] Tenant not found for subscription {subscriptionId}.");
                 return false;
             }
-            Console.WriteLine($"[Webhook] [Test Fallback] Tenant resolved to first database tenant: {tenant.ClinicName}");
+            Console.WriteLine($"[Webhook] [Test Fallback] Tenant resolved to first database tenant: {tenant.Name}");
         }
 
         if (string.IsNullOrEmpty(invoiceId))
@@ -467,7 +467,7 @@ public class ProcessXenditWebhookCommandHandler : IRequestHandler<ProcessXenditW
         _context.PaymentReceipts.Add(receipt);
         await _context.SaveChangesAsync(cancellationToken);
 
-        Console.WriteLine($"[Webhook] Cycle Succeeded payment receipt saved for tenant: {tenant.ClinicName}. Cycle invoice: {invoiceId}");
+        Console.WriteLine($"[Webhook] Cycle Succeeded payment receipt saved for tenant: {tenant.Name}. Cycle invoice: {invoiceId}");
         return true;
     }
 
@@ -512,7 +512,7 @@ public class ProcessXenditWebhookCommandHandler : IRequestHandler<ProcessXenditW
                 Console.WriteLine($"[Webhook] Tenant not found for subscription {subscriptionId}.");
                 return false;
             }
-            Console.WriteLine($"[Webhook] [Test Fallback] Tenant resolved to first database tenant: {tenant.ClinicName}");
+            Console.WriteLine($"[Webhook] [Test Fallback] Tenant resolved to first database tenant: {tenant.Name}");
         }
 
         var existingInvoice = await _context.BillingInvoices.FirstOrDefaultAsync(i => i.XenditInvoiceId == cycleId, cancellationToken);
@@ -569,7 +569,7 @@ public class ProcessXenditWebhookCommandHandler : IRequestHandler<ProcessXenditW
         _context.BillingInvoices.Add(invoiceReceipt);
         await _context.SaveChangesAsync(cancellationToken);
 
-        Console.WriteLine($"[Webhook] Unpaid billing invoice logged for tenant: {tenant.ClinicName}. Cycle invoice: {cycleId}");
+        Console.WriteLine($"[Webhook] Unpaid billing invoice logged for tenant: {tenant.Name}. Cycle invoice: {cycleId}");
         return true;
     }
 }

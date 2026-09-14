@@ -1,33 +1,28 @@
 import { Metadata } from "next";
 import { TenantRegistrationClient } from "./_components/TenantRegistrationClient";
+import { auth } from "@clerk/nextjs/server";
+import { redirect } from "next/navigation";
+import { tenantService } from "@/services/tenant.service";
+import { safeAwait } from "@shared/safe";
 
 export const metadata: Metadata = {
-  title: "Register Tenant | Clinic EZ",
-  description: "Register a new tenant workspace in Clinic EZ.",
-  keywords: ["register clinic", "create Clinic EZ account", "healthcare workspace setup"],
-  openGraph: {
-    title: "Register Tenant | Clinic EZ",
-    description: "Register a new tenant workspace in Clinic EZ.",
-    url: "https://clinicez.net/tenants/register",
-    siteName: "Clinic EZ",
-    images: [
-      {
-        url: "https://clinicez.net/og-register.png",
-        width: 1200,
-        height: 630,
-      }
-    ],
-    locale: "en_US",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Register Tenant | Clinic EZ",
-    description: "Register a new tenant workspace in Clinic EZ.",
-    images: ["https://clinicez.net/og-register.png"],
-  },
+  title: "Setup Workplace | Clinic EZ",
+  description: "Set up your entity or practice workplace in Clinic EZ.",
+  keywords: ["workplace setup", "create Clinic EZ workspace", "healthcare practice setup"],
 };
 
-export default function TenantRegistrationPage() {
+export default async function TenantRegistrationPage() {
+  const { userId, getToken } = await auth();
+
+  if (userId) {
+    const [token] = await safeAwait(getToken());
+    if (token) {
+      const [tenant] = await safeAwait(tenantService.getTenantByOwner(userId, token));
+      if (tenant && tenant.tenantSlug) {
+        redirect(`/${tenant.tenantSlug}/dashboard`);
+      }
+    }
+  }
+
   return <TenantRegistrationClient />;
 }

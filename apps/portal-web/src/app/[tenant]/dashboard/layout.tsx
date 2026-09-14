@@ -60,7 +60,7 @@ export default async function TenantDashboardLayout({
         }
     }
 
-    clinicName = tenant.clinicName;
+    const workplaceName = tenant.name || tenant.clinicName || "Workspace";
 
     return (
         <>
@@ -72,7 +72,7 @@ export default async function TenantDashboardLayout({
                     } as React.CSSProperties
                 }
             >
-                <AppSidebar variant="inset" clinicName={clinicName} user={userDetails} />
+                <AppSidebar variant="inset" name={workplaceName} user={userDetails} />
                 <SidebarInset className="overflow-auto">
                     <SiteHeader />
                     <div className="flex flex-1 flex-col">

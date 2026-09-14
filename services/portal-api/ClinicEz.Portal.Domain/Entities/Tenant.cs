@@ -6,9 +6,9 @@ namespace ClinicEz.Portal.Domain.Entities;
 public class Tenant : BaseEntity
 {
     public string OwnerId { get; set; } = string.Empty;
-    public string ClinicName { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
     public string TenantSlug { get; set; } = string.Empty;
-    public string FacilityType { get; set; } = string.Empty;
+    public string TenantType { get; set; } = "Workplace";
     
     // Additional contact info based on registration
     public string FirstName { get; set; } = string.Empty;
@@ -36,7 +36,7 @@ public class Tenant : BaseEntity
     public string? TaxId { get; set; }
 
     // Telemetry Usage & Limits
-    public int ClinicalBranchesCount { get; set; } = 1;
+    public int FacilitiesCount { get; set; } = 0;
     public int StaffAccountsCount { get; set; } = 3;
     public int ActivePatientRecordsCount { get; set; } = 25;
     public int MonthlyApiQuotaUsed { get; set; } = 500;

@@ -35,7 +35,7 @@ const heroFeaturedItems: Record<string, HeroFeaturedProps> = {
     button: [
       {
         text: "Register Now",
-        href: "/tenants/register",
+        href: "/sign-up",
         variant: "default",
       },
       {

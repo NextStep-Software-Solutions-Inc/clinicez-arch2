@@ -23,7 +23,7 @@ export default function SettingsPage() {
 
     useEffect(() => {
         if (billingInfo) {
-            setClinicName(billingInfo.clinicName || "");
+            setClinicName(billingInfo.name || billingInfo.clinicName || "");
             setPhone(billingInfo.phoneNumber || "");
         }
     }, [billingInfo]);

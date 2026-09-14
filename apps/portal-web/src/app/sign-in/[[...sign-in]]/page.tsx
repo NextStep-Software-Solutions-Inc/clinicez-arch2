@@ -7,7 +7,12 @@ export default function SignInPage() {
       <div className="absolute top-0 right-0 w-[50%] h-full bg-gradient-to-l from-primary/5 to-transparent pointer-events-none -z-10" />
       <div className="absolute bottom-0 left-0 w-[50%] h-[50%] bg-gradient-to-t from-primary/5 to-transparent pointer-events-none -z-10" />
       
-      <SignIn path="/sign-in" routing="path" />
+      <SignIn 
+        path="/sign-in" 
+        routing="path" 
+        signUpUrl="/sign-up"
+        fallbackRedirectUrl="/sync-auth"
+      />
     </div>
   );
 }

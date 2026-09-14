@@ -1,235 +1,532 @@
 "use client";
 
-import { useState } from "react";
-import { Building2, User, Globe, ChevronRight, CheckCircle2, Lock } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Building2, User, Globe, ChevronRight, CheckCircle2, Lock, Sparkles, ShieldCheck, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useUser, useAuth } from "@clerk/nextjs";
 import { tenantService } from "@/services/tenant.service";
 
 export function TenantRegistrationClient() {
-  const [step, setStep] = useState(1);
   const router = useRouter();
+  const { isLoaded, isSignedIn, user } = useUser();
+  const { getToken } = useAuth();
 
+  const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
     email: "",
     password: "",
-    clinicName: "",
+    name: "",
     tenantSlug: "",
-    facilityType: "Outpatient Clinic"
+    tenantType: "Workplace",
   });
 
+  const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleNext = () => {
-    if (step < 3) setStep(step + 1);
+  // When signed in, auto-fill credentials from Clerk profile
+  useEffect(() => {
+    if (isSignedIn && user) {
+      setFormData((prev) => ({
+        ...prev,
+        firstName: user.firstName || "",
+        lastName: user.lastName || "",
+        email: user.primaryEmailAddress?.emailAddress || "",
+      }));
+    }
+  }, [isSignedIn, user]);
+
+  // Generate slug suggestion from name
+  const handleNameChange = (val: string) => {
+    const updated: any = { name: val };
+    if (!slugManuallyEdited) {
+      const generatedSlug = val
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+      updated.tenantSlug = generatedSlug;
+    }
+    setFormData((prev) => ({ ...prev, ...updated }));
   };
 
-  const handleComplete = async () => {
+  const handleAuthenticatedSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!formData.name.trim()) {
+      setError("Please enter a workplace or entity name.");
+      return;
+    }
+    if (!formData.tenantSlug.trim()) {
+      setError("Please enter a workspace URL slug.");
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     try {
-      await tenantService.registerTenant(formData);
-      
-      // Redirect to sign in page
-      router.push("/sign-in?registered=true");
+      const token = await getToken();
+      await tenantService.createTenant(
+        {
+          name: formData.name.trim(),
+          tenantSlug: formData.tenantSlug.trim().toLowerCase(),
+          tenantType: formData.tenantType,
+          firstName: user?.firstName || undefined,
+          lastName: user?.lastName || undefined,
+          email: user?.primaryEmailAddress?.emailAddress || undefined,
+        },
+        token
+      );
+
+      // Route authenticated user directly to their new workplace dashboard
+      router.push(`/${formData.tenantSlug.trim().toLowerCase()}/dashboard`);
     } catch (err: any) {
-      setError(err.message);
-      setStep(1); // Go back to start if error
+      const msg = err.response?.data?.message || err.message || "Failed to create workplace. Please try again.";
+      setError(msg);
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleAnonymousRegister = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      await tenantService.registerTenant({
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        password: formData.password,
+        name: formData.name,
+        tenantSlug: formData.tenantSlug.toLowerCase(),
+        tenantType: formData.tenantType,
+      });
+
+      router.push("/sign-in?registered=true");
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.message || "Failed to register workplace.";
+      setError(msg);
+      setStep(1);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (!isLoaded) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <p className="text-sm font-medium text-muted-foreground">Loading setup...</p>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="flex min-h-screen bg-background relative overflow-hidden">
-      
       {/* Decorative background */}
       <div className="absolute top-0 right-0 w-[50%] h-full bg-gradient-to-l from-primary/5 to-transparent pointer-events-none -z-10" />
 
       <div className="flex w-full max-w-6xl mx-auto items-center justify-center p-6 lg:p-12">
-        
-        {/* Left Side: Info / Testimonial */}
+        {/* Left Side: Context / Info */}
         <div className="hidden lg:flex flex-col w-1/2 pr-16 justify-center">
-          <div className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-sm font-semibold text-primary mb-8 w-fit">
-            Start Your Journey
+          <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-sm font-semibold text-primary mb-8 w-fit">
+            <Sparkles className="h-4 w-4" />
+            {isSignedIn ? "Workplace Setup" : "Start Your Journey"}
           </div>
           <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl mb-6">
-            Welcome to the future of healthcare.
+            {isSignedIn ? "Set up your clinical workplace." : "Welcome to the future of healthcare."}
           </h1>
-          <p className="text-lg text-muted-foreground mb-12">
-            Join thousands of clinics and hospitals globally that trust Clinic EZ to manage their daily operations securely and efficiently.
+          <p className="text-lg text-muted-foreground mb-8 leading-relaxed">
+            {isSignedIn
+              ? "A workplace is your primary entity, personal practice, or account. Once your workplace is ready, you can configure individual clinics, laboratories, pharmacies, and organizations inside."
+              : "Join thousands of healthcare practitioners and medical workplaces that trust Clinic EZ to power their operations securely."}
           </p>
 
-          <div className="flex flex-col space-y-6">
+          <div className="flex flex-col space-y-5">
             <div className="flex items-center">
-              <CheckCircle2 className="h-6 w-6 text-primary mr-4 shrink-0" />
-              <span className="font-medium text-foreground">Secure HIPAA-compliant environment</span>
+              <CheckCircle2 className="h-5 w-5 text-primary mr-3.5 shrink-0" />
+              <span className="font-medium text-foreground">Complete workspace isolation & multi-tenancy</span>
             </div>
             <div className="flex items-center">
-              <CheckCircle2 className="h-6 w-6 text-primary mr-4 shrink-0" />
-              <span className="font-medium text-foreground">Instant multi-tenant deployment</span>
+              <CheckCircle2 className="h-5 w-5 text-primary mr-3.5 shrink-0" />
+              <span className="font-medium text-foreground">Add and manage multiple operational facilities inside</span>
             </div>
             <div className="flex items-center">
-              <CheckCircle2 className="h-6 w-6 text-primary mr-4 shrink-0" />
-              <span className="font-medium text-foreground">24/7 dedicated enterprise support</span>
+              <CheckCircle2 className="h-5 w-5 text-primary mr-3.5 shrink-0" />
+              <span className="font-medium text-foreground">Enterprise HIPAA and HL7 FHIR compliance ready</span>
             </div>
           </div>
         </div>
 
-        {/* Right Side: Registration Wizard */}
+        {/* Right Side: Setup Wizard / Form */}
         <div className="w-full lg:w-1/2">
-          <div className="rounded-3xl border border-border bg-card/60 backdrop-blur-2xl p-8 lg:p-12 shadow-2xl shadow-primary/5">
-            
-            {/* Step Indicators */}
-            <div className="flex items-center justify-between mb-10">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="flex items-center">
-                  <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold transition-colors ${
-                    step >= i ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
-                  }`}>
-                    {i}
-                  </div>
-                  {i < 3 && (
-                    <div className={`h-1 w-12 sm:w-24 mx-2 rounded-full transition-colors ${
-                      step > i ? 'bg-primary' : 'bg-muted'
-                    }`} />
-                  )}
-                </div>
-              ))}
-            </div>
-
+          <div className="rounded-3xl border border-border bg-card/70 backdrop-blur-2xl p-8 lg:p-12 shadow-2xl shadow-primary/5">
             {error && (
-              <div className="mb-6 p-4 bg-red-50 text-red-600 text-sm rounded-md border border-red-200">
+              <div className="mb-6 p-4 bg-destructive/10 text-destructive text-sm rounded-xl border border-destructive/20 animate-in fade-in duration-200">
                 {error}
               </div>
             )}
 
-            {/* Step 1: Admin Details */}
-            {step === 1 && (
-              <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
-                <div className="mb-6">
-                  <h2 className="text-2xl font-bold mb-2">Administrator Profile</h2>
-                  <p className="text-sm text-muted-foreground">This will be the primary owner of the organization.</p>
-                </div>
-                
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">First Name</label>
-                      <div className="relative">
-                        <User className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
-                        <input type="text" value={formData.firstName} onChange={(e) => setFormData({...formData, firstName: e.target.value})} className="h-11 w-full rounded-md border border-input bg-background pl-10 pr-3 text-sm focus-visible:ring-2 focus-visible:ring-primary" placeholder="John" />
+            {/* FLOW A: AUTHENTICATED USER (The Primary Hardened Path) */}
+            {isSignedIn ? (
+              <div className="space-y-6 animate-in fade-in duration-300">
+                {/* User identity badge */}
+                <div className="flex items-center justify-between p-3.5 bg-primary/5 rounded-2xl border border-primary/15 mb-2">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-primary/15 flex items-center justify-center text-primary font-bold text-sm">
+                      {user?.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={user.imageUrl} alt={user.fullName || "User"} className="h-10 w-10 rounded-full object-cover" />
+                      ) : (
+                        (user?.firstName?.[0] || "U").toUpperCase()
+                      )}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-semibold text-foreground">
+                          {user?.fullName || user?.firstName || "Healthcare Administrator"}
+                        </span>
+                        <ShieldCheck className="h-4 w-4 text-primary" />
                       </div>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Last Name</label>
-                      <input type="text" value={formData.lastName} onChange={(e) => setFormData({...formData, lastName: e.target.value})} className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-primary" placeholder="Doe" />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Professional Email</label>
-                    <input type="email" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-primary" placeholder="admin@clinic.com" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Password</label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
-                      <input type="password" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} className="h-11 w-full rounded-md border border-input bg-background pl-10 pr-3 text-sm focus-visible:ring-2 focus-visible:ring-primary" placeholder="••••••••" />
+                      <span className="text-xs text-muted-foreground">
+                        {user?.primaryEmailAddress?.emailAddress}
+                      </span>
                     </div>
                   </div>
+                  <span className="text-[11px] font-semibold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 px-2.5 py-0.5 rounded-full">
+                    Verified
+                  </span>
                 </div>
 
-                <button onClick={handleNext} className="w-full mt-6 h-11 inline-flex items-center justify-center rounded-md bg-primary px-8 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
-                  Continue <ChevronRight className="ml-2 h-4 w-4" />
-                </button>
-              </div>
-            )}
-
-            {/* Step 2: Organization Details */}
-            {step === 2 && (
-              <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
-                <div className="mb-6">
-                  <h2 className="text-2xl font-bold mb-2">Organization Details</h2>
-                  <p className="text-sm text-muted-foreground">Tell us about your healthcare facility.</p>
+                <div>
+                  <h2 className="text-2xl font-bold tracking-tight mb-1">Set Up Your Workplace</h2>
+                  <p className="text-xs text-muted-foreground">
+                    Define your entity or personal workplace. You can create individual clinics inside later.
+                  </p>
                 </div>
-                
-                <div className="space-y-4">
+
+                <form onSubmit={handleAuthenticatedSubmit} className="space-y-4">
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Clinic / Hospital Name</label>
+                    <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      Workplace / Entity Name
+                    </label>
                     <div className="relative">
                       <Building2 className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
-                      <input type="text" value={formData.clinicName} onChange={(e) => setFormData({...formData, clinicName: e.target.value})} className="h-11 w-full rounded-md border border-input bg-background pl-10 pr-3 text-sm focus-visible:ring-2 focus-visible:ring-primary" placeholder="City General Hospital" />
+                      <input
+                        type="text"
+                        value={formData.name}
+                        onChange={(e) => handleNameChange(e.target.value)}
+                        className="h-11 w-full rounded-xl border border-input bg-background pl-10 pr-3 text-sm focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+                        placeholder="e.g. Dr. Jane Smith Practice or Metro Health Group"
+                        required
+                        disabled={isLoading}
+                      />
                     </div>
                   </div>
+
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Tenant Slug (URL)</label>
+                    <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      Workspace URL Identifier
+                    </label>
                     <div className="relative flex items-center">
                       <Globe className="absolute left-3 h-5 w-5 text-muted-foreground" />
-                      <span className="absolute left-10 text-sm text-muted-foreground">clinicez.net/</span>
-                      <input type="text" value={formData.tenantSlug} onChange={(e) => setFormData({...formData, tenantSlug: e.target.value})} className="h-11 w-full rounded-md border border-input bg-background pl-[135px] pr-3 text-sm focus-visible:ring-2 focus-visible:ring-primary font-mono" placeholder="city-general" />
+                      <span className="absolute left-10 text-sm font-medium text-muted-foreground select-none">
+                        clinicez.net/
+                      </span>
+                      <input
+                        type="text"
+                        value={formData.tenantSlug}
+                        onChange={(e) => {
+                          setSlugManuallyEdited(true);
+                          setFormData({ ...formData, tenantSlug: e.target.value.toLowerCase() });
+                        }}
+                        className="h-11 w-full rounded-xl border border-input bg-background pl-[118px] pr-3 text-sm font-mono focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+                        placeholder="my-workplace"
+                        required
+                        disabled={isLoading}
+                      />
                     </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      This will be your permanent workplace URL link.
+                    </p>
                   </div>
+
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Facility Type</label>
-                    <select value={formData.facilityType} onChange={(e) => setFormData({...formData, facilityType: e.target.value})} className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-primary">
-                      <option>Outpatient Clinic</option>
-                      <option>Hospital</option>
-                      <option>Laboratory</option>
-                      <option>Pharmacy</option>
+                    <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      Entity Classification
+                    </label>
+                    <select
+                      value={formData.tenantType}
+                      onChange={(e) => setFormData({ ...formData, tenantType: e.target.value })}
+                      className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+                      disabled={isLoading}
+                    >
+                      <option value="Workplace">Workplace / Medical Practice</option>
+                      <option value="Person">Individual Practitioner / Person</option>
+                      <option value="Entity">Healthcare Entity / Enterprise Group</option>
                     </select>
                   </div>
-                </div>
 
-                <div className="flex gap-4 mt-6">
-                  <button onClick={() => setStep(1)} className="w-1/3 h-11 inline-flex items-center justify-center rounded-md border border-input bg-background text-sm font-medium hover:bg-muted transition-colors">
-                    Back
-                  </button>
-                  <button onClick={handleNext} className="w-2/3 h-11 inline-flex items-center justify-center rounded-md bg-primary text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
-                    Continue <ChevronRight className="ml-2 h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Step 3: Finalization */}
-            {step === 3 && (
-              <div className="space-y-6 text-center animate-in fade-in slide-in-from-right-4 duration-500">
-                <div className="flex justify-center mb-6">
-                  <div className="h-20 w-20 rounded-full bg-emerald-100 flex items-center justify-center">
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full mt-4 h-11 inline-flex items-center justify-center rounded-xl bg-primary px-8 text-sm font-bold text-primary-foreground shadow-sm shadow-primary/20 hover:bg-primary/90 transition-all disabled:opacity-50"
+                  >
                     {isLoading ? (
-                      <div className="h-10 w-10 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+                      <div className="flex items-center gap-2">
+                        <div className="h-4 w-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                        <span>Provisioning Workplace...</span>
+                      </div>
                     ) : (
-                      <CheckCircle2 className="h-10 w-10 text-emerald-600" />
+                      <>
+                        Provision Workplace <ArrowRight className="ml-2 h-4 w-4" />
+                      </>
                     )}
-                  </div>
+                  </button>
+                </form>
+              </div>
+            ) : (
+              /* FLOW B: UNCONNECTED VISITOR (Provide Quick Sign-up / Sign-in or Multi-step Form) */
+              <div>
+                {/* Step Indicators */}
+                <div className="flex items-center justify-between mb-8">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex items-center">
+                      <div
+                        className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold transition-colors ${
+                          step >= i ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {i}
+                      </div>
+                      {i < 3 && (
+                        <div
+                          className={`h-1 w-12 sm:w-20 mx-2 rounded-full transition-colors ${
+                            step > i ? "bg-primary" : "bg-muted"
+                          }`}
+                        />
+                      )}
+                    </div>
+                  ))}
                 </div>
-                
-                <h2 className="text-2xl font-bold mb-2">You are all set!</h2>
-                <p className="text-sm text-muted-foreground mb-8">
-                  Your tenant workspace is ready to be provisioned. By clicking complete, you agree to our Terms of Service and Privacy Policy.
-                </p>
 
-                <div className="flex gap-4 mt-6">
-                  <button onClick={() => setStep(2)} disabled={isLoading} className="w-1/3 h-11 inline-flex items-center justify-center rounded-md border border-input bg-background text-sm font-medium hover:bg-muted transition-colors disabled:opacity-50">
-                    Back
-                  </button>
-                  <button onClick={handleComplete} disabled={isLoading} className="w-2/3 h-11 inline-flex items-center justify-center rounded-md bg-primary text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50">
-                    {isLoading ? "Provisioning..." : "Provision Workspace"}
-                  </button>
+                {/* Step 1: Admin User Account Details */}
+                {step === 1 && (
+                  <div className="space-y-6 animate-in fade-in duration-300">
+                    <div>
+                      <h2 className="text-2xl font-bold mb-1">Create Your Account</h2>
+                      <p className="text-sm text-muted-foreground">
+                        Set up your administrator credentials for your new workplace.
+                      </p>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-muted-foreground uppercase">First Name</label>
+                          <div className="relative">
+                            <User className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
+                            <input
+                              type="text"
+                              value={formData.firstName}
+                              onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                              className="h-11 w-full rounded-xl border border-input bg-background pl-10 pr-3 text-sm focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+                              placeholder="Jane"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-muted-foreground uppercase">Last Name</label>
+                          <input
+                            type="text"
+                            value={formData.lastName}
+                            onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                            className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+                            placeholder="Smith"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-muted-foreground uppercase">Professional Email</label>
+                        <input
+                          type="email"
+                          value={formData.email}
+                          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                          className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+                          placeholder="admin@practice.com"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-muted-foreground uppercase">Password</label>
+                        <div className="relative">
+                          <Lock className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
+                          <input
+                            type="password"
+                            value={formData.password}
+                            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                            className="h-11 w-full rounded-xl border border-input bg-background pl-10 pr-3 text-sm focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+                            placeholder="••••••••"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!formData.firstName || !formData.email || !formData.password) {
+                          setError("Please complete all profile fields.");
+                          return;
+                        }
+                        setError(null);
+                        setStep(2);
+                      }}
+                      className="w-full mt-4 h-11 inline-flex items-center justify-center rounded-xl bg-primary px-8 text-sm font-bold text-primary-foreground hover:bg-primary/90 transition-colors"
+                    >
+                      Continue <ChevronRight className="ml-2 h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Step 2: Workplace Details */}
+                {step === 2 && (
+                  <div className="space-y-6 animate-in fade-in duration-300">
+                    <div>
+                      <h2 className="text-2xl font-bold mb-1">Workplace Details</h2>
+                      <p className="text-sm text-muted-foreground">
+                        Define your primary entity or practice workplace.
+                      </p>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-muted-foreground uppercase">Workplace / Entity Name</label>
+                        <div className="relative">
+                          <Building2 className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
+                          <input
+                            type="text"
+                            value={formData.name}
+                            onChange={(e) => handleNameChange(e.target.value)}
+                            className="h-11 w-full rounded-xl border border-input bg-background pl-10 pr-3 text-sm focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+                            placeholder="e.g. Apex Health Partners"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-muted-foreground uppercase">Workspace URL Identifier</label>
+                        <div className="relative flex items-center">
+                          <Globe className="absolute left-3 h-5 w-5 text-muted-foreground" />
+                          <span className="absolute left-10 text-sm font-medium text-muted-foreground">clinicez.net/</span>
+                          <input
+                            type="text"
+                            value={formData.tenantSlug}
+                            onChange={(e) => {
+                              setSlugManuallyEdited(true);
+                              setFormData({ ...formData, tenantSlug: e.target.value.toLowerCase() });
+                            }}
+                            className="h-11 w-full rounded-xl border border-input bg-background pl-[118px] pr-3 text-sm font-mono focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+                            placeholder="apex-health"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-muted-foreground uppercase">Entity Classification</label>
+                        <select
+                          value={formData.tenantType}
+                          onChange={(e) => setFormData({ ...formData, tenantType: e.target.value })}
+                          className="h-11 w-full rounded-xl border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+                        >
+                          <option value="Workplace">Workplace / Medical Practice</option>
+                          <option value="Person">Individual Practitioner / Person</option>
+                          <option value="Entity">Healthcare Entity / Enterprise Group</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-4 mt-6">
+                      <button
+                        type="button"
+                        onClick={() => setStep(1)}
+                        className="w-1/3 h-11 inline-flex items-center justify-center rounded-xl border border-input bg-background text-sm font-medium hover:bg-muted transition-colors"
+                      >
+                        Back
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!formData.name || !formData.tenantSlug) {
+                            setError("Please enter your workplace name and URL slug.");
+                            return;
+                          }
+                          setError(null);
+                          setStep(3);
+                        }}
+                        className="w-2/3 h-11 inline-flex items-center justify-center rounded-xl bg-primary text-sm font-bold text-primary-foreground hover:bg-primary/90 transition-colors"
+                      >
+                        Continue <ChevronRight className="ml-2 h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Step 3: Confirmation */}
+                {step === 3 && (
+                  <div className="space-y-6 text-center animate-in fade-in duration-300">
+                    <div className="flex justify-center mb-6">
+                      <div className="h-20 w-20 rounded-full bg-emerald-100 dark:bg-emerald-950/60 flex items-center justify-center">
+                        {isLoading ? (
+                          <div className="h-10 w-10 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="h-10 w-10 text-emerald-600 dark:text-emerald-400" />
+                        )}
+                      </div>
+                    </div>
+
+                    <h2 className="text-2xl font-bold mb-2">Ready to provision!</h2>
+                    <p className="text-sm text-muted-foreground mb-6">
+                      Your workplace <strong className="text-foreground">{formData.name}</strong> will be created at{" "}
+                      <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
+                        clinicez.net/{formData.tenantSlug}
+                      </code>
+                      .
+                    </p>
+
+                    <div className="flex gap-4 mt-6">
+                      <button
+                        type="button"
+                        onClick={() => setStep(2)}
+                        disabled={isLoading}
+                        className="w-1/3 h-11 inline-flex items-center justify-center rounded-xl border border-input bg-background text-sm font-medium hover:bg-muted transition-colors disabled:opacity-50"
+                      >
+                        Back
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAnonymousRegister}
+                        disabled={isLoading}
+                        className="w-2/3 h-11 inline-flex items-center justify-center rounded-xl bg-primary text-sm font-bold text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+                      >
+                        {isLoading ? "Provisioning..." : "Provision Workplace"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-8 text-center text-sm text-muted-foreground">
+                  Already have an account?{" "}
+                  <Link href="/sign-in" className="font-semibold text-primary hover:underline">
+                    Log in
+                  </Link>
                 </div>
               </div>
             )}
-
-            <div className="mt-8 text-center text-sm text-muted-foreground">
-              Already have an account? <Link href="/sign-in" className="font-semibold text-primary hover:underline">Log in</Link>
-            </div>
-
           </div>
         </div>
-
       </div>
     </main>
   );

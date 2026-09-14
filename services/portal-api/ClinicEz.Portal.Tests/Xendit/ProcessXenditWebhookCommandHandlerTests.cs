@@ -41,7 +41,7 @@ public class ProcessXenditWebhookCommandHandlerTests : IDisposable
         var tenant = new Tenant
         {
             Id = Guid.NewGuid(),
-            ClinicName = "Test Clinic",
+            Name = "Test Workplace",
             TenantSlug = "test-clinic",
             Email = "test@clinic.com",
             SubscriptionStatus = "TRIALING"
@@ -87,7 +87,7 @@ public class ProcessXenditWebhookCommandHandlerTests : IDisposable
         var tenant = new Tenant
         {
             Id = Guid.NewGuid(),
-            ClinicName = "Paid Clinic",
+            Name = "Paid Workplace",
             TenantSlug = "paid-clinic",
             XenditCustomerId = "cust_paid_999",
             SubscriptionPlanId = "pro",

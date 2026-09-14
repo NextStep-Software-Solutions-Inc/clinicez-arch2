@@ -46,7 +46,7 @@ public class CreateFacilityCommandHandler(
         context.Facilities.Add(facility);
 
         // Increment telemetry counts
-        tenant.ClinicalBranchesCount += 1;
+        tenant.FacilitiesCount += 1;
 
         // Publish the event using MassTransit (which automatically registers in the Outbox transaction)
         await publishEndpoint.Publish(new FacilityCreatedEvent

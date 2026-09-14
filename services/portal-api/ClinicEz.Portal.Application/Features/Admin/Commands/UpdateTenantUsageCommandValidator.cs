@@ -9,8 +9,8 @@ public class UpdateTenantUsageCommandValidator : AbstractValidator<UpdateTenantU
         RuleFor(v => v.Id)
             .NotEmpty().WithMessage("Tenant ID is required.");
 
-        RuleFor(v => v.ClinicalBranchesCount)
-            .GreaterThanOrEqualTo(1).WithMessage("Clinical branches count must be at least 1.");
+        RuleFor(v => v.FacilitiesCount)
+            .GreaterThanOrEqualTo(0).WithMessage("Facilities count cannot be negative.");
 
         RuleFor(v => v.StaffAccountsCount)
             .GreaterThanOrEqualTo(0).WithMessage("Staff accounts count cannot be negative.");

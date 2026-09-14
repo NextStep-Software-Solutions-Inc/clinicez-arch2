@@ -55,7 +55,7 @@ export function Navigation() {
               Log in
             </Link>
             <Link
-              href="/tenants/register"
+              href="/sign-up"
               className="inline-flex h-9 items-center justify-center rounded-full bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm shadow-primary/20 hover:bg-primary/90 transition-colors"
             >
               Get Started
@@ -107,7 +107,7 @@ export function Navigation() {
                 Log in
               </Link>
               <Link
-                href="/tenants/register"
+                href="/sign-up"
                 onClick={() => setIsMobileMenuOpen(false)}
                 className="inline-flex h-11 items-center justify-center rounded-md bg-primary px-4 text-base font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors mt-2"
               >

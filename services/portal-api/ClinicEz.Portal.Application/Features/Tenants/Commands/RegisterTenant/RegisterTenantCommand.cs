@@ -14,9 +14,9 @@ public record RegisterTenantCommand(
     string LastName,
     string Email,
     string Password,
-    string ClinicName,
+    string Name,
     string TenantSlug,
-    string FacilityType
+    string TenantType = "Workplace"
 ) : IRequest<string>;
 
 public class RegisterTenantCommandValidator : AbstractValidator<RegisterTenantCommand>
@@ -27,9 +27,9 @@ public class RegisterTenantCommandValidator : AbstractValidator<RegisterTenantCo
         RuleFor(x => x.LastName).NotEmpty();
         RuleFor(x => x.Email).NotEmpty().EmailAddress();
         RuleFor(x => x.Password).NotEmpty().MinimumLength(8);
-        RuleFor(x => x.ClinicName).NotEmpty();
+        RuleFor(x => x.Name).NotEmpty();
         RuleFor(x => x.TenantSlug).NotEmpty();
-        RuleFor(x => x.FacilityType).NotEmpty();
+        RuleFor(x => x.TenantType).NotEmpty();
     }
 }
 
@@ -46,6 +46,26 @@ public class RegisterTenantCommandHandler : IRequestHandler<RegisterTenantComman
 
     public async Task<string> Handle(RegisterTenantCommand request, CancellationToken cancellationToken)
     {
+        // Pre-check: Ensure slug is not already taken
+        var existingSlug = await _unitOfWork.TenantRepository.FindAsync(
+            t => t.TenantSlug.ToLower() == request.TenantSlug.ToLower(), 
+            cancellationToken);
+
+        if (existingSlug != null)
+        {
+            throw new ValidationException("Workplace URL slug is already taken. Please choose another.");
+        }
+
+        // Pre-check: Ensure email is not already registered in DB
+        var existingEmail = await _unitOfWork.TenantRepository.FindAsync(
+            t => t.Email.ToLower() == request.Email.ToLower(), 
+            cancellationToken);
+
+        if (existingEmail != null)
+        {
+            throw new ValidationException("An account with this email address already exists.");
+        }
+
         // 1. Create User in Clerk
         var req = new Clerk.BackendAPI.Models.Operations.CreateUserRequestBody
         {
@@ -61,9 +81,9 @@ public class RegisterTenantCommandHandler : IRequestHandler<RegisterTenantComman
         var newTenant = new ClinicEz.Portal.Domain.Entities.Tenant
         {
             OwnerId = clerkUserId,
-            ClinicName = request.ClinicName,
-            TenantSlug = request.TenantSlug,
-            FacilityType = request.FacilityType,
+            Name = request.Name,
+            TenantSlug = request.TenantSlug.ToLowerInvariant(),
+            TenantType = string.IsNullOrWhiteSpace(request.TenantType) ? "Workplace" : request.TenantType,
             FirstName = request.FirstName,
             LastName = request.LastName,
             Email = request.Email,

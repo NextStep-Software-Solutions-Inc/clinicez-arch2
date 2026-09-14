@@ -11,9 +11,9 @@ namespace ClinicEz.Portal.Application.Features.Admin.Queries;
 
 public record AdminLeadResponseDto(
     Guid Id,
-    string ClinicName,
+    string Name,
     string TenantSlug,
-    string FacilityType,
+    string TenantType,
     string OwnerName,
     string Email,
     DateTime CreatedAt,
@@ -34,9 +34,9 @@ public class GetAdminLeadsQueryHandler(IApplicationDbContext context) : IRequest
 
         return leads.Select(t => new AdminLeadResponseDto(
             t.Id,
-            t.ClinicName,
+            t.Name,
             t.TenantSlug,
-            t.FacilityType,
+            t.TenantType,
             $"{t.FirstName} {t.LastName}".Trim(),
             t.Email,
             t.CreatedAt,

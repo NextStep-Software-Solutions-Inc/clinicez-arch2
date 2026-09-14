@@ -102,7 +102,7 @@ public class AdminEndpoints : IEndpoint
 
             var result = await sender.Send(new UpdateTenantUsageCommand(
                 id, 
-                request.ClinicalBranchesCount, 
+                request.FacilitiesCount, 
                 request.StaffAccountsCount, 
                 request.ActivePatientRecordsCount, 
                 request.MonthlyApiQuotaUsed, 
@@ -343,7 +343,7 @@ public class AdminEndpoints : IEndpoint
 }
 
 public record UpdateTenantUsageRequest(
-    int ClinicalBranchesCount, 
+    int FacilitiesCount, 
     int StaffAccountsCount, 
     int ActivePatientRecordsCount, 
     int MonthlyApiQuotaUsed, 

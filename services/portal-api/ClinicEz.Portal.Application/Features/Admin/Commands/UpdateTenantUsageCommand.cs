@@ -9,7 +9,7 @@ namespace ClinicEz.Portal.Application.Features.Admin.Commands;
 
 public record UpdateTenantUsageResult(
     Guid Id, 
-    int ClinicalBranchesCount, 
+    int FacilitiesCount, 
     int StaffAccountsCount, 
     int ActivePatientRecordsCount, 
     int MonthlyApiQuotaUsed, 
@@ -18,7 +18,7 @@ public record UpdateTenantUsageResult(
 
 public record UpdateTenantUsageCommand(
     Guid Id, 
-    int ClinicalBranchesCount, 
+    int FacilitiesCount, 
     int StaffAccountsCount, 
     int ActivePatientRecordsCount, 
     int MonthlyApiQuotaUsed, 
@@ -32,7 +32,7 @@ public class UpdateTenantUsageCommandHandler(IApplicationDbContext context) : IR
         var tenant = await context.Tenants.FirstOrDefaultAsync(t => t.Id == request.Id, cancellationToken);
         if (tenant == null) return null;
 
-        tenant.ClinicalBranchesCount = request.ClinicalBranchesCount;
+        tenant.FacilitiesCount = request.FacilitiesCount;
         tenant.StaffAccountsCount = request.StaffAccountsCount;
         tenant.ActivePatientRecordsCount = request.ActivePatientRecordsCount;
         tenant.MonthlyApiQuotaUsed = request.MonthlyApiQuotaUsed;
@@ -42,7 +42,7 @@ public class UpdateTenantUsageCommandHandler(IApplicationDbContext context) : IR
         
         return new UpdateTenantUsageResult(
             tenant.Id,
-            tenant.ClinicalBranchesCount,
+            tenant.FacilitiesCount,
             tenant.StaffAccountsCount,
             tenant.ActivePatientRecordsCount,
             tenant.MonthlyApiQuotaUsed,

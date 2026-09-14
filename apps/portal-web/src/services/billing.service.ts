@@ -36,7 +36,8 @@ export interface BillingInfo {
   subscriptionStatus: string
   subscriptionPlanId: string
   invoices: BillingInvoice[]
-  clinicName: string
+  name: string
+  clinicName?: string
   tradingName?: string
   businessType?: string
   phoneNumber?: string
@@ -86,7 +87,12 @@ export const billingService = {
   },
   getBillingInfo: async (tenantId: string): Promise<BillingInfo> => {
     const res = await apiClient.get<BillingInfo>(`/billing/info/${tenantId}`)
-    return res.data
+    const data = res.data
+    return {
+      ...data,
+      name: data.name || (data as any).clinicName || "",
+      clinicName: data.name || (data as any).clinicName || "",
+    }
   },
   cancelSubscription: async (tenantId: string): Promise<boolean> => {
     const res = await apiClient.post<boolean>(`/billing/cancel-subscription/${tenantId}`)

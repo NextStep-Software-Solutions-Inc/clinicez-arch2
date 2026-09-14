@@ -20,7 +20,7 @@ export function LandingCTA() {
           
           <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
             <Link 
-              href="/tenants/register"
+              href="/sign-up"
               className="inline-flex items-center justify-center rounded-full bg-background px-8 py-4 text-sm font-bold text-primary shadow-lg hover:bg-background/90 transition-all active:scale-95"
             >
               Start your free trial

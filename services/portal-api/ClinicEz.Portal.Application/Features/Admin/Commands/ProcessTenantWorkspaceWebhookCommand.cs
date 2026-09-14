@@ -47,7 +47,7 @@ public class ProcessTenantWorkspaceWebhookCommandHandler(IApplicationDbContext c
             case FacilityType.Laboratory:
             case FacilityType.Pharmacy:
             case FacilityType.Organization:
-                tenant.ClinicalBranchesCount += 1;
+                tenant.FacilitiesCount += 1;
                 break;
         }
 

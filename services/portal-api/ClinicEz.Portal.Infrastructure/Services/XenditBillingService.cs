@@ -175,7 +175,7 @@ public class XenditBillingService : IXenditBillingService
             RecurringAction = "PAYMENT",
             Amount = isAnnual ? (long)(plan.PriceAnnually * 12) : (long)plan.PriceMonthly,
             Currency = "PHP",
-            Description = isAnnual ? $"{tenant.ClinicName} - {plan.Name} Plan Subscription (Annually)" : $"{tenant.ClinicName} - {plan.Name} Plan Subscription (Monthly)",
+            Description = isAnnual ? $"{tenant.Name} - {plan.Name} Plan Subscription (Annually)" : $"{tenant.Name} - {plan.Name} Plan Subscription (Monthly)",
             SuccessReturnUrl = $"{frontendBaseUrl}/{tenant.TenantSlug}/dashboard/billing",
             FailureReturnUrl = $"{frontendBaseUrl}/{tenant.TenantSlug}/dashboard/billing",
             Schedule = new Xendit.Models.Subscriptions.XenditScheduleRequest
@@ -329,7 +329,7 @@ public class XenditBillingService : IXenditBillingService
             Type = "INDIVIDUAL",
             IndividualDetail = new Xendit.Models.Customers.XenditIndividualDetail
             {
-                GivenNames = string.IsNullOrEmpty(tenant.FirstName) ? (string.IsNullOrEmpty(tenant.ClinicName) ? "Clinic" : tenant.ClinicName) : tenant.FirstName,
+                GivenNames = string.IsNullOrEmpty(tenant.FirstName) ? (string.IsNullOrEmpty(tenant.Name) ? "Workplace" : tenant.Name) : tenant.FirstName,
                 Surname = string.IsNullOrEmpty(tenant.LastName) ? "Owner" : tenant.LastName
             },
             Email = tenant.Email ?? "tenant@example.com",
