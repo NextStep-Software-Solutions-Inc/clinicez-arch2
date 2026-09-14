@@ -121,7 +121,7 @@ export function ProductDetailsPageClient({ product }: ProductDetailsPageClientPr
                         <p className="text-xl text-muted-foreground mb-10 max-w-2xl mx-auto">
                             Join hundreds of modern clinics using Clinic EZ to streamline their operations.
                         </p>
-                        <Link href="/tenants/register">
+                        <Link href="/sign-up">
                             <Button size="lg" className={`rounded-full px-10 h-16 text-lg bg-${product.primaryColor} hover:bg-${product.primaryColor}/90 text-white font-bold shadow-xl shadow-${product.primaryColor}/25`}>
                                 Get Started Today
                             </Button>
