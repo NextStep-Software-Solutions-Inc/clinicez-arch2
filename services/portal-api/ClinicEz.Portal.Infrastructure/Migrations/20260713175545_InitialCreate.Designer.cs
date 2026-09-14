@@ -556,11 +556,11 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                     b.Property<string>("City")
                         .HasColumnType("text");
 
-                    b.Property<string>("Name")
+                    b.Property<string>("ClinicName")
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<int>("FacilitiesCount")
+                    b.Property<int>("ClinicalBranchesCount")
                         .HasColumnType("integer");
 
                     b.Property<string>("Country")
@@ -583,7 +583,7 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("TenantType")
+                    b.Property<string>("FacilityType")
                         .IsRequired()
                         .HasColumnType("text");
 
