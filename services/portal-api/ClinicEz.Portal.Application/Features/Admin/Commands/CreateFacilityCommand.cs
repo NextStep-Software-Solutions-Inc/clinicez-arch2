@@ -18,7 +18,8 @@ public record CreateFacilityCommand(
 
 public class CreateFacilityCommandHandler(
     IApplicationDbContext context,
-    IPublishEndpoint publishEndpoint
+    IPublishEndpoint publishEndpoint,
+    ITenantFeatureGuard tenantFeatureGuard
 ) : IRequestHandler<CreateFacilityCommand, bool>
 {
     public async Task<bool> Handle(CreateFacilityCommand request, CancellationToken cancellationToken)
@@ -30,6 +31,9 @@ public class CreateFacilityCommandHandler(
             cancellationToken);
 
         if (tenant == null) return false;
+
+        // Verify workspace plan allocations and limits before provisioning
+        await tenantFeatureGuard.EnsureCanCreateFacilityAsync(tenant.Id.ToString(), request.FacilityType, cancellationToken);
 
         // Provision resource ID
         var resourceId = Guid.NewGuid();

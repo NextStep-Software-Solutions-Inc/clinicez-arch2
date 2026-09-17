@@ -35,10 +35,21 @@ public class FacilityEndpoints : IEndpoint
             }
 
             Console.WriteLine($"[API] Creating facility '{command.Name}' of type {command.FacilityType} for tenant {command.TenantId}");
-            var success = await sender.Send(command);
-            return success 
-                ? Results.Ok(new { Success = true, Message = "Facility created and provisioning event published" }) 
-                : Results.BadRequest(new { Message = "Failed to create facility. Verify tenant details and names." });
+            try
+            {
+                var success = await sender.Send(command);
+                return success 
+                    ? Results.Ok(new { Success = true, Message = "Facility created and provisioning event published" }) 
+                    : Results.BadRequest(new { Message = "Failed to create facility. Verify tenant details and names." });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
         })
         .RequireAuthorization()
         .WithName("CreateFacility")

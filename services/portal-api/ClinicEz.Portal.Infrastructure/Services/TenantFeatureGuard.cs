@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Constants;
+using ClinicEz.Shared.Common;
 using Microsoft.EntityFrameworkCore;
 using ClinicEz.Portal.Infrastructure.Persistence;
 
@@ -10,24 +11,33 @@ namespace ClinicEz.Portal.Infrastructure.Services;
 
 public class TenantFeatureGuard(ApplicationDbContext context) : ITenantFeatureGuard
 {
-    public async Task EnsureCanCreateClinicAsync(string tenantId, CancellationToken cancellationToken = default)
+    public async Task EnsureCanCreateFacilityAsync(string tenantId, FacilityType facilityType, CancellationToken cancellationToken = default)
     {
-        var tenant = await context.Tenants.FirstOrDefaultAsync(t => t.Id.ToString() == tenantId, cancellationToken) 
-            ?? throw new Exception("Tenant not found");
+        var tenant = await context.Tenants.FirstOrDefaultAsync(t => 
+            t.Id.ToString() == tenantId || t.TenantSlug == tenantId, cancellationToken) 
+            ?? throw new InvalidOperationException("Tenant not found");
 
         var limits = PlanFeaturesConfig.GetLimitsForPlan(tenant.SubscriptionPlanId);
         if (limits == null)
         {
-            throw new Exception("Feature Access Restricted: An active plan subscription is required. Please select and activate a subscription plan.");
+            throw new InvalidOperationException("Feature Access Restricted: An active plan subscription is required to provision facilities. Please select and activate a subscription plan.");
         }
-        
-        // TODO: Count actual clinics once the Clinic entity is established in the domain
-        var currentClinicCount = 1; 
 
-        if (currentClinicCount >= limits.MaxClinics)
+        if (facilityType == FacilityType.Clinic)
         {
-            throw new Exception($"Feature Limit Reached: Your current plan only allows up to {limits.MaxClinics} clinics. Please upgrade your subscription.");
+            var currentClinicCount = await context.Facilities.CountAsync(f => 
+                f.TenantId == tenant.Id && f.FacilityType == FacilityType.Clinic, cancellationToken);
+
+            if (currentClinicCount >= limits.MaxClinics)
+            {
+                throw new InvalidOperationException($"Feature Limit Reached: Your current plan ({limits.PlanTitle}) only allows up to {limits.MaxClinics} clinic location{(limits.MaxClinics > 1 ? "s" : "")}. Please upgrade your subscription to add more clinics.");
+            }
         }
+    }
+
+    public async Task EnsureCanCreateClinicAsync(string tenantId, CancellationToken cancellationToken = default)
+    {
+        await EnsureCanCreateFacilityAsync(tenantId, FacilityType.Clinic, cancellationToken);
     }
 
     public async Task EnsureCanCreateStaffAsync(string tenantId, CancellationToken cancellationToken = default)
