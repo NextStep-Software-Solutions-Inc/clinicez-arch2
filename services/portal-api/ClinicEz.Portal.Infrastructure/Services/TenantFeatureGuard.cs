@@ -16,6 +16,10 @@ public class TenantFeatureGuard(ApplicationDbContext context) : ITenantFeatureGu
             ?? throw new Exception("Tenant not found");
 
         var limits = PlanFeaturesConfig.GetLimitsForPlan(tenant.SubscriptionPlanId);
+        if (limits == null)
+        {
+            throw new Exception("Feature Access Restricted: An active plan subscription is required. Please select and activate a subscription plan.");
+        }
         
         // TODO: Count actual clinics once the Clinic entity is established in the domain
         var currentClinicCount = 1; 
@@ -32,6 +36,10 @@ public class TenantFeatureGuard(ApplicationDbContext context) : ITenantFeatureGu
             ?? throw new Exception("Tenant not found");
 
         var limits = PlanFeaturesConfig.GetLimitsForPlan(tenant.SubscriptionPlanId);
+        if (limits == null)
+        {
+            throw new Exception("Feature Access Restricted: An active plan subscription is required. Please select and activate a subscription plan.");
+        }
         
         // TODO: Count actual staff members
         var currentStaffCount = 0; 
@@ -48,6 +56,10 @@ public class TenantFeatureGuard(ApplicationDbContext context) : ITenantFeatureGu
             ?? throw new Exception("Tenant not found");
 
         var limits = PlanFeaturesConfig.GetLimitsForPlan(tenant.SubscriptionPlanId);
+        if (limits == null)
+        {
+            throw new Exception("Feature Access Restricted: An active plan subscription is required. Please select and activate a subscription plan.");
+        }
         
         // TODO: Count actual patients
         var currentPatientCount = 0; 

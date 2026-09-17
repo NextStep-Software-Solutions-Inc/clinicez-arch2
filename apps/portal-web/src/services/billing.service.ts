@@ -32,6 +32,21 @@ export interface BillingInvoice {
   receipt?: PaymentReceipt
 }
 
+export interface BillingPlanLimits {
+  planTitle: string
+  maxClinics: number
+  maxStaff: number
+  maxPatients: number
+  monthlyApiQuotaLimit: number
+}
+
+export interface TenantUsage {
+  facilitiesCount: number
+  staffAccountsCount: number
+  activePatientRecordsCount: number
+  monthlyApiQuotaUsed: number
+}
+
 export interface BillingInfo {
   subscriptionStatus: string
   subscriptionPlanId: string
@@ -50,6 +65,8 @@ export interface BillingInfo {
   taxId?: string
   isAnnual: boolean
   subscriptionExpiresAt?: string
+  planLimits?: BillingPlanLimits
+  usage?: TenantUsage
 }
 
 export interface CheckoutSessionRequest {

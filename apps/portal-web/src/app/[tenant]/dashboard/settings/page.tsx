@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useBillingInfo } from "@/hooks/useBilling";
@@ -8,13 +9,31 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
-import { IconSettings, IconUser, IconLayersIntersect, IconInfoCircle, IconDeviceFloppy } from "@tabler/icons-react";
+import { 
+    IconSettings, 
+    IconUser, 
+    IconLayersIntersect, 
+    IconInfoCircle, 
+    IconDeviceFloppy,
+    IconAlertTriangle,
+    IconCreditCard,
+    IconArrowRight
+} from "@tabler/icons-react";
 import { toast } from "sonner";
 
 export default function SettingsPage() {
     const params = useParams();
     const tenantSlug = params?.tenant as string;
     const { billingInfo, mutate } = useBillingInfo(tenantSlug);
+
+    const isSubscribed = 
+        billingInfo?.subscriptionStatus === "ACTIVE" || 
+        (billingInfo?.subscriptionStatus === "CANCELLED" && 
+         !!billingInfo.subscriptionExpiresAt && 
+         new Date(billingInfo.subscriptionExpiresAt) > new Date());
+    
+    const isTrialing = billingInfo?.subscriptionStatus === "TRIALING";
+    const hasAllocations = (isSubscribed || isTrialing) && !!billingInfo?.planLimits;
 
     const [clinicName, setClinicName] = useState("");
     const [email, setEmail] = useState("");
@@ -204,44 +223,133 @@ export default function SettingsPage() {
                 <TabsContent value="limits" className="space-y-6 outline-none">
                     <Card className="rounded-3xl border-slate-100 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-950">
                         <CardHeader className="p-6 pb-4">
-                            <CardTitle className="text-lg font-bold">Workspace Threshold Allocations</CardTitle>
-                            <CardDescription className="text-xs font-medium text-slate-500">
-                                View resource metrics and allocation limits provisioned under your plan scope.
-                            </CardDescription>
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <div>
+                                    <CardTitle className="text-lg font-bold">Workspace Threshold Allocations</CardTitle>
+                                    <CardDescription className="text-xs font-medium text-slate-500 mt-0.5">
+                                        View resource metrics and allocation limits provisioned under your plan scope.
+                                    </CardDescription>
+                                </div>
+                                {hasAllocations ? (
+                                    <span className="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-semibold bg-primary/10 text-primary border border-primary/20 w-fit">
+                                        {billingInfo?.planLimits?.planTitle || "Active Plan"}
+                                    </span>
+                                ) : (
+                                    <span className="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800/60 w-fit">
+                                        Setup Mode &bull; Unsubscribed
+                                    </span>
+                                )}
+                            </div>
                         </CardHeader>
-                        <CardContent className="p-6 pt-0">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                                <div className="p-5 border border-slate-100 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-900/30">
-                                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Clinical Branches</div>
-                                    <div className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">3 Max</div>
-                                    <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-2.5">Basic Tier Limit</div>
-                                </div>
-                                <div className="p-5 border border-slate-100 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-900/30">
-                                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Staff Accounts</div>
-                                    <div className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">5 Max</div>
-                                    <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-2.5">Basic Tier Limit</div>
-                                </div>
-                                <div className="p-5 border border-slate-100 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-900/30">
-                                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Patients</div>
-                                    <div className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">100 Max</div>
-                                    <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-2.5">Basic Tier Limit</div>
-                                </div>
-                                <div className="p-5 border border-slate-100 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-900/30">
-                                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Monthly Api Quota</div>
-                                    <div className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">10k / Mo</div>
-                                    <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-2.5">Included Allocations</div>
-                                </div>
-                            </div>
+                        <CardContent className="p-6 pt-0 space-y-6">
+                            {!hasAllocations ? (
+                                <div className="space-y-6">
+                                    <div className="flex flex-col sm:flex-row gap-4 items-start p-6 rounded-2xl border border-amber-200/70 dark:border-amber-900/40 bg-amber-50/40 dark:bg-amber-950/20">
+                                        <div className="p-3 rounded-2xl bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400 shrink-0">
+                                            <IconAlertTriangle className="h-6 w-6" />
+                                        </div>
+                                        <div className="space-y-3 flex-1">
+                                            <div>
+                                                <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">No Active Plan Subscription</h4>
+                                                <p className="text-xs text-slate-600 dark:text-slate-400 mt-1.5 leading-relaxed">
+                                                    This workspace is currently in setup mode with zero provisioned resource quotas. Choose a subscription plan to activate clinical branches, staff accounts, patient records, and API usage quotas.
+                                                </p>
+                                            </div>
+                                            <div className="pt-1">
+                                                <Link href={`/${tenantSlug}/dashboard/billing`}>
+                                                    <Button size="sm" className="rounded-xl font-semibold gap-2 text-xs shadow-sm">
+                                                        <IconCreditCard className="h-4 w-4" />
+                                                        Select Plan & Activate Allocations
+                                                        <IconArrowRight className="h-3.5 w-3.5" />
+                                                    </Button>
+                                                </Link>
+                                            </div>
+                                        </div>
+                                    </div>
 
-                            <div className="mt-6 flex items-start gap-3 p-4 border border-blue-100 dark:border-blue-900/30 bg-blue-50/20 dark:bg-blue-950/20 rounded-2xl">
-                                <IconInfoCircle className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />
-                                <div className="space-y-1">
-                                    <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100">Need higher allocation thresholds?</h4>
-                                    <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-                                        You can increase your workspace limits by upgrading your subscription tier. Head to the billing tab to compare plans.
-                                    </p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 opacity-50 grayscale select-none">
+                                        <div className="p-5 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-900/30">
+                                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Clinical Branches</div>
+                                            <div className="text-2xl font-bold text-slate-400 mt-1">0 / 0</div>
+                                            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-2.5">No Active Plan</div>
+                                        </div>
+                                        <div className="p-5 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-900/30">
+                                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Staff Accounts</div>
+                                            <div className="text-2xl font-bold text-slate-400 mt-1">0 / 0</div>
+                                            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-2.5">No Active Plan</div>
+                                        </div>
+                                        <div className="p-5 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-900/30">
+                                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Patients</div>
+                                            <div className="text-2xl font-bold text-slate-400 mt-1">0 / 0</div>
+                                            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-2.5">No Active Plan</div>
+                                        </div>
+                                        <div className="p-5 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-900/30">
+                                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Monthly Api Quota</div>
+                                            <div className="text-2xl font-bold text-slate-400 mt-1">0 / 0</div>
+                                            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-2.5">No Active Plan</div>
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
+                            ) : (
+                                <>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                                        <div className="p-5 border border-slate-100 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-900/30">
+                                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Clinical Branches</div>
+                                            <div className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">
+                                                {billingInfo?.usage?.facilitiesCount ?? 0} / {billingInfo?.planLimits?.maxClinics && billingInfo.planLimits.maxClinics >= 9999 ? "Unlimited" : billingInfo?.planLimits?.maxClinics}
+                                            </div>
+                                            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-2.5">
+                                                {billingInfo?.planLimits?.planTitle} Limit
+                                            </div>
+                                        </div>
+                                        <div className="p-5 border border-slate-100 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-900/30">
+                                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Staff Accounts</div>
+                                            <div className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">
+                                                {billingInfo?.usage?.staffAccountsCount ?? 1} / {billingInfo?.planLimits?.maxStaff && billingInfo.planLimits.maxStaff >= 9999 ? "Unlimited" : billingInfo?.planLimits?.maxStaff}
+                                            </div>
+                                            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-2.5">
+                                                {billingInfo?.planLimits?.planTitle} Limit
+                                            </div>
+                                        </div>
+                                        <div className="p-5 border border-slate-100 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-900/30">
+                                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Patients</div>
+                                            <div className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">
+                                                {billingInfo?.usage?.activePatientRecordsCount ?? 0} / {billingInfo?.planLimits?.maxPatients && billingInfo.planLimits.maxPatients >= 999999 ? "Unlimited" : billingInfo?.planLimits?.maxPatients?.toLocaleString()}
+                                            </div>
+                                            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-2.5">
+                                                {billingInfo?.planLimits?.planTitle} Limit
+                                            </div>
+                                        </div>
+                                        <div className="p-5 border border-slate-100 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-900/30">
+                                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Monthly Api Quota</div>
+                                            <div className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">
+                                                {billingInfo?.usage?.monthlyApiQuotaUsed ?? 0} / {billingInfo?.planLimits?.monthlyApiQuotaLimit && billingInfo.planLimits.monthlyApiQuotaLimit >= 1000000 ? "Unlimited" : `${((billingInfo?.planLimits?.monthlyApiQuotaLimit ?? 10000) / 1000).toFixed(0)}k`}
+                                            </div>
+                                            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-2.5">
+                                                Included Allocations
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 border border-blue-100 dark:border-blue-900/30 bg-blue-50/20 dark:bg-blue-950/20 rounded-2xl">
+                                        <div className="flex items-start gap-3">
+                                            <IconInfoCircle className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />
+                                            <div className="space-y-0.5">
+                                                <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100">Need higher allocation thresholds?</h4>
+                                                <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                                                    You can increase your workspace limits by upgrading your subscription tier anytime.
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <Link href={`/${tenantSlug}/dashboard/billing`} className="shrink-0">
+                                            <Button variant="outline" size="sm" className="rounded-xl text-xs font-semibold gap-1.5 border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/50">
+                                                Manage Plan
+                                                <IconArrowRight className="h-3.5 w-3.5" />
+                                            </Button>
+                                        </Link>
+                                    </div>
+                                </>
+                            )}
                         </CardContent>
                     </Card>
                 </TabsContent>

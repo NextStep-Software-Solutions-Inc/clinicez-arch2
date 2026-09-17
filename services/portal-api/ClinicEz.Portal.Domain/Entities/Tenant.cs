@@ -37,8 +37,8 @@ public class Tenant : BaseEntity
 
     // Telemetry Usage & Limits
     public int FacilitiesCount { get; set; } = 0;
-    public int StaffAccountsCount { get; set; } = 3;
-    public int ActivePatientRecordsCount { get; set; } = 25;
-    public int MonthlyApiQuotaUsed { get; set; } = 500;
+    public int StaffAccountsCount { get; set; } = 1;
+    public int ActivePatientRecordsCount { get; set; } = 0;
+    public int MonthlyApiQuotaUsed { get; set; } = 0;
     public int MonthlyApiQuotaLimit { get; set; } = 10000;
 }

@@ -1,5 +1,6 @@
 using MediatR;
 using ClinicEz.Portal.Application.Interfaces;
+using ClinicEz.Portal.Domain.Constants;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
@@ -29,6 +30,21 @@ public record BillingInvoiceDto(
     PaymentReceiptDto? Receipt
 );
 
+public record PlanLimitsDto(
+    string PlanTitle,
+    int MaxClinics,
+    int MaxStaff,
+    int MaxPatients,
+    int MonthlyApiQuotaLimit
+);
+
+public record TenantUsageDto(
+    int FacilitiesCount,
+    int StaffAccountsCount,
+    int ActivePatientRecordsCount,
+    int MonthlyApiQuotaUsed
+);
+
 public record BillingInfoDto(
     string SubscriptionStatus,
     string SubscriptionPlanId,
@@ -45,7 +61,9 @@ public record BillingInfoDto(
     string? PostalCode,
     string? TaxId,
     bool IsAnnual,
-    DateTime? SubscriptionExpiresAt
+    DateTime? SubscriptionExpiresAt,
+    PlanLimitsDto? PlanLimits = null,
+    TenantUsageDto? Usage = null
 );
 
 public class GetBillingInfoQuery : IRequest<BillingInfoDto?>
@@ -116,6 +134,29 @@ public class GetBillingInfoQueryHandler(IApplicationDbContext context) : IReques
 
         DateTime? subscriptionExpiresAt = latestReceipt?.ExpiryDate;
 
+        PlanLimitsDto? planLimitsDto = null;
+        if (!string.IsNullOrEmpty(tenant.SubscriptionPlanId))
+        {
+            var planLimits = PlanFeaturesConfig.GetLimitsForPlan(tenant.SubscriptionPlanId);
+            if (planLimits != null)
+            {
+                planLimitsDto = new PlanLimitsDto(
+                    planLimits.PlanTitle,
+                    planLimits.MaxClinics,
+                    planLimits.MaxStaff,
+                    planLimits.MaxPatients,
+                    planLimits.MonthlyApiQuotaLimit
+                );
+            }
+        }
+
+        var usageDto = new TenantUsageDto(
+            tenant.FacilitiesCount,
+            tenant.StaffAccountsCount,
+            tenant.ActivePatientRecordsCount,
+            tenant.MonthlyApiQuotaUsed
+        );
+
         return new BillingInfoDto(
             tenant.SubscriptionStatus,
             tenant.SubscriptionPlanId,
@@ -132,7 +173,9 @@ public class GetBillingInfoQueryHandler(IApplicationDbContext context) : IReques
             tenant.PostalCode,
             tenant.TaxId,
             isAnnual,
-            subscriptionExpiresAt
+            subscriptionExpiresAt,
+            planLimitsDto,
+            usageDto
         );
     }
 }
