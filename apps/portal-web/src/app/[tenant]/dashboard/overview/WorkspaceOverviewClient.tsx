@@ -387,6 +387,19 @@ export default function WorkspaceOverviewClient({ tenantSlug }: { tenantSlug: st
                             <IconPlus className="h-3.5 w-3.5 text-slate-400" />
                         </Button>
 
+                        <Link href={`/${tenantSlug}/dashboard/team`} className="block">
+                            <Button
+                                variant="outline"
+                                className="w-full justify-between h-11 rounded-2xl border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900/60 text-xs font-semibold"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <IconUsers className="h-4 w-4 text-purple-600" />
+                                    <span>Manage Team & Staff</span>
+                                </div>
+                                <IconArrowRight className="h-3.5 w-3.5 text-slate-400" />
+                            </Button>
+                        </Link>
+
                         <Link href={`/${tenantSlug}/dashboard/billing?tab=plans`} className="block pt-1">
                             <Button
                                 variant="outline"

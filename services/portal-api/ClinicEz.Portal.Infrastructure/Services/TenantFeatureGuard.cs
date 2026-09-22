@@ -54,21 +54,40 @@ public class TenantFeatureGuard(ApplicationDbContext context) : ITenantFeatureGu
 
     public async Task EnsureCanCreateStaffAsync(string tenantId, CancellationToken cancellationToken = default)
     {
-        var tenant = await context.Tenants.FirstOrDefaultAsync(t => t.Id.ToString() == tenantId, cancellationToken) 
-            ?? throw new Exception("Tenant not found");
+        var tenant = await context.Tenants.FirstOrDefaultAsync(t => 
+            t.Id.ToString() == tenantId || t.TenantSlug == tenantId, cancellationToken) 
+            ?? throw new InvalidOperationException("Tenant not found");
 
-        var limits = PlanFeaturesConfig.GetLimitsForPlan(tenant.SubscriptionPlanId);
-        if (limits == null)
+        var effectivePlanId = tenant.SubscriptionPlanId;
+        if (string.IsNullOrEmpty(effectivePlanId) && tenant.SubscriptionStatus == "TRIALING")
         {
-            throw new Exception("Feature Access Restricted: An active plan subscription is required. Please select and activate a subscription plan.");
+            effectivePlanId = "starter";
         }
-        
-        // TODO: Count actual staff members
-        var currentStaffCount = 0; 
+
+        // Check if 14-day free trial has expired
+        if (tenant.SubscriptionStatus == "TRIALING" && DateTime.UtcNow > tenant.CreatedAt.AddDays(14))
+        {
+            throw new InvalidOperationException("Your 14-day free trial has expired. Please upgrade to an active subscription plan to invite staff members.");
+        }
+
+        var limits = PlanFeaturesConfig.GetLimitsForPlan(effectivePlanId);
+        if (limits == null || tenant.SubscriptionStatus == "EXPIRED")
+        {
+            throw new InvalidOperationException("Feature Access Restricted: An active plan subscription is required to add team members. Please select and activate a subscription plan.");
+        }
+
+        var currentStaffCount = await context.StaffMembers
+            .CountAsync(s => s.TenantId == tenant.Id, cancellationToken);
+
+        // If no members in table yet, the workspace owner counts as 1 seat
+        if (currentStaffCount == 0)
+        {
+            currentStaffCount = 1;
+        }
 
         if (currentStaffCount >= limits.MaxStaff)
         {
-            throw new Exception($"Feature Limit Reached: Your current plan only allows up to {limits.MaxStaff} staff members. Please upgrade your subscription.");
+            throw new InvalidOperationException($"Feature Limit Reached: Your current plan ({limits.PlanTitle}) only allows up to {limits.MaxStaff} staff member{(limits.MaxStaff > 1 ? "s" : "")}. Please upgrade your subscription to invite more team members.");
         }
     }
 

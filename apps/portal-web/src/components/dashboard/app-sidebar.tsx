@@ -11,6 +11,7 @@ import {
   IconSettings,
   IconTestPipe,
   IconCreditCard,
+  IconUsers,
 } from "@tabler/icons-react"
 
 import { NavMain } from "@/components/dashboard/nav-main"
@@ -77,6 +78,11 @@ export function AppSidebar({
             icon: IconPill,
           },
         ]
+      },
+      {
+        title: "Team & Staff",
+        url: `/dashboard/team`,
+        icon: IconUsers,
       },
     ],
     navSecondary: [

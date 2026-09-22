@@ -169,9 +169,13 @@ public class GetBillingInfoQueryHandler(IApplicationDbContext context) : IReques
             }
         }
 
+        var actualStaffCount = await context.StaffMembers
+            .CountAsync(s => s.TenantId == tenant.Id, cancellationToken);
+        var effectiveStaffCount = actualStaffCount > 0 ? actualStaffCount : Math.Max(tenant.StaffAccountsCount, 1);
+
         var usageDto = new TenantUsageDto(
             tenant.FacilitiesCount,
-            tenant.StaffAccountsCount,
+            effectiveStaffCount,
             tenant.ActivePatientRecordsCount,
             tenant.MonthlyApiQuotaUsed
         );

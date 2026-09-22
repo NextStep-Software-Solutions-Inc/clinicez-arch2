@@ -21,6 +21,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<AdminRole> AdminRoles { get; set; }
     public DbSet<AdminUser> AdminUsers { get; set; }
     public DbSet<Facility> Facilities { get; set; }
+    public DbSet<StaffMember> StaffMembers { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -119,6 +120,23 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .WithMany()
                 .HasForeignKey(e => e.TenantId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<StaffMember>(entity =>
+        {
+            entity.HasOne(e => e.Tenant)
+                .WithMany()
+                .HasForeignKey(e => e.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Facility)
+                .WithMany()
+                .HasForeignKey(e => e.FacilityId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(e => new { e.TenantId, e.Email })
+                .HasFilter("\"IsDeleted\" = false")
+                .IsUnique();
         });
 
         modelBuilder.AddInboxStateEntity();
