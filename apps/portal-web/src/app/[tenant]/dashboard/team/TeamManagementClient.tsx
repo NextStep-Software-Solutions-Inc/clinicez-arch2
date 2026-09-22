@@ -16,7 +16,10 @@ import {
     IconCreditCard,
     IconLoader,
     IconSearch,
-    IconUser
+    IconUser,
+    IconCopy,
+    IconLink,
+    IconRefresh
 } from "@tabler/icons-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,6 +28,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { staffService, TenantStaffResultDto, StaffMemberDto } from "@/services/staff.service";
+import { sendStaffInvitationMail } from "@/actions/email.action";
 import { apiClient } from "@/transport/apiClient";
 import { toast } from "sonner";
 
@@ -82,6 +86,18 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
     const [inviteError, setInviteError] = useState<string | null>(null);
     const [submittingInvite, setSubmittingInvite] = useState(false);
 
+    // Created Invite Success Modal
+    const [createdInviteModal, setCreatedInviteModal] = useState<{
+        open: boolean;
+        fullName: string;
+        email: string;
+        role: string;
+        inviteUrl: string;
+    } | null>(null);
+
+    // Resending state
+    const [resendingId, setResendingId] = useState<string | null>(null);
+
     // Revoke Modal state
     const [revokeTarget, setRevokeTarget] = useState<StaffMemberDto | null>(null);
     const [submittingRevoke, setSubmittingRevoke] = useState(false);
@@ -106,6 +122,39 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
         loadData();
     }, [tenantSlug]);
 
+    const handleCopyInviteLink = (token?: string | null) => {
+        if (!token) return;
+        const url = `${window.location.origin}/invitations/${token}`;
+        navigator.clipboard.writeText(url);
+        toast.success("Invitation link copied to clipboard!");
+    };
+
+    const handleResendInvite = async (member: StaffMemberDto) => {
+        setResendingId(member.id);
+        try {
+            const updated = await staffService.resendInvitation(member.id, tenantSlug);
+            const inviteUrl = `${window.location.origin}/invitations/${updated.invitationToken}`;
+            navigator.clipboard.writeText(inviteUrl);
+
+            // Attempt to dispatch email via SMTP (fails gracefully if SMTP not configured)
+            sendStaffInvitationMail({
+                to: member.email,
+                inviteeName: member.fullName,
+                workspaceName: tenantSlug,
+                role: member.role,
+                facilityName: member.facilityName,
+                inviteUrl
+            }).catch((err) => console.warn("[SMTP Resend Warning]", err));
+
+            toast.success(`Invitation refreshed! Link copied to clipboard.`);
+            await loadData();
+        } catch (err: any) {
+            toast.error(err.message || "Failed to resend invitation");
+        } finally {
+            setResendingId(null);
+        }
+    };
+
     const handleInviteSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setInviteError(null);
@@ -122,7 +171,7 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
 
         setSubmittingInvite(true);
         try {
-            await staffService.inviteStaffMember({
+            const created = await staffService.inviteStaffMember({
                 tenantSlug,
                 fullName: fullName.trim(),
                 email: email.trim(),
@@ -130,12 +179,41 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                 facilityId: selectedFacilityId ? selectedFacilityId : undefined
             });
 
-            toast.success(`Invitation sent successfully to ${email}`);
+            const inviteUrl = created.invitationToken
+                ? `${window.location.origin}/invitations/${created.invitationToken}`
+                : "";
+
+            // Attempt to dispatch email via SMTP (fails gracefully without interrupting invite flow)
+            if (inviteUrl) {
+                const selectedFac = facilities.find(f => f.id === selectedFacilityId);
+                sendStaffInvitationMail({
+                    to: email.trim(),
+                    inviteeName: fullName.trim(),
+                    workspaceName: tenantSlug,
+                    role,
+                    facilityName: selectedFac?.name,
+                    inviteUrl
+                }).catch(err => console.warn("[SMTP Dispatch Warning]", err));
+            }
+
             setInviteOpen(false);
             setFullName("");
             setEmail("");
             setRole("Doctor");
             setSelectedFacilityId("");
+
+            if (inviteUrl) {
+                setCreatedInviteModal({
+                    open: true,
+                    fullName: created.fullName,
+                    email: created.email,
+                    role: created.role,
+                    inviteUrl
+                });
+            } else {
+                toast.success(`Invitation sent successfully to ${email}`);
+            }
+
             await loadData();
         } catch (err: any) {
             const msg = err.message || err.response?.data?.message || "Failed to send staff invitation.";
@@ -413,15 +491,46 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                                             Owner
                                                         </span>
                                                     ) : (
-                                                        <Button
-                                                            size="sm"
-                                                            variant="ghost"
-                                                            onClick={() => setRevokeTarget(member)}
-                                                            className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg text-xs font-semibold gap-1"
-                                                        >
-                                                            <IconTrash className="h-3.5 w-3.5" />
-                                                            <span className="hidden sm:inline">Revoke</span>
-                                                        </Button>
+                                                        <div className="flex items-center justify-end gap-1.5">
+                                                            {isPending && member.invitationToken && (
+                                                                <>
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        onClick={() => handleCopyInviteLink(member.invitationToken)}
+                                                                        title="Copy direct invitation link"
+                                                                        className="h-8 px-2.5 text-slate-700 dark:text-slate-200 hover:text-primary rounded-lg text-xs font-semibold gap-1.5 border-slate-200 dark:border-slate-800"
+                                                                    >
+                                                                        <IconCopy className="h-3.5 w-3.5" />
+                                                                        <span className="hidden lg:inline">Copy Link</span>
+                                                                    </Button>
+                                                                    <Button
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        disabled={resendingId === member.id}
+                                                                        onClick={() => handleResendInvite(member)}
+                                                                        title="Refresh token and extend validity"
+                                                                        className="h-8 px-2.5 text-slate-700 dark:text-slate-200 hover:text-primary rounded-lg text-xs font-semibold gap-1.5 border-slate-200 dark:border-slate-800"
+                                                                    >
+                                                                        {resendingId === member.id ? (
+                                                                            <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                                                                        ) : (
+                                                                            <IconRefresh className="h-3.5 w-3.5" />
+                                                                        )}
+                                                                        <span className="hidden lg:inline">Resend</span>
+                                                                    </Button>
+                                                                </>
+                                                            )}
+                                                            <Button
+                                                                size="sm"
+                                                                variant="ghost"
+                                                                onClick={() => setRevokeTarget(member)}
+                                                                className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg text-xs font-semibold gap-1"
+                                                            >
+                                                                <IconTrash className="h-3.5 w-3.5" />
+                                                                <span className="hidden sm:inline">Revoke</span>
+                                                            </Button>
+                                                        </div>
                                                     )}
                                                 </td>
                                             </tr>
@@ -604,6 +713,65 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                     <span>Confirm Revoke</span>
                                 </>
                             )}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* 6. Created Invite Link Success Dialog */}
+            <Dialog open={!!createdInviteModal?.open} onOpenChange={(open) => !open && setCreatedInviteModal(null)}>
+                <DialogContent className="sm:max-w-lg rounded-2xl">
+                    <DialogHeader>
+                        <div className="size-10 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-2">
+                            <IconCheck className="h-5 w-5" />
+                        </div>
+                        <DialogTitle className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                            Invitation Created!
+                        </DialogTitle>
+                        <DialogDescription className="text-xs text-slate-500">
+                            <strong>{createdInviteModal?.fullName}</strong> ({createdInviteModal?.email}) has been invited as <strong>{createdInviteModal?.role}</strong>.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-3 py-2">
+                        <p className="text-xs text-slate-600 dark:text-slate-400">
+                            An automated invitation email was dispatched via SMTP. You can also directly copy and share this link via WhatsApp, Slack, or SMS:
+                        </p>
+
+                        <div className="flex items-center gap-2">
+                            <Input
+                                readOnly
+                                value={createdInviteModal?.inviteUrl || ""}
+                                className="h-9 text-xs font-mono rounded-xl bg-slate-50 dark:bg-slate-900 select-all"
+                            />
+                            <Button
+                                size="sm"
+                                onClick={() => {
+                                    if (createdInviteModal?.inviteUrl) {
+                                        navigator.clipboard.writeText(createdInviteModal.inviteUrl);
+                                        toast.success("Link copied to clipboard!");
+                                    }
+                                }}
+                                className="h-9 px-3 text-xs font-semibold rounded-xl gap-1.5 shrink-0"
+                            >
+                                <IconCopy className="h-3.5 w-3.5" />
+                                <span>Copy</span>
+                            </Button>
+                        </div>
+
+                        <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-500">
+                            • This invitation token is valid for <strong>7 days</strong>.<br />
+                            • The invitee can sign in or create their personal account to immediately join your workspace.
+                        </div>
+                    </div>
+
+                    <DialogFooter className="pt-2 sm:justify-end">
+                        <Button
+                            type="button"
+                            onClick={() => setCreatedInviteModal(null)}
+                            className="rounded-xl text-xs font-semibold"
+                        >
+                            Done
                         </Button>
                     </DialogFooter>
                 </DialogContent>

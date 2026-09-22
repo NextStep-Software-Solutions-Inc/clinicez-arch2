@@ -11,6 +11,8 @@ export interface StaffMemberDto {
   facilityName?: string | null;
   joinedAt?: string | null;
   createdAt: string;
+  invitationToken?: string | null;
+  invitationExpiresAt?: string | null;
 }
 
 export interface StaffQuotaDto {
@@ -33,6 +35,26 @@ export interface InviteStaffRequest {
   facilityId?: string;
 }
 
+export interface InvitationDetailsDto {
+  id: string;
+  tenantName: string;
+  tenantSlug: string;
+  inviteeFullName: string;
+  inviteeEmail: string;
+  role: string;
+  facilityName?: string | null;
+  isExpired: boolean;
+  isAlreadyAccepted: boolean;
+  expiresAt?: string | null;
+}
+
+export interface AcceptInvitationResultDto {
+  tenantSlug: string;
+  workspaceName: string;
+  role: string;
+  fullName: string;
+}
+
 export const staffService = {
   getTenantStaff: async (tenantSlug: string): Promise<TenantStaffResultDto> => {
     const res = await apiClient.get<TenantStaffResultDto>(`/staff?tenantSlug=${tenantSlug}`);
@@ -46,6 +68,21 @@ export const staffService = {
 
   revokeStaffMember: async (id: string, tenantSlug: string): Promise<{ success: boolean; message: string }> => {
     const res = await apiClient.delete<{ success: boolean; message: string }>(`/staff/${id}?tenantSlug=${tenantSlug}`);
+    return res.data;
+  },
+
+  resendInvitation: async (id: string, tenantSlug: string): Promise<StaffMemberDto> => {
+    const res = await apiClient.post<StaffMemberDto>(`/staff/invitations/${id}/resend?tenantSlug=${tenantSlug}`);
+    return res.data;
+  },
+
+  getInvitationDetails: async (token: string): Promise<InvitationDetailsDto> => {
+    const res = await apiClient.get<InvitationDetailsDto>(`/staff/invitations/${token}`);
+    return res.data;
+  },
+
+  acceptInvitation: async (token: string): Promise<AcceptInvitationResultDto> => {
+    const res = await apiClient.post<AcceptInvitationResultDto>(`/staff/invitations/${token}/accept`);
     return res.data;
   },
 };

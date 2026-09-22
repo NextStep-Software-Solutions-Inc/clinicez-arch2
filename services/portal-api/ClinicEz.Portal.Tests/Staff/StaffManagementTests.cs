@@ -169,4 +169,132 @@ public class StaffManagementTests : IDisposable
 
         Assert.Contains("cannot be revoked", ex.Message);
     }
+
+    [Fact]
+    public async Task GetInvitationDetails_ValidToken_ReturnsMetadata()
+    {
+        var token = Guid.NewGuid().ToString("N");
+        var member = new StaffMember
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            Email = "candidate@metro.ph",
+            FullName = "Dr. Clara Osmeña",
+            Role = "Doctor",
+            Status = "PendingInvitation",
+            InvitationToken = token,
+            InvitationExpiresAt = DateTime.UtcNow.AddDays(7),
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = "owner_clerk_123"
+        };
+        _context.StaffMembers.Add(member);
+        await _context.SaveChangesAsync();
+
+        var handler = new GetInvitationDetailsQueryHandler(_context);
+        var result = await handler.Handle(new GetInvitationDetailsQuery(token), CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal("Metro Clinic", result.TenantName);
+        Assert.Equal("candidate@metro.ph", result.InviteeEmail);
+        Assert.Equal("Dr. Clara Osmeña", result.InviteeFullName);
+        Assert.Equal("Doctor", result.Role);
+        Assert.False(result.IsExpired);
+        Assert.False(result.IsAlreadyAccepted);
+    }
+
+    [Fact]
+    public async Task AcceptInvitation_ValidToken_LinksClerkUserIdAndActivates()
+    {
+        var token = Guid.NewGuid().ToString("N");
+        var member = new StaffMember
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            Email = "doctor.clara@metro.ph",
+            FullName = "Dr. Clara Osmeña",
+            Role = "Doctor",
+            Status = "PendingInvitation",
+            InvitationToken = token,
+            InvitationExpiresAt = DateTime.UtcNow.AddDays(7),
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = "owner_clerk_123"
+        };
+        _context.StaffMembers.Add(member);
+        await _context.SaveChangesAsync();
+
+        var handler = new AcceptInvitationCommandHandler(_context);
+        var result = await handler.Handle(new AcceptInvitationCommand(token, "clerk_user_clara_999", "doctor.clara@metro.ph"), CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal(TenantSlug, result.TenantSlug);
+        Assert.Equal("Doctor", result.Role);
+
+        var memberInDb = await _context.StaffMembers.FindAsync(member.Id);
+        Assert.NotNull(memberInDb);
+        Assert.Equal("Active", memberInDb.Status);
+        Assert.Equal("clerk_user_clara_999", memberInDb.UserId);
+        Assert.NotNull(memberInDb.JoinedAt);
+    }
+
+    [Fact]
+    public async Task AcceptInvitation_ExpiredToken_ThrowsInvalidOperationException()
+    {
+        var token = Guid.NewGuid().ToString("N");
+        var member = new StaffMember
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            Email = "expired@metro.ph",
+            FullName = "Nurse Expired",
+            Role = "Nurse",
+            Status = "PendingInvitation",
+            InvitationToken = token,
+            InvitationExpiresAt = DateTime.UtcNow.AddDays(-2), // Expired 2 days ago
+            CreatedAt = DateTime.UtcNow.AddDays(-9),
+            CreatedBy = "owner_clerk_123"
+        };
+        _context.StaffMembers.Add(member);
+        await _context.SaveChangesAsync();
+
+        var handler = new AcceptInvitationCommandHandler(_context);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            handler.Handle(new AcceptInvitationCommand(token, "clerk_user_any"), CancellationToken.None));
+
+        Assert.Contains("expired", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ResendStaffInvitation_PendingMember_GeneratesFreshTokenAndExtendsExpiry()
+    {
+        var originalToken = "original_token_123";
+        var originalExpiry = DateTime.UtcNow.AddDays(-1); // was expired
+        var member = new StaffMember
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            Email = "nurse.renew@metro.ph",
+            FullName = "Nurse Renew",
+            Role = "Nurse",
+            Status = "PendingInvitation",
+            InvitationToken = originalToken,
+            InvitationExpiresAt = originalExpiry,
+            CreatedAt = DateTime.UtcNow.AddDays(-8),
+            CreatedBy = "owner_clerk_123"
+        };
+        _context.StaffMembers.Add(member);
+        await _context.SaveChangesAsync();
+
+        var handler = new ResendStaffInvitationCommandHandler(_context);
+        var result = await handler.Handle(new ResendStaffInvitationCommand(TenantSlug, member.Id), CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.NotEqual(originalToken, result.InvitationToken);
+        Assert.NotNull(result.InvitationExpiresAt);
+        Assert.True(result.InvitationExpiresAt > DateTime.UtcNow.AddDays(6));
+
+        var inDb = await _context.StaffMembers.FindAsync(member.Id);
+        Assert.NotNull(inDb);
+        Assert.Equal(result.InvitationToken, inDb.InvitationToken);
+        Assert.True(inDb.InvitationExpiresAt > DateTime.UtcNow);
+    }
 }

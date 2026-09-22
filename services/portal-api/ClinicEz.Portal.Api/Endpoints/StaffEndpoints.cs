@@ -172,5 +172,120 @@ public class StaffEndpoints : IEndpoint
         .WithName("RevokeStaffMember")
         .WithDescription("Revokes an invitation or removes a staff member from the workspace.")
         .WithTags("Staff");
+
+        // 4. Get public invitation details by token
+        app.MapGet("/staff/invitations/{token}", async (
+            string token,
+            ISender sender) =>
+        {
+            try
+            {
+                var result = await sender.Send(new GetInvitationDetailsQuery(token));
+                return Results.Ok(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+        })
+        .AllowAnonymous()
+        .WithName("GetInvitationDetails")
+        .WithDescription("Retrieves workspace and invitee details for a staff invitation token.")
+        .WithTags("Staff");
+
+        // 5. Accept an invitation and link Clerk user identity
+        app.MapPost("/staff/invitations/{token}/accept", async (
+            string token,
+            HttpContext httpContext,
+            ISender sender) =>
+        {
+            var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(clerkUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var email = httpContext.User.FindFirst(ClaimTypes.Email)?.Value;
+
+            try
+            {
+                var result = await sender.Send(new AcceptInvitationCommand(token, clerkUserId, email));
+                return Results.Ok(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { Message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+        })
+        .RequireAuthorization()
+        .WithName("AcceptStaffInvitation")
+        .WithDescription("Accepts an invitation to join a workspace using an authenticated user identity.")
+        .WithTags("Staff");
+
+        // 6. Resend or refresh a staff invitation token
+        app.MapPost("/staff/invitations/{id:guid}/resend", async (
+            Guid id,
+            string tenantSlug,
+            HttpContext httpContext,
+            IApplicationDbContext context,
+            ISender sender) =>
+        {
+            var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(clerkUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var tenant = await context.Tenants
+                .FirstOrDefaultAsync(t => t.TenantSlug.ToLower() == tenantSlug.ToLower());
+
+            if (tenant == null)
+            {
+                return Results.NotFound(new { Message = "Workspace not found." });
+            }
+
+            var isOwner = tenant.OwnerId == clerkUserId;
+            var isAdmin = !isOwner && await context.StaffMembers.AnyAsync(s => 
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == "Admin" && s.Status == "Active");
+
+            if (!isOwner && !isAdmin)
+            {
+                return Results.Forbid();
+            }
+
+            try
+            {
+                var result = await sender.Send(new ResendStaffInvitationCommand(tenantSlug, id));
+                return Results.Ok(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return Results.NotFound(new { Message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+        })
+        .RequireAuthorization()
+        .WithName("ResendStaffInvitation")
+        .WithDescription("Refreshes the cryptographic invitation token and resets expiration for a pending staff invite.")
+        .WithTags("Staff");
     }
 }

@@ -100,7 +100,9 @@ public class InviteStaffMemberCommandHandler(
             newMember.FacilityId,
             facilityName,
             newMember.JoinedAt,
-            newMember.CreatedAt
+            newMember.CreatedAt,
+            newMember.InvitationToken,
+            newMember.InvitationExpiresAt
         );
     }
 }

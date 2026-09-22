@@ -21,7 +21,9 @@ public record StaffMemberDto(
     Guid? FacilityId,
     string? FacilityName,
     DateTime? JoinedAt,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+    string? InvitationToken = null,
+    DateTime? InvitationExpiresAt = null
 );
 
 public record StaffQuotaDto(
@@ -101,7 +103,9 @@ public class GetTenantStaffQueryHandler(IApplicationDbContext context) : IReques
             m.FacilityId,
             m.Facility != null ? m.Facility.Name : null,
             m.JoinedAt,
-            m.CreatedAt
+            m.CreatedAt,
+            m.InvitationToken,
+            m.InvitationExpiresAt
         )).ToList();
 
         var quotaDto = new StaffQuotaDto(
