@@ -262,16 +262,32 @@ public class ProcessXenditWebhookCommandHandler : IRequestHandler<ProcessXenditW
             return false;
         }
 
+        string? planSlug = null;
+        if (data.TryGetValue("metadata", out var metaEl) && metaEl.ValueKind == JsonValueKind.Object)
+        {
+            if (metaEl.TryGetProperty("planSlug", out var pProp))
+                planSlug = pProp.GetString();
+        }
+
+        if (string.IsNullOrEmpty(planSlug))
+        {
+            planSlug = tenant.SubscriptionPlanId;
+        }
+
+        if (!string.IsNullOrEmpty(planSlug) && planSlug.Length > 20)
+        {
+            var planObj = await _context.SubscriptionPlans.FirstOrDefaultAsync(p => p.Id.ToString() == planSlug, cancellationToken);
+            if (planObj != null) planSlug = planObj.Slug.ToLower();
+        }
+
+        if (string.IsNullOrEmpty(planSlug))
+        {
+            planSlug = "starter";
+        }
+
         var existingInvoice = await _context.BillingInvoices.FirstOrDefaultAsync(i => i.XenditInvoiceId == invoiceId, cancellationToken);
         if (existingInvoice == null)
         {
-            var planSlug = tenant.SubscriptionPlanId;
-            if (!string.IsNullOrEmpty(planSlug) && planSlug.Length > 20)
-            {
-                var planObj = await _context.SubscriptionPlans.FirstOrDefaultAsync(p => p.Id.ToString() == planSlug, cancellationToken);
-                if (planObj != null) planSlug = planObj.Slug.ToLower();
-            }
-
             existingInvoice = new BillingInvoice
             {
                 TenantId = tenant.Id,
@@ -280,7 +296,7 @@ public class ProcessXenditWebhookCommandHandler : IRequestHandler<ProcessXenditW
                 Amount = amountVal,
                 Currency = currency,
                 Status = "Paid",
-                PlanSlug = planSlug ?? "starter",
+                PlanSlug = planSlug,
                 IsAnnual = amountVal > 15000,
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = "Webhook"
@@ -322,6 +338,7 @@ public class ProcessXenditWebhookCommandHandler : IRequestHandler<ProcessXenditW
         };
 
         tenant.SubscriptionStatus = "ACTIVE";
+        tenant.SubscriptionPlanId = planSlug;
 
         _context.PaymentReceipts.Add(receipt);
         await _context.SaveChangesAsync(cancellationToken);
@@ -384,16 +401,32 @@ public class ProcessXenditWebhookCommandHandler : IRequestHandler<ProcessXenditW
             }
         }
 
+        string? planSlug = null;
+        if (data.TryGetValue("metadata", out var metaEl) && metaEl.ValueKind == JsonValueKind.Object)
+        {
+            if (metaEl.TryGetProperty("planSlug", out var pProp))
+                planSlug = pProp.GetString();
+        }
+
+        if (string.IsNullOrEmpty(planSlug))
+        {
+            planSlug = tenant.SubscriptionPlanId;
+        }
+
+        if (!string.IsNullOrEmpty(planSlug) && planSlug.Length > 20)
+        {
+            var planObj = await _context.SubscriptionPlans.FirstOrDefaultAsync(p => p.Id.ToString() == planSlug, cancellationToken);
+            if (planObj != null) planSlug = planObj.Slug.ToLower();
+        }
+
+        if (string.IsNullOrEmpty(planSlug))
+        {
+            planSlug = "starter";
+        }
+
         var billingInvoice = await _context.BillingInvoices.FirstOrDefaultAsync(i => i.XenditInvoiceId == invoiceId, cancellationToken);
         if (billingInvoice == null)
         {
-            var planSlug = tenant.SubscriptionPlanId;
-            if (!string.IsNullOrEmpty(planSlug) && planSlug.Length > 20)
-            {
-                var planObj = await _context.SubscriptionPlans.FirstOrDefaultAsync(p => p.Id.ToString() == planSlug, cancellationToken);
-                if (planObj != null) planSlug = planObj.Slug.ToLower();
-            }
-
             billingInvoice = new BillingInvoice
             {
                 TenantId = tenant.Id,
@@ -402,7 +435,7 @@ public class ProcessXenditWebhookCommandHandler : IRequestHandler<ProcessXenditW
                 Amount = amountVal,
                 Currency = currency,
                 Status = "Paid",
-                PlanSlug = planSlug ?? "starter",
+                PlanSlug = planSlug,
                 IsAnnual = amountVal > 15000,
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = "Webhook"
@@ -463,6 +496,7 @@ public class ProcessXenditWebhookCommandHandler : IRequestHandler<ProcessXenditW
         };
 
         tenant.SubscriptionStatus = "ACTIVE";
+        tenant.SubscriptionPlanId = planSlug;
 
         _context.PaymentReceipts.Add(receipt);
         await _context.SaveChangesAsync(cancellationToken);
