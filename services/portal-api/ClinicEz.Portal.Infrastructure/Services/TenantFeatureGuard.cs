@@ -17,8 +17,20 @@ public class TenantFeatureGuard(ApplicationDbContext context) : ITenantFeatureGu
             t.Id.ToString() == tenantId || t.TenantSlug == tenantId, cancellationToken) 
             ?? throw new InvalidOperationException("Tenant not found");
 
-        var limits = PlanFeaturesConfig.GetLimitsForPlan(tenant.SubscriptionPlanId);
-        if (limits == null)
+        var effectivePlanId = tenant.SubscriptionPlanId;
+        if (string.IsNullOrEmpty(effectivePlanId) && tenant.SubscriptionStatus == "TRIALING")
+        {
+            effectivePlanId = "starter";
+        }
+
+        // Check if 14-day free trial has expired
+        if (tenant.SubscriptionStatus == "TRIALING" && DateTime.UtcNow > tenant.CreatedAt.AddDays(14))
+        {
+            throw new InvalidOperationException("Your 14-day free trial has expired. Please upgrade to an active subscription plan to continue provisioning facilities.");
+        }
+
+        var limits = PlanFeaturesConfig.GetLimitsForPlan(effectivePlanId);
+        if (limits == null || tenant.SubscriptionStatus == "EXPIRED")
         {
             throw new InvalidOperationException("Feature Access Restricted: An active plan subscription is required to provision facilities. Please select and activate a subscription plan.");
         }

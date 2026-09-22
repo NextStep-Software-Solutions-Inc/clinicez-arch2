@@ -132,12 +132,31 @@ public class GetBillingInfoQueryHandler(IApplicationDbContext context) : IReques
             isAnnual = dbInvoices.First().IsAnnual;
         }
 
+        var subscriptionStatus = tenant.SubscriptionStatus;
         DateTime? subscriptionExpiresAt = latestReceipt?.ExpiryDate;
 
-        PlanLimitsDto? planLimitsDto = null;
-        if (!string.IsNullOrEmpty(tenant.SubscriptionPlanId))
+        var effectivePlanId = tenant.SubscriptionPlanId;
+        if (string.IsNullOrEmpty(effectivePlanId) && subscriptionStatus == "TRIALING")
         {
-            var planLimits = PlanFeaturesConfig.GetLimitsForPlan(tenant.SubscriptionPlanId);
+            effectivePlanId = "starter";
+        }
+
+        // If trialing without paid receipts, calculate trial expiration as 14 days from tenant creation
+        if (subscriptionExpiresAt == null && subscriptionStatus == "TRIALING")
+        {
+            subscriptionExpiresAt = tenant.CreatedAt.AddDays(14);
+        }
+
+        // If trial has passed its 14-day evaluation window, mark status as EXPIRED
+        if (subscriptionStatus == "TRIALING" && subscriptionExpiresAt.HasValue && DateTime.UtcNow > subscriptionExpiresAt.Value)
+        {
+            subscriptionStatus = "EXPIRED";
+        }
+
+        PlanLimitsDto? planLimitsDto = null;
+        if (subscriptionStatus != "EXPIRED" && !string.IsNullOrEmpty(effectivePlanId))
+        {
+            var planLimits = PlanFeaturesConfig.GetLimitsForPlan(effectivePlanId);
             if (planLimits != null)
             {
                 planLimitsDto = new PlanLimitsDto(
@@ -158,8 +177,8 @@ public class GetBillingInfoQueryHandler(IApplicationDbContext context) : IReques
         );
 
         return new BillingInfoDto(
-            tenant.SubscriptionStatus,
-            tenant.SubscriptionPlanId,
+            subscriptionStatus,
+            effectivePlanId,
             invoices,
             tenant.Name,
             tenant.TradingName,

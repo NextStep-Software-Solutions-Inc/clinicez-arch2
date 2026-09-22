@@ -87,6 +87,8 @@ public class RegisterTenantCommandHandler : IRequestHandler<RegisterTenantComman
             FirstName = request.FirstName,
             LastName = request.LastName,
             Email = request.Email,
+            SubscriptionStatus = "TRIALING",
+            SubscriptionPlanId = "starter",
             CreatedAt = DateTime.UtcNow,
             CreatedBy = clerkUserId
         };

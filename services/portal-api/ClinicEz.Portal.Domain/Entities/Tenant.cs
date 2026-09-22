@@ -19,7 +19,7 @@ public class Tenant : BaseEntity
     public string XenditCustomerId { get; set; } = string.Empty;
     public string SubscriptionId { get; set; } = string.Empty;
     public string SubscriptionStatus { get; set; } = "TRIALING";
-    public string SubscriptionPlanId { get; set; } = string.Empty;
+    public string SubscriptionPlanId { get; set; } = "starter";
 
     // Contact & Address Details (Xendit Mapping)
     public string? PhoneNumber { get; set; }

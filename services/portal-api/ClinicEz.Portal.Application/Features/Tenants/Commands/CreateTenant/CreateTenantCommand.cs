@@ -65,6 +65,8 @@ public class CreateTenantCommandHandler : IRequestHandler<CreateTenantCommand, T
             FirstName = request.FirstName ?? string.Empty,
             LastName = request.LastName ?? string.Empty,
             Email = request.Email ?? string.Empty,
+            SubscriptionStatus = "TRIALING",
+            SubscriptionPlanId = "starter",
             CreatedAt = DateTime.UtcNow,
             CreatedBy = request.OwnerId
         };
