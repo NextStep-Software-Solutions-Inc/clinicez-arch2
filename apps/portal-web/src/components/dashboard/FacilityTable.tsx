@@ -12,6 +12,8 @@ interface Facility {
     facilityType: "Clinic" | "Laboratory" | "Pharmacy" | "Organization";
     status: "Provisioning" | "Active" | "Suspended" | "Failed";
     createdAt: string;
+    slug?: string;
+    consoleUrl?: string;
 }
 
 interface FacilityTableProps {
@@ -54,8 +56,19 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
     }, [tenantSlug, facilityType]);
 
     const handleOpenConsole = (facility: Facility) => {
-        const port = DASHBOARD_PORTS[facility.facilityType] || 5245;
-        window.open(`http://localhost:${port}`, "_blank");
+        if (facility.consoleUrl) {
+            window.open(facility.consoleUrl, "_blank");
+            return;
+        }
+
+        const isLocal = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+        if (isLocal) {
+            const port = DASHBOARD_PORTS[facility.facilityType] || 5245;
+            window.open(`http://localhost:${port}`, "_blank");
+        } else {
+            const slug = facility.slug || facility.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+            window.open(`https://${slug}.clinicez.ph`, "_blank");
+        }
     };
 
     if (loading) {
@@ -104,7 +117,13 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                         <tr key={fac.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
                             <td className="px-6 py-4">
                                 <div className="font-semibold text-slate-800 dark:text-slate-100">{fac.name}</div>
-                                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">{fac.facilityType}</div>
+                                <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium mt-0.5">
+                                    <span className="font-bold uppercase tracking-wider text-[10px]">{fac.facilityType}</span>
+                                    <span>•</span>
+                                    <span className="font-mono text-[11px] text-primary/85 dark:text-primary/75">
+                                        {fac.slug ? `${fac.slug}.clinicez.ph` : "Console"}
+                                    </span>
+                                </div>
                             </td>
                             <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400 font-medium">
                                 {new Date(fac.createdAt).toLocaleDateString(undefined, {

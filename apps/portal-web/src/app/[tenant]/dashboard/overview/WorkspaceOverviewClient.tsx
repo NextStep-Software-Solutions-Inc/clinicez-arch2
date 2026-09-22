@@ -33,6 +33,8 @@ interface Facility {
     facilityType: "Clinic" | "Laboratory" | "Pharmacy" | "Organization";
     status: "Provisioning" | "Active" | "Suspended" | "Failed";
     createdAt: string;
+    slug?: string;
+    consoleUrl?: string;
 }
 
 const DASHBOARD_PORTS: Record<string, number> = {
@@ -92,13 +94,18 @@ export default function WorkspaceOverviewClient({ tenantSlug }: { tenantSlug: st
     const apiPercent = maxApi > 0 && maxApi < 1000000 ? Math.min(100, Math.round(((usage?.monthlyApiQuotaUsed ?? 0) / maxApi) * 100)) : 0;
 
     const handleOpenConsole = (facility: Facility) => {
+        if (facility.consoleUrl) {
+            window.open(facility.consoleUrl, "_blank");
+            return;
+        }
+
         if (typeof window === "undefined") return;
         const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
         if (isLocal) {
             const port = DASHBOARD_PORTS[facility.facilityType] || 5245;
             window.open(`http://localhost:${port}`, "_blank");
         } else {
-            const slug = facility.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+            const slug = facility.slug || facility.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
             window.open(`https://${slug}.clinicez.ph`, "_blank");
         }
     };
