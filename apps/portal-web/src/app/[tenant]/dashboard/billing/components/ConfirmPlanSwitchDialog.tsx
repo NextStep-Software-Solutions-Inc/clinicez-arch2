@@ -14,7 +14,8 @@ import {
   CheckCircle2, 
   ShieldCheck, 
   AlertTriangle,
-  Info
+  Info,
+  Loader2
 } from "lucide-react"
 import { BillingInfo } from "@/services/billing.service"
 
@@ -133,9 +134,16 @@ export default function ConfirmPlanSwitchDialog({
             type="button"
             onClick={onConfirm}
             disabled={isLoading}
-            className="rounded-full px-5 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90"
+            className="rounded-full px-5 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5"
           >
-            {isLoading ? "Redirecting..." : "Confirm & Proceed"}
+            {isLoading ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span>Redirecting...</span>
+              </>
+            ) : (
+              "Confirm & Proceed"
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

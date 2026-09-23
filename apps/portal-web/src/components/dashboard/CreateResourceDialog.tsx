@@ -17,6 +17,7 @@ import {
     IconArrowRight,
     IconInfoCircle 
 } from "@tabler/icons-react";
+import { triggerNavStart } from "./NavigationProgressBar";
 
 export default function CreateResourceDialog() {
     const searchParams = useSearchParams();
@@ -61,6 +62,7 @@ export default function CreateResourceDialog() {
 
     const handleGoToBilling = () => {
         handleOpenChange(false);
+        triggerNavStart();
         router.push(`/${tenantSlug}/dashboard/billing`);
     };
 

@@ -22,6 +22,7 @@ import {
 import { cn } from "@/lib/utils"
 import { z } from "zod"
 import { toast } from "sonner"
+import { Loader2 } from "lucide-react"
 import { BillingInfo, billingService } from "@/services/billing.service"
 
 const billingSchema = z.object({
@@ -367,9 +368,16 @@ export default function BillingSetupDialog({
               <Button
                 type="submit"
                 disabled={!isValid || isSubmitLoading}
-                className="rounded-full px-6 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="rounded-full px-6 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
               >
-                {isSubmitLoading ? "Redirecting..." : "Proceed to Payment"}
+                {isSubmitLoading ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>Redirecting...</span>
+                  </>
+                ) : (
+                  "Proceed to Payment"
+                )}
               </Button>
             </DialogFooter>
           </div>

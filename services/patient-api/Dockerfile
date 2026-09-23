@@ -26,6 +26,11 @@ RUN dotnet publish "ClinicEz.Patient.Api.csproj" -c Release -o /app/publish /p:U
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 
+# Install Kerberos library required by Npgsql GSSAPI authentication
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgssapi-krb5-2 \
+    && rm -rf /var/lib/apt/lists/*
+
 # Use the built-in non-root user from the .NET runtime image (APP_UID)
 USER $APP_UID
 

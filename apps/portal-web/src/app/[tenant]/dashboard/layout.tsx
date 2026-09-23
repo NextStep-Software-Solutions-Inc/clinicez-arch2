@@ -1,6 +1,7 @@
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
 import CreateResourceDialog from "@/components/dashboard/CreateResourceDialog";
 import TrialCountdownBanner from "@/components/dashboard/TrialCountdownBanner";
+import NavigationProgressBar from "@/components/dashboard/NavigationProgressBar";
 import { SiteHeader } from "@/components/dashboard/site-header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { auth, currentUser } from "@clerk/nextjs/server";
@@ -80,6 +81,7 @@ export default async function TenantDashboardLayout({
             >
                 <AppSidebar variant="inset" name={workplaceName} user={userDetails} />
                 <SidebarInset className="overflow-auto">
+                    <NavigationProgressBar />
                     <SiteHeader />
                     <TrialCountdownBanner tenantSlug={routeTenantSlug} />
                     <div className="flex flex-1 flex-col">

@@ -17,14 +17,15 @@ import PricingPlansSection from "./PricingPlansSection"
 import CancelPlanDialog from "./CancelPlanDialog"
 import BillingSetupDialog from "./BillingSetupDialog"
 import ConfirmPlanSwitchDialog from "./ConfirmPlanSwitchDialog"
+import { PlansTabSkeleton } from "./BillingSkeletons"
 
 interface PlansTabContentProps {
   tenantId: string
 }
 
 export default function PlansTabContent({ tenantId }: PlansTabContentProps) {
-  const { billingInfo, mutate } = useBillingInfo(tenantId)
-  const { plans: tiers } = usePlans()
+  const { billingInfo, mutate, isLoading: isBillingLoading } = useBillingInfo(tenantId)
+  const { plans: tiers, isLoading: isPlansLoading } = usePlans()
 
   const [isLoading, setIsLoading] = useState<string | null>(null)
   const [isPortalLoading, setIsPortalLoading] = useState(false)
@@ -127,8 +128,14 @@ export default function PlansTabContent({ tenantId }: PlansTabContentProps) {
     }
   }
 
+  const isInitialLoading = (isBillingLoading || isPlansLoading) && (!billingInfo || tiers.length === 0)
+
+  if (isInitialLoading) {
+    return <PlansTabSkeleton />
+  }
+
   return (
-    <div className="space-y-8">
+    <div id="billing-plans-section" className="space-y-8 animate-in fade-in-50 duration-300">
       {isSubscribed ? (
         <div className="flex flex-col gap-6">
           {/* Active Plan Overview */}

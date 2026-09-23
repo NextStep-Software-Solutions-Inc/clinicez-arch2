@@ -1,5 +1,5 @@
 import React from "react"
-import { CheckCircle2 } from "lucide-react"
+import { CheckCircle2, Loader2 } from "lucide-react"
 import { BillingPlan, BillingInfo } from "@/services/billing.service"
 
 interface PricingPlansSectionProps {
@@ -126,15 +126,20 @@ export default function PricingPlansSection({
                       : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
                 } ${isLoading === tier.id ? 'opacity-70 cursor-not-allowed' : ''}`}
               >
-                {isLoading === tier.id 
-                  ? 'Loading...' 
-                  : isCurrentPlan
-                    ? 'Active Plan'
-                    : tier.requiresCheckout
-                      ? isSubscribed
-                        ? 'Switch to this Plan'
-                        : `Subscribe to ${tier.name}` 
-                      : tier.id === 'enterprise' ? 'Contact Sales' : 'Get Started'}
+                {isLoading === tier.id ? (
+                  <span className="inline-flex items-center justify-center gap-1.5">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>Processing...</span>
+                  </span>
+                ) : isCurrentPlan ? (
+                  'Active Plan'
+                ) : tier.requiresCheckout ? (
+                  isSubscribed ? (
+                    'Switch to this Plan'
+                  ) : (
+                    `Subscribe to ${tier.name}` 
+                  )
+                ) : tier.id === 'enterprise' ? 'Contact Sales' : 'Get Started'}
               </button>
             </div>
           )

@@ -247,19 +247,17 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
             {/* 1. Header Section */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                    <div className="flex items-center gap-2">
-                        <div className="p-2 rounded-xl bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300">
-                            <IconUsers className="h-6 w-6" />
+                    <div className="flex items-center gap-2.5">
+                        <div className="p-1.5 rounded-lg bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 shrink-0">
+                            <IconUsers className="h-5 w-5" />
                         </div>
-                        <div>
-                            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-slate-50 tracking-tight">
-                                Tenant Team
-                            </h1>
-                            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                                Manage workspace administrators, finance billers, and analysts.
-                            </p>
-                        </div>
+                        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-slate-50 tracking-tight">
+                            Tenant Team
+                        </h1>
                     </div>
+                    <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+                        Manage workspace administrators, finance billers, and analysts.
+                    </p>
                 </div>
 
                 <div className="flex items-center gap-3">
@@ -682,14 +680,14 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
             {/* 6. Created Invite Link Success Dialog */}
             <Dialog open={!!createdInviteModal?.open} onOpenChange={(open) => !open && setCreatedInviteModal(null)}>
                 <DialogContent className="sm:max-w-lg rounded-2xl">
-                    <DialogHeader>
-                        <div className="size-10 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-2">
-                            <IconCheck className="h-5 w-5" />
+                    <DialogHeader className="flex flex-col items-center text-center sm:items-center sm:text-center">
+                        <div className="size-12 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-1">
+                            <IconCheck className="h-6 w-6" />
                         </div>
-                        <DialogTitle className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                        <DialogTitle className="text-xl font-bold text-slate-900 dark:text-slate-100 text-center">
                             Invitation Created!
                         </DialogTitle>
-                        <DialogDescription className="text-xs text-slate-500">
+                        <DialogDescription className="text-xs text-slate-500 text-center max-w-sm">
                             <strong>{createdInviteModal?.fullName}</strong> ({createdInviteModal?.email}) has been invited as <strong>{createdInviteModal?.role}</strong>.
                         </DialogDescription>
                     </DialogHeader>
@@ -730,7 +728,7 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                         <Button
                             type="button"
                             onClick={() => setCreatedInviteModal(null)}
-                            className="rounded-xl text-xs font-semibold"
+                            className="w-full sm:w-auto rounded-xl text-xs font-semibold"
                         >
                             Done
                         </Button>
