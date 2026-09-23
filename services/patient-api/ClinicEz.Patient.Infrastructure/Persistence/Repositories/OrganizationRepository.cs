@@ -13,7 +13,7 @@ public sealed class OrganizationRepository : IOrganizationRepository
 
     public async Task<IReadOnlyList<Organization>> SearchAsync(string? query, int skip, int take, CancellationToken ct = default)
     {
-        var q = _ctx.Organizations.AsQueryable();
+        var q = _ctx.Organizations.Where(o => o.IsPublic).AsQueryable();
         if (!string.IsNullOrWhiteSpace(query))
             q = q.Where(o => EF.Functions.ILike(o.Name, $"%{query}%"));
         return await q.OrderByDescending(o => o.FeaturedScore).ThenBy(o => o.Name)
@@ -42,7 +42,7 @@ public sealed class OrganizationRepository : IOrganizationRepository
 
     public Task<int> CountAsync(string? query, CancellationToken ct = default)
     {
-        var q = _ctx.Organizations.AsQueryable();
+        var q = _ctx.Organizations.Where(o => o.IsPublic).AsQueryable();
         if (!string.IsNullOrWhiteSpace(query))
             q = q.Where(o => EF.Functions.ILike(o.Name, $"%{query}%"));
         return q.CountAsync(ct);

@@ -19,9 +19,11 @@ interface ShellCardProps {
     text: string
     variant?: "default" | "outline"
   }
+  privacyPolicyUrl?: string
+  termsUrl?: string
 }
 
-export default function ShellCard({ image, title, description, button, content }: ShellCardProps) {
+export default function ShellCard({ image, title, description, button, content, privacyPolicyUrl, termsUrl }: ShellCardProps) {
   return (
     <Card className="flex flex-col border-none shadow-none bg-transparent">
       <CardHeader className="pb-4">
@@ -45,10 +47,23 @@ export default function ShellCard({ image, title, description, button, content }
           </div>
         </div>
       </CardContent>
-      <CardFooter className="pt-0">
+      <CardFooter className="pt-0 flex flex-col gap-2">
         <Link href={button.href} className="w-full">
           <Button className="w-full">{button.text}</Button>
         </Link>
+        <div className="flex items-center justify-between w-full text-[11px] text-muted-foreground pt-1">
+          <span className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+            DPA 2012 Compliant
+          </span>
+          <Link
+            href={privacyPolicyUrl || "/privacy"}
+            className="hover:underline hover:text-foreground transition-colors"
+            target={privacyPolicyUrl?.startsWith("http") ? "_blank" : undefined}
+          >
+            Privacy Policy
+          </Link>
+        </div>
       </CardFooter>
     </Card>
   );

@@ -13,7 +13,7 @@ public sealed class ClinicRepository : IClinicRepository
 
     public async Task<IReadOnlyList<Clinic>> SearchAsync(string? query, int skip, int take, CancellationToken ct = default)
     {
-        var q = _ctx.Clinics.AsQueryable();
+        var q = _ctx.Clinics.Where(c => c.IsPublic).AsQueryable();
         if (!string.IsNullOrWhiteSpace(query))
             q = q.Where(c => EF.Functions.ILike(c.Name, $"%{query}%"));
         return await q.OrderByDescending(c => c.FeaturedScore).ThenBy(c => c.Name)
@@ -54,7 +54,7 @@ public sealed class ClinicRepository : IClinicRepository
 
     public Task<int> CountAsync(string? query, CancellationToken ct = default)
     {
-        var q = _ctx.Clinics.AsQueryable();
+        var q = _ctx.Clinics.Where(c => c.IsPublic).AsQueryable();
         if (!string.IsNullOrWhiteSpace(query))
             q = q.Where(c => EF.Functions.ILike(c.Name, $"%{query}%"));
         return q.CountAsync(ct);

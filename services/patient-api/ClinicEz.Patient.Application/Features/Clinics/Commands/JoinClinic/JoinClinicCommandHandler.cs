@@ -23,6 +23,15 @@ public sealed class JoinClinicCommandHandler : IRequestHandler<JoinClinicCommand
 
     public async Task<Guid> Handle(JoinClinicCommand request, CancellationToken cancellationToken)
     {
+        if (!request.ConsentPrivacyPolicy)
+            throw new ValidationException("Consent to the Clinic Privacy Policy is required by data privacy regulations.");
+
+        if (!request.ConsentTermsAndConditions)
+            throw new ValidationException("Consent to the Clinic Terms and Conditions is required.");
+
+        if (!request.ConsentDataSharing)
+            throw new ValidationException("Consent to health data sharing with this facility is required.");
+
         _ = await _patientRepo.GetByIdAsync(request.PatientId, cancellationToken)
             ?? throw new NotFoundException($"Patient '{request.PatientId}' was not found.");
 

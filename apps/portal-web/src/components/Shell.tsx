@@ -12,6 +12,8 @@ interface BaseShellItem {
     alt?: string;
   };
   count: number;
+  privacyPolicyUrl?: string;
+  termsUrl?: string;
 }
 
 interface ClinicItem extends BaseShellItem {
@@ -275,6 +277,8 @@ export default function Shell({ data, type }: ShellProps) {
             title: getContentTitle(type)
           }}
           button={getButtonConfig(type, item.id)}
+          privacyPolicyUrl={item.privacyPolicyUrl || "/privacy"}
+          termsUrl={item.termsUrl || "/terms"}
         />
       )}
     />

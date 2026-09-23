@@ -21,6 +21,8 @@ using ClinicEz.Patient.Infrastructure.Services.Session;
 using ClinicEz.Patient.Infrastructure.Services.Storage;
 using ClinicEz.Patient.Infrastructure.Services.Workers;
 using ClinicEz.Patient.Infrastructure.Services.Notifications;
+using ClinicEz.Patient.Infrastructure.Consumers;
+using MassTransit;
 using StackExchange.Redis;
 
 namespace ClinicEz.Patient.Infrastructure;
@@ -78,6 +80,28 @@ public static class DependencyInjection
             .UsePostgreSqlStorage(c => c.UseNpgsqlConnection(connectionString)));
 
         services.AddHangfireServer();
+
+        // ── MassTransit — RabbitMQ & EF Core Outbox ───────────────────────────
+        services.AddMassTransit(x =>
+        {
+            x.AddConsumer<FacilityCreatedConsumer>();
+            x.AddEntityFrameworkOutbox<ApplicationDbContext>(o =>
+            {
+                o.UsePostgres();
+                o.UseBusOutbox();
+            });
+
+            x.UsingRabbitMq((context, cfg) =>
+            {
+                cfg.Host(configuration["RabbitMq:Host"] ?? "localhost", configuration["RabbitMq:VirtualHost"] ?? "/", h =>
+                {
+                    h.Username(configuration["RabbitMq:Username"] ?? "rabbitmq");
+                    h.Password(configuration["RabbitMq:Password"] ?? "nextstep-rabbitmq-2o2G");
+                });
+
+                cfg.ConfigureEndpoints(context);
+            });
+        });
 
         // ── Repositories & Unit of Work ───────────────────────────────────────
         services.AddScoped<IPatientRepository, PatientRepository>();

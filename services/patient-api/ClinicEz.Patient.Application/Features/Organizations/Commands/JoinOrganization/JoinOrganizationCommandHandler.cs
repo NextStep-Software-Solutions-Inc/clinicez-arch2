@@ -27,6 +27,15 @@ public sealed class JoinOrganizationCommandHandler
     public async Task<OrganizationMembershipDto> Handle(
         JoinOrganizationCommand request, CancellationToken cancellationToken)
     {
+        if (!request.ConsentPrivacyPolicy)
+            throw new ValidationException("Consent to the Organization Privacy Policy is required by data privacy regulations.");
+
+        if (!request.ConsentTermsAndConditions)
+            throw new ValidationException("Consent to the Organization Terms and Conditions is required.");
+
+        if (!request.ConsentDataSharing)
+            throw new ValidationException("Consent to health data sharing with this organization is required.");
+
         _ = await _patientRepo.GetByIdAsync(request.PatientId, cancellationToken)
             ?? throw new NotFoundException($"Patient '{request.PatientId}' was not found.");
 

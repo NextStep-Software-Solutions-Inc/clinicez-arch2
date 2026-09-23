@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using ClinicEz.Shared.Interfaces;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using ClinicEz.Patient.Domain.Common;
 using ClinicEz.Patient.Domain.Entities;
@@ -114,6 +115,10 @@ public sealed class ApplicationDbContext : DbContext
 
             modelBuilder.Entity(entityType.ClrType).HasQueryFilter(filter);
         }
+
+        modelBuilder.AddInboxStateEntity();
+        modelBuilder.AddOutboxStateEntity();
+        modelBuilder.AddOutboxMessageEntity();
 
         base.OnModelCreating(modelBuilder);
     }

@@ -1,5 +1,7 @@
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
 using ClinicEz.Shared.Interfaces;
+using MassTransit;
 using MediatR;
 using ClinicEz.Patient.Application.Common.Interfaces;
 using ClinicEz.Patient.Domain.Enums;
@@ -17,17 +19,18 @@ public sealed class SubmitBookingDraftCommandHandler : IRequestHandler<SubmitBoo
     private readonly IClinicDashboardService _clinicService;
     private readonly ICurrentUserService _currentUserService;
     private readonly IUnitOfWork _uow;
-
     private readonly IClinicMembershipRepository _membershipRepo;
+    private readonly IPublishEndpoint _publishEndpoint;
 
     public SubmitBookingDraftCommandHandler(
         IBookingDraftRepository draftRepo, IClinicRepository clinicRepo,
         IClinicDashboardService clinicService, ICurrentUserService currentUserService, IUnitOfWork uow,
-        IClinicMembershipRepository membershipRepo)
+        IClinicMembershipRepository membershipRepo, IPublishEndpoint publishEndpoint)
     {
         _draftRepo = draftRepo; _clinicRepo = clinicRepo;
         _clinicService = clinicService; _currentUserService = currentUserService; _uow = uow;
         _membershipRepo = membershipRepo;
+        _publishEndpoint = publishEndpoint;
     }
 
     public async Task<string?> Handle(SubmitBookingDraftCommand request, CancellationToken cancellationToken)
@@ -48,6 +51,20 @@ public sealed class SubmitBookingDraftCommandHandler : IRequestHandler<SubmitBoo
         var bookingRef = await _clinicService.SubmitBookingAsync(
             clinic.BaseUrl, request.PatientId, draft.Id,
             draft.ShareFieldsJson, draft.AttachedFileIdsJson, bearerToken, cancellationToken);
+
+        await _publishEndpoint.Publish(new AppointmentBookedEvent
+        {
+            DraftId = draft.Id,
+            PatientId = request.PatientId,
+            ClinicId = clinic.Id,
+            PreferredDate = draft.PreferredDate,
+            PreferredTime = draft.PreferredTime,
+            Reason = draft.Reason,
+            Notes = draft.Notes,
+            ShareFieldsJson = draft.ShareFieldsJson,
+            AttachedFileIdsJson = draft.AttachedFileIdsJson,
+            CreatedAt = DateTime.UtcNow
+        }, cancellationToken);
 
         var membership = await _membershipRepo.GetByPatientAndClinicAsync(request.PatientId, clinic.Id, cancellationToken);
         if (membership is null && clinic.IsPublic)
