@@ -21,7 +21,7 @@ public record InviteStaffMemberCommand(
 
 public class InviteStaffMemberCommandValidator : AbstractValidator<InviteStaffMemberCommand>
 {
-    private static readonly string[] AllowedRoles = ["Admin", "Doctor", "Nurse", "Receptionist", "Staff"];
+    private static readonly string[] AllowedRoles = ["Admin", "Biller", "Viewer"];
 
     public InviteStaffMemberCommandValidator()
     {

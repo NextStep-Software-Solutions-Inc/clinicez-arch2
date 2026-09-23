@@ -40,34 +40,24 @@ interface FacilityOption {
 
 const ROLE_DETAILS: Record<string, { label: string; badgeClass: string; description: string }> = {
     Owner: {
-        label: "Owner / Primary Admin",
+        label: "Workspace Owner",
         badgeClass: "bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border-purple-200 dark:border-purple-800",
-        description: "Full administrative, financial, and workspace management privileges."
+        description: "Primary enterprise administrator with full authority over workspace settings, billing, and facilities."
     },
     Admin: {
-        label: "Administrator",
+        label: "Tenant Administrator",
         badgeClass: "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-200 dark:border-blue-800",
-        description: "Can manage clinical operations, facilities, and staff rosters."
+        description: "Can manage facilities, invite workspace team members, and configure tenancy settings."
     },
-    Doctor: {
-        label: "Doctor / Clinician",
+    Biller: {
+        label: "Biller / Finance",
         badgeClass: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800",
-        description: "Full clinical and patient consultation access."
+        description: "Can manage subscription plans, checkout sessions, payment methods, and download tax invoices."
     },
-    Nurse: {
-        label: "Nurse / Caregiver",
-        badgeClass: "bg-cyan-100 text-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800",
-        description: "Vital signs triage, nursing charts, and bed management."
-    },
-    Receptionist: {
-        label: "Receptionist",
-        badgeClass: "bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800",
-        description: "Patient registration, appointment scheduling, and reception."
-    },
-    Staff: {
-        label: "Support Staff",
+    Viewer: {
+        label: "Viewer / Analyst",
         badgeClass: "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700",
-        description: "General workspace support and front desk tasks."
+        description: "Read-only access to tenancy health, analytics, and branch operational telemetry."
     }
 };
 
@@ -81,8 +71,7 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
     const [inviteOpen, setInviteOpen] = useState(false);
     const [fullName, setFullName] = useState("");
     const [email, setEmail] = useState("");
-    const [role, setRole] = useState("Doctor");
-    const [selectedFacilityId, setSelectedFacilityId] = useState<string>("");
+    const [role, setRole] = useState("Admin");
     const [inviteError, setInviteError] = useState<string | null>(null);
     const [submittingInvite, setSubmittingInvite] = useState(false);
 
@@ -176,7 +165,6 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                 fullName: fullName.trim(),
                 email: email.trim(),
                 role,
-                facilityId: selectedFacilityId ? selectedFacilityId : undefined
             });
 
             const inviteUrl = created.invitationToken
@@ -185,13 +173,11 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
 
             // Attempt to dispatch email via SMTP (fails gracefully without interrupting invite flow)
             if (inviteUrl) {
-                const selectedFac = facilities.find(f => f.id === selectedFacilityId);
                 sendStaffInvitationMail({
                     to: email.trim(),
                     inviteeName: fullName.trim(),
                     workspaceName: tenantSlug,
                     role,
-                    facilityName: selectedFac?.name,
                     inviteUrl
                 }).catch(err => console.warn("[SMTP Dispatch Warning]", err));
             }
@@ -199,8 +185,7 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
             setInviteOpen(false);
             setFullName("");
             setEmail("");
-            setRole("Doctor");
-            setSelectedFacilityId("");
+            setRole("Admin");
 
             if (inviteUrl) {
                 setCreatedInviteModal({
@@ -268,10 +253,10 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                         </div>
                         <div>
                             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-slate-50 tracking-tight">
-                                Team & Staff
+                                Tenant Team
                             </h1>
                             <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                                Manage medical staff, role assignments, and workspace seat allocations.
+                                Manage workspace administrators, finance billers, and analysts.
                             </p>
                         </div>
                     </div>
@@ -284,7 +269,7 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                         className="rounded-xl shadow-sm gap-2 font-semibold"
                     >
                         <IconUserPlus className="h-4 w-4" />
-                        <span>Invite Staff Member</span>
+                        <span>Invite Team Member</span>
                     </Button>
                 </div>
             </div>
@@ -310,10 +295,10 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                             </div>
                             <p className="text-xs text-slate-500 font-medium">
                                 {isUnlimited 
-                                    ? "Your enterprise subscription includes unlimited clinical and administrative staff accounts."
+                                    ? "Your enterprise subscription includes unlimited workspace member accounts."
                                     : isQuotaFull
-                                        ? "All allocated staff seats for your current plan are in use."
-                                        : `${availableSeats} staff seat${availableSeats === 1 ? "" : "s"} available for new invitations.`
+                                        ? "All allocated workspace seats for your current plan are in use."
+                                        : `${availableSeats} member seat${availableSeats === 1 ? "" : "s"} available for new invitations.`
                                 }
                             </p>
                         </div>
@@ -363,9 +348,9 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
             <Card className="rounded-2xl border-slate-200/80 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-950">
                 <CardHeader className="p-5 sm:p-6 pb-3 border-b border-slate-100 dark:border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
-                        <CardTitle className="text-base sm:text-lg font-bold">Workspace Staff Directory</CardTitle>
+                        <CardTitle className="text-base sm:text-lg font-bold">Workspace Team Directory</CardTitle>
                         <CardDescription className="text-xs text-slate-500 mt-0.5">
-                            Active medical practitioners, nurses, and administrative members.
+                            Active tenant administrators, financial billers, and analytical members.
                         </CardDescription>
                     </div>
 
@@ -394,7 +379,7 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                             </div>
                             <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">No team members found</h3>
                             <p className="text-xs text-slate-500 max-w-xs mt-1">
-                                {searchQuery ? "No members match your search criteria." : "Invite your clinical colleagues and support staff to begin collaborating."}
+                                {searchQuery ? "No members match your search criteria." : "Invite administrative and billing colleagues to help govern this workspace."}
                             </p>
                         </div>
                     ) : (
@@ -404,7 +389,7 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                     <tr className="border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/40 dark:bg-slate-900/20 text-slate-500 font-semibold">
                                         <th className="py-3 px-4 sm:px-6">Team Member</th>
                                         <th className="py-3 px-4">Role</th>
-                                        <th className="py-3 px-4">Assigned Facility</th>
+                                        <th className="py-3 px-4">Access Scope</th>
                                         <th className="py-3 px-4">Status</th>
                                         <th className="py-3 px-4 hidden md:table-cell">Added On</th>
                                         <th className="py-3 px-4 sm:px-6 text-right">Actions</th>
@@ -412,7 +397,7 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                 </thead>
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
                                     {members.map((member) => {
-                                        const roleMeta = ROLE_DETAILS[member.role] || ROLE_DETAILS.Staff;
+                                        const roleMeta = ROLE_DETAILS[member.role] || ROLE_DETAILS.Viewer;
                                         const isOwner = member.role.toLowerCase() === "owner";
                                         const isPending = member.status.toLowerCase().includes("pending");
 
@@ -462,7 +447,7 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                                             {member.facilityName}
                                                         </span>
                                                     ) : (
-                                                        <span className="text-slate-400 text-[11px]">All Facilities</span>
+                                                        <span className="text-slate-500 font-medium">Entire Workspace</span>
                                                     )}
                                                 </td>
                                                 <td className="py-3.5 px-4">
@@ -570,7 +555,7 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                             </Label>
                             <Input
                                 id="fullName"
-                                placeholder="e.g. Dr. Roberto Cruz"
+                                placeholder="e.g. Alex Morgan"
                                 value={fullName}
                                 onChange={(e) => setFullName(e.target.value)}
                                 className="h-9 text-xs rounded-xl"
@@ -603,36 +588,12 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                 onChange={(e) => setRole(e.target.value)}
                                 className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
                             >
-                                <option value="Doctor">Doctor / Clinician (Clinical charts, consults, prescriptions)</option>
-                                <option value="Nurse">Nurse / Caregiver (Vitals, triage, inpatient beds)</option>
-                                <option value="Receptionist">Receptionist (Front desk, patient queues, scheduling)</option>
-                                <option value="Admin">Administrator (Workspace configurations & facilities)</option>
-                                <option value="Staff">Support Staff (General medical facility support)</option>
+                                <option value="Admin">Tenant Administrator (Manage branches, invites, & tenancy settings)</option>
+                                <option value="Biller">Biller / Finance (Manage subscriptions, checkout sessions, & invoices)</option>
+                                <option value="Viewer">Viewer / Analyst (Read-only access to tenancy health & branch stats)</option>
                             </select>
                             <p className="text-[11px] text-slate-400">
                                 {ROLE_DETAILS[role]?.description}
-                            </p>
-                        </div>
-
-                        <div className="space-y-1.5">
-                            <Label htmlFor="facility" className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                                Assigned Facility (Optional)
-                            </Label>
-                            <select
-                                id="facility"
-                                value={selectedFacilityId}
-                                onChange={(e) => setSelectedFacilityId(e.target.value)}
-                                className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                            >
-                                <option value="">All Workspace Facilities (Unrestricted)</option>
-                                {facilities.map((fac) => (
-                                    <option key={fac.id} value={fac.id}>
-                                        {fac.name} ({fac.facilityType})
-                                    </option>
-                                ))}
-                            </select>
-                            <p className="text-[11px] text-slate-400">
-                                Restrict this staff member's operational access to a specific clinical facility.
                             </p>
                         </div>
 

@@ -149,7 +149,7 @@ export default function InvitationAcceptClient({ token }: { token: string }) {
                         ClinicEZ Team Invitation
                     </h1>
                     <p className="text-xs text-indigo-100 mt-1 font-medium">
-                        You have been invited to join a clinical healthcare team
+                        You have been invited to join the workspace governance and management team
                     </p>
                 </div>
 
@@ -178,10 +178,10 @@ export default function InvitationAcceptClient({ token }: { token: string }) {
                             </div>
                             <div>
                                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                                    Clinical Branch
+                                    Access Scope
                                 </span>
                                 <div className="text-xs font-semibold text-slate-700 dark:text-slate-300 mt-1">
-                                    {invite.facilityName || "All Facilities (Unrestricted)"}
+                                    {invite.facilityName || "Entire Workspace"}
                                 </div>
                             </div>
                         </div>

@@ -73,18 +73,18 @@ public class StaffManagementTests : IDisposable
     public async Task InviteStaffMember_ValidRequest_CreatesPendingInvitation()
     {
         var handler = new InviteStaffMemberCommandHandler(_context, _guardMock.Object);
-        var command = new InviteStaffMemberCommand(TenantSlug, "doctor@metro.ph", "Dr. Juan Dela Cruz", "Doctor");
+        var command = new InviteStaffMemberCommand(TenantSlug, "biller@metro.ph", "Bob Biller", "Biller");
 
         var result = await handler.Handle(command, CancellationToken.None);
 
         Assert.NotNull(result);
-        Assert.Equal("doctor@metro.ph", result.Email);
-        Assert.Equal("Doctor", result.Role);
+        Assert.Equal("biller@metro.ph", result.Email);
+        Assert.Equal("Biller", result.Role);
         Assert.Equal("PendingInvitation", result.Status);
 
         _guardMock.Verify(g => g.EnsureCanCreateStaffAsync(_tenantId.ToString(), It.IsAny<CancellationToken>()), Times.Once);
 
-        var memberInDb = await _context.StaffMembers.FirstOrDefaultAsync(s => s.Email == "doctor@metro.ph");
+        var memberInDb = await _context.StaffMembers.FirstOrDefaultAsync(s => s.Email == "biller@metro.ph");
         Assert.NotNull(memberInDb);
         Assert.NotNull(memberInDb.InvitationToken);
         Assert.True(memberInDb.InvitationExpiresAt > DateTime.UtcNow);
@@ -95,10 +95,10 @@ public class StaffManagementTests : IDisposable
     {
         // First invite
         var handler = new InviteStaffMemberCommandHandler(_context, _guardMock.Object);
-        await handler.Handle(new InviteStaffMemberCommand(TenantSlug, "nurse@metro.ph", "Nurse Joy", "Nurse"), CancellationToken.None);
+        await handler.Handle(new InviteStaffMemberCommand(TenantSlug, "admin2@metro.ph", "Alice Admin", "Admin"), CancellationToken.None);
 
         // Duplicate invite
-        var duplicateCommand = new InviteStaffMemberCommand(TenantSlug, "nurse@metro.ph", "Nurse Joy 2", "Nurse");
+        var duplicateCommand = new InviteStaffMemberCommand(TenantSlug, "admin2@metro.ph", "Alice Admin 2", "Admin");
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             handler.Handle(duplicateCommand, CancellationToken.None));
@@ -113,7 +113,7 @@ public class StaffManagementTests : IDisposable
             .ThrowsAsync(new InvalidOperationException("Feature Limit Reached: Your current plan only allows up to 3 staff members."));
 
         var handler = new InviteStaffMemberCommandHandler(_context, _guardMock.Object);
-        var command = new InviteStaffMemberCommand(TenantSlug, "newstaff@metro.ph", "New Staff", "Staff");
+        var command = new InviteStaffMemberCommand(TenantSlug, "viewer@metro.ph", "Vic Viewer", "Viewer");
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             handler.Handle(command, CancellationToken.None));
@@ -128,9 +128,9 @@ public class StaffManagementTests : IDisposable
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
-            Email = "reception@metro.ph",
-            FullName = "Receptionist Ray",
-            Role = "Receptionist",
+            Email = "finance@metro.ph",
+            FullName = "Finance Officer",
+            Role = "Biller",
             Status = "Active",
             CreatedAt = DateTime.UtcNow,
             CreatedBy = "owner_clerk_123"
@@ -179,8 +179,8 @@ public class StaffManagementTests : IDisposable
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
             Email = "candidate@metro.ph",
-            FullName = "Dr. Clara Osmeña",
-            Role = "Doctor",
+            FullName = "Clara Finance",
+            Role = "Biller",
             Status = "PendingInvitation",
             InvitationToken = token,
             InvitationExpiresAt = DateTime.UtcNow.AddDays(7),
@@ -196,8 +196,8 @@ public class StaffManagementTests : IDisposable
         Assert.NotNull(result);
         Assert.Equal("Metro Clinic", result.TenantName);
         Assert.Equal("candidate@metro.ph", result.InviteeEmail);
-        Assert.Equal("Dr. Clara Osmeña", result.InviteeFullName);
-        Assert.Equal("Doctor", result.Role);
+        Assert.Equal("Clara Finance", result.InviteeFullName);
+        Assert.Equal("Biller", result.Role);
         Assert.False(result.IsExpired);
         Assert.False(result.IsAlreadyAccepted);
     }
@@ -210,9 +210,9 @@ public class StaffManagementTests : IDisposable
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
-            Email = "doctor.clara@metro.ph",
-            FullName = "Dr. Clara Osmeña",
-            Role = "Doctor",
+            Email = "admin.clara@metro.ph",
+            FullName = "Clara Admin",
+            Role = "Admin",
             Status = "PendingInvitation",
             InvitationToken = token,
             InvitationExpiresAt = DateTime.UtcNow.AddDays(7),
@@ -223,11 +223,11 @@ public class StaffManagementTests : IDisposable
         await _context.SaveChangesAsync();
 
         var handler = new AcceptInvitationCommandHandler(_context);
-        var result = await handler.Handle(new AcceptInvitationCommand(token, "clerk_user_clara_999", "doctor.clara@metro.ph"), CancellationToken.None);
+        var result = await handler.Handle(new AcceptInvitationCommand(token, "clerk_user_clara_999", "admin.clara@metro.ph"), CancellationToken.None);
 
         Assert.NotNull(result);
         Assert.Equal(TenantSlug, result.TenantSlug);
-        Assert.Equal("Doctor", result.Role);
+        Assert.Equal("Admin", result.Role);
 
         var memberInDb = await _context.StaffMembers.FindAsync(member.Id);
         Assert.NotNull(memberInDb);
@@ -245,8 +245,8 @@ public class StaffManagementTests : IDisposable
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
             Email = "expired@metro.ph",
-            FullName = "Nurse Expired",
-            Role = "Nurse",
+            FullName = "Viewer Expired",
+            Role = "Viewer",
             Status = "PendingInvitation",
             InvitationToken = token,
             InvitationExpiresAt = DateTime.UtcNow.AddDays(-2), // Expired 2 days ago
@@ -272,9 +272,9 @@ public class StaffManagementTests : IDisposable
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
-            Email = "nurse.renew@metro.ph",
-            FullName = "Nurse Renew",
-            Role = "Nurse",
+            Email = "biller.renew@metro.ph",
+            FullName = "Biller Renew",
+            Role = "Biller",
             Status = "PendingInvitation",
             InvitationToken = originalToken,
             InvitationExpiresAt = originalExpiry,

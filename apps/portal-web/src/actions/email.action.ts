@@ -94,7 +94,7 @@ export const sendStaffInvitationMail = async (payload: StaffInvitationEmailPaylo
           Hello ${payload.inviteeName},
         </h2>
         <p style="font-size: 15px; line-height: 24px; color: #334155; margin: 0 0 20px 0;">
-          You have been invited by the administration of <strong>${payload.workspaceName}</strong> to join their clinical team on ClinicEZ.
+          You have been invited by the administration of <strong>${payload.workspaceName}</strong> to join their workspace team on ClinicEZ.
         </p>
 
         <!-- Details Card -->
