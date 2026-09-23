@@ -168,5 +168,63 @@ public class FacilityEndpoints : IEndpoint
         .WithName("GetFacilityConsoleUrl")
         .WithDescription("Resolves environment-aware subdomain console URL for a specific facility.")
         .WithTags("Facilities");
+
+        // 4. Update an existing facility
+        app.MapPut("/facilities/{id:guid}", async (
+            Guid id,
+            UpdateFacilityRequest request,
+            HttpContext httpContext,
+            IApplicationDbContext context,
+            ISender sender) =>
+        {
+            var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(clerkUserId)) return Results.Unauthorized();
+
+            var tenant = await context.Tenants
+                .FirstOrDefaultAsync(t => t.TenantSlug.ToLower() == request.TenantSlug.ToLower() || t.Id.ToString() == request.TenantSlug);
+
+            if (tenant == null) return Results.NotFound(new { Message = "Workspace not found." });
+
+            var isOwner = tenant.OwnerId == clerkUserId;
+            var isAdmin = !isOwner && await context.StaffMembers.AnyAsync(s => 
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == "Admin" && s.Status == "Active");
+
+            if (!isOwner && !isAdmin) return Results.Forbid();
+
+            var success = await sender.Send(new UpdateFacilityCommand(id, tenant.TenantSlug, request.Name, request.Status));
+            return success ? Results.Ok(new { Success = true }) : Results.NotFound(new { Message = "Facility not found." });
+        })
+        .RequireAuthorization()
+        .WithName("UpdateFacility")
+        .WithDescription("Updates an existing facility name or operational status.")
+        .WithTags("Facilities");
+
+        // 5. Delete / archive a facility (Owner only)
+        app.MapDelete("/facilities/{id:guid}", async (
+            Guid id,
+            string tenantSlug,
+            HttpContext httpContext,
+            IApplicationDbContext context,
+            ISender sender) =>
+        {
+            var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(clerkUserId)) return Results.Unauthorized();
+
+            var tenant = await context.Tenants
+                .FirstOrDefaultAsync(t => t.TenantSlug.ToLower() == tenantSlug.ToLower() || t.Id.ToString() == tenantSlug);
+
+            if (tenant == null) return Results.NotFound(new { Message = "Workspace not found." });
+
+            if (tenant.OwnerId != clerkUserId) return Results.Forbid();
+
+            var success = await sender.Send(new DeleteFacilityCommand(id, tenant.TenantSlug));
+            return success ? Results.Ok(new { Success = true }) : Results.NotFound(new { Message = "Facility not found." });
+        })
+        .RequireAuthorization()
+        .WithName("DeleteFacility")
+        .WithDescription("Permanently deletes/archives a facility from the workspace (Owner only).")
+        .WithTags("Facilities");
     }
 }
+
+public record UpdateFacilityRequest(string TenantSlug, string Name, ClinicEz.Portal.Domain.Entities.FacilityStatus? Status = null);

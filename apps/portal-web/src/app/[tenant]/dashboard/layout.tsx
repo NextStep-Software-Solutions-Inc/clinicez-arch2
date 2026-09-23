@@ -46,19 +46,24 @@ export default async function TenantDashboardLayout({
         redirect("/tenants/register");
     }
 
-    const [tenant, tenantErr] = await safeAwait(tenantService.getTenantByOwner(userId, token));
-    if (tenantErr) {
+    const [tenant, tenantErr] = await safeAwait(tenantService.getTenantByOwner(userId, token, routeTenantSlug));
+    if (tenantErr || !tenant) {
         console.error("Failed to fetch tenant for layout", tenantErr);
         redirect("/tenants/register");
     }
 
-    // Protect layout boundary: only workspace owner has access
-    if (!tenant || tenant.tenantSlug !== routeTenantSlug) {
+    // Protect layout boundary: only authorized workspace owner or active members have access
+    if (tenant.tenantSlug.toLowerCase() !== routeTenantSlug.toLowerCase()) {
         if (tenant?.tenantSlug) {
             redirect(`/${tenant.tenantSlug}/dashboard/overview`);
         } else {
             redirect("/tenants/register");
         }
+    }
+
+    const userRole = tenant.role || "Owner";
+    if (user) {
+        (userDetails as any).role = userRole;
     }
 
     const workplaceName = tenant.name || tenant.clinicName || "Workspace";

@@ -4,16 +4,41 @@ using System.Threading.Tasks;
 using ClinicEz.Portal.Api.Abstractions;
 using ClinicEz.Portal.Application.Features.Billing.Commands;
 using ClinicEz.Portal.Application.Features.Billing.Queries;
-using ClinicEz.Portal.Domain.Interfaces;
+using ClinicEz.Portal.Application.Interfaces;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.EntityFrameworkCore;
 
 namespace ClinicEz.Portal.Api.Endpoints;
 
 public class BillingEndpoints : IEndpoint
 {
+    private static async Task<(bool Allowed, bool CanManage)> CheckBillingAccessAsync(
+        string tenantSlug, 
+        string clerkUserId, 
+        IApplicationDbContext context)
+    {
+        var slugLower = tenantSlug.Trim().ToLowerInvariant();
+        var tenant = await context.Tenants
+            .FirstOrDefaultAsync(t => t.TenantSlug.ToLower() == slugLower || t.Id.ToString() == slugLower);
+
+        if (tenant == null) return (false, false);
+
+        if (tenant.OwnerId == clerkUserId) return (true, true);
+
+        var staff = await context.StaffMembers
+            .FirstOrDefaultAsync(s => s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Status == "Active");
+
+        if (staff == null) return (false, false);
+
+        // Biller and Admin can manage billing (checkout, update info, cancel)
+        var canManage = staff.Role == "Admin" || staff.Role == "Biller";
+        // Any active member (including Viewer) can view billing info
+        return (true, canManage);
+    }
+
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/billing").WithTags("Billing").RequireAuthorization();
@@ -21,7 +46,7 @@ public class BillingEndpoints : IEndpoint
         group.MapPost("/checkout-session", async (
             CreateCheckoutSessionCommand command, 
             HttpContext httpContext,
-            IUnitOfWork unitOfWork,
+            IApplicationDbContext context,
             ISender sender) =>
         {
             var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -30,8 +55,8 @@ public class BillingEndpoints : IEndpoint
                 return Results.Unauthorized();
             }
 
-            var tenant = await unitOfWork.TenantRepository.FindAsync(t => t.TenantSlug == command.TenantId);
-            if (tenant == null || tenant.OwnerId != clerkUserId)
+            var (allowed, canManage) = await CheckBillingAccessAsync(command.TenantId, clerkUserId, context);
+            if (!allowed || !canManage)
             {
                 return Results.Forbid();
             }
@@ -48,7 +73,7 @@ public class BillingEndpoints : IEndpoint
         group.MapGet("/customer-portal/{tenantId}", async (
             string tenantId, 
             HttpContext httpContext,
-            IUnitOfWork unitOfWork,
+            IApplicationDbContext context,
             ISender sender) =>
         {
             var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -57,8 +82,8 @@ public class BillingEndpoints : IEndpoint
                 return Results.Unauthorized();
             }
 
-            var tenant = await unitOfWork.TenantRepository.FindAsync(t => t.TenantSlug == tenantId);
-            if (tenant == null || tenant.OwnerId != clerkUserId)
+            var (allowed, canManage) = await CheckBillingAccessAsync(tenantId, clerkUserId, context);
+            if (!allowed || !canManage)
             {
                 return Results.Forbid();
             }
@@ -73,7 +98,7 @@ public class BillingEndpoints : IEndpoint
         group.MapGet("/info/{tenantId}", async (
             string tenantId, 
             HttpContext httpContext,
-            IUnitOfWork unitOfWork,
+            IApplicationDbContext context,
             ISender sender) =>
         {
             var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -82,8 +107,8 @@ public class BillingEndpoints : IEndpoint
                 return Results.Unauthorized();
             }
 
-            var tenant = await unitOfWork.TenantRepository.FindAsync(t => t.TenantSlug == tenantId);
-            if (tenant == null || tenant.OwnerId != clerkUserId)
+            var (allowed, _) = await CheckBillingAccessAsync(tenantId, clerkUserId, context);
+            if (!allowed)
             {
                 return Results.Forbid();
             }
@@ -98,7 +123,7 @@ public class BillingEndpoints : IEndpoint
         group.MapPost("/cancel-subscription/{tenantId}", async (
             string tenantId, 
             HttpContext httpContext,
-            IUnitOfWork unitOfWork,
+            IApplicationDbContext context,
             ISender sender) =>
         {
             var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -107,8 +132,8 @@ public class BillingEndpoints : IEndpoint
                 return Results.Unauthorized();
             }
 
-            var tenant = await unitOfWork.TenantRepository.FindAsync(t => t.TenantSlug == tenantId);
-            if (tenant == null || tenant.OwnerId != clerkUserId)
+            var (allowed, canManage) = await CheckBillingAccessAsync(tenantId, clerkUserId, context);
+            if (!allowed || !canManage)
             {
                 return Results.Forbid();
             }
@@ -123,7 +148,7 @@ public class BillingEndpoints : IEndpoint
         group.MapPost("/update-info", async (
             UpdateTenantBillingDetailsCommand command, 
             HttpContext httpContext,
-            IUnitOfWork unitOfWork,
+            IApplicationDbContext context,
             ISender sender) =>
         {
             var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -132,8 +157,8 @@ public class BillingEndpoints : IEndpoint
                 return Results.Unauthorized();
             }
 
-            var tenant = await unitOfWork.TenantRepository.FindAsync(t => t.TenantSlug == command.TenantId);
-            if (tenant == null || tenant.OwnerId != clerkUserId)
+            var (allowed, canManage) = await CheckBillingAccessAsync(command.TenantId, clerkUserId, context);
+            if (!allowed || !canManage)
             {
                 return Results.Forbid();
             }

@@ -20,6 +20,7 @@ import {
     IconArrowRight
 } from "@tabler/icons-react";
 import { toast } from "sonner";
+import { tenantService } from "@/services/tenant.service";
 
 export default function SettingsPage() {
     const params = useParams();
@@ -36,14 +37,19 @@ export default function SettingsPage() {
     const hasAllocations = (isSubscribed || isTrialing) && !!billingInfo?.planLimits;
 
     const [clinicName, setClinicName] = useState("");
+    const [repName, setRepName] = useState("");
     const [email, setEmail] = useState("");
     const [phone, setPhone] = useState("");
+    const [timezone, setTimezone] = useState("UTC+08:00 Manila, Singapore");
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
         if (billingInfo) {
             setClinicName(billingInfo.name || billingInfo.clinicName || "");
             setPhone(billingInfo.phoneNumber || "");
+            if ((billingInfo as any).email) {
+                setEmail((billingInfo as any).email);
+            }
         }
     }, [billingInfo]);
 
@@ -51,13 +57,18 @@ export default function SettingsPage() {
         e.preventDefault();
         setSaving(true);
         try {
-            // Mock API save call to simulate workspace configuration update
-            await new Promise((resolve) => setTimeout(resolve, 800));
+            await tenantService.updateTenantSettings(tenantSlug, {
+                name: clinicName.trim() || undefined,
+                representativeName: repName.trim() || undefined,
+                email: email.trim() || undefined,
+                phoneNumber: phone.trim() || undefined,
+                timezone: timezone
+            });
             toast.success("Settings saved successfully");
             mutate();
-        } catch (err) {
+        } catch (err: any) {
             console.error("Failed to save settings", err);
-            toast.error("Failed to save settings");
+            toast.error(err.response?.data?.message || err.message || "Failed to save settings");
         } finally {
             setSaving(false);
         }
@@ -176,7 +187,8 @@ export default function SettingsPage() {
                                         <Label htmlFor="repName" className="text-xs font-bold text-slate-500 uppercase tracking-wider">Representative Name</Label>
                                         <Input
                                             id="repName"
-                                            defaultValue="Dr. Admin"
+                                            value={repName}
+                                            onChange={(e) => setRepName(e.target.value)}
                                             placeholder="Authorized representative name"
                                             className="rounded-xl border-slate-200 dark:border-slate-800 focus-visible:ring-primary"
                                         />
@@ -186,7 +198,8 @@ export default function SettingsPage() {
                                         <Input
                                             id="repEmail"
                                             type="email"
-                                            defaultValue="admin@clinicez.net"
+                                            value={email}
+                                            onChange={(e) => setEmail(e.target.value)}
                                             placeholder="Enter billing/representative email"
                                             className="rounded-xl border-slate-200 dark:border-slate-800 focus-visible:ring-primary"
                                         />
