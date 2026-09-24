@@ -464,46 +464,40 @@ export default function WorkspaceOverviewClient({ tenantSlug }: { tenantSlug: st
                             </Button>
                         </div>
                     ) : (
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                                        <th className="px-6 py-3.5">Facility Name</th>
-                                        <th className="px-6 py-3.5">Type</th>
-                                        <th className="px-6 py-3.5">Operational Status</th>
-                                        <th className="px-6 py-3.5">Created Date</th>
-                                        <th className="px-6 py-3.5 text-right">Console Access</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
-                                    {facilities.map((fac) => (
-                                        <tr key={fac.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition-colors">
-                                            <td className="px-6 py-4 font-semibold text-slate-800 dark:text-slate-100">
-                                                {fac.name}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                {fac.facilityType === "Clinic" && (
-                                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800/60">
-                                                        <IconBuildingHospital className="h-3 w-3" /> Clinic
-                                                    </span>
-                                                )}
-                                                {fac.facilityType === "Laboratory" && (
-                                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-800/60">
-                                                        <IconFlask className="h-3 w-3" /> Laboratory
-                                                    </span>
-                                                )}
-                                                {fac.facilityType === "Pharmacy" && (
-                                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60">
-                                                        <IconPill className="h-3 w-3" /> Pharmacy
-                                                    </span>
-                                                )}
-                                                {fac.facilityType === "Organization" && (
-                                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800">
-                                                        <IconBuildingSkyscraper className="h-3 w-3" /> Organization
-                                                    </span>
-                                                )}
-                                            </td>
-                                            <td className="px-6 py-4">
+                        <>
+                            {/* Mobile Facilities View (< md) */}
+                            <div className="block md:hidden divide-y divide-slate-100 dark:divide-slate-800 p-3 sm:p-4 space-y-3">
+                                {facilities.map((fac) => (
+                                    <div key={fac.id} className="p-4 rounded-2xl border border-slate-100 dark:border-slate-800/80 bg-slate-50/40 dark:bg-slate-900/30 flex flex-col gap-3">
+                                        <div className="flex items-start justify-between gap-2">
+                                            <div className="min-w-0 flex-1">
+                                                <div className="font-bold text-slate-900 dark:text-slate-100 text-sm truncate">
+                                                    {fac.name}
+                                                </div>
+                                                <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                                                    {fac.facilityType === "Clinic" && (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800/60">
+                                                            <IconBuildingHospital className="h-3 w-3" /> Clinic
+                                                        </span>
+                                                    )}
+                                                    {fac.facilityType === "Laboratory" && (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-800/60">
+                                                            <IconFlask className="h-3 w-3" /> Laboratory
+                                                        </span>
+                                                    )}
+                                                    {fac.facilityType === "Pharmacy" && (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60">
+                                                            <IconPill className="h-3 w-3" /> Pharmacy
+                                                        </span>
+                                                    )}
+                                                    {fac.facilityType === "Organization" && (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800">
+                                                            <IconBuildingSkyscraper className="h-3 w-3" /> Organization
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="shrink-0">
                                                 {fac.status === "Provisioning" && (
                                                     <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 animate-pulse border border-amber-100 dark:border-amber-900/30">
                                                         <IconClockPlay className="h-3 w-3" />
@@ -528,31 +522,125 @@ export default function WorkspaceOverviewClient({ tenantSlug }: { tenantSlug: st
                                                         Suspended
                                                     </span>
                                                 )}
-                                            </td>
-                                            <td className="px-6 py-4 text-slate-500 font-medium">
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center justify-between text-xs text-slate-500 pt-1.5 border-t border-slate-100 dark:border-slate-800/60">
+                                            <span className="text-[10px] uppercase font-bold text-slate-400">Registered</span>
+                                            <span className="font-medium text-slate-600 dark:text-slate-300">
                                                 {new Date(fac.createdAt).toLocaleDateString("en-US", {
                                                     year: "numeric",
                                                     month: "short",
                                                     day: "numeric"
                                                 })}
-                                            </td>
-                                            <td className="px-6 py-4 text-right">
-                                                <Button
-                                                    onClick={() => handleOpenConsole(fac)}
-                                                    disabled={fac.status !== "Active"}
-                                                    variant="outline"
-                                                    size="sm"
-                                                    className="rounded-xl text-xs font-bold h-8 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900"
-                                                >
-                                                    Launch Console
-                                                    <IconExternalLink className="h-3.5 w-3.5 ml-1.5" />
-                                                </Button>
-                                            </td>
+                                            </span>
+                                        </div>
+
+                                        <Button
+                                            onClick={() => handleOpenConsole(fac)}
+                                            disabled={fac.status !== "Active"}
+                                            variant="outline"
+                                            size="sm"
+                                            className="w-full rounded-xl text-xs font-bold h-9 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 flex items-center justify-center gap-1.5"
+                                        >
+                                            <span>Launch Console</span>
+                                            <IconExternalLink className="h-3.5 w-3.5" />
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Desktop Facilities Table (>= md) */}
+                            <div className="hidden md:block overflow-x-auto">
+                                <table className="w-full min-w-[640px] text-left border-collapse">
+                                    <thead>
+                                        <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                                            <th className="px-6 py-3.5 whitespace-nowrap">Facility Name</th>
+                                            <th className="px-6 py-3.5 whitespace-nowrap">Type</th>
+                                            <th className="px-6 py-3.5 whitespace-nowrap">Operational Status</th>
+                                            <th className="px-6 py-3.5 whitespace-nowrap">Created Date</th>
+                                            <th className="px-6 py-3.5 text-right whitespace-nowrap">Console Access</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+                                        {facilities.map((fac) => (
+                                            <tr key={fac.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition-colors">
+                                                <td className="px-6 py-4 font-semibold text-slate-800 dark:text-slate-100">
+                                                    {fac.name}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    {fac.facilityType === "Clinic" && (
+                                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800/60">
+                                                            <IconBuildingHospital className="h-3 w-3" /> Clinic
+                                                        </span>
+                                                    )}
+                                                    {fac.facilityType === "Laboratory" && (
+                                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-800/60">
+                                                            <IconFlask className="h-3 w-3" /> Laboratory
+                                                        </span>
+                                                    )}
+                                                    {fac.facilityType === "Pharmacy" && (
+                                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60">
+                                                            <IconPill className="h-3 w-3" /> Pharmacy
+                                                        </span>
+                                                    )}
+                                                    {fac.facilityType === "Organization" && (
+                                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800">
+                                                            <IconBuildingSkyscraper className="h-3 w-3" /> Organization
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    {fac.status === "Provisioning" && (
+                                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 animate-pulse border border-amber-100 dark:border-amber-900/30">
+                                                            <IconClockPlay className="h-3 w-3" />
+                                                            Provisioning
+                                                        </span>
+                                                    )}
+                                                    {fac.status === "Active" && (
+                                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/30">
+                                                            <IconCircleCheck className="h-3 w-3" />
+                                                            Active
+                                                        </span>
+                                                    )}
+                                                    {fac.status === "Failed" && (
+                                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-900/30">
+                                                            <IconAlertCircle className="h-3 w-3" />
+                                                            Failed
+                                                        </span>
+                                                    )}
+                                                    {fac.status === "Suspended" && (
+                                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800">
+                                                            <IconAlertCircle className="h-3 w-3" />
+                                                            Suspended
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-4 text-slate-500 font-medium whitespace-nowrap">
+                                                    {new Date(fac.createdAt).toLocaleDateString("en-US", {
+                                                        year: "numeric",
+                                                        month: "short",
+                                                        day: "numeric"
+                                                    })}
+                                                </td>
+                                                <td className="px-6 py-4 text-right whitespace-nowrap">
+                                                    <Button
+                                                        onClick={() => handleOpenConsole(fac)}
+                                                        disabled={fac.status !== "Active"}
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="rounded-xl text-xs font-bold h-8 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900"
+                                                    >
+                                                        Launch Console
+                                                        <IconExternalLink className="h-3.5 w-3.5 ml-1.5" />
+                                                    </Button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </>
                     )}
                 </CardContent>
             </Card>

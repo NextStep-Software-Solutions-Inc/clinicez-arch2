@@ -132,11 +132,46 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
         }
     };
 
+    const renderStatusBadge = (status: Facility["status"]) => {
+        switch (status) {
+            case "Provisioning":
+                return (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 animate-pulse border border-amber-100 dark:border-amber-900/30 whitespace-nowrap">
+                        <IconClockPlay className="h-3.5 w-3.5 shrink-0" />
+                        Provisioning
+                    </span>
+                );
+            case "Active":
+                return (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/30 whitespace-nowrap">
+                        <IconCircleCheck className="h-3.5 w-3.5 shrink-0" />
+                        Active
+                    </span>
+                );
+            case "Failed":
+                return (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-900/30 whitespace-nowrap">
+                        <IconAlertCircle className="h-3.5 w-3.5 shrink-0" />
+                        Failed
+                    </span>
+                );
+            case "Suspended":
+                return (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-100 dark:border-slate-800 whitespace-nowrap">
+                        <IconAlertCircle className="h-3.5 w-3.5 shrink-0" />
+                        Suspended
+                    </span>
+                );
+            default:
+                return null;
+        }
+    };
+
     if (loading) {
         return (
             <div className="w-full space-y-3 mt-4">
                 {[1, 2, 3].map((n) => (
-                    <div key={n} className="h-16 w-full rounded-2xl bg-slate-50 dark:bg-slate-900 animate-pulse border border-slate-100 dark:border-slate-800" />
+                    <div key={n} className="h-24 md:h-16 w-full rounded-2xl bg-slate-50 dark:bg-slate-900 animate-pulse border border-slate-100 dark:border-slate-800" />
                 ))}
             </div>
         );
@@ -144,12 +179,12 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
 
     if (facilities.length === 0) {
         return (
-            <div className="flex-1 flex flex-col items-center justify-center border border-dashed border-slate-200 dark:border-slate-800 rounded-3xl p-12 mt-4 bg-slate-50/50 dark:bg-slate-900/35">
+            <div className="flex-1 flex flex-col items-center justify-center border border-dashed border-slate-200 dark:border-slate-800 rounded-3xl p-8 sm:p-12 mt-4 bg-slate-50/50 dark:bg-slate-900/35 text-center">
                 <div className="p-4 bg-primary/10 rounded-full text-primary mb-4 animate-bounce">
                     <IconPlus className="h-8 w-8" />
                 </div>
-                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">No {facilityType}s Yet</h3>
-                <p className="text-xs text-slate-500 max-w-sm text-center mt-1.5 font-medium">
+                <h3 className="text-base sm:text-lg font-bold text-slate-800 dark:text-slate-200">No {facilityType}s Yet</h3>
+                <p className="text-xs text-slate-500 max-w-sm text-center mt-1.5 font-medium leading-relaxed">
                     You haven't provisioned any {facilityType.toLowerCase()}s for this workspace yet. Create one to get started.
                 </p>
                 <Button 
@@ -164,98 +199,153 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
 
     return (
         <>
-            <div className="w-full overflow-hidden border border-slate-100 dark:border-slate-800 rounded-3xl mt-4 shadow-sm bg-white dark:bg-slate-950">
-                <table className="w-full text-left border-collapse">
-                    <thead>
-                        <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/75 dark:bg-slate-900/50">
-                            <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-400">Name</th>
-                            <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-400">Created At</th>
-                            <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-400">Status</th>
-                            <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-400 text-right">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                        {facilities.map((fac) => (
-                            <tr key={fac.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
-                                <td className="px-6 py-4">
-                                    <div className="font-semibold text-slate-800 dark:text-slate-100">{fac.name}</div>
-                                    <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium mt-0.5">
-                                        <span className="font-bold uppercase tracking-wider text-[10px]">{fac.facilityType}</span>
-                                        <span>•</span>
-                                        <span className="font-mono text-[11px] text-primary/85 dark:text-primary/75">
-                                            {fac.slug ? `${fac.slug}.clinicez.ph` : "Console"}
-                                        </span>
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400 font-medium">
-                                    {new Date(fac.createdAt).toLocaleDateString(undefined, {
-                                        year: 'numeric',
-                                        month: 'long',
-                                        day: 'numeric'
-                                    })}
-                                </td>
-                                <td className="px-6 py-4">
-                                    {fac.status === "Provisioning" && (
-                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 animate-pulse border border-amber-100 dark:border-amber-900/30">
-                                            <IconClockPlay className="h-3.5 w-3.5" />
-                                            Provisioning
-                                        </span>
-                                    )}
-                                    {fac.status === "Active" && (
-                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/30">
-                                            <IconCircleCheck className="h-3.5 w-3.5" />
-                                            Active
-                                        </span>
-                                    )}
-                                    {fac.status === "Failed" && (
-                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-900/30">
-                                            <IconAlertCircle className="h-3.5 w-3.5" />
-                                            Failed
-                                        </span>
-                                    )}
-                                    {fac.status === "Suspended" && (
-                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-100 dark:border-slate-800">
-                                            <IconAlertCircle className="h-3.5 w-3.5" />
-                                            Suspended
-                                        </span>
-                                    )}
-                                </td>
-                                <td className="px-6 py-4 text-right">
-                                    <div className="inline-flex items-center gap-1.5 justify-end">
-                                        <Button
-                                            onClick={() => handleOpenConsole(fac)}
-                                            disabled={fac.status !== "Active"}
-                                            variant="outline"
-                                            size="sm"
-                                            className="rounded-xl text-xs font-bold h-8 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900"
-                                        >
-                                            Manage Console
-                                            <IconExternalLink className="h-3.5 w-3.5 ml-1.5" />
-                                        </Button>
-                                        <Button
-                                            onClick={() => handleOpenEdit(fac)}
-                                            variant="ghost"
-                                            size="sm"
-                                            title="Edit Facility"
-                                            className="rounded-xl h-8 w-8 p-0 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800"
-                                        >
-                                            <IconEdit className="h-3.5 w-3.5" />
-                                        </Button>
-                                        <Button
-                                            onClick={() => setDeletingFacility(fac)}
-                                            variant="ghost"
-                                            size="sm"
-                                            title="Archive Facility"
-                                            className="rounded-xl h-8 w-8 p-0 text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40"
-                                        >
-                                            <IconTrash className="h-3.5 w-3.5" />
-                                        </Button>
-                                    </div>
-                                </td>
+            {/* Mobile View: Dedicated cards (< md) */}
+            <div className="block md:hidden space-y-3.5 mt-2">
+                {facilities.map((fac) => (
+                    <div
+                        key={fac.id}
+                        className="p-4 sm:p-5 rounded-2xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-xs flex flex-col gap-3.5"
+                    >
+                        {/* Top: Facility Name & Status Badge */}
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                                <h3 className="font-bold text-base text-slate-900 dark:text-slate-100 truncate">
+                                    {fac.name}
+                                </h3>
+                                <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium mt-0.5 flex-wrap">
+                                    <span className="font-bold uppercase tracking-wider text-[10px] text-slate-400 dark:text-slate-500">
+                                        {fac.facilityType}
+                                    </span>
+                                    <span>•</span>
+                                    <span className="font-mono text-[11px] text-primary/85 dark:text-primary/75 truncate">
+                                        {fac.slug ? `${fac.slug}.clinicez.ph` : "Console"}
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="shrink-0">
+                                {renderStatusBadge(fac.status)}
+                            </div>
+                        </div>
+
+                        {/* Middle: Created At date */}
+                        <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                            <span className="text-[11px] uppercase tracking-wider font-semibold text-slate-400">Created</span>
+                            <span className="font-medium text-slate-600 dark:text-slate-300">
+                                {new Date(fac.createdAt).toLocaleDateString(undefined, {
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric'
+                                })}
+                            </span>
+                        </div>
+
+                        {/* Bottom: Action buttons */}
+                        <div className="flex items-center gap-2 pt-1">
+                            <Button
+                                onClick={() => handleOpenConsole(fac)}
+                                disabled={fac.status !== "Active"}
+                                variant="outline"
+                                size="sm"
+                                className="flex-1 rounded-xl text-xs font-bold h-9 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 flex items-center justify-center gap-1.5"
+                            >
+                                <span>Manage Console</span>
+                                <IconExternalLink className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                                onClick={() => handleOpenEdit(fac)}
+                                variant="ghost"
+                                size="sm"
+                                title="Edit Facility"
+                                className="rounded-xl h-9 w-9 p-0 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0"
+                            >
+                                <IconEdit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                                onClick={() => setDeletingFacility(fac)}
+                                variant="ghost"
+                                size="sm"
+                                title="Archive Facility"
+                                className="rounded-xl h-9 w-9 p-0 text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 shrink-0"
+                            >
+                                <IconTrash className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Desktop View: Full Table (>= md) */}
+            <div className="hidden md:block w-full overflow-hidden border border-slate-100 dark:border-slate-800 rounded-3xl mt-4 shadow-sm bg-white dark:bg-slate-950">
+                <div className="overflow-x-auto">
+                    <table className="w-full min-w-[640px] text-left border-collapse">
+                        <thead>
+                            <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/75 dark:bg-slate-900/50">
+                                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-400 whitespace-nowrap">Name</th>
+                                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-400 whitespace-nowrap">Created At</th>
+                                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-400 whitespace-nowrap">Status</th>
+                                <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-400 text-right whitespace-nowrap">Actions</th>
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                            {facilities.map((fac) => (
+                                <tr key={fac.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/20 transition-colors">
+                                    <td className="px-6 py-4">
+                                        <div className="font-semibold text-slate-800 dark:text-slate-100">{fac.name}</div>
+                                        <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium mt-0.5">
+                                            <span className="font-bold uppercase tracking-wider text-[10px]">{fac.facilityType}</span>
+                                            <span>•</span>
+                                            <span className="font-mono text-[11px] text-primary/85 dark:text-primary/75">
+                                                {fac.slug ? `${fac.slug}.clinicez.ph` : "Console"}
+                                            </span>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400 font-medium whitespace-nowrap">
+                                        {new Date(fac.createdAt).toLocaleDateString(undefined, {
+                                            year: 'numeric',
+                                            month: 'long',
+                                            day: 'numeric'
+                                        })}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        {renderStatusBadge(fac.status)}
+                                    </td>
+                                    <td className="px-6 py-4 text-right whitespace-nowrap">
+                                        <div className="inline-flex items-center gap-1.5 justify-end">
+                                            <Button
+                                                onClick={() => handleOpenConsole(fac)}
+                                                disabled={fac.status !== "Active"}
+                                                variant="outline"
+                                                size="sm"
+                                                className="rounded-xl text-xs font-bold h-8 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900"
+                                            >
+                                                Manage Console
+                                                <IconExternalLink className="h-3.5 w-3.5 ml-1.5" />
+                                            </Button>
+                                            <Button
+                                                onClick={() => handleOpenEdit(fac)}
+                                                variant="ghost"
+                                                size="sm"
+                                                title="Edit Facility"
+                                                className="rounded-xl h-8 w-8 p-0 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800"
+                                            >
+                                                <IconEdit className="h-3.5 w-3.5" />
+                                            </Button>
+                                            <Button
+                                                onClick={() => setDeletingFacility(fac)}
+                                                variant="ghost"
+                                                size="sm"
+                                                title="Archive Facility"
+                                                className="rounded-xl h-8 w-8 p-0 text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                                            >
+                                                <IconTrash className="h-3.5 w-3.5" />
+                                            </Button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             {/* Edit Facility Dialog */}
@@ -279,20 +369,20 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                                 required
                             />
                         </div>
-                        <DialogFooter className="gap-2 sm:justify-end">
+                        <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
                             <Button 
                                 type="button" 
                                 variant="outline" 
                                 onClick={() => setEditingFacility(null)} 
                                 disabled={savingEdit}
-                                className="rounded-xl text-xs"
+                                className="w-full sm:w-auto rounded-xl text-xs"
                             >
                                 Cancel
                             </Button>
                             <Button 
                                 type="submit" 
                                 disabled={savingEdit || !editName.trim()} 
-                                className="rounded-xl text-xs font-semibold gap-1.5"
+                                className="w-full sm:w-auto rounded-xl text-xs font-semibold gap-1.5"
                             >
                                 {savingEdit && <IconLoader className="h-3.5 w-3.5 animate-spin" />}
                                 <span>Save Changes</span>
@@ -313,13 +403,13 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                             Are you sure you want to remove <strong className="text-slate-800 dark:text-slate-200">{deletingFacility?.name}</strong>? This action will unlink the clinical facility from your workspace.
                         </DialogDescription>
                     </DialogHeader>
-                    <DialogFooter className="gap-2 pt-2 sm:justify-end">
+                    <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 pt-2 sm:justify-end">
                         <Button 
                             type="button" 
                             variant="outline" 
                             onClick={() => setDeletingFacility(null)} 
                             disabled={savingDelete}
-                            className="rounded-xl text-xs"
+                            className="w-full sm:w-auto rounded-xl text-xs"
                         >
                             Cancel
                         </Button>
@@ -328,7 +418,7 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                             variant="destructive" 
                             onClick={handleConfirmDelete} 
                             disabled={savingDelete}
-                            className="rounded-xl text-xs font-semibold gap-1.5"
+                            className="w-full sm:w-auto rounded-xl text-xs font-semibold gap-1.5"
                         >
                             {savingDelete && <IconLoader className="h-3.5 w-3.5 animate-spin" />}
                             <span>Confirm &amp; Archive</span>

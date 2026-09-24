@@ -118,19 +118,19 @@ export default function CreateResourceDialog() {
                             </div>
                         </div>
 
-                        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2.5">
+                        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 sm:gap-2.5">
                             <Button
                                 type="button"
                                 variant="ghost"
                                 onClick={() => handleOpenChange(false)}
-                                className="rounded-xl text-xs font-bold"
+                                className="w-full sm:w-auto rounded-xl text-xs font-bold"
                             >
                                 Dismiss
                             </Button>
                             <Button
                                 type="button"
                                 onClick={handleGoToBilling}
-                                className="rounded-xl text-xs font-bold px-4 h-9 bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5"
+                                className="w-full sm:w-auto rounded-xl text-xs font-bold px-4 h-9 bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5"
                             >
                                 <IconCreditCard className="h-3.5 w-3.5" />
                                 Select Plan & Subscribe
@@ -152,19 +152,19 @@ export default function CreateResourceDialog() {
                             </div>
                         </div>
 
-                        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2.5">
+                        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 sm:gap-2.5">
                             <Button
                                 type="button"
                                 variant="ghost"
                                 onClick={() => handleOpenChange(false)}
-                                className="rounded-xl text-xs font-bold"
+                                className="w-full sm:w-auto rounded-xl text-xs font-bold"
                             >
                                 Dismiss
                             </Button>
                             <Button
                                 type="button"
                                 onClick={handleGoToBilling}
-                                className="rounded-xl text-xs font-bold px-4 h-9 bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5"
+                                className="w-full sm:w-auto rounded-xl text-xs font-bold px-4 h-9 bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5"
                             >
                                 <IconCreditCard className="h-3.5 w-3.5" />
                                 Upgrade Plan
@@ -188,19 +188,19 @@ export default function CreateResourceDialog() {
                             />
                         </div>
 
-                        <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2.5">
+                        <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 sm:gap-2.5">
                             <Button
                                 type="button"
                                 variant="ghost"
                                 onClick={() => handleOpenChange(false)}
-                                className="rounded-xl text-xs font-bold"
+                                className="w-full sm:w-auto rounded-xl text-xs font-bold"
                             >
                                 Cancel
                             </Button>
                             <Button
                                 type="submit"
                                 disabled={loading}
-                                className="rounded-xl text-xs font-bold px-5 h-9 bg-primary text-primary-foreground hover:bg-primary/90"
+                                className="w-full sm:w-auto rounded-xl text-xs font-bold px-5 h-9 bg-primary text-primary-foreground hover:bg-primary/90"
                             >
                                 {loading ? (
                                     <IconLoader className="h-4 w-4 animate-spin mr-1.5" />
