@@ -28,5 +28,26 @@ public sealed class PushAppointmentsWebhookEndpoint : IEndpoint
             .Produces<ApiResponse<bool>>(StatusCodes.Status202Accepted)
             .ProducesValidationProblem()
             .RequireAuthorization(); // Webhooks usually use a generic service-to-service token or specific auth.
+
+        app.MapPost("/api/v1/appointments/clinic-push", async (
+                [FromBody] ClinicPushRequest request,
+                ISender sender,
+                CancellationToken ct) =>
+            {
+                var result = await sender.Send(new PushClinicAppointmentsCommand(request.PatientId, request.ClinicId, request.Appointments), ct);
+                return Results.Accepted(value: ApiResponse<bool>.Success(result));
+            })
+            .WithTags("Appointments", "Webhooks")
+            .WithName("ClinicPushAppointments")
+            .WithSummary("Receive push notifications and synced appointment state from a clinic operational console")
+            .WithDescription("Accepts updated appointment records from the clinic dashboard for patient sync.")
+            .Produces<ApiResponse<bool>>(StatusCodes.Status202Accepted)
+            .ProducesValidationProblem();
     }
 }
+
+public sealed record ClinicPushRequest(
+    Guid ClinicId,
+    Guid PatientId,
+    IReadOnlyList<ClinicAppointmentDto> Appointments);
+

@@ -1,10 +1,13 @@
+using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Clinic.Infrastructure.Consumers;
+using ClinicEz.Clinic.Infrastructure.Context;
 using ClinicEz.Clinic.Infrastructure.Persistence;
 using ClinicEz.Clinic.Infrastructure.Persistence.Repositories;
+using ClinicEz.Clinic.Infrastructure.Services;
 using Hangfire;
 using Hangfire.PostgreSql;
 using MassTransit;
-using ClinicEz.Clinic.Infrastructure.Consumers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,14 +30,22 @@ public static class DependencyInjection
             throw new InvalidOperationException("DbSchema configuration value is required but was not specified.");
         }
 
+        services.AddHttpContextAccessor();
+        services.AddScoped<IClinicContext, ClinicContext>();
+
         services.AddDbContext<ApplicationDbContext>(options =>
             options.UseNpgsql(connectionString, npgsqlOptions =>
             {
                 npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", schemaName);
             }));
+
         // Register repositories and Unit of Work
+        services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+
+        // Outbound patient webhook notifier
+        services.AddHttpClient<IPatientWebhookNotifier, PatientWebhookNotifier>();
 
         // Add Hangfire
         services.AddHangfire(config => config
@@ -44,27 +55,27 @@ public static class DependencyInjection
 
         services.AddHangfireServer();
 
-		services.AddMassTransit(x =>
-		{
-			x.AddConsumer<FacilityCreatedConsumer>();
-			x.AddEntityFrameworkOutbox<ApplicationDbContext>(o =>
-			{
-				o.UsePostgres();
-				o.UseBusOutbox();
-			});
+        services.AddMassTransit(x =>
+        {
+            x.AddConsumer<FacilityCreatedConsumer>();
+            x.AddConsumer<AppointmentBookedConsumer>();
+            x.AddEntityFrameworkOutbox<ApplicationDbContext>(o =>
+            {
+                o.UsePostgres();
+                o.UseBusOutbox();
+            });
 
-			x.UsingRabbitMq((context, cfg) =>
-			{
-				cfg.Host(configuration["RabbitMq:Host"] ?? "localhost", configuration["RabbitMq:VirtualHost"] ?? "/", h =>
-				{
-					h.Username(configuration["RabbitMq:Username"] ?? "rabbitmq");
-					h.Password(configuration["RabbitMq:Password"] ?? "nextstep-rabbitmq-2o2G");
-				});
+            x.UsingRabbitMq((context, cfg) =>
+            {
+                cfg.Host(configuration["RabbitMq:Host"] ?? "localhost", configuration["RabbitMq:VirtualHost"] ?? "/", h =>
+                {
+                    h.Username(configuration["RabbitMq:Username"] ?? "rabbitmq");
+                    h.Password(configuration["RabbitMq:Password"] ?? "nextstep-rabbitmq-2o2G");
+                });
 
-				cfg.ConfigureEndpoints(context);
-			});
-		});
-
+                cfg.ConfigureEndpoints(context);
+            });
+        });
 
         if (env != null && env.IsDevelopment())
         {
@@ -75,10 +86,3 @@ public static class DependencyInjection
         return services;
     }
 }
-
-
-
-
-
-
-

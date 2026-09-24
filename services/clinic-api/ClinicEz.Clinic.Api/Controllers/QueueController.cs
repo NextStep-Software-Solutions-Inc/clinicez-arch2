@@ -1,0 +1,138 @@
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using ClinicEz.Clinic.Api.Authorization;
+using ClinicEz.Clinic.Application.Features.Queue.Commands;
+using ClinicEz.Clinic.Application.Features.Queue.DTOs;
+using ClinicEz.Clinic.Application.Features.Queue.Queries;
+using ClinicEz.Clinic.Application.Features.Triage.Commands;
+using ClinicEz.Clinic.Application.Features.Triage.DTOs;
+using ClinicEz.Clinic.Application.Features.Triage.Queries;
+using ClinicEz.Clinic.Domain.Constants;
+using ClinicEz.Clinic.Domain.Enums;
+using ClinicEz.Shared.Common;
+using MediatR;
+using Microsoft.AspNetCore.Mvc;
+
+namespace ClinicEz.Clinic.Api.Controllers;
+
+[ApiController]
+[Route("api/v1/queue")]
+public sealed class QueueController : ControllerBase
+{
+    private readonly ISender _sender;
+
+    public QueueController(ISender sender)
+    {
+        _sender = sender;
+    }
+
+    [HttpPost("check-in")]
+    [HasPermission(ClinicPermissions.QueueCheckIn)]
+    public async Task<ActionResult<ApiResponse<QueueItemDto>>> CheckInPatient(
+        [FromBody] CheckInPatientCommand command,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(command, ct);
+        return CreatedAtAction(nameof(GetQueue), new { id = result.Id }, ApiResponse<QueueItemDto>.Success(result, "Patient checked in successfully."));
+    }
+
+    [HttpGet]
+    [HasPermission(ClinicPermissions.QueueRead)]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<QueueItemDto>>>> GetQueue(
+        [FromQuery] DateOnly? date,
+        [FromQuery] QueueStatus? status,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new GetQueueQuery(date, status), ct);
+        return Ok(ApiResponse<IReadOnlyList<QueueItemDto>>.Success(result));
+    }
+
+    [HttpGet("metrics")]
+    [HasPermission(ClinicPermissions.QueueRead)]
+    public async Task<ActionResult<ApiResponse<QueueMetricsDto>>> GetQueueMetrics(
+        [FromQuery] DateOnly? date,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new GetQueueMetricsQuery(date), ct);
+        return Ok(ApiResponse<QueueMetricsDto>.Success(result));
+    }
+
+    [HttpPost("{id:guid}/triage")]
+    [HasPermission(ClinicPermissions.TriageWrite)]
+    public async Task<ActionResult<ApiResponse<TriageVitalsDto>>> RecordTriage(
+        Guid id,
+        [FromBody] RecordTriageRequest request,
+        CancellationToken ct)
+    {
+        var command = new RecordTriageVitalsCommand(
+            id,
+            request.NurseId,
+            request.RecordedByNurseName,
+            request.SystolicBp,
+            request.DiastolicBp,
+            request.HeartRateBpm,
+            request.TemperatureCelsius,
+            request.RespiratoryRateBreathsPerMin,
+            request.OxygenSaturationPercent,
+            request.HeightCm,
+            request.WeightKg,
+            request.PainScore,
+            request.Notes);
+
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<TriageVitalsDto>.Success(result, "Triage vitals recorded successfully."));
+    }
+
+    [HttpGet("{id:guid}/triage")]
+    [HasPermission(ClinicPermissions.TriageRead)]
+    public async Task<ActionResult<ApiResponse<TriageVitalsDto>>> GetTriage(
+        Guid id,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new GetTriageVitalsQuery(id), ct);
+        if (result == null)
+        {
+            return NotFound(ApiResponse<TriageVitalsDto>.Fail("No vitals recorded for this queue ticket."));
+        }
+        return Ok(ApiResponse<TriageVitalsDto>.Success(result));
+    }
+
+    [HttpPost("{id:guid}/call")]
+    [HasPermission(ClinicPermissions.QueueCall)]
+    public async Task<ActionResult<ApiResponse<QueueItemDto>>> CallQueueItem(
+        Guid id,
+        [FromBody] CallQueueRequest? request,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new CallQueueItemCommand(id, request?.DoctorId, request?.DoctorName), ct);
+        return Ok(ApiResponse<QueueItemDto>.Success(result, "Patient called to room."));
+    }
+
+    [HttpPost("{id:guid}/complete")]
+    [HasPermission(ClinicPermissions.QueueComplete)]
+    public async Task<ActionResult<ApiResponse<bool>>> CompleteQueueItem(
+        Guid id,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new CompleteQueueItemCommand(id), ct);
+        return Ok(ApiResponse<bool>.Success(result, "Queue item completed."));
+    }
+}
+
+public sealed record RecordTriageRequest(
+    Guid? NurseId,
+    string? RecordedByNurseName,
+    int? SystolicBp,
+    int? DiastolicBp,
+    int? HeartRateBpm,
+    decimal? TemperatureCelsius,
+    int? RespiratoryRateBreathsPerMin,
+    decimal? OxygenSaturationPercent,
+    decimal? HeightCm,
+    decimal? WeightKg,
+    int? PainScore,
+    string? Notes);
+
+public sealed record CallQueueRequest(Guid? DoctorId, string? DoctorName);
