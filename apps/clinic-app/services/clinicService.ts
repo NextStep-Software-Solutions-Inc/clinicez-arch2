@@ -317,6 +317,148 @@ export interface DailyEodReport {
   totalDangerousDrugPrescriptions: number;
 }
 
+export interface FlowAnalytics {
+  totalEncountersToday: number;
+  inQueueNow: number;
+  urgentTriageNow: number;
+  inConsultationNow: number;
+  completedToday: number;
+  averageWaitMinutes: number;
+  averageConsultMinutes: number;
+  routineCount: number;
+  urgentCount: number;
+  emergencyCount: number;
+}
+
+export interface DailyTrendPoint {
+  dateLabel: string;
+  revenue: number;
+  patientCount: number;
+}
+
+export interface TenderShare {
+  method: string;
+  totalAmount: number;
+  percentage: number;
+}
+
+export interface MorbidityItem {
+  icd10Code: string;
+  description: string;
+  caseCount: number;
+  percentageShare: number;
+}
+
+export interface ServiceUsage {
+  itemType: string;
+  itemName: string;
+  quantity: number;
+}
+
+export interface DoctorStat {
+  doctorName: string;
+  encountersCount: number;
+  totalBilled: number;
+}
+
+export interface ClinicAnalytics {
+  startDate: string;
+  endDate: string;
+  tenantId: string;
+  clinicId: string;
+  flow: FlowAnalytics;
+  totalGrossRevenue: number;
+  totalNetRevenue: number;
+  totalCollections: number;
+  totalUnpaidBalances: number;
+  averageTicketSize: number;
+  seniorDiscountsGiven: number;
+  pwdDiscountsGiven: number;
+  revenueTrend: DailyTrendPoint[];
+  tenderShares: TenderShare[];
+  topDiagnoses: MorbidityItem[];
+  topServices: ServiceUsage[];
+  doctorStats: DoctorStat[];
+}
+
+export interface MorbidityDiseaseRow {
+  rank: number;
+  icd10Code: string;
+  description: string;
+  totalCases: number;
+  pediatricCases: number;
+  adultCases: number;
+  seniorCases: number;
+  maleCases: number;
+  femaleCases: number;
+  percentageOfTotal: number;
+}
+
+export interface MorbidityReport {
+  startDate: string;
+  endDate: string;
+  tenantId: string;
+  clinicId: string;
+  clinicName: string;
+  totalEncountersReviewed: number;
+  totalDiagnosesRecorded: number;
+  diseases: MorbidityDiseaseRow[];
+}
+
+export interface TaxDiscountAuditRow {
+  invoiceNumber: string;
+  invoiceDate: string;
+  patientName: string;
+  discountType: string;
+  identificationCardNumber?: string;
+  grossAmount: number;
+  discountAmount: number;
+  vatExemptSales: number;
+  vatAmountExempted: number;
+  netAmount: number;
+  amountPaid: number;
+  officialReceiptNumber?: string;
+  paymentMethod?: string;
+}
+
+export interface TaxDiscountAuditReport {
+  startDate: string;
+  endDate: string;
+  tenantId: string;
+  clinicId: string;
+  totalInvoicesAudited: number;
+  totalGrossSales: number;
+  totalSeniorDiscounts: number;
+  totalPwdDiscounts: number;
+  totalVatExempted: number;
+  totalNetCollections: number;
+  items: TaxDiscountAuditRow[];
+}
+
+export interface DoctorWorkloadDetail {
+  doctorId: string;
+  doctorName: string;
+  totalEncounters: number;
+  totalProceduresAssisted: number;
+  totalConsultationGross: number;
+  totalProcedureGross: number;
+  totalGrossGenerated: number;
+  estimatedPhysicianShare: number;
+  clinicFacilityShare: number;
+}
+
+export interface DoctorSharesReport {
+  startDate: string;
+  endDate: string;
+  tenantId: string;
+  clinicId: string;
+  totalClinicEncounters: number;
+  totalClinicGrossRevenue: number;
+  totalPhysicianShares: number;
+  totalFacilityShares: number;
+  doctorShares: DoctorWorkloadDetail[];
+}
+
 export interface PatientChart {
   patientId: string;
   patientName: string;
@@ -733,6 +875,39 @@ export const clinicService = {
   async getDailyEodReport(date?: string) {
     const qs = date ? `?date=${encodeURIComponent(date)}` : '';
     return clinicApiClient.get<DailyEodReport>(`/reports/daily-eod${qs}`);
+  },
+
+  // Advanced Reports & Executive Analytics
+  async getClinicAnalytics(startDate?: string, endDate?: string) {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    const qs = params.toString();
+    return clinicApiClient.get<ClinicAnalytics>(`/reports/analytics${qs ? `?${qs}` : ''}`);
+  },
+
+  async getMorbidityReport(startDate?: string, endDate?: string) {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    const qs = params.toString();
+    return clinicApiClient.get<MorbidityReport>(`/reports/morbidity${qs ? `?${qs}` : ''}`);
+  },
+
+  async getTaxDiscountAuditReport(startDate?: string, endDate?: string) {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    const qs = params.toString();
+    return clinicApiClient.get<TaxDiscountAuditReport>(`/reports/tax-discounts${qs ? `?${qs}` : ''}`);
+  },
+
+  async getDoctorSharesReport(startDate?: string, endDate?: string) {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    const qs = params.toString();
+    return clinicApiClient.get<DoctorSharesReport>(`/reports/doctor-shares${qs ? `?${qs}` : ''}`);
   },
 
   // Patient Chart

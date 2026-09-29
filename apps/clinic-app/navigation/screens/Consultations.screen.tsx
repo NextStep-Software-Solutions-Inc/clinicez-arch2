@@ -9,6 +9,7 @@ import {
   Alert,
   Modal,
 } from 'react-native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import ThemedText from '@ui/ThemedText';
 import {
   clinicService,
@@ -165,6 +166,8 @@ const SAMPLE_VITALS: Record<string, TriageVitals> = {
 };
 
 export default function ConsultationsScreen() {
+  const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const [patients, setPatients] = useState<PatientQueueItem[]>(SAMPLE_PATIENTS);
   const [selectedPatient, setSelectedPatient] = useState<PatientQueueItem>(SAMPLE_PATIENTS[0]);
   const [vitals, setVitals] = useState<TriageVitals | null>(SAMPLE_VITALS['q-001']);
@@ -375,6 +378,17 @@ export default function ConsultationsScreen() {
       setSubjective(`Patient presents with: ${p.chiefComplaint}.`);
     }
   };
+
+  useEffect(() => {
+    const params = route.params as { queueId?: string; patientId?: string } | undefined;
+    if (params?.queueId) {
+      const p = patients.find((x) => x.id === params.queueId);
+      if (p) handleSelectPatient(p);
+    } else if (params?.patientId) {
+      const p = patients.find((x) => x.patientId === params.patientId);
+      if (p) handleSelectPatient(p);
+    }
+  }, [route.params, patients]);
 
   // Search ICD-10 codes
   const handleSearchIcd10 = async (q: string) => {
@@ -1026,6 +1040,26 @@ export default function ConsultationsScreen() {
           <ThemedText style={styles.signedSub}>
             Cryptographically sealed by Dr. Cruz ({doctorPrc}) at {signedAt}.
           </ThemedText>
+          <Pressable
+            style={{
+              backgroundColor: '#15803D',
+              paddingVertical: 10,
+              paddingHorizontal: 16,
+              borderRadius: 8,
+              marginTop: 8,
+              alignItems: 'center',
+            }}
+            onPress={() =>
+              navigation.navigate('Billing', {
+                patientId: selectedPatient.patientId,
+                patientName: selectedPatient.patientName,
+              })
+            }
+          >
+            <ThemedText style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '700' }}>
+              💵 Forward to Cashier Station →
+            </ThemedText>
+          </Pressable>
         </View>
       ) : (
         <Pressable

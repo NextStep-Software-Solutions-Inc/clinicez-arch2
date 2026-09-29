@@ -9,6 +9,7 @@ import {
   RefreshControl,
   Alert,
 } from 'react-native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import ThemedText from '@ui/ThemedText';
 import {
   clinicService,
@@ -76,6 +77,8 @@ const SAMPLE_QUEUE_FOR_BILLING: PatientQueueItem[] = [
 ];
 
 export default function BillingScreen() {
+  const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const [services, setServices] = useState<ClinicServiceItem[]>(DEFAULT_SERVICES);
   const [patients, setPatients] = useState<PatientQueueItem[]>(SAMPLE_QUEUE_FOR_BILLING);
   const [selectedPatient, setSelectedPatient] = useState<PatientQueueItem>(SAMPLE_QUEUE_FOR_BILLING[0]);
@@ -134,6 +137,31 @@ export default function BillingScreen() {
   useEffect(() => {
     loadInitialData();
   }, [loadInitialData]);
+
+  useEffect(() => {
+    const params = route.params as { patientId?: string; patientName?: string } | undefined;
+    if (params?.patientId) {
+      const p = patients.find((x) => x.patientId === params.patientId);
+      if (p) {
+        setSelectedPatient(p);
+      } else if (params.patientName) {
+        setSelectedPatient({
+          id: `q-${Date.now()}`,
+          tenantId: 'tenant-default',
+          clinicId: 'clinic-default',
+          queueNumber: 'WALK-IN',
+          sequenceNumber: 99,
+          queueDate: new Date().toISOString().split('T')[0],
+          patientId: params.patientId,
+          patientName: params.patientName,
+          priority: 'Routine',
+          status: 'Completed',
+          checkInTime: new Date().toISOString(),
+          hasVitals: true,
+        });
+      }
+    }
+  }, [route.params, patients]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -329,6 +357,21 @@ export default function BillingScreen() {
             Amount Paid: ₱{lastReceipt.netAmount.toFixed(2)} • Change Returned: ₱{lastReceipt.change.toFixed(2)}
           </ThemedText>
           <ThemedText style={styles.receiptBiller}>Billed by Cashier Station • St. Jude Family Clinic</ThemedText>
+          <Pressable
+            style={{
+              backgroundColor: '#1E293B',
+              paddingVertical: 8,
+              paddingHorizontal: 12,
+              borderRadius: 6,
+              marginTop: 8,
+              alignItems: 'center',
+            }}
+            onPress={() => navigation.navigate('Dashboard')}
+          >
+            <ThemedText style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>
+              📊 Return to Dashboard & Remittance →
+            </ThemedText>
+          </Pressable>
         </View>
       )}
 
