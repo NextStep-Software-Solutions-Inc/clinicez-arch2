@@ -123,7 +123,7 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
             window.open(`http://localhost:${port}?tenant=${tenantSlug}&facilityId=${facility.id}`, "_blank");
         } else {
             const sub = APP_SUBDOMAINS[facility.facilityType] || "clinic";
-            window.open(`https://${sub}.clinicez.ph?tenant=${tenantSlug}&facilityId=${facility.id}`, "_blank");
+            window.open(`https://${sub}.clinicez.net?tenant=${tenantSlug}&facilityId=${facility.id}`, "_blank");
         }
     };
 
@@ -256,7 +256,7 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                                     </span>
                                     <span>•</span>
                                     <span className="font-mono text-[11px] text-primary/85 dark:text-primary/75 truncate">
-                                        {`${APP_SUBDOMAINS[fac.facilityType] || "clinic"}.clinicez.ph`}
+                                        {`${APP_SUBDOMAINS[fac.facilityType] || "clinic"}.clinicez.net`}
                                     </span>
                                 </div>
                             </div>
@@ -359,7 +359,7 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                                             <span className="font-bold uppercase tracking-wider text-[10px]">{fac.facilityType}</span>
                                             <span>•</span>
                                             <span className="font-mono text-[11px] text-primary/85 dark:text-primary/75">
-                                                {`${APP_SUBDOMAINS[fac.facilityType] || "clinic"}.clinicez.ph`}
+                                                {`${APP_SUBDOMAINS[fac.facilityType] || "clinic"}.clinicez.net`}
                                             </span>
                                         </div>
                                     </td>

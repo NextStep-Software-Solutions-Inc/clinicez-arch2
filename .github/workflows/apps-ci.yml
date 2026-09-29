@@ -9,7 +9,7 @@ on:
       - 'apps/**'
       - 'packages/shared-ts/**'
       - 'package.json'
-      - 'bun.lockb'
+      - 'bun.lock'
       - '.github/workflows/apps-ci.yml'
   pull_request:
     branches:
@@ -19,7 +19,7 @@ on:
       - 'apps/**'
       - 'packages/shared-ts/**'
       - 'package.json'
-      - 'bun.lockb'
+      - 'bun.lock'
       - '.github/workflows/apps-ci.yml'
   workflow_dispatch:
 

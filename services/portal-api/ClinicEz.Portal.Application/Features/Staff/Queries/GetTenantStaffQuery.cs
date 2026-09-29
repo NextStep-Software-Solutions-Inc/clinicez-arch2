@@ -68,7 +68,7 @@ public class GetTenantStaffQueryHandler(IApplicationDbContext context) : IReques
             {
                 TenantId = tenant.Id,
                 UserId = tenant.OwnerId,
-                Email = string.IsNullOrWhiteSpace(tenant.Email) ? "admin@clinicez.ph" : tenant.Email,
+                Email = string.IsNullOrWhiteSpace(tenant.Email) ? "admin@clinicez.net" : tenant.Email,
                 FullName = fullName,
                 Role = "Owner",
                 Status = "Active",

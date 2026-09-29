@@ -8,20 +8,21 @@ name: clinicez-portal-api
 
 services:
   portal-api:
-    image: ${IMAGE_NAME:-clinicez-portal-api}:${IMAGE_TAG:-dev}
-    container_name: clinicez-portal-api
+    image: ${IMAGE_NAME:-clinicez-portal-api}:${IMAGE_TAG:-latest}
+    container_name: ${CONTAINER_NAME:-clinicez-portal-api}
     labels:
       - "project=clinicez"
-      - "environment=dev"
+      - "environment=${ENVIRONMENT_LABEL:-prod}"
     expose:
       - "8080"
     networks:
       - data-network
       - npm-default
     environment:
-      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Production}
       - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}
       - Clerk__SecretKey=${CLERK_SECRET_KEY}
+      - Clerk__Authority=${CLERK_AUTHORITY}
       - Xendit__SecretKey=${XENDIT_SECRET_KEY}
       - Xendit__CallbackToken=${XENDIT_CALLBACK_TOKEN}
       - RabbitMq__Host=${RABBITMQ_HOST}

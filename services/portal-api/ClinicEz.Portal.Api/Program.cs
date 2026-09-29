@@ -77,7 +77,7 @@ builder.Services.AddAuthorization();
 // 1. Add services from our other layers
 builder.Services
     .AddApiServices()
-    .AddApplicationServices()
+    .AddApplicationServices(builder.Configuration)
     .AddInfrastructureServices(builder.Configuration, builder.Environment);
 
 var app = builder.Build();

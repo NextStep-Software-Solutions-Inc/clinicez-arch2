@@ -7,6 +7,7 @@ import {
   Pressable,
   ActivityIndicator,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import ThemedText from '@ui/ThemedText';
 import {
   clinicService,
@@ -81,6 +82,7 @@ const SAMPLE_QUEUE: PatientQueueItem[] = [
 ];
 
 export default function DashboardScreen() {
+  const navigation = useNavigation<any>();
   const [metrics, setMetrics] = useState<QueueMetrics>(SAMPLE_METRICS);
   const [queue, setQueue] = useState<PatientQueueItem[]>(SAMPLE_QUEUE);
   const [loading, setLoading] = useState(false);
@@ -319,8 +321,16 @@ export default function DashboardScreen() {
                     )}
 
                     {item.status === 'Completed' && (
-                      <View style={styles.completedBadge}>
-                        <ThemedText style={styles.completedText}>✓ Encounter Closed</ThemedText>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <View style={styles.completedBadge}>
+                          <ThemedText style={styles.completedText}>✓ Encounter Closed</ThemedText>
+                        </View>
+                        <Pressable
+                          style={[styles.actionBtn, styles.billBtn]}
+                          onPress={() => navigation.navigate('Billing', { patientId: item.patientId, patientName: item.patientName })}
+                        >
+                          <ThemedText style={styles.billBtnText}>Bill Visit →</ThemedText>
+                        </Pressable>
                       </View>
                     )}
                   </View>
@@ -558,6 +568,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#15803D',
+  },
+  billBtn: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+  },
+  billBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#16A34A',
   },
   completedBadge: {
     paddingVertical: 4,

@@ -5,6 +5,11 @@ export type QueuePriority = 'Routine' | 'Urgent' | 'Emergency';
 export type QueueStatus = 'Waiting' | 'Triaged' | 'InConsultation' | 'Completed' | 'Cancelled' | 'NoShow';
 export type AppointmentStatus = 'Pending' | 'Confirmed' | 'CheckedIn' | 'InConsultation' | 'Completed' | 'Cancelled';
 export type StaffRole = 'Doctor' | 'Nurse' | 'Receptionist' | 'Admin';
+export type InvoiceStatus = 'Draft' | 'Paid' | 'PartiallyPaid' | 'Voided' | 'Refunded';
+export type PaymentMethod = 'Cash' | 'GCash' | 'Maya' | 'CreditCard' | 'DebitCard' | 'PhilHealthKonsulta' | 'HmoInsurance';
+export type DiscountType = 'None' | 'SeniorCitizen' | 'Pwd' | 'PhilHealthKonsulta' | 'Custom';
+export type ProcedureStatus = 'Ordered' | 'InProgress' | 'Completed' | 'Cancelled';
+export type LabOrderStatus = 'Ordered' | 'SpecimenCollected' | 'SentToLab' | 'ResultsReceived' | 'Completed' | 'Cancelled';
 
 export interface ClinicRole {
   id: string;
@@ -160,6 +165,169 @@ export interface Icd10Code {
   category: string;
 }
 
+export interface ClinicServiceItem {
+  id: string;
+  tenantId: string;
+  clinicId: string;
+  code: string;
+  name: string;
+  category: string;
+  standardPrice: number;
+  description?: string;
+  isActive: boolean;
+}
+
+export interface InvoiceLineItem {
+  id: string;
+  serviceItemId?: string;
+  itemCode?: string;
+  description: string;
+  category: string;
+  unitPrice: number;
+  quantity: number;
+  totalPrice: number;
+}
+
+export interface PaymentRecord {
+  id: string;
+  paymentNumber: string;
+  paymentDate: string;
+  amount: number;
+  method: PaymentMethod;
+  referenceNumber?: string;
+  receivedByStaffName?: string;
+  notes?: string;
+}
+
+export interface InvoiceRecord {
+  id: string;
+  tenantId: string;
+  clinicId: string;
+  invoiceNumber: string;
+  invoiceDate: string;
+  patientId: string;
+  patientName: string;
+  queueItemId?: string;
+  appointmentId?: string;
+  consultationId?: string;
+  attendingDoctorId?: string;
+  attendingDoctorName?: string;
+  grossAmount: number;
+  discountType: DiscountType;
+  discountIdNumber?: string;
+  discountPercentage: number;
+  discountAmount: number;
+  netAmount: number;
+  amountPaid: number;
+  balanceDue: number;
+  status: InvoiceStatus;
+  notes?: string;
+  billedByStaffName?: string;
+  lineItems: InvoiceLineItem[];
+  payments: PaymentRecord[];
+}
+
+export interface ClinicalProcedureRecord {
+  id: string;
+  tenantId: string;
+  clinicId: string;
+  patientId: string;
+  patientName: string;
+  queueItemId?: string;
+  consultationId?: string;
+  procedureCode?: string;
+  procedureName: string;
+  category: string;
+  orderedByDoctorId?: string;
+  orderedByDoctorName?: string;
+  performedByStaffId?: string;
+  performedByStaffName?: string;
+  performedAt?: string;
+  scheduledAt: string;
+  status: ProcedureStatus;
+  preProcedureVitalsJson?: string;
+  postProcedureVitalsJson?: string;
+  medicationAdministered?: string;
+  lotNumber?: string;
+  expirationDate?: string;
+  siteRoute?: string;
+  clinicalNotes?: string;
+  complications?: string;
+}
+
+export interface ClinicLabOrderItem {
+  id: string;
+  testName: string;
+  category: string;
+  instructions?: string;
+  status: LabOrderStatus;
+}
+
+export interface ClinicLabOrderRecord {
+  id: string;
+  tenantId: string;
+  clinicId: string;
+  orderNumber: string;
+  patientId: string;
+  patientName: string;
+  consultationId?: string;
+  orderedByDoctorId?: string;
+  orderedByDoctorName?: string;
+  orderDate: string;
+  status: LabOrderStatus;
+  clinicalDiagnosis?: string;
+  notes?: string;
+  items: ClinicLabOrderItem[];
+}
+
+export interface PaymentModeSummary {
+  method: string;
+  totalAmount: number;
+  transactionCount: number;
+}
+
+export interface DoctorWorkloadSummary {
+  doctorName: string;
+  encountersCount: number;
+}
+
+export interface DailyEodReport {
+  reportDate: string;
+  tenantId: string;
+  clinicId: string;
+  totalCheckedIn: number;
+  totalWalkIns: number;
+  totalAppointments: number;
+  totalCompletedVisits: number;
+  totalWaitingOrInConsultation: number;
+  totalGrossAmount: number;
+  totalDiscountsGiven: number;
+  totalSeniorDiscounts: number;
+  totalPwdDiscounts: number;
+  totalPhilHealthCovered: number;
+  totalNetAmount: number;
+  totalAmountCollected: number;
+  cashInDrawer: number;
+  totalUnpaidBalances: number;
+  collectionsByMethod: PaymentModeSummary[];
+  doctorWorkloads: DoctorWorkloadSummary[];
+  totalProceduresPerformed: number;
+  totalLabOrdersIssued: number;
+  totalPrescriptionsWritten: number;
+  totalDangerousDrugPrescriptions: number;
+}
+
+export interface PatientChart {
+  patientId: string;
+  patientName: string;
+  totalVisits: number;
+  consultations: ConsultationRecord[];
+  vitalsHistory: TriageVitals[];
+  proceduresHistory: ClinicalProcedureRecord[];
+  labOrdersHistory: ClinicLabOrderRecord[];
+  invoicesHistory: InvoiceRecord[];
+}
+
 export interface CheckInRequest {
   patientId: string;
   patientName: string;
@@ -209,6 +377,35 @@ export interface CreateConsultationRequest {
     isDangerousDrug?: boolean;
     remarks?: string;
   }>;
+}
+
+export interface CreateInvoiceRequest {
+  patientId: string;
+  patientName: string;
+  queueItemId?: string;
+  appointmentId?: string;
+  consultationId?: string;
+  attendingDoctorId?: string;
+  attendingDoctorName?: string;
+  discountType: DiscountType;
+  discountIdNumber?: string;
+  customDiscountPercentage?: number;
+  notes?: string;
+  lineItems: Array<{
+    serviceItemId?: string;
+    itemCode?: string;
+    description: string;
+    category: string;
+    unitPrice: number;
+    quantity: number;
+  }>;
+}
+
+export interface RecordPaymentRequest {
+  amount: number;
+  method: PaymentMethod;
+  referenceNumber?: string;
+  notes?: string;
 }
 
 export const clinicService = {
@@ -286,6 +483,111 @@ export const clinicService = {
   async searchIcd10(query?: string) {
     const qs = query ? `?q=${encodeURIComponent(query)}` : '';
     return clinicApiClient.get<Icd10Code[]>(`/icd10${qs}`);
+  },
+
+  // Billing & Cashier POS
+  async getInvoices(date?: string, patientId?: string, status?: InvoiceStatus) {
+    const params = new URLSearchParams();
+    if (date) params.append('date', date);
+    if (patientId) params.append('patientId', patientId);
+    if (status) params.append('status', status);
+    const qs = params.toString();
+    return clinicApiClient.get<InvoiceRecord[]>(`/billing/invoices${qs ? `?${qs}` : ''}`);
+  },
+
+  async createInvoice(payload: CreateInvoiceRequest) {
+    return clinicApiClient.post<InvoiceRecord>('/billing/invoices', payload);
+  },
+
+  async recordPayment(invoiceId: string, payload: RecordPaymentRequest) {
+    return clinicApiClient.post<InvoiceRecord>(`/billing/invoices/${invoiceId}/pay`, payload);
+  },
+
+  // Services Catalog & Fee Schedule
+  async getServices(category?: string, isActive?: boolean) {
+    const params = new URLSearchParams();
+    if (category) params.append('category', category);
+    if (typeof isActive === 'boolean') params.append('isActive', String(isActive));
+    const qs = params.toString();
+    return clinicApiClient.get<ClinicServiceItem[]>(`/services${qs ? `?${qs}` : ''}`);
+  },
+
+  async createService(payload: { code: string; name: string; category: string; standardPrice: number; description?: string }) {
+    return clinicApiClient.post<ClinicServiceItem>('/services', payload);
+  },
+
+  // Procedures & Nursing Station
+  async getProcedures(patientId?: string, status?: ProcedureStatus, date?: string) {
+    const params = new URLSearchParams();
+    if (patientId) params.append('patientId', patientId);
+    if (status) params.append('status', status);
+    if (date) params.append('date', date);
+    const qs = params.toString();
+    return clinicApiClient.get<ClinicalProcedureRecord[]>(`/procedures${qs ? `?${qs}` : ''}`);
+  },
+
+  async orderProcedure(payload: {
+    patientId: string;
+    patientName: string;
+    queueItemId?: string;
+    consultationId?: string;
+    procedureCode?: string;
+    procedureName: string;
+    category: string;
+    orderedByDoctorId?: string;
+    orderedByDoctorName?: string;
+    clinicalNotes?: string;
+  }) {
+    return clinicApiClient.post<ClinicalProcedureRecord>('/procedures', payload);
+  },
+
+  async completeProcedure(id: string, payload: {
+    performedByStaffId?: string;
+    performedByStaffName?: string;
+    preProcedureVitalsJson?: string;
+    postProcedureVitalsJson?: string;
+    medicationAdministered?: string;
+    lotNumber?: string;
+    expirationDate?: string;
+    siteRoute?: string;
+    clinicalNotes?: string;
+    complications?: string;
+  }) {
+    return clinicApiClient.post<ClinicalProcedureRecord>(`/procedures/${id}/complete`, payload);
+  },
+
+  // Lab Orders & Diagnostic Requisitions
+  async getLabOrders(patientId?: string, status?: LabOrderStatus, date?: string) {
+    const params = new URLSearchParams();
+    if (patientId) params.append('patientId', patientId);
+    if (status) params.append('status', status);
+    if (date) params.append('date', date);
+    const qs = params.toString();
+    return clinicApiClient.get<ClinicLabOrderRecord[]>(`/lab-orders${qs ? `?${qs}` : ''}`);
+  },
+
+  async createLabOrder(payload: {
+    patientId: string;
+    patientName: string;
+    consultationId?: string;
+    orderedByDoctorId?: string;
+    orderedByDoctorName?: string;
+    clinicalDiagnosis?: string;
+    notes?: string;
+    items?: Array<{ testName: string; category: string; instructions?: string }>;
+  }) {
+    return clinicApiClient.post<ClinicLabOrderRecord>('/lab-orders', payload);
+  },
+
+  // Daily Operations Census & Cashier Remittance
+  async getDailyEodReport(date?: string) {
+    const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+    return clinicApiClient.get<DailyEodReport>(`/reports/daily-eod${qs}`);
+  },
+
+  // Patient Chart
+  async getPatientChart(patientId: string) {
+    return clinicApiClient.get<PatientChart>(`/patients/${patientId}/chart`);
   },
 
   // Staff & Roles

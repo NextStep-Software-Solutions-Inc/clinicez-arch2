@@ -30,7 +30,7 @@ public static class ClinicRoleSeeder
                 TenantId = tenantId,
                 ClinicId = clinicId,
                 Name = "Clinic Administrator",
-                Description = "Full operational administration and custom role management",
+                Description = "Full operational administration, billing oversight, and custom role management",
                 IsSystem = true,
                 Permissions = new List<string>(ClinicPermissions.All),
                 CreatedAt = DateTime.UtcNow,
@@ -42,7 +42,7 @@ public static class ClinicRoleSeeder
                 TenantId = tenantId,
                 ClinicId = clinicId,
                 Name = "Attending Physician / Doctor",
-                Description = "Consultation documentation, vitals review, prescription issuing, and encounter signing",
+                Description = "Consultation documentation, vitals review, prescription issuing, lab/procedure ordering, and encounter signing",
                 IsSystem = true,
                 Permissions = new List<string>
                 {
@@ -53,7 +53,12 @@ public static class ClinicRoleSeeder
                     ClinicPermissions.TriageRead,
                     ClinicPermissions.ConsultationsRead,
                     ClinicPermissions.ConsultationsWrite,
-                    ClinicPermissions.ConsultationsSign
+                    ClinicPermissions.ConsultationsSign,
+                    ClinicPermissions.ProceduresRead,
+                    ClinicPermissions.ProceduresWrite,
+                    ClinicPermissions.LabOrdersRead,
+                    ClinicPermissions.LabOrdersWrite,
+                    ClinicPermissions.ServicesRead
                 },
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = "System:Seeder"
@@ -64,7 +69,7 @@ public static class ClinicRoleSeeder
                 TenantId = tenantId,
                 ClinicId = clinicId,
                 Name = "Triage Nurse",
-                Description = "Patient vitals capture, queue flow monitoring, and doctor assistance",
+                Description = "Patient vitals capture, queue flow monitoring, procedure administration (nebulization/vaccination), and doctor assistance",
                 IsSystem = true,
                 Permissions = new List<string>
                 {
@@ -73,7 +78,10 @@ public static class ClinicRoleSeeder
                     ClinicPermissions.QueueCall,
                     ClinicPermissions.TriageRead,
                     ClinicPermissions.TriageWrite,
-                    ClinicPermissions.ConsultationsRead
+                    ClinicPermissions.ConsultationsRead,
+                    ClinicPermissions.ProceduresRead,
+                    ClinicPermissions.ProceduresWrite,
+                    ClinicPermissions.ServicesRead
                 },
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = "System:Seeder"
@@ -84,7 +92,7 @@ public static class ClinicRoleSeeder
                 TenantId = tenantId,
                 ClinicId = clinicId,
                 Name = "Front Desk Receptionist",
-                Description = "Patient check-in, walk-in ticket issuing, queue coordination, and appointments management",
+                Description = "Patient check-in, walk-in ticket issuing, cashier billing, queue coordination, and appointments management",
                 IsSystem = true,
                 Permissions = new List<string>
                 {
@@ -93,7 +101,31 @@ public static class ClinicRoleSeeder
                     ClinicPermissions.QueueRead,
                     ClinicPermissions.QueueCheckIn,
                     ClinicPermissions.QueueCall,
-                    ClinicPermissions.StaffRead
+                    ClinicPermissions.StaffRead,
+                    ClinicPermissions.BillingRead,
+                    ClinicPermissions.BillingWrite,
+                    ClinicPermissions.ServicesRead,
+                    ClinicPermissions.ReportsRead
+                },
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = "System:Seeder"
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                ClinicId = clinicId,
+                Name = "Clinic Cashier / Billing Officer",
+                Description = "Patient billing settlement, official receipts, Senior/PWD discounts, and daily cashier remittance reconciliation",
+                IsSystem = true,
+                Permissions = new List<string>
+                {
+                    ClinicPermissions.QueueRead,
+                    ClinicPermissions.BillingRead,
+                    ClinicPermissions.BillingWrite,
+                    ClinicPermissions.BillingVoid,
+                    ClinicPermissions.ServicesRead,
+                    ClinicPermissions.ReportsRead
                 },
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = "System:Seeder"

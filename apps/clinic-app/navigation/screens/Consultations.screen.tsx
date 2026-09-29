@@ -43,6 +43,24 @@ const COMMON_ICD10: Icd10Code[] = [
   { code: 'A09', description: 'Infectious gastroenteritis and colitis, unspecified', category: 'Infectious' },
 ];
 
+const COMMON_LAB_TESTS = [
+  'Complete Blood Count (CBC) with Platelet',
+  'Fasting Blood Sugar (FBS)',
+  'Lipid Profile (Chol, Trig, HDL, LDL)',
+  'Routine Urinalysis',
+  'Serum Creatinine & eGFR',
+  '12-Lead ECG with Interpretation',
+  'Chest X-Ray PA View',
+  'Random Blood Sugar (RBS) Rapid Test',
+];
+
+const COMMON_PROCEDURES = [
+  { code: 'PROC-NEB', name: 'Nebulization Therapy', category: 'Procedure', fee: 250 },
+  { code: 'PROC-WOUND', name: 'Wound Dressing & Debridement', category: 'Procedure', fee: 350 },
+  { code: 'PROC-ECG', name: '12-Lead Electrocardiogram', category: 'Diagnostic', fee: 450 },
+  { code: 'PROC-VAX', name: 'Vaccine Administration', category: 'NursingService', fee: 250 },
+];
+
 const SAMPLE_PATIENTS: PatientQueueItem[] = [
   {
     id: 'q-001',
@@ -157,7 +175,7 @@ export default function ConsultationsScreen() {
   );
   const [assessment, setAssessment] = useState('Essential (primary) hypertension, Stage 1 - controlled.');
   const [plan, setPlan] = useState(
-    '1. Continue Amlodipine 5mg OD po.\n2. Request 12-lead ECG, Fasting Blood Sugar, Lipid Profile, Serum Creatinine.\n3. Low sodium, DASH diet counseling provided.\n4. Follow up in 4 weeks with lab results.'
+    '1. Continue Amlodipine 5mg OD po.\n2. Request Fasting Blood Sugar, Lipid Profile, Serum Creatinine.\n3. Low sodium, DASH diet counseling provided.\n4. Follow up in 4 weeks with lab results.'
   );
 
   // ICD-10 Search & Selection
@@ -181,6 +199,13 @@ export default function ConsultationsScreen() {
       isDangerousDrug: false,
     },
   ]);
+
+  // Diagnostic Lab Orders & In-Clinic Procedures
+  const [orderedLabs, setOrderedLabs] = useState<string[]>([
+    'Fasting Blood Sugar (FBS)',
+    'Lipid Profile (Chol, Trig, HDL, LDL)',
+  ]);
+  const [orderedProcedures, setOrderedProcedures] = useState<string[]>([]);
 
   // New Prescription Modal / Input Form State
   const [showAddRx, setShowAddRx] = useState(false);
@@ -221,7 +246,6 @@ export default function ConsultationsScreen() {
     setSignedAt(null);
     setBanner(null);
 
-    // Try API triage lookup
     const [triageData, triageErr] = await clinicService.getTriage(p.id);
     if (!triageErr && triageData) {
       setVitals(triageData);
@@ -229,7 +253,6 @@ export default function ConsultationsScreen() {
       setVitals(SAMPLE_VITALS[p.id] ?? null);
     }
 
-    // Set initial subjective from chief complaint
     if (p.chiefComplaint) {
       setSubjective(`Patient presents with: ${p.chiefComplaint}.`);
     }
@@ -266,6 +289,18 @@ export default function ConsultationsScreen() {
 
   const handleRemoveDiagnosis = (code: string) => {
     setSelectedDiagnoses((prev) => prev.filter((d) => d.icd10Code !== code));
+  };
+
+  const handleToggleLab = (labName: string) => {
+    setOrderedLabs(prev =>
+      prev.includes(labName) ? prev.filter(l => l !== labName) : [...prev, labName]
+    );
+  };
+
+  const handleToggleProcedure = (procName: string) => {
+    setOrderedProcedures(prev =>
+      prev.includes(procName) ? prev.filter(p => p !== procName) : [...prev, procName]
+    );
   };
 
   const handleAddPrescription = () => {
@@ -354,6 +389,66 @@ export default function ConsultationsScreen() {
       });
     }
 
+    // Auto-create Diagnostic Lab Requisitions if labs were ordered
+    if (orderedLabs.length > 0) {
+      await clinicService.createLabOrder({
+        patientId: selectedPatient.patientId,
+        patientName: selectedPatient.patientName,
+        consultationId: consultation?.id,
+        orderedByDoctorId: selectedPatient.doctorId,
+        orderedByDoctorName: selectedPatient.doctorName ?? 'Dr. Cruz',
+        clinicalDiagnosis: assessment,
+        items: orderedLabs.map(l => ({
+          testName: l,
+          category: l.includes('ECG') || l.includes('X-Ray') ? 'Diagnostic' : 'Clinical Laboratory',
+        })),
+      });
+    }
+
+    // Auto-order in-clinic procedures for the nursing station
+    for (const procName of orderedProcedures) {
+      const procInfo = COMMON_PROCEDURES.find(p => p.name === procName);
+      await clinicService.orderProcedure({
+        patientId: selectedPatient.patientId,
+        patientName: selectedPatient.patientName,
+        queueItemId: selectedPatient.id,
+        consultationId: consultation?.id,
+        procedureCode: procInfo?.code,
+        procedureName: procName,
+        category: procInfo?.category ?? 'Procedure',
+        orderedByDoctorId: selectedPatient.doctorId,
+        orderedByDoctorName: selectedPatient.doctorName ?? 'Dr. Cruz',
+        clinicalNotes: `Ordered during encounter for ${assessment}`,
+      });
+    }
+
+    // Auto-create draft billing invoice for Cashier Station
+    const billItems = [
+      { description: 'General Outpatient Medical Consultation', category: 'Consultation', unitPrice: 500, quantity: 1 }
+    ];
+    for (const procName of orderedProcedures) {
+      const procInfo = COMMON_PROCEDURES.find(p => p.name === procName);
+      if (procInfo) {
+        billItems.push({
+          description: procInfo.name,
+          category: procInfo.category,
+          unitPrice: procInfo.fee,
+          quantity: 1,
+        });
+      }
+    }
+    await clinicService.createInvoice({
+      patientId: selectedPatient.patientId,
+      patientName: selectedPatient.patientName,
+      queueItemId: selectedPatient.id,
+      consultationId: consultation?.id,
+      attendingDoctorId: selectedPatient.doctorId,
+      attendingDoctorName: selectedPatient.doctorName,
+      discountType: 'None',
+      notes: 'Consultation & procedures bill forwarded to Cashier',
+      lineItems: billItems,
+    });
+
     // Complete queue item
     await clinicService.completeQueueItem(selectedPatient.id);
 
@@ -362,7 +457,7 @@ export default function ConsultationsScreen() {
     const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     setSignedAt(nowStr);
     setBanner({
-      text: `✓ Clinical Encounter signed by Dr. Cruz (${doctorPrc}) at ${nowStr}! Synced to Patient Mobile App.`,
+      text: `✓ Clinical Encounter sealed by Dr. Cruz (${doctorPrc}) at ${nowStr}! Lab requisitions, nursing orders, and Cashier invoice dispatched.`,
       isError: false,
     });
   };
@@ -553,9 +648,55 @@ export default function ConsultationsScreen() {
         )}
       </View>
 
+      {/* Diagnostic Lab Orders Section */}
+      <View style={styles.section}>
+        <ThemedText style={styles.label}>Diagnostic Laboratory Orders ({orderedLabs.length})</ThemedText>
+        <ThemedText style={styles.subHint}>Select diagnostic tests to generate requisition order for laboratory fulfillment.</ThemedText>
+        <View style={styles.chipsRow}>
+          {COMMON_LAB_TESTS.map(lab => {
+            const isSelected = orderedLabs.includes(lab);
+            return (
+              <Pressable
+                key={lab}
+                style={[styles.chip, isSelected && styles.chipActive]}
+                onPress={() => !isSigned && handleToggleLab(lab)}
+                disabled={isSigned}
+              >
+                <ThemedText style={[styles.chipText, isSelected && styles.chipTextActive]}>
+                  {isSelected ? '✓ ' : '+ '}{lab}
+                </ThemedText>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
+      {/* In-Clinic Procedures Order Section */}
+      <View style={styles.section}>
+        <ThemedText style={styles.label}>In-Clinic Nursing Procedures ({orderedProcedures.length})</ThemedText>
+        <ThemedText style={styles.subHint}>Orders dispatched directly to Nurse Station for immediate treatment.</ThemedText>
+        <View style={styles.chipsRow}>
+          {COMMON_PROCEDURES.map(proc => {
+            const isSelected = orderedProcedures.includes(proc.name);
+            return (
+              <Pressable
+                key={proc.code}
+                style={[styles.chip, isSelected && styles.chipActiveProcedure]}
+                onPress={() => !isSigned && handleToggleProcedure(proc.name)}
+                disabled={isSigned}
+              >
+                <ThemedText style={[styles.chipText, isSelected && styles.chipTextActive]}>
+                  {isSelected ? '⚡ ' : '+ '}{proc.name} (₱{proc.fee})
+                </ThemedText>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
       {/* P - Plan & Prescriptions */}
       <View style={styles.section}>
-        <ThemedText style={styles.label}>Plan (Treatment, Labs, Lifestyle, Follow-up)</ThemedText>
+        <ThemedText style={styles.label}>Plan (Treatment, Lifestyle Counseling & Follow-up)</ThemedText>
         <TextInput
           style={styles.textArea}
           multiline
@@ -749,6 +890,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#374151',
+  },
+  subHint: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: -2,
+    marginBottom: 4,
   },
   patientRow: {
     gap: 8,
@@ -1013,6 +1160,35 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#6B7280',
     fontWeight: '600',
+  },
+  chipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  chip: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  chipActive: {
+    backgroundColor: '#0284C7',
+    borderColor: '#0284C7',
+  },
+  chipActiveProcedure: {
+    backgroundColor: '#7C3AED',
+    borderColor: '#7C3AED',
+  },
+  chipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4B5563',
+  },
+  chipTextActive: {
+    color: '#FFFFFF',
   },
   addRxBtn: {
     backgroundColor: '#EFF6FF',

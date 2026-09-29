@@ -115,7 +115,7 @@ export default function WorkspaceOverviewClient({ tenantSlug }: { tenantSlug: st
             window.open(`http://localhost:${port}?tenant=${tenantSlug}&facilityId=${facility.id}`, "_blank");
         } else {
             const sub = APP_SUBDOMAINS[facility.facilityType] || "clinic";
-            window.open(`https://${sub}.clinicez.ph?tenant=${tenantSlug}&facilityId=${facility.id}`, "_blank");
+            window.open(`https://${sub}.clinicez.net?tenant=${tenantSlug}&facilityId=${facility.id}`, "_blank");
         }
     };
 

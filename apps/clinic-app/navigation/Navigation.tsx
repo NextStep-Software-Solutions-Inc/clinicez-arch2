@@ -3,6 +3,7 @@ import { createStaticNavigation, type StaticParamList } from '@react-navigation/
 import DashboardScreen from './screens/Dashboard.screen';
 import ConsultationsScreen from './screens/Consultations.screen';
 import AppointmentsScreen from './screens/Appointments.screen';
+import BillingScreen from './screens/Billing.screen';
 import SettingsScreen from './screens/Settings.screen';
 
 const Tab = createBottomTabNavigator({
@@ -26,6 +27,13 @@ const Tab = createBottomTabNavigator({
       options: {
         title: 'Appointments',
         headerTitle: 'Clinic Schedule',
+      },
+    },
+    Billing: {
+      screen: BillingScreen,
+      options: {
+        title: 'Billing',
+        headerTitle: 'Cashier & POS',
       },
     },
     Settings: {

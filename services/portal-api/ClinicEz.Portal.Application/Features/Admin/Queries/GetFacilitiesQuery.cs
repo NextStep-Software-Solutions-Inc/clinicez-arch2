@@ -74,7 +74,7 @@ public class GetFacilitiesQueryHandler(
             return null;
         }
 
-        var baseDomain = configuration["Console:BaseDomain"] ?? "clinicez.ph";
+        var baseDomain = configuration["Console:BaseDomain"] ?? "clinicez.net";
         var isDev = string.Equals(configuration["ASPNETCORE_ENVIRONMENT"], "Development", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(configuration["Environment"], "Development", StringComparison.OrdinalIgnoreCase) ||
                     (bool.TryParse(configuration["Console:ForceLocal"], out var forceLocal) && forceLocal);

@@ -100,7 +100,7 @@ public class FacilityConsoleTests : IDisposable
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 { "ASPNETCORE_ENVIRONMENT", "Production" },
-                { "Console:BaseDomain", "clinicez.ph" }
+                { "Console:BaseDomain", "clinicez.net" }
             })
             .Build();
 
@@ -111,7 +111,7 @@ public class FacilityConsoleTests : IDisposable
         Assert.Single(result);
         var dto = result[0];
         Assert.Equal("metro-st-jude-diagnostic-lab", dto.Slug);
-        Assert.Equal($"https://lab.clinicez.ph?tenant={TenantSlug}&facilityId={facility.Id}", dto.ConsoleUrl);
+        Assert.Equal($"https://lab.clinicez.net?tenant={TenantSlug}&facilityId={facility.Id}", dto.ConsoleUrl);
     }
 
     [Fact]
@@ -133,7 +133,7 @@ public class FacilityConsoleTests : IDisposable
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 { "ASPNETCORE_ENVIRONMENT", "Production" },
-                { "Console:BaseDomain", "clinicez.ph" }
+                { "Console:BaseDomain", "clinicez.net" }
             })
             .Build();
 

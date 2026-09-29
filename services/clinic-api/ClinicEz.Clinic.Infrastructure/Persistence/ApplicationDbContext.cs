@@ -34,6 +34,13 @@ public class ApplicationDbContext : DbContext
     public DbSet<ConsultationEncounter> Consultations { get; set; } = null!;
     public DbSet<EncounterDiagnosis> Diagnoses { get; set; } = null!;
     public DbSet<PrescriptionItem> Prescriptions { get; set; } = null!;
+    public DbSet<ClinicServiceItem> ServiceItems { get; set; } = null!;
+    public DbSet<Invoice> Invoices { get; set; } = null!;
+    public DbSet<InvoiceLineItem> InvoiceLineItems { get; set; } = null!;
+    public DbSet<PaymentRecord> Payments { get; set; } = null!;
+    public DbSet<ClinicalProcedure> Procedures { get; set; } = null!;
+    public DbSet<ClinicLabOrder> LabOrders { get; set; } = null!;
+    public DbSet<ClinicLabOrderItem> LabOrderItems { get; set; } = null!;
 
     public Guid CurrentClinicId => _clinicContext?.ClinicId ?? Guid.Empty;
 
@@ -81,8 +88,10 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<QueueItem>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
         modelBuilder.Entity<TriageVitals>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
         modelBuilder.Entity<ConsultationEncounter>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
-
-
+        modelBuilder.Entity<ClinicServiceItem>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
+        modelBuilder.Entity<Invoice>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
+        modelBuilder.Entity<ClinicalProcedure>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
+        modelBuilder.Entity<ClinicLabOrder>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
 
         modelBuilder.Entity<EncounterDiagnosis>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<PrescriptionItem>().HasQueryFilter(e => !e.IsDeleted);
@@ -213,6 +222,89 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.Dosage).IsRequired().HasMaxLength(50);
             entity.Property(e => e.Form).IsRequired().HasMaxLength(50);
             entity.Property(e => e.Sig).IsRequired().HasMaxLength(255);
+        });
+
+        modelBuilder.Entity<ClinicServiceItem>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Code).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(150);
+            entity.Property(e => e.Category).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.StandardPrice).HasPrecision(18, 2);
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.Code }).IsUnique();
+        });
+
+        modelBuilder.Entity<Invoice>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.InvoiceNumber).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.PatientName).IsRequired().HasMaxLength(150);
+            entity.Property(e => e.GrossAmount).HasPrecision(18, 2);
+            entity.Property(e => e.DiscountPercentage).HasPrecision(5, 2);
+            entity.Property(e => e.DiscountAmount).HasPrecision(18, 2);
+            entity.Property(e => e.NetAmount).HasPrecision(18, 2);
+            entity.Property(e => e.AmountPaid).HasPrecision(18, 2);
+            entity.Property(e => e.BalanceDue).HasPrecision(18, 2);
+
+            entity.HasMany(e => e.LineItems)
+                .WithOne()
+                .HasForeignKey(l => l.InvoiceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(e => e.Payments)
+                .WithOne()
+                .HasForeignKey(p => p.InvoiceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.InvoiceNumber }).IsUnique();
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.InvoiceDate });
+        });
+
+        modelBuilder.Entity<InvoiceLineItem>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Description).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Category).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.UnitPrice).HasPrecision(18, 2);
+            entity.Property(e => e.TotalPrice).HasPrecision(18, 2);
+        });
+
+        modelBuilder.Entity<PaymentRecord>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.PaymentNumber).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Amount).HasPrecision(18, 2);
+            entity.Property(e => e.ReferenceNumber).HasMaxLength(100);
+        });
+
+        modelBuilder.Entity<ClinicalProcedure>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.PatientName).IsRequired().HasMaxLength(150);
+            entity.Property(e => e.ProcedureName).IsRequired().HasMaxLength(150);
+            entity.Property(e => e.Category).IsRequired().HasMaxLength(50);
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
+        });
+
+        modelBuilder.Entity<ClinicLabOrder>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.OrderNumber).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.PatientName).IsRequired().HasMaxLength(150);
+
+            entity.HasMany(e => e.Items)
+                .WithOne()
+                .HasForeignKey(i => i.LabOrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.OrderNumber }).IsUnique();
+        });
+
+        modelBuilder.Entity<ClinicLabOrderItem>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TestName).IsRequired().HasMaxLength(150);
+            entity.Property(e => e.Category).IsRequired().HasMaxLength(50);
         });
 
         modelBuilder.Entity<Product>(entity =>

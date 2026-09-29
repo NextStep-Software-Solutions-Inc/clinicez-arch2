@@ -23,6 +23,26 @@ public static class ClinicPermissions
     public const string ConsultationsWrite = "consultations:write";
     public const string ConsultationsSign = "consultations:sign";
 
+    // Billing & Cashier
+    public const string BillingRead = "billing:read";
+    public const string BillingWrite = "billing:write";
+    public const string BillingVoid = "billing:void";
+
+    // Fee Schedule & Services Catalog
+    public const string ServicesRead = "services:read";
+    public const string ServicesManage = "services:manage";
+
+    // Clinical Procedures & Nursing Orders
+    public const string ProceduresRead = "procedures:read";
+    public const string ProceduresWrite = "procedures:write";
+
+    // Lab Orders & Diagnostic Referrals
+    public const string LabOrdersRead = "laborders:read";
+    public const string LabOrdersWrite = "laborders:write";
+
+    // Reports & End-of-Day Remittance
+    public const string ReportsRead = "reports:read";
+
     // Staff Roster
     public const string StaffRead = "staff:read";
     public const string StaffManage = "staff:manage";
@@ -44,6 +64,16 @@ public static class ClinicPermissions
         ConsultationsRead,
         ConsultationsWrite,
         ConsultationsSign,
+        BillingRead,
+        BillingWrite,
+        BillingVoid,
+        ServicesRead,
+        ServicesManage,
+        ProceduresRead,
+        ProceduresWrite,
+        LabOrdersRead,
+        LabOrdersWrite,
+        ReportsRead,
         StaffRead,
         StaffManage,
         RolesRead,
