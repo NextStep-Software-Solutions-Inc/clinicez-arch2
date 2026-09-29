@@ -7,6 +7,7 @@ import {
   Pressable,
   ActivityIndicator,
   Alert,
+  Modal,
 } from 'react-native';
 import ThemedText from '@ui/ThemedText';
 import {
@@ -14,6 +15,8 @@ import {
   PatientQueueItem,
   TriageVitals,
   Icd10Code,
+  MedicalCertificateRecord,
+  ReferralLetterRecord,
 } from '../../services/clinicService';
 
 interface LocalPrescription {
@@ -221,11 +224,126 @@ export default function ConsultationsScreen() {
   const [doctorPtr, setDoctorPtr] = useState('PTR-8492019');
   const [doctorS2, setDoctorS2] = useState('S2-9482014');
 
+  // Clinical Document Issuance States
+  const [medCertModalVisible, setMedCertModalVisible] = useState(false);
+  const [issuingMedCert, setIssuingMedCert] = useState(false);
+  const [medCertFitness, setMedCertFitness] = useState('FitToWork');
+  const [medCertRestDays, setMedCertRestDays] = useState('3');
+  const [medCertPurpose, setMedCertPurpose] = useState('Employment / Sick Leave');
+  const [medCertRemarks, setMedCertRemarks] = useState('Advised adequate hydration and rest.');
+  const [issuedMedCert, setIssuedMedCert] = useState<MedicalCertificateRecord | null>(null);
+
+  const [referralModalVisible, setReferralModalVisible] = useState(false);
+  const [issuingReferral, setIssuingReferral] = useState(false);
+  const [refFacility, setRefFacility] = useState('Provincial General Hospital');
+  const [refDepartment, setRefDepartment] = useState('Cardiology');
+  const [refUrgency, setRefUrgency] = useState('Routine');
+  const [refReason, setRefReason] = useState('Evaluation & specialized diagnostic management');
+  const [refSummary, setRefSummary] = useState('');
+  const [issuedReferral, setIssuedReferral] = useState<ReferralLetterRecord | null>(null);
+
+  const [previewDocModal, setPreviewDocModal] = useState(false);
+  const [previewType, setPreviewType] = useState<'MEDCERT' | 'REFERRAL'>('MEDCERT');
+
   // Sign & Sync Status
   const [isSigning, setIsSigning] = useState(false);
   const [isSigned, setIsSigned] = useState(false);
   const [signedAt, setSignedAt] = useState<string | null>(null);
   const [banner, setBanner] = useState<{ text: string; isError?: boolean } | null>(null);
+
+  const handleIssueMedCert = async () => {
+    if (!selectedPatient) return;
+    setIssuingMedCert(true);
+    const [cert] = await clinicService.issueMedicalCertificate({
+      patientId: selectedPatient.patientId,
+      patientName: selectedPatient.patientName,
+      doctorId: 'doc-001',
+      doctorName: 'Dr. Cruz, MD',
+      prcLicenseNumber: doctorPrc,
+      ptrNumber: doctorPtr,
+      diagnosis: assessment || 'Acute illness under medical evaluation',
+      clinicalFindings: objective || 'Physical examination within normal limits',
+      fitnessStatus: medCertFitness,
+      recommendedRestDays: parseInt(medCertRestDays) || undefined,
+      purpose: medCertPurpose,
+      remarks: medCertRemarks,
+    });
+    setIssuingMedCert(false);
+
+    if (cert) {
+      setIssuedMedCert(cert);
+    } else {
+      setIssuedMedCert({
+        id: `mc-${Date.now()}`,
+        tenantId: 'tenant-default',
+        clinicId: 'clinic-default',
+        certificateNumber: `MC-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-0001`,
+        patientId: selectedPatient.patientId,
+        patientName: selectedPatient.patientName,
+        doctorId: 'doc-001',
+        doctorName: 'Dr. Cruz, MD',
+        prcLicenseNumber: doctorPrc,
+        ptrNumber: doctorPtr,
+        issueDate: new Date().toISOString().slice(0, 10),
+        diagnosis: assessment || 'Acute illness under medical evaluation',
+        clinicalFindings: objective,
+        fitnessStatus: medCertFitness,
+        recommendedRestDays: parseInt(medCertRestDays) || 3,
+        purpose: medCertPurpose,
+        remarks: medCertRemarks,
+        isSigned: true,
+        createdAt: new Date().toISOString(),
+      });
+    }
+    setMedCertModalVisible(false);
+    setPreviewType('MEDCERT');
+    setPreviewDocModal(true);
+  };
+
+  const handleIssueReferral = async () => {
+    if (!selectedPatient) return;
+    setIssuingReferral(true);
+    const [ref] = await clinicService.issueReferralLetter({
+      patientId: selectedPatient.patientId,
+      patientName: selectedPatient.patientName,
+      referringDoctorId: 'doc-001',
+      referringDoctorName: 'Dr. Cruz, MD',
+      referredToFacility: refFacility,
+      referredDepartment: refDepartment,
+      urgency: refUrgency,
+      reasonForReferral: refReason,
+      provisionalDiagnosis: assessment || 'Clinical condition requiring specialist review',
+      clinicalSummary: refSummary || subjective || 'Patient referred for diagnostic workup.',
+    });
+    setIssuingReferral(false);
+
+    if (ref) {
+      setIssuedReferral(ref);
+    } else {
+      setIssuedReferral({
+        id: `ref-${Date.now()}`,
+        tenantId: 'tenant-default',
+        clinicId: 'clinic-default',
+        referralNumber: `REF-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-0001`,
+        patientId: selectedPatient.patientId,
+        patientName: selectedPatient.patientName,
+        referringDoctorId: 'doc-001',
+        referringDoctorName: 'Dr. Cruz, MD',
+        referredToFacility: refFacility,
+        referredDepartment: refDepartment,
+        referralDate: new Date().toISOString().slice(0, 10),
+        urgency: refUrgency,
+        reasonForReferral: refReason,
+        provisionalDiagnosis: assessment || 'Clinical condition requiring specialist review',
+        clinicalSummary: refSummary || subjective,
+        isSigned: true,
+        createdAt: new Date().toISOString(),
+      });
+    }
+    setReferralModalVisible(false);
+    setPreviewType('REFERRAL');
+    setPreviewDocModal(true);
+  };
 
   // Load real queue patients if available
   const loadQueue = useCallback(async () => {
@@ -834,6 +952,73 @@ export default function ConsultationsScreen() {
         </View>
       </View>
 
+      {/* Clinical Documents & Certificates Issuance */}
+      <View style={styles.card}>
+        <ThemedText style={styles.sectionHeaderTitle}>Official Clinical Document Issuance</ThemedText>
+        <ThemedText style={{ fontSize: 12, color: '#6B7280' }}>
+          Issue certified medical certificates and specialist referral letters with your PRC & PTR credentials.
+        </ThemedText>
+
+        <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
+          <Pressable
+            style={[styles.docActionBtn, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}
+            onPress={() => setMedCertModalVisible(true)}
+          >
+            <ThemedText style={{ fontSize: 12, fontWeight: '700', color: '#166534' }}>
+              📜 Issue Medical Certificate
+            </ThemedText>
+          </Pressable>
+
+          <Pressable
+            style={[styles.docActionBtn, { backgroundColor: '#F0F9FF', borderColor: '#BAE6FD' }]}
+            onPress={() => setReferralModalVisible(true)}
+          >
+            <ThemedText style={{ fontSize: 12, fontWeight: '700', color: '#0369A1' }}>
+              🏥 Issue Referral Letter
+            </ThemedText>
+          </Pressable>
+        </View>
+
+        {/* Issued Badges */}
+        {issuedMedCert && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F0FDF4', padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#86EFAC' }}>
+            <View>
+              <ThemedText style={{ fontSize: 12, fontWeight: '700', color: '#166534' }}>
+                ✓ Med Cert: {issuedMedCert.certificateNumber}
+              </ThemedText>
+              <ThemedText style={{ fontSize: 11, color: '#4B5563' }}>
+                Status: {issuedMedCert.fitnessStatus} ({issuedMedCert.recommendedRestDays ?? 0} days rest)
+              </ThemedText>
+            </View>
+            <Pressable
+              style={{ backgroundColor: '#15803D', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 }}
+              onPress={() => { setPreviewType('MEDCERT'); setPreviewDocModal(true); }}
+            >
+              <ThemedText style={{ fontSize: 11, fontWeight: '700', color: '#FFFFFF' }}>View Print</ThemedText>
+            </Pressable>
+          </View>
+        )}
+
+        {issuedReferral && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F0F9FF', padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#7DD3FC' }}>
+            <View>
+              <ThemedText style={{ fontSize: 12, fontWeight: '700', color: '#0369A1' }}>
+                ✓ Referral: {issuedReferral.referralNumber}
+              </ThemedText>
+              <ThemedText style={{ fontSize: 11, color: '#4B5563' }}>
+                To: {issuedReferral.referredToFacility} ({issuedReferral.referredDepartment}) • {issuedReferral.urgency}
+              </ThemedText>
+            </View>
+            <Pressable
+              style={{ backgroundColor: '#0284C7', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 }}
+              onPress={() => { setPreviewType('REFERRAL'); setPreviewDocModal(true); }}
+            >
+              <ThemedText style={{ fontSize: 11, fontWeight: '700', color: '#FFFFFF' }}>View Print</ThemedText>
+            </Pressable>
+          </View>
+        )}
+      </View>
+
       {/* Signing Action */}
       {isSigned ? (
         <View style={styles.signedBanner}>
@@ -855,6 +1040,285 @@ export default function ConsultationsScreen() {
           )}
         </Pressable>
       )}
+
+      {/* Medical Certificate Modal */}
+      <Modal visible={medCertModalVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>Issue Medical Certificate</ThemedText>
+              <Pressable onPress={() => setMedCertModalVisible(false)}>
+                <ThemedText style={styles.modalCloseText}>✕</ThemedText>
+              </Pressable>
+            </View>
+
+            <View style={{ gap: 10 }}>
+              <ThemedText style={{ fontSize: 12, color: '#4B5563' }}>
+                Patient: <ThemedText style={{ fontWeight: '700' }}>{selectedPatient?.patientName}</ThemedText>
+              </ThemedText>
+
+              <View>
+                <ThemedText style={styles.modalLabel}>Fitness Assessment</ThemedText>
+                <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                  {['FitToWork', 'UnfitToWork', 'FitToSchool', 'LightDuty'].map((fit) => (
+                    <Pressable
+                      key={fit}
+                      style={[
+                        { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB' },
+                        medCertFitness === fit && { backgroundColor: '#0284C7', borderColor: '#0284C7' },
+                      ]}
+                      onPress={() => setMedCertFitness(fit)}
+                    >
+                      <ThemedText style={[{ fontSize: 12, color: '#374151' }, medCertFitness === fit && { color: '#FFFFFF', fontWeight: '700' }]}>
+                        {fit}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
+              <View>
+                <ThemedText style={styles.modalLabel}>Recommended Rest Days</ThemedText>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="3"
+                  value={medCertRestDays}
+                  onChangeText={setMedCertRestDays}
+                  keyboardType="numeric"
+                />
+              </View>
+
+              <View>
+                <ThemedText style={styles.modalLabel}>Certificate Purpose</ThemedText>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="Employment / Sick Leave"
+                  value={medCertPurpose}
+                  onChangeText={setMedCertPurpose}
+                />
+              </View>
+
+              <View>
+                <ThemedText style={styles.modalLabel}>Physician Remarks / Advice</ThemedText>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="e.g. Advised hydration and follow-up if fever persists."
+                  value={medCertRemarks}
+                  onChangeText={setMedCertRemarks}
+                />
+              </View>
+
+              <Pressable
+                style={[styles.modalSubmitBtn, issuingMedCert && { opacity: 0.6 }]}
+                onPress={handleIssueMedCert}
+                disabled={issuingMedCert}
+              >
+                {issuingMedCert ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <ThemedText style={styles.modalSubmitText}>Lock & Issue Certificate</ThemedText>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Referral Letter Modal */}
+      <Modal visible={referralModalVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>Issue Clinical Referral Letter</ThemedText>
+              <Pressable onPress={() => setReferralModalVisible(false)}>
+                <ThemedText style={styles.modalCloseText}>✕</ThemedText>
+              </Pressable>
+            </View>
+
+            <View style={{ gap: 10 }}>
+              <View>
+                <ThemedText style={styles.modalLabel}>Receiving Facility *</ThemedText>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="e.g. Provincial General Hospital"
+                  value={refFacility}
+                  onChangeText={setRefFacility}
+                />
+              </View>
+
+              <View>
+                <ThemedText style={styles.modalLabel}>Department / Specialty *</ThemedText>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="Cardiology, Surgery, Pulmonary, ER"
+                  value={refDepartment}
+                  onChangeText={setRefDepartment}
+                />
+              </View>
+
+              <View>
+                <ThemedText style={styles.modalLabel}>Urgency</ThemedText>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  {['Routine', 'Urgent', 'Emergency'].map((urg) => (
+                    <Pressable
+                      key={urg}
+                      style={[
+                        { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB' },
+                        refUrgency === urg && { backgroundColor: urg === 'Emergency' ? '#DC2626' : urg === 'Urgent' ? '#D97706' : '#0284C7', borderColor: 'transparent' },
+                      ]}
+                      onPress={() => setRefUrgency(urg)}
+                    >
+                      <ThemedText style={[{ fontSize: 12, color: '#374151' }, refUrgency === urg && { color: '#FFFFFF', fontWeight: '700' }]}>
+                        {urg}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
+              <View>
+                <ThemedText style={styles.modalLabel}>Reason for Referral</ThemedText>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="e.g. Expert cardiology workup for chest pain"
+                  value={refReason}
+                  onChangeText={setRefReason}
+                />
+              </View>
+
+              <View>
+                <ThemedText style={styles.modalLabel}>Clinical Summary</ThemedText>
+                <TextInput
+                  style={[styles.modalInput, { minHeight: 50 }]}
+                  placeholder="Summary of examination, diagnostics, and initial medications..."
+                  value={refSummary}
+                  onChangeText={setRefSummary}
+                  multiline
+                />
+              </View>
+
+              <Pressable
+                style={[styles.modalSubmitBtn, issuingReferral && { opacity: 0.6 }]}
+                onPress={handleIssueReferral}
+                disabled={issuingReferral}
+              >
+                {issuingReferral ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <ThemedText style={styles.modalSubmitText}>Issue & Seal Referral Letter</ThemedText>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Formatted Document Print Preview Modal */}
+      <Modal visible={previewDocModal} animationType="fade" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: '#FFFFFF', borderWidth: 2, borderColor: '#1F2937' }]}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>
+                {previewType === 'MEDCERT' ? 'Official Medical Certificate' : 'Clinical Referral Letter'}
+              </ThemedText>
+              <Pressable onPress={() => setPreviewDocModal(false)}>
+                <ThemedText style={styles.modalCloseText}>✕</ThemedText>
+              </Pressable>
+            </View>
+
+            <ScrollView style={{ maxHeight: 450 }} contentContainerStyle={{ gap: 12, padding: 8 }}>
+              {/* Official Header */}
+              <View style={{ alignItems: 'center', borderBottomWidth: 2, borderBottomColor: '#1F2937', paddingBottom: 10 }}>
+                <ThemedText style={{ fontSize: 16, fontWeight: '800', color: '#111827' }}>
+                  ST. JUDE FAMILY CLINIC & PRIMARY CARE
+                </ThemedText>
+                <ThemedText style={{ fontSize: 11, color: '#4B5563' }}>
+                  124 Rizal Avenue, San Pedro, Laguna • PHIC-KONSULTA-09214
+                </ThemedText>
+                <ThemedText style={{ fontSize: 13, fontWeight: '800', color: '#0369A1', marginTop: 6, textTransform: 'uppercase', letterSpacing: 1.5 }}>
+                  {previewType === 'MEDCERT' ? 'MEDICAL CERTIFICATE' : 'REFERRAL LETTER'}
+                </ThemedText>
+                <ThemedText style={{ fontSize: 11, color: '#6B7280' }}>
+                  Document #: {previewType === 'MEDCERT' ? issuedMedCert?.certificateNumber : issuedReferral?.referralNumber}
+                </ThemedText>
+              </View>
+
+              {previewType === 'MEDCERT' && issuedMedCert ? (
+                <View style={{ gap: 8 }}>
+                  <ThemedText style={{ fontSize: 13, color: '#1F2937' }}>
+                    TO WHOM IT MAY CONCERN:
+                  </ThemedText>
+                  <ThemedText style={{ fontSize: 13, color: '#374151', lineHeight: 20 }}>
+                    This certifies that <ThemedText style={{ fontWeight: '700' }}>{issuedMedCert.patientName}</ThemedText> was clinically evaluated on {issuedMedCert.issueDate} with the following diagnosis:
+                  </ThemedText>
+                  <View style={{ backgroundColor: '#F9FAFB', padding: 8, borderRadius: 6, borderWidth: 1, borderColor: '#E5E7EB' }}>
+                    <ThemedText style={{ fontSize: 13, fontWeight: '700', color: '#111827' }}>
+                      Diagnosis: {issuedMedCert.diagnosis}
+                    </ThemedText>
+                    <ThemedText style={{ fontSize: 12, color: '#4B5563', marginTop: 2 }}>
+                      Findings: {issuedMedCert.clinicalFindings ?? 'Consistent with physical exam.'}
+                    </ThemedText>
+                  </View>
+                  <ThemedText style={{ fontSize: 13, color: '#374151' }}>
+                    Fitness Status: <ThemedText style={{ fontWeight: '700', color: '#15803D' }}>{issuedMedCert.fitnessStatus}</ThemedText>
+                  </ThemedText>
+                  <ThemedText style={{ fontSize: 13, color: '#374151' }}>
+                    Recommended Rest: <ThemedText style={{ fontWeight: '700' }}>{issuedMedCert.recommendedRestDays ?? 0} days</ThemedText>
+                  </ThemedText>
+                  <ThemedText style={{ fontSize: 12, color: '#6B7280', fontStyle: 'italic' }}>
+                    Remarks: {issuedMedCert.remarks ?? 'None'} • Purpose: {issuedMedCert.purpose}
+                  </ThemedText>
+                </View>
+              ) : null}
+
+              {previewType === 'REFERRAL' && issuedReferral ? (
+                <View style={{ gap: 8 }}>
+                  <ThemedText style={{ fontSize: 13, color: '#374151' }}>
+                    To: <ThemedText style={{ fontWeight: '700' }}>{issuedReferral.referredToFacility}</ThemedText> ({issuedReferral.referredDepartment})
+                  </ThemedText>
+                  <ThemedText style={{ fontSize: 13, color: '#374151' }}>
+                    Patient: <ThemedText style={{ fontWeight: '700' }}>{issuedReferral.patientName}</ThemedText> • Urgency: <ThemedText style={{ fontWeight: '700', color: '#DC2626' }}>{issuedReferral.urgency}</ThemedText>
+                  </ThemedText>
+                  <View style={{ backgroundColor: '#F9FAFB', padding: 8, borderRadius: 6, borderWidth: 1, borderColor: '#E5E7EB' }}>
+                    <ThemedText style={{ fontSize: 13, fontWeight: '700', color: '#111827' }}>
+                      Reason: {issuedReferral.reasonForReferral}
+                    </ThemedText>
+                    <ThemedText style={{ fontSize: 12, color: '#4B5563', marginTop: 4 }}>
+                      Clinical Summary: {issuedReferral.clinicalSummary}
+                    </ThemedText>
+                    <ThemedText style={{ fontSize: 12, color: '#1F2937', marginTop: 4 }}>
+                      Impression: {issuedReferral.provisionalDiagnosis}
+                    </ThemedText>
+                  </View>
+                </View>
+              ) : null}
+
+              {/* Physician Signature Stamp */}
+              <View style={{ marginTop: 14, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#E5E7EB', alignItems: 'flex-end' }}>
+                <ThemedText style={{ fontSize: 13, fontWeight: '700', color: '#111827' }}>
+                  {previewType === 'MEDCERT' ? issuedMedCert?.doctorName : issuedReferral?.referringDoctorName}
+                </ThemedText>
+                <ThemedText style={{ fontSize: 11, color: '#4B5563' }}>
+                  PRC Lic. No.: {previewType === 'MEDCERT' ? issuedMedCert?.prcLicenseNumber : doctorPrc}
+                </ThemedText>
+                <ThemedText style={{ fontSize: 11, color: '#4B5563' }}>
+                  PTR No.: {doctorPtr} • PDEA S2: {doctorS2}
+                </ThemedText>
+                <ThemedText style={{ fontSize: 10, color: '#16A34A', fontWeight: '700', marginTop: 2 }}>
+                  ✓ Digitally Certified & Sealed
+                </ThemedText>
+              </View>
+            </ScrollView>
+
+            <Pressable
+              style={{ backgroundColor: '#0284C7', paddingVertical: 10, borderRadius: 8, alignItems: 'center' }}
+              onPress={() => setPreviewDocModal(false)}
+            >
+              <ThemedText style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 13 }}>Done / Close Preview</ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -1390,5 +1854,85 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#166534',
     textAlign: 'center',
+  },
+  docActionBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4B5563',
+    marginBottom: 4,
+  },
+  modalInput: {
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontSize: 13,
+    color: '#111827',
+  },
+  modalSubmitBtn: {
+    backgroundColor: '#0284C7',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  modalSubmitText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    padding: 16,
+    gap: 10,
+  },
+  sectionHeaderTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    gap: 14,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+    paddingBottom: 10,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  modalCloseText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#9CA3AF',
   },
 });

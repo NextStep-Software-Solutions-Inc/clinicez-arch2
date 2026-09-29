@@ -4,7 +4,7 @@ import { SyncStatus } from '@shared/safe';
 export type QueuePriority = 'Routine' | 'Urgent' | 'Emergency';
 export type QueueStatus = 'Waiting' | 'Triaged' | 'InConsultation' | 'Completed' | 'Cancelled' | 'NoShow';
 export type AppointmentStatus = 'Pending' | 'Confirmed' | 'CheckedIn' | 'InConsultation' | 'Completed' | 'Cancelled';
-export type StaffRole = 'Doctor' | 'Nurse' | 'Receptionist' | 'Admin';
+export type StaffRole = 'Doctor' | 'Nurse' | 'Receptionist' | 'Cashier' | 'Admin';
 export type InvoiceStatus = 'Draft' | 'Paid' | 'PartiallyPaid' | 'Voided' | 'Refunded';
 export type PaymentMethod = 'Cash' | 'GCash' | 'Maya' | 'CreditCard' | 'DebitCard' | 'PhilHealthKonsulta' | 'HmoInsurance';
 export type DiscountType = 'None' | 'SeniorCitizen' | 'Pwd' | 'PhilHealthKonsulta' | 'Custom';
@@ -328,6 +328,156 @@ export interface PatientChart {
   invoicesHistory: InvoiceRecord[];
 }
 
+export interface ClinicPatient {
+  id: string;
+  tenantId: string;
+  clinicId: string;
+  patientCode: string;
+  firstName: string;
+  lastName: string;
+  middleName?: string;
+  suffix?: string;
+  fullName: string;
+  dateOfBirth: string;
+  age: number;
+  gender: string;
+  civilStatus?: string;
+  contactNumber: string;
+  email?: string;
+  addressLine?: string;
+  barangay?: string;
+  city?: string;
+  province?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  emergencyContactRelationship?: string;
+  philHealthNumber?: string;
+  seniorCitizenId?: string;
+  pwdId?: string;
+  bloodType?: string;
+  allergies?: string;
+  chronicConditions?: string;
+  alerts?: string;
+  syncPatientId?: string;
+  createdAt: string;
+}
+
+export interface RegisterPatientPayload {
+  firstName: string;
+  lastName: string;
+  middleName?: string;
+  suffix?: string;
+  dateOfBirth: string;
+  gender: string;
+  civilStatus?: string;
+  contactNumber: string;
+  email?: string;
+  addressLine?: string;
+  barangay?: string;
+  city?: string;
+  province?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  emergencyContactRelationship?: string;
+  philHealthNumber?: string;
+  seniorCitizenId?: string;
+  pwdId?: string;
+  bloodType?: string;
+  allergies?: string;
+  chronicConditions?: string;
+  alerts?: string;
+}
+
+export interface MedicalCertificateRecord {
+  id: string;
+  tenantId: string;
+  clinicId: string;
+  certificateNumber: string;
+  patientId: string;
+  patientName: string;
+  consultationId?: string;
+  doctorId: string;
+  doctorName: string;
+  prcLicenseNumber: string;
+  ptrNumber?: string;
+  issueDate: string;
+  diagnosis: string;
+  clinicalFindings?: string;
+  fitnessStatus: string;
+  recommendedRestDays?: number;
+  restStartDate?: string;
+  restEndDate?: string;
+  purpose: string;
+  remarks?: string;
+  isSigned: boolean;
+  signedAt?: string;
+  createdAt: string;
+}
+
+export interface ReferralLetterRecord {
+  id: string;
+  tenantId: string;
+  clinicId: string;
+  referralNumber: string;
+  patientId: string;
+  patientName: string;
+  consultationId?: string;
+  referringDoctorId: string;
+  referringDoctorName: string;
+  referredToDoctor?: string;
+  referredToFacility: string;
+  referredDepartment: string;
+  referralDate: string;
+  urgency: string;
+  reasonForReferral: string;
+  provisionalDiagnosis: string;
+  clinicalSummary: string;
+  currentMedications?: string;
+  attachedDiagnostics?: string;
+  isSigned: boolean;
+  signedAt?: string;
+  createdAt: string;
+}
+
+export interface ClinicRecordAttachmentRecord {
+  id: string;
+  tenantId: string;
+  clinicId: string;
+  patientId: string;
+  consultationId?: string;
+  recordType: string;
+  title: string;
+  fileName: string;
+  contentType: string;
+  fileSizeBytes: number;
+  storageUri: string;
+  documentDate: string;
+  notes?: string;
+  uploadedByStaffId?: string;
+  uploadedByStaffName?: string;
+  createdAt: string;
+}
+
+export interface ClinicSettingsRecord {
+  id: string;
+  tenantId: string;
+  clinicId: string;
+  clinicName: string;
+  taxIdentificationNumber?: string;
+  accreditationNumber?: string;
+  operatingHours: string;
+  defaultSlotDurationMinutes: number;
+  queuePrefix: string;
+  invoicePrefix: string;
+  defaultConsultationFee: number;
+  vatRate: number;
+  letterheadHeader?: string;
+  letterheadSubHeader?: string;
+  letterheadAddress?: string;
+  letterheadContact?: string;
+  letterheadFooter?: string;
+}
+
 export interface CheckInRequest {
   patientId: string;
   patientName: string;
@@ -601,5 +751,143 @@ export const clinicService = {
 
   async getRoles() {
     return clinicApiClient.get<ClinicRole[]>('/roles');
+  },
+
+  // Patients Directory & Master Patient Index
+  async getPatients(search?: string, hasAlerts?: boolean, page: number = 1, pageSize: number = 50) {
+    const params = new URLSearchParams();
+    if (search) params.append('search', search);
+    if (typeof hasAlerts === 'boolean') params.append('hasAlerts', String(hasAlerts));
+    params.append('page', String(page));
+    params.append('pageSize', String(pageSize));
+    const qs = params.toString();
+    return clinicApiClient.get<ClinicPatient[]>(`/patients?${qs}`);
+  },
+
+  async getPatientById(id: string) {
+    return clinicApiClient.get<ClinicPatient>(`/patients/${id}`);
+  },
+
+  async registerPatient(payload: RegisterPatientPayload) {
+    return clinicApiClient.post<ClinicPatient>('/patients', payload);
+  },
+
+  async updatePatient(id: string, payload: RegisterPatientPayload) {
+    return clinicApiClient.put<ClinicPatient>(`/patients/${id}`, payload);
+  },
+
+  // Appointment Scheduling & Desk Bookings
+  async createAppointment(payload: {
+    patientId: string;
+    patientName: string;
+    doctorId?: string;
+    doctorName?: string;
+    scheduledAt: string;
+    durationMinutes?: number;
+    serviceType?: string;
+    reason?: string;
+    notes?: string;
+  }) {
+    return clinicApiClient.post<AppointmentItem>('/appointments', payload);
+  },
+
+  async rescheduleAppointment(id: string, payload: {
+    newScheduledAt: string;
+    durationMinutes?: number;
+    reason?: string;
+  }) {
+    return clinicApiClient.put<AppointmentItem>(`/appointments/${id}/reschedule`, payload);
+  },
+
+  async cancelAppointment(id: string, reason?: string) {
+    return clinicApiClient.put<AppointmentItem>(`/appointments/${id}/cancel`, { reason });
+  },
+
+  // Document Issuance (Medical Certificates & Referrals)
+  async issueMedicalCertificate(payload: {
+    patientId: string;
+    patientName: string;
+    consultationId?: string;
+    doctorId: string;
+    doctorName: string;
+    prcLicenseNumber: string;
+    ptrNumber?: string;
+    diagnosis: string;
+    clinicalFindings?: string;
+    fitnessStatus?: string;
+    recommendedRestDays?: number;
+    restStartDate?: string;
+    restEndDate?: string;
+    purpose?: string;
+    remarks?: string;
+  }) {
+    return clinicApiClient.post<MedicalCertificateRecord>('/documents/medical-certificates', payload);
+  },
+
+  async getMedicalCertificates(patientId?: string, doctorId?: string) {
+    const params = new URLSearchParams();
+    if (patientId) params.append('patientId', patientId);
+    if (doctorId) params.append('doctorId', doctorId);
+    const qs = params.toString();
+    return clinicApiClient.get<MedicalCertificateRecord[]>(`/documents/medical-certificates${qs ? `?${qs}` : ''}`);
+  },
+
+  async issueReferralLetter(payload: {
+    patientId: string;
+    patientName: string;
+    consultationId?: string;
+    referringDoctorId: string;
+    referringDoctorName: string;
+    referredToDoctor?: string;
+    referredToFacility: string;
+    referredDepartment: string;
+    urgency?: string;
+    reasonForReferral: string;
+    provisionalDiagnosis: string;
+    clinicalSummary: string;
+    currentMedications?: string;
+    attachedDiagnostics?: string;
+  }) {
+    return clinicApiClient.post<ReferralLetterRecord>('/documents/referrals', payload);
+  },
+
+  async getReferralLetters(patientId?: string, doctorId?: string) {
+    const params = new URLSearchParams();
+    if (patientId) params.append('patientId', patientId);
+    if (doctorId) params.append('doctorId', doctorId);
+    const qs = params.toString();
+    return clinicApiClient.get<ReferralLetterRecord[]>(`/documents/referrals${qs ? `?${qs}` : ''}`);
+  },
+
+  // Records & Attachments
+  async uploadRecordAttachment(payload: {
+    patientId: string;
+    consultationId?: string;
+    recordType: string;
+    title: string;
+    fileName: string;
+    contentType: string;
+    fileSizeBytes: number;
+    storageUri: string;
+    documentDate: string;
+    notes?: string;
+    uploadedByStaffId?: string;
+    uploadedByStaffName?: string;
+  }) {
+    return clinicApiClient.post<ClinicRecordAttachmentRecord>('/records/attachments', payload);
+  },
+
+  async getPatientRecordAttachments(patientId: string, recordType?: string) {
+    const qs = recordType ? `?recordType=${encodeURIComponent(recordType)}` : '';
+    return clinicApiClient.get<ClinicRecordAttachmentRecord[]>(`/records/patients/${patientId}${qs}`);
+  },
+
+  // Clinic Preferences / Settings
+  async getSettings() {
+    return clinicApiClient.get<ClinicSettingsRecord>('/settings');
+  },
+
+  async updateSettings(payload: Partial<ClinicSettingsRecord>) {
+    return clinicApiClient.put<ClinicSettingsRecord>('/settings', payload);
   }
 };

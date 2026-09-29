@@ -43,6 +43,22 @@ public static class ClinicPermissions
     // Reports & End-of-Day Remittance
     public const string ReportsRead = "reports:read";
 
+    // Patients Directory & Master Patient Index
+    public const string PatientsRead = "patients:read";
+    public const string PatientsWrite = "patients:write";
+
+    // Documents & Clinical Certificates
+    public const string DocumentsRead = "documents:read";
+    public const string DocumentsIssue = "documents:issue";
+
+    // Records & Clinical Attachments
+    public const string RecordsRead = "records:read";
+    public const string RecordsUpload = "records:upload";
+
+    // Clinic Settings & Preferences
+    public const string SettingsRead = "settings:read";
+    public const string SettingsManage = "settings:manage";
+
     // Staff Roster
     public const string StaffRead = "staff:read";
     public const string StaffManage = "staff:manage";
@@ -64,6 +80,12 @@ public static class ClinicPermissions
         ConsultationsRead,
         ConsultationsWrite,
         ConsultationsSign,
+        PatientsRead,
+        PatientsWrite,
+        DocumentsRead,
+        DocumentsIssue,
+        RecordsRead,
+        RecordsUpload,
         BillingRead,
         BillingWrite,
         BillingVoid,
@@ -74,6 +96,8 @@ public static class ClinicPermissions
         LabOrdersRead,
         LabOrdersWrite,
         ReportsRead,
+        SettingsRead,
+        SettingsManage,
         StaffRead,
         StaffManage,
         RolesRead,

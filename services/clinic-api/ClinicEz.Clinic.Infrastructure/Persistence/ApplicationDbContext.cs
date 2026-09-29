@@ -41,6 +41,11 @@ public class ApplicationDbContext : DbContext
     public DbSet<ClinicalProcedure> Procedures { get; set; } = null!;
     public DbSet<ClinicLabOrder> LabOrders { get; set; } = null!;
     public DbSet<ClinicLabOrderItem> LabOrderItems { get; set; } = null!;
+    public DbSet<ClinicPatient> Patients { get; set; } = null!;
+    public DbSet<MedicalCertificate> MedicalCertificates { get; set; } = null!;
+    public DbSet<ReferralLetter> ReferralLetters { get; set; } = null!;
+    public DbSet<ClinicRecordAttachment> RecordAttachments { get; set; } = null!;
+    public DbSet<ClinicSettings> ClinicSettings { get; set; } = null!;
 
     public Guid CurrentClinicId => _clinicContext?.ClinicId ?? Guid.Empty;
 
@@ -92,6 +97,11 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<Invoice>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
         modelBuilder.Entity<ClinicalProcedure>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
         modelBuilder.Entity<ClinicLabOrder>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
+        modelBuilder.Entity<ClinicPatient>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
+        modelBuilder.Entity<MedicalCertificate>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
+        modelBuilder.Entity<ReferralLetter>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
+        modelBuilder.Entity<ClinicRecordAttachment>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
+        modelBuilder.Entity<ClinicSettings>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
 
         modelBuilder.Entity<EncounterDiagnosis>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<PrescriptionItem>().HasQueryFilter(e => !e.IsDeleted);
@@ -313,6 +323,71 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.Name).IsRequired().HasMaxLength(255);
             entity.Property(e => e.Sku).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Price).HasPrecision(18, 2);
+        });
+
+        modelBuilder.Entity<ClinicPatient>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.PatientCode).IsRequired().HasMaxLength(30);
+            entity.Property(e => e.FirstName).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.LastName).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.ContactNumber).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Gender).HasMaxLength(50);
+            entity.Property(e => e.PhilHealthNumber).HasMaxLength(30);
+            entity.Property(e => e.SeniorCitizenId).HasMaxLength(50);
+            entity.Property(e => e.PwdId).HasMaxLength(50);
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientCode }).IsUnique();
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.LastName, e.FirstName });
+        });
+
+        modelBuilder.Entity<MedicalCertificate>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.CertificateNumber).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.PatientName).IsRequired().HasMaxLength(150);
+            entity.Property(e => e.DoctorName).IsRequired().HasMaxLength(150);
+            entity.Property(e => e.PrcLicenseNumber).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.FitnessStatus).HasMaxLength(50);
+            entity.Property(e => e.Purpose).HasMaxLength(50);
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.CertificateNumber }).IsUnique();
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
+        });
+
+        modelBuilder.Entity<ReferralLetter>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.ReferralNumber).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.PatientName).IsRequired().HasMaxLength(150);
+            entity.Property(e => e.ReferringDoctorName).IsRequired().HasMaxLength(150);
+            entity.Property(e => e.ReferredToFacility).IsRequired().HasMaxLength(150);
+            entity.Property(e => e.ReferredDepartment).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Urgency).HasMaxLength(50);
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.ReferralNumber }).IsUnique();
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
+        });
+
+        modelBuilder.Entity<ClinicRecordAttachment>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.RecordType).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.FileName).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.ContentType).HasMaxLength(100);
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
+        });
+
+        modelBuilder.Entity<ClinicSettings>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.ClinicName).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.DefaultConsultationFee).HasPrecision(18, 2);
+            entity.Property(e => e.VatRate).HasPrecision(5, 4);
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId }).IsUnique();
         });
 
         // MassTransit outbox

@@ -1,30 +1,133 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, RefreshControl } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  RefreshControl,
+  TextInput,
+} from 'react-native';
 import ThemedText from '@ui/ThemedText';
-import { clinicService, DailyEodReport } from '../../services/clinicService';
+import {
+  clinicService,
+  DailyEodReport,
+  ClinicSettingsRecord,
+  StaffMember,
+} from '../../services/clinicService';
 
 export default function SettingsScreen() {
   const [eodReport, setEodReport] = useState<DailyEodReport | null>(null);
+  const [settings, setSettings] = useState<ClinicSettingsRecord | null>(null);
+  const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [settingsSavedBanner, setSettingsSavedBanner] = useState(false);
 
-  const loadEod = useCallback(async () => {
-    const [data, err] = await clinicService.getDailyEodReport();
-    if (!err && data) {
-      setEodReport(data);
+  // Form states for preferences
+  const [clinicName, setClinicName] = useState('St. Jude Family Clinic & Primary Care');
+  const [operatingHours, setOperatingHours] = useState('Mon-Sat 8:00 AM - 5:00 PM');
+  const [slotDuration, setSlotDuration] = useState('30');
+  const [consultationFee, setConsultationFee] = useState('400.00');
+  const [letterheadHeader, setLetterheadHeader] = useState('ST. JUDE FAMILY MEDICAL CLINIC');
+  const [letterheadAddress, setLetterheadAddress] = useState('124 Rizal Avenue, San Pedro, Laguna');
+  const [letterheadContact, setLetterheadContact] = useState('Tel: (02) 8876-5432 • Mobile: +63 917 123 4567');
+
+  const loadAll = useCallback(async () => {
+    const [[eodData], [settingsData], [staffData]] = await Promise.all([
+      clinicService.getDailyEodReport(),
+      clinicService.getSettings(),
+      clinicService.getStaff(),
+    ]);
+
+    if (eodData) setEodReport(eodData);
+    if (settingsData) {
+      setSettings(settingsData);
+      setClinicName(settingsData.clinicName);
+      setOperatingHours(settingsData.operatingHours);
+      setSlotDuration(String(settingsData.defaultSlotDurationMinutes));
+      setConsultationFee(String(settingsData.defaultConsultationFee));
+      if (settingsData.letterheadHeader) setLetterheadHeader(settingsData.letterheadHeader);
+      if (settingsData.letterheadAddress) setLetterheadAddress(settingsData.letterheadAddress);
+      if (settingsData.letterheadContact) setLetterheadContact(settingsData.letterheadContact);
+    }
+    if (staffData && staffData.length > 0) {
+      setStaff(staffData);
+    } else {
+      // Sample provider roster
+      setStaff([
+        {
+          id: 'st-1',
+          tenantId: 'tenant-default',
+          clinicId: 'clinic-default',
+          firstName: 'Roberto',
+          lastName: 'Cruz',
+          title: 'Dr.',
+          role: 'Doctor',
+          prcLicenseNumber: 'PRC-0149281',
+          ptrNumber: 'PTR-8492019',
+          s2LicenseNumber: 'S2-9482014',
+          specialty: 'Family Medicine / General Practice',
+          isActive: true,
+          createdAt: new Date().toISOString(),
+        },
+        {
+          id: 'st-2',
+          tenantId: 'tenant-default',
+          clinicId: 'clinic-default',
+          firstName: 'Bea',
+          lastName: 'Gomez',
+          title: 'Nurse',
+          role: 'Nurse',
+          prcLicenseNumber: 'PRC-0982312',
+          specialty: 'Triage & Primary Care Nursing',
+          isActive: true,
+          createdAt: new Date().toISOString(),
+        },
+        {
+          id: 'st-3',
+          tenantId: 'tenant-default',
+          clinicId: 'clinic-default',
+          firstName: 'Clara',
+          lastName: 'Santos',
+          title: 'Ms.',
+          role: 'Cashier',
+          specialty: 'Billing & PhilHealth Konsulta Claims',
+          isActive: true,
+          createdAt: new Date().toISOString(),
+        },
+      ]);
     }
   }, []);
 
   useEffect(() => {
     setLoading(true);
-    loadEod().finally(() => setLoading(false));
-  }, [loadEod]);
+    loadAll().finally(() => setLoading(false));
+  }, [loadAll]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadEod();
+    await loadAll();
     setRefreshing(false);
-  }, [loadEod]);
+  }, [loadAll]);
+
+  const handleSavePreferences = async () => {
+    setSavingSettings(true);
+    setSettingsSavedBanner(false);
+    await clinicService.updateSettings({
+      clinicName: clinicName.trim(),
+      operatingHours: operatingHours.trim(),
+      defaultSlotDurationMinutes: parseInt(slotDuration) || 30,
+      defaultConsultationFee: parseFloat(consultationFee) || 400.0,
+      letterheadHeader: letterheadHeader.trim(),
+      letterheadAddress: letterheadAddress.trim(),
+      letterheadContact: letterheadContact.trim(),
+    });
+    setSavingSettings(false);
+    setSettingsSavedBanner(true);
+    setTimeout(() => setSettingsSavedBanner(false), 4000);
+  };
 
   return (
     <ScrollView
@@ -41,7 +144,7 @@ export default function SettingsScreen() {
       <View style={styles.card}>
         <View style={styles.cardHeaderRow}>
           <ThemedText style={styles.cardTitle}>Daily Operations & Remittance</ThemedText>
-          <Pressable onPress={loadEod} style={styles.auditBtn}>
+          <Pressable onPress={loadAll} style={styles.auditBtn}>
             <ThemedText style={styles.auditBtnText}>↻ Refresh Audit</ThemedText>
           </Pressable>
         </View>
@@ -105,19 +208,6 @@ export default function SettingsScreen() {
                 ))}
               </View>
             )}
-
-            {/* Doctor Workloads */}
-            {eodReport.doctorWorkloads && eodReport.doctorWorkloads.length > 0 && (
-              <View style={styles.subSection}>
-                <ThemedText style={styles.subSectionTitle}>Physician Consultations</ThemedText>
-                {eodReport.doctorWorkloads.map((dw, idx) => (
-                  <View key={idx} style={styles.row}>
-                    <ThemedText style={styles.label}>{dw.doctorName}</ThemedText>
-                    <ThemedText style={styles.value}>{dw.encountersCount} patients</ThemedText>
-                  </View>
-                ))}
-              </View>
-            )}
           </View>
         ) : (
           <ThemedText style={{ color: '#6B7280', fontSize: 13, padding: 8 }}>
@@ -126,13 +216,129 @@ export default function SettingsScreen() {
         )}
       </View>
 
-      {/* Facility Details */}
+      {/* Operational Preferences Card */}
       <View style={styles.card}>
-        <ThemedText style={styles.cardTitle}>Facility Details</ThemedText>
-        <View style={styles.row}>
-          <ThemedText style={styles.label}>Clinic Name</ThemedText>
-          <ThemedText style={styles.value}>St. Jude Family Clinic</ThemedText>
+        <ThemedText style={styles.cardTitle}>Operational Preferences & Letterhead</ThemedText>
+
+        {settingsSavedBanner && (
+          <View style={styles.savedBanner}>
+            <ThemedText style={styles.savedBannerText}>✓ Preferences successfully saved & updated!</ThemedText>
+          </View>
+        )}
+
+        <View style={{ gap: 10 }}>
+          <View>
+            <ThemedText style={styles.fieldLabel}>Facility Name</ThemedText>
+            <TextInput
+              style={styles.fieldInput}
+              value={clinicName}
+              onChangeText={setClinicName}
+            />
+          </View>
+
+          <View style={styles.formRow}>
+            <View style={{ flex: 2 }}>
+              <ThemedText style={styles.fieldLabel}>Operating Schedule</ThemedText>
+              <TextInput
+                style={styles.fieldInput}
+                value={operatingHours}
+                onChangeText={setOperatingHours}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <ThemedText style={styles.fieldLabel}>Slot (min)</ThemedText>
+              <TextInput
+                style={styles.fieldInput}
+                value={slotDuration}
+                onChangeText={setSlotDuration}
+                keyboardType="numeric"
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <ThemedText style={styles.fieldLabel}>Fee (₱)</ThemedText>
+              <TextInput
+                style={styles.fieldInput}
+                value={consultationFee}
+                onChangeText={setConsultationFee}
+                keyboardType="numeric"
+              />
+            </View>
+          </View>
+
+          <View>
+            <ThemedText style={styles.fieldLabel}>Letterhead Title / Header</ThemedText>
+            <TextInput
+              style={styles.fieldInput}
+              value={letterheadHeader}
+              onChangeText={setLetterheadHeader}
+            />
+          </View>
+
+          <View>
+            <ThemedText style={styles.fieldLabel}>Facility Address</ThemedText>
+            <TextInput
+              style={styles.fieldInput}
+              value={letterheadAddress}
+              onChangeText={setLetterheadAddress}
+            />
+          </View>
+
+          <View>
+            <ThemedText style={styles.fieldLabel}>Contact Information</ThemedText>
+            <TextInput
+              style={styles.fieldInput}
+              value={letterheadContact}
+              onChangeText={setLetterheadContact}
+            />
+          </View>
+
+          <Pressable
+            style={[styles.savePrefBtn, savingSettings && { opacity: 0.6 }]}
+            onPress={handleSavePreferences}
+            disabled={savingSettings}
+          >
+            {savingSettings ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <ThemedText style={styles.savePrefBtnText}>Save Preferences</ThemedText>
+            )}
+          </Pressable>
         </View>
+      </View>
+
+      {/* Staff & Healthcare Providers Roster Card */}
+      <View style={styles.card}>
+        <ThemedText style={styles.cardTitle}>Clinic Staff & Providers Roster</ThemedText>
+        <View style={{ gap: 10 }}>
+          {staff.map((s) => (
+            <View key={s.id} style={styles.staffItem}>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <ThemedText style={styles.staffName}>
+                    {s.title ? `${s.title} ` : ''}{s.firstName} {s.lastName}
+                  </ThemedText>
+                  <View style={[styles.roleBadge, s.role === 'Doctor' && { backgroundColor: '#E0F2FE' }]}>
+                    <ThemedText style={[styles.roleBadgeText, s.role === 'Doctor' && { color: '#0369A1' }]}>
+                      {s.role}
+                    </ThemedText>
+                  </View>
+                </View>
+                <ThemedText style={styles.specialtyText}>{s.specialty ?? 'General Staff'}</ThemedText>
+                {s.prcLicenseNumber && (
+                  <ThemedText style={styles.licenseText}>
+                    PRC: {s.prcLicenseNumber} {s.ptrNumber ? `• PTR: ${s.ptrNumber}` : ''} {s.s2LicenseNumber ? `• PDEA S2: ${s.s2LicenseNumber}` : ''}
+                  </ThemedText>
+                )}
+              </View>
+              <View style={styles.activeDot} />
+            </View>
+          ))}
+        </View>
+      </View>
+
+      {/* Facility Accreditation Details */}
+      <View style={styles.card}>
+        <ThemedText style={styles.cardTitle}>Facility Details & Sync</ThemedText>
         <View style={styles.row}>
           <ThemedText style={styles.label}>Accreditation ID</ThemedText>
           <ThemedText style={styles.value}>PHIC-KONSULTA-09214</ThemedText>
@@ -141,22 +347,9 @@ export default function SettingsScreen() {
           <ThemedText style={styles.label}>Operating Mode</ThemedText>
           <ThemedText style={styles.value}>Multi-Tenant Cloud + Local Edge</ThemedText>
         </View>
-      </View>
-
-      {/* Sync Status */}
-      <View style={styles.card}>
-        <ThemedText style={styles.cardTitle}>Offline-First Synchronization</ThemedText>
-        <View style={styles.row}>
-          <ThemedText style={styles.label}>Backend Service</ThemedText>
-          <ThemedText style={styles.value}>services/clinic-api</ThemedText>
-        </View>
         <View style={styles.row}>
           <ThemedText style={styles.label}>Sync Status</ThemedText>
           <ThemedText style={[styles.value, { color: '#16A34A', fontWeight: '700' }]}>Synced (0 pending)</ThemedText>
-        </View>
-        <View style={styles.row}>
-          <ThemedText style={styles.label}>Local Storage</ThemedText>
-          <ThemedText style={styles.value}>SQLite Encrypted Cache</ThemedText>
         </View>
       </View>
     </ScrollView>
@@ -309,5 +502,91 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#1F2937',
+  },
+  formRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  fieldLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4B5563',
+    marginBottom: 4,
+  },
+  fieldInput: {
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontSize: 13,
+    color: '#111827',
+  },
+  savePrefBtn: {
+    backgroundColor: '#0284C7',
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  savePrefBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  savedBanner: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+    borderRadius: 8,
+    padding: 10,
+  },
+  savedBannerText: {
+    color: '#166534',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  staffItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    padding: 12,
+  },
+  staffName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  roleBadge: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  roleBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#4B5563',
+  },
+  specialtyText: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  licenseText: {
+    fontSize: 11,
+    color: '#0284C7',
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  activeDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#16A34A',
   },
 });

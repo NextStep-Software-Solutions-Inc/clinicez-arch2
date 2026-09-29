@@ -1,6 +1,7 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStaticNavigation, type StaticParamList } from '@react-navigation/native';
 import DashboardScreen from './screens/Dashboard.screen';
+import PatientsScreen from './screens/Patients.screen';
 import ConsultationsScreen from './screens/Consultations.screen';
 import AppointmentsScreen from './screens/Appointments.screen';
 import BillingScreen from './screens/Billing.screen';
@@ -13,6 +14,13 @@ const Tab = createBottomTabNavigator({
       options: {
         title: 'Dashboard',
         headerTitle: 'Clinic Dashboard',
+      },
+    },
+    Patients: {
+      screen: PatientsScreen,
+      options: {
+        title: 'Patients',
+        headerTitle: 'Patient Registry',
       },
     },
     Consultations: {

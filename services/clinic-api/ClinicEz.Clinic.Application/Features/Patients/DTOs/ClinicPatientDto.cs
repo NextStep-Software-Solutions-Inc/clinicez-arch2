@@ -1,0 +1,36 @@
+using System;
+
+namespace ClinicEz.Clinic.Application.Features.Patients.DTOs;
+
+public sealed record ClinicPatientDto(
+    Guid Id,
+    string TenantId,
+    Guid ClinicId,
+    string PatientCode,
+    string FirstName,
+    string LastName,
+    string? MiddleName,
+    string? Suffix,
+    string FullName,
+    DateOnly DateOfBirth,
+    int Age,
+    string Gender,
+    string? CivilStatus,
+    string ContactNumber,
+    string? Email,
+    string? AddressLine,
+    string? Barangay,
+    string? City,
+    string? Province,
+    string? EmergencyContactName,
+    string? EmergencyContactPhone,
+    string? EmergencyContactRelationship,
+    string? PhilHealthNumber,
+    string? SeniorCitizenId,
+    string? PwdId,
+    string? BloodType,
+    string? Allergies,
+    string? ChronicConditions,
+    string? Alerts,
+    Guid? SyncPatientId,
+    DateTime CreatedAt);
