@@ -157,8 +157,9 @@ public class BillingAndCashierTests
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var orderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
 
-        var handler = new CreateClinicLabOrderCommandHandler(orderRepo, unitOfWork, _clinicContext);
+        var handler = new CreateClinicLabOrderCommandHandler(orderRepo, patientRepo, unitOfWork, _clinicContext);
         var command = new CreateClinicLabOrderCommand(
             PatientId: Guid.NewGuid(),
             PatientName: "Pedro Penduko",

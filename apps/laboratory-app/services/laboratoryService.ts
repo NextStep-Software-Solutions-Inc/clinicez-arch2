@@ -1,51 +1,136 @@
 import { labApiClient } from './apiClient';
-import { SyncStatus } from '@shared/safe';
 
-export interface LabOrder {
-  id: string;
-  orderNumber: string;
-  patientId: string;
-  patientName: string;
-  testCodes: string[];
-  priority: 'routine' | 'stat';
-  status: 'ordered' | 'sample_collected' | 'processing' | 'completed';
-  orderingDoctor: string;
-  createdAt: string;
-}
-
-export interface SpecimenSample {
+export interface SpecimenItem {
   id: string;
   barcode: string;
-  orderId: string;
-  type: 'whole_blood' | 'serum' | 'urine' | 'swab';
-  containerType: 'edta_lavender' | 'sst_gold' | 'plain_red' | 'sterile_cup';
-  collectedAt: string;
-  collectedBy: string;
+  containerType: string;
+  specimenType: string;
+  status: 'Pending' | 'Collected' | 'ReceivedInLab' | 'Rejected';
+  collectedAt?: string;
+  collectedByPhlebotomistName?: string;
+  receivedInLabAt?: string;
+  notes?: string;
 }
 
-export interface LabResultEntry {
+export interface AnalyteResultItem {
   id: string;
-  orderId: string;
-  testCode: string;
-  testName: string;
+  panelName: string;
+  analyteCode: string;
+  analyteName: string;
   value: string;
   unit: string;
-  referenceRange: string;
-  isAbnormal: boolean;
-  verifiedBy?: string;
-  syncStatus: SyncStatus;
+  referenceInterval: string;
+  flag: 'Normal' | 'Low' | 'High' | 'Critical';
+  interpretation?: string;
+  enteredByMedTechName?: string;
+  enteredAt?: string;
+}
+
+export interface DiagnosticReportItem {
+  id: string;
+  reportNumber: string;
+  releasedAt: string;
+  pathologistName: string;
+  pathologistPrcLicense: string;
+  medicalTechnologistName: string;
+  medicalTechnologistPrcLicense: string;
+  pathologistImpression?: string;
+  isCriticalResult: boolean;
+  signedPdfBase64?: string;
+}
+
+export interface LabRequisitionItem {
+  id: string;
+  externalRequisitionId?: string;
+  accessionNumber: string;
+  orderingFacilityName: string;
+  orderingDoctorName: string;
+  orderingDoctorPrc?: string;
+  patientId: string;
+  patientName: string;
+  philHealthPin?: string;
+  patientAge: number;
+  patientGender: string;
+  contactNumber?: string;
+  clinicalDiagnosis?: string;
+  fastingInstructions?: string;
+  urgency: 'Routine' | 'STAT';
+  status: 'PendingAccession' | 'SpecimenCollected' | 'InTesting' | 'AwaitingReview' | 'Verified' | 'Rejected';
+  createdAt: string;
+  specimens: SpecimenItem[];
+  analyteResults: AnalyteResultItem[];
+  diagnosticReport?: DiagnosticReportItem;
+}
+
+export interface AnalyteCatalogSpec {
+  panelName: string;
+  analyteCode: string;
+  analyteName: string;
+  unit: string;
+  referenceInterval: string;
 }
 
 export const laboratoryService = {
-  async getWorklist() {
-    return labApiClient.get<LabOrder[]>('/orders');
+  async getWorklist(status?: string, searchTerm?: string) {
+    const params = new URLSearchParams();
+    if (status) params.append('status', status);
+    if (searchTerm) params.append('searchTerm', searchTerm);
+    const qs = params.toString();
+    return labApiClient.get<LabRequisitionItem[]>(`/requisitions${qs ? `?${qs}` : ''}`);
   },
 
-  async getSpecimens() {
-    return labApiClient.get<SpecimenSample[]>('/specimens');
+  async getRequisition(id: string) {
+    return labApiClient.get<LabRequisitionItem>(`/requisitions/${id}`);
   },
 
-  async submitResults(orderId: string, results: Partial<LabResultEntry>[]) {
-    return labApiClient.post<LabResultEntry[]>(`/orders/${orderId}/results`, results);
+  async getByAccession(accessionNumber: string) {
+    return labApiClient.get<LabRequisitionItem>(`/requisitions/by-accession/${encodeURIComponent(accessionNumber)}`);
   },
+
+  async accessionSpecimen(id: string, phlebotomistName: string, specimens: {
+    specimenId?: string;
+    barcode?: string;
+    containerType: string;
+    specimenType: string;
+    collectedAt?: string;
+    notes?: string;
+  }[]) {
+    return labApiClient.post<LabRequisitionItem>(`/requisitions/${id}/accession`, {
+      phlebotomistName,
+      specimens
+    });
+  },
+
+  async getCatalog() {
+    return labApiClient.get<AnalyteCatalogSpec[]>('/results/catalog');
+  },
+
+  async recordResults(requisitionId: string, medTechName: string, results: {
+    panelName?: string;
+    analyteCode: string;
+    analyteName?: string;
+    value: string;
+    unit?: string;
+    interpretation?: string;
+  }[]) {
+    return labApiClient.post<LabRequisitionItem>(`/results/${requisitionId}`, {
+      medTechName,
+      results
+    });
+  },
+
+  async verifyAndSignReport(requisitionId: string, payload: {
+    pathologistName: string;
+    pathologistPrcLicense: string;
+    medicalTechnologistName: string;
+    medicalTechnologistPrcLicense: string;
+    pathologistImpression?: string;
+    signedPdfBase64?: string;
+  }) {
+    return labApiClient.post<LabRequisitionItem>(`/reports/${requisitionId}/verify`, payload);
+  },
+
+  async getReport(requisitionId: string) {
+    return labApiClient.get<DiagnosticReportItem>(`/reports/${requisitionId}`);
+  }
 };

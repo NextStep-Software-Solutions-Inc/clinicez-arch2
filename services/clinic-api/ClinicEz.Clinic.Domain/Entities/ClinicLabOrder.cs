@@ -23,6 +23,19 @@ public sealed class ClinicLabOrder : BaseEntity
     public string? ClinicalDiagnosis { get; set; }
     public string? Notes { get; set; }
 
+    // Interoperability & External Lab Ingestion Fields
+    public string? PublicUploadToken { get; set; }
+    public string? ExternalLabName { get; set; }
+    public string? ExternalReportUrl { get; set; }
+    public string? ExternalReportFileBase64 { get; set; }
+    public string? ExternalReportType { get; set; } // Photo, PDF
+    public string? UploadedBy { get; set; } // Patient, ExternalLab, ClinicStaff
+    public string? ObservationsJson { get; set; } // Serialized discrete analyte results
+    public string? PathologistImpression { get; set; }
+    public string? VerifiedByPathologist { get; set; }
+    public string? PathologistPrcLicense { get; set; }
+    public DateTime? ReportReleasedAt { get; set; }
+
     public List<ClinicLabOrderItem> Items { get; set; } = new();
 }
 

@@ -95,6 +95,14 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "clinic-api", "clinic-api", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ClinicEz.Clinic.Application.Tests", "services\clinic-api\ClinicEz.Clinic.Application.Tests\ClinicEz.Clinic.Application.Tests.csproj", "{0708C7F7-6929-4926-BD7D-3BB03EA457E0}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "laboratory-api", "laboratory-api", "{F5C36F34-58D9-BB0E-2B11-A059DCC37A75}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ClinicEz.Laboratory.Application.Tests", "services\laboratory-api\ClinicEz.Laboratory.Application.Tests\ClinicEz.Laboratory.Application.Tests.csproj", "{D2DE13C8-98FB-45FE-AC8B-DC0916163E33}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "packages", "packages", "{809F86A1-1C4C-B159-0CD4-DF9D33D876CE}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "shared-dotnet", "shared-dotnet", "{7C2A49A6-435B-10FF-0B78-167F27B7B311}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -549,6 +557,18 @@ Global
 		{0708C7F7-6929-4926-BD7D-3BB03EA457E0}.Release|x64.Build.0 = Release|Any CPU
 		{0708C7F7-6929-4926-BD7D-3BB03EA457E0}.Release|x86.ActiveCfg = Release|Any CPU
 		{0708C7F7-6929-4926-BD7D-3BB03EA457E0}.Release|x86.Build.0 = Release|Any CPU
+		{D2DE13C8-98FB-45FE-AC8B-DC0916163E33}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D2DE13C8-98FB-45FE-AC8B-DC0916163E33}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D2DE13C8-98FB-45FE-AC8B-DC0916163E33}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{D2DE13C8-98FB-45FE-AC8B-DC0916163E33}.Debug|x64.Build.0 = Debug|Any CPU
+		{D2DE13C8-98FB-45FE-AC8B-DC0916163E33}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{D2DE13C8-98FB-45FE-AC8B-DC0916163E33}.Debug|x86.Build.0 = Debug|Any CPU
+		{D2DE13C8-98FB-45FE-AC8B-DC0916163E33}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D2DE13C8-98FB-45FE-AC8B-DC0916163E33}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D2DE13C8-98FB-45FE-AC8B-DC0916163E33}.Release|x64.ActiveCfg = Release|Any CPU
+		{D2DE13C8-98FB-45FE-AC8B-DC0916163E33}.Release|x64.Build.0 = Release|Any CPU
+		{D2DE13C8-98FB-45FE-AC8B-DC0916163E33}.Release|x86.ActiveCfg = Release|Any CPU
+		{D2DE13C8-98FB-45FE-AC8B-DC0916163E33}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -591,6 +611,9 @@ Global
 		{226C3A47-FD2D-4384-BB51-9BFD0493D376} = {70D323E0-2C89-DD53-5CBF-C8AB0F77C698}
 		{E1157EF6-ACDE-3331-9460-F909B47893C6} = {5854FF58-B8C5-05C6-5BF2-ACE42193F22B}
 		{0708C7F7-6929-4926-BD7D-3BB03EA457E0} = {E1157EF6-ACDE-3331-9460-F909B47893C6}
+		{F5C36F34-58D9-BB0E-2B11-A059DCC37A75} = {5854FF58-B8C5-05C6-5BF2-ACE42193F22B}
+		{D2DE13C8-98FB-45FE-AC8B-DC0916163E33} = {F5C36F34-58D9-BB0E-2B11-A059DCC37A75}
+		{7C2A49A6-435B-10FF-0B78-167F27B7B311} = {809F86A1-1C4C-B159-0CD4-DF9D33D876CE}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {47973B73-8009-4789-A2BC-29223023C1EF}

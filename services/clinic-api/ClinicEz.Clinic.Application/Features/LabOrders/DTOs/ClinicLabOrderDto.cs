@@ -26,7 +26,19 @@ public record ClinicLabOrderDto(
     LabOrderStatus Status,
     string? ClinicalDiagnosis,
     string? Notes,
-    List<ClinicLabOrderItemDto> Items
+    List<ClinicLabOrderItemDto> Items,
+    string? PublicUploadToken = null,
+    string? PublicUploadUrl = null,
+    string? ExternalLabName = null,
+    string? ExternalReportUrl = null,
+    string? ExternalReportFileBase64 = null,
+    string? ExternalReportType = null,
+    string? UploadedBy = null,
+    string? ObservationsJson = null,
+    string? PathologistImpression = null,
+    string? VerifiedByPathologist = null,
+    string? PathologistPrcLicense = null,
+    DateTime? ReportReleasedAt = null
 );
 
 public record CreateLabOrderItemRequest(
@@ -43,5 +55,28 @@ public record CreateClinicLabOrderRequest(
     string? OrderedByDoctorName,
     string? ClinicalDiagnosis,
     string? Notes,
-    List<CreateLabOrderItemRequest> Items
+    List<CreateLabOrderItemRequest> Items,
+    string? TargetFacilityId = null,
+    string? TargetTenantId = null
+);
+
+public record AttachExternalLabResultRequest(
+    string? ExternalLabName,
+    string DocumentType, // Photo, PDF
+    string? DocumentUrl,
+    string? FileBase64,
+    string? Notes,
+    string UploadedBy = "ClinicStaff"
+);
+
+public record PublicLabUploadInfoResponse(
+    string OrderNumber,
+    string PatientInitials,
+    int PatientAge,
+    string PatientGender,
+    string OrderingDoctorName,
+    string OrderingFacilityName,
+    string? ClinicalDiagnosis,
+    List<string> RequestedTests,
+    DateTime OrderDate
 );

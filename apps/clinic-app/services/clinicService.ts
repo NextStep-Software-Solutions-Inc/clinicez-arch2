@@ -9,7 +9,7 @@ export type InvoiceStatus = 'Draft' | 'Paid' | 'PartiallyPaid' | 'Voided' | 'Ref
 export type PaymentMethod = 'Cash' | 'GCash' | 'Maya' | 'CreditCard' | 'DebitCard' | 'PhilHealthKonsulta' | 'HmoInsurance';
 export type DiscountType = 'None' | 'SeniorCitizen' | 'Pwd' | 'PhilHealthKonsulta' | 'Custom';
 export type ProcedureStatus = 'Ordered' | 'InProgress' | 'Completed' | 'Cancelled';
-export type LabOrderStatus = 'Ordered' | 'SpecimenCollected' | 'SentToLab' | 'ResultsReceived' | 'Completed' | 'Cancelled';
+export type LabOrderStatus = 'Draft' | 'Ordered' | 'SpecimenCollected' | 'InTesting' | 'SentToLab' | 'ResultsReceived' | 'Completed' | 'CompletedWithExternalReport' | 'Cancelled';
 
 export interface ClinicRole {
   id: string;
@@ -278,6 +278,18 @@ export interface ClinicLabOrderRecord {
   clinicalDiagnosis?: string;
   notes?: string;
   items: ClinicLabOrderItem[];
+  publicUploadToken?: string;
+  publicUploadUrl?: string;
+  externalLabName?: string;
+  externalReportUrl?: string;
+  externalReportFileBase64?: string;
+  externalReportType?: string;
+  uploadedBy?: string;
+  observationsJson?: string;
+  pathologistImpression?: string;
+  verifiedByPathologist?: string;
+  pathologistPrcLicense?: string;
+  reportReleasedAt?: string;
 }
 
 export interface PaymentModeSummary {
@@ -871,6 +883,21 @@ export const clinicService = {
     return clinicApiClient.post<ClinicLabOrderRecord>('/lab-orders', payload);
   },
 
+  async getLabOrderSlip(orderId: string) {
+    return clinicApiClient.get<LabOrderSlipData>(`/lab-orders/${orderId}/slip`);
+  },
+
+  async attachExternalLabResult(orderId: string, payload: {
+    externalLabName?: string;
+    documentType: 'Photo' | 'PDF';
+    documentUrl?: string;
+    fileBase64?: string;
+    notes?: string;
+    uploadedBy?: string;
+  }) {
+    return clinicApiClient.post<ClinicLabOrderRecord>(`/lab-orders/${orderId}/attach-external-result`, payload);
+  },
+
   // Daily Operations Census & Cashier Remittance
   async getDailyEodReport(date?: string) {
     const qs = date ? `?date=${encodeURIComponent(date)}` : '';
@@ -1066,3 +1093,26 @@ export const clinicService = {
     return clinicApiClient.put<ClinicSettingsRecord>('/settings', payload);
   }
 };
+
+export interface LabOrderSlipData {
+  orderId: string;
+  orderNumber: string;
+  orderDate: string;
+  clinicName: string;
+  clinicAddress: string;
+  clinicContact: string;
+  doctorName: string;
+  doctorPrcLicense: string;
+  doctorPtr?: string;
+  patientId: string;
+  patientName: string;
+  patientAge: number;
+  patientGender: string;
+  philHealthNumber?: string;
+  clinicalDiagnosis?: string;
+  fastingInstructions?: string;
+  items: { testName: string; category: string; instructions?: string }[];
+  publicUploadToken: string;
+  publicUploadUrl: string;
+  qrPayload: string;
+}

@@ -37,6 +37,16 @@ public sealed class LabOrdersController : ControllerBase
         return Ok(ApiResponse<List<ClinicLabOrderDto>>.Success(result));
     }
 
+    [HttpGet("{id}/slip")]
+    [HasPermission(ClinicPermissions.LabOrdersRead)]
+    public async Task<ActionResult<ApiResponse<LabOrderSlipDto>>> GetLabOrderSlip(
+        [FromRoute] Guid id,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new GetClinicLabOrderSlipQuery(id), ct);
+        return Ok(ApiResponse<LabOrderSlipDto>.Success(result));
+    }
+
     [HttpPost]
     [HasPermission(ClinicPermissions.LabOrdersWrite)]
     public async Task<ActionResult<ApiResponse<ClinicLabOrderDto>>> CreateLabOrder(
@@ -51,10 +61,33 @@ public sealed class LabOrdersController : ControllerBase
             request.OrderedByDoctorName,
             request.ClinicalDiagnosis,
             request.Notes,
-            request.Items
+            request.Items,
+            request.TargetFacilityId,
+            request.TargetTenantId
         );
 
         var result = await _sender.Send(command, ct);
-        return Ok(ApiResponse<ClinicLabOrderDto>.Success(result, "Lab order created successfully."));
+        return Ok(ApiResponse<ClinicLabOrderDto>.Success(result, "Lab order created and requisition issued."));
+    }
+
+    [HttpPost("{id}/attach-external-result")]
+    [HasPermission(ClinicPermissions.LabOrdersWrite)]
+    public async Task<ActionResult<ApiResponse<ClinicLabOrderDto>>> AttachExternalResult(
+        [FromRoute] Guid id,
+        [FromBody] AttachExternalLabResultRequest request,
+        CancellationToken ct)
+    {
+        var command = new AttachExternalLabResultCommand(
+            id,
+            request.ExternalLabName,
+            request.DocumentType,
+            request.DocumentUrl,
+            request.FileBase64,
+            request.Notes,
+            request.UploadedBy
+        );
+
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<ClinicLabOrderDto>.Success(result, "External lab result attached successfully to patient EMR."));
     }
 }

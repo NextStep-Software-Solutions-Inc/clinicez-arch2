@@ -3,11 +3,13 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.LabOrders.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Exceptions;
+using ClinicEz.Shared.Interoperability;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -21,23 +23,31 @@ public record CreateClinicLabOrderCommand(
     string? OrderedByDoctorName = null,
     string? ClinicalDiagnosis = null,
     string? Notes = null,
-    List<CreateLabOrderItemRequest>? Items = null
+    List<CreateLabOrderItemRequest>? Items = null,
+    string? TargetFacilityId = null,
+    string? TargetTenantId = null
 ) : IRequest<ClinicLabOrderDto>;
 
 public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLabOrderCommand, ClinicLabOrderDto>
 {
     private readonly IRepository<ClinicLabOrder> _orderRepo;
+    private readonly IRepository<ClinicPatient> _patientRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
+    private readonly ILabRequisitionPublisher? _requisitionPublisher;
 
     public CreateClinicLabOrderCommandHandler(
         IRepository<ClinicLabOrder> orderRepo,
+        IRepository<ClinicPatient> patientRepo,
         IUnitOfWork unitOfWork,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        ILabRequisitionPublisher? requisitionPublisher = null)
     {
         _orderRepo = orderRepo;
+        _patientRepo = patientRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _requisitionPublisher = requisitionPublisher;
     }
 
     public async Task<ClinicLabOrderDto> Handle(CreateClinicLabOrderCommand request, CancellationToken cancellationToken)
@@ -54,6 +64,7 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
 
         var dateTag = today.ToString("yyyyMMdd");
         var orderNumber = $"LAB-{dateTag}-{(todayCount + 1):D3}";
+        var uploadToken = Guid.NewGuid().ToString("N")[..16];
 
         var items = new List<ClinicLabOrderItem>();
         if (request.Items != null && request.Items.Any())
@@ -95,11 +106,66 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
             Status = LabOrderStatus.Ordered,
             ClinicalDiagnosis = request.ClinicalDiagnosis?.Trim(),
             Notes = request.Notes?.Trim(),
+            PublicUploadToken = uploadToken,
             Items = items
         };
 
         await _orderRepo.AddAsync(order, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // Fetch patient demographics for the interoperability event payload
+        var patient = await _patientRepo.GetByIdAsync(request.PatientId, cancellationToken);
+
+        // Publish LabRequisitionIssuedEvent to RabbitMQ for ClinicEz Labs (Path A)
+        if (_requisitionPublisher != null)
+        {
+            var requisitionEvent = new LabRequisitionIssuedEvent
+            {
+                RequisitionId = order.Id,
+                AccessionNumber = order.OrderNumber,
+                OrderingFacilityId = _clinicContext.ClinicId.ToString(),
+                OrderingFacilityName = "ClinicEz Primary Care Clinic",
+                TenantId = _clinicContext.TenantId ?? "tenant-default",
+                TargetFacilityId = request.TargetFacilityId,
+                TargetTenantId = request.TargetTenantId,
+                OrderingDoctor = new OrderingDoctorDto
+                {
+                    DoctorId = request.OrderedByDoctorId?.ToString() ?? "doc-001",
+                    DoctorName = request.OrderedByDoctorName ?? "Dr. Cruz",
+                    PrcLicenseNumber = "0149281",
+                    PtrNumber = "PTR-2026-9912",
+                    Specialization = "Family Medicine"
+                },
+                Patient = new RequisitionPatientDto
+                {
+                    PatientId = request.PatientId,
+                    FullName = request.PatientName.Trim(),
+                    PhilHealthPin = patient?.PhilHealthNumber,
+                    NationalId = patient?.SeniorCitizenId ?? patient?.PwdId,
+                    DateOfBirth = patient?.DateOfBirth.ToString("yyyy-MM-dd"),
+                    Age = patient != null ? DateTime.UtcNow.Year - patient.DateOfBirth.Year : 40,
+                    Gender = patient?.Gender.ToString() ?? "Unknown",
+                    ContactNumber = patient?.ContactNumber
+                },
+                Icd10Code = request.ClinicalDiagnosis,
+                ProvisionalDiagnosis = request.ClinicalDiagnosis,
+                FastingInstructions = request.Notes,
+                Urgency = "Routine",
+                Items = items.Select(i => new RequisitionItemDto
+                {
+                    ItemCode = i.TestName.ToUpperInvariant().Replace(" ", "_")[..Math.Min(i.TestName.Length, 15)],
+                    ItemName = i.TestName,
+                    Category = i.Category,
+                    Urgency = "Routine",
+                    SpecimenRequirement = i.Instructions
+                }).ToList(),
+                PublicUploadToken = uploadToken,
+                PublicUploadUrl = $"/api/v1/public/lab-upload/{uploadToken}",
+                IssuedAt = order.OrderDate
+            };
+
+            await _requisitionPublisher.PublishRequisitionIssuedAsync(requisitionEvent, cancellationToken);
+        }
 
         return MapToDto(order);
     }
@@ -124,6 +190,18 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
             i.Category,
             i.Instructions,
             i.Status
-        )).ToList()
+        )).ToList(),
+        order.PublicUploadToken,
+        !string.IsNullOrEmpty(order.PublicUploadToken) ? $"/api/v1/public/lab-upload/{order.PublicUploadToken}" : null,
+        order.ExternalLabName,
+        order.ExternalReportUrl,
+        order.ExternalReportFileBase64,
+        order.ExternalReportType,
+        order.UploadedBy,
+        order.ObservationsJson,
+        order.PathologistImpression,
+        order.VerifiedByPathologist,
+        order.PathologistPrcLicense,
+        order.ReportReleasedAt
     );
 }

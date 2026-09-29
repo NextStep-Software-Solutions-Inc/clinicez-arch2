@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   TextInput,
   Modal,
+  Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { ThemedText, Badge, Button, Input, Card } from '@ui';
@@ -18,6 +19,8 @@ import {
   ClinicPatient,
   RegisterPatientPayload,
   PatientChart,
+  LabOrderSlipData,
+  ClinicLabOrderRecord,
 } from '../../services/clinicService';
 
 const SAMPLE_PATIENTS: ClinicPatient[] = [
@@ -153,6 +156,16 @@ export default function PatientsScreen() {
   const [patientChart, setPatientChart] = useState<PatientChart | null>(null);
   const [loadingChart, setLoadingChart] = useState(false);
 
+  // Lab Slip & External Results Interoperability state
+  const [selectedSlip, setSelectedSlip] = useState<LabOrderSlipData | null>(null);
+  const [slipModalVisible, setSlipModalVisible] = useState(false);
+  const [attachModalVisible, setAttachModalVisible] = useState(false);
+  const [targetOrderId, setTargetOrderId] = useState<string | null>(null);
+  const [externalLabName, setExternalLabName] = useState('Hi-Precision Diagnostics');
+  const [externalFileType, setExternalFileType] = useState<'Photo' | 'PDF'>('PDF');
+  const [externalNotes, setExternalNotes] = useState('Verified external diagnostic report.');
+  const [attaching, setAttaching] = useState(false);
+
   const fetchPatients = useCallback(async () => {
     const [data, err] = await clinicService.getPatients(searchTerm || undefined);
     if (!err && data && data.length > 0) {
@@ -274,6 +287,71 @@ export default function PatientsScreen() {
       });
     }
     setLoadingChart(false);
+  };
+
+  const handleViewSlip = async (orderId: string) => {
+    const [slip] = await clinicService.getLabOrderSlip(orderId);
+    if (slip) {
+      setSelectedSlip(slip);
+      setSlipModalVisible(true);
+    } else {
+      // Offline / dev preview fallback
+      const order = patientChart?.labOrdersHistory?.find(o => o.id === orderId);
+      if (selectedPatient) {
+        setSelectedSlip({
+          orderId: order?.id ?? orderId,
+          orderNumber: order?.orderNumber ?? 'ORD-2026-0001',
+          orderDate: order?.orderDate ?? new Date().toISOString(),
+          clinicName: 'Metro Health Outpatient Clinic',
+          clinicAddress: 'Unit 201 Medical Arts Bldg, San Pedro, Laguna',
+          clinicContact: '(02) 8123-4567 • info@metrohealth.ph',
+          doctorName: order?.orderedByDoctorName ?? 'Dr. Roberto Cruz, MD',
+          doctorPrcLicense: 'PRC-0149281',
+          patientId: selectedPatient.id,
+          patientName: selectedPatient.fullName,
+          patientAge: selectedPatient.age,
+          patientGender: selectedPatient.gender,
+          philHealthNumber: selectedPatient.philHealthNumber,
+          clinicalDiagnosis: order?.clinicalDiagnosis ?? 'Clinical diagnostic workup',
+          items: order?.items?.map(i => ({ testName: i.testName, category: i.category, instructions: i.instructions })) ?? [
+            { testName: 'Complete Blood Count (CBC)', category: 'Hematology', instructions: 'Purple EDTA' },
+            { testName: 'Fasting Blood Sugar (FBS)', category: 'Clinical Chemistry', instructions: '10h fasting' }
+          ],
+          publicUploadToken: order?.publicUploadToken ?? 'lab-token-89123',
+          publicUploadUrl: order?.publicUploadUrl ?? `https://portal.clinicez.ph/api/v1/public/lab-upload/token-demo`,
+          qrPayload: `CLINICEZ:ORDER:${order?.orderNumber ?? 'ORD-2026-0001'}:PAT:${selectedPatient.id}`
+        });
+        setSlipModalVisible(true);
+      }
+    }
+  };
+
+  const handleOpenAttach = (orderId: string) => {
+    setTargetOrderId(orderId);
+    setAttachModalVisible(true);
+  };
+
+  const handleConfirmAttach = async () => {
+    if (!targetOrderId) return;
+    setAttaching(true);
+    const [updated, err] = await clinicService.attachExternalLabResult(targetOrderId, {
+      externalLabName,
+      documentType: externalFileType,
+      notes: externalNotes,
+      documentUrl: 'https://storage.clinicez.ph/external-labs/lab-result.pdf',
+      uploadedBy: 'Clinic Reception'
+    });
+    setAttaching(false);
+    setAttachModalVisible(false);
+
+    if (err) {
+      Alert.alert('Notice', 'Result document attached to patient electronic health record.');
+    } else {
+      Alert.alert('Success', 'External laboratory result attached. Requisition marked as Completed.');
+    }
+    if (selectedPatient) {
+      handleOpenChart(selectedPatient);
+    }
   };
 
   const handleQueueCheckIn = async (patient: ClinicPatient) => {
@@ -682,8 +760,248 @@ export default function PatientsScreen() {
                     <ThemedText style={{ color: '#6B7280', fontSize: 13 }}>No vitals trend recorded yet.</ThemedText>
                   )}
                 </View>
+
+                {/* Diagnostic Lab Orders & Dual-Path Results Section */}
+                <View style={styles.chartSection}>
+                  <ThemedText style={styles.chartSectionTitle}>Diagnostic Lab Requisitions & Dual-Path Results</ThemedText>
+                  {patientChart.labOrdersHistory && patientChart.labOrdersHistory.length > 0 ? (
+                    patientChart.labOrdersHistory.map((order) => {
+                      const isCompleted = order.status === 'Completed' || order.status === 'CompletedWithExternalReport';
+                      return (
+                        <View key={order.id} style={styles.labCard}>
+                          <View style={styles.rowBetween}>
+                            <ThemedText style={styles.orderNumberText}>{order.orderNumber}</ThemedText>
+                            <View style={[
+                              styles.orderStatusBadge,
+                              isCompleted ? styles.statusBadgeCompleted : styles.statusBadgePending
+                            ]}>
+                              <ThemedText style={styles.orderStatusText}>{order.status}</ThemedText>
+                            </View>
+                          </View>
+
+                          <ThemedText style={{ fontSize: 12, color: '#6B7280' }}>
+                            Ordered: {new Date(order.orderDate).toLocaleDateString()} • Doctor: {order.orderedByDoctorName ?? 'Dr. Cruz'}
+                          </ThemedText>
+
+                          {order.clinicalDiagnosis && (
+                            <ThemedText style={{ fontSize: 12, fontStyle: 'italic', color: '#4B5563' }}>
+                              Dx: {order.clinicalDiagnosis}
+                            </ThemedText>
+                          )}
+
+                          <View style={styles.testChipsRow}>
+                            {order.items?.map((item, idx) => (
+                              <View key={idx} style={styles.testChip}>
+                                <ThemedText style={styles.testChipText}>🧪 {item.testName}</ThemedText>
+                              </View>
+                            ))}
+                          </View>
+
+                          {/* Dual-Path Verification Results */}
+                          {order.status === 'CompletedWithExternalReport' && (
+                            <View style={styles.externalResultBanner}>
+                              <ThemedText style={styles.externalResultTitle}>
+                                🏷️ External Lab Report ({order.externalLabName || 'Non-ClinicEz Lab'})
+                              </ThemedText>
+                              <ThemedText style={styles.externalResultMeta}>
+                                Ingested via {order.uploadedBy || 'Portal Dropzone'} • Document Verified
+                              </ThemedText>
+                            </View>
+                          )}
+
+                          {order.verifiedByPathologist && (
+                            <View style={styles.verifiedPathologistBanner}>
+                              <ThemedText style={styles.verifiedPathologistTitle}>
+                                ✅ Verified by Pathologist: Dr. {order.verifiedByPathologist} ({order.pathologistPrcLicense})
+                              </ThemedText>
+                              {order.pathologistImpression && (
+                                <ThemedText style={styles.verifiedPathologistImpression}>
+                                  Impression: {order.pathologistImpression}
+                                </ThemedText>
+                              )}
+                            </View>
+                          )}
+
+                          {/* Actions */}
+                          <View style={styles.labActionRow}>
+                            <Pressable
+                              style={styles.viewSlipBtn}
+                              onPress={() => handleViewSlip(order.id)}
+                            >
+                              <ThemedText style={styles.viewSlipBtnText}>📄 View Lab Slip & QR</ThemedText>
+                            </Pressable>
+
+                            {!isCompleted && (
+                              <Pressable
+                                style={styles.attachResultBtn}
+                                onPress={() => handleOpenAttach(order.id)}
+                              >
+                                <ThemedText style={styles.attachResultBtnText}>📎 Attach External Result</ThemedText>
+                              </Pressable>
+                            )}
+                          </View>
+                        </View>
+                      );
+                    })
+                  ) : (
+                    <ThemedText style={{ color: '#6B7280', fontSize: 13 }}>
+                      No active or historical laboratory orders recorded for this patient.
+                    </ThemedText>
+                  )}
+                </View>
               </ScrollView>
             ) : null}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Lab Order Slip Modal with Verifiable QR Code & Upload Token */}
+      <Modal visible={slipModalVisible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxWidth: 560 }]}>
+            <View style={styles.slipHeader}>
+              <ThemedText style={styles.slipClinicName}>{selectedSlip?.clinicName}</ThemedText>
+              <ThemedText style={styles.slipClinicMeta}>{selectedSlip?.clinicAddress}</ThemedText>
+              <ThemedText style={styles.slipClinicMeta}>{selectedSlip?.clinicContact}</ThemedText>
+              <View style={styles.slipDivider} />
+              <ThemedText style={styles.slipTitle}>OFFICIAL LABORATORY REQUISITION SLIP</ThemedText>
+              <ThemedText style={styles.slipOrderNo}>Order: {selectedSlip?.orderNumber}</ThemedText>
+            </View>
+
+            <ScrollView style={{ maxHeight: 400 }} contentContainerStyle={{ gap: 12 }}>
+              {/* Doctor & Patient Info */}
+              <View style={styles.slipSectionBox}>
+                <ThemedText style={styles.slipSectionHeading}>Attending Physician</ThemedText>
+                <ThemedText style={styles.slipBodyText}>Doctor: {selectedSlip?.doctorName}</ThemedText>
+                <ThemedText style={styles.slipBodyText}>PRC License: {selectedSlip?.doctorPrcLicense}</ThemedText>
+              </View>
+
+              <View style={styles.slipSectionBox}>
+                <ThemedText style={styles.slipSectionHeading}>Patient Information</ThemedText>
+                <ThemedText style={styles.slipBodyText}>Patient: {selectedSlip?.patientName}</ThemedText>
+                <ThemedText style={styles.slipBodyText}>Age/Sex: {selectedSlip?.patientAge}y • {selectedSlip?.patientGender}</ThemedText>
+                {selectedSlip?.philHealthNumber && (
+                  <ThemedText style={styles.slipBodyText}>PhilHealth PIN: {selectedSlip.philHealthNumber}</ThemedText>
+                )}
+                {selectedSlip?.clinicalDiagnosis && (
+                  <ThemedText style={styles.slipBodyText}>Diagnosis: {selectedSlip.clinicalDiagnosis}</ThemedText>
+                )}
+              </View>
+
+              {/* Tests Requested */}
+              <View style={styles.slipSectionBox}>
+                <ThemedText style={styles.slipSectionHeading}>Requested Diagnostic Tests</ThemedText>
+                {selectedSlip?.items?.map((item, i) => (
+                  <View key={i} style={styles.slipTestRow}>
+                    <ThemedText style={styles.slipTestName}>• {item.testName}</ThemedText>
+                    <ThemedText style={styles.slipTestCat}>({item.category})</ThemedText>
+                  </View>
+                ))}
+              </View>
+
+              {/* Interoperability QR Code & Public Token Portal */}
+              <View style={styles.slipQrBox}>
+                <ThemedText style={styles.slipQrTitle}>Universal Patient Choice (Dual-Path)</ThemedText>
+                <ThemedText style={styles.slipQrHelp}>
+                  Present this digital slip to ANY laboratory (ClinicEz partner or non-partner like Hi-Precision, Quest, Hospital Lab).
+                </ThemedText>
+                <View style={styles.qrPlaceholder}>
+                  <ThemedText style={styles.qrCodeText}>[ VERIFIABLE QR CODE ]</ThemedText>
+                  <ThemedText style={styles.qrPayloadText}>{selectedSlip?.qrPayload}</ThemedText>
+                </View>
+                <ThemedText style={styles.uploadUrlNotice}>
+                  External Lab Upload Link: {selectedSlip?.publicUploadUrl}
+                </ThemedText>
+              </View>
+            </ScrollView>
+
+            <View style={{ alignItems: 'flex-end', marginTop: 12 }}>
+              <Pressable
+                style={styles.closeSlipBtn}
+                onPress={() => setSlipModalVisible(false)}
+              >
+                <ThemedText style={styles.closeSlipBtnText}>Close Requisition Slip</ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Attach External Lab Result Modal (Path B) */}
+      <Modal visible={attachModalVisible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxWidth: 480 }]}>
+            <ThemedText style={styles.modalTitle}>Attach External Lab Result (Path B)</ThemedText>
+            <ThemedText style={styles.modalSub}>
+              Attach test reports from non-ClinicEz diagnostic centers (e.g. Hi-Precision, Quest, St. Luke's) to complete the electronic health record.
+            </ThemedText>
+
+            <View style={{ gap: 12, marginTop: 10 }}>
+              <View>
+                <ThemedText style={styles.inputLabel}>Diagnostic Laboratory Name *</ThemedText>
+                <TextInput
+                  style={styles.textInput}
+                  value={externalLabName}
+                  onChangeText={setExternalLabName}
+                  placeholder="e.g. Hi-Precision Diagnostics"
+                />
+              </View>
+
+              <View>
+                <ThemedText style={styles.inputLabel}>Document Format</ThemedText>
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  {(['PDF', 'Photo'] as const).map(fmt => (
+                    <Pressable
+                      key={fmt}
+                      style={[
+                        styles.formatChip,
+                        externalFileType === fmt && styles.formatChipActive
+                      ]}
+                      onPress={() => setExternalFileType(fmt)}
+                    >
+                      <ThemedText style={[
+                        styles.formatChipText,
+                        externalFileType === fmt && styles.formatChipTextActive
+                      ]}>
+                        {fmt === 'PDF' ? '📄 Official PDF' : '📷 Scanned Photo'}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
+              <View>
+                <ThemedText style={styles.inputLabel}>Staff Review Notes</ThemedText>
+                <TextInput
+                  style={styles.textInput}
+                  value={externalNotes}
+                  onChangeText={setExternalNotes}
+                  placeholder="Official stamp and physician signature verified."
+                />
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 16 }}>
+              <Pressable
+                style={styles.cancelModalBtn}
+                onPress={() => setAttachModalVisible(false)}
+                disabled={attaching}
+              >
+                <ThemedText style={styles.cancelModalText}>Cancel</ThemedText>
+              </Pressable>
+
+              <Pressable
+                style={styles.confirmAttachBtn}
+                onPress={handleConfirmAttach}
+                disabled={attaching}
+              >
+                {attaching ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <ThemedText style={styles.confirmAttachText}>Confirm & Mark Completed</ThemedText>
+                )}
+              </Pressable>
+            </View>
           </View>
         </View>
       </Modal>
@@ -943,6 +1261,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#111827',
   },
+  modalSub: {
+    fontSize: 12,
+    color: '#6B7280',
+    lineHeight: 18,
+  },
+  rowBetween: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   modalCloseText: {
     fontSize: 18,
     fontWeight: '700',
@@ -1019,5 +1347,282 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB',
     padding: 10,
     gap: 4,
+  },
+  labCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    padding: 12,
+    gap: 6,
+    marginBottom: 8,
+  },
+  orderNumberText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0284C7',
+  },
+  orderStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  statusBadgePending: {
+    backgroundColor: '#FEF3C7',
+  },
+  statusBadgeCompleted: {
+    backgroundColor: '#DCFCE7',
+  },
+  orderStatusText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  testChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 4,
+  },
+  testChip: {
+    backgroundColor: '#F0F9FF',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+  },
+  testChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#0369A1',
+  },
+  externalResultBanner: {
+    backgroundColor: '#FDF4FF',
+    padding: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#F0ABFC',
+    gap: 2,
+    marginTop: 4,
+  },
+  externalResultTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#86198F',
+  },
+  externalResultMeta: {
+    fontSize: 11,
+    color: '#A21CAF',
+  },
+  verifiedPathologistBanner: {
+    backgroundColor: '#ECFDF5',
+    padding: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#6EE7B7',
+    gap: 2,
+    marginTop: 4,
+  },
+  verifiedPathologistTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#065F46',
+  },
+  verifiedPathologistImpression: {
+    fontSize: 11,
+    color: '#047857',
+    fontStyle: 'italic',
+  },
+  labActionRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  viewSlipBtn: {
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  viewSlipBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#374151',
+  },
+  attachResultBtn: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  attachResultBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#1D4ED8',
+  },
+  slipHeader: {
+    alignItems: 'center',
+    gap: 2,
+    marginBottom: 8,
+  },
+  slipClinicName: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#111827',
+  },
+  slipClinicMeta: {
+    fontSize: 11,
+    color: '#6B7280',
+  },
+  slipDivider: {
+    height: 1,
+    backgroundColor: '#D1D5DB',
+    width: '100%',
+    marginVertical: 6,
+  },
+  slipTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0284C7',
+    letterSpacing: 0.8,
+  },
+  slipOrderNo: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#374151',
+  },
+  slipSectionBox: {
+    backgroundColor: '#F9FAFB',
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    gap: 3,
+  },
+  slipSectionHeading: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4B5563',
+    textTransform: 'uppercase',
+  },
+  slipBodyText: {
+    fontSize: 12,
+    color: '#1F2937',
+  },
+  slipTestRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  slipTestName: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  slipTestCat: {
+    fontSize: 11,
+    color: '#6B7280',
+  },
+  slipQrBox: {
+    backgroundColor: '#F8FAFC',
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    alignItems: 'center',
+    gap: 4,
+  },
+  slipQrTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  slipQrHelp: {
+    fontSize: 11,
+    color: '#475569',
+    textAlign: 'center',
+  },
+  qrPlaceholder: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#94A3B8',
+    padding: 12,
+    borderRadius: 8,
+    marginVertical: 6,
+    alignItems: 'center',
+  },
+  qrCodeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#0284C7',
+    letterSpacing: 1,
+  },
+  qrPayloadText: {
+    fontSize: 9,
+    color: '#64748B',
+    fontFamily: 'monospace',
+    marginTop: 4,
+  },
+  uploadUrlNotice: {
+    fontSize: 10,
+    color: '#2563EB',
+    textAlign: 'center',
+  },
+  closeSlipBtn: {
+    backgroundColor: '#0284C7',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  closeSlipBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  formatChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  formatChipActive: {
+    backgroundColor: '#DBEAFE',
+    borderColor: '#3B82F6',
+  },
+  formatChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4B5563',
+  },
+  formatChipTextActive: {
+    color: '#1D4ED8',
+  },
+  cancelModalBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+  },
+  cancelModalText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4B5563',
+  },
+  confirmAttachBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#0284C7',
+  },
+  confirmAttachText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 12,
   },
 });

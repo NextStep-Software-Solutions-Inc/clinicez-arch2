@@ -47,6 +47,9 @@ public static class DependencyInjection
         // Outbound patient webhook notifier
         services.AddHttpClient<IPatientWebhookNotifier, PatientWebhookNotifier>();
 
+        // Outbound interoperability publisher
+        services.AddScoped<ILabRequisitionPublisher, LabRequisitionPublisher>();
+
         // Add Hangfire
         services.AddHangfire(config => config
             .UseSimpleAssemblyNameTypeSerializer()
@@ -59,6 +62,7 @@ public static class DependencyInjection
         {
             x.AddConsumer<FacilityCreatedConsumer>();
             x.AddConsumer<AppointmentBookedConsumer>();
+            x.AddConsumer<DiagnosticReportFinalizedConsumer>();
             x.AddEntityFrameworkOutbox<ApplicationDbContext>(o =>
             {
                 o.UsePostgres();

@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ClinicEz.Laboratory.Application\ClinicEz.Laboratory.Application.csproj" />
+    <ProjectReference Include="..\..\..\packages\shared-dotnet\ClinicEz.Shared.csproj" />
   </ItemGroup>
 
   <ItemGroup>

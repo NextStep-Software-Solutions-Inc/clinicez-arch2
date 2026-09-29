@@ -44,5 +44,6 @@ public enum LabOrderStatus
     SentToLab,
     ResultsReceived,
     Completed,
+    CompletedWithExternalReport,
     Cancelled
 }

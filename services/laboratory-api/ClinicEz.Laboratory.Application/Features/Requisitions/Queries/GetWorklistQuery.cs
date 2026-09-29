@@ -1,0 +1,125 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using ClinicEz.Laboratory.Application.Features.Requisitions.DTOs;
+using ClinicEz.Laboratory.Domain.Entities;
+using ClinicEz.Laboratory.Domain.Enums;
+using ClinicEz.Laboratory.Domain.Interfaces;
+using MediatR;
+using Microsoft.EntityFrameworkCore;
+
+namespace ClinicEz.Laboratory.Application.Features.Requisitions.Queries;
+
+public record GetWorklistQuery(
+    string? Status = null,
+    string? SearchTerm = null,
+    int PageNumber = 1,
+    int PageSize = 50
+) : IRequest<List<LabRequisitionDto>>;
+
+public class GetWorklistQueryHandler : IRequestHandler<GetWorklistQuery, List<LabRequisitionDto>>
+{
+    private readonly IRepository<LabRequisition> _requisitionRepository;
+
+    public GetWorklistQueryHandler(IRepository<LabRequisition> requisitionRepository)
+    {
+        _requisitionRepository = requisitionRepository;
+    }
+
+    public async Task<List<LabRequisitionDto>> Handle(GetWorklistQuery request, CancellationToken cancellationToken)
+    {
+        var query = _requisitionRepository.Query()
+            .Include(r => r.Specimens)
+            .Include(r => r.AnalyteResults)
+            .Include(r => r.DiagnosticReport)
+            .AsNoTracking();
+
+        if (!string.IsNullOrWhiteSpace(request.Status) && Enum.TryParse<RequisitionStatus>(request.Status, true, out var parsedStatus))
+        {
+            query = query.Where(r => r.Status == parsedStatus);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.SearchTerm))
+        {
+            var term = request.SearchTerm.Trim().ToLower();
+            query = query.Where(r =>
+                r.AccessionNumber.ToLower().Contains(term) ||
+                r.PatientName.ToLower().Contains(term) ||
+                r.OrderingDoctorName.ToLower().Contains(term) ||
+                r.OrderingFacilityName.ToLower().Contains(term));
+        }
+
+        var items = await query
+            .OrderByDescending(r => r.CreatedAt)
+            .Skip((request.PageNumber - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .ToListAsync(cancellationToken);
+
+        return items.Select(r => MapToDto(r)).ToList();
+    }
+
+    public static LabRequisitionDto MapToDto(LabRequisition r)
+    {
+        return new LabRequisitionDto
+        {
+            Id = r.Id,
+            ExternalRequisitionId = r.ExternalRequisitionId,
+            AccessionNumber = r.AccessionNumber,
+            OrderingFacilityName = r.OrderingFacilityName,
+            OrderingDoctorName = r.OrderingDoctorName,
+            OrderingDoctorPrc = r.OrderingDoctorPrc,
+            PatientId = r.PatientId,
+            PatientName = r.PatientName,
+            PhilHealthPin = r.PhilHealthPin,
+            PatientAge = r.PatientAge,
+            PatientGender = r.PatientGender,
+            ContactNumber = r.ContactNumber,
+            ClinicalDiagnosis = r.ClinicalDiagnosis,
+            FastingInstructions = r.FastingInstructions,
+            Urgency = r.Urgency,
+            Status = r.Status.ToString(),
+            CreatedAt = r.CreatedAt,
+            Specimens = r.Specimens.Select(s => new SpecimenDto
+            {
+                Id = s.Id,
+                Barcode = s.Barcode,
+                ContainerType = s.ContainerType.ToString(),
+                SpecimenType = s.SpecimenType,
+                Status = s.Status.ToString(),
+                CollectedAt = s.CollectedAt,
+                CollectedByPhlebotomistName = s.CollectedByPhlebotomistName,
+                ReceivedInLabAt = s.ReceivedInLabAt,
+                Notes = s.Notes
+            }).ToList(),
+            AnalyteResults = r.AnalyteResults.Select(a => new AnalyteResultDto
+            {
+                Id = a.Id,
+                PanelName = a.PanelName,
+                AnalyteCode = a.AnalyteCode,
+                AnalyteName = a.AnalyteName,
+                Value = a.Value,
+                Unit = a.Unit,
+                ReferenceInterval = a.ReferenceInterval,
+                Flag = a.Flag.ToString(),
+                Interpretation = a.Interpretation,
+                EnteredByMedTechName = a.EnteredByMedTechName,
+                EnteredAt = a.EnteredAt
+            }).ToList(),
+            DiagnosticReport = r.DiagnosticReport == null ? null : new DiagnosticReportDto
+            {
+                Id = r.DiagnosticReport.Id,
+                ReportNumber = r.DiagnosticReport.ReportNumber,
+                ReleasedAt = r.DiagnosticReport.ReleasedAt,
+                PathologistName = r.DiagnosticReport.PathologistName,
+                PathologistPrcLicense = r.DiagnosticReport.PathologistPrcLicense,
+                MedicalTechnologistName = r.DiagnosticReport.MedicalTechnologistName,
+                MedicalTechnologistPrcLicense = r.DiagnosticReport.MedicalTechnologistPrcLicense,
+                PathologistImpression = r.DiagnosticReport.PathologistImpression,
+                IsCriticalResult = r.DiagnosticReport.IsCriticalResult,
+                SignedPdfBase64 = r.DiagnosticReport.SignedPdfBase64
+            }
+        };
+    }
+}

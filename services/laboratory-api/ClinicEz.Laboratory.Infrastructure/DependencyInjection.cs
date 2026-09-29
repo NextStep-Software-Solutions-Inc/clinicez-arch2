@@ -1,6 +1,8 @@
 using ClinicEz.Laboratory.Domain.Interfaces;
+using ClinicEz.Laboratory.Application.Common.Interfaces;
 using ClinicEz.Laboratory.Infrastructure.Persistence;
 using ClinicEz.Laboratory.Infrastructure.Persistence.Repositories;
+using ClinicEz.Laboratory.Infrastructure.Services;
 using Hangfire;
 using Hangfire.PostgreSql;
 using MassTransit;
@@ -33,8 +35,12 @@ public static class DependencyInjection
                 npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", schemaName);
             }));
         // Register repositories and Unit of Work
+        services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+
+        // Register publisher
+        services.AddScoped<IDiagnosticReportPublisher, DiagnosticReportPublisher>();
 
         // Add Hangfire
         services.AddHangfire(config => config
@@ -47,6 +53,7 @@ public static class DependencyInjection
 		services.AddMassTransit(x =>
 		{
 			x.AddConsumer<FacilityCreatedConsumer>();
+			x.AddConsumer<LabRequisitionIssuedConsumer>();
 			x.AddEntityFrameworkOutbox<ApplicationDbContext>(o =>
 			{
 				o.UsePostgres();
