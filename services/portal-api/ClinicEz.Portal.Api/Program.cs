@@ -136,6 +136,30 @@ using (var scope = app.Services.CreateScope())
     {
         var seeders = scope.ServiceProvider.GetServices<IBaseSeeder>();
         foreach (var seeder in seeders) seeder.SeedAsync().GetAwaiter().GetResult();
+
+        // Auto-heal any legacy facilities stuck in Provisioning status (Development only)
+        try
+        {
+            var stuckFacilities = dbContext.Facilities
+                .Where(f => f.Status == ClinicEz.Portal.Domain.Entities.FacilityStatus.Provisioning)
+                .ToList();
+
+            if (stuckFacilities.Count > 0)
+            {
+                Console.WriteLine($"[ClinicEz.Portal] Auto-healing {stuckFacilities.Count} facility/facilities stuck in Provisioning status...");
+                foreach (var fac in stuckFacilities)
+                {
+                    fac.Status = ClinicEz.Portal.Domain.Entities.FacilityStatus.Active;
+                    fac.UpdatedAt = DateTime.UtcNow;
+                }
+                dbContext.SaveChanges();
+                Console.WriteLine("[ClinicEz.Portal] Auto-healing complete. All facilities updated to Active.");
+            }
+        }
+        catch (Exception healEx)
+        {
+            Console.WriteLine($"[ClinicEz.Portal] Warning: Auto-healing facilities failed: {healEx.Message}");
+        }
     }
 }
 

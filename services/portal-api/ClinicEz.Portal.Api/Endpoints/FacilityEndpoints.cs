@@ -146,23 +146,21 @@ public class FacilityEndpoints : IEndpoint
                 return Results.NotFound(new { Message = "Facility not found." });
             }
 
-            var baseDomain = configuration["Console:BaseDomain"] ?? "clinicez.ph";
-            var isDev = string.Equals(configuration["ASPNETCORE_ENVIRONMENT"], "Development", StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(configuration["Environment"], "Development", StringComparison.OrdinalIgnoreCase) ||
-                        (bool.TryParse(configuration["Console:ForceLocal"], out var forceLocal) && forceLocal);
-
             var slug = GetFacilitiesQueryHandler.GenerateFacilitySlug(facility.Name);
-            var devPort = facility.FacilityType switch
-            {
-                FacilityType.Clinic => configuration["Console:DevPorts:Clinic"] ?? "5245",
-                FacilityType.Laboratory => configuration["Console:DevPorts:Laboratory"] ?? "5245",
-                FacilityType.Pharmacy => configuration["Console:DevPorts:Pharmacy"] ?? "5245",
-                FacilityType.Organization => configuration["Console:DevPorts:Organization"] ?? "5245",
-                _ => "5245"
-            };
+            var consoleUrl = GetFacilitiesQueryHandler.ResolveConsoleUrl(
+                configuration,
+                facility.FacilityType,
+                facility.Status,
+                facility.Id,
+                tenant.TenantSlug);
 
-            var consoleUrl = isDev ? $"http://localhost:{devPort}" : $"https://{slug}.{baseDomain}";
-            return Results.Ok(new { Slug = slug, ConsoleUrl = consoleUrl, FacilityType = facility.FacilityType.ToString() });
+            return Results.Ok(new 
+            { 
+                Slug = slug, 
+                ConsoleUrl = consoleUrl, 
+                Status = facility.Status.ToString(),
+                FacilityType = facility.FacilityType.ToString() 
+            });
         })
         .RequireAuthorization()
         .WithName("GetFacilityConsoleUrl")
@@ -223,6 +221,51 @@ public class FacilityEndpoints : IEndpoint
         .RequireAuthorization()
         .WithName("DeleteFacility")
         .WithDescription("Permanently deletes/archives a facility from the workspace (Owner only).")
+        .WithTags("Facilities");
+
+        // 6. Force-activate a facility and re-publish provisioning event
+        app.MapPost("/facilities/{id:guid}/activate", async (
+            Guid id,
+            string tenantSlug,
+            HttpContext httpContext,
+            IApplicationDbContext context,
+            MassTransit.IPublishEndpoint publishEndpoint) =>
+        {
+            var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(clerkUserId)) return Results.Unauthorized();
+
+            var tenant = await context.Tenants
+                .FirstOrDefaultAsync(t => t.TenantSlug.ToLower() == tenantSlug.ToLower() || t.Id.ToString() == tenantSlug);
+
+            if (tenant == null) return Results.NotFound(new { Message = "Workspace not found." });
+
+            var isOwner = tenant.OwnerId == clerkUserId;
+            var isAdmin = !isOwner && await context.StaffMembers.AnyAsync(s => 
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == "Admin" && s.Status == "Active");
+
+            if (!isOwner && !isAdmin) return Results.Forbid();
+
+            var facility = await context.Facilities.FirstOrDefaultAsync(f => f.Id == id && f.TenantId == tenant.Id);
+            if (facility == null) return Results.NotFound(new { Message = "Facility not found." });
+
+            facility.Status = ClinicEz.Portal.Domain.Entities.FacilityStatus.Active;
+            facility.UpdatedAt = DateTime.UtcNow;
+
+            await publishEndpoint.Publish(new FacilityCreatedEvent
+            {
+                TenantId = tenant.Id.ToString(),
+                FacilityType = facility.FacilityType,
+                ResourceId = facility.Id,
+                Name = facility.Name
+            });
+
+            await context.SaveChangesAsync(default);
+
+            return Results.Ok(new { Success = true, Message = "Facility activated successfully." });
+        })
+        .RequireAuthorization()
+        .WithName("ActivateFacility")
+        .WithDescription("Activates a facility and re-publishes the provisioning event.")
         .WithTags("Facilities");
     }
 }

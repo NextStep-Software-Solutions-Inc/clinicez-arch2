@@ -38,10 +38,17 @@ interface Facility {
 }
 
 const DASHBOARD_PORTS: Record<string, number> = {
-    Clinic: 5245,
-    Laboratory: 5245,
-    Pharmacy: 5245,
-    Organization: 5245
+    Clinic: 8081,
+    Laboratory: 8082,
+    Pharmacy: 8083,
+    Organization: 8084
+};
+
+const APP_SUBDOMAINS: Record<string, string> = {
+    Clinic: "clinic",
+    Laboratory: "lab",
+    Pharmacy: "pharmacy",
+    Organization: "org"
 };
 
 export default function WorkspaceOverviewClient({ tenantSlug }: { tenantSlug: string }) {
@@ -94,6 +101,8 @@ export default function WorkspaceOverviewClient({ tenantSlug }: { tenantSlug: st
     const apiPercent = maxApi > 0 && maxApi < 1000000 ? Math.min(100, Math.round(((usage?.monthlyApiQuotaUsed ?? 0) / maxApi) * 100)) : 0;
 
     const handleOpenConsole = (facility: Facility) => {
+        if (facility.status !== "Active") return;
+
         if (facility.consoleUrl) {
             window.open(facility.consoleUrl, "_blank");
             return;
@@ -102,11 +111,11 @@ export default function WorkspaceOverviewClient({ tenantSlug }: { tenantSlug: st
         if (typeof window === "undefined") return;
         const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
         if (isLocal) {
-            const port = DASHBOARD_PORTS[facility.facilityType] || 5245;
-            window.open(`http://localhost:${port}`, "_blank");
+            const port = DASHBOARD_PORTS[facility.facilityType] || 8081;
+            window.open(`http://localhost:${port}?tenant=${tenantSlug}&facilityId=${facility.id}`, "_blank");
         } else {
-            const slug = facility.slug || facility.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-            window.open(`https://${slug}.clinicez.ph`, "_blank");
+            const sub = APP_SUBDOMAINS[facility.facilityType] || "clinic";
+            window.open(`https://${sub}.clinicez.ph?tenant=${tenantSlug}&facilityId=${facility.id}`, "_blank");
         }
     };
 
@@ -543,8 +552,17 @@ export default function WorkspaceOverviewClient({ tenantSlug }: { tenantSlug: st
                                             size="sm"
                                             className="w-full rounded-xl text-xs font-bold h-9 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 flex items-center justify-center gap-1.5"
                                         >
-                                            <span>Launch Console</span>
-                                            <IconExternalLink className="h-3.5 w-3.5" />
+                                            {fac.status === "Provisioning" ? (
+                                                <>
+                                                    <IconClockPlay className="h-3.5 w-3.5 animate-spin text-amber-500" />
+                                                    <span>Provisioning...</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <span>Launch Console</span>
+                                                    <IconExternalLink className="h-3.5 w-3.5" />
+                                                </>
+                                            )}
                                         </Button>
                                     </div>
                                 ))}
@@ -631,8 +649,17 @@ export default function WorkspaceOverviewClient({ tenantSlug }: { tenantSlug: st
                                                         size="sm"
                                                         className="rounded-xl text-xs font-bold h-8 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900"
                                                     >
-                                                        Launch Console
-                                                        <IconExternalLink className="h-3.5 w-3.5 ml-1.5" />
+                                                        {fac.status === "Provisioning" ? (
+                                                            <span className="inline-flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                                                                <IconClockPlay className="h-3.5 w-3.5 animate-spin" />
+                                                                Provisioning...
+                                                            </span>
+                                                        ) : (
+                                                            <>
+                                                                Launch Console
+                                                                <IconExternalLink className="h-3.5 w-3.5 ml-1.5" />
+                                                            </>
+                                                        )}
                                                     </Button>
                                                 </td>
                                             </tr>

@@ -20,7 +20,7 @@ public record FacilityDto(
     FacilityStatus Status,
     DateTime CreatedAt,
     string Slug,
-    string ConsoleUrl
+    string? ConsoleUrl
 );
 
 public record GetFacilitiesQuery(string TenantSlug) : IRequest<List<FacilityDto>>;
@@ -45,26 +45,10 @@ public class GetFacilitiesQueryHandler(
             .OrderByDescending(f => f.CreatedAt)
             .ToListAsync(cancellationToken);
 
-        var baseDomain = configuration["Console:BaseDomain"] ?? "clinicez.ph";
-        var isDev = string.Equals(configuration["ASPNETCORE_ENVIRONMENT"], "Development", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(configuration["Environment"], "Development", StringComparison.OrdinalIgnoreCase) ||
-                    (bool.TryParse(configuration["Console:ForceLocal"], out var forceLocal) && forceLocal);
-
         return rawFacilities.Select(f =>
         {
             var slug = GenerateFacilitySlug(f.Name);
-            var devPort = f.FacilityType switch
-            {
-                FacilityType.Clinic => configuration["Console:DevPorts:Clinic"] ?? "5245",
-                FacilityType.Laboratory => configuration["Console:DevPorts:Laboratory"] ?? "5245",
-                FacilityType.Pharmacy => configuration["Console:DevPorts:Pharmacy"] ?? "5245",
-                FacilityType.Organization => configuration["Console:DevPorts:Organization"] ?? "5245",
-                _ => "5245"
-            };
-
-            var consoleUrl = isDev 
-                ? $"http://localhost:{devPort}" 
-                : $"https://{slug}.{baseDomain}";
+            var consoleUrl = ResolveConsoleUrl(configuration, f.FacilityType, f.Status, f.Id, tenant.TenantSlug);
 
             return new FacilityDto(
                 f.Id,
@@ -76,6 +60,49 @@ public class GetFacilitiesQueryHandler(
                 consoleUrl
             );
         }).ToList();
+    }
+
+    public static string? ResolveConsoleUrl(
+        IConfiguration configuration,
+        FacilityType facilityType,
+        FacilityStatus status,
+        Guid facilityId,
+        string tenantSlug)
+    {
+        if (status != FacilityStatus.Active)
+        {
+            return null;
+        }
+
+        var baseDomain = configuration["Console:BaseDomain"] ?? "clinicez.ph";
+        var isDev = string.Equals(configuration["ASPNETCORE_ENVIRONMENT"], "Development", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(configuration["Environment"], "Development", StringComparison.OrdinalIgnoreCase) ||
+                    (bool.TryParse(configuration["Console:ForceLocal"], out var forceLocal) && forceLocal);
+
+        if (isDev)
+        {
+            var devPort = facilityType switch
+            {
+                FacilityType.Clinic => configuration["Console:DevPorts:Clinic"] ?? "8081",
+                FacilityType.Laboratory => configuration["Console:DevPorts:Laboratory"] ?? "8082",
+                FacilityType.Pharmacy => configuration["Console:DevPorts:Pharmacy"] ?? "8083",
+                FacilityType.Organization => configuration["Console:DevPorts:Organization"] ?? "8084",
+                _ => "8081"
+            };
+
+            return $"http://localhost:{devPort}?tenant={tenantSlug}&facilityId={facilityId}";
+        }
+
+        var subdomain = facilityType switch
+        {
+            FacilityType.Clinic => configuration["Console:Subdomains:Clinic"] ?? "clinic",
+            FacilityType.Laboratory => configuration["Console:Subdomains:Laboratory"] ?? "lab",
+            FacilityType.Pharmacy => configuration["Console:Subdomains:Pharmacy"] ?? "pharmacy",
+            FacilityType.Organization => configuration["Console:Subdomains:Organization"] ?? "org",
+            _ => "clinic"
+        };
+
+        return $"https://{subdomain}.{baseDomain}?tenant={tenantSlug}&facilityId={facilityId}";
     }
 
     public static string GenerateFacilitySlug(string name)

@@ -33,11 +33,18 @@ interface FacilityTableProps {
     facilityType: "Clinic" | "Laboratory" | "Pharmacy" | "Organization";
 }
 
-const DASHBOARD_PORTS = {
-    Clinic: 5245,
-    Laboratory: 5245,
-    Pharmacy: 5245,
-    Organization: 5245
+const DASHBOARD_PORTS: Record<string, number> = {
+    Clinic: 8081,
+    Laboratory: 8082,
+    Pharmacy: 8083,
+    Organization: 8084
+};
+
+const APP_SUBDOMAINS: Record<string, string> = {
+    Clinic: "clinic",
+    Laboratory: "lab",
+    Pharmacy: "pharmacy",
+    Organization: "org"
 };
 
 export default function FacilityTable({ facilityType }: FacilityTableProps) {
@@ -50,11 +57,38 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
     // Edit Modal state
     const [editingFacility, setEditingFacility] = useState<Facility | null>(null);
     const [editName, setEditName] = useState("");
+    const [editStatus, setEditStatus] = useState<Facility["status"]>("Active");
     const [savingEdit, setSavingEdit] = useState(false);
+
+    // Activation state
+    const [activatingId, setActivatingId] = useState<string | null>(null);
 
     // Delete Modal state
     const [deletingFacility, setDeletingFacility] = useState<Facility | null>(null);
     const [savingDelete, setSavingDelete] = useState(false);
+
+    const handleActivateFacility = async (fac: Facility) => {
+        setActivatingId(fac.id);
+        try {
+            await apiClient.post(`/facilities/${fac.id}/activate?tenantSlug=${tenantSlug}`);
+            toast.success(`"${fac.name}" activated and provisioned successfully!`);
+            fetchFacilities();
+        } catch (err: any) {
+            try {
+                await apiClient.put(`/facilities/${fac.id}`, {
+                    tenantSlug,
+                    name: fac.name,
+                    status: "Active"
+                });
+                toast.success(`"${fac.name}" activated successfully!`);
+                fetchFacilities();
+            } catch (fallbackErr: any) {
+                toast.error(err.response?.data?.message || err.message || "Failed to activate facility");
+            }
+        } finally {
+            setActivatingId(null);
+        }
+    };
 
     const fetchFacilities = async () => {
         try {
@@ -76,6 +110,8 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
     }, [tenantSlug, facilityType]);
 
     const handleOpenConsole = (facility: Facility) => {
+        if (facility.status !== "Active") return;
+
         if (facility.consoleUrl) {
             window.open(facility.consoleUrl, "_blank");
             return;
@@ -83,17 +119,18 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
 
         const isLocal = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
         if (isLocal) {
-            const port = DASHBOARD_PORTS[facility.facilityType] || 5245;
-            window.open(`http://localhost:${port}`, "_blank");
+            const port = DASHBOARD_PORTS[facility.facilityType] || 8081;
+            window.open(`http://localhost:${port}?tenant=${tenantSlug}&facilityId=${facility.id}`, "_blank");
         } else {
-            const slug = facility.slug || facility.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-            window.open(`https://${slug}.clinicez.ph`, "_blank");
+            const sub = APP_SUBDOMAINS[facility.facilityType] || "clinic";
+            window.open(`https://${sub}.clinicez.ph?tenant=${tenantSlug}&facilityId=${facility.id}`, "_blank");
         }
     };
 
     const handleOpenEdit = (fac: Facility) => {
         setEditingFacility(fac);
         setEditName(fac.name);
+        setEditStatus(fac.status);
     };
 
     const handleSaveEdit = async (e: React.FormEvent) => {
@@ -104,7 +141,8 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
         try {
             await apiClient.put(`/facilities/${editingFacility.id}`, {
                 tenantSlug,
-                name: editName.trim()
+                name: editName.trim(),
+                status: editStatus
             });
             toast.success("Facility updated successfully");
             setEditingFacility(null);
@@ -218,7 +256,7 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                                     </span>
                                     <span>•</span>
                                     <span className="font-mono text-[11px] text-primary/85 dark:text-primary/75 truncate">
-                                        {fac.slug ? `${fac.slug}.clinicez.ph` : "Console"}
+                                        {`${APP_SUBDOMAINS[fac.facilityType] || "clinic"}.clinicez.ph`}
                                     </span>
                                 </div>
                             </div>
@@ -241,16 +279,42 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
 
                         {/* Bottom: Action buttons */}
                         <div className="flex items-center gap-2 pt-1">
-                            <Button
-                                onClick={() => handleOpenConsole(fac)}
-                                disabled={fac.status !== "Active"}
-                                variant="outline"
-                                size="sm"
-                                className="flex-1 rounded-xl text-xs font-bold h-9 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 flex items-center justify-center gap-1.5"
-                            >
-                                <span>Manage Console</span>
-                                <IconExternalLink className="h-3.5 w-3.5" />
-                            </Button>
+                            {fac.status === "Provisioning" ? (
+                                <Button
+                                    disabled
+                                    variant="outline"
+                                    size="sm"
+                                    className="flex-1 rounded-xl text-xs font-bold h-9 border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 flex items-center justify-center gap-1.5"
+                                >
+                                    <IconClockPlay className="h-3.5 w-3.5 animate-spin" />
+                                    <span>Provisioning...</span>
+                                </Button>
+                            ) : fac.status === "Active" ? (
+                                <Button
+                                    onClick={() => handleOpenConsole(fac)}
+                                    variant="outline"
+                                    size="sm"
+                                    className="flex-1 rounded-xl text-xs font-bold h-9 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 flex items-center justify-center gap-1.5"
+                                >
+                                    <span>Manage Console</span>
+                                    <IconExternalLink className="h-3.5 w-3.5" />
+                                </Button>
+                            ) : (
+                                <Button
+                                    onClick={() => handleActivateFacility(fac)}
+                                    disabled={activatingId === fac.id}
+                                    variant="default"
+                                    size="sm"
+                                    className="flex-1 rounded-xl text-xs font-bold h-9 bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center gap-1.5 shadow-sm"
+                                >
+                                    {activatingId === fac.id ? (
+                                        <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                        <IconCircleCheck className="h-3.5 w-3.5" />
+                                    )}
+                                    <span>Activate Now</span>
+                                </Button>
+                            )}
                             <Button
                                 onClick={() => handleOpenEdit(fac)}
                                 variant="ghost"
@@ -295,7 +359,7 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                                             <span className="font-bold uppercase tracking-wider text-[10px]">{fac.facilityType}</span>
                                             <span>•</span>
                                             <span className="font-mono text-[11px] text-primary/85 dark:text-primary/75">
-                                                {fac.slug ? `${fac.slug}.clinicez.ph` : "Console"}
+                                                {`${APP_SUBDOMAINS[fac.facilityType] || "clinic"}.clinicez.ph`}
                                             </span>
                                         </div>
                                     </td>
@@ -311,16 +375,42 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                                     </td>
                                     <td className="px-6 py-4 text-right whitespace-nowrap">
                                         <div className="inline-flex items-center gap-1.5 justify-end">
-                                            <Button
-                                                onClick={() => handleOpenConsole(fac)}
-                                                disabled={fac.status !== "Active"}
-                                                variant="outline"
-                                                size="sm"
-                                                className="rounded-xl text-xs font-bold h-8 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900"
-                                            >
-                                                Manage Console
-                                                <IconExternalLink className="h-3.5 w-3.5 ml-1.5" />
-                                            </Button>
+                                            {fac.status === "Provisioning" ? (
+                                                <Button
+                                                    disabled
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="rounded-xl text-xs font-bold h-8 border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 gap-1.5"
+                                                >
+                                                    <IconClockPlay className="h-3.5 w-3.5 animate-spin" />
+                                                    <span>Provisioning...</span>
+                                                </Button>
+                                            ) : fac.status === "Active" ? (
+                                                <Button
+                                                    onClick={() => handleOpenConsole(fac)}
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="rounded-xl text-xs font-bold h-8 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900"
+                                                >
+                                                    Manage Console
+                                                    <IconExternalLink className="h-3.5 w-3.5 ml-1.5" />
+                                                </Button>
+                                            ) : (
+                                                <Button
+                                                    onClick={() => handleActivateFacility(fac)}
+                                                    disabled={activatingId === fac.id}
+                                                    variant="default"
+                                                    size="sm"
+                                                    className="rounded-xl text-xs font-bold h-8 bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 shadow-sm"
+                                                >
+                                                    {activatingId === fac.id ? (
+                                                        <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                                                    ) : (
+                                                        <IconCircleCheck className="h-3.5 w-3.5" />
+                                                    )}
+                                                    <span>Activate Now</span>
+                                                </Button>
+                                            )}
                                             <Button
                                                 onClick={() => handleOpenEdit(fac)}
                                                 variant="ghost"
@@ -368,6 +458,20 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                                 className="h-9 text-xs rounded-xl"
                                 required
                             />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="editStatus" className="text-xs font-bold">Operational Status</Label>
+                            <select
+                                id="editStatus"
+                                value={editStatus}
+                                onChange={(e) => setEditStatus(e.target.value as Facility["status"])}
+                                className="w-full h-9 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-background px-3 font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary"
+                            >
+                                <option value="Active">Active</option>
+                                <option value="Provisioning">Provisioning</option>
+                                <option value="Suspended">Suspended</option>
+                                <option value="Failed">Failed</option>
+                            </select>
                         </div>
                         <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
                             <Button 
