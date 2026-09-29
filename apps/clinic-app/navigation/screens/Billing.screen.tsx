@@ -10,7 +10,9 @@ import {
   Alert,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import ThemedText from '@ui/ThemedText';
+import { ThemedText, Badge, Button, Input, Card, StatCard } from '@ui';
+import { ResponsiveLayout } from '@layout';
+import { theme } from '@constants/theme';
 import {
   clinicService,
   InvoiceRecord,
@@ -285,11 +287,15 @@ export default function BillingScreen() {
   };
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#0284C7']} />}
+    <ResponsiveLayout
+      headerTitle="Clinic Cashier & POS"
+      headerSubtitle="Billing, Statutory Discounts (RA 9994/10754) & Official Receipts"
     >
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.primary]} />}
+      >
       <View style={styles.header}>
         <ThemedText style={styles.subtitle}>Clinic Cashier & POS</ThemedText>
         <ThemedText style={styles.title}>Billing & Settlements</ThemedText>
@@ -533,7 +539,8 @@ export default function BillingScreen() {
         )}
       </Pressable>
     </ScrollView>
-  );
+  </ResponsiveLayout>
+);
 }
 
 const styles = StyleSheet.create({

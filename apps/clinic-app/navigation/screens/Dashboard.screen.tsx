@@ -10,7 +10,9 @@ import {
   Modal,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import ThemedText from '@ui/ThemedText';
+import { ThemedText, Badge, Button, StatCard, ProgressBar } from '@ui';
+import { ResponsiveLayout } from '@layout';
+import { theme } from '@constants/theme';
 import {
   clinicService,
   PatientQueueItem,
@@ -357,11 +359,23 @@ export default function DashboardScreen() {
   };
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#0284C7']} />}
+    <ResponsiveLayout
+      headerTitle="Clinic Operations Command"
+      headerSubtitle="Provider Center • Outpatient Encounters, Live Queue & Analytics"
+      rightAction={
+        <Button
+          title="+ Intake / Patient"
+          variant="primary"
+          size="sm"
+          onPress={() => navigation.navigate('Patients')}
+        />
+      }
     >
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.primary]} />}
+      >
       {/* Top Header */}
       <View style={styles.header}>
         <View style={styles.rowBetween}>
@@ -1336,7 +1350,8 @@ export default function DashboardScreen() {
         </View>
       </Modal>
     </ScrollView>
-  );
+  </ResponsiveLayout>
+);
 }
 
 const styles = StyleSheet.create({

@@ -8,6 +8,9 @@
     "paths": {
       "@ui/*": ["components/ui/*"],
       "@ui": ["components/ui"],
+      "@layout/*": ["components/layout/*"],
+      "@layout": ["components/layout"],
+      "@constants/*": ["constants/*"],
       "@services/*": ["services/*"],
       "@screens/*": ["navigation/screens/*"]
     }

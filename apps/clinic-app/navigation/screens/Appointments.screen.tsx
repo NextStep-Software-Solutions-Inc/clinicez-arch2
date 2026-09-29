@@ -9,7 +9,9 @@ import {
   TextInput,
   Modal,
 } from 'react-native';
-import ThemedText from '@ui/ThemedText';
+import { ThemedText, Badge, Button, Input, Card } from '@ui';
+import { ResponsiveLayout } from '@layout';
+import { theme } from '@constants/theme';
 import { clinicService, AppointmentItem, AppointmentStatus } from '../../services/clinicService';
 
 const SAMPLE_APPOINTMENTS: AppointmentItem[] = [
@@ -230,11 +232,23 @@ export default function AppointmentsScreen() {
   };
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#0284C7']} />}
+    <ResponsiveLayout
+      headerTitle="Clinic Scheduling"
+      headerSubtitle="Booked Appointments, Intake & Walk-In Queue"
+      rightAction={
+        <Button
+          title="+ Book Appointment"
+          variant="primary"
+          size="sm"
+          onPress={() => setBookModalVisible(true)}
+        />
+      }
     >
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.primary]} />}
+      >
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
         <View style={styles.header}>
           <ThemedText style={styles.subtitle}>Scheduling & Check-in</ThemedText>
@@ -416,7 +430,8 @@ export default function AppointmentsScreen() {
         </View>
       </Modal>
     </ScrollView>
-  );
+  </ResponsiveLayout>
+);
 }
 
 const styles = StyleSheet.create({

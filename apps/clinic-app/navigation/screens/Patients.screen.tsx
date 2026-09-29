@@ -10,7 +10,9 @@ import {
   Modal,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import ThemedText from '@ui/ThemedText';
+import { ThemedText, Badge, Button, Input, Card } from '@ui';
+import { ResponsiveLayout } from '@layout';
+import { theme } from '@constants/theme';
 import {
   clinicService,
   ClinicPatient,
@@ -296,11 +298,23 @@ export default function PatientsScreen() {
   });
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#0284C7']} />}
+    <ResponsiveLayout
+      headerTitle="Patient Registry & EMR"
+      headerSubtitle="Master Patient Index • Demographic & Clinical Records"
+      rightAction={
+        <Button
+          title="+ Register Walk-In"
+          variant="primary"
+          size="sm"
+          onPress={() => setRegisterVisible(true)}
+        />
+      }
     >
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.primary]} />}
+      >
       <View style={styles.headerRow}>
         <View>
           <ThemedText style={styles.subtitle}>Master Patient Index</ThemedText>
@@ -674,7 +688,8 @@ export default function PatientsScreen() {
         </View>
       </Modal>
     </ScrollView>
-  );
+  </ResponsiveLayout>
+);
 }
 
 const styles = StyleSheet.create({

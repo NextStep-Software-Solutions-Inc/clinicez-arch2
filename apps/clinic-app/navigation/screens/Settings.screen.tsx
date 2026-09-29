@@ -8,7 +8,9 @@ import {
   RefreshControl,
   TextInput,
 } from 'react-native';
-import ThemedText from '@ui/ThemedText';
+import { ThemedText, Badge, Button, Input, Card } from '@ui';
+import { ResponsiveLayout } from '@layout';
+import { theme } from '@constants/theme';
 import {
   clinicService,
   DailyEodReport,
@@ -130,11 +132,15 @@ export default function SettingsScreen() {
   };
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#0284C7']} />}
+    <ResponsiveLayout
+      headerTitle="Facility Operations & Config"
+      headerSubtitle="Preferences, Letterhead, Remittance Audit & Provider Roster"
     >
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.primary]} />}
+      >
       <View style={styles.header}>
         <ThemedText style={styles.subtitle}>Clinic Operations & Config</ThemedText>
         <ThemedText style={styles.title}>Facility & Audit</ThemedText>
@@ -353,7 +359,8 @@ export default function SettingsScreen() {
         </View>
       </View>
     </ScrollView>
-  );
+  </ResponsiveLayout>
+);
 }
 
 const styles = StyleSheet.create({

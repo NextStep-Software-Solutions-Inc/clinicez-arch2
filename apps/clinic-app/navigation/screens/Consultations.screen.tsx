@@ -10,7 +10,9 @@ import {
   Modal,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import ThemedText from '@ui/ThemedText';
+import { ThemedText, Badge, Button, Input, Card } from '@ui';
+import { ResponsiveLayout } from '@layout';
+import { theme } from '@constants/theme';
 import {
   clinicService,
   PatientQueueItem,
@@ -595,7 +597,11 @@ export default function ConsultationsScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ResponsiveLayout
+      headerTitle="Doctor Clinical Encounter"
+      headerSubtitle="SOAP Encounter Notes • Rx, Lab Requisitions & Medical Documents"
+    >
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
         <ThemedText style={styles.subtitle}>Doctor EMR & Clinical Encounter</ThemedText>
         <ThemedText style={styles.title}>SOAP Consultation</ThemedText>
@@ -1354,7 +1360,8 @@ export default function ConsultationsScreen() {
         </View>
       </Modal>
     </ScrollView>
-  );
+  </ResponsiveLayout>
+);
 }
 
 const styles = StyleSheet.create({
