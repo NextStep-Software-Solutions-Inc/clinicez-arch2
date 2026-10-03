@@ -1,12 +1,27 @@
 using System;
 using System.Threading.Tasks;
+using ClinicEz.Laboratory.Domain.Entities;
+using ClinicEz.Laboratory.Infrastructure.Persistence;
 using ClinicEz.Shared.Common;
 using MassTransit;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace ClinicEz.Laboratory.Infrastructure.Consumers;
 
 public class FacilityCreatedConsumer : IConsumer<FacilityCreatedEvent>
 {
+    private readonly ApplicationDbContext _dbContext;
+    private readonly ILogger<FacilityCreatedConsumer> _logger;
+
+    public FacilityCreatedConsumer(
+        ApplicationDbContext dbContext,
+        ILogger<FacilityCreatedConsumer> logger)
+    {
+        _dbContext = dbContext;
+        _logger = logger;
+    }
+
     public async Task Consume(ConsumeContext<FacilityCreatedEvent> context)
     {
         var message = context.Message;
@@ -14,7 +29,46 @@ public class FacilityCreatedConsumer : IConsumer<FacilityCreatedEvent>
         if (message.FacilityType != FacilityType.Laboratory) 
             return;
 
-        Console.WriteLine($"[ClinicEz.Laboratory] Successfully Provisioned Laboratory: '{message.Name}' (ID: {message.ResourceId}) for Tenant {message.TenantId}");
+        _logger.LogInformation("[ClinicEz.Laboratory] Provisioning Laboratory: '{Name}' (ID: {ResourceId}) for Tenant {TenantId}",
+            message.Name, message.ResourceId, message.TenantId);
+
+        // Seed or update LabSettings with cryptographically rooted license token
+        var existingSettings = await _dbContext.LabSettings
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(s => s.LaboratoryId == message.ResourceId);
+
+        if (existingSettings != null)
+        {
+            if (!string.IsNullOrWhiteSpace(message.LicenseToken))
+            {
+                existingSettings.LicenseToken = message.LicenseToken;
+                existingSettings.PlanTier = message.PlanTier ?? "Community";
+                existingSettings.MaxStaffLimit = message.Limits?.MaxStaff ?? 5;
+                existingSettings.MaxAnalyzersLimit = message.Limits?.MaxAnalyzers ?? 1;
+                existingSettings.LicenseExpiresAt = message.LicenseExpiresAt;
+            }
+            existingSettings.LaboratoryName = message.Name;
+        }
+        else
+        {
+            var newSettings = new LabSettings
+            {
+                Id = Guid.NewGuid(),
+                TenantId = message.TenantId,
+                LaboratoryId = message.ResourceId,
+                LaboratoryName = message.Name,
+                LicenseToken = message.LicenseToken,
+                PlanTier = message.PlanTier ?? "Community",
+                MaxStaffLimit = message.Limits?.MaxStaff ?? 5,
+                MaxAnalyzersLimit = message.Limits?.MaxAnalyzers ?? 1,
+                LicenseExpiresAt = message.LicenseExpiresAt,
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = "SystemProvisioning"
+            };
+            _dbContext.LabSettings.Add(newSettings);
+        }
+
+        await _dbContext.SaveChangesAsync();
 
         // Publish feedback confirmation event
         await context.Publish(new FacilityProvisionedEvent

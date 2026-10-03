@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Features.Billing.DTOs;
 using ClinicEz.Clinic.Application.Features.Consultations.DTOs;
+using ClinicEz.Clinic.Application.Features.LabOrders.Commands;
 using ClinicEz.Clinic.Application.Features.LabOrders.DTOs;
 using ClinicEz.Clinic.Application.Features.Patients.DTOs;
 using ClinicEz.Clinic.Application.Features.Procedures.DTOs;
@@ -172,28 +173,7 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
             p.Complications
         )).ToList();
 
-        var labOrderDtos = labOrders.Select(l => new ClinicLabOrderDto(
-            l.Id,
-            l.TenantId ?? _clinicContext.TenantId,
-            l.ClinicId,
-            l.OrderNumber,
-            l.PatientId,
-            l.PatientName,
-            l.ConsultationId,
-            l.OrderedByDoctorId,
-            l.OrderedByDoctorName,
-            l.OrderDate,
-            l.Status,
-            l.ClinicalDiagnosis,
-            l.Notes,
-            l.Items.Select(i => new ClinicLabOrderItemDto(
-                i.Id,
-                i.TestName,
-                i.Category,
-                i.Instructions,
-                i.Status
-            )).ToList()
-        )).ToList();
+        var labOrderDtos = labOrders.Select(CreateClinicLabOrderCommandHandler.MapToDto).ToList();
 
         var invoiceDtos = invoices.Select(i => new InvoiceDto(
             i.Id,

@@ -90,4 +90,48 @@ public sealed class LabOrdersController : ControllerBase
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<ClinicLabOrderDto>.Success(result, "External lab result attached successfully to patient EMR."));
     }
+
+    [HttpGet("panic-alerts")]
+    [HasPermission(ClinicPermissions.LabOrdersRead)]
+    public async Task<ActionResult<ApiResponse<List<ClinicLabOrderDto>>>> GetPanicAlerts(CancellationToken ct)
+    {
+        var result = await _sender.Send(new GetActivePanicAlertsQuery(), ct);
+        return Ok(ApiResponse<List<ClinicLabOrderDto>>.Success(result));
+    }
+
+    [HttpPost("{id}/acknowledge-panic")]
+    [HasPermission(ClinicPermissions.LabOrdersWrite)]
+    public async Task<ActionResult<ApiResponse<ClinicLabOrderDto>>> AcknowledgePanicAlert(
+        [FromRoute] Guid id,
+        [FromBody] AcknowledgePanicAlertRequest request,
+        CancellationToken ct)
+    {
+        var command = new AcknowledgePanicAlertCommand(id, request.AcknowledgedByDoctorName, request.Notes);
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<ClinicLabOrderDto>.Success(result, "STAT critical panic alert acknowledged and logged."));
+    }
+
+    [HttpGet("{id}/report-pdf")]
+    [HasPermission(ClinicPermissions.LabOrdersRead)]
+    public async Task<IActionResult> GetReportPdf(
+        [FromRoute] Guid id,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new GetClinicLabOrdersQuery(), ct);
+        var order = result.Find(o => o.Id == id);
+        if (order == null || string.IsNullOrEmpty(order.ExternalReportFileBase64))
+        {
+            return NotFound("Official signed PDF report is not yet available for this order.");
+        }
+
+        try
+        {
+            var pdfBytes = Convert.FromBase64String(order.ExternalReportFileBase64);
+            return File(pdfBytes, "application/pdf", $"LabReport-{order.OrderNumber}.pdf");
+        }
+        catch
+        {
+            return BadRequest("Invalid report PDF payload.");
+        }
+    }
 }

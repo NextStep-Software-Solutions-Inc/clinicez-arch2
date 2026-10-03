@@ -6,8 +6,9 @@ import {
   TextInput,
   Pressable,
   ActivityIndicator,
-  Alert,
   Modal,
+  Linking,
+  Alert,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { ThemedText, Badge, Button, Input, Card } from '@ui';
@@ -23,6 +24,8 @@ import {
   MedicalCertificateRecord,
   ReferralLetterRecord,
   PrescriptionSlipData,
+  ClinicLabOrderRecord,
+  CdsAlert,
 } from '../../services/clinicService';
 
 interface LocalPrescription {
@@ -170,6 +173,109 @@ const SAMPLE_VITALS: Record<string, TriageVitals> = {
   },
 };
 
+const SAMPLE_LAB_RESULTS: Record<string, ClinicLabOrderRecord[]> = {
+  'pat-101': [
+    {
+      id: 'lab-ord-101',
+      tenantId: 'tenant-default',
+      clinicId: 'clinic-default',
+      orderNumber: 'ACC-2026-0041',
+      patientId: 'pat-101',
+      patientName: 'Maria Santos',
+      orderDate: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+      status: 'ResultsReceived',
+      clinicalDiagnosis: 'Essential Hypertension',
+      externalLabName: 'ClinicEz Central Diagnostic Laboratory',
+      pathologistImpression: 'Fasting blood glucose and lipid panel within acceptable targets. Normal renal clearance.',
+      verifiedByPathologist: 'Dr. Roberto Gomez, MD, FPSP',
+      pathologistPrcLicense: 'PRC-0089123',
+      reportReleasedAt: new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString(),
+      observationsJson: JSON.stringify([
+        { analyteCode: 'FBS', analyteName: 'Fasting Blood Sugar', value: '94.0', unit: 'mg/dL', referenceInterval: '70.0 - 99.0', flag: 'Normal' },
+        { analyteCode: 'CREA', analyteName: 'Serum Creatinine', value: '0.85', unit: 'mg/dL', referenceInterval: '0.6 - 1.1', flag: 'Normal' },
+        { analyteCode: 'EGFR', analyteName: 'eGFR (CKD-EPI)', value: '88.5', unit: 'mL/min/1.73m2', referenceInterval: '> 60.0', flag: 'Normal' },
+        { analyteCode: 'CHOL', analyteName: 'Total Cholesterol', value: '185', unit: 'mg/dL', referenceInterval: '< 200', flag: 'Normal' },
+        { analyteCode: 'TRIG', analyteName: 'Triglycerides', value: '130', unit: 'mg/dL', referenceInterval: '< 150', flag: 'Normal' },
+      ]),
+      items: [
+        { id: 'item-1', testName: 'Fasting Blood Sugar (FBS)', category: 'Clinical Chemistry', status: 'ResultsReceived' },
+        { id: 'item-2', testName: 'Lipid Profile', category: 'Clinical Chemistry', status: 'ResultsReceived' },
+      ],
+      hasCriticalPanicAlert: false,
+    }
+  ],
+  'pat-102': [
+    {
+      id: 'lab-ord-102',
+      tenantId: 'tenant-default',
+      clinicId: 'clinic-default',
+      orderNumber: 'ACC-2026-0042',
+      patientId: 'pat-102',
+      patientName: 'Juan Dela Cruz',
+      orderDate: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
+      status: 'ResultsReceived',
+      clinicalDiagnosis: 'Chest discomfort & Type 2 Diabetes',
+      externalLabName: 'ClinicEz Central Diagnostic Laboratory',
+      pathologistImpression: 'Renal panel demonstrates moderate renal impairment (eGFR 38.0 mL/min). Recommend dose adjustment for renally eliminated medications.',
+      verifiedByPathologist: 'Dr. Roberto Gomez, MD, FPSP',
+      pathologistPrcLicense: 'PRC-0089123',
+      reportReleasedAt: new Date(Date.now() - 44 * 60 * 60 * 1000).toISOString(),
+      observationsJson: JSON.stringify([
+        { analyteCode: 'FBS', analyteName: 'Fasting Blood Sugar', value: '142.0', unit: 'mg/dL', referenceInterval: '70.0 - 99.0', flag: 'High' },
+        { analyteCode: 'CREA', analyteName: 'Serum Creatinine', value: '1.85', unit: 'mg/dL', referenceInterval: '0.7 - 1.3', flag: 'High' },
+        { analyteCode: 'EGFR', analyteName: 'eGFR (CKD-EPI)', value: '38.0', unit: 'mL/min/1.73m2', referenceInterval: '> 60.0', flag: 'Low' },
+      ]),
+      items: [
+        { id: 'item-3', testName: 'Serum Creatinine & eGFR', category: 'Clinical Chemistry', status: 'ResultsReceived' },
+      ],
+      hasCriticalPanicAlert: false,
+    }
+  ],
+  'pat-103': [
+    {
+      id: 'lab-ord-103',
+      tenantId: 'tenant-default',
+      clinicId: 'clinic-default',
+      orderNumber: 'ACC-2026-0043',
+      patientId: 'pat-103',
+      patientName: 'Elena Ramos',
+      orderDate: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      status: 'ResultsReceived',
+      clinicalDiagnosis: 'Routine Prenatal Screening & Weakness',
+      externalLabName: 'ClinicEz Central Diagnostic Laboratory',
+      pathologistImpression: 'STAT PANIC RESULT: Severe hyperkalemia (Potassium 6.8 mmol/L). Immediate telephone notification executed to clinic.',
+      verifiedByPathologist: 'Dr. Roberto Gomez, MD, FPSP',
+      pathologistPrcLicense: 'PRC-0089123',
+      reportReleasedAt: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
+      hasCriticalPanicAlert: true,
+      panicAlertTriggeredAt: new Date(Date.now() - 50 * 60 * 1000).toISOString(),
+      criticalFindingsJson: JSON.stringify([
+        {
+          analyteCode: 'K',
+          analyteName: 'Serum Potassium',
+          observedValue: '6.8',
+          unit: 'mmol/L',
+          referenceInterval: '3.5 - 5.1',
+          alertDescription: 'Severe Hyperkalemia exceeding 6.2 mmol/L panic limit. Cardiac dysrhythmia risk.'
+        }
+      ]),
+      observationsJson: JSON.stringify([
+        { analyteCode: 'K', analyteName: 'Serum Potassium', value: '6.8', unit: 'mmol/L', referenceInterval: '3.5 - 5.1', flag: 'Critical' },
+        { analyteCode: 'NA', analyteName: 'Serum Sodium', value: '138', unit: 'mmol/L', referenceInterval: '135 - 145', flag: 'Normal' },
+      ]),
+      items: [
+        { id: 'item-4', testName: 'Serum Electrolytes (Na, K, Cl)', category: 'Clinical Chemistry', status: 'ResultsReceived' },
+      ],
+    }
+  ]
+};
+
+const PATIENT_ALLERGIES_MAP: Record<string, string> = {
+  'pat-101': 'Penicillin, Aspirin',
+  'pat-102': 'None known',
+  'pat-103': 'Penicillin',
+};
+
 export default function ConsultationsScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -263,6 +369,21 @@ export default function ConsultationsScreen() {
   const [signedConsultationId, setSignedConsultationId] = useState<string | null>(null);
   const [prescriptionSlip, setPrescriptionSlip] = useState<PrescriptionSlipData | null>(null);
   const [prescriptionSlipModalVisible, setPrescriptionSlipModalVisible] = useState(false);
+
+  // Lab Results & STAT Panic Alerts
+  const [labOrders, setLabOrders] = useState<ClinicLabOrderRecord[]>(SAMPLE_LAB_RESULTS['pat-101'] ?? []);
+  const [panicModalVisible, setPanicModalVisible] = useState(false);
+  const [selectedPanicOrder, setSelectedPanicOrder] = useState<ClinicLabOrderRecord | null>(null);
+  const [panicAckNotes, setPanicAckNotes] = useState('Attending physician notified via clinic alert. Initiated patient telemetry and stabilization protocol.');
+  const [isAcknowledgingPanic, setIsAcknowledgingPanic] = useState(false);
+  const [expandedLabOrderId, setExpandedLabOrderId] = useState<string | null>(null);
+
+  // Clinical Decision Support (CDS) Safety Engine States
+  const [cdsAlerts, setCdsAlerts] = useState<CdsAlert[]>([]);
+  const [evaluatingCds, setEvaluatingCds] = useState(false);
+  const [cdsOverrideReason, setCdsOverrideReason] = useState('');
+  const [showOverrideInput, setShowOverrideInput] = useState(false);
+  const [overrideConfirmed, setOverrideConfirmed] = useState(false);
   const [externalDispenseModalVisible, setExternalDispenseModalVisible] = useState(false);
   const [loadingSlip, setLoadingSlip] = useState(false);
 
@@ -432,7 +553,7 @@ export default function ConsultationsScreen() {
     loadQueue();
   }, [loadQueue]);
 
-  // Load vitals when selected patient changes
+  // Load vitals & lab results when selected patient changes
   const handleSelectPatient = async (p: PatientQueueItem) => {
     setSelectedPatient(p);
     setIsSigned(false);
@@ -449,6 +570,230 @@ export default function ConsultationsScreen() {
     if (p.chiefComplaint) {
       setSubjective(`Patient presents with: ${p.chiefComplaint}.`);
     }
+
+    // Ingest patient lab orders & diagnostic reports
+    const [labData] = await clinicService.getLabOrders(p.patientId);
+    let ordersList = SAMPLE_LAB_RESULTS[p.patientId] ?? [];
+    if (labData && labData.length > 0) {
+      ordersList = labData;
+    }
+    setLabOrders(ordersList);
+
+    // Run CDS evaluation
+    runCdsScreening(prescriptions, p.patientId, ordersList);
+  };
+
+  const runCdsScreening = async (
+    currentPrescriptions: LocalPrescription[],
+    overridePatientId?: string,
+    overrideOrders?: ClinicLabOrderRecord[]
+  ) => {
+    const patId = overridePatientId ?? selectedPatient?.patientId;
+    const orders = overrideOrders ?? labOrders;
+    const allergies = PATIENT_ALLERGIES_MAP[patId] ?? 'None';
+
+    // Extract latest renal & electrolyte lab values from recent orders if available
+    let latestCreatinine: number | undefined;
+    let latestEgfr: number | undefined;
+    let latestPotassium: number | undefined;
+
+    for (const ord of orders) {
+      if (ord.observationsJson) {
+        try {
+          const obs = JSON.parse(ord.observationsJson);
+          for (const item of obs) {
+            const val = parseFloat(item.value);
+            if (!isNaN(val)) {
+              if (item.analyteCode === 'CREA' && !latestCreatinine) latestCreatinine = val;
+              if (item.analyteCode === 'EGFR' && !latestEgfr) latestEgfr = val;
+              if (item.analyteCode === 'K' && !latestPotassium) latestPotassium = val;
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    setEvaluatingCds(true);
+    try {
+      const [res, err] = await clinicService.evaluateCds({
+        patientId: patId,
+        patientAllergies: allergies,
+        prescriptions: currentPrescriptions.map(p => ({ genericName: p.genericName, dosage: p.dosage })),
+        serumCreatinineMgDl: latestCreatinine,
+        egfrMlMin: latestEgfr,
+        serumPotassiumMmolL: latestPotassium,
+      });
+
+      if (!err && res && res.alerts) {
+        setCdsAlerts(res.alerts);
+        if (res.hasCriticalAlerts) {
+          setShowOverrideInput(true);
+        } else {
+          setShowOverrideInput(false);
+          setOverrideConfirmed(false);
+        }
+        return;
+      }
+    } catch {
+      // Fallback local screening
+    } finally {
+      setEvaluatingCds(false);
+    }
+
+    // Local client-side fallback CDS rules
+    const localAlerts: CdsAlert[] = [];
+    const allNames = currentPrescriptions.map(p => p.genericName.toLowerCase());
+
+    // Allergy checks
+    if (allergies.toLowerCase().includes('penicillin')) {
+      for (const rx of currentPrescriptions) {
+        const name = rx.genericName.toLowerCase();
+        if (name.includes('amox') || name.includes('ampicillin') || name.includes('penicillin') || name.includes('augmentin')) {
+          localAlerts.push({
+            alertId: `loc-allergy-${rx.id}`,
+            type: 'DrugAllergy',
+            severity: 'Critical',
+            title: `🚨 CONTRAINDICATION: Patient has documented Penicillin allergy`,
+            clinicalMechanism: `${rx.genericName} is a beta-lactam penicillin. High risk of anaphylaxis and severe cutaneous reaction.`,
+            recommendation: 'Do not prescribe. Substitute Macrolide or alternative class.',
+            offendingDrug: rx.genericName,
+            requiresOverrideReason: true,
+          });
+        } else if (name.includes('ceph') || name.includes('cefu') || name.includes('ceft') || name.includes('cefi')) {
+          localAlerts.push({
+            alertId: `loc-cross-${rx.id}`,
+            type: 'DrugAllergy',
+            severity: 'Major',
+            title: `⚠️ CROSS-REACTIVITY WARNING: Cephalosporin in Penicillin-allergic patient`,
+            clinicalMechanism: `${rx.genericName} shares structural beta-lactam motifs with penicillin (~2-5% cross-reactivity).`,
+            recommendation: 'Verify reaction history. Avoid if previous reaction was angioedema or anaphylaxis.',
+            offendingDrug: rx.genericName,
+            requiresOverrideReason: true,
+          });
+        }
+      }
+    }
+
+    // Aspirin & NSAID
+    if (allergies.toLowerCase().includes('aspirin') || allergies.toLowerCase().includes('nsaid')) {
+      for (const rx of currentPrescriptions) {
+        const name = rx.genericName.toLowerCase();
+        if (name.includes('ibuprofen') || name.includes('mefenamic') || name.includes('aspirin') || name.includes('naproxen') || name.includes('ketorolac')) {
+          localAlerts.push({
+            alertId: `loc-nsaid-allergy-${rx.id}`,
+            type: 'DrugAllergy',
+            severity: 'Critical',
+            title: `🚨 CONTRAINDICATION: NSAID prescribed to Aspirin/NSAID-sensitive patient`,
+            clinicalMechanism: `${rx.genericName} inhibits COX-1, triggering severe bronchospasm or urticaria in aspirin-exacerbated respiratory disease.`,
+            recommendation: 'Do not prescribe NSAIDs. Use Paracetamol for mild analgesia.',
+            offendingDrug: rx.genericName,
+            requiresOverrideReason: true,
+          });
+        }
+      }
+    }
+
+    // Warfarin + NSAID
+    if (allNames.some(n => n.includes('warfarin')) && allNames.some(n => n.includes('mefenamic') || n.includes('ibuprofen') || n.includes('aspirin') || n.includes('ketorolac'))) {
+      localAlerts.push({
+        alertId: 'loc-warf-nsaid',
+        type: 'DrugDrugInteraction',
+        severity: 'Critical',
+        title: '🚨 SEVERE BLEEDING RISK: Warfarin + NSAID',
+        clinicalMechanism: 'Synergistic GI mucosal ulceration and platelet inhibition markedly increases major internal hemorrhage risk.',
+        recommendation: 'Avoid combination. Consider Paracetamol for analgesia with INR monitoring.',
+        offendingDrug: 'NSAID',
+        interactingDrug: 'Warfarin',
+        requiresOverrideReason: true,
+      });
+    }
+
+    // ACEi/ARB + Spironolactone / Potassium
+    if (allNames.some(n => n.includes('losartan') || n.includes('enalapril')) && allNames.some(n => n.includes('spironolactone') || n.includes('potassium'))) {
+      localAlerts.push({
+        alertId: 'loc-ace-k',
+        type: 'DrugDrugInteraction',
+        severity: 'Major',
+        title: '⚠️ HYPERKALEMIA RISK: ACEi/ARB + Potassium-Sparing Agent',
+        clinicalMechanism: 'Combined aldosterone suppression impairs renal potassium excretion, risking severe hyperkalemia.',
+        recommendation: 'Monitor serum potassium and renal panel within 1-2 weeks of initiation.',
+        offendingDrug: 'Spironolactone',
+        interactingDrug: 'ACEi/ARB',
+        requiresOverrideReason: false,
+      });
+    }
+
+    // Renal check for Metformin
+    if (allNames.some(n => n.includes('metformin'))) {
+      if (latestEgfr && latestEgfr < 30) {
+        localAlerts.push({
+          alertId: 'loc-met-30',
+          type: 'RenalDoseAdjustment',
+          severity: 'Critical',
+          title: `🚨 RENAL CONTRAINDICATION: Metformin in Severe CKD (eGFR ${latestEgfr.toFixed(1)} mL/min)`,
+          clinicalMechanism: 'Drug accumulation in severe renal impairment triggers potentially fatal lactic acidosis.',
+          recommendation: 'Discontinue Metformin. Switch to Linagliptin or Insulin.',
+          offendingDrug: 'Metformin',
+          requiresOverrideReason: true,
+        });
+      } else if (latestEgfr && latestEgfr < 45) {
+        localAlerts.push({
+          alertId: 'loc-met-45',
+          type: 'RenalDoseAdjustment',
+          severity: 'Major',
+          title: `⚠️ RENAL DOSE ADJUSTMENT: Metformin in Moderate CKD (eGFR ${latestEgfr.toFixed(1)} mL/min)`,
+          clinicalMechanism: 'Decreased clearance increases toxicity. Maximum safe dose is 1,000 mg/day.',
+          recommendation: 'Limit dose to 500mg BID and monitor renal profile every 3 months.',
+          offendingDrug: 'Metformin',
+          requiresOverrideReason: false,
+        });
+      }
+    }
+
+    setCdsAlerts(localAlerts);
+    if (localAlerts.some(a => a.requiresOverrideReason)) {
+      setShowOverrideInput(true);
+    } else {
+      setShowOverrideInput(false);
+      setOverrideConfirmed(false);
+    }
+  };
+
+  const handleAcknowledgePanic = async () => {
+    if (!selectedPanicOrder) return;
+    setIsAcknowledgingPanic(true);
+    try {
+      const [res, err] = await clinicService.acknowledgePanicAlert(
+        selectedPanicOrder.id,
+        doctorPrc || 'Attending Physician',
+        panicAckNotes
+      );
+      if (!err && res) {
+        setLabOrders(prev => prev.map(o => o.id === selectedPanicOrder.id ? res : o));
+      } else {
+        // Local update
+        setLabOrders(prev => prev.map(o => o.id === selectedPanicOrder.id ? {
+          ...o,
+          panicAcknowledgedAt: new Date().toISOString(),
+          panicAcknowledgedBy: doctorPrc || 'Dr. Cruz, MD'
+        } : o));
+      }
+      setPanicModalVisible(false);
+      Alert.alert('STAT Panic Alert Acknowledged', 'Emergency telephone notification and clinical action logged in patient record.');
+    } catch {
+      Alert.alert('Error', 'Failed to acknowledge panic alert.');
+    } finally {
+      setIsAcknowledgingPanic(false);
+    }
+  };
+
+  const handleOpenLabPdf = (order: ClinicLabOrderRecord) => {
+    const url = clinicService.getLabReportPdfUrl(order.id);
+    Linking.openURL(url).catch(() => {
+      Alert.alert('Diagnostic PDF Report', `Accession #${order.orderNumber}\nVerified by: ${order.verifiedByPathologist ?? 'Pathologist'}\nPathologist Impression:\n${order.pathologistImpression ?? 'Normal intervals.'}`);
+    });
   };
 
   useEffect(() => {
@@ -521,7 +866,9 @@ export default function ConsultationsScreen() {
       quantity: parseInt(newRxQuantity, 10) || 30,
       isDangerousDrug: newRxDangerous,
     };
-    setPrescriptions((prev) => [...prev, newRx]);
+    const updated = [...prescriptions, newRx];
+    setPrescriptions(updated);
+    runCdsScreening(updated);
     setNewRxGeneric('');
     setNewRxDosage('');
     setNewRxSig('');
@@ -531,11 +878,24 @@ export default function ConsultationsScreen() {
   };
 
   const handleRemovePrescription = (id: string) => {
-    setPrescriptions((prev) => prev.filter((p) => p.id !== id));
+    const updated = prescriptions.filter((p) => p.id !== id);
+    setPrescriptions(updated);
+    runCdsScreening(updated);
   };
 
   const handleSignAndSync = async () => {
     setBanner(null);
+
+    // Clinical Decision Support (CDS) Critical Override Gate
+    const criticalAlerts = cdsAlerts.filter(a => a.requiresOverrideReason);
+    if (criticalAlerts.length > 0 && (!cdsOverrideReason.trim() || !overrideConfirmed)) {
+      setBanner({
+        text: `🚨 CDS Safety Gate: ${criticalAlerts.length} critical drug allergy / severe interaction alert(s) require clinical override justification before signing encounter.`,
+        isError: true,
+      });
+      setShowOverrideInput(true);
+      return;
+    }
 
     // PDEA Dangerous Drug validation (Philippine Comprehensive Dangerous Drugs Act RA 9165)
     const hasDangerousDrug = prescriptions.some((p) => p.isDangerousDrug);

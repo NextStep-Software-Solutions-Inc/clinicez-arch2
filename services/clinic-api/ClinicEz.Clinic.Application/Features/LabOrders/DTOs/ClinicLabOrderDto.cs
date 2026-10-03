@@ -38,7 +38,17 @@ public record ClinicLabOrderDto(
     string? PathologistImpression = null,
     string? VerifiedByPathologist = null,
     string? PathologistPrcLicense = null,
-    DateTime? ReportReleasedAt = null
+    DateTime? ReportReleasedAt = null,
+    bool HasCriticalPanicAlert = false,
+    string? CriticalFindingsJson = null,
+    DateTime? PanicAlertTriggeredAt = null,
+    DateTime? PanicAcknowledgedAt = null,
+    string? PanicAcknowledgedBy = null
+);
+
+public record AcknowledgePanicAlertRequest(
+    string AcknowledgedByDoctorName,
+    string? Notes = null
 );
 
 public record CreateLabOrderItemRequest(

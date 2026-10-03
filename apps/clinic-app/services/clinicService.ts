@@ -299,6 +299,36 @@ export interface ClinicLabOrderRecord {
   verifiedByPathologist?: string;
   pathologistPrcLicense?: string;
   reportReleasedAt?: string;
+  hasCriticalPanicAlert?: boolean;
+  criticalFindingsJson?: string;
+  panicAlertTriggeredAt?: string;
+  panicAcknowledgedAt?: string;
+  panicAcknowledgedBy?: string;
+}
+
+export type CdsAlertSeverity = 'Information' | 'Moderate' | 'Major' | 'Critical';
+export type CdsAlertType = 'DrugAllergy' | 'DrugDrugInteraction' | 'RenalDoseAdjustment' | 'LabValueWarning';
+
+export interface CdsAlert {
+  alertId: string;
+  type: CdsAlertType;
+  severity: CdsAlertSeverity;
+  title: string;
+  clinicalMechanism: string;
+  recommendation: string;
+  offendingDrug: string;
+  interactingDrug?: string;
+  requiresOverrideReason: boolean;
+}
+
+export interface EvaluateCdsResponse {
+  hasCriticalAlerts: boolean;
+  requiresOverride: boolean;
+  alerts: CdsAlert[];
+  patientAllergiesEvaluated?: string;
+  latestCreatinine?: number;
+  latestEgfr?: number;
+  latestPotassium?: number;
 }
 
 export interface PaymentModeSummary {
@@ -914,6 +944,35 @@ export const clinicService = {
     uploadedBy?: string;
   }) {
     return clinicApiClient.post<ClinicLabOrderRecord>(`/lab-orders/${orderId}/attach-external-result`, payload);
+  },
+
+  async getActivePanicAlerts() {
+    return clinicApiClient.get<ClinicLabOrderRecord[]>('/lab-orders/panic-alerts');
+  },
+
+  async acknowledgePanicAlert(orderId: string, doctorName: string, notes?: string) {
+    return clinicApiClient.post<ClinicLabOrderRecord>(`/lab-orders/${orderId}/acknowledge-panic`, {
+      acknowledgedByDoctorName: doctorName,
+      notes
+    });
+  },
+
+  getLabReportPdfUrl(orderId: string) {
+    const baseUrl = (process.env.EXPO_PUBLIC_CLINIC_API_URL ?? 'http://localhost:5000').replace(/\/+$/, '');
+    return `${baseUrl}/api/v1/lab-orders/${orderId}/report-pdf`;
+  },
+
+  // Clinical Decision Support (CDS) Safety Engine
+  async evaluateCds(payload: {
+    patientId?: string;
+    patientAllergies?: string;
+    prescriptions: Array<{ genericName: string; dosage?: string; brandName?: string }>;
+    existingMedications?: Array<{ genericName: string }>;
+    serumCreatinineMgDl?: number;
+    egfrMlMin?: number;
+    serumPotassiumMmolL?: number;
+  }) {
+    return clinicApiClient.post<EvaluateCdsResponse>('/prescriptions/evaluate-cds', payload);
   },
 
   // Daily Operations Census & Cashier Remittance

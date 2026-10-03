@@ -92,17 +92,13 @@ public sealed class LicenseController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(request?.LicenseToken))
         {
-            return BadRequest(new ApiResponse<object> { Success = false, Message = "License token is required." });
+            return BadRequest(ApiResponse<FacilityLicenseStatusDto>.Fail("License token is required."));
         }
 
         var validation = _licenseValidator.Validate(request.LicenseToken.Trim(), _clinicContext.ClinicId, _clinicContext.TenantId);
         if (!validation.IsValid && !validation.IsExpired)
         {
-            return BadRequest(new ApiResponse<object>
-            {
-                Success = false,
-                Message = validation.ErrorMessage ?? "Invalid or tampered facility license key."
-            });
+            return BadRequest(ApiResponse<FacilityLicenseStatusDto>.Fail(validation.ErrorMessage ?? "Invalid or tampered facility license key."));
         }
 
         var settings = await _settingsRepo.Query(s => s.ClinicId == _clinicContext.ClinicId)

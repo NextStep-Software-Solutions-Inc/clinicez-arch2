@@ -72,6 +72,7 @@ public class StaffCommandsTests
             Id = Guid.NewGuid(),
             ClinicId = clinicId,
             TenantId = tenantId,
+            ClinicName = "Test Clinic",
             LicenseToken = "mock.valid.token"
         };
         await context.ClinicSettings.AddAsync(settings);
@@ -118,5 +119,92 @@ public class StaffCommandsTests
         saved.Should().NotBeNull();
         saved!.PrcLicenseNumber.Should().Be("PRC-0123456");
         saved.ClinicRoleId.Should().Be(doctorRole.Id);
+    }
+
+    [Fact]
+    public async Task CreateStaff_WhenLimitExceeded_ThrowsValidationException()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+
+        // Seed 1 active staff member
+        await context.StaffMembers.AddAsync(new StaffMember
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            FirstName = "Existing",
+            LastName = "Staff",
+            Role = StaffRole.Nurse,
+            IsActive = true
+        });
+
+        var settings = new ClinicSettings
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = clinicId,
+            TenantId = tenantId,
+            ClinicName = "Test Clinic",
+            LicenseToken = "mock.token"
+        };
+        await context.ClinicSettings.AddAsync(settings);
+        await context.SaveChangesAsync();
+
+        // License allows max 1 staff
+        var licenseValidator = Substitute.For<ClinicEz.Shared.Licensing.IFacilityLicenseValidator>();
+        licenseValidator.Validate(Arg.Any<string?>(), clinicId, tenantId)
+            .Returns(ClinicEz.Shared.Licensing.LicenseValidationResult.Success(new ClinicEz.Shared.Licensing.FacilityLicensePayload
+            {
+                FacilityId = clinicId,
+                TenantId = tenantId,
+                Limits = new ClinicEz.Shared.Licensing.FacilityLimits { MaxStaff = 1 }
+            }));
+
+        var handler = new CreateStaffMemberCommandHandler(staffRepo, roleRepo, settingsRepo, licenseValidator, uow, clinicContext);
+
+        var command = new CreateStaffMemberCommand(
+            "Second", "Nurse", null, null, StaffRole.Nurse, null, "nurse2@clinic.com", "09181234567", null, null, null, null);
+
+        var act = async () => await handler.Handle(command, CancellationToken.None);
+
+        await act.Should().ThrowAsync<ClinicEz.Shared.Exceptions.ValidationException>()
+            .WithMessage("*Staff limit reached*");
+    }
+
+    [Fact]
+    public async Task CreateStaff_WhenLicenseTampered_ThrowsValidationException()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+
+        var licenseValidator = Substitute.For<ClinicEz.Shared.Licensing.IFacilityLicenseValidator>();
+        licenseValidator.Validate(Arg.Any<string?>(), clinicId, tenantId)
+            .Returns(ClinicEz.Shared.Licensing.LicenseValidationResult.Tampered("Signature mismatch"));
+
+        var handler = new CreateStaffMemberCommandHandler(staffRepo, roleRepo, settingsRepo, licenseValidator, uow, clinicContext);
+
+        var command = new CreateStaffMemberCommand(
+            "Fake", "Doctor", null, "MD", StaffRole.Doctor, null, "dr.fake@clinic.com", "09181234567", "PRC-9999", null, null, null);
+
+        var act = async () => await handler.Handle(command, CancellationToken.None);
+
+        await act.Should().ThrowAsync<ClinicEz.Shared.Exceptions.ValidationException>()
+            .WithMessage("*Tampered facility license detected*");
     }
 }

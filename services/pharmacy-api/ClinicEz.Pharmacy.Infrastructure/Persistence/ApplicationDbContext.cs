@@ -13,6 +13,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<PrescriptionOrder> PrescriptionOrders { get; set; }
     public DbSet<PrescriptionOrderItem> PrescriptionOrderItems { get; set; }
     public DbSet<DispenseAuditRecord> DispenseAuditRecords { get; set; }
+    public DbSet<PharmacyStaffMember> PharmacyStaffMembers { get; set; }
+    public DbSet<PharmacySettings> PharmacySettings { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

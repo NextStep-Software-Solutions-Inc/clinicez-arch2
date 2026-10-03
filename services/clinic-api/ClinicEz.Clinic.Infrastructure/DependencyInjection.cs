@@ -66,6 +66,7 @@ public static class DependencyInjection
             x.AddConsumer<AppointmentBookedConsumer>();
             x.AddConsumer<DiagnosticReportFinalizedConsumer>();
             x.AddConsumer<PrescriptionDispensedConsumer>();
+            x.AddConsumer<LabPanicResultAlertConsumer>();
             x.AddEntityFrameworkOutbox<ApplicationDbContext>(o =>
             {
                 o.UsePostgres();

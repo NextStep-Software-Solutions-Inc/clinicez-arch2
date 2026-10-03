@@ -202,6 +202,11 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
         order.PathologistImpression,
         order.VerifiedByPathologist,
         order.PathologistPrcLicense,
-        order.ReportReleasedAt
+        order.ReportReleasedAt,
+        order.HasCriticalPanicAlert,
+        order.CriticalFindingsJson,
+        order.PanicAlertTriggeredAt,
+        order.PanicAcknowledgedAt,
+        order.PanicAcknowledgedBy
     );
 }

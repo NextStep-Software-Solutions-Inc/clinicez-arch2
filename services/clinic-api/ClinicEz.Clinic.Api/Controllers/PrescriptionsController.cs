@@ -64,6 +64,16 @@ public sealed class PrescriptionsController : ControllerBase
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<PrescriptionSlipDto>.Success(result, "External pharmacy dispensing proof recorded successfully."));
     }
+
+    [HttpPost("evaluate-cds")]
+    [HasPermission(ClinicPermissions.ConsultationsRead)]
+    public async Task<ActionResult<ApiResponse<EvaluateCdsResponse>>> EvaluateClinicalDecisionSupport(
+        [FromBody] EvaluateCdsRequest request,
+        CancellationToken ct = default)
+    {
+        var result = await _sender.Send(new EvaluateClinicalDecisionSupportQuery(request), ct);
+        return Ok(ApiResponse<EvaluateCdsResponse>.Success(result));
+    }
 }
 
 public record RecordExternalDispenseRequest

@@ -36,6 +36,13 @@ public sealed class ClinicLabOrder : BaseEntity
     public string? PathologistPrcLicense { get; set; }
     public DateTime? ReportReleasedAt { get; set; }
 
+    // Critical Panic Result Interoperability Fields
+    public bool HasCriticalPanicAlert { get; set; } = false;
+    public string? CriticalFindingsJson { get; set; }
+    public DateTime? PanicAlertTriggeredAt { get; set; }
+    public DateTime? PanicAcknowledgedAt { get; set; }
+    public string? PanicAcknowledgedBy { get; set; }
+
     public List<ClinicLabOrderItem> Items { get; set; } = new();
 }
 

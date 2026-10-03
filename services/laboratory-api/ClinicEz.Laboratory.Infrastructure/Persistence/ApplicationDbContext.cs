@@ -15,6 +15,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<QcLot> QcLots { get; set; }
     public DbSet<QcRun> QcRuns { get; set; }
     public DbSet<CriticalPanicDispatchLog> CriticalPanicDispatchLogs { get; set; }
+    public DbSet<LabStaffMember> LabStaffMembers { get; set; }
+    public DbSet<LabSettings> LabSettings { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
