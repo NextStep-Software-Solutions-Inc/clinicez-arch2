@@ -98,6 +98,15 @@ export default function PrescriptionSlipModal({
                   <ThemedText style={styles.allergyWarningText}>⚠️ ALLERGIES: {slip.patientAllergies}</ThemedText>
                 </View>
               )}
+
+              {slip.philHealthNumber && (
+                <View style={styles.gamotBannerBox}>
+                  <ThemedText style={styles.gamotBannerTitle}>🛡️ PHILHEALTH YAKAP & GAMOT BENEFIT</ThemedText>
+                  <ThemedText style={styles.gamotBannerSub}>
+                    Beneficiary PIN: {slip.philHealthNumber} • Covered under annual ₱9,000.00 GAMOT allocation (PhilHealth Circular No. 2025-0013).
+                  </ThemedText>
+                </View>
+              )}
             </View>
 
             {/* Prescribed Medications (Generics Act RA 6675 Compliant) */}
@@ -141,6 +150,13 @@ export default function PrescriptionSlipModal({
 
                     {item.remarks && (
                       <ThemedText style={styles.rxRemarksText}>Note: {item.remarks}</ThemedText>
+                    )}
+
+                    {item.uniquePrescriptionSecurityCode && (
+                      <View style={styles.upscItemBox}>
+                        <ThemedText style={styles.upscLabel}>🛡️ PhilHealth GAMOT Security Code (UPSC):</ThemedText>
+                        <ThemedText style={styles.upscValue}>{item.uniquePrescriptionSecurityCode}</ThemedText>
+                      </View>
                     )}
                   </View>
                 ))
@@ -714,5 +730,44 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  gamotBannerBox: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 8,
+    gap: 2,
+  },
+  gamotBannerTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#15803D',
+  },
+  gamotBannerSub: {
+    fontSize: 11,
+    color: '#166534',
+  },
+  upscItemBox: {
+    backgroundColor: '#EFF6FF',
+    borderRadius: 6,
+    padding: 6,
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  upscLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#1E40AF',
+    textTransform: 'uppercase',
+  },
+  upscValue: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#1D4ED8',
+    fontFamily: 'monospace',
+    marginTop: 2,
   },
 });

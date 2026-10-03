@@ -1,15 +1,16 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { safeAwait, ApiResponse, ApiError } from '@shared/safe';
 
-const BASE_URL = (process.env.EXPO_PUBLIC_CLINIC_API_URL ?? 'http://localhost:5245').replace(/\/+$/, '');
+const CLINIC_BASE_URL = (process.env.EXPO_PUBLIC_CLINIC_API_URL ?? 'http://localhost:5245').replace(/\/+$/, '');
+const PHARMACY_BASE_URL = (process.env.EXPO_PUBLIC_PHARMACY_API_URL ?? 'http://localhost:5245').replace(/\/+$/, '');
 const API_PREFIX = '/api/v1';
 
 export class ClinicApiClient {
   private client: AxiosInstance;
 
-  constructor() {
+  constructor(baseUrl: string = CLINIC_BASE_URL) {
     this.client = axios.create({
-      baseURL: `${BASE_URL}${API_PREFIX}`,
+      baseURL: `${baseUrl}${API_PREFIX}`,
       timeout: 15000,
       headers: {
         'Content-Type': 'application/json',
@@ -62,4 +63,5 @@ export class ClinicApiClient {
   }
 }
 
-export const clinicApiClient = new ClinicApiClient();
+export const clinicApiClient = new ClinicApiClient(CLINIC_BASE_URL);
+export const pharmacyApiClient = new ClinicApiClient(PHARMACY_BASE_URL);

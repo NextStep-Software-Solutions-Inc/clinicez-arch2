@@ -44,6 +44,12 @@ export const WORKSTATION_NAV_ITEMS: NavItem[] = [
     subtitle: 'Cashier & Receipts',
   },
   {
+    key: 'Yakap',
+    label: 'PhilHealth Yakap',
+    icon: '🛡️',
+    subtitle: 'Transmittals & GAMOT',
+  },
+  {
     key: 'Settings',
     label: 'Facility Settings',
     icon: '⚙️',

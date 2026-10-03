@@ -9,6 +9,7 @@ import PatientsScreen from './screens/Patients.screen';
 import ConsultationsScreen from './screens/Consultations.screen';
 import AppointmentsScreen from './screens/Appointments.screen';
 import BillingScreen from './screens/Billing.screen';
+import YakapScreen from './screens/Yakap.screen';
 import SettingsScreen from './screens/Settings.screen';
 
 const Tab = createBottomTabNavigator({
@@ -66,6 +67,13 @@ const Tab = createBottomTabNavigator({
       options: {
         title: 'Billing',
         tabBarIcon: () => <ThemedText style={{ fontSize: 20 }}>💳</ThemedText>,
+      },
+    },
+    Yakap: {
+      screen: YakapScreen,
+      options: {
+        title: 'Yakap',
+        tabBarIcon: () => <ThemedText style={{ fontSize: 20 }}>🛡️</ThemedText>,
       },
     },
     Settings: {

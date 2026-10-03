@@ -1,4 +1,4 @@
-import { clinicApiClient } from './apiClient';
+import { clinicApiClient, pharmacyApiClient } from './apiClient';
 import { SyncStatus } from '@shared/safe';
 
 export type QueuePriority = 'Routine' | 'Urgent' | 'Emergency';
@@ -1283,6 +1283,73 @@ export const clinicService = {
 
   async updateSettings(payload: Partial<ClinicSettingsRecord>) {
     return clinicApiClient.put<ClinicSettingsRecord>('/settings', payload);
+  },
+
+  // PhilHealth Yakap (formerly Konsulta)
+  async getYakapTransmittals(status?: string, year?: string) {
+    const params = new URLSearchParams();
+    if (status) params.append('status', status);
+    if (year) params.append('year', year);
+    const qs = params.toString();
+    return clinicApiClient.get<YakapTransmittal[]>(`/yakap/transmittals${qs ? `?${qs}` : ''}`);
+  },
+
+  async getYakapTransmittalById(id: string) {
+    return clinicApiClient.get<YakapTransmittal>(`/yakap/transmittals/${id}`);
+  },
+
+  async createYakapTransmittal(payload: CreateYakapTransmittalPayload) {
+    return clinicApiClient.post<YakapTransmittal>('/yakap/transmittals', payload);
+  },
+
+  async validateYakapTransmittal(id: string) {
+    return clinicApiClient.post<YakapTransmittal>(`/yakap/transmittals/${id}/validate`, {});
+  },
+
+  async submitYakapTransmittal(id: string) {
+    return clinicApiClient.post<YakapTransmittal>(`/yakap/transmittals/${id}/submit`, {});
+  },
+
+  async validatePhilHealthPin(pin: string) {
+    return clinicApiClient.get<PinValidationResult>(`/yakap/pin/${encodeURIComponent(pin)}/validate`);
+  },
+
+  async extractYakapMasterlist(payload: { hciAccreditationNumber: string; cipherKey: string }) {
+    return clinicApiClient.post<YakapMasterlistAssignment[]>('/yakap/masterlist/extract', payload);
+  },
+
+  async getPhilHealthCatalog(catalogType: string) {
+    return clinicApiClient.get<PhilHealthCatalogItem[]>(`/yakap/catalogs/${encodeURIComponent(catalogType)}`);
+  },
+
+  // PhilHealth GAMOT & UPSC
+  async getGamotLedger(pin: string, year?: string) {
+    const qs = year ? `?year=${encodeURIComponent(year)}` : '';
+    return pharmacyApiClient.get<GamotBeneficiaryLedger>(`/gamot/ledger/${encodeURIComponent(pin)}${qs}`);
+  },
+
+  async getGamotFormulary(search?: string, category?: string) {
+    const params = new URLSearchParams();
+    if (search) params.append('search', search);
+    if (category) params.append('category', category);
+    const qs = params.toString();
+    return pharmacyApiClient.get<GamotFormularyItem[]>(`/gamot/formulary${qs ? `?${qs}` : ''}`);
+  },
+
+  async generateUpsc(payload: GenerateUpscPayload) {
+    return pharmacyApiClient.post<UpscGenerateResult>('/gamot/upsc/generate', payload);
+  },
+
+  async validateUpsc(payload: ValidateUpscPayload) {
+    return pharmacyApiClient.post<UpscVerifyResult>('/gamot/upsc/validate', payload);
+  },
+
+  async dispenseGamot(payload: DispenseGamotPayload) {
+    return pharmacyApiClient.post<any>('/gamot/dispense', payload);
+  },
+
+  async reverseGamotTransaction(id: string, payload: ReverseGamotPayload) {
+    return pharmacyApiClient.post<GamotLedgerTransaction>(`/gamot/transactions/${id}/reverse`, payload);
   }
 };
 
@@ -1321,6 +1388,9 @@ export interface PrescriptionSlipItem {
   refills: number;
   isDangerousDrug: boolean;
   remarks?: string;
+  uniquePrescriptionSecurityCode?: string;
+  isGamotCovered?: boolean;
+  philHealthDrugCode?: string;
 }
 
 export interface PrescriptionSlipData {
@@ -1343,6 +1413,8 @@ export interface PrescriptionSlipData {
   patientAllergies?: string;
   clinicalDiagnosis?: string;
   specialInstructions?: string;
+  isPhilHealthGamot?: boolean;
+  gamotCoverageAmount?: number;
   items: PrescriptionSlipItem[];
   publicVerificationToken: string;
   publicVerificationUrl: string;
@@ -1366,4 +1438,168 @@ export interface RecordExternalDispensePayload {
   receiptDocumentUrl?: string;
   notes?: string;
 }
+
+export type YakapTransmittalStatus = 'Draft' | 'Validated' | 'Submitted' | 'Approved' | 'Failed';
+
+export interface YakapTransmittalItem {
+  id: string;
+  transmittalId: string;
+  patientId: string;
+  patientName: string;
+  philHealthIdentificationNumber: string;
+  consultationEncounterId?: string;
+  itemType: 'Enlistment' | 'Profile' | 'Soap';
+  reportStatus: 'U' | 'A' | 'D' | 'V' | 'F';
+  deficiencyRemarks?: string;
+  processedAt?: string;
+}
+
+export interface YakapTransmittal {
+  id: string;
+  transmittalNumber: string;
+  reportTagging: '1' | '2';
+  effectiveYear: string;
+  packageType: string;
+  status: YakapTransmittalStatus;
+  totalEnlistments: number;
+  totalProfiles: number;
+  totalSoaps: number;
+  totalMedicines: number;
+  philHealthTransactionNumber?: string;
+  validationErrors?: string[];
+  rawXmlPayload?: string;
+  encryptedPayloadHash?: string;
+  transmittedAt?: string;
+  validatedAt?: string;
+  notes?: string;
+  createdAt: string;
+  items: YakapTransmittalItem[];
+}
+
+export interface CreateYakapTransmittalPayload {
+  reportTagging: '1' | '2';
+  effectiveYear: string;
+  packageType?: string;
+  encounterIds?: string[];
+  notes?: string;
+}
+
+export interface PinValidationResult {
+  isValid: boolean;
+  formattedPin: string;
+  failureReason?: string;
+}
+
+export interface YakapMasterlistAssignment {
+  philHealthIdentificationNumber: string;
+  memberPhilHealthIdentificationNumber?: string;
+  lastName: string;
+  firstName: string;
+  middleName?: string;
+  extensionName?: string;
+  birthDate: string;
+  gender: string;
+  packageType: string;
+  registrationDate: string;
+  effectivityYear: string;
+}
+
+export interface PhilHealthCatalogItem {
+  code: string;
+  description: string;
+  category?: string;
+}
+
+export interface GamotLedgerTransaction {
+  id: string;
+  prescriptionOrderId: string;
+  prescriptionOrderItemId?: string;
+  prescriptionNumber: string;
+  transactionDate: string;
+  philHealthDrugCode: string;
+  genericName: string;
+  brandName?: string;
+  quantityDispensed: number;
+  philHealthReferencePrice: number;
+  totalGamotAmount: number;
+  patientCoPay: number;
+  uniquePrescriptionSecurityCode: string;
+  dispensingPharmacistName: string;
+  dispensingPharmacistPrc: string;
+  hciAccreditationNumber: string;
+  status: 'Allocated' | 'Dispensed' | 'Claimed' | 'Reversed' | 'Rejected';
+  notes?: string;
+}
+
+export interface GamotBeneficiaryLedger {
+  id: string;
+  patientName: string;
+  philHealthIdentificationNumber: string;
+  memberPhilHealthIdentificationNumber?: string;
+  benefitYear: string;
+  annualAllocation: number;
+  totalAmountUtilized: number;
+  remainingBalance: number;
+  transactions: GamotLedgerTransaction[];
+}
+
+export interface GamotFormularyItem {
+  drugCode: string;
+  genericName: string;
+  dosage: string;
+  form: string;
+  therapeuticCategory: string;
+  referenceUnitPrice: number;
+  requiresSpecialistRecommendation: boolean;
+}
+
+export interface UpscGenerateResult {
+  uniquePrescriptionSecurityCode: string;
+  prescriptionNumber: string;
+  drugCode: string;
+  generatedAt: string;
+}
+
+export interface UpscVerifyResult {
+  isValid: boolean;
+  failureReason?: string;
+  uniquePrescriptionSecurityCode: string;
+}
+
+export interface GenerateUpscPayload {
+  prescriptionOrderId: string;
+  prescriptionOrderItemId: string;
+  hciAccreditationNumber: string;
+}
+
+export interface ValidateUpscPayload {
+  uniquePrescriptionSecurityCode: string;
+  hciAccreditationNumber?: string;
+  philHealthIdentificationNumber?: string;
+  prescriptionNumber?: string;
+  doctorPrcLicense?: string;
+  drugCode?: string;
+  quantity?: number;
+  issueDate?: string;
+}
+
+export interface DispenseGamotPayload {
+  prescriptionOrderId: string;
+  pharmacistName: string;
+  pharmacistPrcLicense: string;
+  hciAccreditationNumber: string;
+  receiptNumber?: string;
+  notes?: string;
+  manualBatchSelections?: Array<{
+    itemId: string;
+    batchId: string;
+    quantity: number;
+  }>;
+}
+
+export interface ReverseGamotPayload {
+  reason: string;
+  reversedBy: string;
+}
+
 
