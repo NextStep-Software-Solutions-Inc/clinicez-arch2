@@ -223,6 +223,10 @@ export default function DispenseScreen() {
     }
     if (data) {
       setOrder(data);
+      const alerts = evaluatePharmacyCds(data);
+      setCdsAlerts(alerts);
+      setPharmacistOverrideConfirmed(false);
+      setPharmacistOverrideReason('');
     }
   }, []);
 
@@ -252,15 +256,28 @@ export default function DispenseScreen() {
       return;
     }
 
+    const hasCritical = cdsAlerts.some((a) => a.severity === 'Critical');
+    if (hasCritical && (!pharmacistOverrideConfirmed || !pharmacistOverrideReason.trim())) {
+      Alert.alert(
+        'CDS Safety Override Required',
+        'A critical drug-allergy or severe interaction was flagged. As dispensing pharmacist, you must check the confirmation box and provide your clinical justification note before dispensing.'
+      );
+      return;
+    }
+
     setDispensing(true);
     setErrorMessage(null);
     setSuccessBanner(null);
+
+    const finalNotes = pharmacistOverrideReason.trim()
+      ? `[PHARMACIST CDS OVERRIDE: ${pharmacistOverrideReason.trim()}] ${dispenseNotes.trim()}`
+      : dispenseNotes.trim();
 
     const [result, err] = await pharmacyService.dispensePrescription(order.id, {
       pharmacistName: pharmacistName.trim(),
       pharmacistPrcLicense: pharmacistPrc.trim(),
       receiptNumber: receiptNumber.trim() || undefined,
-      notes: dispenseNotes.trim() || undefined,
+      notes: finalNotes || undefined,
     });
 
     setDispensing(false);
@@ -331,6 +348,104 @@ export default function DispenseScreen() {
                 <ThemedText style={styles.s2Badge}>S2: {order.doctorS2License}</ThemedText>
               ) : null}
             </View>
+          </View>
+
+          {/* Pharmacist Clinical Decision Support (CDS) Safety Panel */}
+          <View style={styles.cdsCard}>
+            <View style={styles.rowBetween}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <ThemedText style={{ fontSize: 16 }}>🛡️</ThemedText>
+                <ThemedText style={styles.cdsCardTitle}>Pharmacist CDS Safety Review</ThemedText>
+              </View>
+              <ThemedText style={styles.cdsSubtitleText}>
+                {cdsAlerts.length === 0 ? '✓ All Safety Checks Passed' : `${cdsAlerts.length} Clinical Flags`}
+              </ThemedText>
+            </View>
+
+            {cdsAlerts.length === 0 ? (
+              <View style={styles.cdsClearBox}>
+                <ThemedText style={styles.cdsClearText}>
+                  ✓ No severe drug-allergy contraindications or major drug interactions detected. Safe to dispense.
+                </ThemedText>
+              </View>
+            ) : (
+              <View style={{ gap: 8, marginTop: 4 }}>
+                {cdsAlerts.map((alert) => {
+                  const isCritical = alert.severity === 'Critical';
+                  const isMajor = alert.severity === 'Major';
+                  return (
+                    <View
+                      key={alert.id}
+                      style={[
+                        styles.cdsAlertItem,
+                        isCritical
+                          ? styles.cdsAlertItemCritical
+                          : isMajor
+                          ? styles.cdsAlertItemMajor
+                          : styles.cdsAlertItemModerate,
+                      ]}
+                    >
+                      <View style={styles.rowBetween}>
+                        <View
+                          style={[
+                            styles.severityBadge,
+                            isCritical
+                              ? styles.severityCritical
+                              : isMajor
+                              ? styles.severityMajor
+                              : styles.severityModerate,
+                          ]}
+                        >
+                          <ThemedText style={styles.severityBadgeText}>{alert.severity.toUpperCase()}</ThemedText>
+                        </View>
+                        <ThemedText style={styles.alertOffendingDrug}>{alert.offendingDrug}</ThemedText>
+                      </View>
+
+                      <ThemedText style={styles.alertTitle}>{alert.title}</ThemedText>
+                      <ThemedText style={styles.alertMechanism}>{alert.clinicalMechanism}</ThemedText>
+                      <ThemedText style={styles.alertRecommendation}>
+                        💡 Recommendation: {alert.recommendation}
+                      </ThemedText>
+                    </View>
+                  );
+                })}
+
+                {/* Pharmacist Override Action Form for Critical Contraindications */}
+                {cdsAlerts.some((a) => a.severity === 'Critical') && (
+                  <View style={styles.overrideBox}>
+                    <ThemedText style={styles.overrideHeading}>
+                      ⚠️ Clinical Override Required for Dispensing
+                    </ThemedText>
+                    <ThemedText style={styles.overrideSub}>
+                      A severe contraindication exists. Record prescriber communication or clinical rationale before proceeding:
+                    </ThemedText>
+
+                    <TextInput
+                      style={styles.overrideInput}
+                      placeholder="e.g. Verified with Dr. Cruz - patient tolerates dose; monitored closely..."
+                      placeholderTextColor="#9CA3AF"
+                      value={pharmacistOverrideReason}
+                      onChangeText={setPharmacistOverrideReason}
+                      multiline
+                    />
+
+                    <Pressable
+                      style={styles.checkboxRow}
+                      onPress={() => setPharmacistOverrideConfirmed(!pharmacistOverrideConfirmed)}
+                    >
+                      <View style={[styles.checkbox, pharmacistOverrideConfirmed && styles.checkboxActive]}>
+                        {pharmacistOverrideConfirmed && (
+                          <ThemedText style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>✓</ThemedText>
+                        )}
+                      </View>
+                      <ThemedText style={styles.checkboxLabel}>
+                        I certify that clinical benefit justifies dispensing and necessary patient counseling was provided.
+                      </ThemedText>
+                    </Pressable>
+                  </View>
+                )}
+              </View>
+            )}
           </View>
 
           {/* Prescribed Items & FEFO Batch Allocation */}
@@ -737,5 +852,149 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 13,
+  },
+
+  // Pharmacist CDS Safety Styles
+  cdsCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    padding: 16,
+    gap: 10,
+  },
+  cdsCardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  cdsSubtitleText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#0D9488',
+  },
+  cdsClearBox: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+    borderRadius: 8,
+    padding: 12,
+  },
+  cdsClearText: {
+    fontSize: 13,
+    color: '#15803D',
+    fontWeight: '600',
+  },
+  cdsAlertItem: {
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 12,
+    gap: 6,
+  },
+  cdsAlertItemCritical: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#F87171',
+  },
+  cdsAlertItemMajor: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FCD34D',
+  },
+  cdsAlertItemModerate: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#93C5FD',
+  },
+  severityBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  severityCritical: {
+    backgroundColor: '#DC2626',
+  },
+  severityMajor: {
+    backgroundColor: '#D97706',
+  },
+  severityModerate: {
+    backgroundColor: '#2563EB',
+  },
+  severityBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  alertOffendingDrug: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#374151',
+  },
+  alertTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  alertMechanism: {
+    fontSize: 12,
+    color: '#4B5563',
+    lineHeight: 18,
+  },
+  alertRecommendation: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#0369A1',
+    lineHeight: 18,
+  },
+  overrideBox: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: 8,
+    padding: 12,
+    gap: 8,
+    marginTop: 6,
+  },
+  overrideHeading: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#991B1B',
+  },
+  overrideSub: {
+    fontSize: 12,
+    color: '#7F1D1D',
+  },
+  overrideInput: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: 6,
+    padding: 8,
+    fontSize: 12,
+    color: '#1F2937',
+    minHeight: 50,
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: '#DC2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  checkboxActive: {
+    backgroundColor: '#DC2626',
+  },
+  checkboxLabel: {
+    fontSize: 12,
+    color: '#7F1D1D',
+    fontWeight: '600',
+    flex: 1,
   },
 });
