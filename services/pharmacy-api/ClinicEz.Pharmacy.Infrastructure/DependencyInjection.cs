@@ -1,10 +1,12 @@
+using ClinicEz.Pharmacy.Application.Common.Interfaces;
 using ClinicEz.Pharmacy.Domain.Interfaces;
+using ClinicEz.Pharmacy.Infrastructure.Consumers;
 using ClinicEz.Pharmacy.Infrastructure.Persistence;
 using ClinicEz.Pharmacy.Infrastructure.Persistence.Repositories;
+using ClinicEz.Pharmacy.Infrastructure.Services;
 using Hangfire;
 using Hangfire.PostgreSql;
 using MassTransit;
-using ClinicEz.Pharmacy.Infrastructure.Consumers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -32,9 +34,14 @@ public static class DependencyInjection
             {
                 npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", schemaName);
             }));
+
         // Register repositories and Unit of Work
+        services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+
+        // Register publishers
+        services.AddScoped<IPrescriptionDispensedPublisher, PrescriptionDispensedPublisher>();
 
         // Add Hangfire
         services.AddHangfire(config => config
@@ -44,27 +51,39 @@ public static class DependencyInjection
 
         services.AddHangfireServer();
 
-		services.AddMassTransit(x =>
-		{
-			x.AddConsumer<FacilityCreatedConsumer>();
-			x.AddEntityFrameworkOutbox<ApplicationDbContext>(o =>
-			{
-				o.UsePostgres();
-				o.UseBusOutbox();
-			});
+        services.AddMassTransit(x =>
+        {
+            x.AddConsumer<FacilityCreatedConsumer>();
+            x.AddConsumer<PrescriptionIssuedConsumer>();
+            x.AddEntityFrameworkOutbox<ApplicationDbContext>(o =>
+            {
+                o.UsePostgres();
+                o.UseBusOutbox();
+            });
 
-			x.UsingRabbitMq((context, cfg) =>
-			{
-				cfg.Host(configuration["RabbitMq:Host"] ?? "localhost", configuration["RabbitMq:VirtualHost"] ?? "/", h =>
-				{
-					h.Username(configuration["RabbitMq:Username"] ?? "rabbitmq");
-					h.Password(configuration["RabbitMq:Password"] ?? "nextstep-rabbitmq-2o2G");
-				});
+            x.UsingRabbitMq((context, cfg) =>
+            {
+                var host = configuration["RabbitMq:Host"] ?? "localhost";
+                var portStr = configuration["RabbitMq:Port"];
+                ushort port = !string.IsNullOrEmpty(portStr) && ushort.TryParse(portStr, out var p) ? p : (ushort)5672;
+                var useSsl = configuration.GetValue<bool>("RabbitMq:UseSsl", port == 5671);
 
-				cfg.ConfigureEndpoints(context);
-			});
-		});
+                cfg.Host(host, port, configuration["RabbitMq:VirtualHost"] ?? "/", h =>
+                {
+                    h.Username(configuration["RabbitMq:Username"] ?? "rabbitmq");
+                    h.Password(configuration["RabbitMq:Password"] ?? "nextstep-rabbitmq-2o2G");
+                    if (useSsl)
+                    {
+                        h.UseSsl(s =>
+                        {
+                            // Supports on-premises outbound AMQPS firewall traversal over port 5671
+                        });
+                    }
+                });
 
+                cfg.ConfigureEndpoints(context);
+            });
+        });
 
         if (env != null && env.IsDevelopment())
         {
@@ -75,11 +94,3 @@ public static class DependencyInjection
         return services;
     }
 }
-
-
-
-
-
-
-
-
