@@ -9,6 +9,9 @@ using ClinicEz.Shared.Exceptions;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using ValidationException = ClinicEz.Shared.Exceptions.ValidationException;
+
+using ClinicEz.Shared.Licensing;
 
 namespace ClinicEz.Clinic.Application.Features.Staff.Commands;
 
@@ -48,23 +51,59 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
 {
     private readonly IRepository<StaffMember> _staffRepository;
     private readonly IRepository<ClinicRole> _roleRepository;
+    private readonly IRepository<ClinicSettings> _settingsRepository;
+    private readonly IFacilityLicenseValidator _licenseValidator;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public CreateStaffMemberCommandHandler(
         IRepository<StaffMember> staffRepository,
         IRepository<ClinicRole> roleRepository,
+        IRepository<ClinicSettings> settingsRepository,
+        IFacilityLicenseValidator licenseValidator,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext)
     {
         _staffRepository = staffRepository;
         _roleRepository = roleRepository;
+        _settingsRepository = settingsRepository;
+        _licenseValidator = licenseValidator;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
     }
 
     public async Task<StaffMemberDto> Handle(CreateStaffMemberCommand request, CancellationToken cancellationToken)
     {
+        // Cryptographic License Validation & Tamper Verification
+        var settings = await _settingsRepository.Query(s => s.ClinicId == _clinicContext.ClinicId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var licenseResult = _licenseValidator.Validate(settings?.LicenseToken, _clinicContext.ClinicId, _clinicContext.TenantId);
+
+        if (licenseResult.IsMissing)
+        {
+            throw new ValidationException("Facility activation required: No valid license key is installed for this clinic. Please apply an authorized license key to create staff.");
+        }
+
+        if (licenseResult.IsTampered)
+        {
+            throw new ValidationException($"Tampered facility license detected: {licenseResult.ErrorMessage}. Staff creation is locked.");
+        }
+
+        if (licenseResult.IsExpired)
+        {
+            throw new ValidationException("Facility license has expired. The clinic is operating in Grace Read-Only mode. Staff management is locked.");
+        }
+
+        // Security Hardening: Derive MaxStaff limit strictly from the validated cryptographic payload!
+        int maxStaffLimit = licenseResult.Payload?.Limits?.MaxStaff ?? 5;
+        int currentActiveStaff = await _staffRepository.Query(s => s.ClinicId == _clinicContext.ClinicId && s.IsActive)
+            .CountAsync(cancellationToken);
+
+        if (currentActiveStaff >= maxStaffLimit)
+        {
+            throw new ValidationException($"Staff limit reached: Your facility license allows up to {maxStaffLimit} active staff members ({currentActiveStaff} currently active). Please upgrade your facility license to add more staff.");
+        }
         Guid? assignedRoleId = request.ClinicRoleId;
         string? assignedRoleName = null;
 

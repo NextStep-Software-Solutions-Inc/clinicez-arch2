@@ -97,6 +97,10 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             settings.LetterheadSubHeader,
             settings.LetterheadAddress,
             settings.LetterheadContact,
-            settings.LetterheadFooter);
+            settings.LetterheadFooter,
+            settings.LicenseToken,
+            settings.PlanTier,
+            settings.MaxStaffLimit,
+            settings.LicenseExpiresAt);
     }
 }

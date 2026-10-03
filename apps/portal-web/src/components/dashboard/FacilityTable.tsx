@@ -15,19 +15,13 @@ import {
     IconPlus, 
     IconEdit, 
     IconTrash, 
-    IconLoader 
+    IconLoader,
+    IconSettings
 } from "@tabler/icons-react";
 import { toast } from "sonner";
+import FacilitySettingsHub, { FacilityData } from "./FacilitySettingsHub";
 
-interface Facility {
-    id: string;
-    name: string;
-    facilityType: "Clinic" | "Laboratory" | "Pharmacy" | "Organization";
-    status: "Provisioning" | "Active" | "Suspended" | "Failed";
-    createdAt: string;
-    slug?: string;
-    consoleUrl?: string;
-}
+type Facility = FacilityData;
 
 interface FacilityTableProps {
     facilityType: "Clinic" | "Laboratory" | "Pharmacy" | "Organization";
@@ -59,6 +53,9 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
     const [editName, setEditName] = useState("");
     const [editStatus, setEditStatus] = useState<Facility["status"]>("Active");
     const [savingEdit, setSavingEdit] = useState(false);
+
+    // Settings Hub state
+    const [settingsFacility, setSettingsFacility] = useState<FacilityData | null>(null);
 
     // Activation state
     const [activatingId, setActivatingId] = useState<string | null>(null);
@@ -316,10 +313,19 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                                 </Button>
                             )}
                             <Button
+                                onClick={() => setSettingsFacility(fac)}
+                                variant="ghost"
+                                size="sm"
+                                title="Letterhead & Facility Settings"
+                                className="rounded-xl h-9 w-9 p-0 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0"
+                            >
+                                <IconSettings className="h-4 w-4" />
+                            </Button>
+                            <Button
                                 onClick={() => handleOpenEdit(fac)}
                                 variant="ghost"
                                 size="sm"
-                                title="Edit Facility"
+                                title="Quick Edit Name/Status"
                                 className="rounded-xl h-9 w-9 p-0 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0"
                             >
                                 <IconEdit className="h-4 w-4" />
@@ -412,10 +418,19 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                                                 </Button>
                                             )}
                                             <Button
+                                                onClick={() => setSettingsFacility(fac)}
+                                                variant="ghost"
+                                                size="sm"
+                                                title="Letterhead & Facility Settings"
+                                                className="rounded-xl h-8 w-8 p-0 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800"
+                                            >
+                                                <IconSettings className="h-3.5 w-3.5" />
+                                            </Button>
+                                            <Button
                                                 onClick={() => handleOpenEdit(fac)}
                                                 variant="ghost"
                                                 size="sm"
-                                                title="Edit Facility"
+                                                title="Quick Edit Name/Status"
                                                 className="rounded-xl h-8 w-8 p-0 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800"
                                             >
                                                 <IconEdit className="h-3.5 w-3.5" />
@@ -530,6 +545,14 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* Facility Settings, Letterhead Customizer & Medical Stamp Hub */}
+            <FacilitySettingsHub
+                facility={settingsFacility}
+                open={!!settingsFacility}
+                onOpenChange={(open) => !open && setSettingsFacility(null)}
+                onSaved={fetchFacilities}
+            />
         </>
     );
 }

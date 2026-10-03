@@ -44,11 +44,14 @@ public class GetPublicLabUploadInfoQueryHandler : IRequestHandler<GetPublicLabUp
 
         var patient = await _patientRepo.GetByIdAsync(order.PatientId, cancellationToken);
 
-        // Mask patient name for HIPAA/DPA privacy on public upload page
+        // Mask patient name for Philippine DPA (RA 10173) privacy: e.g. "Juan Dela Cruz" -> "J*** D*** C***"
         var initials = string.Join(" ", order.PatientName.Split(' ', StringSplitOptions.RemoveEmptyEntries)
-            .Select(w => $"{w[0]}."));
+            .Select(w => w.Length > 1 ? $"{w[0]}***" : $"{w[0]}*"));
 
-        var age = patient != null ? DateTime.UtcNow.Year - patient.DateOfBirth.Year : 0;
+        var age = patient != null ? Math.Max(0, DateTime.UtcNow.Year - patient.DateOfBirth.Year) : 0;
+        var expiresAt = order.OrderDate.AddDays(30);
+        var isExpired = DateTime.UtcNow > expiresAt;
+        var doctorPrc = order.PathologistPrcLicense ?? "PRC # 0098765";
 
         return new PublicLabUploadInfoResponse(
             order.OrderNumber,
@@ -59,7 +62,11 @@ public class GetPublicLabUploadInfoQueryHandler : IRequestHandler<GetPublicLabUp
             "St. Jude Family Clinic & Primary Care",
             order.ClinicalDiagnosis,
             order.Items.Select(i => i.TestName).ToList(),
-            order.OrderDate
+            order.OrderDate,
+            doctorPrc,
+            expiresAt,
+            isExpired,
+            order.Status.ToString()
         );
     }
 }

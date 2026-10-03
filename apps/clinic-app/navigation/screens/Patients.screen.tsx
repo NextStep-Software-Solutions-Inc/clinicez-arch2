@@ -14,6 +14,8 @@ import { useNavigation } from '@react-navigation/native';
 import { ThemedText, Badge, Button, Input, Card } from '@ui';
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
+import PrescriptionSlipModal from '../../components/PrescriptionSlipModal';
+import RecordExternalDispenseModal from '../../components/RecordExternalDispenseModal';
 import {
   clinicService,
   ClinicPatient,
@@ -21,6 +23,8 @@ import {
   PatientChart,
   LabOrderSlipData,
   ClinicLabOrderRecord,
+  PrescriptionSlipData,
+  ConsultationRecord,
 } from '../../services/clinicService';
 
 const SAMPLE_PATIENTS: ClinicPatient[] = [
@@ -165,6 +169,13 @@ export default function PatientsScreen() {
   const [externalFileType, setExternalFileType] = useState<'Photo' | 'PDF'>('PDF');
   const [externalNotes, setExternalNotes] = useState('Verified external diagnostic report.');
   const [attaching, setAttaching] = useState(false);
+
+  // Prescription Slip & External Dispense (Path B) state
+  const [selectedRxSlip, setSelectedRxSlip] = useState<PrescriptionSlipData | null>(null);
+  const [rxSlipModalVisible, setRxSlipModalVisible] = useState(false);
+  const [targetConsultationId, setTargetConsultationId] = useState<string | null>(null);
+  const [targetPrescriptionNumber, setTargetPrescriptionNumber] = useState<string | undefined>(undefined);
+  const [externalDispenseModalVisible, setExternalDispenseModalVisible] = useState(false);
 
   const fetchPatients = useCallback(async () => {
     const [data, err] = await clinicService.getPatients(searchTerm || undefined);
@@ -352,6 +363,91 @@ export default function PatientsScreen() {
     if (selectedPatient) {
       handleOpenChart(selectedPatient);
     }
+  };
+
+  const handleViewPrescriptionSlip = async (consultation: ConsultationRecord) => {
+    const [slip] = await clinicService.getPrescriptionSlip(consultation.id);
+    if (slip) {
+      setSelectedRxSlip(slip);
+      setRxSlipModalVisible(true);
+    } else {
+      // Offline fallback / demo preview
+      const fallbackToken = consultation.rxPublicVerificationToken || 'rx-token-preview';
+      const fallbackNumber = consultation.prescriptionNumber || `RX-${new Date().getFullYear()}-00281`;
+      setSelectedRxSlip({
+        consultationId: consultation.id,
+        prescriptionNumber: fallbackNumber,
+        issuedAt: consultation.encounterDate || new Date().toISOString(),
+        clinicName: 'Metro Health Outpatient Clinic',
+        clinicAddress: 'Unit 201 Medical Arts Bldg, San Pedro, Laguna',
+        clinicContact: '(02) 8123-4567 • rx@metrohealth.ph',
+        doctorName: consultation.doctorName || 'Dr. Roberto Cruz, MD',
+        doctorPrcLicense: consultation.doctorPrcLicense || 'PRC-0149281',
+        doctorPtr: consultation.doctorPtr || 'PTR-892104',
+        doctorS2License: consultation.doctorS2License || 'S2-9482014',
+        doctorSpecialization: 'General Outpatient Medicine',
+        patientId: selectedPatient?.id || consultation.patientId,
+        patientName: selectedPatient?.fullName || consultation.patientName,
+        patientAge: selectedPatient?.age || 45,
+        patientGender: selectedPatient?.gender || 'Female',
+        philHealthNumber: selectedPatient?.philHealthNumber,
+        patientAllergies: selectedPatient?.allergies,
+        clinicalDiagnosis: consultation.assessment || 'Hypertension Stage 1',
+        specialInstructions: consultation.plan || 'Take medications daily as prescribed.',
+        items: consultation.prescriptions?.map(p => ({
+          itemId: p.id,
+          genericName: p.genericName,
+          brandName: p.brandName,
+          dosage: p.dosage,
+          form: p.form,
+          sig: p.sig,
+          quantity: p.quantity,
+          durationDays: p.durationDays || 30,
+          refills: p.refills || 0,
+          isDangerousDrug: p.isDangerousDrug,
+          remarks: p.remarks,
+        })) || [],
+        publicVerificationToken: fallbackToken,
+        publicVerificationUrl: `https://portal.clinicez.ph/api/v1/public/rx-verify/${fallbackToken}`,
+        qrPayload: `CLINICEZ:RX:${fallbackNumber}:${fallbackToken}`,
+        dispenseStatus: consultation.rxDispenseStatus || 'Pending',
+        dispensedPharmacyName: consultation.rxDispensedPharmacyName,
+        dispensedPharmacistName: consultation.rxDispensedPharmacistName,
+        dispensedPharmacistPrc: consultation.rxDispensedPharmacistPrc,
+        dispensedReceiptNumber: consultation.rxDispensedReceiptNumber,
+        dispensedAt: consultation.rxDispensedAt,
+        dispenseNotes: consultation.rxDispenseNotes,
+      });
+      setRxSlipModalVisible(true);
+    }
+  };
+
+  const handleOpenExternalDispense = (consultation: ConsultationRecord) => {
+    setTargetConsultationId(consultation.id);
+    setTargetPrescriptionNumber(consultation.prescriptionNumber);
+    setExternalDispenseModalVisible(true);
+  };
+
+  const handleExternalDispenseSuccess = (updatedSlip: PrescriptionSlipData) => {
+    if (patientChart) {
+      const updatedConsultations = patientChart.consultations.map(c => {
+        if (c.id === updatedSlip.consultationId) {
+          return {
+            ...c,
+            rxDispenseStatus: 'DispensedExternally' as const,
+            rxDispensedPharmacyName: updatedSlip.dispensedPharmacyName,
+            rxDispensedPharmacistName: updatedSlip.dispensedPharmacistName,
+            rxDispensedPharmacistPrc: updatedSlip.dispensedPharmacistPrc,
+            rxDispensedReceiptNumber: updatedSlip.dispensedReceiptNumber,
+            rxDispensedAt: updatedSlip.dispensedAt,
+            rxDispenseNotes: updatedSlip.dispenseNotes,
+          };
+        }
+        return c;
+      });
+      setPatientChart({ ...patientChart, consultations: updatedConsultations });
+    }
+    setSelectedRxSlip(updatedSlip);
   };
 
   const handleQueueCheckIn = async (patient: ClinicPatient) => {
@@ -737,6 +833,58 @@ export default function PatientsScreen() {
                         <ThemedText style={{ fontSize: 13, fontWeight: '600', color: '#111827' }}>
                           Assessment: {c.assessment ?? 'Clinical examination normal'}
                         </ThemedText>
+
+                        {/* Prescriptions & Dual-Path Status */}
+                        {((c.prescriptions && c.prescriptions.length > 0) || c.prescriptionNumber) && (
+                          <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#E5E7EB', gap: 6 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <ThemedText style={{ fontSize: 12, fontWeight: '700', color: '#374151' }}>
+                                💊 Prescriptions ({c.prescriptions?.length ?? 0}):
+                              </ThemedText>
+                              <ThemedText style={{
+                                fontSize: 10,
+                                fontWeight: '700',
+                                color: c.rxDispenseStatus === 'Dispensed' ? '#166534' : c.rxDispenseStatus === 'DispensedExternally' ? '#92400E' : '#0284C7',
+                                backgroundColor: c.rxDispenseStatus === 'Dispensed' ? '#DCFCE7' : c.rxDispenseStatus === 'DispensedExternally' ? '#FEF3C7' : '#E0F2FE',
+                                paddingHorizontal: 6,
+                                paddingVertical: 2,
+                                borderRadius: 4,
+                              }}>
+                                {c.rxDispenseStatus === 'Dispensed'
+                                  ? '✓ Dispensed (Partner)'
+                                  : c.rxDispenseStatus === 'DispensedExternally'
+                                  ? `✓ Dispensed (${c.rxDispensedPharmacyName || 'External'})`
+                                  : '● In Partner Queue'}
+                              </ThemedText>
+                            </View>
+
+                            {c.prescriptions && c.prescriptions.length > 0 && (
+                              <ThemedText style={{ fontSize: 11, color: '#4B5563' }}>
+                                {c.prescriptions.map(p => `${p.genericName} ${p.dosage} (Qty: ${p.quantity})`).join(', ')}
+                              </ThemedText>
+                            )}
+
+                            <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+                              <Pressable
+                                style={styles.viewSlipBtn}
+                                onPress={() => handleViewPrescriptionSlip(c)}
+                              >
+                                <ThemedText style={styles.viewSlipBtnText}>📄 View E-Rx Slip</ThemedText>
+                              </Pressable>
+
+                              {c.rxDispenseStatus !== 'Dispensed' && c.rxDispenseStatus !== 'DispensedExternally' && (
+                                <Pressable
+                                  style={[styles.viewSlipBtn, { backgroundColor: '#F0FDFA', borderColor: '#99F6E4' }]}
+                                  onPress={() => handleOpenExternalDispense(c)}
+                                >
+                                  <ThemedText style={[styles.viewSlipBtnText, { color: '#0D9488' }]}>
+                                    🏥 Log External Dispense
+                                  </ThemedText>
+                                </Pressable>
+                              )}
+                            </View>
+                          </View>
+                        )}
                       </View>
                     ))
                   ) : (
@@ -1005,6 +1153,26 @@ export default function PatientsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Electronic Prescription Slip Modal (Dual-Path) */}
+      <PrescriptionSlipModal
+        visible={rxSlipModalVisible}
+        onClose={() => setRxSlipModalVisible(false)}
+        slip={selectedRxSlip}
+        onOpenExternalDispense={() => {
+          setRxSlipModalVisible(false);
+          setExternalDispenseModalVisible(true);
+        }}
+      />
+
+      {/* Record External Dispense Modal (Path B) */}
+      <RecordExternalDispenseModal
+        visible={externalDispenseModalVisible}
+        onClose={() => setExternalDispenseModalVisible(false)}
+        consultationId={targetConsultationId || ''}
+        prescriptionNumber={targetPrescriptionNumber}
+        onSuccess={handleExternalDispenseSuccess}
+      />
     </ScrollView>
   </ResponsiveLayout>
 );

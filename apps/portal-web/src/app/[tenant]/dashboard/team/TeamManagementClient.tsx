@@ -49,6 +49,36 @@ const ROLE_DETAILS: Record<string, { label: string; badgeClass: string; descript
         badgeClass: "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-200 dark:border-blue-800",
         description: "Can manage facilities, invite workspace team members, and configure tenancy settings."
     },
+    "Facility Administrator": {
+        label: "Facility Administrator",
+        badgeClass: "bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800",
+        description: "Governs branch-level clinical operations, staff scheduling, local facility settings, and letterheads."
+    },
+    "Attending Physician": {
+        label: "Attending Physician",
+        badgeClass: "bg-cyan-100 text-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800",
+        description: "Licensed medical doctor authorized to consult, order lab tests, and prescribe signed e-prescriptions."
+    },
+    "Medical Technologist": {
+        label: "Medical Technologist",
+        badgeClass: "bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300 border-teal-200 dark:border-teal-800",
+        description: "Certified diagnostic professional performing laboratory analyses and releasing validated test results."
+    },
+    "Registered Pharmacist": {
+        label: "Registered Pharmacist",
+        badgeClass: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800",
+        description: "Licensed pharmacist authorized to review e-prescriptions, log fulfillment, and dispense medications."
+    },
+    Phlebotomist: {
+        label: "Phlebotomist",
+        badgeClass: "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border-rose-200 dark:border-rose-800",
+        description: "Specimen collector managing venipuncture, barcode accessioning, and patient routing in the diagnostic dropzone."
+    },
+    "Cashier/Billing Staff": {
+        label: "Cashier / Billing Staff",
+        badgeClass: "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-800",
+        description: "Handles patient payment reconciliation, PhilHealth Konsulta co-pays, and official BIR receipts."
+    },
     Biller: {
         label: "Biller / Finance",
         badgeClass: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800",
@@ -72,6 +102,7 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
     const [fullName, setFullName] = useState("");
     const [email, setEmail] = useState("");
     const [role, setRole] = useState("Admin");
+    const [facilityId, setFacilityId] = useState("");
     const [inviteError, setInviteError] = useState<string | null>(null);
     const [submittingInvite, setSubmittingInvite] = useState(false);
 
@@ -165,6 +196,7 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                 fullName: fullName.trim(),
                 email: email.trim(),
                 role,
+                facilityId: facilityId || undefined,
             });
 
             const inviteUrl = created.invitationToken
@@ -178,6 +210,7 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                     inviteeName: fullName.trim(),
                     workspaceName: tenantSlug,
                     role,
+                    facilityName: facilities.find(f => f.id === facilityId)?.name,
                     inviteUrl
                 }).catch(err => console.warn("[SMTP Dispatch Warning]", err));
             }
@@ -186,6 +219,7 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
             setFullName("");
             setEmail("");
             setRole("Admin");
+            setFacilityId("");
 
             if (inviteUrl) {
                 setCreatedInviteModal({
@@ -450,10 +484,19 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                                 </td>
                                                 <td className="py-3.5 px-4">
                                                     {isPending ? (
-                                                        <Badge variant="outline" className="text-[10px] font-semibold gap-1 bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border-amber-200 dark:border-amber-800">
-                                                            <IconClock className="h-3 w-3" />
-                                                            Pending Invite
-                                                        </Badge>
+                                                        <div className="flex flex-col gap-0.5">
+                                                            <Badge variant="outline" className="text-[10px] font-semibold gap-1 bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border-amber-200 dark:border-amber-800 w-fit">
+                                                                <IconClock className="h-3 w-3" />
+                                                                Pending Invite
+                                                            </Badge>
+                                                            {member.invitationExpiresAt && (
+                                                                <span className="text-[10px] text-slate-400">
+                                                                    {new Date(member.invitationExpiresAt) < new Date()
+                                                                        ? "Expired"
+                                                                        : `Expires ${new Date(member.invitationExpiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     ) : (
                                                         <Badge variant="outline" className="text-[10px] font-semibold gap-1 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800">
                                                             <IconCheck className="h-3 w-3" />
@@ -586,12 +629,44 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                 onChange={(e) => setRole(e.target.value)}
                                 className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
                             >
-                                <option value="Admin">Tenant Administrator (Manage branches, invites, & tenancy settings)</option>
-                                <option value="Biller">Biller / Finance (Manage subscriptions, checkout sessions, & invoices)</option>
-                                <option value="Viewer">Viewer / Analyst (Read-only access to tenancy health & branch stats)</option>
+                                <optgroup label="Tenant & Administrative Roles">
+                                    <option value="Admin">Tenant Administrator (Manage branches, invites, & tenancy settings)</option>
+                                    <option value="Facility Administrator">Facility Administrator (Branch clinical operations & local settings)</option>
+                                    <option value="Biller">Biller / Finance (Manage subscriptions, checkout sessions, & invoices)</option>
+                                    <option value="Viewer">Viewer / Analyst (Read-only access to tenancy health & branch stats)</option>
+                                </optgroup>
+                                <optgroup label="Clinical & Medical Roles">
+                                    <option value="Attending Physician">Attending Physician (Consultations, e-prescriptions & lab requisitions)</option>
+                                    <option value="Medical Technologist">Medical Technologist (Diagnostic assays, quantitative findings, certs)</option>
+                                    <option value="Registered Pharmacist">Registered Pharmacist (e-Prescription validation & dispensary fulfillment)</option>
+                                    <option value="Phlebotomist">Phlebotomist (Specimen collection, barcode accessioning, patient dropzone)</option>
+                                    <option value="Cashier/Billing Staff">Cashier / Billing Staff (Patient POS, PhilHealth Konsulta claims, ORs)</option>
+                                </optgroup>
                             </select>
                             <p className="text-[11px] text-slate-400">
                                 {ROLE_DETAILS[role]?.description}
+                            </p>
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <Label htmlFor="facilityId" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                Branch / Facility Scope (Optional)
+                            </Label>
+                            <select
+                                id="facilityId"
+                                value={facilityId}
+                                onChange={(e) => setFacilityId(e.target.value)}
+                                className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                            >
+                                <option value="">Entire Workspace (All Branches &amp; Facilities)</option>
+                                {facilities.map((fac) => (
+                                    <option key={fac.id} value={fac.id}>
+                                        {fac.name} ({fac.facilityType})
+                                    </option>
+                                ))}
+                            </select>
+                            <p className="text-[11px] text-slate-400">
+                                Scope staff credentials to a specific clinic, diagnostic lab, or dispensary branch.
                             </p>
                         </div>
 

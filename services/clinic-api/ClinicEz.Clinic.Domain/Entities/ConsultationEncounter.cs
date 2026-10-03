@@ -38,7 +38,20 @@ public sealed class ConsultationEncounter : BaseEntity
     public bool IsSigned { get; set; } = false;
     public DateTime? SignedAt { get; set; }
 
+    // E-Prescription Interoperability & External Verification
+    public string? PrescriptionNumber { get; set; }
+    public string? RxPublicVerificationToken { get; set; }
+    public ClinicEz.Clinic.Domain.Enums.PrescriptionDispenseStatus RxDispenseStatus { get; set; } = ClinicEz.Clinic.Domain.Enums.PrescriptionDispenseStatus.Issued;
+    public string? RxDispensedPharmacyName { get; set; }
+    public string? RxDispensedPharmacistName { get; set; }
+    public string? RxDispensedPharmacistPrc { get; set; }
+    public string? RxDispensedReceiptNumber { get; set; }
+    public string? RxDispensedReceiptUrl { get; set; }
+    public DateTime? RxDispensedAt { get; set; }
+    public string? RxNotes { get; set; }
+
     // Navigations
     public ICollection<EncounterDiagnosis> Diagnoses { get; set; } = new List<EncounterDiagnosis>();
     public ICollection<PrescriptionItem> Prescriptions { get; set; } = new List<PrescriptionItem>();
 }
+

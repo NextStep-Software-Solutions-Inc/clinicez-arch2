@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using ClinicEz.Shared.Licensing;
 
 namespace ClinicEz.Portal.Api.Endpoints;
 
@@ -229,7 +230,8 @@ public class FacilityEndpoints : IEndpoint
             string tenantSlug,
             HttpContext httpContext,
             IApplicationDbContext context,
-            MassTransit.IPublishEndpoint publishEndpoint) =>
+            MassTransit.IPublishEndpoint publishEndpoint,
+            IFacilityLicenseSigner licenseSigner) =>
         {
             var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(clerkUserId)) return Results.Unauthorized();
@@ -248,6 +250,29 @@ public class FacilityEndpoints : IEndpoint
             var facility = await context.Facilities.FirstOrDefaultAsync(f => f.Id == id && f.TenantId == tenant.Id);
             if (facility == null) return Results.NotFound(new { Message = "Facility not found." });
 
+            var planTier = facility.PlanTier ?? "Community";
+            var limits = PlanTierDefaults.GetLimitsForTier(planTier);
+            var features = PlanTierDefaults.GetFeaturesForTier(planTier);
+            var expiresAt = facility.LicenseExpiresAt ?? DateTime.UtcNow.AddYears(1);
+
+            var payload = new FacilityLicensePayload
+            {
+                FacilityId = facility.Id,
+                TenantId = tenant.Id.ToString(),
+                FacilityName = facility.Name,
+                FacilityType = facility.FacilityType.ToString(),
+                PlanTier = planTier,
+                Limits = limits,
+                EnabledFeatures = features,
+                IssuedAtUtc = DateTime.UtcNow,
+                ExpiresAtUtc = expiresAt
+            };
+
+            var licenseToken = licenseSigner.SignLicense(payload);
+
+            facility.LicenseToken = licenseToken;
+            facility.MaxStaffLimit = limits.MaxStaff;
+            facility.LicenseExpiresAt = expiresAt;
             facility.Status = ClinicEz.Portal.Domain.Entities.FacilityStatus.Active;
             facility.UpdatedAt = DateTime.UtcNow;
 
@@ -256,18 +281,187 @@ public class FacilityEndpoints : IEndpoint
                 TenantId = tenant.Id.ToString(),
                 FacilityType = facility.FacilityType,
                 ResourceId = facility.Id,
-                Name = facility.Name
+                Name = facility.Name,
+                LicenseToken = licenseToken,
+                Limits = limits,
+                PlanTier = planTier,
+                LicenseExpiresAt = expiresAt
             });
 
             await context.SaveChangesAsync(default);
 
-            return Results.Ok(new { Success = true, Message = "Facility activated successfully." });
+            return Results.Ok(new
+            {
+                Success = true,
+                Message = "Facility activated successfully.",
+                LicenseToken = licenseToken,
+                Limits = limits
+            });
         })
         .RequireAuthorization()
         .WithName("ActivateFacility")
-        .WithDescription("Activates a facility and re-publishes the provisioning event.")
+        .WithDescription("Activates a facility, mints a cryptographic license, and re-publishes the provisioning event.")
+        .WithTags("Facilities");
+
+        // 6b. Export or fetch facility license key for offline / on-premise installation
+        app.MapGet("/facilities/{id:guid}/license-key", async (
+            Guid id,
+            string tenantSlug,
+            HttpContext httpContext,
+            IApplicationDbContext context,
+            IFacilityLicenseSigner licenseSigner) =>
+        {
+            var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(clerkUserId)) return Results.Unauthorized();
+
+            var tenant = await context.Tenants
+                .FirstOrDefaultAsync(t => t.TenantSlug.ToLower() == tenantSlug.ToLower() || t.Id.ToString() == tenantSlug);
+
+            if (tenant == null) return Results.NotFound(new { Message = "Workspace not found." });
+
+            var isOwner = tenant.OwnerId == clerkUserId;
+            var isAdmin = !isOwner && await context.StaffMembers.AnyAsync(s => 
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == "Admin" && s.Status == "Active");
+
+            if (!isOwner && !isAdmin) return Results.Forbid();
+
+            var facility = await context.Facilities.FirstOrDefaultAsync(f => f.Id == id && f.TenantId == tenant.Id);
+            if (facility == null) return Results.NotFound(new { Message = "Facility not found." });
+
+            if (string.IsNullOrWhiteSpace(facility.LicenseToken))
+            {
+                var planTier = facility.PlanTier ?? "Community";
+                var limits = PlanTierDefaults.GetLimitsForTier(planTier);
+                var features = PlanTierDefaults.GetFeaturesForTier(planTier);
+                var expiresAt = facility.LicenseExpiresAt ?? DateTime.UtcNow.AddYears(1);
+
+                var payload = new FacilityLicensePayload
+                {
+                    FacilityId = facility.Id,
+                    TenantId = tenant.Id.ToString(),
+                    FacilityName = facility.Name,
+                    FacilityType = facility.FacilityType.ToString(),
+                    PlanTier = planTier,
+                    Limits = limits,
+                    EnabledFeatures = features,
+                    IssuedAtUtc = DateTime.UtcNow,
+                    ExpiresAtUtc = expiresAt
+                };
+
+                facility.LicenseToken = licenseSigner.SignLicense(payload);
+                facility.MaxStaffLimit = limits.MaxStaff;
+                facility.LicenseExpiresAt = expiresAt;
+                await context.SaveChangesAsync(default);
+            }
+
+            var activeLimits = PlanTierDefaults.GetLimitsForTier(facility.PlanTier);
+
+            return Results.Ok(new
+            {
+                FacilityId = facility.Id,
+                FacilityName = facility.Name,
+                FacilityType = facility.FacilityType.ToString(),
+                PlanTier = facility.PlanTier,
+                LicenseToken = facility.LicenseToken,
+                Limits = activeLimits,
+                ExpiresAt = facility.LicenseExpiresAt
+            });
+        })
+        .RequireAuthorization()
+        .WithName("GetFacilityLicenseKey")
+        .WithDescription("Retrieves the cryptographically signed facility license key for offline or on-premise installation.")
+        .WithTags("Facilities");
+
+        // 7. Update facility settings (regulatory profile, digital letterhead, medical stamp, notifications)
+        app.MapPut("/facilities/{id:guid}/settings", async (
+            Guid id,
+            UpdateFacilitySettingsRequest request,
+            HttpContext httpContext,
+            IApplicationDbContext context) =>
+        {
+            var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(clerkUserId)) return Results.Unauthorized();
+
+            var tenant = await context.Tenants
+                .FirstOrDefaultAsync(t => t.TenantSlug.ToLower() == request.TenantSlug.ToLower() || t.Id.ToString() == request.TenantSlug);
+
+            if (tenant == null) return Results.NotFound(new { Message = "Workspace not found." });
+
+            var isOwner = tenant.OwnerId == clerkUserId;
+            var isAdmin = !isOwner && await context.StaffMembers.AnyAsync(s => 
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && (s.Role == "Admin" || s.Role == "Facility Administrator") && s.Status == "Active");
+
+            if (!isOwner && !isAdmin) return Results.Forbid();
+
+            var facility = await context.Facilities.FirstOrDefaultAsync(f => f.Id == id && f.TenantId == tenant.Id);
+            if (facility == null) return Results.NotFound(new { Message = "Facility not found." });
+
+            if (!string.IsNullOrWhiteSpace(request.Name)) facility.Name = request.Name.Trim();
+            if (request.Status.HasValue) facility.Status = request.Status.Value;
+            if (request.Classification != null) facility.Classification = request.Classification;
+            if (request.LicenseToOperate != null) facility.LicenseToOperate = request.LicenseToOperate;
+            if (request.PhilHealthAccreditationNumber != null) facility.PhilHealthAccreditationNumber = request.PhilHealthAccreditationNumber;
+            if (request.TaxIdentificationNumber != null) facility.TaxIdentificationNumber = request.TaxIdentificationNumber;
+            if (request.OperatingHours != null) facility.OperatingHours = request.OperatingHours;
+            if (request.Region != null) facility.Region = request.Region;
+            if (request.Province != null) facility.Province = request.Province;
+            if (request.City != null) facility.City = request.City;
+            if (request.Barangay != null) facility.Barangay = request.Barangay;
+            if (request.ZipCode != null) facility.ZipCode = request.ZipCode;
+            if (request.StreetAddress != null) facility.StreetAddress = request.StreetAddress;
+            if (request.ContactNumber != null) facility.ContactNumber = request.ContactNumber;
+            if (request.ContactEmail != null) facility.ContactEmail = request.ContactEmail;
+            if (request.LogoUrl != null) facility.LogoUrl = request.LogoUrl;
+            if (request.LetterheadHeader != null) facility.LetterheadHeader = request.LetterheadHeader;
+            if (request.LetterheadSubHeader != null) facility.LetterheadSubHeader = request.LetterheadSubHeader;
+            if (request.LetterheadAddress != null) facility.LetterheadAddress = request.LetterheadAddress;
+            if (request.LetterheadContact != null) facility.LetterheadContact = request.LetterheadContact;
+            if (request.LetterheadFooter != null) facility.LetterheadFooter = request.LetterheadFooter;
+            if (request.StampPhysicianName != null) facility.StampPhysicianName = request.StampPhysicianName;
+            if (request.StampPrcLicense != null) facility.StampPrcLicense = request.StampPrcLicense;
+            if (request.StampPtrNumber != null) facility.StampPtrNumber = request.StampPtrNumber;
+            if (request.StampS2License != null) facility.StampS2License = request.StampS2License;
+            if (request.NotificationPreferencesJson != null) facility.NotificationPreferencesJson = request.NotificationPreferencesJson;
+            facility.UpdatedAt = DateTime.UtcNow;
+
+            await context.SaveChangesAsync(default);
+            return Results.Ok(new { Success = true, Message = "Facility settings saved successfully." });
+        })
+        .RequireAuthorization()
+        .WithName("UpdateFacilitySettings")
+        .WithDescription("Updates facility regulatory profile, digital letterhead, medical stamp, and notification preferences.")
         .WithTags("Facilities");
     }
 }
 
 public record UpdateFacilityRequest(string TenantSlug, string Name, ClinicEz.Portal.Domain.Entities.FacilityStatus? Status = null);
+
+public record UpdateFacilitySettingsRequest(
+    string TenantSlug,
+    string? Name = null,
+    ClinicEz.Portal.Domain.Entities.FacilityStatus? Status = null,
+    string? Classification = null,
+    string? LicenseToOperate = null,
+    string? PhilHealthAccreditationNumber = null,
+    string? TaxIdentificationNumber = null,
+    string? OperatingHours = null,
+    string? Region = null,
+    string? Province = null,
+    string? City = null,
+    string? Barangay = null,
+    string? ZipCode = null,
+    string? StreetAddress = null,
+    string? ContactNumber = null,
+    string? ContactEmail = null,
+    string? LogoUrl = null,
+    string? LetterheadHeader = null,
+    string? LetterheadSubHeader = null,
+    string? LetterheadAddress = null,
+    string? LetterheadContact = null,
+    string? LetterheadFooter = null,
+    string? StampPhysicianName = null,
+    string? StampPrcLicense = null,
+    string? StampPtrNumber = null,
+    string? StampS2License = null,
+    string? NotificationPreferencesJson = null
+);

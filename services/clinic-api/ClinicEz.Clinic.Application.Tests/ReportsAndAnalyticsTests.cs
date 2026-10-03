@@ -36,6 +36,7 @@ public class ReportsAndAnalyticsTests
         var procRepo = TestDbHelper.CreateRepository<ClinicalProcedure>(context, sieve);
         var labRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
 
+        var todayMidday = DateTime.UtcNow.Date.AddHours(12);
         // Seed sample queue item
         var qItem = new QueueItem
         {
@@ -43,16 +44,16 @@ public class ReportsAndAnalyticsTests
             ClinicId = _testClinicId,
             QueueNumber = "Q-001",
             SequenceNumber = 1,
-            QueueDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            QueueDate = DateOnly.FromDateTime(todayMidday),
             PatientId = Guid.NewGuid(),
             PatientName = "Pedro Cruz",
             DoctorId = Guid.NewGuid(),
             DoctorName = "Dr. Cruz",
             Priority = QueuePriority.Routine,
             Status = QueueStatus.Completed,
-            CheckInTime = DateTime.UtcNow.AddMinutes(-30),
-            CalledTime = DateTime.UtcNow.AddMinutes(-20),
-            CompletedTime = DateTime.UtcNow
+            CheckInTime = todayMidday.AddMinutes(-30),
+            CalledTime = todayMidday.AddMinutes(-20),
+            CompletedTime = todayMidday
         };
         await queueRepo.AddAsync(qItem);
 
@@ -62,7 +63,7 @@ public class ReportsAndAnalyticsTests
             TenantId = _testTenantId,
             ClinicId = _testClinicId,
             InvoiceNumber = "INV-20260929-9999",
-            InvoiceDate = DateTime.UtcNow,
+            InvoiceDate = todayMidday,
             PatientId = qItem.PatientId,
             PatientName = qItem.PatientName,
             GrossAmount = 600m,

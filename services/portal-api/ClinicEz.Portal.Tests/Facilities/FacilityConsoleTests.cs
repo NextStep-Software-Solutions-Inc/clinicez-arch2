@@ -150,8 +150,9 @@ public class FacilityConsoleTests : IDisposable
     {
         var mockPublish = new Mock<IPublishEndpoint>();
         var mockGuard = new Mock<ITenantFeatureGuard>();
+        var licenseSigner = new ClinicEz.Shared.Licensing.FacilityLicenseSigner();
 
-        var handler = new CreateFacilityCommandHandler(_context, mockPublish.Object, mockGuard.Object);
+        var handler = new CreateFacilityCommandHandler(_context, mockPublish.Object, mockGuard.Object, licenseSigner);
         var command = new CreateFacilityCommand(_tenantId.ToString(), FacilityType.Clinic, "Brand New Clinic");
 
         var result = await handler.Handle(command, CancellationToken.None);
@@ -160,6 +161,8 @@ public class FacilityConsoleTests : IDisposable
         var facility = await _context.Facilities.FirstOrDefaultAsync(f => f.Name == "Brand New Clinic");
         Assert.NotNull(facility);
         Assert.Equal(FacilityStatus.Provisioning, facility.Status);
+        Assert.NotNull(facility.LicenseToken);
+        Assert.Equal(5, facility.MaxStaffLimit);
     }
 
     [Fact]

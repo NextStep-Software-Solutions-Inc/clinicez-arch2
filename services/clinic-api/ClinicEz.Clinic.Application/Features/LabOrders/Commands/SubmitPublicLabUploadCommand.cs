@@ -10,6 +10,9 @@ using ClinicEz.Shared.Exceptions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
+using ClinicEz.Clinic.Application.Common.Interfaces;
+using ClinicEz.Shared.Interoperability;
+
 namespace ClinicEz.Clinic.Application.Features.LabOrders.Commands;
 
 public record SubmitPublicLabUploadCommand(
@@ -19,20 +22,26 @@ public record SubmitPublicLabUploadCommand(
     string? DocumentUrl,
     string? FileBase64,
     string? Notes,
-    string UploadedBy = "ExternalLab"
+    string UploadedBy = "ExternalLab",
+    string? ContactNumber = null,
+    string? PathologistName = null,
+    string? PathologistPrcLicense = null
 ) : IRequest<ClinicLabOrderDto>;
 
 public class SubmitPublicLabUploadCommandHandler : IRequestHandler<SubmitPublicLabUploadCommand, ClinicLabOrderDto>
 {
     private readonly IRepository<ClinicLabOrder> _orderRepo;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ILabRequisitionPublisher? _requisitionPublisher;
 
     public SubmitPublicLabUploadCommandHandler(
         IRepository<ClinicLabOrder> orderRepo,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ILabRequisitionPublisher? requisitionPublisher = null)
     {
         _orderRepo = orderRepo;
         _unitOfWork = unitOfWork;
+        _requisitionPublisher = requisitionPublisher;
     }
 
     public async Task<ClinicLabOrderDto> Handle(SubmitPublicLabUploadCommand request, CancellationToken cancellationToken)
@@ -59,6 +68,22 @@ public class SubmitPublicLabUploadCommandHandler : IRequestHandler<SubmitPublicL
         order.Status = LabOrderStatus.CompletedWithExternalReport;
         order.ReportReleasedAt = DateTime.UtcNow;
 
+        if (!string.IsNullOrWhiteSpace(request.PathologistName))
+        {
+            order.VerifiedByPathologist = request.PathologistName.Trim();
+        }
+        if (!string.IsNullOrWhiteSpace(request.PathologistPrcLicense))
+        {
+            order.PathologistPrcLicense = request.PathologistPrcLicense.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.ContactNumber))
+        {
+            order.Notes = string.IsNullOrWhiteSpace(order.Notes)
+                ? $"Facility Contact: {request.ContactNumber.Trim()}"
+                : $"{order.Notes} • Facility Contact: {request.ContactNumber.Trim()}";
+        }
+
         if (!string.IsNullOrWhiteSpace(request.Notes))
         {
             order.Notes = string.IsNullOrWhiteSpace(order.Notes)
@@ -73,6 +98,24 @@ public class SubmitPublicLabUploadCommandHandler : IRequestHandler<SubmitPublicL
 
         _orderRepo.Update(order);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        if (_requisitionPublisher != null)
+        {
+            await _requisitionPublisher.PublishExternalResultUploadedAsync(new ExternalLabResultUploadedEvent
+            {
+                UploadId = Guid.NewGuid(),
+                RequisitionId = order.Id,
+                AccessionNumber = order.OrderNumber,
+                PatientId = order.PatientId,
+                UploadedBy = request.UploadedBy,
+                ExternalLabName = order.ExternalLabName,
+                DocumentType = order.ExternalReportType,
+                DocumentUrl = order.ExternalReportUrl,
+                FileBase64 = order.ExternalReportFileBase64,
+                Notes = order.Notes,
+                UploadedAt = DateTime.UtcNow
+            }, cancellationToken);
+        }
 
         return CreateClinicLabOrderCommandHandler.MapToDto(order);
     }

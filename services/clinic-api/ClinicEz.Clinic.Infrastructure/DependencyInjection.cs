@@ -43,12 +43,14 @@ public static class DependencyInjection
         services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddSingleton<ClinicEz.Shared.Licensing.IFacilityLicenseValidator, ClinicEz.Shared.Licensing.FacilityLicenseValidator>();
 
         // Outbound patient webhook notifier
         services.AddHttpClient<IPatientWebhookNotifier, PatientWebhookNotifier>();
 
         // Outbound interoperability publisher
         services.AddScoped<ILabRequisitionPublisher, LabRequisitionPublisher>();
+        services.AddScoped<IPrescriptionPublisher, PrescriptionPublisher>();
 
         // Add Hangfire
         services.AddHangfire(config => config
@@ -63,6 +65,7 @@ public static class DependencyInjection
             x.AddConsumer<FacilityCreatedConsumer>();
             x.AddConsumer<AppointmentBookedConsumer>();
             x.AddConsumer<DiagnosticReportFinalizedConsumer>();
+            x.AddConsumer<PrescriptionDispensedConsumer>();
             x.AddEntityFrameworkOutbox<ApplicationDbContext>(o =>
             {
                 o.UsePostgres();
@@ -71,10 +74,22 @@ public static class DependencyInjection
 
             x.UsingRabbitMq((context, cfg) =>
             {
-                cfg.Host(configuration["RabbitMq:Host"] ?? "localhost", configuration["RabbitMq:VirtualHost"] ?? "/", h =>
+                var host = configuration["RabbitMq:Host"] ?? "localhost";
+                var portStr = configuration["RabbitMq:Port"];
+                ushort port = !string.IsNullOrEmpty(portStr) && ushort.TryParse(portStr, out var p) ? p : (ushort)5672;
+                var useSsl = configuration.GetValue<bool>("RabbitMq:UseSsl", port == 5671);
+
+                cfg.Host(host, port, configuration["RabbitMq:VirtualHost"] ?? "/", h =>
                 {
                     h.Username(configuration["RabbitMq:Username"] ?? "rabbitmq");
                     h.Password(configuration["RabbitMq:Password"] ?? "nextstep-rabbitmq-2o2G");
+                    if (useSsl)
+                    {
+                        h.UseSsl(s =>
+                        {
+                            // Supports on-premises outbound AMQPS firewall traversal over port 5671
+                        });
+                    }
                 });
 
                 cfg.ConfigureEndpoints(context);

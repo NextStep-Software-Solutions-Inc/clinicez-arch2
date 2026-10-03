@@ -19,4 +19,8 @@ public sealed record ClinicSettingsDto(
     string? LetterheadSubHeader,
     string? LetterheadAddress,
     string? LetterheadContact,
-    string? LetterheadFooter);
+    string? LetterheadFooter,
+    string? LicenseToken = null,
+    string? PlanTier = "Community",
+    int MaxStaffLimit = 5,
+    DateTime? LicenseExpiresAt = null);

@@ -12,6 +12,12 @@ public sealed class ClinicSettings : BaseEntity
     public string? TaxIdentificationNumber { get; set; } // TIN
     public string? AccreditationNumber { get; set; }     // e.g. PHIC-KONSULTA-09214
 
+    // Cryptographic License & Hard Limit Profile
+    public string? LicenseToken { get; set; }
+    public string PlanTier { get; set; } = "Community";
+    public int MaxStaffLimit { get; set; } = 5;
+    public DateTime? LicenseExpiresAt { get; set; }
+
     /// <summary>
     /// JSON encoded schedule, e.g. "Mon-Fri 8:00 AM - 5:00 PM, Sat 8:00 AM - 12:00 PM"
     /// </summary>

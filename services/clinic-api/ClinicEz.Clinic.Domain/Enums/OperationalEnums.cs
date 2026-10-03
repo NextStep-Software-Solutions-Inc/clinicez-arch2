@@ -47,3 +47,13 @@ public enum LabOrderStatus
     CompletedWithExternalReport,
     Cancelled
 }
+
+public enum PrescriptionDispenseStatus
+{
+    Issued,
+    SentToPartnerPharmacy,
+    DispensedAtPartnerPharmacy,
+    DispensedExternally,
+    Cancelled
+}
+

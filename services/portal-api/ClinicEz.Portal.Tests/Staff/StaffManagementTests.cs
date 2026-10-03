@@ -91,6 +91,39 @@ public class StaffManagementTests : IDisposable
     }
 
     [Fact]
+    public async Task InviteStaffMember_FacilityClinicalRole_CreatesPendingInvitationWithFacility()
+    {
+        var facility = new Facility
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            Name = "BGC Laboratory Branch",
+            FacilityType = ClinicEz.Shared.Common.FacilityType.Laboratory,
+            Status = FacilityStatus.Active
+        };
+        _context.Facilities.Add(facility);
+        await _context.SaveChangesAsync();
+
+        var handler = new InviteStaffMemberCommandHandler(_context, _guardMock.Object);
+        var command = new InviteStaffMemberCommand(
+            TenantSlug,
+            "medtech@metro.ph",
+            "Mark Bautista, RMT",
+            "Medical Technologist",
+            facility.Id
+        );
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal("medtech@metro.ph", result.Email);
+        Assert.Equal("Medical Technologist", result.Role);
+        Assert.Equal(facility.Id, result.FacilityId);
+        Assert.Equal("BGC Laboratory Branch", result.FacilityName);
+        Assert.Equal("PendingInvitation", result.Status);
+    }
+
+    [Fact]
     public async Task InviteStaffMember_DuplicateEmail_ThrowsInvalidOperationException()
     {
         // First invite

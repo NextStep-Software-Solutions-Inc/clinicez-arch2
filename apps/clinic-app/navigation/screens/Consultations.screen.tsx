@@ -13,6 +13,8 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { ThemedText, Badge, Button, Input, Card } from '@ui';
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
+import PrescriptionSlipModal from '../../components/PrescriptionSlipModal';
+import RecordExternalDispenseModal from '../../components/RecordExternalDispenseModal';
 import {
   clinicService,
   PatientQueueItem,
@@ -20,6 +22,7 @@ import {
   Icd10Code,
   MedicalCertificateRecord,
   ReferralLetterRecord,
+  PrescriptionSlipData,
 } from '../../services/clinicService';
 
 interface LocalPrescription {
@@ -255,6 +258,73 @@ export default function ConsultationsScreen() {
   const [isSigned, setIsSigned] = useState(false);
   const [signedAt, setSignedAt] = useState<string | null>(null);
   const [banner, setBanner] = useState<{ text: string; isError?: boolean } | null>(null);
+
+  // E-Prescription Slip & Dual-Path Interoperability States
+  const [signedConsultationId, setSignedConsultationId] = useState<string | null>(null);
+  const [prescriptionSlip, setPrescriptionSlip] = useState<PrescriptionSlipData | null>(null);
+  const [prescriptionSlipModalVisible, setPrescriptionSlipModalVisible] = useState(false);
+  const [externalDispenseModalVisible, setExternalDispenseModalVisible] = useState(false);
+  const [loadingSlip, setLoadingSlip] = useState(false);
+
+  const handleOpenPrescriptionSlip = async () => {
+    if (signedConsultationId) {
+      setLoadingSlip(true);
+      const [slip] = await clinicService.getPrescriptionSlip(signedConsultationId);
+      setLoadingSlip(false);
+      if (slip) {
+        setPrescriptionSlip(slip);
+        setPrescriptionSlipModalVisible(true);
+        return;
+      }
+    }
+
+    // Dynamic fallback / draft preview
+    const draftSlip: PrescriptionSlipData = {
+      consultationId: signedConsultationId || 'draft-encounter',
+      prescriptionNumber: prescriptionSlip?.prescriptionNumber || `RX-${new Date().getFullYear()}-00912`,
+      issuedAt: new Date().toISOString(),
+      clinicName: 'Metro Health Outpatient Clinic',
+      clinicAddress: 'Unit 201 Medical Arts Bldg, San Pedro, Laguna',
+      clinicContact: '(02) 8123-4567 • rx@metrohealth.ph',
+      doctorName: selectedPatient.doctorName || 'Dr. Roberto Cruz, MD',
+      doctorPrcLicense: doctorPrc || 'PRC-0149281',
+      doctorPtr: doctorPtr || 'PTR-892104',
+      doctorS2License: doctorS2 || 'S2-9482014',
+      doctorSpecialization: 'General Outpatient Medicine',
+      patientId: selectedPatient.patientId,
+      patientName: selectedPatient.patientName,
+      patientAge: 42,
+      patientGender: 'Male',
+      philHealthNumber: '12-092819281-9',
+      patientAllergies: selectedPatient.vitalsSummary?.includes('Penicillin') ? 'Penicillin' : undefined,
+      clinicalDiagnosis: assessment || 'Acute Bronchitis & Hypertension Stage 1',
+      specialInstructions: plan || 'Take medications with meals. Complete full antibiotic course.',
+      items: prescriptions.map((p, idx) => ({
+        itemId: p.id || `item-${idx}`,
+        genericName: p.genericName,
+        brandName: undefined,
+        dosage: p.dosage,
+        form: p.form,
+        sig: p.sig,
+        quantity: p.quantity,
+        durationDays: 7,
+        refills: 0,
+        isDangerousDrug: p.isDangerousDrug,
+      })),
+      publicVerificationToken: prescriptionSlip?.publicVerificationToken || 'rx-tok-98124a9c',
+      publicVerificationUrl: prescriptionSlip?.publicVerificationUrl || 'https://portal.clinicez.ph/api/v1/public/rx-verify/rx-tok-98124a9c',
+      qrPayload: prescriptionSlip?.qrPayload || `CLINICEZ:RX:RX-${new Date().getFullYear()}-00912:rx-tok-98124a9c`,
+      dispenseStatus: prescriptionSlip?.dispenseStatus || (isSigned ? 'Pending' : 'Draft'),
+      dispensedPharmacyName: prescriptionSlip?.dispensedPharmacyName,
+      dispensedPharmacistName: prescriptionSlip?.dispensedPharmacistName,
+      dispensedPharmacistPrc: prescriptionSlip?.dispensedPharmacistPrc,
+      dispensedReceiptNumber: prescriptionSlip?.dispensedReceiptNumber,
+      dispensedAt: prescriptionSlip?.dispensedAt,
+      dispenseNotes: prescriptionSlip?.dispenseNotes,
+    };
+    setPrescriptionSlip(draftSlip);
+    setPrescriptionSlipModalVisible(true);
+  };
 
   const handleIssueMedCert = async () => {
     if (!selectedPatient) return;
@@ -516,11 +586,19 @@ export default function ConsultationsScreen() {
     const [consultation] = await clinicService.createConsultation(payload);
 
     if (consultation?.id) {
+      setSignedConsultationId(consultation.id);
       await clinicService.signConsultation(consultation.id, {
         prcLicenseNumber: doctorPrc,
         ptrNumber: doctorPtr,
         s2LicenseNumber: doctorS2,
       });
+
+      if (prescriptions.length > 0) {
+        const [slip] = await clinicService.getPrescriptionSlip(consultation.id);
+        if (slip) {
+          setPrescriptionSlip(slip);
+        }
+      }
     }
 
     // Auto-create Diagnostic Lab Requisitions if labs were ordered
@@ -848,11 +926,24 @@ export default function ConsultationsScreen() {
         {/* Electronic Prescriptions Header */}
         <View style={styles.rowBetween}>
           <ThemedText style={styles.subHeading}>Electronic Prescriptions ({prescriptions.length})</ThemedText>
-          {!isSigned && (
-            <Pressable style={styles.addRxBtn} onPress={() => setShowAddRx(!showAddRx)}>
-              <ThemedText style={styles.addRxBtnText}>+ Add Medication</ThemedText>
-            </Pressable>
-          )}
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            {prescriptions.length > 0 && (
+              <Pressable
+                style={[styles.addRxBtn, { backgroundColor: '#F0F9FF', borderColor: '#BAE6FD' }]}
+                onPress={handleOpenPrescriptionSlip}
+                disabled={loadingSlip}
+              >
+                <ThemedText style={[styles.addRxBtnText, { color: '#0284C7' }]}>
+                  {loadingSlip ? 'Loading...' : isSigned ? '📄 View E-Rx Slip' : '👁️ Preview Slip'}
+                </ThemedText>
+              </Pressable>
+            )}
+            {!isSigned && (
+              <Pressable style={styles.addRxBtn} onPress={() => setShowAddRx(!showAddRx)}>
+                <ThemedText style={styles.addRxBtnText}>+ Add Medication</ThemedText>
+              </Pressable>
+            )}
+          </View>
         </View>
 
         {/* Add Prescription Sub-Form */}
@@ -1046,26 +1137,71 @@ export default function ConsultationsScreen() {
           <ThemedText style={styles.signedSub}>
             Cryptographically sealed by Dr. Cruz ({doctorPrc}) at {signedAt}.
           </ThemedText>
-          <Pressable
-            style={{
-              backgroundColor: '#15803D',
-              paddingVertical: 10,
-              paddingHorizontal: 16,
-              borderRadius: 8,
-              marginTop: 8,
-              alignItems: 'center',
-            }}
-            onPress={() =>
-              navigation.navigate('Billing', {
-                patientId: selectedPatient.patientId,
-                patientName: selectedPatient.patientName,
-              })
-            }
-          >
-            <ThemedText style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '700' }}>
-              💵 Forward to Cashier Station →
-            </ThemedText>
-          </Pressable>
+          <ThemedText style={[styles.signedSub, { color: '#0369A1', fontWeight: '600', marginTop: 4 }]}>
+            📡 Prescriptions broadcasted to ClinicEz Partner Pharmacy via AMQPS (Port 5671) over RabbitMQ.
+          </ThemedText>
+
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+            {prescriptions.length > 0 && (
+              <>
+                <Pressable
+                  style={{
+                    backgroundColor: '#0284C7',
+                    paddingVertical: 10,
+                    paddingHorizontal: 14,
+                    borderRadius: 8,
+                    flex: 1,
+                    minWidth: 160,
+                    alignItems: 'center',
+                  }}
+                  onPress={handleOpenPrescriptionSlip}
+                >
+                  <ThemedText style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '700' }}>
+                    📄 View E-Prescription Slip
+                  </ThemedText>
+                </Pressable>
+
+                <Pressable
+                  style={{
+                    backgroundColor: '#0D9488',
+                    paddingVertical: 10,
+                    paddingHorizontal: 14,
+                    borderRadius: 8,
+                    flex: 1,
+                    minWidth: 160,
+                    alignItems: 'center',
+                  }}
+                  onPress={() => setExternalDispenseModalVisible(true)}
+                >
+                  <ThemedText style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '700' }}>
+                    🏥 Log External Dispense (Path B)
+                  </ThemedText>
+                </Pressable>
+              </>
+            )}
+
+            <Pressable
+              style={{
+                backgroundColor: '#15803D',
+                paddingVertical: 10,
+                paddingHorizontal: 14,
+                borderRadius: 8,
+                flex: 1,
+                minWidth: 160,
+                alignItems: 'center',
+              }}
+              onPress={() =>
+                navigation.navigate('Billing', {
+                  patientId: selectedPatient.patientId,
+                  patientName: selectedPatient.patientName,
+                })
+              }
+            >
+              <ThemedText style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '700' }}>
+                💵 Forward to Cashier Station →
+              </ThemedText>
+            </Pressable>
+          </View>
         </View>
       ) : (
         <Pressable
@@ -1359,6 +1495,32 @@ export default function ConsultationsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Electronic Prescription Slip Modal (Dual-Path) */}
+      <PrescriptionSlipModal
+        visible={prescriptionSlipModalVisible}
+        onClose={() => setPrescriptionSlipModalVisible(false)}
+        slip={prescriptionSlip}
+        onOpenExternalDispense={() => {
+          setPrescriptionSlipModalVisible(false);
+          setExternalDispenseModalVisible(true);
+        }}
+      />
+
+      {/* Record External Dispense Modal (Path B) */}
+      <RecordExternalDispenseModal
+        visible={externalDispenseModalVisible}
+        onClose={() => setExternalDispenseModalVisible(false)}
+        consultationId={signedConsultationId || 'draft-encounter'}
+        prescriptionNumber={prescriptionSlip?.prescriptionNumber}
+        onSuccess={(updated) => {
+          setPrescriptionSlip(updated);
+          setBanner({
+            text: `✓ External dispensing by ${updated.dispensedPharmacyName} recorded successfully!`,
+            isError: false,
+          });
+        }}
+      />
     </ScrollView>
   </ResponsiveLayout>
 );

@@ -21,6 +21,18 @@ import { Badge } from "@/components/ui/badge";
 import { staffService, InvitationDetailsDto } from "@/services/staff.service";
 import { toast } from "sonner";
 
+const ROLE_DESCRIPTIONS: Record<string, string> = {
+    "Attending Physician": "Authorized to conduct patient consultations, order laboratory diagnostics, and issue digitally signed e-prescriptions.",
+    "Medical Technologist": "Authorized to access the diagnostic dropzone, process specimen assays, and certify clinical lab results.",
+    "Registered Pharmacist": "Authorized to verify e-prescriptions, log dispensing transactions, and manage pharmacy dispensary pathways.",
+    "Facility Administrator": "Authorized to govern branch-level operations, facility operating hours, staff schedules, and letterhead customizers.",
+    "Phlebotomist": "Authorized to collect specimens, manage barcode accessioning, and intake patients at the diagnostic dropzone.",
+    "Cashier/Billing Staff": "Authorized to process patient payments, manage PhilHealth Konsulta claims, and generate official BIR receipts.",
+    Admin: "Full administrative access to manage facilities, invite workspace practitioners, and configure tenancy settings.",
+    Biller: "Authorized to manage subscription plans, payment methods, checkout sessions, and tax invoices.",
+    Viewer: "Read-only access to workspace health, analytics, and branch operational telemetry."
+};
+
 export default function InvitationAcceptClient({ token }: { token: string }) {
     const router = useRouter();
     const { isSignedIn, user, isLoaded } = useUser();
@@ -218,6 +230,13 @@ export default function InvitationAcceptClient({ token }: { token: string }) {
                         </div>
                     </div>
 
+                    {ROLE_DESCRIPTIONS[invite.role] && (
+                        <div className="p-2.5 rounded-lg bg-background/60 border border-border/60 text-[11px] text-muted-foreground leading-relaxed">
+                            <span className="font-semibold text-foreground">Role Scope: </span>
+                            {ROLE_DESCRIPTIONS[invite.role]}
+                        </div>
+                    )}
+
                     <div className="pt-2 border-t border-border/60">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                             Invitee
@@ -305,7 +324,13 @@ export default function InvitationAcceptClient({ token }: { token: string }) {
                     <IconShieldCheck className="h-3.5 w-3.5 text-primary" />
                     <span>Protected by ClinicEZ Security</span>
                 </span>
-                <span>Valid for 7 days</span>
+                <span>
+                    {invite.expiresAt ? (
+                        <>Valid until {new Date(invite.expiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</>
+                    ) : (
+                        <>Valid for 7 days</>
+                    )}
+                </span>
             </CardFooter>
         </Card>
     );

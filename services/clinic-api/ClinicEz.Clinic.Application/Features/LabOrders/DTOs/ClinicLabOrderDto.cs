@@ -66,7 +66,10 @@ public record AttachExternalLabResultRequest(
     string? DocumentUrl,
     string? FileBase64,
     string? Notes,
-    string UploadedBy = "ClinicStaff"
+    string UploadedBy = "ClinicStaff",
+    string? ContactNumber = null,
+    string? PathologistName = null,
+    string? PathologistPrcLicense = null
 );
 
 public record PublicLabUploadInfoResponse(
@@ -78,5 +81,9 @@ public record PublicLabUploadInfoResponse(
     string OrderingFacilityName,
     string? ClinicalDiagnosis,
     List<string> RequestedTests,
-    DateTime OrderDate
+    DateTime OrderDate,
+    string? DoctorPrcLicense = null,
+    DateTime? ExpiresAt = null,
+    bool IsExpired = false,
+    string? Status = null
 );

@@ -139,6 +139,15 @@ export interface ConsultationRecord {
   diagnoses: EncounterDiagnosis[];
   prescriptions: PrescriptionItem[];
   syncStatus?: SyncStatus;
+  prescriptionNumber?: string;
+  rxPublicVerificationToken?: string;
+  rxDispenseStatus?: 'Pending' | 'Dispensed' | 'DispensedExternally' | 'PartiallyDispensed' | 'Cancelled';
+  rxDispensedPharmacyName?: string;
+  rxDispensedAt?: string;
+  rxDispensedPharmacistName?: string;
+  rxDispensedPharmacistPrc?: string;
+  rxDispensedReceiptNumber?: string;
+  rxDispenseNotes?: string;
 }
 
 export interface AppointmentItem {
@@ -783,6 +792,15 @@ export const clinicService = {
     return clinicApiClient.post<ConsultationRecord>(`/consultations/${id}/sign`, credentials ?? {});
   },
 
+  // E-Prescriptions & Dual-Path Dispense
+  async getPrescriptionSlip(consultationId: string) {
+    return clinicApiClient.get<PrescriptionSlipData>(`/prescriptions/${consultationId}/slip`);
+  },
+
+  async recordExternalDispense(consultationId: string, payload: RecordExternalDispensePayload) {
+    return clinicApiClient.post<PrescriptionSlipData>(`/prescriptions/${consultationId}/record-external-dispense`, payload);
+  },
+
   // ICD-10 Search
   async searchIcd10(query?: string) {
     const qs = query ? `?q=${encodeURIComponent(query)}` : '';
@@ -1116,3 +1134,62 @@ export interface LabOrderSlipData {
   publicUploadUrl: string;
   qrPayload: string;
 }
+
+export interface PrescriptionSlipItem {
+  itemId: string;
+  genericName: string;
+  brandName?: string;
+  dosage: string;
+  form: string;
+  sig: string;
+  quantity: number;
+  durationDays?: number;
+  refills: number;
+  isDangerousDrug: boolean;
+  remarks?: string;
+}
+
+export interface PrescriptionSlipData {
+  consultationId: string;
+  prescriptionNumber: string;
+  issuedAt: string;
+  clinicName: string;
+  clinicAddress: string;
+  clinicContact: string;
+  doctorName: string;
+  doctorPrcLicense: string;
+  doctorPtr?: string;
+  doctorS2License?: string;
+  doctorSpecialization?: string;
+  patientId: string;
+  patientName: string;
+  patientAge: number;
+  patientGender: string;
+  philHealthNumber?: string;
+  patientAllergies?: string;
+  clinicalDiagnosis?: string;
+  specialInstructions?: string;
+  items: PrescriptionSlipItem[];
+  publicVerificationToken: string;
+  publicVerificationUrl: string;
+  qrPayload: string;
+  dispenseStatus: string;
+  dispensedPharmacyName?: string;
+  dispensedPharmacistName?: string;
+  dispensedPharmacistPrc?: string;
+  dispensedReceiptNumber?: string;
+  dispensedReceiptUrl?: string;
+  dispensedAt?: string;
+  dispenseNotes?: string;
+}
+
+export interface RecordExternalDispensePayload {
+  externalPharmacyName: string;
+  externalBranchLocation?: string;
+  pharmacistName?: string;
+  pharmacistPrcLicense?: string;
+  officialReceiptNumber?: string;
+  receiptDocumentUrl?: string;
+  notes?: string;
+}
+

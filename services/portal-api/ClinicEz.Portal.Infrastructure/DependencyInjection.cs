@@ -57,6 +57,8 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IXenditBillingService, XenditBillingService>();
         services.AddScoped<ITenantFeatureGuard, TenantFeatureGuard>();
+        services.AddSingleton<ClinicEz.Shared.Licensing.IFacilityLicenseSigner, ClinicEz.Shared.Licensing.FacilityLicenseSigner>();
+        services.AddSingleton<ClinicEz.Shared.Licensing.IFacilityLicenseValidator, ClinicEz.Shared.Licensing.FacilityLicenseValidator>();
         services.AddHttpContextAccessor();
 
         // Register Xendit Typed HTTP Client with Resilience

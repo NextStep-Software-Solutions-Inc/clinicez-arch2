@@ -55,6 +55,7 @@ public class StaffCommandsTests
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
         var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
 
         var doctorRole = new ClinicRole
         {
@@ -65,9 +66,27 @@ public class StaffCommandsTests
             IsSystem = true
         };
         await context.ClinicRoles.AddAsync(doctorRole);
+
+        var settings = new ClinicSettings
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = clinicId,
+            TenantId = tenantId,
+            LicenseToken = "mock.valid.token"
+        };
+        await context.ClinicSettings.AddAsync(settings);
         await context.SaveChangesAsync();
 
-        var handler = new CreateStaffMemberCommandHandler(staffRepo, roleRepo, uow, clinicContext);
+        var licenseValidator = Substitute.For<ClinicEz.Shared.Licensing.IFacilityLicenseValidator>();
+        licenseValidator.Validate(Arg.Any<string?>(), clinicId, tenantId)
+            .Returns(ClinicEz.Shared.Licensing.LicenseValidationResult.Success(new ClinicEz.Shared.Licensing.FacilityLicensePayload
+            {
+                FacilityId = clinicId,
+                TenantId = tenantId,
+                Limits = new ClinicEz.Shared.Licensing.FacilityLimits { MaxStaff = 10 }
+            }));
+
+        var handler = new CreateStaffMemberCommandHandler(staffRepo, roleRepo, settingsRepo, licenseValidator, uow, clinicContext);
 
         var command = new CreateStaffMemberCommand(
             "Maria",

@@ -39,6 +39,7 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IPatientWebhookNotifier _webhookNotifier;
+    private readonly IPrescriptionPublisher? _prescriptionPublisher;
 
     public SignConsultationCommandHandler(
         IRepository<ConsultationEncounter> consultationRepository,
@@ -47,7 +48,8 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
         IRepository<Appointment> appointmentRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
-        IPatientWebhookNotifier webhookNotifier)
+        IPatientWebhookNotifier webhookNotifier,
+        IPrescriptionPublisher? prescriptionPublisher = null)
     {
         _consultationRepository = consultationRepository;
         _staffRepository = staffRepository;
@@ -56,6 +58,7 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
         _webhookNotifier = webhookNotifier;
+        _prescriptionPublisher = prescriptionPublisher;
     }
 
     public async Task<ConsultationEncounterDto> Handle(SignConsultationCommand request, CancellationToken cancellationToken)
@@ -96,6 +99,13 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
         encounter.UpdatedAt = DateTime.UtcNow;
         encounter.UpdatedBy = encounter.DoctorName;
 
+        if (encounter.Prescriptions.Any())
+        {
+            encounter.PrescriptionNumber ??= $"RX-{encounter.EncounterDate:yyyyMMdd}-{encounter.Id.ToString("N")[..6].ToUpper()}";
+            encounter.RxPublicVerificationToken ??= Guid.NewGuid().ToString("N");
+            encounter.RxDispenseStatus = PrescriptionDispenseStatus.Issued;
+        }
+
         _consultationRepository.Update(encounter);
 
         // Update queue item to Completed
@@ -129,6 +139,56 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // Outbound event publishing to RabbitMQ for Partner Pharmacy (Path A)
+        if (encounter.Prescriptions.Any() && _prescriptionPublisher != null)
+        {
+            var rxEvent = new ClinicEz.Shared.Interoperability.PrescriptionIssuedEvent
+            {
+                PrescriptionId = encounter.Id,
+                PrescriptionNumber = encounter.PrescriptionNumber!,
+                OrderingFacilityId = _clinicContext.ClinicId.ToString(),
+                OrderingFacilityName = "Clinic Operations Hub",
+                TenantId = _clinicContext.TenantId,
+                PrescriberDoctor = new ClinicEz.Shared.Interoperability.PrescriberDoctorDto
+                {
+                    DoctorId = encounter.DoctorId.ToString(),
+                    DoctorName = encounter.DoctorName,
+                    PrcLicenseNumber = encounter.DoctorPrcLicense ?? string.Empty,
+                    PtrNumber = encounter.DoctorPtr,
+                    S2LicenseNumber = encounter.DoctorS2License,
+                    Specialization = doctor?.Specialty
+                },
+                Patient = new ClinicEz.Shared.Interoperability.PrescriptionPatientDto
+                {
+                    PatientId = encounter.PatientId,
+                    FullName = encounter.PatientName,
+                    Age = 35
+                },
+                ClinicalDiagnosis = encounter.Assessment,
+                SpecialInstructions = encounter.Plan,
+                PublicVerificationToken = encounter.RxPublicVerificationToken!,
+                PublicVerificationUrl = $"/api/v1/public/rx-verify/{encounter.RxPublicVerificationToken}",
+                QrPayload = $"CLINICEZ:RX:{encounter.PrescriptionNumber}:{encounter.RxPublicVerificationToken}",
+                IssuedAt = encounter.SignedAt ?? DateTime.UtcNow,
+                Items = encounter.Prescriptions.Select(p => new ClinicEz.Shared.Interoperability.PrescriptionItemDto
+                {
+                    ItemId = p.Id,
+                    GenericName = p.GenericName,
+                    BrandName = p.BrandName,
+                    Dosage = p.Dosage,
+                    Form = p.Form,
+                    Sig = p.Sig,
+                    Quantity = p.Quantity,
+                    DurationDays = p.DurationDays,
+                    Refills = p.Refills,
+                    IsDangerousDrug = p.IsDangerousDrug,
+                    Remarks = p.Remarks
+                }).ToList()
+            };
+
+            _ = _prescriptionPublisher.PublishPrescriptionIssuedAsync(rxEvent, CancellationToken.None);
+        }
 
         // Outbound push notification to patient-api
         var apptId = appointment?.Id ?? encounter.QueueItemId ?? encounter.Id;
