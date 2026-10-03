@@ -3,6 +3,7 @@ import { createStaticNavigation, type StaticParamList } from '@react-navigation/
 import WorklistScreen from './screens/Worklist.screen';
 import SpecimenScreen from './screens/Specimen.screen';
 import ResultsScreen from './screens/Results.screen';
+import QualityControlScreen from './screens/QualityControl.screen';
 import SettingsScreen from './screens/Settings.screen';
 
 const Tab = createBottomTabNavigator({
@@ -26,6 +27,13 @@ const Tab = createBottomTabNavigator({
       options: {
         title: 'Results',
         headerTitle: 'Result Validation',
+      },
+    },
+    QualityControl: {
+      screen: QualityControlScreen,
+      options: {
+        title: 'QC & Westgard',
+        headerTitle: 'Quality Control & Westgard Rules',
       },
     },
     Settings: {

@@ -10,6 +10,21 @@ export interface SpecimenItem {
   collectedByPhlebotomistName?: string;
   receivedInLabAt?: string;
   notes?: string;
+
+  // Rejection metadata
+  rejectionReason?: string;
+  rejectionNotes?: string;
+  rejectedAt?: string;
+  rejectedByPhlebotomistName?: string;
+  correctiveAction?: string;
+
+  // Storage rack metadata
+  rackId?: string;
+  rackPosition?: string;
+  storageTemperature?: string;
+  storageStatus?: string;
+  storedAt?: string;
+  disposedAt?: string;
 }
 
 export interface AnalyteResultItem {
@@ -24,6 +39,7 @@ export interface AnalyteResultItem {
   interpretation?: string;
   enteredByMedTechName?: string;
   enteredAt?: string;
+  deltaCheckAlert?: string;
 }
 
 export interface DiagnosticReportItem {
@@ -70,6 +86,132 @@ export interface AnalyteCatalogSpec {
   referenceInterval: string;
 }
 
+export interface PrintableTubeStickerItem {
+  barcode: string;
+  accessionNumber: string;
+  patientName: string;
+  patientGender: string;
+  patientAge: number;
+  philHealthPin?: string;
+  containerType: string;
+  containerColor: string;
+  hexColor: string;
+  specimenType: string;
+  requiredTests: string;
+  urgency: string;
+  drawnAt?: string;
+  phlebotomistName?: string;
+  rackLocation?: string;
+}
+
+export interface RackInventoryItem {
+  specimenId: string;
+  requisitionId: string;
+  barcode: string;
+  accessionNumber: string;
+  patientName: string;
+  containerType: string;
+  specimenType: string;
+  rackId: string;
+  rackPosition: string;
+  storageTemperature: string;
+  storageStatus: string;
+  storedAt?: string;
+}
+
+export interface QcLotItem {
+  id: string;
+  tenantId: string;
+  lotNumber: string;
+  controlName: string;
+  level: string;
+  analyteCode: string;
+  instrumentName: string;
+  targetMean: number;
+  targetStandardDeviation: number;
+  manufacturerExpirationDate: string;
+  openVialDate?: string;
+  openVialStabilityDays: number;
+  openVialExpirationDate?: string;
+  isExpired: boolean;
+  daysRemaining?: number;
+  isActive: boolean;
+}
+
+export interface QcRunItem {
+  id: string;
+  qcLotId: string;
+  analyteCode: string;
+  measuredValue: number;
+  zScore: number;
+  runAt: string;
+  runByMedTechName: string;
+  status: 'Passed' | 'Warning' | 'Rejected';
+  violationRules: string;
+  correctiveAction?: string;
+  notes?: string;
+}
+
+export interface LeveyJenningsPoint {
+  runId: string;
+  runAt: string;
+  measuredValue: number;
+  zScore: number;
+  status: string;
+  violationRules?: string;
+}
+
+export interface LeveyJenningsChartData {
+  lotId: string;
+  lotNumber: string;
+  controlName: string;
+  level: string;
+  analyteCode: string;
+  targetMean: number;
+  targetSD: number;
+  plus1SD: number;
+  plus2SD: number;
+  plus3SD: number;
+  minus1SD: number;
+  minus2SD: number;
+  minus3SD: number;
+  points: LeveyJenningsPoint[];
+}
+
+export interface CriticalPanicDispatchLogItem {
+  id: string;
+  requisitionId: string;
+  accessionNumber: string;
+  patientName: string;
+  orderingDoctorName: string;
+  orderingFacilityName: string;
+  criticalFindings: string;
+  dispatchedAt: string;
+  dispatchedByMedTechName: string;
+  notifiedDoctorName: string;
+  notificationMethod: string;
+  readbackConfirmed: boolean;
+  readbackNotes?: string;
+  acknowledgedAt?: string;
+}
+
+export interface IngestFeedResult {
+  protocol: string;
+  analyzerId: string;
+  accessionNumber: string;
+  ingestedCount: number;
+  hasDeltaCheckAlerts: boolean;
+  hasCriticalFlags: boolean;
+  requisition?: LabRequisitionItem;
+}
+
+export interface SimulateAnalyzerResult {
+  format: string;
+  analyzerModel: string;
+  accessionNumber: string;
+  rawPayload: string;
+}
+
 export const laboratoryService = {
   async getWorklist(status?: string, searchTerm?: string) {
     const params = new URLSearchParams();
@@ -101,6 +243,34 @@ export const laboratoryService = {
     });
   },
 
+  // Scope 1: Phlebotomy, Stickers, Rejection, Storage Racks
+  async getTubeStickers(requisitionId: string) {
+    return labApiClient.get<PrintableTubeStickerItem[]>(`/requisitions/${requisitionId}/stickers`);
+  },
+
+  async rejectSpecimen(requisitionId: string, specimenId: string, payload: {
+    reasonCode: string;
+    notes?: string;
+    phlebotomistName?: string;
+    correctiveAction?: string;
+  }) {
+    return labApiClient.post<LabRequisitionItem>(`/requisitions/${requisitionId}/specimens/${specimenId}/reject`, payload);
+  },
+
+  async storeSpecimen(requisitionId: string, specimenId: string, payload: {
+    rackId: string;
+    rackPosition: string;
+    temperature?: string;
+  }) {
+    return labApiClient.post<LabRequisitionItem>(`/requisitions/${requisitionId}/specimens/${specimenId}/store`, payload);
+  },
+
+  async getRackInventory(rackId?: string) {
+    const qs = rackId ? `?rackId=${encodeURIComponent(rackId)}` : '';
+    return labApiClient.get<RackInventoryItem[]>(`/requisitions/racks${qs}`);
+  },
+
+  // Scope 2: Analyte Catalog, Results, Analyzer Feeds & Simulation
   async getCatalog() {
     return labApiClient.get<AnalyteCatalogSpec[]>('/results/catalog');
   },
@@ -119,6 +289,66 @@ export const laboratoryService = {
     });
   },
 
+  async ingestAnalyzerFeed(rawPayload: string, protocolHint?: string, medTechName?: string) {
+    return labApiClient.post<IngestFeedResult>('/analyzers/feed', {
+      rawPayload,
+      protocolHint,
+      medTechName
+    });
+  },
+
+  async simulateAnalyzer(accessionNumber: string, analyzerModel = 'Mindray BC-5150', format = 'ASTM') {
+    return labApiClient.post<SimulateAnalyzerResult>('/analyzers/simulate', {
+      accessionNumber,
+      analyzerModel,
+      format
+    });
+  },
+
+  // Scope 3: Quality Control & Westgard Multi-Rules
+  async getQcLots(analyteCode?: string, activeOnly = true) {
+    const params = new URLSearchParams();
+    if (analyteCode) params.append('analyteCode', analyteCode);
+    params.append('activeOnly', String(activeOnly));
+    return labApiClient.get<QcLotItem[]>(`/qc/lots?${params.toString()}`);
+  },
+
+  async createQcLot(payload: {
+    tenantId?: string;
+    lotNumber: string;
+    controlName: string;
+    level: string;
+    analyteCode: string;
+    instrumentName: string;
+    targetMean: number;
+    targetStandardDeviation: number;
+    manufacturerExpirationDate: string;
+    openVialDate?: string;
+    openVialStabilityDays?: number;
+  }) {
+    return labApiClient.post<QcLotItem>('/qc/lots', payload);
+  },
+
+  async recordQcRun(payload: {
+    qcLotId: string;
+    measuredValue: number;
+    medTechName: string;
+    runAt?: string;
+    peerLevelZScore?: number;
+    notes?: string;
+  }) {
+    return labApiClient.post<QcRunItem>('/qc/runs', payload);
+  },
+
+  async getLeveyJenningsChart(lotId?: string, analyteCode?: string, level?: string) {
+    const params = new URLSearchParams();
+    if (lotId) params.append('lotId', lotId);
+    if (analyteCode) params.append('analyteCode', analyteCode);
+    if (level) params.append('level', level);
+    return labApiClient.get<LeveyJenningsChartData>(`/qc/chart?${params.toString()}`);
+  },
+
+  // Scope 4: Statutory Reports, PDF Generation, Panic Dispatch
   async verifyAndSignReport(requisitionId: string, payload: {
     pathologistName: string;
     pathologistPrcLicense: string;
@@ -132,5 +362,29 @@ export const laboratoryService = {
 
   async getReport(requisitionId: string) {
     return labApiClient.get<DiagnosticReportItem>(`/reports/${requisitionId}`);
+  },
+
+  async recordPanicDispatch(requisitionId: string, payload: {
+    dispatchedByMedTechName: string;
+    notifiedDoctorName: string;
+    notificationMethod?: string;
+    readbackConfirmed?: boolean;
+    readbackNotes?: string;
+  }) {
+    return labApiClient.post<CriticalPanicDispatchLogItem>(`/reports/${requisitionId}/panic-dispatch`, payload);
+  },
+
+  async getPanicAlerts(limit = 50) {
+    return labApiClient.get<CriticalPanicDispatchLogItem[]>(`/reports/panic-alerts?limit=${limit}`);
+  },
+
+  getReportPdfDownloadUrl(requisitionId: string) {
+    const baseUrl = (process.env.EXPO_PUBLIC_LAB_API_URL ?? 'http://localhost:5245').replace(/\/+$/, '');
+    return `${baseUrl}/api/v1/reports/${requisitionId}/pdf`;
+  },
+
+  getReportHtmlPreviewUrl(requisitionId: string) {
+    const baseUrl = (process.env.EXPO_PUBLIC_LAB_API_URL ?? 'http://localhost:5245').replace(/\/+$/, '');
+    return `${baseUrl}/api/v1/reports/${requisitionId}/preview-html`;
   }
 };
