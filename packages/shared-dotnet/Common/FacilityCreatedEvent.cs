@@ -1,4 +1,5 @@
 using System;
+using ClinicEz.Shared.Licensing;
 
 namespace ClinicEz.Shared.Common;
 
@@ -10,4 +11,10 @@ public record FacilityCreatedEvent
     public Guid ResourceId { get; init; }
     public string Name { get; init; } = string.Empty;
     public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
+
+    // Cryptographically signed license information rooted upon facility activation
+    public string? LicenseToken { get; init; }
+    public FacilityLimits? Limits { get; init; }
+    public string? PlanTier { get; init; }
+    public DateTime? LicenseExpiresAt { get; init; }
 }

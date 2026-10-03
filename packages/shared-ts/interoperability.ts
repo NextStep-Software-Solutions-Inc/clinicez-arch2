@@ -87,3 +87,130 @@ export interface ExternalLabResultUpload {
   notes?: string;
   uploadedAt: string;
 }
+
+export interface PrescriptionItemContract {
+  itemId: string;
+  genericName: string;
+  brandName?: string;
+  dosage: string;
+  form: string;
+  sig: string;
+  quantity: number;
+  durationDays?: number;
+  refills: number;
+  isDangerousDrug: boolean;
+  remarks?: string;
+}
+
+export interface PrescriberDoctorContract {
+  doctorId: string;
+  doctorName: string;
+  prcLicenseNumber: string;
+  ptrNumber?: string;
+  s2LicenseNumber?: string;
+  specialization?: string;
+}
+
+export interface PrescriptionPatientContract {
+  patientId: string;
+  philHealthPin?: string;
+  nationalId?: string;
+  fullName: string;
+  dateOfBirth?: string;
+  age: number;
+  gender: string;
+  contactNumber?: string;
+  allergies?: string;
+}
+
+export interface PrescriptionIssuedContract {
+  prescriptionId: string;
+  prescriptionNumber: string;
+  orderingFacilityId: string;
+  orderingFacilityName: string;
+  tenantId: string;
+  targetPharmacyFacilityId?: string;
+  targetPharmacyTenantId?: string;
+  prescriberDoctor: PrescriberDoctorContract;
+  patient: PrescriptionPatientContract;
+  clinicalDiagnosis?: string;
+  specialInstructions?: string;
+  items: PrescriptionItemContract[];
+  publicVerificationToken: string;
+  publicVerificationUrl: string;
+  qrPayload: string;
+  issuedAt: string;
+}
+
+export interface DispensedMedicationContract {
+  itemId: string;
+  genericName: string;
+  brandName?: string;
+  dosage: string;
+  form: string;
+  quantityDispensed: number;
+  batchNumber: string;
+  expiryDate: string;
+  unitPrice: number;
+  subtotal: number;
+}
+
+export interface PrescriptionDispensedContract {
+  dispenseId: string;
+  prescriptionId: string;
+  prescriptionNumber: string;
+  pharmacyFacilityId: string;
+  pharmacyFacilityName: string;
+  pharmacyTenantId: string;
+  dispensingPharmacistName: string;
+  dispensingPharmacistPrcLicense: string;
+  dispensedAt: string;
+  dispensedItems: DispensedMedicationContract[];
+  totalAmount: number;
+  receiptNumber?: string;
+  notes?: string;
+}
+
+export interface ExternalPrescriptionDispensedContract {
+  eventId: string;
+  prescriptionId: string;
+  prescriptionNumber: string;
+  externalPharmacyName: string;
+  externalBranchLocation?: string;
+  pharmacistName?: string;
+  pharmacistPrcLicense?: string;
+  officialReceiptNumber?: string;
+  receiptDocumentUrl?: string;
+  receiptDocumentBase64?: string;
+  notes?: string;
+  dispensedAt: string;
+}
+
+export interface PrescriptionSlipContract {
+  prescriptionId: string;
+  prescriptionNumber: string;
+  issuedAt: string;
+  clinicName: string;
+  clinicAddress: string;
+  clinicContact: string;
+  doctorName: string;
+  doctorPrcLicense: string;
+  doctorPtr?: string;
+  doctorS2License?: string;
+  doctorSpecialization?: string;
+  patientId: string;
+  patientName: string;
+  patientAge: number;
+  patientGender: string;
+  patientPhilHealth?: string;
+  patientAllergies?: string;
+  clinicalDiagnosis?: string;
+  specialInstructions?: string;
+  items: PrescriptionItemContract[];
+  publicVerificationToken: string;
+  publicVerificationUrl: string;
+  qrPayload: string;
+  dispenseStatus: 'Issued' | 'DispensedPartner' | 'DispensedExternally' | 'Cancelled';
+  externalDispenseDetails?: ExternalPrescriptionDispensedContract;
+}
+
