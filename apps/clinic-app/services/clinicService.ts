@@ -44,6 +44,43 @@ export interface StaffMember {
   createdAt: string;
 }
 
+export interface CreateStaffPayload {
+  firstName: string;
+  lastName: string;
+  middleName?: string;
+  title?: string;
+  role: StaffRole;
+  email?: string;
+  phoneNumber?: string;
+  prcLicenseNumber?: string;
+  ptrNumber?: string;
+  s2LicenseNumber?: string;
+  specialty?: string;
+}
+
+export interface FacilityLimits {
+  maxStaff: number;
+  maxDailyEncounters: number;
+  maxActiveBeds: number;
+  maxStorageMb: number;
+  maxAnalyzers: number;
+  isOfflineCapable: boolean;
+  canDispenseRestrictedDrugs: boolean;
+}
+
+export interface FacilityLicenseStatus {
+  status: 'Active' | 'ActivationRequired' | 'Expired' | 'Tampered';
+  clinicId: string;
+  clinicName: string;
+  planTier: string;
+  limits: FacilityLimits;
+  activeStaffCount: number;
+  enabledFeatures: string[];
+  expiresAtUtc?: string;
+  isTampered: boolean;
+  errorMessage?: string;
+}
+
 export interface PatientQueueItem {
   id: string;
   tenantId: string;
@@ -1035,6 +1072,22 @@ export const clinicService = {
     if (typeof isActive === 'boolean') params.append('isActive', String(isActive));
     const qs = params.toString();
     return clinicApiClient.get<StaffMember[]>(`/staff${qs ? `?${qs}` : ''}`);
+  },
+
+  async createStaff(payload: CreateStaffPayload) {
+    return clinicApiClient.post<StaffMember>('/staff', payload);
+  },
+
+  async deactivateStaff(id: string) {
+    return clinicApiClient.delete(`/staff/${id}`);
+  },
+
+  async getLicenseStatus() {
+    return clinicApiClient.get<FacilityLicenseStatus>('/clinic/license');
+  },
+
+  async applyLicense(licenseToken: string) {
+    return clinicApiClient.post<FacilityLicenseStatus>('/clinic/license/apply', { licenseToken });
   },
 
   async getRoles() {

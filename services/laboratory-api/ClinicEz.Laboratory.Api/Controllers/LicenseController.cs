@@ -27,6 +27,7 @@ public record LabLicenseStatusDto(
 
 [ApiController]
 [Route("api/v1/laboratory/license")]
+[Route("api/v1/license")]
 public sealed class LicenseController : ControllerBase
 {
     private readonly IRepository<LabSettings> _settingsRepo;
@@ -53,11 +54,15 @@ public sealed class LicenseController : ControllerBase
         [FromHeader(Name = "X-Tenant-Id")] string? tenantId,
         CancellationToken ct)
     {
-        var targetLabId = facilityId ?? Guid.Empty;
-        var settings = await _settingsRepo.FindAsync(s => s.LaboratoryId == targetLabId, ct);
+        var settings = (facilityId.HasValue && facilityId.Value != Guid.Empty)
+            ? await _settingsRepo.FindAsync(s => s.LaboratoryId == facilityId.Value, ct)
+            : await _settingsRepo.Query().FirstOrDefaultAsync(ct);
 
-        var activeStaffCount = await _staffRepo.Query(s => s.LaboratoryId == targetLabId && s.IsActive)
-            .CountAsync(ct);
+        var targetLabId = facilityId ?? settings?.LaboratoryId ?? Guid.Empty;
+
+        var activeStaffCount = targetLabId != Guid.Empty
+            ? await _staffRepo.Query(s => s.LaboratoryId == targetLabId && s.IsActive).CountAsync(ct)
+            : await _staffRepo.Query(s => s.IsActive).CountAsync(ct);
 
         var validation = _licenseValidator.Validate(settings?.LicenseToken, targetLabId, tenantId ?? settings?.TenantId);
 
@@ -86,6 +91,7 @@ public sealed class LicenseController : ControllerBase
     }
 
     [HttpPost("apply")]
+    [AllowAnonymous]
     public async Task<ActionResult<ApiResponse<LabLicenseStatusDto>>> ApplyLicense(
         [FromHeader(Name = "X-Facility-Id")] Guid? facilityId,
         [FromHeader(Name = "X-Tenant-Id")] string? tenantId,
@@ -106,7 +112,11 @@ public sealed class LicenseController : ControllerBase
             return BadRequest(ApiResponse<LabLicenseStatusDto>.Fail(validation.ErrorMessage ?? "Invalid or tampered laboratory license key."));
         }
 
-        var settings = await _settingsRepo.FindAsync(s => s.LaboratoryId == targetLabId, ct);
+        var resolvedLabId = targetLabId != Guid.Empty ? targetLabId : (validation.Payload?.FacilityId ?? Guid.Empty);
+
+        var settings = resolvedLabId != Guid.Empty
+            ? await _settingsRepo.FindAsync(s => s.LaboratoryId == resolvedLabId, ct)
+            : await _settingsRepo.Query().FirstOrDefaultAsync(ct);
 
         if (settings == null)
         {

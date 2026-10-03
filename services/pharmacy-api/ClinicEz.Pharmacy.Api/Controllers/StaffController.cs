@@ -25,6 +25,7 @@ public sealed record CreatePharmacyStaffRequest(
 
 [ApiController]
 [Route("api/v1/pharmacy/staff")]
+[Route("api/v1/staff")]
 public sealed class StaffController : ControllerBase
 {
     private readonly ISender _sender;

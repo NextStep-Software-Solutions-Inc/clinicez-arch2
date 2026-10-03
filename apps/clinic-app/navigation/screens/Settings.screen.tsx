@@ -7,18 +7,22 @@ import {
   ActivityIndicator,
   RefreshControl,
   TextInput,
+  Modal,
 } from 'react-native';
 import { ThemedText, Badge, Button, Input, Card } from '@ui';
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
+import { useFacilityLicense } from '../../components/FacilityActivationGate';
 import {
   clinicService,
   DailyEodReport,
   ClinicSettingsRecord,
   StaffMember,
+  StaffRole,
 } from '../../services/clinicService';
 
 export default function SettingsScreen() {
+  const { license, openActivationModal, refreshLicense } = useFacilityLicense();
   const [eodReport, setEodReport] = useState<DailyEodReport | null>(null);
   const [settings, setSettings] = useState<ClinicSettingsRecord | null>(null);
   const [staff, setStaff] = useState<StaffMember[]>([]);
@@ -26,6 +30,18 @@ export default function SettingsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsSavedBanner, setSettingsSavedBanner] = useState(false);
+
+  // Staff creation modal states
+  const [showAddStaffModal, setShowAddStaffModal] = useState(false);
+  const [newStaffFirstName, setNewStaffFirstName] = useState('');
+  const [newStaffLastName, setNewStaffLastName] = useState('');
+  const [newStaffTitle, setNewStaffTitle] = useState('Dr.');
+  const [newStaffRole, setNewStaffRole] = useState<StaffRole>('Doctor');
+  const [newStaffPrc, setNewStaffPrc] = useState('');
+  const [newStaffSpecialty, setNewStaffSpecialty] = useState('');
+  const [newStaffEmail, setNewStaffEmail] = useState('');
+  const [addingStaff, setAddingStaff] = useState(false);
+  const [staffError, setStaffError] = useState<string | null>(null);
 
   // Form states for preferences
   const [clinicName, setClinicName] = useState('St. Jude Family Clinic & Primary Care');
@@ -129,6 +145,52 @@ export default function SettingsScreen() {
     setSavingSettings(false);
     setSettingsSavedBanner(true);
     setTimeout(() => setSettingsSavedBanner(false), 4000);
+  };
+
+  const handleAddStaff = async () => {
+    if (!newStaffFirstName.trim() || !newStaffLastName.trim()) {
+      setStaffError('First and last name are required.');
+      return;
+    }
+
+    setAddingStaff(true);
+    setStaffError(null);
+
+    const [created, err] = await clinicService.createStaff({
+      firstName: newStaffFirstName.trim(),
+      lastName: newStaffLastName.trim(),
+      title: newStaffTitle.trim() || undefined,
+      role: newStaffRole,
+      prcLicenseNumber: newStaffPrc.trim() || undefined,
+      specialty: newStaffSpecialty.trim() || undefined,
+      email: newStaffEmail.trim() || undefined,
+    });
+
+    setAddingStaff(false);
+
+    if (err) {
+      setStaffError(err.message || 'Failed to add staff member. Quota limit may have been reached.');
+      return;
+    }
+
+    if (created) {
+      setStaff((prev) => [...prev, created]);
+      setShowAddStaffModal(false);
+      setNewStaffFirstName('');
+      setNewStaffLastName('');
+      setNewStaffPrc('');
+      setNewStaffSpecialty('');
+      setNewStaffEmail('');
+      await refreshLicense();
+    }
+  };
+
+  const handleDeactivateStaff = async (staffId: string) => {
+    const [, err] = await clinicService.deactivateStaff(staffId);
+    if (!err) {
+      setStaff((prev) => prev.filter((s) => s.id !== staffId));
+      await refreshLicense();
+    }
   };
 
   return (
@@ -312,10 +374,82 @@ export default function SettingsScreen() {
         </View>
       </View>
 
+      {/* Facility License & Signed Limits Card */}
+      <View style={styles.card}>
+        <View style={styles.cardHeaderRow}>
+          <ThemedText style={styles.cardTitle}>Facility Operating License</ThemedText>
+          <Pressable style={styles.licenseActionBtn} onPress={openActivationModal}>
+            <ThemedText style={styles.licenseActionBtnText}>🔑 Update / Renew Key</ThemedText>
+          </Pressable>
+        </View>
+
+        <View style={styles.licenseBannerRow}>
+          <View style={styles.licenseTierBadge}>
+            <ThemedText style={styles.licenseTierText}>{license?.planTier ?? 'Community'} Tier</ThemedText>
+          </View>
+          <ThemedText style={[styles.licenseStatusText, { color: license?.status === 'Active' ? '#16A34A' : '#DC2626' }]}>
+            ● {license?.status === 'Active' ? 'Cryptographically Verified (ECDSA P-256)' : (license?.status ?? 'Unverified')}
+          </ThemedText>
+        </View>
+
+        <View style={styles.row}>
+          <ThemedText style={styles.label}>Licensed Facility</ThemedText>
+          <ThemedText style={styles.value}>{license?.clinicName ?? clinicName}</ThemedText>
+        </View>
+        <View style={styles.row}>
+          <ThemedText style={styles.label}>Staff Quota Allocation</ThemedText>
+          <ThemedText style={[styles.value, { color: '#0284C7', fontWeight: '700' }]}>
+            {staff.filter((s) => s.isActive).length} / {license?.limits?.maxStaff ?? 5} active seats used
+          </ThemedText>
+        </View>
+        <View style={styles.row}>
+          <ThemedText style={styles.label}>Encounter Daily Cap</ThemedText>
+          <ThemedText style={styles.value}>
+            {license?.limits?.maxDailyEncounters === 2147483647 ? 'Unlimited' : `${license?.limits?.maxDailyEncounters ?? 100} / day`}
+          </ThemedText>
+        </View>
+        <View style={styles.row}>
+          <ThemedText style={styles.label}>Offline Edge Operation</ThemedText>
+          <ThemedText style={[styles.value, { color: '#16A34A' }]}>
+            {license?.limits?.isOfflineCapable ? 'Enabled (Full Autonomous)' : 'Standard'}
+          </ThemedText>
+        </View>
+        {license?.expiresAtUtc && (
+          <View style={styles.row}>
+            <ThemedText style={styles.label}>Expiration Date</ThemedText>
+            <ThemedText style={styles.value}>{new Date(license.expiresAtUtc).toLocaleDateString()}</ThemedText>
+          </View>
+        )}
+      </View>
+
       {/* Staff & Healthcare Providers Roster Card */}
       <View style={styles.card}>
-        <ThemedText style={styles.cardTitle}>Clinic Staff & Providers Roster</ThemedText>
-        <View style={{ gap: 10 }}>
+        <View style={styles.cardHeaderRow}>
+          <View>
+            <ThemedText style={styles.cardTitle}>Autonomous Staff Roster</ThemedText>
+            <ThemedText style={{ fontSize: 12, color: '#6B7280' }}>
+              Quota: {staff.filter((s) => s.isActive).length} of {license?.limits?.maxStaff ?? 5} seats used
+            </ThemedText>
+          </View>
+          <Pressable
+            style={[
+              styles.addStaffBtn,
+              staff.filter((s) => s.isActive).length >= (license?.limits?.maxStaff ?? 5) && { backgroundColor: '#9CA3AF' },
+            ]}
+            onPress={() => {
+              if (staff.filter((s) => s.isActive).length >= (license?.limits?.maxStaff ?? 5)) {
+                alert(`Staff quota limit of ${license?.limits?.maxStaff ?? 5} reached for the ${license?.planTier ?? 'Community'} tier. Please upgrade license key.`);
+                return;
+              }
+              setStaffError(null);
+              setShowAddStaffModal(true);
+            }}
+          >
+            <ThemedText style={styles.addStaffBtnText}>+ Add Staff</ThemedText>
+          </Pressable>
+        </View>
+
+        <View style={{ gap: 10, marginTop: 4 }}>
           {staff.map((s) => (
             <View key={s.id} style={styles.staffItem}>
               <View style={{ flex: 1 }}>
@@ -336,7 +470,9 @@ export default function SettingsScreen() {
                   </ThemedText>
                 )}
               </View>
-              <View style={styles.activeDot} />
+              <Pressable style={styles.deactivateBtn} onPress={() => handleDeactivateStaff(s.id)}>
+                <ThemedText style={styles.deactivateBtnText}>Deactivate</ThemedText>
+              </Pressable>
             </View>
           ))}
         </View>
@@ -359,6 +495,130 @@ export default function SettingsScreen() {
         </View>
       </View>
     </ScrollView>
+
+    {/* Add Staff Modal */}
+    <Modal
+      visible={showAddStaffModal}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowAddStaffModal(false)}
+    >
+      <View style={styles.modalBackdrop}>
+        <View style={styles.modalContent}>
+          <ThemedText style={styles.modalHeaderTitle}>Add Clinic Staff Member</ThemedText>
+          <ThemedText style={styles.modalHeaderSub}>
+            Autonomous Edge Roster • Seats: {staff.filter((s) => s.isActive).length}/{license?.limits?.maxStaff ?? 5}
+          </ThemedText>
+
+          {staffError && (
+            <View style={styles.modalErrorBanner}>
+              <ThemedText style={styles.modalErrorBannerText}>{staffError}</ThemedText>
+            </View>
+          )}
+
+          <View style={{ gap: 8 }}>
+            <View style={styles.formRow}>
+              <View style={{ flex: 1 }}>
+                <ThemedText style={styles.fieldLabel}>Title (Dr., Nurse, etc.)</ThemedText>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={newStaffTitle}
+                  onChangeText={setNewStaffTitle}
+                  placeholder="Dr. / RN / Ms."
+                />
+              </View>
+              <View style={{ flex: 2 }}>
+                <ThemedText style={styles.fieldLabel}>Role</ThemedText>
+                <View style={{ flexDirection: 'row', gap: 6, marginTop: 4 }}>
+                  {(['Doctor', 'Nurse', 'Receptionist', 'Cashier'] as const).map((r) => (
+                    <Pressable
+                      key={r}
+                      style={[
+                        styles.roleSelectChip,
+                        newStaffRole === r && styles.roleSelectChipActive,
+                      ]}
+                      onPress={() => setNewStaffRole(r)}
+                    >
+                      <ThemedText
+                        style={[
+                          styles.roleSelectChipText,
+                          newStaffRole === r && styles.roleSelectChipTextActive,
+                        ]}
+                      >
+                        {r}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.formRow}>
+              <View style={{ flex: 1 }}>
+                <ThemedText style={styles.fieldLabel}>First Name *</ThemedText>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={newStaffFirstName}
+                  onChangeText={setNewStaffFirstName}
+                  placeholder="Juan"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <ThemedText style={styles.fieldLabel}>Last Name *</ThemedText>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={newStaffLastName}
+                  onChangeText={setNewStaffLastName}
+                  placeholder="Dela Cruz"
+                />
+              </View>
+            </View>
+
+            <View>
+              <ThemedText style={styles.fieldLabel}>PRC License Number</ThemedText>
+              <TextInput
+                style={styles.fieldInput}
+                value={newStaffPrc}
+                onChangeText={setNewStaffPrc}
+                placeholder="PRC-0123456"
+              />
+            </View>
+
+            <View>
+              <ThemedText style={styles.fieldLabel}>Specialty / Designation</ThemedText>
+              <TextInput
+                style={styles.fieldInput}
+                value={newStaffSpecialty}
+                onChangeText={setNewStaffSpecialty}
+                placeholder="Pediatrics / Primary Care"
+              />
+            </View>
+          </View>
+
+          <View style={styles.modalActionsRow}>
+            <Pressable
+              style={styles.cancelModalBtn}
+              onPress={() => setShowAddStaffModal(false)}
+              disabled={addingStaff}
+            >
+              <ThemedText style={styles.cancelModalBtnText}>Cancel</ThemedText>
+            </Pressable>
+
+            <Pressable
+              style={[styles.saveStaffBtn, addingStaff && { opacity: 0.6 }]}
+              onPress={handleAddStaff}
+              disabled={addingStaff}
+            >
+              {addingStaff ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <ThemedText style={styles.saveStaffBtnText}>Register Staff</ThemedText>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
   </ResponsiveLayout>
 );
 }
@@ -595,5 +855,150 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 5,
     backgroundColor: '#16A34A',
+  },
+  licenseActionBtn: {
+    backgroundColor: '#F0F9FF',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  licenseActionBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0284C7',
+  },
+  licenseBannerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 4,
+  },
+  licenseTierBadge: {
+    backgroundColor: '#0284C7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  licenseTierText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  licenseStatusText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  addStaffBtn: {
+    backgroundColor: '#0284C7',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  addStaffBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  deactivateBtn: {
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    backgroundColor: '#FEF2F2',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  deactivateBtnText: {
+    color: '#DC2626',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 22,
+    maxWidth: 500,
+    width: '100%',
+    gap: 12,
+  },
+  modalHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  modalHeaderSub: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  modalErrorBanner: {
+    backgroundColor: '#FEE2E2',
+    borderColor: '#F87171',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 8,
+  },
+  modalErrorBannerText: {
+    color: '#991B1B',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  roleSelectChip: {
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: '#F8FAFC',
+  },
+  roleSelectChipActive: {
+    backgroundColor: '#0284C7',
+    borderColor: '#0284C7',
+  },
+  roleSelectChipText: {
+    fontSize: 11,
+    color: '#475569',
+    fontWeight: '600',
+  },
+  roleSelectChipTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  modalActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 8,
+  },
+  cancelModalBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  cancelModalBtnText: {
+    color: '#475569',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  saveStaffBtn: {
+    backgroundColor: '#0284C7',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+  },
+  saveStaffBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

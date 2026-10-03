@@ -27,6 +27,7 @@ public record PharmacyLicenseStatusDto(
 
 [ApiController]
 [Route("api/v1/pharmacy/license")]
+[Route("api/v1/license")]
 public sealed class LicenseController : ControllerBase
 {
     private readonly IRepository<PharmacySettings> _settingsRepo;
@@ -53,11 +54,15 @@ public sealed class LicenseController : ControllerBase
         [FromHeader(Name = "X-Tenant-Id")] string? tenantId,
         CancellationToken ct)
     {
-        var targetPharmacyId = facilityId ?? Guid.Empty;
-        var settings = await _settingsRepo.FindAsync(s => s.PharmacyId == targetPharmacyId, ct);
+        var settings = (facilityId.HasValue && facilityId.Value != Guid.Empty)
+            ? await _settingsRepo.FindAsync(s => s.PharmacyId == facilityId.Value, ct)
+            : await _settingsRepo.Query().FirstOrDefaultAsync(ct);
 
-        var activeStaffCount = await _staffRepo.Query(s => s.PharmacyId == targetPharmacyId && s.IsActive)
-            .CountAsync(ct);
+        var targetPharmacyId = facilityId ?? settings?.PharmacyId ?? Guid.Empty;
+
+        var activeStaffCount = targetPharmacyId != Guid.Empty
+            ? await _staffRepo.Query(s => s.PharmacyId == targetPharmacyId && s.IsActive).CountAsync(ct)
+            : await _staffRepo.Query(s => s.IsActive).CountAsync(ct);
 
         var validation = _licenseValidator.Validate(settings?.LicenseToken, targetPharmacyId, tenantId ?? settings?.TenantId);
 
@@ -86,6 +91,7 @@ public sealed class LicenseController : ControllerBase
     }
 
     [HttpPost("apply")]
+    [AllowAnonymous]
     public async Task<ActionResult<ApiResponse<PharmacyLicenseStatusDto>>> ApplyLicense(
         [FromHeader(Name = "X-Facility-Id")] Guid? facilityId,
         [FromHeader(Name = "X-Tenant-Id")] string? tenantId,
@@ -106,7 +112,11 @@ public sealed class LicenseController : ControllerBase
             return BadRequest(ApiResponse<PharmacyLicenseStatusDto>.Fail(validation.ErrorMessage ?? "Invalid or tampered pharmacy license key."));
         }
 
-        var settings = await _settingsRepo.FindAsync(s => s.PharmacyId == targetPharmacyId, ct);
+        var resolvedPharmacyId = targetPharmacyId != Guid.Empty ? targetPharmacyId : (validation.Payload?.FacilityId ?? Guid.Empty);
+
+        var settings = resolvedPharmacyId != Guid.Empty
+            ? await _settingsRepo.FindAsync(s => s.PharmacyId == resolvedPharmacyId, ct)
+            : await _settingsRepo.Query().FirstOrDefaultAsync(ct);
 
         if (settings == null)
         {

@@ -134,5 +134,93 @@ export const pharmacyService = {
 
   async seedInventory() {
     return pharmacyApiClient.post<number>('/inventory/seed');
+  },
+
+  // Scope 5: Facility Licensing & Autonomous Staff Roster
+  async getLicenseStatus() {
+    return pharmacyApiClient.get<PharmacyLicenseStatus>('/license');
+  },
+
+  async applyLicense(licenseToken: string) {
+    return pharmacyApiClient.post<PharmacyLicenseStatus>('/license/apply', { licenseToken });
+  },
+
+  async getStaff(role?: PharmacyStaffRole, isActive?: boolean) {
+    const params = new URLSearchParams();
+    if (role) params.append('role', role);
+    if (typeof isActive === 'boolean') params.append('isActive', String(isActive));
+    const qs = params.toString();
+    return pharmacyApiClient.get<PharmacyStaffMember[]>(`/staff${qs ? `?${qs}` : ''}`);
+  },
+
+  async createStaff(payload: CreatePharmacyStaffPayload) {
+    return pharmacyApiClient.post<PharmacyStaffMember>('/staff', payload);
+  },
+
+  async updateStaff(id: string, payload: Partial<CreatePharmacyStaffPayload>) {
+    return pharmacyApiClient.put<PharmacyStaffMember>(`/staff/${id}`, payload);
+  },
+
+  async deactivateStaff(id: string) {
+    return pharmacyApiClient.delete(`/staff/${id}`);
   }
 };
+
+export type PharmacyStaffRole =
+  | 'ChiefPharmacist'
+  | 'StaffPharmacist'
+  | 'PharmacyTechnician'
+  | 'Cashier'
+  | 'InventoryClerk';
+
+export interface PharmacyStaffMember {
+  id: string;
+  tenantId: string;
+  pharmacyId: string;
+  firstName: string;
+  lastName: string;
+  middleName?: string;
+  title?: string;
+  role: PharmacyStaffRole;
+  email?: string;
+  phoneNumber?: string;
+  prcLicenseNumber?: string;
+  s2LicenseNumber?: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface CreatePharmacyStaffPayload {
+  firstName: string;
+  lastName: string;
+  middleName?: string;
+  title?: string;
+  role: PharmacyStaffRole;
+  email?: string;
+  phoneNumber?: string;
+  prcLicenseNumber?: string;
+  s2LicenseNumber?: string;
+}
+
+export interface FacilityLimits {
+  maxStaff: number;
+  maxDailyEncounters: number;
+  maxActiveBeds: number;
+  maxStorageMb: number;
+  maxAnalyzers: number;
+  isOfflineCapable: boolean;
+  canDispenseRestrictedDrugs: boolean;
+}
+
+export interface PharmacyLicenseStatus {
+  status: 'Active' | 'ActivationRequired' | 'Expired' | 'Tampered';
+  pharmacyId: string;
+  pharmacyName: string;
+  planTier: string;
+  limits: FacilityLimits;
+  activeStaffCount: number;
+  enabledFeatures: string[];
+  expiresAtUtc?: string;
+  isTampered: boolean;
+  errorMessage?: string;
+}

@@ -386,5 +386,95 @@ export const laboratoryService = {
   getReportHtmlPreviewUrl(requisitionId: string) {
     const baseUrl = (process.env.EXPO_PUBLIC_LAB_API_URL ?? 'http://localhost:5245').replace(/\/+$/, '');
     return `${baseUrl}/api/v1/reports/${requisitionId}/preview-html`;
+  },
+
+  // Scope 5: Facility Licensing & On-Premise Staff Roster
+  async getLicenseStatus() {
+    return labApiClient.get<LabLicenseStatus>('/license');
+  },
+
+  async applyLicense(licenseToken: string) {
+    return labApiClient.post<LabLicenseStatus>('/license/apply', { licenseToken });
+  },
+
+  async getStaff(role?: LabStaffRole, isActive?: boolean) {
+    const params = new URLSearchParams();
+    if (role) params.append('role', role);
+    if (typeof isActive === 'boolean') params.append('isActive', String(isActive));
+    const qs = params.toString();
+    return labApiClient.get<LabStaffMember[]>(`/staff${qs ? `?${qs}` : ''}`);
+  },
+
+  async createStaff(payload: CreateLabStaffPayload) {
+    return labApiClient.post<LabStaffMember>('/staff', payload);
+  },
+
+  async updateStaff(id: string, payload: Partial<CreateLabStaffPayload>) {
+    return labApiClient.put<LabStaffMember>(`/staff/${id}`, payload);
+  },
+
+  async deactivateStaff(id: string) {
+    return labApiClient.delete(`/staff/${id}`);
   }
 };
+
+export type LabStaffRole =
+  | 'Pathologist'
+  | 'MedicalTechnologist'
+  | 'LaboratoryTechnician'
+  | 'Phlebotomist'
+  | 'LaboratoryAide';
+
+export interface LabStaffMember {
+  id: string;
+  tenantId: string;
+  laboratoryId: string;
+  firstName: string;
+  lastName: string;
+  middleName?: string;
+  title?: string;
+  role: LabStaffRole;
+  email?: string;
+  phoneNumber?: string;
+  prcLicenseNumber?: string;
+  ptrNumber?: string;
+  specialty?: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface CreateLabStaffPayload {
+  firstName: string;
+  lastName: string;
+  middleName?: string;
+  title?: string;
+  role: LabStaffRole;
+  email?: string;
+  phoneNumber?: string;
+  prcLicenseNumber?: string;
+  ptrNumber?: string;
+  specialty?: string;
+}
+
+export interface FacilityLimits {
+  maxStaff: number;
+  maxDailyEncounters: number;
+  maxActiveBeds: number;
+  maxStorageMb: number;
+  maxAnalyzers: number;
+  isOfflineCapable: boolean;
+  canDispenseRestrictedDrugs: boolean;
+}
+
+export interface LabLicenseStatus {
+  status: 'Active' | 'ActivationRequired' | 'Expired' | 'Tampered';
+  laboratoryId: string;
+  laboratoryName: string;
+  planTier: string;
+  limits: FacilityLimits;
+  activeStaffCount: number;
+  enabledFeatures: string[];
+  expiresAtUtc?: string;
+  isTampered: boolean;
+  errorMessage?: string;
+}

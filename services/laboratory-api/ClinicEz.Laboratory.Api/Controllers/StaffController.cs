@@ -26,6 +26,7 @@ public sealed record CreateLabStaffRequest(
 
 [ApiController]
 [Route("api/v1/laboratory/staff")]
+[Route("api/v1/staff")]
 public sealed class StaffController : ControllerBase
 {
     private readonly ISender _sender;

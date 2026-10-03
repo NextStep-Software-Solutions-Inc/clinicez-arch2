@@ -27,6 +27,7 @@ public record FacilityLicenseStatusDto(
 
 [ApiController]
 [Route("api/v1/clinic/license")]
+[Route("api/v1/license")]
 public sealed class LicenseController : ControllerBase
 {
     private readonly IRepository<ClinicSettings> _settingsRepo;
@@ -54,12 +55,14 @@ public sealed class LicenseController : ControllerBase
     public async Task<ActionResult<ApiResponse<FacilityLicenseStatusDto>>> GetLicenseStatus(CancellationToken ct)
     {
         var settings = await _settingsRepo.Query(s => s.ClinicId == _clinicContext.ClinicId)
-            .FirstOrDefaultAsync(ct);
+            .FirstOrDefaultAsync(ct) ?? await _settingsRepo.Query().FirstOrDefaultAsync(ct);
 
-        var activeStaffCount = await _staffRepo.Query(s => s.ClinicId == _clinicContext.ClinicId && s.IsActive)
+        var resolvedClinicId = settings?.ClinicId ?? _clinicContext.ClinicId;
+
+        var activeStaffCount = await _staffRepo.Query(s => s.ClinicId == resolvedClinicId && s.IsActive)
             .CountAsync(ct);
 
-        var validation = _licenseValidator.Validate(settings?.LicenseToken, _clinicContext.ClinicId, _clinicContext.TenantId);
+        var validation = _licenseValidator.Validate(settings?.LicenseToken, resolvedClinicId, _clinicContext.TenantId);
 
         string status;
         if (validation.IsMissing) status = "ActivationRequired";
@@ -72,7 +75,7 @@ public sealed class LicenseController : ControllerBase
 
         var dto = new FacilityLicenseStatusDto(
             status,
-            _clinicContext.ClinicId,
+            resolvedClinicId,
             settings?.ClinicName ?? "Clinic Facility",
             validation.Payload?.PlanTier ?? settings?.PlanTier ?? "Community",
             limits,
@@ -86,6 +89,7 @@ public sealed class LicenseController : ControllerBase
     }
 
     [HttpPost("apply")]
+    [AllowAnonymous]
     public async Task<ActionResult<ApiResponse<FacilityLicenseStatusDto>>> ApplyLicense(
         [FromBody] ApplyLicenseRequest request,
         CancellationToken ct)
@@ -101,8 +105,12 @@ public sealed class LicenseController : ControllerBase
             return BadRequest(ApiResponse<FacilityLicenseStatusDto>.Fail(validation.ErrorMessage ?? "Invalid or tampered facility license key."));
         }
 
-        var settings = await _settingsRepo.Query(s => s.ClinicId == _clinicContext.ClinicId)
-            .FirstOrDefaultAsync(ct);
+        var targetClinicId = validation.Payload?.FacilityId != null && validation.Payload.FacilityId != Guid.Empty
+            ? validation.Payload.FacilityId
+            : _clinicContext.ClinicId;
+
+        var settings = await _settingsRepo.Query(s => s.ClinicId == targetClinicId)
+            .FirstOrDefaultAsync(ct) ?? await _settingsRepo.Query().FirstOrDefaultAsync(ct);
 
         if (settings == null)
         {
