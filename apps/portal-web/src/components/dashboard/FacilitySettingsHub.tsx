@@ -23,7 +23,11 @@ import {
   IconSparkles,
   IconUpload,
   IconAlertCircle,
-  IconExternalLink
+  IconExternalLink,
+  IconKey,
+  IconCopy,
+  IconShieldCheck,
+  IconServer
 } from "@tabler/icons-react";
 import { Stethoscope, Stamp as IconStamp } from "lucide-react";
 
@@ -79,6 +83,53 @@ export default function FacilitySettingsHub({
 
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("letterhead");
+
+  // Cryptographic Facility License State
+  const [licenseData, setLicenseData] = useState<{
+    facilityId: string;
+    facilityName: string;
+    facilityType: string;
+    planTier: string;
+    licenseToken: string;
+    limits: {
+      maxStaff: number;
+      maxBeds: number;
+      maxAnalyzers: number;
+      maxMonthlyConsultations: number;
+      maxStorageMb: number;
+      concurrentTerminals: number;
+    };
+    expiresAt?: string | null;
+  } | null>(null);
+  const [loadingLicense, setLoadingLicense] = useState(false);
+  const [copiedKey, setCopiedKey] = useState(false);
+
+  const fetchLicenseKey = async () => {
+    if (!facility) return;
+    setLoadingLicense(true);
+    try {
+      const res = await apiClient.get(`/facilities/${facility.id}/license-key?tenantSlug=${tenantSlug}`);
+      setLicenseData(res.data);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to load facility license key");
+    } finally {
+      setLoadingLicense(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (activeTab === "license" && !licenseData && facility) {
+      fetchLicenseKey();
+    }
+  }, [activeTab, facility]);
+
+  const handleCopyLicenseKey = () => {
+    if (!licenseData?.licenseToken) return;
+    navigator.clipboard.writeText(licenseData.licenseToken);
+    setCopiedKey(true);
+    toast.success("Cryptographically signed facility license key copied to clipboard!");
+    setTimeout(() => setCopiedKey(false), 2500);
+  };
 
   // Profile & Statutory State
   const [name, setName] = useState(facility?.name || "");
@@ -287,6 +338,13 @@ export default function FacilitySettingsHub({
               >
                 <IconBell className="h-4 w-4" />
                 <span>Notifications</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="license"
+                className="rounded-t-xl rounded-b-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs font-bold gap-1.5 px-3.5"
+              >
+                <IconKey className="h-4 w-4" />
+                <span>License &amp; Hard Limits</span>
               </TabsTrigger>
             </TabsList>
           </div>
@@ -756,6 +814,132 @@ export default function FacilitySettingsHub({
                     </div>
                   );
                 })}
+              </div>
+            </TabsContent>
+
+            {/* TAB 5: CRYPTOGRAPHIC LICENSE & HARD LIMITS */}
+            <TabsContent value="license" className="m-0 space-y-6">
+              <div className="space-y-6">
+                {/* Security Guarantee Banner */}
+                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-start gap-3">
+                  <IconShieldCheck className="h-6 w-6 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <div className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
+                      Asymmetric Cryptographic Root of Trust (ECDSA P-256)
+                    </div>
+                    <p className="text-xs text-emerald-700 dark:text-emerald-300/90 leading-relaxed">
+                      This facility operates with autonomous operational authority. Resource hard limits are sealed digitally into the license key. 
+                      Direct modifications to local databases (<code className="px-1 py-0.5 rounded bg-emerald-500/20 text-[11px]">psql / pgAdmin</code>) will invalidate the signature and prevent unmetered staff creation.
+                    </p>
+                  </div>
+                </div>
+
+                {loadingLicense ? (
+                  <div className="py-12 flex flex-col items-center justify-center gap-3 text-slate-500">
+                    <IconLoader className="h-6 w-6 animate-spin text-primary" />
+                    <span className="text-xs">Fetching cryptographically signed license...</span>
+                  </div>
+                ) : licenseData ? (
+                  <>
+                    {/* Signed License Key Box */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                          <IconKey className="h-3.5 w-3.5 text-primary" />
+                          <span>Facility License Key (Token)</span>
+                        </Label>
+                        <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary border-primary/20">
+                          Tier: {licenseData.planTier}
+                        </Badge>
+                      </div>
+
+                      <div className="p-3.5 rounded-2xl bg-slate-900 text-slate-100 font-mono text-[11px] break-all border border-slate-800 shadow-inner flex items-center justify-between gap-3">
+                        <span className="truncate max-w-[550px]">{licenseData.licenseToken}</span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          onClick={handleCopyLicenseKey}
+                          className="shrink-0 h-8 px-3 rounded-xl text-xs font-bold gap-1.5 bg-slate-800 hover:bg-slate-700 text-white"
+                        >
+                          {copiedKey ? <IconCheck className="h-3.5 w-3.5 text-emerald-400" /> : <IconCopy className="h-3.5 w-3.5" />}
+                          <span>{copiedKey ? "Copied" : "Copy Key"}</span>
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Hard Limit Badges & Capacities */}
+                    <div className="space-y-3">
+                      <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                        Rooted Operational Limits
+                      </Label>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        <div className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-card space-y-1">
+                          <div className="text-[11px] font-semibold text-slate-500">Max Active Staff</div>
+                          <div className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                            {licenseData.limits.maxStaff} <span className="text-xs font-normal text-slate-400">members</span>
+                          </div>
+                        </div>
+
+                        <div className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-card space-y-1">
+                          <div className="text-[11px] font-semibold text-slate-500">Max Beds</div>
+                          <div className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                            {licenseData.limits.maxBeds} <span className="text-xs font-normal text-slate-400">beds</span>
+                          </div>
+                        </div>
+
+                        <div className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-card space-y-1">
+                          <div className="text-[11px] font-semibold text-slate-500">Max Analyzers</div>
+                          <div className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                            {licenseData.limits.maxAnalyzers} <span className="text-xs font-normal text-slate-400">LIS units</span>
+                          </div>
+                        </div>
+
+                        <div className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-card space-y-1">
+                          <div className="text-[11px] font-semibold text-slate-500">Monthly Consultations</div>
+                          <div className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                            {licenseData.limits.maxMonthlyConsultations.toLocaleString()} <span className="text-xs font-normal text-slate-400">/ mo</span>
+                          </div>
+                        </div>
+
+                        <div className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-card space-y-1">
+                          <div className="text-[11px] font-semibold text-slate-500">Encrypted Storage</div>
+                          <div className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                            {(licenseData.limits.maxStorageMb / 1024).toFixed(0)} <span className="text-xs font-normal text-slate-400">GB</span>
+                          </div>
+                        </div>
+
+                        <div className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-card space-y-1">
+                          <div className="text-[11px] font-semibold text-slate-500">Terminals</div>
+                          <div className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                            {licenseData.limits.concurrentTerminals} <span className="text-xs font-normal text-slate-400">concurrent</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Air-Gapped / On-Premise Activation Instructions */}
+                    <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 space-y-2">
+                      <div className="flex items-center gap-2 text-xs font-bold text-slate-800 dark:text-slate-200">
+                        <IconServer className="h-4 w-4 text-primary" />
+                        <span>Air-Gapped / Offline Local Server Activation</span>
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                        For facilities operating entirely offline or in low-connectivity rural health units, apply this license key directly to the local facility instance:
+                      </p>
+                      <pre className="p-3 rounded-xl bg-slate-950 text-slate-200 font-mono text-[11px] overflow-x-auto border border-slate-800">
+                        {`POST http://localhost:5000/api/v1/${facility.facilityType.toLowerCase()}/license/apply\nContent-Type: application/json\n\n{\n  "licenseToken": "${licenseData.licenseToken.slice(0, 32)}..."\n}`}
+                      </pre>
+                    </div>
+                  </>
+                ) : (
+                  <div className="py-8 text-center space-y-2">
+                    <p className="text-xs text-slate-500">No license token found for this facility.</p>
+                    <Button type="button" size="sm" variant="outline" onClick={fetchLicenseKey}>
+                      Retry Loading License
+                    </Button>
+                  </div>
+                )}
               </div>
             </TabsContent>
           </div>

@@ -283,10 +283,13 @@ export interface ClinicLabOrderRecord {
   orderedByDoctorId?: string;
   orderedByDoctorName?: string;
   orderDate: string;
+  orderedAt?: string;
   status: LabOrderStatus;
   clinicalDiagnosis?: string;
   notes?: string;
   items: ClinicLabOrderItem[];
+  testName?: string;
+  specimenType?: string;
   publicUploadToken?: string;
   publicUploadUrl?: string;
   externalLabName?: string;
@@ -301,9 +304,11 @@ export interface ClinicLabOrderRecord {
   reportReleasedAt?: string;
   hasCriticalPanicAlert?: boolean;
   criticalFindingsJson?: string;
+  criticalFindings?: string;
   panicAlertTriggeredAt?: string;
   panicAcknowledgedAt?: string;
   panicAcknowledgedBy?: string;
+  isPanicAcknowledged?: boolean;
 }
 
 export type CdsAlertSeverity = 'Information' | 'Moderate' | 'Major' | 'Critical';
@@ -311,11 +316,15 @@ export type CdsAlertType = 'DrugAllergy' | 'DrugDrugInteraction' | 'RenalDoseAdj
 
 export interface CdsAlert {
   alertId: string;
+  ruleId?: string;
   type: CdsAlertType;
+  category?: string;
   severity: CdsAlertSeverity;
   title: string;
+  message?: string;
   clinicalMechanism: string;
   recommendation: string;
+  clinicalRecommendation?: string;
   offendingDrug: string;
   interactingDrug?: string;
   requiresOverrideReason: boolean;

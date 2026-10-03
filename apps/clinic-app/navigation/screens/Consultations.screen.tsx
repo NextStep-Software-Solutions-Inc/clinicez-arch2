@@ -387,6 +387,12 @@ export default function ConsultationsScreen() {
   const [externalDispenseModalVisible, setExternalDispenseModalVisible] = useState(false);
   const [loadingSlip, setLoadingSlip] = useState(false);
 
+  // Computed Interop & CDS helpers
+  const activePanicAlert = labOrders.find(o => o.hasCriticalPanicAlert && !(o.isPanicAcknowledged ?? Boolean(o.panicAcknowledgedAt))) || labOrders.find(o => o.hasCriticalPanicAlert);
+  const patientLabResults = labOrders;
+  const hasCriticalCdsAlert = cdsAlerts.some(a => a.severity === 'Critical');
+  const attendingDoctorName = selectedPatient?.doctorName || 'Dr. Cruz, MD';
+
   const handleOpenPrescriptionSlip = async () => {
     if (signedConsultationId) {
       setLoadingSlip(true);
@@ -789,10 +795,15 @@ export default function ConsultationsScreen() {
     }
   };
 
-  const handleOpenLabPdf = (order: ClinicLabOrderRecord) => {
-    const url = clinicService.getLabReportPdfUrl(order.id);
+  const handleOpenLabPdf = (orderOrId: ClinicLabOrderRecord | string) => {
+    const orderId = typeof orderOrId === 'string' ? orderOrId : orderOrId.id;
+    const found = typeof orderOrId === 'string' ? labOrders.find(o => o.id === orderOrId) : orderOrId;
+    const url = clinicService.getLabReportPdfUrl(orderId);
     Linking.openURL(url).catch(() => {
-      Alert.alert('Diagnostic PDF Report', `Accession #${order.orderNumber}\nVerified by: ${order.verifiedByPathologist ?? 'Pathologist'}\nPathologist Impression:\n${order.pathologistImpression ?? 'Normal intervals.'}`);
+      Alert.alert(
+        'Diagnostic PDF Report',
+        `Accession #${found?.orderNumber ?? orderId.slice(0, 8)}\nVerified by: ${found?.verifiedByPathologist ?? 'Pathologist'}\nPathologist Impression:\n${found?.pathologistImpression ?? 'Normal intervals.'}`
+      );
     });
   };
 
@@ -1125,6 +1136,72 @@ export default function ConsultationsScreen() {
         )}
       </View>
 
+      {/* STAT Critical / Panic Lab Result Banner */}
+      {activePanicAlert && (() => {
+        const isAck = activePanicAlert.isPanicAcknowledged ?? Boolean(activePanicAlert.panicAcknowledgedAt);
+        const testName = activePanicAlert.testName || activePanicAlert.items?.[0]?.testName || 'Diagnostic Panel';
+        const specimenType = activePanicAlert.specimenType || 'Venous Blood';
+        const findings = activePanicAlert.criticalFindings || activePanicAlert.criticalFindingsJson;
+        return (
+          <View style={[styles.panicBanner, isAck && styles.panicBannerAcknowledged]}>
+            <View style={styles.panicHeaderRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                <ThemedText style={{ fontSize: 20 }}>🚨</ThemedText>
+                <View style={{ flex: 1 }}>
+                  <ThemedText style={styles.panicTitle}>
+                    {isAck ? 'STAT CRITICAL VALUE (ACKNOWLEDGED)' : 'STAT CRITICAL / PANIC LAB VALUE ALERT'}
+                  </ThemedText>
+                  <ThemedText style={styles.panicSubtitle}>
+                    Order #{activePanicAlert.id.slice(-6).toUpperCase()} • {testName} • Specimen: {specimenType}
+                  </ThemedText>
+                </View>
+              </View>
+              <View style={styles.panicBadgeContainer}>
+                <ThemedText style={styles.panicBadgeText}>
+                  {isAck ? 'READBACK COMPLETED' : 'TELEPHONE READBACK REQUIRED'}
+                </ThemedText>
+              </View>
+            </View>
+
+            <View style={styles.panicDetailsCard}>
+              <ThemedText style={styles.panicFindings}>
+                {findings || 'Critical threshold exceeded. Immediate clinical intervention advised.'}
+              </ThemedText>
+              {isAck ? (
+                <ThemedText style={styles.panicAckInfo}>
+                  ✓ Acknowledged by Dr. {activePanicAlert.panicAcknowledgedBy ?? attendingDoctorName} on{' '}
+                  {new Date(activePanicAlert.panicAcknowledgedAt || Date.now()).toLocaleTimeString()}
+                </ThemedText>
+              ) : (
+                <ThemedText style={styles.panicUrgentPrompt}>
+                  DOH / PRC Medical Technologist reported critical value requiring immediate physician verbal readback.
+                </ThemedText>
+              )}
+            </View>
+
+            <View style={styles.panicActionsRow}>
+              {!isAck && (
+                <Pressable
+                  style={styles.panicAckButton}
+                  onPress={() => {
+                    setSelectedPanicOrder(activePanicAlert);
+                    setPanicModalVisible(true);
+                  }}
+                >
+                  <ThemedText style={styles.panicAckButtonText}>📞 Complete Statutory Readback</ThemedText>
+                </Pressable>
+              )}
+              <Pressable
+                style={styles.panicPdfButton}
+                onPress={() => handleOpenLabPdf(activePanicAlert.id)}
+              >
+                <ThemedText style={styles.panicPdfButtonText}>📄 View Diagnostic PDF</ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        );
+      })()}
+
       {/* Notification Banner */}
       {banner && (
         <View style={[styles.bannerCard, banner.isError && styles.bannerCardError]}>
@@ -1246,6 +1323,87 @@ export default function ConsultationsScreen() {
           })}
         </View>
       </View>
+
+      {/* Diagnostic Lab Results & Pathologist Reports */}
+      {patientLabResults.length > 0 && (
+        <View style={styles.card}>
+          <View style={styles.rowBetween}>
+            <View>
+              <ThemedText style={styles.sectionHeaderTitle}>Laboratory Reports & Diagnostics ({patientLabResults.length})</ThemedText>
+              <ThemedText style={styles.subHint}>Official verified lab findings from Laboratory Information System (LIS)</ThemedText>
+            </View>
+            <ThemedText style={{ fontSize: 11, color: '#0284C7', fontWeight: '700' }}>⚡ DOH Interop Active</ThemedText>
+          </View>
+
+          <View style={{ gap: 10, marginTop: 8 }}>
+            {patientLabResults.map((order) => {
+              const isFinal = order.status === 'Completed';
+              const isAck = order.isPanicAcknowledged ?? Boolean(order.panicAcknowledgedAt);
+              const testName = order.testName || order.items?.[0]?.testName || 'Laboratory Panel';
+              const specimenType = order.specimenType || 'Venous Blood';
+              const orderedDate = order.orderedAt || order.orderDate;
+              const findings = order.criticalFindings || order.criticalFindingsJson;
+
+              return (
+                <View key={order.id} style={[styles.labResultCard, order.hasCriticalPanicAlert && styles.labResultCardPanic]}>
+                  <View style={styles.rowBetween}>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <ThemedText style={styles.labResultName}>{testName}</ThemedText>
+                        <View style={[styles.labStatusBadge, isFinal ? styles.labStatusFinal : styles.labStatusPending]}>
+                          <ThemedText style={[styles.labStatusText, isFinal ? styles.labStatusFinalText : styles.labStatusPendingText]}>
+                            {isFinal ? 'FINAL / VERIFIED' : order.status.toUpperCase()}
+                          </ThemedText>
+                        </View>
+                        {order.hasCriticalPanicAlert && (
+                          <View style={styles.panicPill}>
+                            <ThemedText style={styles.panicPillText}>CRITICAL PANIC</ThemedText>
+                          </View>
+                        )}
+                      </View>
+                      <ThemedText style={styles.labResultMeta}>
+                        Specimen: {specimenType} • Ordered: {new Date(orderedDate).toLocaleDateString()}
+                      </ThemedText>
+                    </View>
+
+                    <Pressable
+                      style={styles.labPdfBtn}
+                      onPress={() => handleOpenLabPdf(order.id)}
+                    >
+                      <ThemedText style={styles.labPdfBtnText}>📄 PDF Report</ThemedText>
+                    </Pressable>
+                  </View>
+
+                  {findings && (
+                    <View style={styles.labFindingsBox}>
+                      <ThemedText style={styles.labFindingsText}>
+                        <ThemedText style={{ fontWeight: '700' }}>Findings: </ThemedText>
+                        {findings}
+                      </ThemedText>
+                    </View>
+                  )}
+
+                  {order.hasCriticalPanicAlert && !isAck && (
+                    <View style={styles.unackNoticeRow}>
+                      <ThemedText style={styles.unackNoticeText}>
+                        ⚠️ Urgent: Statutory telephone readback has not yet been logged.
+                      </ThemedText>
+                      <Pressable
+                        onPress={() => {
+                          setSelectedPanicOrder(order);
+                          setPanicModalVisible(true);
+                        }}
+                      >
+                        <ThemedText style={styles.unackActionLink}>Acknowledge Now →</ThemedText>
+                      </Pressable>
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      )}
 
       {/* In-Clinic Procedures Order Section */}
       <View style={styles.section}>
@@ -1387,6 +1545,112 @@ export default function ConsultationsScreen() {
             </View>
           ))}
         </View>
+
+        {/* Clinical Decision Support (CDS) Safety Engine */}
+        {prescriptions.length > 0 && (
+          <View style={styles.cdsContainer}>
+            <View style={styles.rowBetween}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <ThemedText style={{ fontSize: 16 }}>🛡️</ThemedText>
+                <ThemedText style={styles.cdsTitle}>Clinical Decision Support (CDS) Safety</ThemedText>
+              </View>
+              {evaluatingCds ? (
+                <ActivityIndicator size="small" color="#0284C7" />
+              ) : (
+                <Pressable onPress={() => runCdsScreening(prescriptions)}>
+                  <ThemedText style={{ fontSize: 11, color: '#0284C7', fontWeight: '600' }}>Re-screen</ThemedText>
+                </Pressable>
+              )}
+            </View>
+
+            {cdsAlerts.length === 0 && !evaluatingCds ? (
+              <View style={styles.cdsPassedBox}>
+                <ThemedText style={styles.cdsPassedText}>
+                  ✓ All CDS Checks Passed: No drug-allergy conflicts, harmful drug-drug interactions, or organ dosing warnings detected.
+                </ThemedText>
+              </View>
+            ) : (
+              <View style={{ gap: 8, marginTop: 4 }}>
+                {cdsAlerts.map((alert) => {
+                  const isCrit = alert.severity === 'Critical';
+                  const isMajor = alert.severity === 'Major';
+                  const alertKey = alert.ruleId || alert.alertId || `cds-${Math.random()}`;
+                  const category = alert.category || alert.type;
+                  const message = alert.message || alert.title;
+                  const recommendation = alert.clinicalRecommendation || alert.recommendation;
+
+                  return (
+                    <View
+                      key={alertKey}
+                      style={[
+                        styles.cdsAlertCard,
+                        isCrit ? styles.cdsAlertCardCritical : isMajor ? styles.cdsAlertCardMajor : styles.cdsAlertCardModerate,
+                      ]}
+                    >
+                      <View style={styles.rowBetween}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                          <View
+                            style={[
+                              styles.cdsSeverityBadge,
+                              isCrit ? styles.cdsSeverityCritical : isMajor ? styles.cdsSeverityMajor : styles.cdsSeverityModerate,
+                            ]}
+                          >
+                            <ThemedText style={styles.cdsSeverityBadgeText}>
+                              {alert.severity.toUpperCase()}
+                            </ThemedText>
+                          </View>
+                          <ThemedText style={styles.cdsCategoryText}>{category}</ThemedText>
+                        </View>
+                        <ThemedText style={styles.cdsDrugText}>{alert.offendingDrug}</ThemedText>
+                      </View>
+
+                      <ThemedText style={styles.cdsAlertMessage}>{message}</ThemedText>
+                      {recommendation && (
+                        <ThemedText style={styles.cdsAlertRecommendation}>
+                          💡 Recommendation: {recommendation}
+                        </ThemedText>
+                      )}
+                    </View>
+                  );
+                })}
+
+                {/* Critical Override Block */}
+                {hasCriticalCdsAlert && (
+                  <View style={styles.cdsOverrideBox}>
+                    <ThemedText style={styles.cdsOverrideHeading}>
+                      ⚠️ Clinical Override Required to Prescribe
+                    </ThemedText>
+                    <ThemedText style={styles.cdsOverrideSub}>
+                      A severe contraindication was flagged. In accordance with clinical governance, please specify justification:
+                    </ThemedText>
+
+                    <TextInput
+                      style={styles.cdsOverrideInput}
+                      placeholder="Enter clinical rationale (e.g. Desensitization protocol, alternative unavailable, monitored in ICU)..."
+                      placeholderTextColor="#9CA3AF"
+                      value={cdsOverrideReason}
+                      onChangeText={setCdsOverrideReason}
+                      multiline
+                      editable={!isSigned}
+                    />
+
+                    <Pressable
+                      style={styles.overrideCheckRow}
+                      onPress={() => !isSigned && setOverrideConfirmed(!overrideConfirmed)}
+                    >
+                      <View style={[styles.overrideCheckbox, overrideConfirmed && styles.overrideCheckboxActive]}>
+                        {overrideConfirmed && <ThemedText style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>✓</ThemedText>}
+                      </View>
+                      <ThemedText style={styles.overrideCheckLabel}>
+                        I certify that clinical benefit outweighs the severe risk and have counseled the patient.
+                      </ThemedText>
+                    </Pressable>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+        )}
       </View>
 
       {/* Doctor Legal Credentials */}
@@ -1881,6 +2145,106 @@ export default function ConsultationsScreen() {
           });
         }}
       />
+
+      {/* Statutory Telephone Readback Acknowledgment Modal */}
+      <Modal visible={panicModalVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxWidth: 520 }]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <ThemedText style={{ fontSize: 18 }}>🚨</ThemedText>
+                <ThemedText style={styles.modalTitle}>Critical Value Readback Acknowledgment</ThemedText>
+              </View>
+              <Pressable onPress={() => setPanicModalVisible(false)}>
+                <ThemedText style={styles.modalCloseText}>✕</ThemedText>
+              </Pressable>
+            </View>
+
+            <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={{ gap: 12 }}>
+              <View style={styles.panicModalInfoBox}>
+                <ThemedText style={{ fontSize: 13, fontWeight: '700', color: '#991B1B' }}>
+                  Statutory DOH / Clinical Laboratory Safety Standard
+                </ThemedText>
+                <ThemedText style={{ fontSize: 12, color: '#7F1D1D', marginTop: 2 }}>
+                  Immediate physician verbal readback confirms receipt of life-threatening diagnostic findings.
+                </ThemedText>
+              </View>
+
+              {selectedPanicOrder && (() => {
+                const testName = selectedPanicOrder.testName || selectedPanicOrder.items?.[0]?.testName || 'Diagnostic Panel';
+                const specimenType = selectedPanicOrder.specimenType || 'Venous Blood';
+                const findings = selectedPanicOrder.criticalFindings || selectedPanicOrder.criticalFindingsJson;
+                return (
+                  <View style={{ backgroundColor: '#F8FAFC', padding: 10, borderRadius: 8, gap: 4 }}>
+                    <ThemedText style={{ fontSize: 12, color: '#64748B' }}>
+                      Patient: <ThemedText style={{ fontWeight: '700', color: '#1E293B' }}>{selectedPatient?.patientName}</ThemedText> (ID: {selectedPatient?.patientId})
+                    </ThemedText>
+                    <ThemedText style={{ fontSize: 12, color: '#64748B' }}>
+                      Test: <ThemedText style={{ fontWeight: '700', color: '#1E293B' }}>{testName}</ThemedText> • Specimen: {specimenType}
+                    </ThemedText>
+                    <View style={{ backgroundColor: '#FEE2E2', padding: 8, borderRadius: 6, marginTop: 4 }}>
+                      <ThemedText style={{ fontSize: 13, fontWeight: '700', color: '#B91C1C' }}>
+                        {findings || 'CRITICAL THRESHOLD VIOLATION'}
+                      </ThemedText>
+                    </View>
+                  </View>
+                );
+              })()}
+
+              <View>
+                <ThemedText style={styles.modalLabel}>Attending Physician *</ThemedText>
+                <TextInput
+                  style={styles.modalInput}
+                  value={attendingDoctorName}
+                  editable={false}
+                  placeholder="Doctor Name, MD"
+                />
+              </View>
+
+              <View>
+                <ThemedText style={styles.modalLabel}>PRC License # *</ThemedText>
+                <TextInput
+                  style={styles.modalInput}
+                  value={doctorPrc}
+                  onChangeText={setDoctorPrc}
+                  placeholder="PRC License"
+                />
+              </View>
+
+              <View>
+                <ThemedText style={styles.modalLabel}>Readback Notes / Immediate Clinical Actions *</ThemedText>
+                <TextInput
+                  style={[styles.modalInput, { minHeight: 70 }]}
+                  multiline
+                  value={panicAckNotes}
+                  onChangeText={setPanicAckNotes}
+                  placeholder="e.g. Verbal telephone readback confirmed with laboratory. Ordered IV calcium gluconate, nebulized salbutamol, and repeat serum K in 2 hours."
+                />
+              </View>
+            </ScrollView>
+
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+              <Pressable
+                style={[styles.modalCancelBtn, { flex: 1 }]}
+                onPress={() => setPanicModalVisible(false)}
+              >
+                <ThemedText style={styles.modalCancelText}>Cancel</ThemedText>
+              </Pressable>
+              <Pressable
+                style={[styles.panicAckSubmitBtn, isAcknowledgingPanic && { opacity: 0.6 }]}
+                onPress={handleAcknowledgePanic}
+                disabled={isAcknowledgingPanic}
+              >
+                {isAcknowledgingPanic ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <ThemedText style={styles.panicAckSubmitText}>✓ Sign & Confirm Readback</ThemedText>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   </ResponsiveLayout>
 );
@@ -2497,5 +2861,374 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: '#9CA3AF',
+  },
+
+  // STAT Panic Alert Styles
+  panicBanner: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 2,
+    borderColor: '#EF4444',
+    borderRadius: 12,
+    padding: 14,
+    gap: 10,
+  },
+  panicBannerAcknowledged: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#22C55E',
+  },
+  panicHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+  },
+  panicTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#991B1B',
+    letterSpacing: 0.5,
+  },
+  panicSubtitle: {
+    fontSize: 11,
+    color: '#7F1D1D',
+    marginTop: 2,
+  },
+  panicBadgeContainer: {
+    backgroundColor: '#DC2626',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  panicBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  panicDetailsCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    gap: 4,
+  },
+  panicFindings: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#B91C1C',
+  },
+  panicAckInfo: {
+    fontSize: 11,
+    color: '#15803D',
+    fontWeight: '600',
+  },
+  panicUrgentPrompt: {
+    fontSize: 11,
+    color: '#991B1B',
+    fontStyle: 'italic',
+  },
+  panicActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'flex-end',
+  },
+  panicAckButton: {
+    backgroundColor: '#DC2626',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 6,
+  },
+  panicAckButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  panicPdfButton: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  panicPdfButtonText: {
+    color: '#374151',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  // Lab Results Styles
+  labResultCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 12,
+    gap: 8,
+  },
+  labResultCardPanic: {
+    borderColor: '#F87171',
+    backgroundColor: '#FEF2F2',
+  },
+  labResultName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  labResultMeta: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  labStatusBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  labStatusFinal: {
+    backgroundColor: '#DCFCE7',
+  },
+  labStatusPending: {
+    backgroundColor: '#FEF3C7',
+  },
+  labStatusText: {
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  labStatusFinalText: {
+    color: '#15803D',
+  },
+  labStatusPendingText: {
+    color: '#B45309',
+  },
+  panicPill: {
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#F87171',
+  },
+  panicPillText: {
+    color: '#B91C1C',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  labPdfBtn: {
+    backgroundColor: '#F0F9FF',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  labPdfBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0284C7',
+  },
+  labFindingsBox: {
+    backgroundColor: '#FFFFFF',
+    padding: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  labFindingsText: {
+    fontSize: 12,
+    color: '#334155',
+  },
+  unackNoticeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#FEE2E2',
+    padding: 6,
+    borderRadius: 6,
+  },
+  unackNoticeText: {
+    fontSize: 11,
+    color: '#991B1B',
+    fontWeight: '600',
+    flex: 1,
+  },
+  unackActionLink: {
+    fontSize: 11,
+    color: '#DC2626',
+    fontWeight: '800',
+    marginLeft: 6,
+  },
+
+  // CDS Styles
+  cdsContainer: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    borderRadius: 12,
+    padding: 12,
+    gap: 8,
+    marginTop: 4,
+  },
+  cdsTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#166534',
+  },
+  cdsPassedBox: {
+    backgroundColor: '#DCFCE7',
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+  },
+  cdsPassedText: {
+    fontSize: 12,
+    color: '#15803D',
+    fontWeight: '600',
+  },
+  cdsAlertCard: {
+    borderRadius: 8,
+    padding: 10,
+    borderWidth: 1,
+    gap: 6,
+  },
+  cdsAlertCardCritical: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#F87171',
+  },
+  cdsAlertCardMajor: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FCD34D',
+  },
+  cdsAlertCardModerate: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#93C5FD',
+  },
+  cdsSeverityBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  cdsSeverityCritical: {
+    backgroundColor: '#DC2626',
+  },
+  cdsSeverityMajor: {
+    backgroundColor: '#D97706',
+  },
+  cdsSeverityModerate: {
+    backgroundColor: '#2563EB',
+  },
+  cdsSeverityBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  cdsCategoryText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#374151',
+  },
+  cdsDrugText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#4B5563',
+  },
+  cdsAlertMessage: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  cdsAlertRecommendation: {
+    fontSize: 11,
+    color: '#4B5563',
+    lineHeight: 16,
+  },
+  cdsOverrideBox: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: 8,
+    padding: 10,
+    gap: 6,
+    marginTop: 4,
+  },
+  cdsOverrideHeading: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#991B1B',
+  },
+  cdsOverrideSub: {
+    fontSize: 11,
+    color: '#7F1D1D',
+  },
+  cdsOverrideInput: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: 6,
+    padding: 8,
+    fontSize: 12,
+    color: '#1F2937',
+    minHeight: 50,
+  },
+  overrideCheckRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  overrideCheckbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: '#DC2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  overrideCheckboxActive: {
+    backgroundColor: '#DC2626',
+  },
+  overrideCheckLabel: {
+    fontSize: 11,
+    color: '#7F1D1D',
+    fontWeight: '600',
+    flex: 1,
+  },
+
+  // Panic Modal Additional Styles
+  panicModalInfoBox: {
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 8,
+    padding: 10,
+  },
+  panicAckSubmitBtn: {
+    flex: 2,
+    backgroundColor: '#DC2626',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  panicAckSubmitText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  modalCancelBtn: {
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    color: '#374151',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });

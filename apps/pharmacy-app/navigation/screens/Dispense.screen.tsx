@@ -4,6 +4,190 @@ import ThemedText from '@ui/ThemedText';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { pharmacyService, PrescriptionOrderDto } from '../../services/pharmacyService';
 
+export interface PharmacistCdsAlert {
+  id: string;
+  type: 'Allergy' | 'DrugInteraction' | 'DosageWarning';
+  severity: 'Critical' | 'Major' | 'Moderate';
+  title: string;
+  clinicalMechanism: string;
+  recommendation: string;
+  offendingDrug: string;
+  interactingDrug?: string;
+  requiresPharmacistOverride: boolean;
+}
+
+export function evaluatePharmacyCds(order: PrescriptionOrderDto): PharmacistCdsAlert[] {
+  const alerts: PharmacistCdsAlert[] = [];
+  const allergies = (order.patientAllergies || '').toLowerCase();
+  const items = order.items || [];
+  const genericNames = items.map((i) => (i.genericName || '').toLowerCase());
+
+  // 1. Drug-Allergy Screen
+  if (allergies.includes('penicillin')) {
+    for (const item of items) {
+      const name = item.genericName.toLowerCase();
+      if (
+        name.includes('amoxicillin') ||
+        name.includes('ampicillin') ||
+        name.includes('penicillin') ||
+        name.includes('augmentin') ||
+        name.includes('co-amoxiclav')
+      ) {
+        alerts.push({
+          id: `pa-pen-${item.id}`,
+          type: 'Allergy',
+          severity: 'Critical',
+          title: '🚨 CONTRAINDICATION: Penicillin Prescribed to Penicillin-Allergic Patient',
+          clinicalMechanism: `${item.genericName} contains the core beta-lactam nucleus, creating an acute risk of IgE-mediated anaphylaxis or angioedema.`,
+          recommendation: 'DO NOT DISPENSE. Contact prescribing physician to switch to Azithromycin or Clindamycin.',
+          offendingDrug: item.genericName,
+          requiresPharmacistOverride: true,
+        });
+      } else if (
+        name.includes('cefalexin') ||
+        name.includes('cephalexin') ||
+        name.includes('cefuroxime') ||
+        name.includes('ceftriaxone')
+      ) {
+        alerts.push({
+          id: `pa-ceph-${item.id}`,
+          type: 'Allergy',
+          severity: 'Major',
+          title: '⚠️ CROSS-REACTIVITY WARNING: Cephalosporin in Penicillin Allergy',
+          clinicalMechanism: 'Cephalosporins share structural side-chain similarities (~5-10% cross-reactivity rate).',
+          recommendation: 'Verify if prior reaction was mild rash vs immediate anaphylaxis before dispensing.',
+          offendingDrug: item.genericName,
+          requiresPharmacistOverride: false,
+        });
+      }
+    }
+  }
+
+  if (allergies.includes('sulfa') || allergies.includes('sulfonamide')) {
+    for (const item of items) {
+      const name = item.genericName.toLowerCase();
+      if (name.includes('cotrimoxazole') || name.includes('sulfamethoxazole') || name.includes('bactrim')) {
+        alerts.push({
+          id: `pa-sulfa-${item.id}`,
+          type: 'Allergy',
+          severity: 'Critical',
+          title: '🚨 CONTRAINDICATION: Sulfonamide Prescribed to Sulfa-Allergic Patient',
+          clinicalMechanism: 'Risk of severe cutaneous adverse reactions (SCAR), Stevens-Johnson Syndrome (SJS), or toxic epidermal necrolysis.',
+          recommendation: 'DO NOT DISPENSE. Clarify with doctor for non-sulfonamide alternative.',
+          offendingDrug: item.genericName,
+          requiresPharmacistOverride: true,
+        });
+      }
+    }
+  }
+
+  if (allergies.includes('nsaid') || allergies.includes('aspirin')) {
+    for (const item of items) {
+      const name = item.genericName.toLowerCase();
+      if (
+        name.includes('ibuprofen') ||
+        name.includes('mefenamic') ||
+        name.includes('aspirin') ||
+        name.includes('naproxen') ||
+        name.includes('ketorolac') ||
+        name.includes('celecoxib')
+      ) {
+        alerts.push({
+          id: `pa-nsaid-${item.id}`,
+          type: 'Allergy',
+          severity: 'Critical',
+          title: '🚨 CONTRAINDICATION: NSAID Prescribed to Aspirin/NSAID-Sensitive Patient',
+          clinicalMechanism: 'COX-1 inhibition risks precipitating acute bronchospasm, urticaria, or anaphylactoid reaction.',
+          recommendation: 'Hold medication. Recommend Paracetamol as safe alternative analgesic.',
+          offendingDrug: item.genericName,
+          requiresPharmacistOverride: true,
+        });
+      }
+    }
+  }
+
+  // 2. Drug-Drug Interactions
+  const hasWarfarin = genericNames.some((n) => n.includes('warfarin'));
+  const hasNsaid = genericNames.some(
+    (n) =>
+      n.includes('ibuprofen') ||
+      n.includes('mefenamic') ||
+      n.includes('naproxen') ||
+      n.includes('aspirin') ||
+      n.includes('ketorolac')
+  );
+  if (hasWarfarin && hasNsaid) {
+    alerts.push({
+      id: 'pa-ddi-warf-nsaid',
+      type: 'DrugInteraction',
+      severity: 'Critical',
+      title: '🚨 HIGH-RISK INTERACTION: Warfarin + NSAID (Severe Hemorrhage Risk)',
+      clinicalMechanism: 'Concurrent anticoagulant and mucosal ulceration effects multiply major GI bleed risk by up to 4-5x.',
+      recommendation: 'Dispense with extreme caution only if physician specifically documented co-prescription with PPI protection and urgent INR check.',
+      offendingDrug: 'NSAID',
+      interactingDrug: 'Warfarin',
+      requiresPharmacistOverride: true,
+    });
+  }
+
+  const hasClopidogrel = genericNames.some((n) => n.includes('clopidogrel'));
+  const hasOmeprazole = genericNames.some((n) => n.includes('omeprazole') || n.includes('esomeprazole'));
+  if (hasClopidogrel && hasOmeprazole) {
+    alerts.push({
+      id: 'pa-ddi-clop-omep',
+      type: 'DrugInteraction',
+      severity: 'Major',
+      title: '⚠️ INTERACTION: Clopidogrel + Omeprazole (Attenuated Antiplatelet Effect)',
+      clinicalMechanism: 'Omeprazole competitive CYP2C19 inhibition reduces activation of clopidogrel prodrug, increasing stent thrombosis risk.',
+      recommendation: 'Recommend switching PPI to Pantoprazole or Rabeprazole (minimal CYP2C19 interaction).',
+      offendingDrug: 'Omeprazole',
+      interactingDrug: 'Clopidogrel',
+      requiresPharmacistOverride: false,
+    });
+  }
+
+  const hasAceOrArb = genericNames.some(
+    (n) =>
+      n.includes('losartan') ||
+      n.includes('enalapril') ||
+      n.includes('candesartan') ||
+      n.includes('ramipril') ||
+      n.includes('valsartan')
+  );
+  const hasPotassiumSparing = genericNames.some((n) => n.includes('spironolactone') || n.includes('potassium'));
+  if (hasAceOrArb && hasPotassiumSparing) {
+    alerts.push({
+      id: 'pa-ddi-ace-k',
+      type: 'DrugInteraction',
+      severity: 'Major',
+      title: '⚠️ INTERACTION: ACEi/ARB + Potassium Sparing Agent',
+      clinicalMechanism: 'Dual inhibition of potassium elimination through aldosterone pathway risks severe hyperkalemia.',
+      recommendation: 'Verify patient has recent baseline serum potassium and renal panel. Advise patient on signs of muscle weakness.',
+      offendingDrug: 'Spironolactone/Potassium',
+      interactingDrug: 'ACEi/ARB',
+      requiresPharmacistOverride: false,
+    });
+  }
+
+  const hasStatin = genericNames.some((n) => n.includes('simvastatin') || n.includes('atorvastatin'));
+  const hasMacrolide = genericNames.some((n) => n.includes('clarithromycin') || n.includes('erythromycin'));
+  if (hasStatin && hasMacrolide) {
+    alerts.push({
+      id: 'pa-ddi-statin-macro',
+      type: 'DrugInteraction',
+      severity: 'Major',
+      title: '⚠️ INTERACTION: Statin + Macrolide Antibiotic (Rhabdomyolysis Risk)',
+      clinicalMechanism: 'Macrolides strongly inhibit CYP3A4, causing massive statin blood concentration spikes and acute myopathy/renal failure.',
+      recommendation: 'Temporarily suspend statin therapy during antibiotic course.',
+      offendingDrug: 'Statin',
+      interactingDrug: 'Macrolide',
+      requiresPharmacistOverride: false,
+    });
+  }
+
+  return alerts;
+}
+
 export default function DispenseScreen() {
   const route = useRoute<any>();
   const navigation = useNavigation<any>();
@@ -21,6 +205,11 @@ export default function DispenseScreen() {
   const [pharmacistPrc, setPharmacistPrc] = useState('PRC-0089123');
   const [receiptNumber, setReceiptNumber] = useState('OR-2026-0412');
   const [dispenseNotes, setDispenseNotes] = useState('Patient advised on taking medication after breakfast');
+
+  // Clinical Decision Support (CDS) Safety States
+  const [cdsAlerts, setCdsAlerts] = useState<PharmacistCdsAlert[]>([]);
+  const [pharmacistOverrideConfirmed, setPharmacistOverrideConfirmed] = useState(false);
+  const [pharmacistOverrideReason, setPharmacistOverrideReason] = useState('');
 
   // Load prescription order details
   const loadOrder = useCallback(async (id: string) => {
