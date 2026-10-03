@@ -39,8 +39,11 @@ public static class DependencyInjection
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
-        // Register publisher
+        // Register publisher & clinical engine services
         services.AddScoped<IDiagnosticReportPublisher, DiagnosticReportPublisher>();
+        services.AddScoped<IAnalyzerFeedService, AnalyzerFeedService>();
+        services.AddScoped<IDiagnosticReportPdfGenerator, DiagnosticReportPdfGenerator>();
+        services.AddScoped<IPanicAlertPublisher, PanicAlertPublisher>();
 
         // Add Hangfire
         services.AddHangfire(config => config

@@ -57,6 +57,23 @@ public class RecordAnalyteResultCommandHandler : IRequestHandler<RecordAnalyteRe
 
         var entryTime = DateTime.UtcNow;
 
+        // Fetch patient's previous analyte results for Delta Check evaluation
+        var previousRequisitions = await _requisitionRepository.Query()
+            .Where(r => r.PatientId == requisition.PatientId && r.Id != requisition.Id)
+            .OrderByDescending(r => r.CreatedAt)
+            .Include(r => r.AnalyteResults)
+            .Take(5)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+
+        var previousResultsMap = previousRequisitions
+            .SelectMany(r => r.AnalyteResults)
+            .GroupBy(a => a.AnalyteCode.ToUpperInvariant())
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderByDescending(x => x.EnteredAt).First()
+            );
+
         foreach (var item in request.Results)
         {
             var code = item.AnalyteCode.Trim().ToUpperInvariant();
@@ -67,8 +84,20 @@ public class RecordAnalyteResultCommandHandler : IRequestHandler<RecordAnalyteRe
             var unit = !string.IsNullOrWhiteSpace(item.Unit) ? item.Unit : (spec?.Unit ?? string.Empty);
             var refInterval = spec?.ReferenceInterval ?? string.Empty;
 
-            var (flag, alertNote) = ReferenceRangeEvaluator.Evaluate(code, item.Value, requisition.PatientGender);
+            var (flag, alertNote) = ReferenceRangeEvaluator.Evaluate(code, item.Value, requisition.PatientGender, requisition.PatientAge);
             var finalInterpretation = !string.IsNullOrWhiteSpace(item.Interpretation) ? item.Interpretation : alertNote;
+
+            // Delta Check Evaluation against historical patient encounter
+            if (previousResultsMap.TryGetValue(code, out var priorResult))
+            {
+                var delta = DeltaCheckEvaluator.Evaluate(code, item.Value, priorResult.Value, priorResult.EnteredAt, entryTime);
+                if (delta != null && delta.IsAlert)
+                {
+                    finalInterpretation = string.IsNullOrWhiteSpace(finalInterpretation)
+                        ? delta.AlertMessage
+                        : $"{finalInterpretation} | {delta.AlertMessage}";
+                }
+            }
 
             var existing = requisition.AnalyteResults.FirstOrDefault(a => string.Equals(a.AnalyteCode, code, StringComparison.OrdinalIgnoreCase));
             if (existing != null)

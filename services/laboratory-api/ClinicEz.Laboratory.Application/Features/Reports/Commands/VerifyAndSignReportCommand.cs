@@ -29,15 +29,18 @@ public class VerifyAndSignReportCommandHandler : IRequestHandler<VerifyAndSignRe
     private readonly IRepository<LabRequisition> _requisitionRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IDiagnosticReportPublisher _reportPublisher;
+    private readonly IDiagnosticReportPdfGenerator _pdfGenerator;
 
     public VerifyAndSignReportCommandHandler(
         IRepository<LabRequisition> requisitionRepository,
         IUnitOfWork unitOfWork,
-        IDiagnosticReportPublisher reportPublisher)
+        IDiagnosticReportPublisher reportPublisher,
+        IDiagnosticReportPdfGenerator pdfGenerator)
     {
         _requisitionRepository = requisitionRepository;
         _unitOfWork = unitOfWork;
         _reportPublisher = reportPublisher;
+        _pdfGenerator = pdfGenerator;
     }
 
     public async Task<LabRequisitionDto> Handle(VerifyAndSignReportCommand request, CancellationToken cancellationToken)
@@ -87,6 +90,13 @@ public class VerifyAndSignReportCommandHandler : IRequestHandler<VerifyAndSignRe
             }
         }
 
+        // Auto-generate standard PDF if not provided
+        if (string.IsNullOrWhiteSpace(requisition.DiagnosticReport.SignedPdfBase64))
+        {
+            var pdfBytes = _pdfGenerator.GeneratePdf(requisition);
+            requisition.DiagnosticReport.SignedPdfBase64 = Convert.ToBase64String(pdfBytes);
+        }
+
         requisition.Status = RequisitionStatus.Verified;
         _requisitionRepository.Update(requisition);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -107,7 +117,7 @@ public class VerifyAndSignReportCommandHandler : IRequestHandler<VerifyAndSignRe
             ReleasedAt = releaseTime,
             PathologistImpression = request.PathologistImpression,
             IsCriticalResult = isCritical,
-            SignedPdfBase64 = request.SignedPdfBase64,
+            SignedPdfBase64 = requisition.DiagnosticReport.SignedPdfBase64,
             Observations = requisition.AnalyteResults.Select(a => new AnalyteObservationDto
             {
                 PanelName = a.PanelName,

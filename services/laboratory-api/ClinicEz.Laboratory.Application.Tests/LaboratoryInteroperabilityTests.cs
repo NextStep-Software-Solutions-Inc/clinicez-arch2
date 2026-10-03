@@ -184,7 +184,8 @@ public class LaboratoryInteroperabilityTests
         await db.LabRequisitions.AddAsync(req);
         await db.SaveChangesAsync();
 
-        var handler = new VerifyAndSignReportCommandHandler(repo, uow, reportPublisher);
+        var pdfGen = new ClinicEz.Laboratory.Infrastructure.Services.DiagnosticReportPdfGenerator();
+        var handler = new VerifyAndSignReportCommandHandler(repo, uow, reportPublisher, pdfGen);
         var command = new VerifyAndSignReportCommand(
             req.Id,
             "Dr. Roberto Gomez, MD, FPSP",

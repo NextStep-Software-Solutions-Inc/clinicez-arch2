@@ -12,6 +12,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<Specimen> Specimens { get; set; }
     public DbSet<AnalyteResult> AnalyteResults { get; set; }
     public DbSet<DiagnosticReport> DiagnosticReports { get; set; }
+    public DbSet<QcLot> QcLots { get; set; }
+    public DbSet<QcRun> QcRuns { get; set; }
+    public DbSet<CriticalPanicDispatchLog> CriticalPanicDispatchLogs { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -64,6 +67,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Barcode).IsRequired().HasMaxLength(50);
             entity.HasIndex(e => e.Barcode).IsUnique();
+            entity.Property(e => e.RackId).HasMaxLength(50);
+            entity.Property(e => e.RackPosition).HasMaxLength(20);
         });
 
         modelBuilder.Entity<AnalyteResult>(entity =>
@@ -80,6 +85,37 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(e => e.ReportNumber).IsRequired().HasMaxLength(50);
             entity.Property(e => e.PathologistName).IsRequired().HasMaxLength(255);
             entity.Property(e => e.PathologistPrcLicense).IsRequired().HasMaxLength(50);
+        });
+
+        modelBuilder.Entity<QcLot>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.LotNumber).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.ControlName).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.AnalyteCode).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.InstrumentName).HasMaxLength(100);
+            entity.HasMany(e => e.Runs).WithOne().HasForeignKey(r => r.QcLotId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<QcRun>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.AnalyteCode).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.RunByMedTechName).HasMaxLength(100);
+            entity.Property(e => e.ViolationRules).HasMaxLength(255);
+        });
+
+        modelBuilder.Entity<CriticalPanicDispatchLog>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.AccessionNumber).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.PatientName).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.DispatchedByMedTechName).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.NotifiedDoctorName).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.CriticalFindings).IsRequired().HasMaxLength(1000);
         });
 
         modelBuilder.AddInboxStateEntity();

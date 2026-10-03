@@ -68,10 +68,67 @@ public sealed class RequisitionsController : ControllerBase
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<LabRequisitionDto>.Success(result));
     }
+
+    [HttpGet("{id:guid}/stickers")]
+    public async Task<ActionResult<ApiResponse<List<PrintableTubeStickerDto>>>> GetTubeStickers(
+        [FromRoute] Guid id,
+        CancellationToken ct = default)
+    {
+        var result = await _sender.Send(new GetPrintableStickersQuery(RequisitionId: id), ct);
+        return Ok(ApiResponse<List<PrintableTubeStickerDto>>.Success(result));
+    }
+
+    [HttpPost("{id:guid}/specimens/{specimenId:guid}/reject")]
+    public async Task<ActionResult<ApiResponse<LabRequisitionDto>>> RejectSpecimen(
+        [FromRoute] Guid id,
+        [FromRoute] Guid specimenId,
+        [FromBody] RejectSpecimenRequest request,
+        CancellationToken ct = default)
+    {
+        var command = new RejectSpecimenCommand(id, specimenId, request.ReasonCode, request.Notes, request.PhlebotomistName, request.CorrectiveAction);
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<LabRequisitionDto>.Success(result));
+    }
+
+    [HttpPost("{id:guid}/specimens/{specimenId:guid}/store")]
+    public async Task<ActionResult<ApiResponse<LabRequisitionDto>>> StoreSpecimen(
+        [FromRoute] Guid id,
+        [FromRoute] Guid specimenId,
+        [FromBody] StoreSpecimenRequest request,
+        CancellationToken ct = default)
+    {
+        var command = new StoreSpecimenCommand(id, specimenId, request.RackId, request.RackPosition, request.Temperature);
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<LabRequisitionDto>.Success(result));
+    }
+
+    [HttpGet("racks")]
+    public async Task<ActionResult<ApiResponse<List<RackInventoryItemDto>>>> GetRackInventory(
+        [FromQuery] string? rackId,
+        CancellationToken ct = default)
+    {
+        var result = await _sender.Send(new GetRackInventoryQuery(rackId), ct);
+        return Ok(ApiResponse<List<RackInventoryItemDto>>.Success(result));
+    }
 }
 
 public record AccessionSpecimenRequest
 {
     public string PhlebotomistName { get; init; } = "Phlebotomist";
     public List<SpecimenAccessionInput> Specimens { get; init; } = new();
+}
+
+public record RejectSpecimenRequest
+{
+    public required string ReasonCode { get; init; }
+    public string? Notes { get; init; }
+    public string? PhlebotomistName { get; init; }
+    public string? CorrectiveAction { get; init; }
+}
+
+public record StoreSpecimenRequest
+{
+    public required string RackId { get; init; }
+    public required string RackPosition { get; init; }
+    public string? Temperature { get; init; }
 }

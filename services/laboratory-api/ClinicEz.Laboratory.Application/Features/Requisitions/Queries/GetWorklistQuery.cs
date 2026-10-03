@@ -91,7 +91,18 @@ public class GetWorklistQueryHandler : IRequestHandler<GetWorklistQuery, List<La
                 CollectedAt = s.CollectedAt,
                 CollectedByPhlebotomistName = s.CollectedByPhlebotomistName,
                 ReceivedInLabAt = s.ReceivedInLabAt,
-                Notes = s.Notes
+                Notes = s.Notes,
+                RejectionReason = s.RejectionReason.ToString(),
+                RejectionNotes = s.RejectionNotes,
+                RejectedAt = s.RejectedAt,
+                RejectedByPhlebotomistName = s.RejectedByPhlebotomistName,
+                CorrectiveAction = s.CorrectiveAction,
+                RackId = s.RackId,
+                RackPosition = s.RackPosition,
+                StorageTemperature = s.StorageTemperature.ToString(),
+                StorageStatus = s.StorageStatus.ToString(),
+                StoredAt = s.StoredAt,
+                DisposedAt = s.DisposedAt
             }).ToList(),
             AnalyteResults = r.AnalyteResults.Select(a => new AnalyteResultDto
             {
