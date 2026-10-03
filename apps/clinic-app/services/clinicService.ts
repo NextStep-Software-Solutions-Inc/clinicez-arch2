@@ -598,6 +598,8 @@ export interface ClinicPatient {
   chronicConditions?: string;
   alerts?: string;
   syncPatientId?: string;
+  customFields?: Record<string, any>;
+  verificationStatus?: string;
   createdAt: string;
 }
 
@@ -625,6 +627,25 @@ export interface RegisterPatientPayload {
   allergies?: string;
   chronicConditions?: string;
   alerts?: string;
+  customFields?: Record<string, any>;
+  verificationStatus?: string;
+}
+
+export interface ClinicCustomFieldDefinition {
+  id: string;
+  tenantId: string;
+  clinicId: string;
+  entityType: string;
+  fieldKey: string;
+  label: string;
+  dataType: 'Text' | 'Number' | 'Date' | 'Select' | 'Boolean';
+  category?: string;
+  isRequired: boolean;
+  displayOrder: number;
+  optionsJson?: string;
+  placeholder?: string;
+  isActive: boolean;
+  createdAt: string;
 }
 
 export interface MedicalCertificateRecord {
@@ -694,6 +715,11 @@ export interface ClinicRecordAttachmentRecord {
   notes?: string;
   uploadedByStaffId?: string;
   uploadedByStaffName?: string;
+  verificationStatus?: string;
+  rejectionReason?: string;
+  verifiedAt?: string;
+  verifiedByStaffId?: string;
+  verifiedByStaffName?: string;
   createdAt: string;
 }
 
@@ -1113,6 +1139,12 @@ export const clinicService = {
     return clinicApiClient.post<ClinicPatient>('/patients', payload);
   },
 
+  async bulkRegisterPatients(patients: RegisterPatientPayload[]) {
+    return clinicApiClient.post<{ totalProcessed: number; successCount: number; createdPatients: ClinicPatient[] }>('/patients/bulk', {
+      patients
+    });
+  },
+
   async updatePatient(id: string, payload: RegisterPatientPayload) {
     return clinicApiClient.put<ClinicPatient>(`/patients/${id}`, payload);
   },
@@ -1221,6 +1253,27 @@ export const clinicService = {
   async getPatientRecordAttachments(patientId: string, recordType?: string) {
     const qs = recordType ? `?recordType=${encodeURIComponent(recordType)}` : '';
     return clinicApiClient.get<ClinicRecordAttachmentRecord[]>(`/records/patients/${patientId}${qs}`);
+  },
+
+  async verifyRecordAttachment(attachmentId: string, isApproved: boolean, rejectionReason?: string) {
+    return clinicApiClient.post<ClinicRecordAttachmentRecord>(`/records/attachments/${attachmentId}/verify`, {
+      isApproved,
+      rejectionReason
+    });
+  },
+
+  // Tenant Custom Fields
+  async getCustomFields(entityType = 'ClinicPatient', category?: string) {
+    const qs = category ? `?entityType=${entityType}&category=${encodeURIComponent(category)}` : `?entityType=${entityType}`;
+    return clinicApiClient.get<ClinicCustomFieldDefinition[]>(`/custom-fields${qs}`);
+  },
+
+  async createCustomField(payload: Partial<ClinicCustomFieldDefinition>) {
+    return clinicApiClient.post<ClinicCustomFieldDefinition>('/custom-fields', payload);
+  },
+
+  async deleteCustomField(id: string) {
+    return clinicApiClient.delete<boolean>(`/custom-fields/${id}`);
   },
 
   // Clinic Preferences / Settings

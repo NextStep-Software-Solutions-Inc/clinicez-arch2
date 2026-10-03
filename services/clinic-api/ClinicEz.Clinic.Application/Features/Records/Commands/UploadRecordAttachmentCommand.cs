@@ -21,7 +21,8 @@ public sealed record UploadRecordAttachmentCommand(
     DateOnly DocumentDate,
     string? Notes = null,
     Guid? UploadedByStaffId = null,
-    string? UploadedByStaffName = null) : IRequest<ClinicRecordAttachmentDto>;
+    string? UploadedByStaffName = null,
+    string VerificationStatus = "Verified") : IRequest<ClinicRecordAttachmentDto>;
 
 public sealed class UploadRecordAttachmentCommandHandler : IRequestHandler<UploadRecordAttachmentCommand, ClinicRecordAttachmentDto>
 {
@@ -58,6 +59,7 @@ public sealed class UploadRecordAttachmentCommandHandler : IRequestHandler<Uploa
             Notes = request.Notes?.Trim(),
             UploadedByStaffId = request.UploadedByStaffId,
             UploadedByStaffName = request.UploadedByStaffName?.Trim(),
+            VerificationStatus = string.IsNullOrWhiteSpace(request.VerificationStatus) ? "Verified" : request.VerificationStatus,
             CreatedAt = DateTime.UtcNow,
             CreatedBy = request.UploadedByStaffName ?? "ClinicStaff"
         };
@@ -81,6 +83,11 @@ public sealed class UploadRecordAttachmentCommandHandler : IRequestHandler<Uploa
             attachment.Notes,
             attachment.UploadedByStaffId,
             attachment.UploadedByStaffName,
-            attachment.CreatedAt);
+            attachment.CreatedAt,
+            attachment.VerificationStatus,
+            attachment.RejectionReason,
+            attachment.VerifiedAt,
+            attachment.VerifiedByStaffId,
+            attachment.VerifiedByStaffName);
     }
 }

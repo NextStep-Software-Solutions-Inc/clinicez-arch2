@@ -37,6 +37,12 @@ public static class DependencyInjection
         // Singleton token cache — holds per-tenant access tokens across HTTP requests.
         services.AddSingleton<IPhilHealthTokenCache, PhilHealthTokenCache>();
 
+        // PhilHealth PKA cryptographic, validation, generation, and parsing engines
+        services.AddSingleton<IPhilHealthPayloadEncryptor, PhilHealthPayloadEncryptor>();
+        services.AddSingleton<IKonsultaXmlValidator, KonsultaXmlValidator>();
+        services.AddSingleton<IKonsultaXmlGenerator, KonsultaXmlGenerator>();
+        services.AddSingleton<IKonsultaMasterlistParser, KonsultaMasterlistParser>();
+
         services.AddDataProtection()
             .SetApplicationName("ClinicEz.PhilHealthProxy");
 

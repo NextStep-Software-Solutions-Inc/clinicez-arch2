@@ -45,7 +45,10 @@ public class ApplicationDbContext : DbContext
     public DbSet<MedicalCertificate> MedicalCertificates { get; set; } = null!;
     public DbSet<ReferralLetter> ReferralLetters { get; set; } = null!;
     public DbSet<ClinicRecordAttachment> RecordAttachments { get; set; } = null!;
+    public DbSet<ClinicCustomFieldDefinition> CustomFieldDefinitions { get; set; } = null!;
     public DbSet<ClinicSettings> ClinicSettings { get; set; } = null!;
+    public DbSet<YakapTransmittal> YakapTransmittals { get; set; } = null!;
+    public DbSet<YakapTransmittalItem> YakapTransmittalItems { get; set; } = null!;
 
     public Guid CurrentClinicId => _clinicContext?.ClinicId ?? Guid.Empty;
 
@@ -101,7 +104,10 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<MedicalCertificate>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
         modelBuilder.Entity<ReferralLetter>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
         modelBuilder.Entity<ClinicRecordAttachment>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
+        modelBuilder.Entity<ClinicCustomFieldDefinition>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
         modelBuilder.Entity<ClinicSettings>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
+        modelBuilder.Entity<YakapTransmittal>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
+        modelBuilder.Entity<YakapTransmittalItem>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
 
         modelBuilder.Entity<EncounterDiagnosis>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<PrescriptionItem>().HasQueryFilter(e => !e.IsDeleted);
@@ -337,6 +343,12 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.PhilHealthNumber).HasMaxLength(30);
             entity.Property(e => e.SeniorCitizenId).HasMaxLength(50);
             entity.Property(e => e.PwdId).HasMaxLength(50);
+            entity.Property(e => e.VerificationStatus).HasMaxLength(50).HasDefaultValue("Verified");
+            entity.Property(e => e.CustomFields)
+                .HasConversion(
+                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                    v => string.IsNullOrEmpty(v) ? new Dictionary<string, object?>() : JsonSerializer.Deserialize<Dictionary<string, object?>>(v, (JsonSerializerOptions?)null) ?? new Dictionary<string, object?>()
+                );
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientCode }).IsUnique();
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.LastName, e.FirstName });
         });
@@ -377,7 +389,22 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
             entity.Property(e => e.FileName).IsRequired().HasMaxLength(255);
             entity.Property(e => e.ContentType).HasMaxLength(100);
+            entity.Property(e => e.VerificationStatus).HasMaxLength(50).HasDefaultValue("Verified");
+            entity.Property(e => e.RejectionReason).HasMaxLength(255);
+            entity.Property(e => e.VerifiedByStaffName).HasMaxLength(150);
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
+        });
+
+        modelBuilder.Entity<ClinicCustomFieldDefinition>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.EntityType).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.FieldKey).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Label).IsRequired().HasMaxLength(150);
+            entity.Property(e => e.Category).HasMaxLength(50);
+            entity.Property(e => e.Placeholder).HasMaxLength(200);
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.EntityType, e.FieldKey });
         });
 
         modelBuilder.Entity<ClinicSettings>(entity =>
@@ -388,6 +415,40 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.DefaultConsultationFee).HasPrecision(18, 2);
             entity.Property(e => e.VatRate).HasPrecision(5, 4);
             entity.HasIndex(e => new { e.TenantId, e.ClinicId }).IsUnique();
+        });
+
+        modelBuilder.Entity<YakapTransmittal>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.TransmittalNumber).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.ReportTagging).IsRequired().HasMaxLength(10);
+            entity.Property(e => e.EffectiveYear).IsRequired().HasMaxLength(10);
+            entity.Property(e => e.PackageType).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.PhilHealthTransactionNumber).HasMaxLength(100);
+            entity.Property(e => e.EncryptedPayloadHash).HasMaxLength(128);
+            entity.Property(e => e.SubmittedBy).HasMaxLength(150);
+            entity.Property(e => e.ValidationErrors).HasConversion(permissionsConverter);
+
+            entity.HasMany(e => e.Items)
+                .WithOne(i => i.Transmittal)
+                .HasForeignKey(i => i.YakapTransmittalId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.TransmittalNumber });
+        });
+
+        modelBuilder.Entity<YakapTransmittalItem>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.PatientName).IsRequired().HasMaxLength(150);
+            entity.Property(e => e.PhilHealthIdentificationNumber).IsRequired().HasMaxLength(30);
+            entity.Property(e => e.ItemType).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.ReportStatus).HasMaxLength(10).HasDefaultValue("U");
+            entity.Property(e => e.DeficiencyRemarks).HasMaxLength(500);
+
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.YakapTransmittalId });
         });
 
         // MassTransit outbox

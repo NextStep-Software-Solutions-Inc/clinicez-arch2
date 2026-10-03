@@ -67,6 +67,11 @@ public static class ClinicPermissions
     public const string RolesRead = "roles:read";
     public const string RolesManage = "roles:manage";
 
+    // PhilHealth Yakap Transmittals & Integration
+    public const string YakapRead = "yakap:read";
+    public const string YakapWrite = "yakap:write";
+    public const string YakapSubmit = "yakap:submit";
+
     public static readonly IReadOnlyList<string> All = new List<string>
     {
         AppointmentsRead,
@@ -101,6 +106,9 @@ public static class ClinicPermissions
         StaffRead,
         StaffManage,
         RolesRead,
-        RolesManage
+        RolesManage,
+        YakapRead,
+        YakapWrite,
+        YakapSubmit
     }.AsReadOnly();
 }

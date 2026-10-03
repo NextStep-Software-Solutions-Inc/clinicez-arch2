@@ -34,7 +34,9 @@ public sealed record UpdateClinicPatientCommand(
     string? BloodType,
     string? Allergies,
     string? ChronicConditions,
-    string? Alerts) : IRequest<ClinicPatientDto>;
+    string? Alerts,
+    System.Collections.Generic.Dictionary<string, object?>? CustomFields = null,
+    string? VerificationStatus = null) : IRequest<ClinicPatientDto>;
 
 public sealed class UpdateClinicPatientCommandHandler : IRequestHandler<UpdateClinicPatientCommand, ClinicPatientDto>
 {
@@ -82,6 +84,14 @@ public sealed class UpdateClinicPatientCommandHandler : IRequestHandler<UpdateCl
         patient.Allergies = request.Allergies?.Trim();
         patient.ChronicConditions = request.ChronicConditions?.Trim();
         patient.Alerts = request.Alerts?.Trim();
+        if (request.CustomFields != null)
+        {
+            patient.CustomFields = request.CustomFields;
+        }
+        if (!string.IsNullOrWhiteSpace(request.VerificationStatus))
+        {
+            patient.VerificationStatus = request.VerificationStatus;
+        }
         patient.UpdatedAt = DateTime.UtcNow;
         patient.UpdatedBy = "ClinicStaff";
 

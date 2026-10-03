@@ -34,7 +34,9 @@ public sealed record RegisterClinicPatientCommand(
     string? Allergies,
     string? ChronicConditions,
     string? Alerts,
-    Guid? SyncPatientId = null) : IRequest<ClinicPatientDto>;
+    Guid? SyncPatientId = null,
+    System.Collections.Generic.Dictionary<string, object?>? CustomFields = null,
+    string VerificationStatus = "Verified") : IRequest<ClinicPatientDto>;
 
 public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<RegisterClinicPatientCommand, ClinicPatientDto>
 {
@@ -90,6 +92,8 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             ChronicConditions = request.ChronicConditions?.Trim(),
             Alerts = request.Alerts?.Trim(),
             SyncPatientId = request.SyncPatientId,
+            CustomFields = request.CustomFields ?? new System.Collections.Generic.Dictionary<string, object?>(),
+            VerificationStatus = string.IsNullOrWhiteSpace(request.VerificationStatus) ? "Verified" : request.VerificationStatus,
             CreatedAt = DateTime.UtcNow,
             CreatedBy = "ClinicStaff"
         };
@@ -141,6 +145,8 @@ public sealed class RegisterClinicPatientCommandHandler : IRequestHandler<Regist
             p.ChronicConditions,
             p.Alerts,
             p.SyncPatientId,
-            p.CreatedAt);
+            p.CreatedAt,
+            p.CustomFields,
+            p.VerificationStatus);
     }
 }

@@ -39,5 +39,11 @@ public sealed class PrescriptionOrderItem : BaseEntity
 
     public bool IsDangerousDrug { get; set; } = false;
 
+    // PhilHealth Yakap / GAMOT Item Fields
+    public bool IsGamotCovered { get; set; } = false;
+    public string? PhilHealthDrugCode { get; set; }
+    public string? UniquePrescriptionSecurityCode { get; set; } // UPSC
+    public decimal? GamotReferencePrice { get; set; }
+
     public string? Remarks { get; set; }
 }

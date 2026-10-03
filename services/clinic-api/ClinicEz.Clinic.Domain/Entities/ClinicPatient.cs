@@ -50,4 +50,14 @@ public sealed class ClinicPatient : BaseEntity
     /// Optional linkage to cloud Patient App ID if patient has synchronized
     /// </summary>
     public Guid? SyncPatientId { get; set; }
+
+    /// <summary>
+    /// Tenant-specific custom properties stored as JSON (e.g., student_id, college, year_level, employee_id).
+    /// </summary>
+    public System.Collections.Generic.Dictionary<string, object?> CustomFields { get; set; } = new();
+
+    /// <summary>
+    /// Verification status: Verified, PendingVerification, Rejected, None
+    /// </summary>
+    public string VerificationStatus { get; set; } = "Verified";
 }

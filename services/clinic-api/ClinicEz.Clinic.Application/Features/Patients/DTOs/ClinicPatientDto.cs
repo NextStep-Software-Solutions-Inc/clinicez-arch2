@@ -33,4 +33,6 @@ public sealed record ClinicPatientDto(
     string? ChronicConditions,
     string? Alerts,
     Guid? SyncPatientId,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    System.Collections.Generic.Dictionary<string, object?>? CustomFields = null,
+    string VerificationStatus = "Verified");

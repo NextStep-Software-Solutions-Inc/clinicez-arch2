@@ -64,6 +64,13 @@ public sealed class PrescriptionOrder : BaseEntity
 
     public decimal TotalAmount { get; set; }
 
+    // PhilHealth Yakap / GAMOT Benefit Fields
+    public bool IsPhilHealthGamot { get; set; } = false;
+    public string? PhilHealthIdentificationNumber { get; set; }
+    public string? PhilHealthMemberPin { get; set; }
+    public decimal GamotCoverageAmount { get; set; } = 0.00m;
+    public decimal PatientCoPayAmount { get; set; } = 0.00m;
+
     public ICollection<PrescriptionOrderItem> Items { get; set; } = new List<PrescriptionOrderItem>();
 
     public ICollection<DispenseAuditRecord> DispenseRecords { get; set; } = new List<DispenseAuditRecord>();

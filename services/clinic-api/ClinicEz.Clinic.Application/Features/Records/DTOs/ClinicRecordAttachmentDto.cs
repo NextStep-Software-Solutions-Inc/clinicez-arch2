@@ -18,4 +18,9 @@ public sealed record ClinicRecordAttachmentDto(
     string? Notes,
     Guid? UploadedByStaffId,
     string? UploadedByStaffName,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    string VerificationStatus = "Verified",
+    string? RejectionReason = null,
+    DateTime? VerifiedAt = null,
+    Guid? VerifiedByStaffId = null,
+    string? VerifiedByStaffName = null);

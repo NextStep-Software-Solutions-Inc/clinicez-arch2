@@ -25,7 +25,10 @@ import {
   ClinicLabOrderRecord,
   PrescriptionSlipData,
   ConsultationRecord,
+  ClinicRecordAttachmentRecord,
+  ClinicCustomFieldDefinition,
 } from '../../services/clinicService';
+import { offlineSyncService } from '../../services/offlineSyncService';
 
 const SAMPLE_PATIENTS: ClinicPatient[] = [
   {
@@ -121,6 +124,74 @@ const SAMPLE_PATIENTS: ClinicPatient[] = [
     alerts: 'Asthma exacerbation on cold weather',
     createdAt: new Date().toISOString(),
   },
+  {
+    id: 'pat-104',
+    tenantId: 'tenant-default',
+    clinicId: 'clinic-default',
+    patientCode: 'PAT-2026-00004',
+    firstName: 'Joshua',
+    lastName: 'Garcia',
+    middleName: 'Mendoza',
+    fullName: 'Garcia, Joshua M.',
+    dateOfBirth: '2005-09-14',
+    age: 20,
+    gender: 'Male',
+    civilStatus: 'Single',
+    contactNumber: '0917-555-0192',
+    email: 'joshua.garcia@univ.edu.ph',
+    addressLine: 'Dorm 3, University Village',
+    barangay: 'San Antonio',
+    city: 'Biñan',
+    province: 'Laguna',
+    emergencyContactName: 'Lourdes Garcia',
+    emergencyContactPhone: '0917-555-0193',
+    emergencyContactRelationship: 'Mother',
+    bloodType: 'O+',
+    allergies: 'None known',
+    chronicConditions: 'None',
+    verificationStatus: 'PendingVerification',
+    customFields: {
+      classification: 'Student',
+      student_id: '2026-10492',
+      college: 'College of Computer Studies',
+      program: 'BS Computer Science',
+      year_level: '1st Year',
+    },
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'pat-105',
+    tenantId: 'tenant-default',
+    clinicId: 'clinic-default',
+    patientCode: 'PAT-2026-00005',
+    firstName: 'Clarissa',
+    lastName: 'Mendoza',
+    middleName: 'Reyes',
+    fullName: 'Mendoza, Clarissa R.',
+    dateOfBirth: '1981-04-18',
+    age: 45,
+    gender: 'Female',
+    civilStatus: 'Married',
+    contactNumber: '0920-777-3321',
+    email: 'cmendoza@univ.edu.ph',
+    addressLine: '45 Faculty Row',
+    barangay: 'San Vicente',
+    city: 'San Pedro',
+    province: 'Laguna',
+    emergencyContactName: 'Eduardo Mendoza',
+    emergencyContactPhone: '0920-777-3322',
+    emergencyContactRelationship: 'Spouse',
+    bloodType: 'B+',
+    allergies: 'None known',
+    chronicConditions: 'Mild Hypertension',
+    verificationStatus: 'Verified',
+    customFields: {
+      classification: 'Employee',
+      employee_id: 'EMP-2019-041',
+      department: 'Department of Mathematics',
+    },
+    createdAt: new Date().toISOString(),
+  },
 ];
 
 export default function PatientsScreen() {
@@ -129,11 +200,20 @@ export default function PatientsScreen() {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterMode, setFilterMode] = useState<'ALL' | 'ALERTS' | 'SENIOR_PWD'>('ALL');
+  const [filterMode, setFilterMode] = useState<'ALL' | 'ALERTS' | 'SENIOR_PWD' | 'STUDENTS' | 'EMPLOYEES'>('ALL');
 
   // Register Modal state
   const [registerVisible, setRegisterVisible] = useState(false);
   const [savingPatient, setSavingPatient] = useState(false);
+  const [formClassification, setFormClassification] = useState<'General' | 'Student' | 'Employee'>('General');
+  const [formStudentId, setFormStudentId] = useState('');
+  const [formCollege, setFormCollege] = useState('');
+  const [formProgram, setFormProgram] = useState('');
+  const [formYearLevel, setFormYearLevel] = useState('1st Year');
+  const [formEmployeeId, setFormEmployeeId] = useState('');
+  const [formDepartment, setFormDepartment] = useState('');
+  const [tenantCustomFields, setTenantCustomFields] = useState<ClinicCustomFieldDefinition[]>([]);
+  const [dynamicFieldValues, setDynamicFieldValues] = useState<Record<string, string>>({});
   const [formFirstName, setFormFirstName] = useState('');
   const [formLastName, setFormLastName] = useState('');
   const [formMiddleName, setFormMiddleName] = useState('');
@@ -170,12 +250,27 @@ export default function PatientsScreen() {
   const [externalNotes, setExternalNotes] = useState('Verified external diagnostic report.');
   const [attaching, setAttaching] = useState(false);
 
+  // External Physical Attachments & Verification (School Clinic & 80/20) state
+  const [patientAttachments, setPatientAttachments] = useState<ClinicRecordAttachmentRecord[]>([]);
+  const [loadingAttachments, setLoadingAttachments] = useState(false);
+  const [uploadDocModalVisible, setUploadDocModalVisible] = useState(false);
+  const [docTitle, setDocTitle] = useState('');
+  const [docRecordType, setDocRecordType] = useState('OutsideChestXRay');
+  const [docFileType, setDocFileType] = useState<'PDF' | 'Photo'>('PDF');
+  const [docNotes, setDocNotes] = useState('');
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [verifyingAttachmentId, setVerifyingAttachmentId] = useState<string | null>(null);
+
   // Prescription Slip & External Dispense (Path B) state
   const [selectedRxSlip, setSelectedRxSlip] = useState<PrescriptionSlipData | null>(null);
   const [rxSlipModalVisible, setRxSlipModalVisible] = useState(false);
   const [targetConsultationId, setTargetConsultationId] = useState<string | null>(null);
   const [targetPrescriptionNumber, setTargetPrescriptionNumber] = useState<string | undefined>(undefined);
   const [externalDispenseModalVisible, setExternalDispenseModalVisible] = useState(false);
+
+  // Offline Campus LAN Edge Outbox states
+  const [offlinePendingCount, setOfflinePendingCount] = useState(offlineSyncService.getPendingCount());
+  const [syncingOffline, setSyncingOffline] = useState(false);
 
   const fetchPatients = useCallback(async () => {
     const [data, err] = await clinicService.getPatients(searchTerm || undefined);
@@ -187,6 +282,16 @@ export default function PatientsScreen() {
   useEffect(() => {
     setLoading(true);
     fetchPatients().finally(() => setLoading(false));
+    clinicService.getCustomFields('ClinicPatient').then(([fields]) => {
+      if (fields && fields.length > 0) {
+        setTenantCustomFields(fields);
+      }
+    });
+
+    const unsub = offlineSyncService.subscribe(() => {
+      setOfflinePendingCount(offlineSyncService.getPendingCount());
+    });
+    return unsub;
   }, [fetchPatients]);
 
   const onRefresh = useCallback(async () => {
@@ -202,6 +307,27 @@ export default function PatientsScreen() {
     }
 
     setSavingPatient(true);
+
+    const customFields: Record<string, any> = {};
+    if (formClassification === 'Student') {
+      customFields['classification'] = 'Student';
+      if (formStudentId.trim()) customFields['student_id'] = formStudentId.trim();
+      if (formCollege.trim()) customFields['college'] = formCollege.trim();
+      if (formProgram.trim()) customFields['program'] = formProgram.trim();
+      if (formYearLevel.trim()) customFields['year_level'] = formYearLevel.trim();
+    } else if (formClassification === 'Employee') {
+      customFields['classification'] = 'Employee';
+      if (formEmployeeId.trim()) customFields['employee_id'] = formEmployeeId.trim();
+      if (formDepartment.trim()) customFields['department'] = formDepartment.trim();
+    }
+
+    // Merge additional tenant-configured custom fields
+    Object.entries(dynamicFieldValues).forEach(([k, v]) => {
+      if (v && v.trim()) {
+        customFields[k] = v.trim();
+      }
+    });
+
     const payload: RegisterPatientPayload = {
       firstName: formFirstName.trim(),
       lastName: formLastName.trim(),
@@ -222,6 +348,8 @@ export default function PatientsScreen() {
       allergies: formAllergies.trim() || undefined,
       chronicConditions: formChronicConditions.trim() || undefined,
       alerts: formAlerts.trim() || undefined,
+      customFields: Object.keys(customFields).length > 0 ? customFields : undefined,
+      verificationStatus: 'Verified',
     };
 
     const [newPat, err] = await clinicService.registerPatient(payload);
@@ -229,41 +357,26 @@ export default function PatientsScreen() {
 
     if (newPat) {
       setPatients((prev) => [newPat, ...prev]);
+      Alert.alert('Registration Successful', `Patient ${newPat.fullName} registered with code ${newPat.patientCode}.`);
     } else {
-      // Local fallback for dev resilience
-      const fakeNew: ClinicPatient = {
-        id: `pat-${Date.now()}`,
-        tenantId: 'tenant-default',
-        clinicId: 'clinic-default',
-        patientCode: `PAT-${new Date().getFullYear()}-${Math.floor(Math.random() * 89999 + 10000)}`,
-        firstName: payload.firstName,
-        lastName: payload.lastName,
-        middleName: payload.middleName,
-        fullName: `${payload.lastName}, ${payload.firstName}`,
-        dateOfBirth: payload.dateOfBirth,
-        age: 35,
-        gender: payload.gender,
-        civilStatus: payload.civilStatus,
-        contactNumber: payload.contactNumber,
-        email: payload.email,
-        addressLine: payload.addressLine,
-        barangay: payload.barangay,
-        city: payload.city,
-        province: payload.province,
-        philHealthNumber: payload.philHealthNumber,
-        seniorCitizenId: payload.seniorCitizenId,
-        pwdId: payload.pwdId,
-        bloodType: payload.bloodType,
-        allergies: payload.allergies,
-        chronicConditions: payload.chronicConditions,
-        alerts: payload.alerts,
-        createdAt: new Date().toISOString(),
-      };
-      setPatients((prev) => [fakeNew, ...prev]);
+      // Campus LAN Offline Queue fallback
+      const offlinePat = await offlineSyncService.enqueuePatient(payload);
+      setPatients((prev) => [offlinePat, ...prev]);
+      Alert.alert(
+        'Saved Locally (Offline Queue)',
+        `Campus edge node cached record for ${offlinePat.fullName} (${offlinePat.patientCode}). It will automatically sync to cloud when connection is active.`
+      );
     }
 
     setRegisterVisible(false);
     // Reset form
+    setFormClassification('General');
+    setFormStudentId('');
+    setFormCollege('');
+    setFormProgram('');
+    setFormYearLevel('1st Year');
+    setFormEmployeeId('');
+    setFormDepartment('');
     setFormFirstName('');
     setFormLastName('');
     setFormMiddleName('');
@@ -275,12 +388,14 @@ export default function PatientsScreen() {
     setFormAllergies('');
     setFormChronicConditions('');
     setFormAlerts('');
+    setDynamicFieldValues({});
   };
 
   const handleOpenChart = async (patient: ClinicPatient) => {
     setSelectedPatient(patient);
     setChartVisible(true);
     setLoadingChart(true);
+    setLoadingAttachments(true);
     const [chartData] = await clinicService.getPatientChart(patient.id);
     if (chartData) {
       setPatientChart(chartData);
@@ -298,6 +413,142 @@ export default function PatientsScreen() {
       });
     }
     setLoadingChart(false);
+
+    // Fetch attachments
+    const [attData] = await clinicService.getPatientRecordAttachments(patient.id);
+    if (attData && attData.length > 0) {
+      setPatientAttachments(attData);
+    } else if (patient.customFields?.classification === 'Student' || patient.customFields?.student_id) {
+      // Offline/demo sample attachments for school clinic student
+      setPatientAttachments([
+        {
+          id: `att-cor-${patient.id}`,
+          tenantId: patient.tenantId,
+          clinicId: patient.clinicId,
+          patientId: patient.id,
+          recordType: 'CertificateOfRegistration',
+          title: 'Certificate of Registration (COR - AY 2026-2027 1st Sem)',
+          fileName: 'student_cor_2026.pdf',
+          contentType: 'application/pdf',
+          fileSizeBytes: 245000,
+          storageUri: 'https://storage.clinicez.ph/school-records/cor.pdf',
+          documentDate: new Date().toISOString(),
+          notes: 'Scanned paper COR presented at intake station.',
+          uploadedByStaffName: 'Intake Station Nurse',
+          verificationStatus: 'Verified',
+          verifiedAt: new Date().toISOString(),
+          verifiedByStaffName: 'Nurse Maria Reyes, RN',
+          createdAt: new Date().toISOString(),
+        },
+        {
+          id: `att-xray-${patient.id}`,
+          tenantId: patient.tenantId,
+          clinicId: patient.clinicId,
+          patientId: patient.id,
+          recordType: 'OutsideChestXRay',
+          title: 'Outside Chest X-Ray PA View (St. Jude Diagnostic Center)',
+          fileName: 'chest_xray_film.pdf',
+          contentType: 'application/pdf',
+          fileSizeBytes: 1850000,
+          storageUri: 'https://storage.clinicez.ph/school-records/xray.pdf',
+          documentDate: new Date().toISOString(),
+          notes: 'Findings: Normal lung fields, clear costophrenic angles, normal cardiac silhouette.',
+          uploadedByStaffName: 'Student Self-Upload (Mobile Portal)',
+          verificationStatus: 'PendingVerification',
+          createdAt: new Date().toISOString(),
+        },
+        {
+          id: `att-medcert-${patient.id}`,
+          tenantId: patient.tenantId,
+          clinicId: patient.clinicId,
+          patientId: patient.id,
+          recordType: 'MedicalCertificate',
+          title: 'Outside Medical Clearance Certificate',
+          fileName: 'outside_medcert.pdf',
+          contentType: 'application/pdf',
+          fileSizeBytes: 320000,
+          storageUri: 'https://storage.clinicez.ph/school-records/medcert.pdf',
+          documentDate: new Date().toISOString(),
+          notes: 'Fit for academic and physical education enrollment.',
+          uploadedByStaffName: 'Intake Station Nurse',
+          verificationStatus: 'Verified',
+          verifiedAt: new Date().toISOString(),
+          verifiedByStaffName: 'Dr. Roberto Cruz, MD',
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+    } else {
+      setPatientAttachments([]);
+    }
+    setLoadingAttachments(false);
+  };
+
+  const handleVerifyAttachment = async (attachmentId: string, isApproved: boolean) => {
+    setVerifyingAttachmentId(attachmentId);
+    const rejectionReason = !isApproved ? 'Document illegible or missing official physician signature/stamp.' : undefined;
+    await clinicService.verifyRecordAttachment(attachmentId, isApproved, rejectionReason);
+    setVerifyingAttachmentId(null);
+
+    setPatientAttachments((prev) =>
+      prev.map((att) =>
+        att.id === attachmentId
+          ? {
+              ...att,
+              verificationStatus: isApproved ? 'Verified' : 'Rejected',
+              rejectionReason,
+              verifiedAt: new Date().toISOString(),
+              verifiedByStaffName: 'Clinic Nurse / Reviewer',
+            }
+          : att
+      )
+    );
+
+    Alert.alert(
+      isApproved ? 'Document Verified' : 'Document Rejected',
+      isApproved
+        ? 'The document has been verified and recorded into the official student/patient file.'
+        : 'The document has been marked as Rejected.'
+    );
+  };
+
+  const handleUploadDocument = async () => {
+    if (!selectedPatient) return;
+    if (!docTitle.trim()) {
+      Alert.alert('Required', 'Please enter a document title.');
+      return;
+    }
+
+    setUploadingDoc(true);
+    const payload = {
+      patientId: selectedPatient.id,
+      recordType: docRecordType,
+      title: docTitle.trim(),
+      fileName: `${docTitle.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}.${docFileType === 'PDF' ? 'pdf' : 'jpg'}`,
+      contentType: docFileType === 'PDF' ? 'application/pdf' : 'image/jpeg',
+      fileSizeBytes: 1024 * 450,
+      storageUri: `https://storage.clinicez.ph/clinic-records/${selectedPatient.id}/${Date.now()}.${docFileType === 'PDF' ? 'pdf' : 'jpg'}`,
+      documentDate: new Date().toISOString(),
+      notes: docNotes.trim() || undefined,
+      uploadedByStaffName: 'Clinic Staff',
+    };
+
+    const [newAtt, err] = await clinicService.uploadRecordAttachment(payload);
+    setUploadingDoc(false);
+
+    if (newAtt) {
+      setPatientAttachments((prev) => [newAtt, ...prev]);
+      setUploadDocModalVisible(false);
+      setDocTitle('');
+      setDocNotes('');
+      Alert.alert('Success', 'Document attached to patient electronic health record.');
+    } else {
+      const queuedAtt = await offlineSyncService.enqueueAttachment(payload);
+      setPatientAttachments((prev) => [queuedAtt, ...prev]);
+      setUploadDocModalVisible(false);
+      setDocTitle('');
+      setDocNotes('');
+      Alert.alert('Saved Locally (Offline Queue)', 'Document queued on campus edge node. It will upload automatically once online.');
+    }
   };
 
   const handleViewSlip = async (orderId: string) => {
@@ -468,6 +719,12 @@ export default function PatientsScreen() {
     if (filterMode === 'SENIOR_PWD') {
       return !!p.seniorCitizenId || !!p.pwdId || p.age >= 60;
     }
+    if (filterMode === 'STUDENTS') {
+      return p.customFields?.classification === 'Student' || !!p.customFields?.student_id;
+    }
+    if (filterMode === 'EMPLOYEES') {
+      return p.customFields?.classification === 'Employee' || !!p.customFields?.employee_id;
+    }
     return true;
   });
 
@@ -499,12 +756,45 @@ export default function PatientsScreen() {
         </Pressable>
       </View>
 
+      {/* Offline Outbox Sync Banner */}
+      {offlinePendingCount > 0 && (
+        <View style={styles.offlineBanner}>
+          <View style={{ flex: 1 }}>
+            <ThemedText style={styles.offlineBannerTitle}>
+              📶 Campus LAN Offline Queue: {offlinePendingCount} pending item{offlinePendingCount > 1 ? 's' : ''}
+            </ThemedText>
+            <ThemedText style={styles.offlineBannerSubtitle}>
+              Walk-in registrations and uploaded attachments saved locally on edge storage.
+            </ThemedText>
+          </View>
+          <Pressable
+            style={styles.syncNowBtn}
+            disabled={syncingOffline}
+            onPress={async () => {
+              setSyncingOffline(true);
+              const report = await offlineSyncService.syncPendingOutbox();
+              setSyncingOffline(false);
+              Alert.alert(
+                'Sync Complete',
+                `Synced ${report.syncedPatients} patient(s) and ${report.syncedAttachments} attachment(s).` +
+                  (report.failedCount > 0 ? ` (${report.failedCount} remaining)` : '')
+              );
+              fetchPatients();
+            }}
+          >
+            <ThemedText style={styles.syncNowBtnText}>
+              {syncingOffline ? 'Syncing...' : '↻ Sync Now'}
+            </ThemedText>
+          </Pressable>
+        </View>
+      )}
+
       {/* Search Bar */}
       <View style={styles.searchBar}>
         <ThemedText style={styles.searchIcon}>🔍</ThemedText>
         <TextInput
           style={styles.searchInput}
-          placeholder="Search by name, patient code, phone, PhilHealth PIN..."
+          placeholder="Search by name, patient code, phone, Student ID..."
           placeholderTextColor="#9CA3AF"
           value={searchTerm}
           onChangeText={setSearchTerm}
@@ -521,6 +811,8 @@ export default function PatientsScreen() {
       <View style={styles.filterRow}>
         {[
           { key: 'ALL', label: 'All Patients' },
+          { key: 'STUDENTS', label: '🎓 Students' },
+          { key: 'EMPLOYEES', label: '💼 Employees' },
           { key: 'ALERTS', label: '⚠️ Alerts & Allergies' },
           { key: 'SENIOR_PWD', label: '👵 Senior & PWD (RA 9994/10754)' },
         ].map((tab) => {
@@ -552,13 +844,31 @@ export default function PatientsScreen() {
               <View key={item.id} style={styles.card}>
                 <View style={styles.cardHeader}>
                   <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <ThemedText style={styles.patientName}>{item.fullName}</ThemedText>
                       <ThemedText style={styles.codeBadge}>{item.patientCode}</ThemedText>
+                      {item.verificationStatus === 'PendingVerification' && (
+                        <ThemedText style={{ fontSize: 10, fontWeight: '700', color: '#D97706', backgroundColor: '#FEF3C7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                          ⏳ Pending Verification
+                        </ThemedText>
+                      )}
                     </View>
                     <ThemedText style={styles.demographicsText}>
                       {item.age} yrs • {item.gender} • {item.civilStatus ?? 'Single'} • 🩸 {item.bloodType ?? 'O+'}
                     </ThemedText>
+                    {item.customFields?.student_id ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginVertical: 3 }}>
+                        <ThemedText style={{ fontSize: 11, fontWeight: '700', color: '#1E40AF', backgroundColor: '#DBEAFE', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                          🎓 ID: {item.customFields.student_id} {item.customFields.program ? `• ${item.customFields.program}` : ''} {item.customFields.year_level ? `(${item.customFields.year_level})` : ''}
+                        </ThemedText>
+                      </View>
+                    ) : item.customFields?.employee_id ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginVertical: 3 }}>
+                        <ThemedText style={{ fontSize: 11, fontWeight: '700', color: '#065F46', backgroundColor: '#D1FAE5', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                          💼 EMP: {item.customFields.employee_id} {item.customFields.department ? `• ${item.customFields.department}` : ''}
+                        </ThemedText>
+                      </View>
+                    ) : null}
                     <ThemedText style={styles.contactText}>
                       📞 {item.contactNumber} {item.city ? `• ${item.barangay ?? ''}, ${item.city}` : ''}
                     </ThemedText>
@@ -634,6 +944,126 @@ export default function PatientsScreen() {
             </View>
 
             <ScrollView style={{ maxHeight: 500 }} contentContainerStyle={{ gap: 12 }}>
+              {/* Classification Selector */}
+              <View>
+                <ThemedText style={styles.inputLabel}>Patient Classification / Profile Type</ThemedText>
+                <View style={styles.categoryRow}>
+                  {(['General', 'Student', 'Employee'] as const).map((cat) => (
+                    <Pressable
+                      key={cat}
+                      style={[styles.categoryPill, formClassification === cat && styles.categoryPillActive]}
+                      onPress={() => setFormClassification(cat)}
+                    >
+                      <ThemedText style={[styles.categoryPillText, formClassification === cat && styles.categoryPillTextActive]}>
+                        {cat === 'General' ? '👤 General' : cat === 'Student' ? '🎓 Student' : '💼 Employee'}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
+              {/* Student-specific Institutional Fields */}
+              {formClassification === 'Student' && (
+                <View style={styles.institutionalBox}>
+                  <ThemedText style={styles.institutionalBoxTitle}>🎓 School Clinic: Student Details</ThemedText>
+                  <View style={styles.formRow}>
+                    <View style={{ flex: 1 }}>
+                      <ThemedText style={styles.inputLabel}>Student ID / LRN *</ThemedText>
+                      <TextInput
+                        style={styles.textInput}
+                        placeholder="e.g. 2026-10492"
+                        placeholderTextColor="#9CA3AF"
+                        value={formStudentId}
+                        onChangeText={setFormStudentId}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <ThemedText style={styles.inputLabel}>Year Level</ThemedText>
+                      <TextInput
+                        style={styles.textInput}
+                        placeholder="e.g. 1st Year"
+                        placeholderTextColor="#9CA3AF"
+                        value={formYearLevel}
+                        onChangeText={setFormYearLevel}
+                      />
+                    </View>
+                  </View>
+                  <View style={styles.formRow}>
+                    <View style={{ flex: 1 }}>
+                      <ThemedText style={styles.inputLabel}>College / Faculty</ThemedText>
+                      <TextInput
+                        style={styles.textInput}
+                        placeholder="e.g. College of Computer Studies"
+                        placeholderTextColor="#9CA3AF"
+                        value={formCollege}
+                        onChangeText={setFormCollege}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <ThemedText style={styles.inputLabel}>Program / Course</ThemedText>
+                      <TextInput
+                        style={styles.textInput}
+                        placeholder="e.g. BS Computer Science"
+                        placeholderTextColor="#9CA3AF"
+                        value={formProgram}
+                        onChangeText={setFormProgram}
+                      />
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {/* Employee-specific Institutional Fields */}
+              {formClassification === 'Employee' && (
+                <View style={styles.institutionalBox}>
+                  <ThemedText style={styles.institutionalBoxTitle}>💼 School Clinic: Employee Details</ThemedText>
+                  <View style={styles.formRow}>
+                    <View style={{ flex: 1 }}>
+                      <ThemedText style={styles.inputLabel}>Employee ID *</ThemedText>
+                      <TextInput
+                        style={styles.textInput}
+                        placeholder="e.g. EMP-2026-042"
+                        placeholderTextColor="#9CA3AF"
+                        value={formEmployeeId}
+                        onChangeText={setFormEmployeeId}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <ThemedText style={styles.inputLabel}>Department / Unit</ThemedText>
+                      <TextInput
+                        style={styles.textInput}
+                        placeholder="e.g. Registrar / Faculty of Sciences"
+                        placeholderTextColor="#9CA3AF"
+                        value={formDepartment}
+                        onChangeText={setFormDepartment}
+                      />
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {/* Additional Tenant-Configured Dynamic Custom Fields */}
+              {tenantCustomFields
+                .filter(
+                  (f) =>
+                    (f.category === formClassification || (!f.category && formClassification === 'General')) &&
+                    !['student_id', 'college', 'program', 'year_level', 'employee_id', 'department'].includes(f.fieldKey)
+                )
+                .map((f) => (
+                  <View key={f.id} style={{ marginTop: 2 }}>
+                    <ThemedText style={styles.inputLabel}>
+                      {f.label} {f.isRequired ? '*' : ''}
+                    </ThemedText>
+                    <TextInput
+                      style={styles.textInput}
+                      placeholder={f.placeholder || `Enter ${f.label}`}
+                      placeholderTextColor="#9CA3AF"
+                      value={dynamicFieldValues[f.fieldKey] || ''}
+                      onChangeText={(val) => setDynamicFieldValues((prev) => ({ ...prev, [f.fieldKey]: val }))}
+                    />
+                  </View>
+                ))}
+
               <View style={styles.formRow}>
                 <View style={{ flex: 1 }}>
                   <ThemedText style={styles.inputLabel}>First Name *</ThemedText>
@@ -811,6 +1241,93 @@ export default function PatientsScreen() {
                     <ThemedText style={styles.chartMetricLabel}>Invoices</ThemedText>
                   </View>
                 </View>
+
+                {/* Institutional Profile Banner (Student / Employee) */}
+                {selectedPatient?.customFields?.classification === 'Student' || selectedPatient?.customFields?.student_id ? (
+                  <View style={styles.institutionalBanner}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <ThemedText style={styles.institutionalBannerTitle}>
+                        🎓 Student Institutional Profile (COR / Enrollment)
+                      </ThemedText>
+                      <ThemedText style={{
+                        fontSize: 11,
+                        fontWeight: '700',
+                        color: selectedPatient.verificationStatus === 'PendingVerification' ? '#B45309' : '#15803D',
+                        backgroundColor: selectedPatient.verificationStatus === 'PendingVerification' ? '#FEF3C7' : '#DCFCE7',
+                        paddingHorizontal: 8,
+                        paddingVertical: 3,
+                        borderRadius: 6,
+                      }}>
+                        {selectedPatient.verificationStatus === 'PendingVerification' ? '⏳ Verification Pending' : '✓ Verified Enrollment'}
+                      </ThemedText>
+                    </View>
+                    <View style={styles.institutionalGrid}>
+                      <View style={styles.institutionalItem}>
+                        <ThemedText style={styles.institutionalLabel}>Student ID / LRN</ThemedText>
+                        <ThemedText style={styles.institutionalValue}>{selectedPatient.customFields?.student_id || 'Not Assigned'}</ThemedText>
+                      </View>
+                      <View style={styles.institutionalItem}>
+                        <ThemedText style={styles.institutionalLabel}>Year Level</ThemedText>
+                        <ThemedText style={styles.institutionalValue}>{selectedPatient.customFields?.year_level || '1st Year'}</ThemedText>
+                      </View>
+                      <View style={styles.institutionalItem}>
+                        <ThemedText style={styles.institutionalLabel}>College</ThemedText>
+                        <ThemedText style={styles.institutionalValue}>{selectedPatient.customFields?.college || 'General College'}</ThemedText>
+                      </View>
+                      <View style={styles.institutionalItem}>
+                        <ThemedText style={styles.institutionalLabel}>Degree Program</ThemedText>
+                        <ThemedText style={styles.institutionalValue}>{selectedPatient.customFields?.program || 'Undergraduate'}</ThemedText>
+                      </View>
+                      {selectedPatient.customFields &&
+                        Object.entries(selectedPatient.customFields)
+                          .filter(([k]) => !['classification', 'student_id', 'college', 'program', 'year_level', 'employee_id', 'department'].includes(k))
+                          .map(([k, v]) => (
+                            <View key={k} style={styles.institutionalItem}>
+                              <ThemedText style={styles.institutionalLabel}>{k.replace(/_/g, ' ').toUpperCase()}</ThemedText>
+                              <ThemedText style={styles.institutionalValue}>{String(v)}</ThemedText>
+                            </View>
+                          ))}
+                    </View>
+                  </View>
+                ) : selectedPatient?.customFields?.classification === 'Employee' || selectedPatient?.customFields?.employee_id ? (
+                  <View style={[styles.institutionalBanner, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <ThemedText style={[styles.institutionalBannerTitle, { color: '#166534' }]}>
+                        💼 Employee Institutional Profile
+                      </ThemedText>
+                      <ThemedText style={{
+                        fontSize: 11,
+                        fontWeight: '700',
+                        color: '#15803D',
+                        backgroundColor: '#DCFCE7',
+                        paddingHorizontal: 8,
+                        paddingVertical: 3,
+                        borderRadius: 6,
+                      }}>
+                        ✓ Verified Staff
+                      </ThemedText>
+                    </View>
+                    <View style={styles.institutionalGrid}>
+                      <View style={styles.institutionalItem}>
+                        <ThemedText style={styles.institutionalLabel}>Employee ID</ThemedText>
+                        <ThemedText style={styles.institutionalValue}>{selectedPatient.customFields?.employee_id || 'Not Assigned'}</ThemedText>
+                      </View>
+                      <View style={styles.institutionalItem}>
+                        <ThemedText style={styles.institutionalLabel}>Department / Unit</ThemedText>
+                        <ThemedText style={styles.institutionalValue}>{selectedPatient.customFields?.department || 'Administration'}</ThemedText>
+                      </View>
+                      {selectedPatient.customFields &&
+                        Object.entries(selectedPatient.customFields)
+                          .filter(([k]) => !['classification', 'student_id', 'college', 'program', 'year_level', 'employee_id', 'department'].includes(k))
+                          .map(([k, v]) => (
+                            <View key={k} style={styles.institutionalItem}>
+                              <ThemedText style={styles.institutionalLabel}>{k.replace(/_/g, ' ').toUpperCase()}</ThemedText>
+                              <ThemedText style={styles.institutionalValue}>{String(v)}</ThemedText>
+                            </View>
+                          ))}
+                    </View>
+                  </View>
+                ) : null}
 
                 {selectedPatient?.allergies && (
                   <View style={styles.allergyBanner}>
@@ -997,6 +1514,110 @@ export default function PatientsScreen() {
                     </ThemedText>
                   )}
                 </View>
+
+                {/* Attached Physical Documents & External Records Section */}
+                <View style={styles.chartSection}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <ThemedText style={styles.chartSectionTitle}>
+                      📁 External Records & Physical Attachments ({patientAttachments.length})
+                    </ThemedText>
+                    <Pressable
+                      style={styles.addDocBtn}
+                      onPress={() => setUploadDocModalVisible(true)}
+                    >
+                      <ThemedText style={styles.addDocBtnText}>+ Attach External Document</ThemedText>
+                    </Pressable>
+                  </View>
+
+                  <ThemedText style={{ fontSize: 12, color: '#6B7280', marginBottom: 8 }}>
+                    Scanned paper Certificate of Registration (COR), outside Chest X-Ray films, lab sheets, and outside medical clearance certificates.
+                  </ThemedText>
+
+                  {loadingAttachments ? (
+                    <ActivityIndicator size="small" color="#0284C7" style={{ padding: 12 }} />
+                  ) : patientAttachments.length > 0 ? (
+                    patientAttachments.map((att) => {
+                      const isVerified = att.verificationStatus === 'Verified';
+                      const isPending = att.verificationStatus === 'PendingVerification' || !att.verificationStatus;
+                      const isRejected = att.verificationStatus === 'Rejected';
+                      return (
+                        <View key={att.id} style={styles.attachmentCard}>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <View style={{ flex: 1, paddingRight: 8 }}>
+                              <ThemedText style={styles.attachmentTitle}>{att.title}</ThemedText>
+                              <ThemedText style={styles.attachmentMeta}>
+                                Type: {att.recordType} • File: {att.fileName} ({Math.round(att.fileSizeBytes / 1024)} KB)
+                              </ThemedText>
+                              <ThemedText style={styles.attachmentMeta}>
+                                Uploaded: {new Date(att.documentDate || att.createdAt).toLocaleDateString()} • Ingested by: {att.uploadedByStaffName || 'Clinic Staff'}
+                              </ThemedText>
+                              {att.notes ? (
+                                <ThemedText style={styles.attachmentNotes}>
+                                  📝 Notes: {att.notes}
+                                </ThemedText>
+                              ) : null}
+                            </View>
+                            <View style={[
+                              styles.attBadge,
+                              isVerified ? styles.attBadgeVerified : isRejected ? styles.attBadgeRejected : styles.attBadgePending
+                            ]}>
+                              <ThemedText style={[
+                                styles.attBadgeText,
+                                isVerified ? styles.attBadgeTextVerified : isRejected ? styles.attBadgeTextRejected : styles.attBadgeTextPending
+                              ]}>
+                                {isVerified ? '✓ Verified' : isRejected ? '✕ Rejected' : '⏳ Pending Review'}
+                              </ThemedText>
+                            </View>
+                          </View>
+
+                          {/* Verification Meta or Action Buttons */}
+                          {isVerified && att.verifiedByStaffName && (
+                            <View style={styles.verifiedMetaBox}>
+                              <ThemedText style={styles.verifiedMetaText}>
+                                ✅ Verified by {att.verifiedByStaffName} on {att.verifiedAt ? new Date(att.verifiedAt).toLocaleDateString() : 'today'}
+                              </ThemedText>
+                            </View>
+                          )}
+
+                          {isRejected && (
+                            <View style={[styles.verifiedMetaBox, { backgroundColor: '#FEF2F2', borderColor: '#FECACA' }]}>
+                              <ThemedText style={[styles.verifiedMetaText, { color: '#991B1B' }]}>
+                                ⚠️ Rejection reason: {att.rejectionReason || 'Illegible or unverifiable external document.'}
+                              </ThemedText>
+                            </View>
+                          )}
+
+                          {isPending && (
+                            <View style={styles.attActionRow}>
+                              <Pressable
+                                style={[styles.verifyBtn, verifyingAttachmentId === att.id && { opacity: 0.6 }]}
+                                onPress={() => handleVerifyAttachment(att.id, true)}
+                                disabled={verifyingAttachmentId === att.id}
+                              >
+                                <ThemedText style={styles.verifyBtnText}>
+                                  ✓ Verify & Accept Document
+                                </ThemedText>
+                              </Pressable>
+                              <Pressable
+                                style={[styles.rejectBtn, verifyingAttachmentId === att.id && { opacity: 0.6 }]}
+                                onPress={() => handleVerifyAttachment(att.id, false)}
+                                disabled={verifyingAttachmentId === att.id}
+                              >
+                                <ThemedText style={styles.rejectBtnText}>
+                                  ✕ Reject
+                                </ThemedText>
+                              </Pressable>
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })
+                  ) : (
+                    <View style={styles.emptyCard}>
+                      <ThemedText style={styles.emptyText}>No external physical documents attached yet.</ThemedText>
+                    </View>
+                  )}
+                </View>
               </ScrollView>
             ) : null}
           </View>
@@ -1173,6 +1794,109 @@ export default function PatientsScreen() {
         prescriptionNumber={targetPrescriptionNumber}
         onSuccess={handleExternalDispenseSuccess}
       />
+
+      {/* Attach External Physical Document Modal (School Clinic / 80/20) */}
+      <Modal visible={uploadDocModalVisible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxWidth: 500 }]}>
+            <View style={styles.modalHeader}>
+              <ThemedText style={styles.modalTitle}>Attach External Physical Document</ThemedText>
+              <Pressable onPress={() => setUploadDocModalVisible(false)}>
+                <ThemedText style={styles.modalCloseText}>✕</ThemedText>
+              </Pressable>
+            </View>
+            <ThemedText style={styles.modalSub}>
+              Ingest scanned physical documents (paper COR, outside Chest X-Ray films, lab sheets, or med certs) directly into {selectedPatient?.fullName}'s profile.
+            </ThemedText>
+
+            <View style={{ gap: 12, marginTop: 12 }}>
+              <View>
+                <ThemedText style={styles.inputLabel}>Document Title *</ThemedText>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="e.g. Chest X-Ray (Outside Clinic - St. Jude)"
+                  placeholderTextColor="#9CA3AF"
+                  value={docTitle}
+                  onChangeText={setDocTitle}
+                />
+              </View>
+
+              <View>
+                <ThemedText style={styles.inputLabel}>Document / Record Classification</ThemedText>
+                <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                  {[
+                    { key: 'OutsideChestXRay', label: '🩻 Chest X-Ray' },
+                    { key: 'CertificateOfRegistration', label: '📜 Paper COR' },
+                    { key: 'MedicalCertificate', label: '🩺 Outside MedCert' },
+                    { key: 'LabResult', label: '🧪 Lab Sheet' },
+                    { key: 'Other', label: '📄 Other' },
+                  ].map((t) => (
+                    <Pressable
+                      key={t.key}
+                      style={[styles.formatChip, docRecordType === t.key && styles.formatChipActive]}
+                      onPress={() => setDocRecordType(t.key)}
+                    >
+                      <ThemedText style={[styles.formatChipText, docRecordType === t.key && styles.formatChipTextActive]}>
+                        {t.label}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
+              <View>
+                <ThemedText style={styles.inputLabel}>Ingestion Source / Format</ThemedText>
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  {(['PDF', 'Photo'] as const).map((fmt) => (
+                    <Pressable
+                      key={fmt}
+                      style={[styles.formatChip, docFileType === fmt && styles.formatChipActive]}
+                      onPress={() => setDocFileType(fmt)}
+                    >
+                      <ThemedText style={[styles.formatChipText, docFileType === fmt && styles.formatChipTextActive]}>
+                        {fmt === 'PDF' ? '📄 Scanned PDF' : '📷 Flatbed / Camera Scan'}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
+              <View>
+                <ThemedText style={styles.inputLabel}>Clinical Review Findings & Notes</ThemedText>
+                <TextInput
+                  style={[styles.textInput, { height: 60 }]}
+                  multiline
+                  placeholder="e.g. Clean chest PA film, no active pulmonary disease seen."
+                  placeholderTextColor="#9CA3AF"
+                  value={docNotes}
+                  onChangeText={setDocNotes}
+                />
+              </View>
+
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 14 }}>
+                <Pressable
+                  style={styles.cancelModalBtn}
+                  onPress={() => setUploadDocModalVisible(false)}
+                  disabled={uploadingDoc}
+                >
+                  <ThemedText style={styles.cancelModalText}>Cancel</ThemedText>
+                </Pressable>
+                <Pressable
+                  style={styles.confirmAttachBtn}
+                  onPress={handleUploadDocument}
+                  disabled={uploadingDoc}
+                >
+                  {uploadingDoc ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <ThemedText style={styles.confirmAttachText}>Save & Attach to Profile</ThemedText>
+                  )}
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   </ResponsiveLayout>
 );
@@ -1789,6 +2513,218 @@ const styles = StyleSheet.create({
     backgroundColor: '#0284C7',
   },
   confirmAttachText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  categoryRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  categoryPill: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    alignItems: 'center',
+  },
+  categoryPillActive: {
+    backgroundColor: '#0284C7',
+    borderColor: '#0284C7',
+  },
+  categoryPillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#4B5563',
+  },
+  categoryPillTextActive: {
+    color: '#FFFFFF',
+  },
+  institutionalBox: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 10,
+    padding: 12,
+    gap: 10,
+  },
+  institutionalBoxTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1E40AF',
+  },
+  institutionalBanner: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 10,
+    padding: 12,
+    gap: 8,
+  },
+  institutionalBannerTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1E40AF',
+  },
+  institutionalGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  institutionalItem: {
+    minWidth: '45%',
+    flex: 1,
+  },
+  institutionalLabel: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  institutionalValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  addDocBtn: {
+    backgroundColor: '#E0F2FE',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+  },
+  addDocBtnText: {
+    color: '#0284C7',
+    fontWeight: '700',
+    fontSize: 11,
+  },
+  attachmentCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    padding: 12,
+    gap: 8,
+  },
+  attachmentTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  attachmentMeta: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  attachmentNotes: {
+    fontSize: 12,
+    color: '#374151',
+    fontStyle: 'italic',
+    marginTop: 4,
+  },
+  attBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  attBadgeVerified: {
+    backgroundColor: '#DCFCE7',
+    borderColor: '#86EFAC',
+  },
+  attBadgePending: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#FDE68A',
+  },
+  attBadgeRejected: {
+    backgroundColor: '#FEE2E2',
+    borderColor: '#FCA5A5',
+  },
+  attBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  attBadgeTextVerified: {
+    color: '#15803D',
+  },
+  attBadgeTextPending: {
+    color: '#B45309',
+  },
+  attBadgeTextRejected: {
+    color: '#B91C1C',
+  },
+  verifiedMetaBox: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    padding: 8,
+    borderRadius: 6,
+  },
+  verifiedMetaText: {
+    fontSize: 11,
+    color: '#166534',
+    fontWeight: '600',
+  },
+  attActionRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  verifyBtn: {
+    backgroundColor: '#16A34A',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  verifyBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 11,
+  },
+  rejectBtn: {
+    backgroundColor: '#DC2626',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  rejectBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 11,
+  },
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    gap: 12,
+  },
+  offlineBannerTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#92400E',
+  },
+  offlineBannerSubtitle: {
+    fontSize: 11,
+    color: '#B45309',
+    marginTop: 2,
+  },
+  syncNowBtn: {
+    backgroundColor: '#D97706',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  syncNowBtnText: {
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 12,

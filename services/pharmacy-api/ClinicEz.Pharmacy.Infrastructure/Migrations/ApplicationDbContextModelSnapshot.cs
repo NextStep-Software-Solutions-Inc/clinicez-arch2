@@ -88,6 +88,205 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
                     b.ToTable("DispenseAuditRecords", "pharmacy_dashboard");
                 });
 
+            modelBuilder.Entity("ClinicEz.Pharmacy.Domain.Entities.GamotBeneficiaryLedger", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("AnnualAllocation")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("BenefitYear")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("MemberPhilHealthIdentificationNumber")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<Guid>("PatientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PatientName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("PharmacyId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("PhilHealthIdentificationNumber")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal>("TotalAmountUtilized")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "PharmacyId", "PhilHealthIdentificationNumber", "BenefitYear");
+
+                    b.ToTable("GamotBeneficiaryLedgers", "pharmacy_dashboard");
+                });
+
+            modelBuilder.Entity("ClinicEz.Pharmacy.Domain.Entities.GamotLedgerTransaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BrandName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DispensingPharmacistName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("DispensingPharmacistPrc")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("GamotBeneficiaryLedgerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("GenericName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("HciAccreditationNumber")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<decimal>("PatientCoPay")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("PharmacyId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("PhilHealthClaimSequenceNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("PhilHealthDrugCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<decimal>("PhilHealthReferencePrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("PrescriptionNumber")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("PrescriptionOrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("PrescriptionOrderItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("QuantityDispensed")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal>("TotalGamotAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime>("TransactionDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UniquePrescriptionSecurityCode")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GamotBeneficiaryLedgerId");
+
+                    b.HasIndex("TenantId", "PharmacyId", "UniquePrescriptionSecurityCode");
+
+                    b.ToTable("GamotLedgerTransactions", "pharmacy_dashboard");
+                });
+
             modelBuilder.Entity("ClinicEz.Pharmacy.Domain.Entities.InventoryBatch", b =>
                 {
                     b.Property<Guid>("Id")
@@ -418,7 +617,14 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
                     b.Property<Guid>("ExternalPrescriptionId")
                         .HasColumnType("uuid");
 
+                    b.Property<decimal>("GamotCoverageAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPhilHealthGamot")
                         .HasColumnType("boolean");
 
                     b.Property<DateTime>("IssuedAt")
@@ -443,6 +649,10 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
                     b.Property<string>("PatientAllergies")
                         .HasColumnType("text");
 
+                    b.Property<decimal>("PatientCoPayAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<string>("PatientContact")
                         .HasColumnType("text");
 
@@ -461,6 +671,14 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
                     b.Property<string>("PharmacyId")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<string>("PhilHealthIdentificationNumber")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("PhilHealthMemberPin")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
 
                     b.Property<string>("PrescriptionNumber")
                         .IsRequired()
@@ -529,6 +747,10 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<decimal?>("GamotReferencePrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<string>("GenericName")
                         .IsRequired()
                         .HasMaxLength(255)
@@ -542,6 +764,13 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
+
+                    b.Property<bool>("IsGamotCovered")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PhilHealthDrugCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<Guid>("PrescriptionOrderId")
                         .HasColumnType("uuid");
@@ -565,6 +794,10 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
                     b.Property<decimal>("Subtotal")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("UniquePrescriptionSecurityCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<decimal>("UnitPrice")
                         .HasPrecision(18, 2)
@@ -809,6 +1042,17 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
                     b.Navigation("PrescriptionOrder");
                 });
 
+            modelBuilder.Entity("ClinicEz.Pharmacy.Domain.Entities.GamotLedgerTransaction", b =>
+                {
+                    b.HasOne("ClinicEz.Pharmacy.Domain.Entities.GamotBeneficiaryLedger", "Ledger")
+                        .WithMany("Transactions")
+                        .HasForeignKey("GamotBeneficiaryLedgerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Ledger");
+                });
+
             modelBuilder.Entity("ClinicEz.Pharmacy.Domain.Entities.InventoryBatch", b =>
                 {
                     b.HasOne("ClinicEz.Pharmacy.Domain.Entities.PharmacyInventoryItem", "InventoryItem")
@@ -841,6 +1085,11 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("InboxMessageId", "InboxConsumerId")
                         .HasPrincipalKey("MessageId", "ConsumerId");
+                });
+
+            modelBuilder.Entity("ClinicEz.Pharmacy.Domain.Entities.GamotBeneficiaryLedger", b =>
+                {
+                    b.Navigation("Transactions");
                 });
 
             modelBuilder.Entity("ClinicEz.Pharmacy.Domain.Entities.PharmacyInventoryItem", b =>

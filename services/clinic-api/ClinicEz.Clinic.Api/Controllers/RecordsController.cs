@@ -44,4 +44,17 @@ public sealed class RecordsController : ControllerBase
         var result = await _sender.Send(new GetPatientRecordAttachmentsQuery(patientId, recordType), ct);
         return Ok(ApiResponse<IReadOnlyList<ClinicRecordAttachmentDto>>.Success(result));
     }
+
+    [HttpPost("attachments/{id:guid}/verify")]
+    [HasPermission(ClinicPermissions.RecordsUpload)]
+    public async Task<ActionResult<ApiResponse<ClinicRecordAttachmentDto>>> VerifyAttachment(
+        Guid id,
+        [FromBody] VerifyAttachmentRequest request,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new VerifyRecordAttachmentCommand(id, request.IsApproved, request.RejectionReason), ct);
+        return Ok(ApiResponse<ClinicRecordAttachmentDto>.Success(result, "Attachment verification updated."));
+    }
 }
+
+public sealed record VerifyAttachmentRequest(bool IsApproved, string? RejectionReason = null);

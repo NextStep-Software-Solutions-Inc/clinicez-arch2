@@ -13,13 +13,109 @@ import { ThemedText, Badge, Button, Input, Card } from '@ui';
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
 import { useFacilityLicense } from '../../components/FacilityActivationGate';
+import { BulkStudentImportModal } from '../../components/BulkStudentImportModal';
 import {
   clinicService,
   DailyEodReport,
   ClinicSettingsRecord,
   StaffMember,
   StaffRole,
+  ClinicCustomFieldDefinition,
 } from '../../services/clinicService';
+
+const DEFAULT_CUSTOM_FIELDS: ClinicCustomFieldDefinition[] = [
+  {
+    id: 'cf-student-id',
+    tenantId: 'tenant-default',
+    clinicId: 'clinic-default',
+    entityType: 'ClinicPatient',
+    fieldKey: 'student_id',
+    label: 'Student ID / LRN',
+    category: 'Student',
+    dataType: 'Text',
+    isRequired: true,
+    displayOrder: 1,
+    placeholder: 'e.g. 2026-10492',
+    isActive: true,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'cf-college',
+    tenantId: 'tenant-default',
+    clinicId: 'clinic-default',
+    entityType: 'ClinicPatient',
+    fieldKey: 'college',
+    label: 'College / Faculty',
+    category: 'Student',
+    dataType: 'Text',
+    isRequired: false,
+    displayOrder: 2,
+    placeholder: 'e.g. College of Computer Studies',
+    isActive: true,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'cf-program',
+    tenantId: 'tenant-default',
+    clinicId: 'clinic-default',
+    entityType: 'ClinicPatient',
+    fieldKey: 'program',
+    label: 'Degree Program / Course',
+    category: 'Student',
+    dataType: 'Text',
+    isRequired: false,
+    displayOrder: 3,
+    placeholder: 'e.g. BS Computer Science',
+    isActive: true,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'cf-year-level',
+    tenantId: 'tenant-default',
+    clinicId: 'clinic-default',
+    entityType: 'ClinicPatient',
+    fieldKey: 'year_level',
+    label: 'Year Level',
+    category: 'Student',
+    dataType: 'Select',
+    optionsJson: JSON.stringify(['1st Year', '2nd Year', '3rd Year', '4th Year', 'Graduate Studies']),
+    isRequired: true,
+    displayOrder: 4,
+    placeholder: 'Select Year Level',
+    isActive: true,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'cf-employee-id',
+    tenantId: 'tenant-default',
+    clinicId: 'clinic-default',
+    entityType: 'ClinicPatient',
+    fieldKey: 'employee_id',
+    label: 'Employee ID',
+    category: 'Employee',
+    dataType: 'Text',
+    isRequired: true,
+    displayOrder: 5,
+    placeholder: 'e.g. EMP-2026-042',
+    isActive: true,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'cf-department',
+    tenantId: 'tenant-default',
+    clinicId: 'clinic-default',
+    entityType: 'ClinicPatient',
+    fieldKey: 'department',
+    label: 'Department / Unit',
+    category: 'Employee',
+    dataType: 'Text',
+    isRequired: false,
+    displayOrder: 6,
+    placeholder: 'e.g. Registrar / Human Resources',
+    isActive: true,
+    createdAt: new Date().toISOString(),
+  },
+];
 
 export default function SettingsScreen() {
   const { license, openActivationModal, refreshLicense } = useFacilityLicense();
@@ -43,6 +139,21 @@ export default function SettingsScreen() {
   const [addingStaff, setAddingStaff] = useState(false);
   const [staffError, setStaffError] = useState<string | null>(null);
 
+  // Tenant Custom Field Builder states
+  const [customFields, setCustomFields] = useState<ClinicCustomFieldDefinition[]>(DEFAULT_CUSTOM_FIELDS);
+  const [selectedFieldCategory, setSelectedFieldCategory] = useState<'All' | 'Student' | 'Employee' | 'General'>('All');
+  const [showAddFieldModal, setShowAddFieldModal] = useState(false);
+  const [showBulkImportModal, setShowBulkImportModal] = useState(false);
+  const [newFieldLabel, setNewFieldLabel] = useState('');
+  const [newFieldKey, setNewFieldKey] = useState('');
+  const [newFieldCategory, setNewFieldCategory] = useState<'Student' | 'Employee' | 'General'>('Student');
+  const [newFieldDataType, setNewFieldDataType] = useState<'Text' | 'Number' | 'Date' | 'Select' | 'Boolean'>('Text');
+  const [newFieldPlaceholder, setNewFieldPlaceholder] = useState('');
+  const [newFieldOptions, setNewFieldOptions] = useState('');
+  const [newFieldRequired, setNewFieldRequired] = useState(false);
+  const [savingField, setSavingField] = useState(false);
+  const [fieldError, setFieldError] = useState<string | null>(null);
+
   // Form states for preferences
   const [clinicName, setClinicName] = useState('St. Jude Family Clinic & Primary Care');
   const [operatingHours, setOperatingHours] = useState('Mon-Sat 8:00 AM - 5:00 PM');
@@ -53,13 +164,19 @@ export default function SettingsScreen() {
   const [letterheadContact, setLetterheadContact] = useState('Tel: (02) 8876-5432 • Mobile: +63 917 123 4567');
 
   const loadAll = useCallback(async () => {
-    const [[eodData], [settingsData], [staffData]] = await Promise.all([
+    const [[eodData], [settingsData], [staffData], [customFieldsData]] = await Promise.all([
       clinicService.getDailyEodReport(),
       clinicService.getSettings(),
       clinicService.getStaff(),
+      clinicService.getCustomFields('ClinicPatient'),
     ]);
 
     if (eodData) setEodReport(eodData);
+    if (customFieldsData && customFieldsData.length > 0) {
+      setCustomFields(customFieldsData);
+    } else {
+      setCustomFields(DEFAULT_CUSTOM_FIELDS);
+    }
     if (settingsData) {
       setSettings(settingsData);
       setClinicName(settingsData.clinicName);
@@ -191,6 +308,69 @@ export default function SettingsScreen() {
       setStaff((prev) => prev.filter((s) => s.id !== staffId));
       await refreshLicense();
     }
+  };
+
+  const handleCreateCustomField = async () => {
+    if (!newFieldLabel.trim()) {
+      setFieldError('Field display label is required.');
+      return;
+    }
+    const computedKey = (newFieldKey.trim() || newFieldLabel.trim()).toLowerCase().replace(/[^a-z0-9]/g, '_');
+    setSavingField(true);
+    setFieldError(null);
+
+    const payload: Partial<ClinicCustomFieldDefinition> = {
+      entityType: 'ClinicPatient',
+      fieldKey: computedKey,
+      label: newFieldLabel.trim(),
+      category: newFieldCategory,
+      dataType: newFieldDataType,
+      isRequired: newFieldRequired,
+      displayOrder: customFields.length + 1,
+      placeholder: newFieldPlaceholder.trim() || undefined,
+      optionsJson: newFieldDataType === 'Select' && newFieldOptions.trim()
+        ? JSON.stringify(newFieldOptions.split(',').map((s) => s.trim()).filter(Boolean))
+        : undefined,
+      isActive: true,
+    };
+
+    const [created, err] = await clinicService.createCustomField(payload);
+    setSavingField(false);
+
+    if (created) {
+      setCustomFields((prev) => [...prev, created]);
+    } else {
+      // Local fallback for resilience
+      const fallback: ClinicCustomFieldDefinition = {
+        id: `cf-${Date.now()}`,
+        tenantId: 'tenant-default',
+        clinicId: 'clinic-default',
+        entityType: 'ClinicPatient',
+        fieldKey: computedKey,
+        label: newFieldLabel.trim(),
+        category: newFieldCategory,
+        dataType: newFieldDataType,
+        isRequired: newFieldRequired,
+        displayOrder: customFields.length + 1,
+        placeholder: newFieldPlaceholder.trim() || undefined,
+        optionsJson: payload.optionsJson,
+        isActive: true,
+        createdAt: new Date().toISOString(),
+      };
+      setCustomFields((prev) => [...prev, fallback]);
+    }
+
+    setShowAddFieldModal(false);
+    setNewFieldLabel('');
+    setNewFieldKey('');
+    setNewFieldPlaceholder('');
+    setNewFieldOptions('');
+    setNewFieldRequired(false);
+  };
+
+  const handleDeleteCustomField = async (fieldId: string) => {
+    await clinicService.deleteCustomField(fieldId);
+    setCustomFields((prev) => prev.filter((f) => f.id !== fieldId));
   };
 
   return (
@@ -478,6 +658,108 @@ export default function SettingsScreen() {
         </View>
       </View>
 
+      {/* Tenant Custom Fields & Dynamic Form Builder Card */}
+      <View style={styles.card}>
+        <View style={styles.cardHeaderRow}>
+          <View style={{ flex: 1 }}>
+            <ThemedText style={styles.cardTitle}>Tenant Custom Fields & Dynamic Form Studio</ThemedText>
+            <ThemedText style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>
+              Build and customize demographic intake fields for Students, Employees, or Campus Programs without modifying code or schema.
+            </ThemedText>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Pressable
+              style={[styles.addStaffBtn, { backgroundColor: '#059669' }]}
+              onPress={() => setShowBulkImportModal(true)}
+            >
+              <ThemedText style={styles.addStaffBtnText}>📥 Bulk Import Students</ThemedText>
+            </Pressable>
+            <Pressable
+              style={styles.addStaffBtn}
+              onPress={() => {
+                setFieldError(null);
+                setShowAddFieldModal(true);
+              }}
+            >
+              <ThemedText style={styles.addStaffBtnText}>+ Add Custom Field</ThemedText>
+            </Pressable>
+          </View>
+        </View>
+
+        {/* Category Filter Pills */}
+        <View style={{ flexDirection: 'row', gap: 6, marginVertical: 6 }}>
+          {(['All', 'Student', 'Employee', 'General'] as const).map((cat) => (
+            <Pressable
+              key={cat}
+              style={[
+                styles.categoryFilterChip,
+                selectedFieldCategory === cat && styles.categoryFilterChipActive,
+              ]}
+              onPress={() => setSelectedFieldCategory(cat)}
+            >
+              <ThemedText
+                style={[
+                  styles.categoryFilterChipText,
+                  selectedFieldCategory === cat && styles.categoryFilterChipTextActive,
+                ]}
+              >
+                {cat === 'All' ? '🌐 All Fields' : cat === 'Student' ? '🎓 Students' : cat === 'Employee' ? '💼 Employees' : '👤 General'}
+              </ThemedText>
+            </Pressable>
+          ))}
+        </View>
+
+        {/* Custom Fields List */}
+        <View style={{ gap: 8, marginTop: 4 }}>
+          {customFields
+            .filter((f) => selectedFieldCategory === 'All' || f.category === selectedFieldCategory)
+            .map((field) => (
+              <View key={field.id} style={styles.customFieldItem}>
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <ThemedText style={styles.customFieldLabel}>{field.label}</ThemedText>
+                    <ThemedText style={styles.customFieldKeyBadge}>{field.fieldKey}</ThemedText>
+                    <ThemedText
+                      style={[
+                        styles.customFieldTypeBadge,
+                        field.dataType === 'Select' ? { backgroundColor: '#EDE9FE', color: '#6D28D9' } :
+                        field.dataType === 'Number' ? { backgroundColor: '#FEF3C7', color: '#B45309' } :
+                        field.dataType === 'Date' ? { backgroundColor: '#FEE2E2', color: '#B91C1C' } :
+                        { backgroundColor: '#E0F2FE', color: '#0369A1' }
+                      ]}
+                    >
+                      {field.dataType}
+                    </ThemedText>
+                    {field.isRequired ? (
+                      <ThemedText style={{ fontSize: 10, fontWeight: '700', color: '#DC2626' }}>
+                        * Required
+                      </ThemedText>
+                    ) : (
+                      <ThemedText style={{ fontSize: 10, color: '#9CA3AF' }}>
+                        Optional
+                      </ThemedText>
+                    )}
+                  </View>
+                  <ThemedText style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>
+                    Category: {field.category || 'General'} {field.placeholder ? `• Hint: "${field.placeholder}"` : ''}
+                  </ThemedText>
+                  {field.optionsJson ? (
+                    <ThemedText style={{ fontSize: 11, color: '#4B5563', fontStyle: 'italic', marginTop: 2 }}>
+                      Options: {JSON.parse(field.optionsJson || '[]').join(', ')}
+                    </ThemedText>
+                  ) : null}
+                </View>
+                <Pressable
+                  style={styles.deactivateBtn}
+                  onPress={() => handleDeleteCustomField(field.id)}
+                >
+                  <ThemedText style={styles.deactivateBtnText}>Delete</ThemedText>
+                </Pressable>
+              </View>
+            ))}
+        </View>
+      </View>
+
       {/* Facility Accreditation Details */}
       <View style={styles.card}>
         <ThemedText style={styles.cardTitle}>Facility Details & Sync</ThemedText>
@@ -619,6 +901,172 @@ export default function SettingsScreen() {
         </View>
       </View>
     </Modal>
+
+    {/* Add Custom Field Modal */}
+    <Modal
+      visible={showAddFieldModal}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowAddFieldModal(false)}
+    >
+      <View style={styles.modalBackdrop}>
+        <View style={[styles.modalContent, { maxWidth: 500 }]}>
+          <ThemedText style={styles.modalHeaderTitle}>Add Tenant Custom Field</ThemedText>
+          <ThemedText style={styles.modalHeaderSub}>
+            Define new institutional demographic or clinical attributes for your facility's intake forms.
+          </ThemedText>
+
+          {fieldError && (
+            <View style={styles.modalErrorBanner}>
+              <ThemedText style={styles.modalErrorBannerText}>{fieldError}</ThemedText>
+            </View>
+          )}
+
+          <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={{ gap: 10 }}>
+            <View>
+              <ThemedText style={styles.fieldLabel}>Field Display Label *</ThemedText>
+              <TextInput
+                style={styles.fieldInput}
+                value={newFieldLabel}
+                onChangeText={(text) => {
+                  setNewFieldLabel(text);
+                  if (!newFieldKey) {
+                    setNewFieldKey(text.toLowerCase().replace(/[^a-z0-9]/g, '_'));
+                  }
+                }}
+                placeholder="e.g. Guardian / Parent Name"
+              />
+            </View>
+
+            <View>
+              <ThemedText style={styles.fieldLabel}>System Key / Attribute Name</ThemedText>
+              <TextInput
+                style={styles.fieldInput}
+                value={newFieldKey}
+                onChangeText={setNewFieldKey}
+                placeholder="e.g. guardian_name"
+              />
+            </View>
+
+            <View>
+              <ThemedText style={styles.fieldLabel}>Target Category</ThemedText>
+              <View style={{ flexDirection: 'row', gap: 6, marginTop: 4 }}>
+                {(['Student', 'Employee', 'General'] as const).map((cat) => (
+                  <Pressable
+                    key={cat}
+                    style={[
+                      styles.roleSelectChip,
+                      newFieldCategory === cat && styles.roleSelectChipActive,
+                    ]}
+                    onPress={() => setNewFieldCategory(cat)}
+                  >
+                    <ThemedText
+                      style={[
+                        styles.roleSelectChipText,
+                        newFieldCategory === cat && styles.roleSelectChipTextActive,
+                      ]}
+                    >
+                      {cat === 'Student' ? '🎓 Student' : cat === 'Employee' ? '💼 Employee' : '👤 General'}
+                    </ThemedText>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+
+            <View>
+              <ThemedText style={styles.fieldLabel}>Data Type</ThemedText>
+              <View style={{ flexDirection: 'row', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+                {(['Text', 'Number', 'Date', 'Select', 'Boolean'] as const).map((dt) => (
+                  <Pressable
+                    key={dt}
+                    style={[
+                      styles.roleSelectChip,
+                      newFieldDataType === dt && styles.roleSelectChipActive,
+                    ]}
+                    onPress={() => setNewFieldDataType(dt)}
+                  >
+                    <ThemedText
+                      style={[
+                        styles.roleSelectChipText,
+                        newFieldDataType === dt && styles.roleSelectChipTextActive,
+                      ]}
+                    >
+                      {dt}
+                    </ThemedText>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+
+            {newFieldDataType === 'Select' && (
+              <View>
+                <ThemedText style={styles.fieldLabel}>Dropdown Options (comma separated) *</ThemedText>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={newFieldOptions}
+                  onChangeText={setNewFieldOptions}
+                  placeholder="e.g. 1st Year, 2nd Year, 3rd Year, 4th Year"
+                />
+              </View>
+            )}
+
+            <View>
+              <ThemedText style={styles.fieldLabel}>Placeholder / Helper Text</ThemedText>
+              <TextInput
+                style={styles.fieldInput}
+                value={newFieldPlaceholder}
+                onChangeText={setNewFieldPlaceholder}
+                placeholder="e.g. Full name of emergency guardian"
+              />
+            </View>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 }}>
+              <Pressable
+                style={[
+                  styles.checkboxBox,
+                  newFieldRequired && styles.checkboxBoxActive,
+                ]}
+                onPress={() => setNewFieldRequired(!newFieldRequired)}
+              >
+                {newFieldRequired && <ThemedText style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '700' }}>✓</ThemedText>}
+              </Pressable>
+              <ThemedText style={{ fontSize: 13, color: '#374151' }}>
+                Mark field as mandatory / required during patient registration
+              </ThemedText>
+            </View>
+          </ScrollView>
+
+          <View style={styles.modalActionsRow}>
+            <Pressable
+              style={styles.cancelModalBtn}
+              onPress={() => setShowAddFieldModal(false)}
+              disabled={savingField}
+            >
+              <ThemedText style={styles.cancelModalBtnText}>Cancel</ThemedText>
+            </Pressable>
+            <Pressable
+              style={styles.saveStaffBtn}
+              onPress={handleCreateCustomField}
+              disabled={savingField}
+            >
+              {savingField ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <ThemedText style={styles.saveStaffBtnText}>Deploy Custom Field</ThemedText>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+
+    <BulkStudentImportModal
+      visible={showBulkImportModal}
+      onClose={() => setShowBulkImportModal(false)}
+      onSuccess={() => {
+        loadAll();
+      }}
+    />
   </ResponsiveLayout>
 );
 }
@@ -1000,5 +1448,71 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '700',
+  },
+  categoryFilterChip: {
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  categoryFilterChipActive: {
+    backgroundColor: '#0284C7',
+    borderColor: '#0284C7',
+  },
+  categoryFilterChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  categoryFilterChipTextActive: {
+    color: '#FFFFFF',
+  },
+  customFieldItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    padding: 10,
+    gap: 8,
+  },
+  customFieldLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  customFieldKeyBadge: {
+    fontSize: 10,
+    fontFamily: 'monospace',
+    color: '#64748B',
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  customFieldTypeBadge: {
+    fontSize: 10,
+    fontWeight: '700',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  checkboxBox: {
+    width: 20,
+    height: 20,
+    borderWidth: 1,
+    borderColor: '#94A3B8',
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  checkboxBoxActive: {
+    backgroundColor: '#0284C7',
+    borderColor: '#0284C7',
   },
 });

@@ -27,6 +27,7 @@
   <ItemGroup>
     <ProjectReference Include="..\ClinicEz.PhilHealthProxy.Application\ClinicEz.PhilHealthProxy.Application.csproj" />
     <ProjectReference Include="..\ClinicEz.PhilHealthProxy.Domain\ClinicEz.PhilHealthProxy.Domain.csproj" />
+    <ProjectReference Include="..\ClinicEz.PhilHealthProxy.Infrastructure\ClinicEz.PhilHealthProxy.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

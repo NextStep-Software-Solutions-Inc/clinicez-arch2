@@ -48,6 +48,9 @@ public static class DependencyInjection
         // Outbound patient webhook notifier
         services.AddHttpClient<IPatientWebhookNotifier, PatientWebhookNotifier>();
 
+        // Outbound PhilHealth Yakap integration client
+        services.AddHttpClient<IPhilHealthProxyClient, PhilHealthProxyClient>();
+
         // Outbound interoperability publisher
         services.AddScoped<ILabRequisitionPublisher, LabRequisitionPublisher>();
         services.AddScoped<IPrescriptionPublisher, PrescriptionPublisher>();

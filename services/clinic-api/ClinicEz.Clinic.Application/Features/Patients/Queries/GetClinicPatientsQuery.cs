@@ -16,6 +16,7 @@ namespace ClinicEz.Clinic.Application.Features.Patients.Queries;
 public sealed record GetClinicPatientsQuery(
     string? SearchTerm = null,
     bool? HasAlerts = null,
+    string? VerificationStatus = null,
     int PageNumber = 1,
     int PageSize = 50) : IRequest<IReadOnlyList<ClinicPatientDto>>;
 
@@ -50,6 +51,11 @@ public sealed class GetClinicPatientsQueryHandler : IRequestHandler<GetClinicPat
             query = query.Where(p =>
                 !string.IsNullOrWhiteSpace(p.Alerts) ||
                 !string.IsNullOrWhiteSpace(p.Allergies));
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.VerificationStatus))
+        {
+            query = query.Where(p => p.VerificationStatus == request.VerificationStatus);
         }
 
         var patients = await query

@@ -15,6 +15,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<DispenseAuditRecord> DispenseAuditRecords { get; set; }
     public DbSet<PharmacyStaffMember> PharmacyStaffMembers { get; set; }
     public DbSet<PharmacySettings> PharmacySettings { get; set; }
+    public DbSet<GamotBeneficiaryLedger> GamotBeneficiaryLedgers { get; set; }
+    public DbSet<GamotLedgerTransaction> GamotLedgerTransactions { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -79,6 +81,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(e => e.PatientName).IsRequired().HasMaxLength(255);
             entity.Property(e => e.OrderingDoctorName).HasMaxLength(255);
             entity.Property(e => e.TotalAmount).HasPrecision(18, 2);
+            entity.Property(e => e.PhilHealthIdentificationNumber).HasMaxLength(30);
+            entity.Property(e => e.PhilHealthMemberPin).HasMaxLength(30);
+            entity.Property(e => e.GamotCoverageAmount).HasPrecision(18, 2);
+            entity.Property(e => e.PatientCoPayAmount).HasPrecision(18, 2);
 
             entity.HasMany(e => e.Items)
                 .WithOne(i => i.PrescriptionOrder)
@@ -98,6 +104,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(e => e.Dosage).IsRequired().HasMaxLength(100);
             entity.Property(e => e.UnitPrice).HasPrecision(18, 2);
             entity.Property(e => e.Subtotal).HasPrecision(18, 2);
+            entity.Property(e => e.PhilHealthDrugCode).HasMaxLength(50);
+            entity.Property(e => e.UniquePrescriptionSecurityCode).HasMaxLength(100);
+            entity.Property(e => e.GamotReferencePrice).HasPrecision(18, 2);
         });
 
         modelBuilder.Entity<DispenseAuditRecord>(entity =>
@@ -106,6 +115,48 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(e => e.PharmacistName).IsRequired().HasMaxLength(255);
             entity.Property(e => e.PharmacistPrcLicense).IsRequired().HasMaxLength(100);
             entity.Property(e => e.TotalAmount).HasPrecision(18, 2);
+        });
+
+        modelBuilder.Entity<GamotBeneficiaryLedger>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.PharmacyId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.PatientName).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.PhilHealthIdentificationNumber).IsRequired().HasMaxLength(30);
+            entity.Property(e => e.MemberPhilHealthIdentificationNumber).HasMaxLength(30);
+            entity.Property(e => e.BenefitYear).IsRequired().HasMaxLength(10);
+            entity.Property(e => e.AnnualAllocation).HasPrecision(18, 2);
+            entity.Property(e => e.TotalAmountUtilized).HasPrecision(18, 2);
+
+            entity.HasMany(e => e.Transactions)
+                .WithOne(t => t.Ledger)
+                .HasForeignKey(t => t.GamotBeneficiaryLedgerId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.TenantId, e.PharmacyId, e.PhilHealthIdentificationNumber, e.BenefitYear });
+        });
+
+        modelBuilder.Entity<GamotLedgerTransaction>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.PharmacyId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.PrescriptionNumber).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.PhilHealthDrugCode).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.GenericName).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.BrandName).HasMaxLength(255);
+            entity.Property(e => e.PhilHealthReferencePrice).HasPrecision(18, 2);
+            entity.Property(e => e.TotalGamotAmount).HasPrecision(18, 2);
+            entity.Property(e => e.PatientCoPay).HasPrecision(18, 2);
+            entity.Property(e => e.UniquePrescriptionSecurityCode).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.DispensingPharmacistName).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.DispensingPharmacistPrc).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.HciAccreditationNumber).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.PhilHealthClaimSequenceNumber).HasMaxLength(100);
+            entity.Property(e => e.Notes).HasMaxLength(500);
+
+            entity.HasIndex(e => new { e.TenantId, e.PharmacyId, e.UniquePrescriptionSecurityCode });
         });
 
         modelBuilder.AddInboxStateEntity();

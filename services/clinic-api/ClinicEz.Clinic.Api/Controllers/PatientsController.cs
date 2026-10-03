@@ -29,11 +29,12 @@ public sealed class PatientsController : ControllerBase
     public async Task<ActionResult<ApiResponse<IReadOnlyList<ClinicPatientDto>>>> GetPatients(
         [FromQuery] string? search,
         [FromQuery] bool? hasAlerts,
+        [FromQuery] string? verificationStatus,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
         CancellationToken ct = default)
     {
-        var result = await _sender.Send(new GetClinicPatientsQuery(search, hasAlerts, page, pageSize), ct);
+        var result = await _sender.Send(new GetClinicPatientsQuery(search, hasAlerts, verificationStatus, page, pageSize), ct);
         return Ok(ApiResponse<IReadOnlyList<ClinicPatientDto>>.Success(result));
     }
 
@@ -92,7 +93,9 @@ public sealed class PatientsController : ControllerBase
             request.BloodType,
             request.Allergies,
             request.ChronicConditions,
-            request.Alerts);
+            request.Alerts,
+            request.CustomFields,
+            request.VerificationStatus);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<ClinicPatientDto>.Success(result, "Patient profile updated successfully."));
@@ -106,6 +109,25 @@ public sealed class PatientsController : ControllerBase
     {
         var result = await _sender.Send(new GetPatientChartQuery(id), ct);
         return Ok(ApiResponse<PatientChartDto>.Success(result));
+    }
+
+    [HttpPost("bulk")]
+    [HasPermission(ClinicPermissions.PatientsWrite)]
+    public async Task<ActionResult<ApiResponse<BulkRegisterPatientsResultDto>>> BulkRegisterPatients(
+        [FromBody] BulkRegisterClinicPatientsCommand command,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<BulkRegisterPatientsResultDto>.Success(result, $"Successfully processed {result.SuccessCount} patient records."));
+    }
+
+    [HttpPost("public/student-intake")]
+    public async Task<ActionResult<ApiResponse<PublicStudentSelfEnrollResultDto>>> PublicStudentSelfEnroll(
+        [FromBody] PublicStudentSelfEnrollCommand command,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<PublicStudentSelfEnrollResultDto>.Success(result, result.Message));
     }
 }
 
@@ -132,4 +154,6 @@ public sealed record UpdatePatientRequest(
     string? BloodType,
     string? Allergies,
     string? ChronicConditions,
-    string? Alerts);
+    string? Alerts,
+    System.Collections.Generic.Dictionary<string, object?>? CustomFields = null,
+    string? VerificationStatus = null);

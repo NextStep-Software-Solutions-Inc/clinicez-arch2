@@ -31,4 +31,13 @@ public sealed class ClinicRecordAttachment : BaseEntity
 
     public Guid? UploadedByStaffId { get; set; }
     public string? UploadedByStaffName { get; set; }
+
+    /// <summary>
+    /// Verification status: Verified, PendingVerification, Rejected
+    /// </summary>
+    public string VerificationStatus { get; set; } = "Verified";
+    public string? RejectionReason { get; set; }
+    public DateTime? VerifiedAt { get; set; }
+    public Guid? VerifiedByStaffId { get; set; }
+    public string? VerifiedByStaffName { get; set; }
 }
