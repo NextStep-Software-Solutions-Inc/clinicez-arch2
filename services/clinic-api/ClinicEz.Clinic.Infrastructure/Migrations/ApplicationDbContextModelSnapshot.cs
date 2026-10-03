@@ -135,16 +135,37 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("CriticalFindingsJson")
+                        .HasColumnType("text");
+
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("DeletedBy")
                         .HasColumnType("text");
 
+                    b.Property<string>("ExternalLabName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ExternalReportFileBase64")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ExternalReportType")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ExternalReportUrl")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("HasCriticalPanicAlert")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
                     b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ObservationsJson")
                         .HasColumnType("text");
 
                     b.Property<DateTime>("OrderDate")
@@ -161,6 +182,21 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<string>("OrderedByDoctorName")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("PanicAcknowledgedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PanicAcknowledgedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("PanicAlertTriggeredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PathologistImpression")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PathologistPrcLicense")
+                        .HasColumnType("text");
+
                     b.Property<Guid>("PatientId")
                         .HasColumnType("uuid");
 
@@ -168,6 +204,12 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)");
+
+                    b.Property<string>("PublicUploadToken")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ReportReleasedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -180,6 +222,12 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("UploadedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("VerifiedByPathologist")
                         .HasColumnType("text");
 
                     b.HasKey("Id");
@@ -630,7 +678,20 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<string>("LetterheadSubHeader")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("LicenseExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LicenseToken")
+                        .HasColumnType("text");
+
+                    b.Property<int>("MaxStaffLimit")
+                        .HasColumnType("integer");
+
                     b.Property<string>("OperatingHours")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PlanTier")
                         .IsRequired()
                         .HasColumnType("text");
 
@@ -852,8 +913,39 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("PrescriptionNumber")
+                        .HasColumnType("text");
+
                     b.Property<Guid?>("QueueItemId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("RxDispenseStatus")
+                        .IsRequired()
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime?>("RxDispensedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RxDispensedPharmacistName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RxDispensedPharmacistPrc")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RxDispensedPharmacyName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RxDispensedReceiptNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RxDispensedReceiptUrl")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RxNotes")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RxPublicVerificationToken")
+                        .HasColumnType("text");
 
                     b.Property<DateTime?>("SignedAt")
                         .HasColumnType("timestamp with time zone");

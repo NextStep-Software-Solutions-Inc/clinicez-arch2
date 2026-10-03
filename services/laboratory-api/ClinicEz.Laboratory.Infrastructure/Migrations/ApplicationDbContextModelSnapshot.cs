@@ -369,6 +369,147 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                     b.ToTable("LabRequisitions", "laboratory_dashboard");
                 });
 
+            modelBuilder.Entity("ClinicEz.Laboratory.Domain.Entities.LabSettings", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("LaboratoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LaboratoryName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("LicenseExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LicenseToOperateNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("LicenseToken")
+                        .HasColumnType("text");
+
+                    b.Property<int>("MaxAnalyzersLimit")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MaxStaffLimit")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PlanTier")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("TaxIdentificationNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("LabSettings", "laboratory_dashboard");
+                });
+
+            modelBuilder.Entity("ClinicEz.Laboratory.Domain.Entities.LabStaffMember", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Email")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FirstName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("LaboratoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LastName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("MiddleName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PhoneNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PrcLicenseNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PtrNumber")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Role")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Specialty")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Title")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("LabStaffMembers", "laboratory_dashboard");
+                });
+
             modelBuilder.Entity("ClinicEz.Laboratory.Domain.Entities.Product", b =>
                 {
                     b.Property<Guid>("Id")

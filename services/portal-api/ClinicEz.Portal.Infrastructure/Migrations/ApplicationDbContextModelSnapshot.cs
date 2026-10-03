@@ -317,6 +317,21 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasDefaultValueSql("gen_random_uuid()");
 
+                    b.Property<string>("Barangay")
+                        .HasColumnType("text");
+
+                    b.Property<string>("City")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Classification")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ContactEmail")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ContactNumber")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -337,12 +352,79 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("LetterheadAddress")
+                        .HasColumnType("text");
+
+                    b.Property<string>("LetterheadContact")
+                        .HasColumnType("text");
+
+                    b.Property<string>("LetterheadFooter")
+                        .HasColumnType("text");
+
+                    b.Property<string>("LetterheadHeader")
+                        .HasColumnType("text");
+
+                    b.Property<string>("LetterheadSubHeader")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("LicenseExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LicenseToOperate")
+                        .HasColumnType("text");
+
+                    b.Property<string>("LicenseToken")
+                        .HasColumnType("text");
+
+                    b.Property<string>("LogoUrl")
+                        .HasColumnType("text");
+
+                    b.Property<int>("MaxStaffLimit")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("NotificationPreferencesJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("OperatingHours")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PhilHealthAccreditationNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PlanTier")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Province")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Region")
+                        .HasColumnType("text");
+
+                    b.Property<string>("StampPhysicianName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("StampPrcLicense")
+                        .HasColumnType("text");
+
+                    b.Property<string>("StampPtrNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("StampS2License")
+                        .HasColumnType("text");
+
                     b.Property<string>("Status")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("StreetAddress")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TaxIdentificationNumber")
                         .HasColumnType("text");
 
                     b.Property<Guid>("TenantId")
@@ -352,6 +434,9 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ZipCode")
                         .HasColumnType("text");
 
                     b.HasKey("Id");
