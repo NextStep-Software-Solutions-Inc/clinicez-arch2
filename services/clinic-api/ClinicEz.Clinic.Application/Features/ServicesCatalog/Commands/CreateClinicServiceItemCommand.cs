@@ -15,7 +15,10 @@ public record CreateClinicServiceItemCommand(
     string Name,
     string Category,
     decimal StandardPrice,
-    string? Description = null
+    string? Description = null,
+    string? PhilHealthCode = null,
+    string? PhilHealthDescription = null,
+    bool IsPhilHealthFormulary = false
 ) : IRequest<ClinicServiceItemDto>;
 
 public class CreateClinicServiceItemCommandHandler : IRequestHandler<CreateClinicServiceItemCommand, ClinicServiceItemDto>
@@ -59,7 +62,10 @@ public class CreateClinicServiceItemCommandHandler : IRequestHandler<CreateClini
             Category = string.IsNullOrWhiteSpace(request.Category) ? "General" : request.Category.Trim(),
             StandardPrice = Math.Max(0m, request.StandardPrice),
             Description = request.Description?.Trim(),
-            IsActive = true
+            IsActive = true,
+            PhilHealthCode = request.PhilHealthCode?.Trim(),
+            PhilHealthDescription = request.PhilHealthDescription?.Trim(),
+            IsPhilHealthFormulary = request.IsPhilHealthFormulary
         };
 
         await _serviceRepo.AddAsync(entity, cancellationToken);
@@ -74,7 +80,10 @@ public class CreateClinicServiceItemCommandHandler : IRequestHandler<CreateClini
             entity.Category,
             entity.StandardPrice,
             entity.Description,
-            entity.IsActive
+            entity.IsActive,
+            entity.PhilHealthCode,
+            entity.PhilHealthDescription,
+            entity.IsPhilHealthFormulary
         );
     }
 }

@@ -13,4 +13,9 @@ public sealed class ClinicServiceItem : BaseEntity
     public decimal StandardPrice { get; set; }
     public string? Description { get; set; }
     public bool IsActive { get; set; } = true;
+
+    // PhilHealth Statutory Catalog Mapping
+    public string? PhilHealthCode { get; set; }
+    public string? PhilHealthDescription { get; set; }
+    public bool IsPhilHealthFormulary { get; set; } = false;
 }

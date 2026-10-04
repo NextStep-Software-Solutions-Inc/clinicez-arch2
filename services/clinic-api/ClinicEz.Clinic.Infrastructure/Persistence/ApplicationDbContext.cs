@@ -248,6 +248,9 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.Name).IsRequired().HasMaxLength(150);
             entity.Property(e => e.Category).IsRequired().HasMaxLength(50);
             entity.Property(e => e.StandardPrice).HasPrecision(18, 2);
+            entity.Property(e => e.PhilHealthCode).HasMaxLength(50);
+            entity.Property(e => e.PhilHealthDescription).HasMaxLength(255);
+            entity.Property(e => e.IsPhilHealthFormulary).HasDefaultValue(false);
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.Code }).IsUnique();
         });
 

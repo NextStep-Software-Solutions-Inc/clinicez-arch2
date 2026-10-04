@@ -58,10 +58,10 @@ public class GetClinicServicesQueryHandler : IRequestHandler<GetClinicServicesQu
                 new() { TenantId = _clinicContext.TenantId, ClinicId = _clinicContext.ClinicId, Code = "CONS-FU", Name = "Follow-up Consultation", Category = "Consultation", StandardPrice = 350m, Description = "Return follow-up review within 14 days" },
                 new() { TenantId = _clinicContext.TenantId, ClinicId = _clinicContext.ClinicId, Code = "PROC-NEB", Name = "Nebulization Therapy", Category = "Procedure", StandardPrice = 250m, Description = "Inhalation bronchodilator nebulization session" },
                 new() { TenantId = _clinicContext.TenantId, ClinicId = _clinicContext.ClinicId, Code = "PROC-WOUND", Name = "Wound Dressing & Debridement", Category = "Procedure", StandardPrice = 350m, Description = "Aseptic wound dressing, cleansing, and bandage application" },
-                new() { TenantId = _clinicContext.TenantId, ClinicId = _clinicContext.ClinicId, Code = "PROC-ECG", Name = "12-Lead Electrocardiogram (ECG)", Category = "Diagnostic", StandardPrice = 450m, Description = "Standard 12-lead ECG tracing with physician interpretation" },
+                new() { TenantId = _clinicContext.TenantId, ClinicId = _clinicContext.ClinicId, Code = "PROC-ECG", Name = "12-Lead Electrocardiogram (ECG)", Category = "Diagnostic", StandardPrice = 450m, Description = "Standard 12-lead ECG tracing with physician interpretation", PhilHealthCode = "93000", PhilHealthDescription = "Electrocardiogram, routine ECG with at least 12 leads", IsPhilHealthFormulary = true },
                 new() { TenantId = _clinicContext.TenantId, ClinicId = _clinicContext.ClinicId, Code = "PROC-SUTURE", Name = "Minor Suture / Laceration Repair", Category = "Procedure", StandardPrice = 850m, Description = "Local anesthesia and primary closure of minor skin laceration" },
                 new() { TenantId = _clinicContext.TenantId, ClinicId = _clinicContext.ClinicId, Code = "PROC-VAX", Name = "Vaccine Administration Fee", Category = "NursingService", StandardPrice = 250m, Description = "Intramuscular or subcutaneous vaccine administration and observation" },
-                new() { TenantId = _clinicContext.TenantId, ClinicId = _clinicContext.ClinicId, Code = "LAB-RBS", Name = "Random Blood Sugar (RBS) Rapid Test", Category = "Diagnostic", StandardPrice = 150m, Description = "Capillary blood glucose fingerstick test" }
+                new() { TenantId = _clinicContext.TenantId, ClinicId = _clinicContext.ClinicId, Code = "LAB-RBS", Name = "Random Blood Sugar (RBS) Rapid Test", Category = "Diagnostic", StandardPrice = 150m, Description = "Capillary blood glucose fingerstick test", PhilHealthCode = "82947", PhilHealthDescription = "Glucose; quantitative, blood (except reagent strip)", IsPhilHealthFormulary = true }
             };
 
             foreach (var svc in defaultServices)
@@ -82,7 +82,10 @@ public class GetClinicServicesQueryHandler : IRequestHandler<GetClinicServicesQu
             s.Category,
             s.StandardPrice,
             s.Description,
-            s.IsActive
+            s.IsActive,
+            s.PhilHealthCode,
+            s.PhilHealthDescription,
+            s.IsPhilHealthFormulary
         )).ToList();
     }
 }

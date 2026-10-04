@@ -19,13 +19,13 @@ interface PhilHealthCatalogMappingModalProps {
   onSaveMapping: (mapping: CatalogMappingResult) => void;
 }
 
-interface FormularyQuickItem {
+export interface FormularyQuickItem {
   code: string;
   name: string;
   category: string;
 }
 
-const CORE_GAMOT_FORMULARY: FormularyQuickItem[] = [
+export const CORE_GAMOT_FORMULARY: FormularyQuickItem[] = [
   { code: 'AMLOD0000000005TAB00000000100', name: 'Amlodipine 5mg Tablet', category: 'Antihypertensive' },
   { code: 'AMLOD0000000010TAB00000000100', name: 'Amlodipine 10mg Tablet', category: 'Antihypertensive' },
   { code: 'LOSAR0000000050TAB00000000100', name: 'Losartan Potassium 50mg Tablet', category: 'Antihypertensive' },
@@ -44,7 +44,7 @@ const CORE_GAMOT_FORMULARY: FormularyQuickItem[] = [
   { code: 'ORSOL0000000000SACH0000000025', name: 'Oral Rehydration Salts (ORS) Sachet', category: 'Fluid & Electrolyte' },
 ];
 
-const STATUTORY_YAKAP_DIAGNOSTICS: FormularyQuickItem[] = [
+export const STATUTORY_YAKAP_DIAGNOSTICS: FormularyQuickItem[] = [
   { code: '1', name: 'Complete Blood Count (CBC) with Platelet', category: 'Mandatory Lab' },
   { code: '2', name: 'Routine Urinalysis', category: 'Mandatory Lab' },
   { code: '3', name: 'Fecalysis / Stool Exam', category: 'Mandatory Lab' },

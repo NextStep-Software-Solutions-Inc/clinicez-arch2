@@ -11,5 +11,8 @@ public record ClinicServiceItemDto(
     string Category,
     decimal StandardPrice,
     string? Description,
-    bool IsActive
+    bool IsActive,
+    string? PhilHealthCode = null,
+    string? PhilHealthDescription = null,
+    bool IsPhilHealthFormulary = false
 );

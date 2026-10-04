@@ -26,6 +26,7 @@ import {
   PrescriptionSlipData,
   ClinicLabOrderRecord,
   CdsAlert,
+  ClinicServiceItem,
 } from '../../services/clinicService';
 
 interface LocalPrescription {
@@ -417,6 +418,27 @@ export default function ConsultationsScreen() {
     setNewRxForm(item.form);
     setNewRxSig(item.sig);
     setNewRxDrugCode(item.drugCode);
+  };
+
+  // Tenant Mapped Services & Formulary Catalog
+  const [clinicCatalog, setClinicCatalog] = useState<ClinicServiceItem[]>([]);
+
+  useEffect(() => {
+    clinicService.getServices().then(([items]) => {
+      if (items && items.length > 0) {
+        setClinicCatalog(items);
+      }
+    });
+  }, []);
+
+  const handleSelectCatalogMedicine = (item: ClinicServiceItem) => {
+    setNewRxGeneric(item.name);
+    if (item.philHealthCode) {
+      setNewRxDrugCode(item.philHealthCode);
+    }
+    if (item.description && !newRxSig) {
+      setNewRxSig(item.description);
+    }
   };
 
   // Doctor Regulatory Credentials
@@ -1572,6 +1594,27 @@ export default function ConsultationsScreen() {
               </Pressable>
             );
           })}
+          {clinicCatalog
+            .filter((s) => s.category.toLowerCase() === 'diagnostic' && s.isActive && !COMMON_LAB_TESTS.includes(s.name))
+            .map((diag) => {
+              const isSelected = orderedLabs.includes(diag.name);
+              const yakapCode = diag.philHealthCode || YAKAP_LAB_CODE_MAP[diag.name];
+              return (
+                <Pressable
+                  key={diag.id}
+                  style={[styles.chip, isSelected && styles.chipActive, { borderColor: '#A7F3D0' }]}
+                  onPress={() => !isSigned && handleToggleLab(diag.name)}
+                  disabled={isSigned}
+                >
+                  <ThemedText style={[styles.chipText, isSelected && styles.chipTextActive]}>
+                    {isSelected ? '✓ ' : '+ '}{diag.name} (₱{diag.standardPrice.toFixed(0)})
+                    {isYakapEligible && yakapCode && (
+                      <ThemedText style={styles.yakapDiagnosticCode}> (Yakap {yakapCode})</ThemedText>
+                    )}
+                  </ThemedText>
+                </Pressable>
+              );
+            })}
         </View>
       </View>
 
@@ -1742,6 +1785,44 @@ export default function ConsultationsScreen() {
                     ✓ Bound 30-char UPSC: <ThemedText style={{ fontFamily: 'monospace', fontWeight: '800' }}>{newRxDrugCode}</ThemedText>
                   </ThemedText>
                 ) : null}
+              </View>
+            )}
+
+            {/* Clinic Mapped Formulary Quick-Picks */}
+            {clinicCatalog.filter((s) => s.category.toLowerCase() === 'medicine' && s.isActive).length > 0 && (
+              <View style={[styles.gamotShelfCard, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <ThemedText style={{ fontSize: 13 }}>🏥</ThemedText>
+                  <ThemedText style={[styles.gamotShelfTitle, { color: '#166534' }]}>Clinic Fee Schedule & Formulary:</ThemedText>
+                </View>
+                <View style={styles.gamotChipsRow}>
+                  {clinicCatalog
+                    .filter((s) => s.category.toLowerCase() === 'medicine' && s.isActive)
+                    .map((item) => {
+                      const isSelected = newRxGeneric.toLowerCase() === item.name.toLowerCase() || (item.philHealthCode && newRxDrugCode === item.philHealthCode);
+                      return (
+                        <Pressable
+                          key={item.id}
+                          style={[
+                            styles.gamotChip,
+                            { backgroundColor: '#FFFFFF', borderColor: '#86EFAC' },
+                            isSelected && { backgroundColor: '#059669', borderColor: '#059669' },
+                          ]}
+                          onPress={() => handleSelectCatalogMedicine(item)}
+                        >
+                          <ThemedText
+                            style={[
+                              styles.gamotChipText,
+                              { color: '#166534' },
+                              isSelected && { color: '#FFFFFF', fontWeight: '700' },
+                            ]}
+                          >
+                            + {item.name} (₱{item.standardPrice.toFixed(0)})
+                          </ThemedText>
+                        </Pressable>
+                      );
+                    })}
+                </View>
               </View>
             )}
 

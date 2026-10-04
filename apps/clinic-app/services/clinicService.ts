@@ -221,6 +221,29 @@ export interface ClinicServiceItem {
   standardPrice: number;
   description?: string;
   isActive: boolean;
+  philHealthCode?: string;
+  philHealthDescription?: string;
+  isPhilHealthFormulary?: boolean;
+}
+
+export interface BulkImportServiceItem {
+  code: string;
+  name: string;
+  category: string;
+  standardPrice: number;
+  description?: string;
+  philHealthCode?: string;
+  philHealthDescription?: string;
+  isPhilHealthFormulary?: boolean;
+}
+
+export interface BulkImportResult {
+  totalProcessed: number;
+  totalCreated: number;
+  totalUpdated: number;
+  totalMappedToPhilHealth: number;
+  totalNonFormulary: number;
+  items: ClinicServiceItem[];
 }
 
 export interface InvoiceLineItem {
@@ -969,8 +992,34 @@ export const clinicService = {
     return clinicApiClient.get<ClinicServiceItem[]>(`/services${qs ? `?${qs}` : ''}`);
   },
 
-  async createService(payload: { code: string; name: string; category: string; standardPrice: number; description?: string }) {
+  async createService(payload: {
+    code: string;
+    name: string;
+    category: string;
+    standardPrice: number;
+    description?: string;
+    philHealthCode?: string;
+    philHealthDescription?: string;
+    isPhilHealthFormulary?: boolean;
+  }) {
     return clinicApiClient.post<ClinicServiceItem>('/services', payload);
+  },
+
+  async updateService(id: string, payload: {
+    name: string;
+    category: string;
+    standardPrice: number;
+    description?: string;
+    isActive?: boolean;
+    philHealthCode?: string;
+    philHealthDescription?: string;
+    isPhilHealthFormulary?: boolean;
+  }) {
+    return clinicApiClient.put<ClinicServiceItem>(`/services/${id}`, payload);
+  },
+
+  async bulkImportServices(items: BulkImportServiceItem[]) {
+    return clinicApiClient.post<BulkImportResult>('/services/bulk-import', { items });
   },
 
   // Procedures & Nursing Station

@@ -21,7 +21,12 @@ import {
   StaffMember,
   StaffRole,
   ClinicCustomFieldDefinition,
+  ClinicServiceItem,
 } from '../../services/clinicService';
+import PhilHealthCatalogMappingModal, {
+  CatalogMappingResult,
+} from '../../components/PhilHealthCatalogMappingModal';
+import CsvCatalogImportModal from '../../components/CsvCatalogImportModal';
 
 const DEFAULT_CUSTOM_FIELDS: ClinicCustomFieldDefinition[] = [
   {
@@ -154,6 +159,28 @@ export default function SettingsScreen() {
   const [savingField, setSavingField] = useState(false);
   const [fieldError, setFieldError] = useState<string | null>(null);
 
+  // Services & Formulary Catalog State
+  const [services, setServices] = useState<ClinicServiceItem[]>([]);
+  const [selectedServiceCategory, setSelectedServiceCategory] = useState<string>('All');
+  const [showAddServiceModal, setShowAddServiceModal] = useState(false);
+  const [showCsvCatalogImportModal, setShowCsvCatalogImportModal] = useState(false);
+  const [showPhilHealthMappingModal, setShowPhilHealthMappingModal] = useState(false);
+
+  // New Service Form State
+  const [newServiceCode, setNewServiceCode] = useState('');
+  const [newServiceName, setNewServiceName] = useState('');
+  const [newServiceCategory, setNewServiceCategory] = useState<string>('Medicine');
+  const [newServicePrice, setNewServicePrice] = useState('');
+  const [newServiceDesc, setNewServiceDesc] = useState('');
+  const [newServicePhilHealthCode, setNewServicePhilHealthCode] = useState<string | undefined>(undefined);
+  const [newServicePhilHealthDesc, setNewServicePhilHealthDesc] = useState<string | undefined>(undefined);
+  const [newServiceIsFormulary, setNewServiceIsFormulary] = useState(false);
+  const [savingService, setSavingService] = useState(false);
+  const [serviceError, setServiceError] = useState<string | null>(null);
+
+  // Target item for inline PhilHealth mapping edit
+  const [mappingTargetItem, setMappingTargetItem] = useState<ClinicServiceItem | null>(null);
+
   // Form states for preferences
   const [clinicName, setClinicName] = useState('St. Jude Family Clinic & Primary Care');
   const [operatingHours, setOperatingHours] = useState('Mon-Sat 8:00 AM - 5:00 PM');
@@ -164,11 +191,12 @@ export default function SettingsScreen() {
   const [letterheadContact, setLetterheadContact] = useState('Tel: (02) 8876-5432 • Mobile: +63 917 123 4567');
 
   const loadAll = useCallback(async () => {
-    const [[eodData], [settingsData], [staffData], [customFieldsData]] = await Promise.all([
+    const [[eodData], [settingsData], [staffData], [customFieldsData], [servicesData]] = await Promise.all([
       clinicService.getDailyEodReport(),
       clinicService.getSettings(),
       clinicService.getStaff(),
       clinicService.getCustomFields('ClinicPatient'),
+      clinicService.getServices(),
     ]);
 
     if (eodData) setEodReport(eodData);
@@ -176,6 +204,9 @@ export default function SettingsScreen() {
       setCustomFields(customFieldsData);
     } else {
       setCustomFields(DEFAULT_CUSTOM_FIELDS);
+    }
+    if (servicesData && servicesData.length > 0) {
+      setServices(servicesData);
     }
     if (settingsData) {
       setSettings(settingsData);
@@ -371,6 +402,122 @@ export default function SettingsScreen() {
   const handleDeleteCustomField = async (fieldId: string) => {
     await clinicService.deleteCustomField(fieldId);
     setCustomFields((prev) => prev.filter((f) => f.id !== fieldId));
+  };
+
+  // Service Catalog Actions
+  const handleOpenAddService = () => {
+    setNewServiceCode('');
+    setNewServiceName('');
+    setNewServiceCategory('Medicine');
+    setNewServicePrice('');
+    setNewServiceDesc('');
+    setNewServicePhilHealthCode(undefined);
+    setNewServicePhilHealthDesc(undefined);
+    setNewServiceIsFormulary(false);
+    setServiceError(null);
+    setShowAddServiceModal(true);
+  };
+
+  const handleInitiateSaveService = () => {
+    if (!newServiceCode.trim() || !newServiceName.trim()) {
+      setServiceError('Item code and name are required.');
+      return;
+    }
+    const priceVal = parseFloat(newServicePrice);
+    if (isNaN(priceVal) || priceVal < 0) {
+      setServiceError('Please enter a valid non-negative standard price.');
+      return;
+    }
+
+    const isClinical = newServiceCategory === 'Medicine' || newServiceCategory === 'Diagnostic';
+    // If clinical item and not yet mapped to PhilHealth, intercept with PhilHealth mapping modal!
+    if (isClinical && !newServicePhilHealthCode && !newServiceIsFormulary) {
+      setShowPhilHealthMappingModal(true);
+      return;
+    }
+
+    // Otherwise directly execute save
+    executeCreateService(newServicePhilHealthCode, newServicePhilHealthDesc, newServiceIsFormulary);
+  };
+
+  const executeCreateService = async (
+    philHealthCode?: string,
+    philHealthDesc?: string,
+    isFormulary?: boolean
+  ) => {
+    try {
+      setSavingService(true);
+      setServiceError(null);
+
+      const [res, err] = await clinicService.createService({
+        code: newServiceCode.trim().toUpperCase(),
+        name: newServiceName.trim(),
+        category: newServiceCategory,
+        standardPrice: parseFloat(newServicePrice) || 0,
+        description: newServiceDesc.trim() || undefined,
+        philHealthCode,
+        philHealthDescription: philHealthDesc,
+        isPhilHealthFormulary: isFormulary ?? false,
+      });
+
+      if (res) {
+        setServices((prev) => [...prev, res]);
+        setShowAddServiceModal(false);
+        setShowPhilHealthMappingModal(false);
+      } else {
+        setServiceError(err?.message || 'Failed to create service item.');
+      }
+    } catch (e: any) {
+      setServiceError(e.message || 'Error saving service item.');
+    } finally {
+      setSavingService(false);
+    }
+  };
+
+  const handlePhilHealthMappingConfirmed = async (mapping: CatalogMappingResult) => {
+    if (mappingTargetItem) {
+      // Editing mapping on an existing item
+      const [updated] = await clinicService.updateService(mappingTargetItem.id, {
+        name: mappingTargetItem.name,
+        category: mappingTargetItem.category,
+        standardPrice: mappingTargetItem.standardPrice,
+        description: mappingTargetItem.description,
+        isActive: mappingTargetItem.isActive,
+        philHealthCode: mapping.code,
+        philHealthDescription: mapping.description,
+        isPhilHealthFormulary: !mapping.isNonFormulary,
+      });
+
+      if (updated) {
+        setServices((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+      }
+      setMappingTargetItem(null);
+    } else {
+      // Mapping for new service item being created
+      setNewServicePhilHealthCode(mapping.code);
+      setNewServicePhilHealthDesc(mapping.description);
+      setNewServiceIsFormulary(!mapping.isNonFormulary);
+      setShowPhilHealthMappingModal(false);
+      await executeCreateService(mapping.code, mapping.description, !mapping.isNonFormulary);
+    }
+  };
+
+  const handleToggleServiceActive = async (item: ClinicServiceItem) => {
+    const nextActive = !item.isActive;
+    const [updated] = await clinicService.updateService(item.id, {
+      name: item.name,
+      category: item.category,
+      standardPrice: item.standardPrice,
+      description: item.description,
+      isActive: nextActive,
+      philHealthCode: item.philHealthCode,
+      philHealthDescription: item.philHealthDescription,
+      isPhilHealthFormulary: item.isPhilHealthFormulary,
+    });
+
+    if (updated) {
+      setServices((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+    }
   };
 
   return (
@@ -760,6 +907,140 @@ export default function SettingsScreen() {
         </View>
       </View>
 
+      {/* Services & Formulary Catalog Studio Card */}
+      <View style={styles.card}>
+        <View style={styles.cardHeaderRow}>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <ThemedText style={styles.cardTitle}>Services & Formulary Catalog Studio</ThemedText>
+              <ThemedText style={styles.badgeFormulary}>Yakap & GAMOT Synchronized</ThemedText>
+            </View>
+            <ThemedText style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>
+              Standardize clinic inventory, fees, procedures, diagnostic exams, and medicines with statutory PhilHealth catalog binding.
+            </ThemedText>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Pressable
+              style={[styles.addStaffBtn, { backgroundColor: '#059669' }]}
+              onPress={() => setShowCsvCatalogImportModal(true)}
+            >
+              <ThemedText style={styles.addStaffBtnText}>📥 Bulk Import CSV</ThemedText>
+            </Pressable>
+            <Pressable
+              style={styles.addStaffBtn}
+              onPress={handleOpenAddService}
+            >
+              <ThemedText style={styles.addStaffBtnText}>+ Add Catalog Item</ThemedText>
+            </Pressable>
+          </View>
+        </View>
+
+        {/* Category Filter Pills */}
+        <View style={{ flexDirection: 'row', gap: 6, marginVertical: 6, flexWrap: 'wrap' }}>
+          {(['All', 'Medicine', 'Diagnostic', 'Procedure', 'Consultation', 'NursingService'] as const).map((cat) => (
+            <Pressable
+              key={cat}
+              style={[
+                styles.categoryFilterChip,
+                selectedServiceCategory === cat && styles.categoryFilterChipActive,
+              ]}
+              onPress={() => setSelectedServiceCategory(cat)}
+            >
+              <ThemedText
+                style={[
+                  styles.categoryFilterChipText,
+                  selectedServiceCategory === cat && styles.categoryFilterChipTextActive,
+                ]}
+              >
+                {cat === 'All' ? '🌐 All Services' :
+                 cat === 'Medicine' ? '💊 Medicines' :
+                 cat === 'Diagnostic' ? '🔬 Diagnostics' :
+                 cat === 'Procedure' ? '🩺 Procedures' :
+                 cat === 'Consultation' ? '👨‍⚕️ Consultations' : '💉 Nursing'}
+                {' '}({cat === 'All' ? services.length : services.filter((s) => s.category.toLowerCase() === cat.toLowerCase()).length})
+              </ThemedText>
+            </Pressable>
+          ))}
+        </View>
+
+        {/* Service Items Table / List */}
+        <View style={{ gap: 8, marginTop: 4 }}>
+          {services
+            .filter((s) => selectedServiceCategory === 'All' || s.category.toLowerCase() === selectedServiceCategory.toLowerCase())
+            .map((item) => {
+              const isClinical = item.category.toLowerCase() === 'medicine' || item.category.toLowerCase() === 'diagnostic';
+              return (
+                <View key={item.id} style={styles.serviceItemCard}>
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <ThemedText style={styles.serviceItemName}>{item.name}</ThemedText>
+                      <ThemedText style={styles.serviceItemCodeBadge}>{item.code}</ThemedText>
+                      <View style={[styles.roleBadge, { backgroundColor: '#F1F5F9' }]}>
+                        <ThemedText style={[styles.roleBadgeText, { color: '#334155' }]}>{item.category}</ThemedText>
+                      </View>
+                      <ThemedText style={styles.serviceItemPrice}>₱{item.standardPrice.toFixed(2)}</ThemedText>
+                      {!item.isActive && (
+                        <ThemedText style={{ fontSize: 10, color: '#DC2626', fontWeight: '700' }}>[Inactive]</ThemedText>
+                      )}
+                    </View>
+
+                    {item.description ? (
+                      <ThemedText style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>{item.description}</ThemedText>
+                    ) : null}
+
+                    {/* PhilHealth Mapping Status Row */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                      {item.isPhilHealthFormulary && item.philHealthCode ? (
+                        <View style={styles.philHealthMappedPill}>
+                          <ThemedText style={styles.philHealthMappedText}>
+                            ✓ PhilHealth Mapped: {item.philHealthCode}
+                          </ThemedText>
+                          {item.philHealthDescription && (
+                            <ThemedText style={styles.philHealthMappedDesc} numberOfLines={1}>
+                              ({item.philHealthDescription})
+                            </ThemedText>
+                          )}
+                        </View>
+                      ) : isClinical ? (
+                        <View style={styles.philHealthUnmappedPill}>
+                          <ThemedText style={styles.philHealthUnmappedText}>
+                            ⚠️ Non-Formulary / Out-of-Pocket
+                          </ThemedText>
+                        </View>
+                      ) : (
+                        <View style={styles.philHealthNaPill}>
+                          <ThemedText style={styles.philHealthNaText}>Standard Clinic Service</ThemedText>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    {isClinical && (
+                      <Pressable
+                        style={styles.mapActionBtn}
+                        onPress={() => setMappingTargetItem(item)}
+                      >
+                        <ThemedText style={styles.mapActionBtnText}>
+                          {item.philHealthCode ? 'Edit Mapping' : 'Map PhilHealth'}
+                        </ThemedText>
+                      </Pressable>
+                    )}
+                    <Pressable
+                      style={[styles.deactivateBtn, !item.isActive && { backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' }]}
+                      onPress={() => handleToggleServiceActive(item)}
+                    >
+                      <ThemedText style={[styles.deactivateBtnText, !item.isActive && { color: '#059669' }]}>
+                        {item.isActive ? 'Deactivate' : 'Activate'}
+                      </ThemedText>
+                    </Pressable>
+                  </View>
+                </View>
+              );
+            })}
+        </View>
+      </View>
+
       {/* Facility Accreditation Details */}
       <View style={styles.card}>
         <ThemedText style={styles.cardTitle}>Facility Details & Sync</ThemedText>
@@ -1065,6 +1346,169 @@ export default function SettingsScreen() {
       onClose={() => setShowBulkImportModal(false)}
       onSuccess={() => {
         loadAll();
+      }}
+    />
+
+    {/* Add Service Catalog Item Modal */}
+    <Modal
+      visible={showAddServiceModal}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowAddServiceModal(false)}
+    >
+      <View style={styles.modalBackdrop}>
+        <View style={[styles.modalContent, { maxWidth: 540 }]}>
+          <ThemedText style={styles.modalHeaderTitle}>Add Clinic Service / Formulary Item</ThemedText>
+          <ThemedText style={styles.modalHeaderSub}>
+            Register a new billable medical procedure, lab test, consultation, or formulary medicine into your clinic fee schedule.
+          </ThemedText>
+
+          {serviceError && (
+            <View style={styles.modalErrorBanner}>
+              <ThemedText style={styles.modalErrorBannerText}>{serviceError}</ThemedText>
+            </View>
+          )}
+
+          <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={{ gap: 10 }}>
+            <View style={styles.formRow}>
+              <View style={{ flex: 1 }}>
+                <ThemedText style={styles.fieldLabel}>Item Code *</ThemedText>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={newServiceCode}
+                  onChangeText={setNewServiceCode}
+                  placeholder="e.g. MED-AMOX-500"
+                  autoCapitalize="characters"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <ThemedText style={styles.fieldLabel}>Standard Fee / Price (₱) *</ThemedText>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={newServicePrice}
+                  onChangeText={setNewServicePrice}
+                  placeholder="0.00"
+                  keyboardType="numeric"
+                />
+              </View>
+            </View>
+
+            <View>
+              <ThemedText style={styles.fieldLabel}>Item Display Name *</ThemedText>
+              <TextInput
+                style={styles.fieldInput}
+                value={newServiceName}
+                onChangeText={setNewServiceName}
+                placeholder="e.g. Amoxicillin 500mg Capsule or CBC with Platelet"
+              />
+            </View>
+
+            <View>
+              <ThemedText style={styles.fieldLabel}>Category</ThemedText>
+              <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                {(['Medicine', 'Diagnostic', 'Procedure', 'Consultation', 'NursingService'] as const).map((cat) => (
+                  <Pressable
+                    key={cat}
+                    style={[
+                      styles.roleSelectChip,
+                      newServiceCategory === cat && styles.roleSelectChipActive,
+                    ]}
+                    onPress={() => setNewServiceCategory(cat)}
+                  >
+                    <ThemedText
+                      style={[
+                        styles.roleSelectChipText,
+                        newServiceCategory === cat && styles.roleSelectChipTextActive,
+                      ]}
+                    >
+                      {cat}
+                    </ThemedText>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+
+            <View>
+              <ThemedText style={styles.fieldLabel}>Clinical Description / Notes</ThemedText>
+              <TextInput
+                style={[styles.fieldInput, { height: 60 }]}
+                value={newServiceDesc}
+                onChangeText={setNewServiceDesc}
+                placeholder="Dosage form, clinical notes, or instructions"
+                multiline
+              />
+            </View>
+
+            {(newServiceCategory === 'Medicine' || newServiceCategory === 'Diagnostic') && (
+              <View style={styles.philHealthNoticeBox}>
+                <ThemedText style={styles.philHealthNoticeTitle}>
+                  🏛️ PhilHealth Yakap / GAMOT Integration Notice
+                </ThemedText>
+                <ThemedText style={styles.philHealthNoticeSub}>
+                  Clinical items require binding to statutory PhilHealth codes for claims reimbursement. If not yet mapped, clicking "Save Catalog Item" will automatically open the PhilHealth Statutory Catalog Mapping dialog.
+                </ThemedText>
+              </View>
+            )}
+          </ScrollView>
+
+          <View style={styles.modalActionsRow}>
+            <Pressable
+              style={styles.cancelModalBtn}
+              onPress={() => setShowAddServiceModal(false)}
+              disabled={savingService}
+            >
+              <ThemedText style={styles.cancelModalBtnText}>Cancel</ThemedText>
+            </Pressable>
+
+            <Pressable
+              style={[styles.saveStaffBtn, savingService && { opacity: 0.6 }]}
+              onPress={handleInitiateSaveService}
+              disabled={savingService}
+            >
+              {savingService ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <ThemedText style={styles.saveStaffBtnText}>
+                  {(newServiceCategory === 'Medicine' || newServiceCategory === 'Diagnostic') && !newServicePhilHealthCode && !newServiceIsFormulary
+                    ? 'Map & Save Item →'
+                    : 'Save Catalog Item'}
+                </ThemedText>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+
+    {/* PhilHealth Statutory Catalog Mapping Dialog */}
+    {(showPhilHealthMappingModal || !!mappingTargetItem) && (
+      <PhilHealthCatalogMappingModal
+        visible={showPhilHealthMappingModal || !!mappingTargetItem}
+        onClose={() => {
+          setShowPhilHealthMappingModal(false);
+          setMappingTargetItem(null);
+        }}
+        itemName={mappingTargetItem ? mappingTargetItem.name : newServiceName}
+        itemType={
+          (mappingTargetItem
+            ? mappingTargetItem.category.toLowerCase() === 'medicine'
+            : newServiceCategory.toLowerCase() === 'medicine')
+            ? 'Medicine'
+            : 'Diagnostic'
+        }
+        initialGenericName={mappingTargetItem ? mappingTargetItem.name : newServiceName}
+        onSaveMapping={handlePhilHealthMappingConfirmed}
+      />
+    )}
+
+    {/* CSV Bulk Catalog Import Modal */}
+    <CsvCatalogImportModal
+      visible={showCsvCatalogImportModal}
+      onClose={() => setShowCsvCatalogImportModal(false)}
+      onImportSuccess={(_result) => {
+        clinicService.getServices().then(([freshServices]) => {
+          if (freshServices) setServices(freshServices);
+        });
       }}
     />
   </ResponsiveLayout>
@@ -1514,5 +1958,122 @@ const styles = StyleSheet.create({
   checkboxBoxActive: {
     backgroundColor: '#0284C7',
     borderColor: '#0284C7',
+  },
+  badgeFormulary: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#0284C7',
+    backgroundColor: '#E0F2FE',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  serviceItemCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    padding: 12,
+    gap: 10,
+  },
+  serviceItemName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  serviceItemCodeBadge: {
+    fontSize: 11,
+    fontFamily: 'monospace',
+    color: '#475569',
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  serviceItemPrice: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#059669',
+  },
+  philHealthMappedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  philHealthMappedText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#065F46',
+    fontFamily: 'monospace',
+  },
+  philHealthMappedDesc: {
+    fontSize: 10,
+    color: '#047857',
+    maxWidth: 240,
+  },
+  philHealthUnmappedPill: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  philHealthUnmappedText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#92400E',
+  },
+  philHealthNaPill: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  philHealthNaText: {
+    fontSize: 10,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  mapActionBtn: {
+    backgroundColor: '#E0F2FE',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  mapActionBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0284C7',
+  },
+  philHealthNoticeBox: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 6,
+  },
+  philHealthNoticeTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#1E40AF',
+  },
+  philHealthNoticeSub: {
+    fontSize: 11,
+    color: '#1E3A8A',
+    marginTop: 2,
+    lineHeight: 16,
   },
 });
