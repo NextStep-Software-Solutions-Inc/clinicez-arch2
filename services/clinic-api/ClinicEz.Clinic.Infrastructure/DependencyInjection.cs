@@ -58,6 +58,10 @@ public static class DependencyInjection
         services.AddScoped<IPrescriptionPublisher, PrescriptionPublisher>();
         services.AddClinicEzDocumentEngine();
         services.AddScoped<IClinicDocumentPdfService, ClinicDocumentPdfService>();
+        services.AddSingleton<IClinicEncryptionService, ClinicEz.Clinic.Infrastructure.Services.Storage.ClinicEncryptionService>();
+        services.AddSingleton<IClinicStorageService, ClinicEz.Clinic.Infrastructure.Services.Storage.LocalClinicStorageService>();
+        services.AddScoped<IClinicRecordEventPublisher, ClinicEz.Clinic.Infrastructure.Services.ClinicRecordEventPublisher>();
+
 
         // Add Hangfire
         services.AddHangfire(config => config

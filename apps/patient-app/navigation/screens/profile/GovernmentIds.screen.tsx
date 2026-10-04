@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform, View } from 'react-native';
+import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform, View, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useForm, Controller } from 'react-hook-form';
 import { db } from '@db/index';
@@ -72,6 +72,13 @@ function validatePhilHealthPinMod11(rawPin: string): Mod11Result {
 type FormValues = {
   philhealthId: string;
   philhealthCategory: PhilhealthCategory | '';
+  sponsorPin: string;
+  sponsorLastName: string;
+  sponsorFirstName: string;
+  sponsorMiddleName: string;
+  sponsorSuffix: string;
+  sponsorDob: string;
+  sponsorRelationship: 'S' | 'C' | 'P' | 'D' | '';
   sssNumber: string;
   gsisNumber: string;
   pagIbigNumber: string;
@@ -90,6 +97,13 @@ type FormValues = {
 const PHILHEALTH_CATEGORY_OPTIONS = [
   { label: 'MM - Member', value: 'MM' },
   { label: 'DD - Dependent', value: 'DD' },
+];
+
+const SPONSOR_RELATIONSHIP_OPTIONS = [
+  { label: 'Child (C)', value: 'C' },
+  { label: 'Spouse (S)', value: 'S' },
+  { label: 'Parent (P)', value: 'P' },
+  { label: 'Disabled Dependent (D)', value: 'D' },
 ];
 
 const DISABILITY_TYPE_OPTIONS = [
@@ -138,11 +152,14 @@ export default function GovernmentIdsScreen() {
   const { getToken } = useAuth();
   const navigation = useNavigation();
   const [saving, setSaving] = useState(false);
-  const [modal, setModal] = useState<'philhealth' | 'disability' | 'hmoPlan' | null>(null);
+  const [modal, setModal] = useState<'philhealth' | 'disability' | 'hmoPlan' | 'sponsorRel' | null>(null);
 
   const { control, handleSubmit, reset, watch, formState: { isDirty } } = useForm<FormValues>({
     defaultValues: {
-      philhealthId: '', philhealthCategory: '', sssNumber: '', gsisNumber: '',
+      philhealthId: '', philhealthCategory: '',
+      sponsorPin: '', sponsorLastName: '', sponsorFirstName: '', sponsorMiddleName: '',
+      sponsorSuffix: '', sponsorDob: '', sponsorRelationship: '',
+      sssNumber: '', gsisNumber: '',
       pagIbigNumber: '', tinNumber: '', seniorCitizenId: '',
       isPwd: false, pwdIdNumber: '', disabilityType: '',
       hmoProvider: '', hmoPolicyNumber: '', hmoPlanType: '',
@@ -152,6 +169,7 @@ export default function GovernmentIdsScreen() {
 
   const isPwd = watch('isPwd');
   const philhealthId = watch('philhealthId');
+  const philhealthCategory = watch('philhealthCategory');
   const mod11Status = useMemo(() => validatePhilHealthPinMod11(philhealthId || ''), [philhealthId]);
 
   useEffect(() => {
@@ -161,6 +179,13 @@ export default function GovernmentIdsScreen() {
           reset({
             philhealthId: row.philhealthId ?? '',
             philhealthCategory: row.philhealthCategory ?? '',
+            sponsorPin: row.sponsorPin ?? '',
+            sponsorLastName: row.sponsorLastName ?? '',
+            sponsorFirstName: row.sponsorFirstName ?? '',
+            sponsorMiddleName: row.sponsorMiddleName ?? '',
+            sponsorSuffix: row.sponsorSuffix ?? '',
+            sponsorDob: row.sponsorDob ?? '',
+            sponsorRelationship: (row.sponsorRelationship as any) ?? '',
             sssNumber: row.sssNumber ?? '',
             gsisNumber: row.gsisNumber ?? '',
             pagIbigNumber: row.pagibigId ?? '',
@@ -181,11 +206,29 @@ export default function GovernmentIdsScreen() {
   }, [patientId, reset]);
 
   const onSave = handleSubmit(async (data) => {
+    if (data.philhealthCategory === 'DD') {
+      if (!data.sponsorPin?.trim()) {
+        Alert.alert('Required Field', 'For dependent benefits, Principal Member PIN is required.');
+        return;
+      }
+      if (!data.sponsorLastName?.trim() || !data.sponsorFirstName?.trim()) {
+        Alert.alert('Required Field', 'Principal Member Last Name and First Name are required.');
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       const payload = {
         philhealthId: data.philhealthId,
         philhealthCategory: data.philhealthCategory || null,
+        sponsorPin: data.sponsorPin || null,
+        sponsorLastName: data.sponsorLastName || null,
+        sponsorFirstName: data.sponsorFirstName || null,
+        sponsorMiddleName: data.sponsorMiddleName || null,
+        sponsorSuffix: data.sponsorSuffix || null,
+        sponsorDob: data.sponsorDob || null,
+        sponsorRelationship: (data.sponsorRelationship as any) || null,
         sssNumber: data.sssNumber,
         gsisNumber: data.gsisNumber,
         pagibigId: data.pagIbigNumber,
@@ -275,6 +318,79 @@ export default function GovernmentIdsScreen() {
           />
         )} />
 
+        {philhealthCategory === 'DD' && (
+          <View style={styles.sponsorCard}>
+            <ThemedText style={styles.sponsorTitle}>Principal Member / Sponsor Credentials</ThemedText>
+            <ThemedText style={styles.sponsorSubtitle}>
+              Required for PhilHealth dependent benefits. Please provide the credentials of the sponsoring member.
+            </ThemedText>
+
+            <Controller control={control} name="sponsorPin" render={({ field }) => (
+              <ProfileFormField
+                label="Sponsoring Member PIN *"
+                value={field.value}
+                onChangeText={(text) => field.onChange(formatPhilhealthId(text))}
+                keyboardType="numeric"
+                placeholder="00-000000000-0"
+                maxLength={14}
+              />
+            )} />
+
+            <Controller control={control} name="sponsorRelationship" render={({ field }) => (
+              <ProfileFormField
+                label="Relationship to Member *"
+                value={SPONSOR_RELATIONSHIP_OPTIONS.find(o => o.value === field.value)?.label || ''}
+                onPressIn={() => setModal('sponsorRel')}
+                placeholder="Select relationship"
+              />
+            )} />
+
+            <Controller control={control} name="sponsorLastName" render={({ field }) => (
+              <ProfileFormField
+                label="Sponsor Last Name *"
+                value={field.value}
+                onChangeText={field.onChange}
+                placeholder="Last Name"
+              />
+            )} />
+
+            <Controller control={control} name="sponsorFirstName" render={({ field }) => (
+              <ProfileFormField
+                label="Sponsor First Name *"
+                value={field.value}
+                onChangeText={field.onChange}
+                placeholder="First Name"
+              />
+            )} />
+
+            <Controller control={control} name="sponsorMiddleName" render={({ field }) => (
+              <ProfileFormField
+                label="Sponsor Middle Name"
+                value={field.value}
+                onChangeText={field.onChange}
+                placeholder="Middle Name (Optional)"
+              />
+            )} />
+
+            <Controller control={control} name="sponsorSuffix" render={({ field }) => (
+              <ProfileFormField
+                label="Sponsor Suffix"
+                value={field.value}
+                onChangeText={field.onChange}
+                placeholder="e.g. Jr, Sr, III"
+              />
+            )} />
+
+            <Controller control={control} name="sponsorDob" render={({ field }) => (
+              <ProfileDatePicker
+                label="Sponsor Date of Birth"
+                value={field.value}
+                onChange={field.onChange}
+              />
+            )} />
+          </View>
+        )}
+
         <ProfileSectionHeader title="Other Government IDs" />
         <Controller control={control} name="sssNumber" render={({ field }) => (
           <ProfileFormField label="SSS Number" value={field.value} onChangeText={(text) => field.onChange(formatSssNumber(text))} keyboardType="numeric" placeholder="00-0000000-0" maxLength={12} />
@@ -340,6 +456,9 @@ export default function GovernmentIdsScreen() {
       <Controller control={control} name="philhealthCategory" render={({ field }) => (
         <ProfileSelectModal visible={modal === 'philhealth'} title="PhilHealth Category" options={PHILHEALTH_CATEGORY_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setModal(null)} />
       )} />
+      <Controller control={control} name="sponsorRelationship" render={({ field }) => (
+        <ProfileSelectModal visible={modal === 'sponsorRel'} title="Relationship to Sponsor" options={SPONSOR_RELATIONSHIP_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setModal(null)} />
+      )} />
       <Controller control={control} name="disabilityType" render={({ field }) => (
         <ProfileSelectModal visible={modal === 'disability'} title="Disability Type" options={DISABILITY_TYPE_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setModal(null)} />
       )} />
@@ -353,6 +472,27 @@ export default function GovernmentIdsScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   content: { padding: 16, paddingBottom: 24 },
+  sponsorCard: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+    borderRadius: 10,
+    padding: 14,
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  sponsorTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 4,
+  },
+  sponsorSubtitle: {
+    fontSize: 12,
+    color: '#475569',
+    lineHeight: 16,
+    marginBottom: 12,
+  },
   mod11Badge: {
     borderRadius: 8,
     borderWidth: 1,

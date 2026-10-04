@@ -37,6 +37,7 @@ interface LocalPrescription {
   quantity: number;
   durationDays?: number;
   isDangerousDrug: boolean;
+  philHealthDrugCode?: string;
 }
 
 interface LocalDiagnosis {
@@ -44,6 +45,45 @@ interface LocalDiagnosis {
   description: string;
   isPrimary: boolean;
 }
+
+export interface StatutorySymptom {
+  code: string;
+  name: string;
+  description: string;
+}
+
+const STATUTORY_SYMPTOMS: StatutorySymptom[] = [
+  { code: '14', name: 'Headache', description: 'Headache / Cephalalgia' },
+  { code: '7', name: 'Cough', description: 'Cough / Productive or Dry' },
+  { code: '13', name: 'Fever', description: 'Fever / Pyrexia' },
+  { code: '5', name: 'Chest pain', description: 'Chest pain / Angina / Discomfort' },
+  { code: '2', name: 'Abdominal pain', description: 'Abdominal pain / Epigastric / Cramps' },
+  { code: '10', name: 'Dyspnea', description: 'Dyspnea / Shortness of breath' },
+  { code: '9', name: 'Dizziness', description: 'Dizziness / Vertigo / Lightheadedness' },
+  { code: '37', name: 'Hypertension signs', description: 'Hypertension-related signs / High BP' },
+  { code: '38', name: 'Pain', description: 'Pain (Requires pain site)' },
+  { code: 'X', name: 'Other complaint', description: 'Other complaint (Requires specific description)' },
+];
+
+const YAKAP_GAMOT_QUICK_PICKS = [
+  { genericName: 'Amlodipine Besylate', dosage: '5mg', form: 'Tablet', sig: '1 tab once daily in the morning', drugCode: 'AMLOD0000000005TAB00000000100', label: 'Amlodipine 5mg' },
+  { genericName: 'Losartan Potassium', dosage: '50mg', form: 'Tablet', sig: '1 tab once daily', drugCode: 'LOSAR0000000050TAB00000000100', label: 'Losartan 50mg' },
+  { genericName: 'Metformin HCl', dosage: '500mg', form: 'Tablet', sig: '1 tab twice daily with meals', drugCode: 'METFO0000000500TAB00000000100', label: 'Metformin 500mg' },
+  { genericName: 'Co-Amoxiclav', dosage: '625mg', form: 'Tablet', sig: '1 tab every 12 hours for 7 days', drugCode: 'COAMO0000000625TAB00000000100', label: 'Co-Amox 625mg' },
+  { genericName: 'Salbutamol MDI', dosage: '100mcg/dose', form: 'Inhaler', sig: '1-2 puffs every 4-6 hours as needed for wheezing', drugCode: 'SALBU0000000100INH00000000001', label: 'Salbutamol MDI' },
+  { genericName: 'Paracetamol', dosage: '500mg', form: 'Tablet', sig: '1 tab every 4-6 hours as needed for fever/pain', drugCode: 'PARAC0000000500TAB00000000100', label: 'Paracetamol 500mg' },
+];
+
+const YAKAP_LAB_CODE_MAP: Record<string, string> = {
+  'Complete Blood Count (CBC) with Platelet': '01',
+  'Routine Urinalysis': '02',
+  'Fasting Blood Sugar (FBS)': '05',
+  'Random Blood Sugar (RBS) Rapid Test': '06',
+  'Lipid Profile (Chol, Trig, HDL, LDL)': '08',
+  'Serum Creatinine & eGFR': '09',
+  'Chest X-Ray PA View': '11',
+  '12-Lead ECG with Interpretation': '12',
+};
 
 const COMMON_ICD10: Icd10Code[] = [
   { code: 'I10', description: 'Essential (primary) hypertension, Stage 1', category: 'Circulatory' },
@@ -332,6 +372,52 @@ export default function ConsultationsScreen() {
   const [newRxSig, setNewRxSig] = useState('');
   const [newRxQuantity, setNewRxQuantity] = useState('30');
   const [newRxDangerous, setNewRxDangerous] = useState(false);
+  const [newRxDrugCode, setNewRxDrugCode] = useState<string>('');
+
+  // PhilHealth Yakap Tagging & Statutory Mapping State
+  const [isYakapEligible, setIsYakapEligible] = useState<boolean>(true);
+  const [selectedSymptomCodes, setSelectedSymptomCodes] = useState<string[]>(['14', '37']);
+  const [symptomOtherDesc, setSymptomOtherDesc] = useState<string>('');
+  const [symptomPainSite, setSymptomPainSite] = useState<string>('');
+
+  const handleToggleSymptom = (symptom: StatutorySymptom) => {
+    if (isSigned) return;
+    const exists = selectedSymptomCodes.includes(symptom.code);
+    let updated: string[];
+    if (exists) {
+      updated = selectedSymptomCodes.filter((c) => c !== symptom.code);
+    } else {
+      updated = [...selectedSymptomCodes, symptom.code];
+      // Priority 1: When selected, automatically seed/append into free-text subjective narrative!
+      if (!subjective.trim()) {
+        setSubjective(`${symptom.name}, `);
+      } else if (!subjective.toLowerCase().includes(symptom.name.toLowerCase())) {
+        const separator = subjective.endsWith(',') || subjective.endsWith('.') ? ' ' : ', ';
+        setSubjective((prev) => `${prev.trim()}${separator}${symptom.name}`);
+      }
+    }
+    setSelectedSymptomCodes(updated);
+  };
+
+  const handleQuickAddDiagnosis = (code: string, desc: string) => {
+    if (isSigned) return;
+    if (!selectedDiagnoses.some((d) => d.icd10Code === code)) {
+      const isFirst = selectedDiagnoses.length === 0;
+      setSelectedDiagnoses((prev) => [...prev, { icd10Code: code, description: desc, isPrimary: isFirst }]);
+      if (!assessment.toLowerCase().includes(desc.toLowerCase())) {
+        const separator = assessment.trim() ? '; ' : '';
+        setAssessment((prev) => `${prev.trim()}${separator}${desc}`);
+      }
+    }
+  };
+
+  const handleSelectGamotQuickPick = (item: (typeof YAKAP_GAMOT_QUICK_PICKS)[0]) => {
+    setNewRxGeneric(item.genericName);
+    setNewRxDosage(item.dosage);
+    setNewRxForm(item.form);
+    setNewRxSig(item.sig);
+    setNewRxDrugCode(item.drugCode);
+  };
 
   // Doctor Regulatory Credentials
   const [doctorPrc, setDoctorPrc] = useState('PRC-0149281');
@@ -876,6 +962,7 @@ export default function ConsultationsScreen() {
       sig: newRxSig.trim(),
       quantity: parseInt(newRxQuantity, 10) || 30,
       isDangerousDrug: newRxDangerous,
+      philHealthDrugCode: newRxDrugCode.trim() || undefined,
     };
     const updated = [...prescriptions, newRx];
     setPrescriptions(updated);
@@ -885,6 +972,7 @@ export default function ConsultationsScreen() {
     setNewRxSig('');
     setNewRxQuantity('30');
     setNewRxDangerous(false);
+    setNewRxDrugCode('');
     setShowAddRx(false);
   };
 
@@ -939,6 +1027,10 @@ export default function ConsultationsScreen() {
       objective,
       assessment,
       plan,
+      isYakapEligible,
+      philHealthSignSympCode: selectedSymptomCodes.join(','),
+      philHealthOtherComplaint: selectedSymptomCodes.includes('X') ? (symptomOtherDesc || subjective) : undefined,
+      philHealthPainSite: selectedSymptomCodes.includes('38') ? symptomPainSite : undefined,
       diagnoses: selectedDiagnoses.map((d) => ({
         icd10Code: d.icd10Code,
         description: d.description,
@@ -951,6 +1043,7 @@ export default function ConsultationsScreen() {
         sig: p.sig,
         quantity: p.quantity,
         isDangerousDrug: p.isDangerousDrug,
+        philHealthDrugCode: p.philHealthDrugCode,
       })),
     };
 
@@ -1211,9 +1304,126 @@ export default function ConsultationsScreen() {
         </View>
       )}
 
+      {/* PhilHealth Yakap Consultation Control & Claim Readiness Banner */}
+      <View style={[styles.yakapHeaderCard, !isYakapEligible && styles.yakapHeaderCardInactive]}>
+        <View style={styles.rowBetween}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+            <Pressable
+              style={[styles.yakapCheckbox, isYakapEligible && styles.yakapCheckboxActive]}
+              onPress={() => !isSigned && setIsYakapEligible(!isYakapEligible)}
+              disabled={isSigned}
+            >
+              <ThemedText style={styles.yakapCheckMark}>{isYakapEligible ? '✓' : ''}</ThemedText>
+            </Pressable>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <ThemedText style={styles.yakapTitle}>PhilHealth Yakap / Konsulta Consultation</ThemedText>
+                <View style={[styles.trancheBadge, isYakapEligible ? styles.trancheBadgeActive : styles.trancheBadgeInactive]}>
+                  <ThemedText style={[styles.trancheBadgeText, isYakapEligible ? styles.trancheBadgeTextActive : styles.trancheBadgeTextInactive]}>
+                    {isYakapEligible ? 'Tranche 2 E-Claims Tagged' : 'Private / Non-Yakap'}
+                  </ThemedText>
+                </View>
+              </View>
+              <ThemedText style={styles.yakapSubtitle}>
+                {isYakapEligible
+                  ? `Statutory selector 1st priority • Patient PIN: Active • Auto-seeds doctor narrative`
+                  : 'Encounter will record in internal EMR only. No statutory XML generated.'}
+              </ThemedText>
+            </View>
+          </View>
+
+          {isYakapEligible && (
+            <View style={styles.claimReadinessContainer}>
+              <View style={[
+                styles.readinessPill,
+                (selectedSymptomCodes.length > 0 && selectedDiagnoses.length > 0 && vitals?.systolicBp)
+                  ? styles.readinessPillSuccess
+                  : styles.readinessPillPending
+              ]}>
+                <ThemedText style={[
+                  styles.readinessPillText,
+                  (selectedSymptomCodes.length > 0 && selectedDiagnoses.length > 0 && vitals?.systolicBp)
+                    ? styles.readinessPillTextSuccess
+                    : styles.readinessPillTextPending
+                ]}>
+                  {(selectedSymptomCodes.length > 0 && selectedDiagnoses.length > 0 && vitals?.systolicBp)
+                    ? '🟢 Tranche 2 Claim Ready'
+                    : '🟡 Incomplete for Yakap'}
+                </ThemedText>
+              </View>
+            </View>
+          )}
+        </View>
+      </View>
+
       {/* S - Subjective */}
       <View style={styles.section}>
-        <ThemedText style={styles.label}>Subjective (Chief Complaint & History of Present Illness)</ThemedText>
+        <View style={styles.rowBetween}>
+          <ThemedText style={styles.label}>Subjective (Chief Complaint & History of Present Illness)</ThemedText>
+          {isYakapEligible && (
+            <ThemedText style={styles.statutoryTag}>⭐ 1st Priority: PhilHealth Statutory Symptoms (lib_signssymptoms)</ThemedText>
+          )}
+        </View>
+
+        {/* Priority 1: PhilHealth Statutory Symptom Selector Chips */}
+        {isYakapEligible && (
+          <View style={styles.statutorySelectorCard}>
+            <ThemedText style={styles.statutoryInstruction}>
+              Select statutory complaint to guarantee 100% claim accuracy. Selection automatically seeds the clinical narrative below for doctor expansion:
+            </ThemedText>
+            <View style={styles.symptomChipsRow}>
+              {STATUTORY_SYMPTOMS.map((symp) => {
+                const isSelected = selectedSymptomCodes.includes(symp.code);
+                return (
+                  <Pressable
+                    key={symp.code}
+                    style={[styles.symptomChip, isSelected && styles.symptomChipActive]}
+                    onPress={() => handleToggleSymptom(symp)}
+                    disabled={isSigned}
+                  >
+                    <ThemedText style={[styles.symptomChipCode, isSelected && styles.symptomChipCodeActive]}>
+                      {symp.code}
+                    </ThemedText>
+                    <ThemedText style={[styles.symptomChipText, isSelected && styles.symptomChipTextActive]}>
+                      {symp.name}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {/* If Symptom 38 (Pain) selected: Prompt pain site */}
+            {selectedSymptomCodes.includes('38') && (
+              <View style={styles.statutorySubField}>
+                <ThemedText style={styles.subFieldLabel}>Required PhilHealth Pain Site (pPainSite):</ThemedText>
+                <TextInput
+                  style={styles.statutorySubInput}
+                  placeholder="e.g. Epigastric area, Right shoulder, Lumbar spine..."
+                  placeholderTextColor="#9CA3AF"
+                  value={symptomPainSite}
+                  onChangeText={setSymptomPainSite}
+                  editable={!isSigned}
+                />
+              </View>
+            )}
+
+            {/* If Symptom X (Other Complaint) selected: Prompt specific narrative */}
+            {selectedSymptomCodes.includes('X') && (
+              <View style={styles.statutorySubField}>
+                <ThemedText style={styles.subFieldLabel}>Required PhilHealth Other Complaint (pOtherComplaint):</ThemedText>
+                <TextInput
+                  style={styles.statutorySubInput}
+                  placeholder="e.g. Generalized pruriginous urticarial lesions..."
+                  placeholderTextColor="#9CA3AF"
+                  value={symptomOtherDesc}
+                  onChangeText={setSymptomOtherDesc}
+                  editable={!isSigned}
+                />
+              </View>
+            )}
+          </View>
+        )}
+
         <TextInput
           style={styles.textArea}
           multiline
@@ -1241,7 +1451,44 @@ export default function ConsultationsScreen() {
 
       {/* A - Assessment & ICD-10 Search */}
       <View style={styles.section}>
-        <ThemedText style={styles.label}>Assessment (Clinical Impression & ICD-10)</ThemedText>
+        <View style={styles.rowBetween}>
+          <ThemedText style={styles.label}>Assessment (Clinical Impression & ICD-10)</ThemedText>
+          {isYakapEligible && (
+            <ThemedText style={styles.statutoryTag}>PhilHealth ICD-10 & lib_mdisease Linked</ThemedText>
+          )}
+        </View>
+
+        {/* PhilHealth Chronic Condition Quick-Picks */}
+        {isYakapEligible && !isSigned && (
+          <View style={styles.chronicQuickPicksRow}>
+            <ThemedText style={styles.quickPickLabel}>Yakap Essential Diagnoses:</ThemedText>
+            <Pressable
+              style={styles.chronicChip}
+              onPress={() => handleQuickAddDiagnosis('I10', 'Essential (primary) hypertension')}
+            >
+              <ThemedText style={styles.chronicChipText}>+ I10 (HPN)</ThemedText>
+            </Pressable>
+            <Pressable
+              style={styles.chronicChip}
+              onPress={() => handleQuickAddDiagnosis('E11.9', 'Type 2 diabetes mellitus')}
+            >
+              <ThemedText style={styles.chronicChipText}>+ E11.9 (DM)</ThemedText>
+            </Pressable>
+            <Pressable
+              style={styles.chronicChip}
+              onPress={() => handleQuickAddDiagnosis('J45.909', 'Bronchial asthma')}
+            >
+              <ThemedText style={styles.chronicChipText}>+ J45.9 (Asthma)</ThemedText>
+            </Pressable>
+            <Pressable
+              style={styles.chronicChip}
+              onPress={() => handleQuickAddDiagnosis('J00', 'Acute nasopharyngitis [common cold]')}
+            >
+              <ThemedText style={styles.chronicChipText}>+ J00 (URTI)</ThemedText>
+            </Pressable>
+          </View>
+        )}
+
         <TextInput
           style={styles.input}
           placeholder="Primary Impression Narrative..."
@@ -1308,6 +1555,7 @@ export default function ConsultationsScreen() {
         <View style={styles.chipsRow}>
           {COMMON_LAB_TESTS.map(lab => {
             const isSelected = orderedLabs.includes(lab);
+            const yakapCode = YAKAP_LAB_CODE_MAP[lab];
             return (
               <Pressable
                 key={lab}
@@ -1317,6 +1565,9 @@ export default function ConsultationsScreen() {
               >
                 <ThemedText style={[styles.chipText, isSelected && styles.chipTextActive]}>
                   {isSelected ? '✓ ' : '+ '}{lab}
+                  {isYakapEligible && yakapCode && (
+                    <ThemedText style={styles.yakapDiagnosticCode}> (Yakap {yakapCode})</ThemedText>
+                  )}
                 </ThemedText>
               </Pressable>
             );
@@ -1468,6 +1719,32 @@ export default function ConsultationsScreen() {
         {showAddRx && (
           <View style={styles.rxFormCard}>
             <ThemedText style={styles.rxFormTitle}>New Medication Order</ThemedText>
+
+            {/* Yakap GAMOT Core Formulary Quick-Picks */}
+            {isYakapEligible && (
+              <View style={styles.gamotShelfCard}>
+                <ThemedText style={styles.gamotShelfTitle}>Yakap GAMOT Core Formulary Quick-Picks:</ThemedText>
+                <View style={styles.gamotChipsRow}>
+                  {YAKAP_GAMOT_QUICK_PICKS.map((item) => (
+                    <Pressable
+                      key={item.drugCode}
+                      style={[styles.gamotChip, newRxDrugCode === item.drugCode && styles.gamotChipActive]}
+                      onPress={() => handleSelectGamotQuickPick(item)}
+                    >
+                      <ThemedText style={[styles.gamotChipText, newRxDrugCode === item.drugCode && styles.gamotChipTextActive]}>
+                        + {item.label}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                </View>
+                {newRxDrugCode ? (
+                  <ThemedText style={styles.gamotBoundTag}>
+                    ✓ Bound 30-char UPSC: <ThemedText style={{ fontFamily: 'monospace', fontWeight: '800' }}>{newRxDrugCode}</ThemedText>
+                  </ThemedText>
+                ) : null}
+              </View>
+            )}
+
             <TextInput
               style={styles.rxInput}
               placeholder="Generic Name (e.g. Paracetamol, Amoxicillin)"
@@ -1531,6 +1808,13 @@ export default function ConsultationsScreen() {
                 </ThemedText>
                 <ThemedText style={styles.rxSig}>Sig: {rx.sig}</ThemedText>
                 <ThemedText style={styles.rxQty}>Dispense: #{rx.quantity} {rx.form}s</ThemedText>
+                {rx.philHealthDrugCode && (
+                  <View style={styles.gamotPrescriptionBadge}>
+                    <ThemedText style={styles.gamotPrescriptionBadgeText}>
+                      ✓ PhilHealth GAMOT UPSC: {rx.philHealthDrugCode}
+                    </ThemedText>
+                  </View>
+                )}
                 {rx.isDangerousDrug && (
                   <View style={styles.s2Badge}>
                     <ThemedText style={styles.s2BadgeText}>⚠️ PDEA S2 DANGEROUS DRUG</ThemedText>
@@ -3262,5 +3546,282 @@ const styles = StyleSheet.create({
     color: '#374151',
     fontSize: 13,
     fontWeight: '600',
+  },
+
+  // PhilHealth Yakap Header & Claim Readiness Styles
+  yakapHeaderCard: {
+    backgroundColor: '#F0F9FF',
+    borderWidth: 1.5,
+    borderColor: '#0284C7',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+  },
+  yakapHeaderCardInactive: {
+    backgroundColor: '#F9FAFB',
+    borderColor: '#E5E7EB',
+  },
+  yakapCheckbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#9CA3AF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  yakapCheckboxActive: {
+    borderColor: '#0284C7',
+    backgroundColor: '#0284C7',
+  },
+  yakapCheckMark: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  yakapTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  trancheBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  trancheBadgeActive: {
+    backgroundColor: '#E0F2FE',
+  },
+  trancheBadgeInactive: {
+    backgroundColor: '#F3F4F6',
+  },
+  trancheBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  trancheBadgeTextActive: {
+    color: '#0284C7',
+  },
+  trancheBadgeTextInactive: {
+    color: '#6B7280',
+  },
+  yakapSubtitle: {
+    fontSize: 12,
+    color: '#475569',
+    marginTop: 2,
+  },
+  claimReadinessContainer: {
+    justifyContent: 'center',
+  },
+  readinessPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  readinessPillSuccess: {
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+  },
+  readinessPillPending: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  readinessPillText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  readinessPillTextSuccess: {
+    color: '#15803D',
+  },
+  readinessPillTextPending: {
+    color: '#B45309',
+  },
+
+  // Statutory Symptom Selector Styles
+  statutoryTag: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0284C7',
+    backgroundColor: '#E0F2FE',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  statutorySelectorCard: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+  },
+  statutoryInstruction: {
+    fontSize: 12,
+    color: '#475569',
+    marginBottom: 8,
+    lineHeight: 16,
+  },
+  symptomChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  symptomChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 6,
+  },
+  symptomChipActive: {
+    backgroundColor: '#0284C7',
+    borderColor: '#0284C7',
+  },
+  symptomChipCode: {
+    fontSize: 10,
+    fontFamily: 'monospace',
+    fontWeight: '800',
+    color: '#0284C7',
+    backgroundColor: '#E0F2FE',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  symptomChipCodeActive: {
+    color: '#0284C7',
+    backgroundColor: '#FFFFFF',
+  },
+  symptomChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  symptomChipTextActive: {
+    color: '#FFFFFF',
+  },
+  statutorySubField: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  subFieldLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#475569',
+    marginBottom: 4,
+  },
+  statutorySubInput: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#94A3B8',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontSize: 12,
+    color: '#0F172A',
+  },
+
+  // Chronic Disease Quick Picks
+  chronicQuickPicksRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  quickPickLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  chronicChip: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  chronicChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#1D4ED8',
+  },
+
+  // GAMOT Formulary Shelf Styles
+  gamotShelfCard: {
+    backgroundColor: '#F0FDFA',
+    borderWidth: 1,
+    borderColor: '#99F6E4',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 10,
+  },
+  gamotShelfTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#0F766E',
+    marginBottom: 6,
+    textTransform: 'uppercase',
+  },
+  gamotChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 6,
+  },
+  gamotChip: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#5EEAD4',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  gamotChipActive: {
+    backgroundColor: '#0D9488',
+    borderColor: '#0D9488',
+  },
+  gamotChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0F766E',
+  },
+  gamotChipTextActive: {
+    color: '#FFFFFF',
+  },
+  gamotBoundTag: {
+    fontSize: 11,
+    color: '#0D9488',
+    fontWeight: '600',
+  },
+  gamotPrescriptionBadge: {
+    backgroundColor: '#F0FDFA',
+    borderWidth: 1,
+    borderColor: '#99F6E4',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  gamotPrescriptionBadgeText: {
+    fontSize: 10,
+    fontFamily: 'monospace',
+    fontWeight: '800',
+    color: '#0D9488',
+  },
+  yakapDiagnosticCode: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#0284C7',
   },
 });

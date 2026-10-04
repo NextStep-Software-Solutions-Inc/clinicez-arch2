@@ -7,6 +7,7 @@ using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using ClinicEz.Shared.Common;
 
 namespace ClinicEz.Clinic.Application.Features.Records.Commands;
 
@@ -20,15 +21,18 @@ public sealed class VerifyRecordAttachmentCommandHandler : IRequestHandler<Verif
     private readonly IRepository<ClinicRecordAttachment> _attachmentRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
+    private readonly IClinicRecordEventPublisher? _eventPublisher;
 
     public VerifyRecordAttachmentCommandHandler(
         IRepository<ClinicRecordAttachment> attachmentRepo,
         IUnitOfWork unitOfWork,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IClinicRecordEventPublisher? eventPublisher = null)
     {
         _attachmentRepo = attachmentRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _eventPublisher = eventPublisher;
     }
 
     public async Task<ClinicRecordAttachmentDto> Handle(VerifyRecordAttachmentCommand request, CancellationToken ct)
@@ -49,6 +53,26 @@ public sealed class VerifyRecordAttachmentCommandHandler : IRequestHandler<Verif
         attachment.UpdatedAt = DateTime.UtcNow;
 
         await _unitOfWork.SaveChangesAsync(ct);
+
+        if (_eventPublisher != null)
+        {
+            await _eventPublisher.PublishRecordVerifiedAsync(new ClinicRecordVerifiedEvent
+            {
+                AttachmentId = attachment.Id,
+                TenantId = attachment.TenantId,
+                ClinicId = attachment.ClinicId,
+                PatientId = attachment.PatientId,
+                RecordType = attachment.RecordType,
+                Title = attachment.Title,
+                FileName = attachment.FileName,
+                ContentType = attachment.ContentType,
+                FileSizeBytes = attachment.FileSizeBytes,
+                VerificationStatus = attachment.VerificationStatus,
+                RejectionReason = attachment.RejectionReason,
+                VerifiedAt = attachment.VerifiedAt ?? DateTime.UtcNow,
+                VerifiedByStaffName = attachment.VerifiedByStaffName
+            }, ct);
+        }
 
         return new ClinicRecordAttachmentDto(
             attachment.Id,
@@ -71,6 +95,10 @@ public sealed class VerifyRecordAttachmentCommandHandler : IRequestHandler<Verif
             attachment.RejectionReason,
             attachment.VerifiedAt,
             attachment.VerifiedByStaffId,
-            attachment.VerifiedByStaffName);
+            attachment.VerifiedByStaffName,
+            attachment.EncryptionAlgorithm,
+            attachment.EncryptionKeyId,
+            attachment.EncryptedSizeBytes,
+            attachment.EncryptedHash);
     }
 }

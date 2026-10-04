@@ -393,6 +393,12 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.VerificationStatus).HasMaxLength(50).HasDefaultValue("Verified");
             entity.Property(e => e.RejectionReason).HasMaxLength(255);
             entity.Property(e => e.VerifiedByStaffName).HasMaxLength(150);
+            entity.Property(e => e.EncryptionAlgorithm).HasMaxLength(50).HasDefaultValue("AES-256-GCM");
+            entity.Property(e => e.EncryptionKeyId).HasMaxLength(100);
+            entity.Property(e => e.EncryptionIvBase64).HasMaxLength(100);
+            entity.Property(e => e.EncryptionTagBase64).HasMaxLength(100);
+            entity.Property(e => e.EncryptedHash).HasMaxLength(100);
+            entity.Property(e => e.WrappedKeyJson).HasColumnType("text");
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
         });
 

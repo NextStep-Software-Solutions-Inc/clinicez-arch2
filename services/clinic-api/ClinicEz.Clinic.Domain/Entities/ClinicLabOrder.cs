@@ -54,4 +54,5 @@ public sealed class ClinicLabOrderItem
     public required string Category { get; set; }
     public string? Instructions { get; set; }
     public LabOrderStatus Status { get; set; } = LabOrderStatus.Ordered;
+    public string? PhilHealthServiceCode { get; set; }
 }

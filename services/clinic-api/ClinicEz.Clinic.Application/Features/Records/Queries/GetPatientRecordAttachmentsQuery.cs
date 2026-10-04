@@ -60,6 +60,10 @@ public sealed class GetPatientRecordAttachmentsQueryHandler : IRequestHandler<Ge
             a.RejectionReason,
             a.VerifiedAt,
             a.VerifiedByStaffId,
-            a.VerifiedByStaffName)).ToList().AsReadOnly();
+            a.VerifiedByStaffName,
+            a.EncryptionAlgorithm,
+            a.EncryptionKeyId,
+            a.EncryptedSizeBytes,
+            a.EncryptedHash)).ToList().AsReadOnly();
     }
 }

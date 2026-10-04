@@ -352,6 +352,82 @@ export default function AppointmentDetailScreen({ route }: Props) {
                     </View>
                 ) : null}
 
+                {/* ── Clinical Visit Summary & Care Plan (Sealed by Doctor) ─ */}
+                {(item.status === 'completed' || item.clinicalAssessment || item.doctorPlan || item.prescriptionsSummary) ? (
+                    <View style={[styles.section, { borderColor: '#10B981', backgroundColor: colors.card }]}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                            <ThemedText style={[styles.sectionTitle, { color: '#059669', opacity: 1 }]}>
+                                Clinical Visit Summary
+                            </ThemedText>
+                            <View style={{ backgroundColor: 'rgba(16, 185, 129, 0.12)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 }}>
+                                <ThemedText style={{ fontSize: 10, fontWeight: '700', color: '#059669' }}>
+                                    ✓ Sealed Record
+                                </ThemedText>
+                            </View>
+                        </View>
+
+                        {item.clinicalAssessment ? (
+                            <>
+                                <ThemedText style={styles.fieldHint}>Doctor Assessment & Diagnoses</ThemedText>
+                                <View style={[styles.complaintBox, { borderColor: colors.border, backgroundColor: 'rgba(16, 185, 129, 0.05)', marginBottom: 8 }]}>
+                                    <ThemedText style={[styles.complaintText, { color: colors.text, fontWeight: '600' }]}>
+                                        {item.clinicalAssessment}
+                                    </ThemedText>
+                                </View>
+                            </>
+                        ) : null}
+
+                        {item.doctorPlan ? (
+                            <>
+                                <ThemedText style={styles.fieldHint}>Physician Care Plan & Instructions</ThemedText>
+                                <View style={[styles.complaintBox, { borderColor: colors.border, backgroundColor: 'rgba(148, 163, 184, 0.08)', marginBottom: 8 }]}>
+                                    <ThemedText style={[styles.complaintText, { color: colors.text }]}>
+                                        {item.doctorPlan}
+                                    </ThemedText>
+                                </View>
+                            </>
+                        ) : null}
+
+                        {item.prescriptionsSummary ? (
+                            <>
+                                <ThemedText style={styles.fieldHint}>Prescriptions Issued (Rx)</ThemedText>
+                                <View style={[styles.complaintBox, { borderColor: colors.border, backgroundColor: 'rgba(99, 102, 241, 0.06)', marginBottom: 8 }]}>
+                                    <ThemedText style={[styles.complaintText, { color: colors.text, fontSize: 13 }]}>
+                                        💊 {item.prescriptionsSummary}
+                                    </ThemedText>
+                                </View>
+                            </>
+                        ) : null}
+
+                        {item.prescriptionPublicVerificationUrl ? (
+                            <Pressable
+                                onPress={() => {
+                                    if (item.prescriptionPublicVerificationUrl) {
+                                        Linking.openURL(item.prescriptionPublicVerificationUrl).catch(() => {});
+                                    }
+                                }}
+                                style={{
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: 6,
+                                    paddingVertical: 10,
+                                    borderRadius: 12,
+                                    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                                    borderWidth: 1,
+                                    borderColor: 'rgba(99, 102, 241, 0.3)',
+                                    marginTop: 4,
+                                }}
+                            >
+                                <ThemedText style={{ fontSize: 14 }}>🔗</ThemedText>
+                                <ThemedText style={{ fontSize: 13, fontWeight: '700', color: colors.primary }}>
+                                    Verify Electronic Prescription (Rx)
+                                </ThemedText>
+                            </Pressable>
+                        ) : null}
+                    </View>
+                ) : null}
+
                 {/* ── Healthcare Provider ─────────────────────────────────── */}
                 <ProviderSection provider={item.provider} onViewProfile={handleViewProfile} />
 

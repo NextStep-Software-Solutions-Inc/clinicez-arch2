@@ -115,11 +115,18 @@ public sealed class YakapPatientProfileController : ControllerBase
                 defaultMedHistories.Add(new PhilHealthConditionEntryDto("001", "Allergy"));
         }
 
+        var isDependentDefault = isPediatric;
         var defaultProfile = new PhilHealthPatientProfileDto
         {
             Pin = patient.PhilHealthNumber,
-            MemberPin = patient.PhilHealthNumber,
-            MemberType = "MM",
+            MemberPin = isDependentDefault ? null : patient.PhilHealthNumber,
+            MemberType = isDependentDefault ? "DD" : "MM",
+            MemberLastName = patient.LastName,
+            MemberFirstName = isDependentDefault ? null : patient.FirstName,
+            MemberMiddleName = isDependentDefault ? null : patient.MiddleName,
+            MemberSuffix = isDependentDefault ? null : patient.Suffix,
+            MemberBirthDate = isDependentDefault ? null : patient.DateOfBirth.ToString("yyyy-MM-dd"),
+            DependentRelationship = isDependentDefault ? "C" : null,
             Atc = "A",
             IsWalkedIn = "Y",
             BloodType = patient.BloodType,

@@ -42,23 +42,42 @@ public sealed class GetAppointmentsQueryHandler
             clinicsDict.TryGetValue(appt.ClinicId, out var clinic);
             var provider = clinic?.HealthcareProviders.FirstOrDefault(p => p.Id == appt.ProviderId);
 
+            ClinicAppointmentDto? clinicDto = null;
+            if (!string.IsNullOrWhiteSpace(appt.RawJson))
+            {
+                try
+                {
+                    clinicDto = System.Text.Json.JsonSerializer.Deserialize<ClinicAppointmentDto>(
+                        appt.RawJson,
+                        new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                }
+                catch
+                {
+                    // Ignore malformed rawJson fallback
+                }
+            }
+
             dtos.Add(new AppointmentDto(
                 appt.Id,
                 appt.ClinicId,
-                clinic?.Name ?? "Unknown Clinic",
+                clinic?.Name ?? clinicDto?.ClinicName ?? "Unknown Clinic",
                 new AppointmentProviderSnapshot(
                     appt.ProviderId,
-                    provider?.Name ?? "Unknown Provider",
-                    provider?.Specialty,
-                    provider?.AvatarUrl
+                    provider?.Name ?? clinicDto?.Provider?.Name ?? "Unknown Provider",
+                    provider?.Specialty ?? clinicDto?.Provider?.Specialty,
+                    provider?.AvatarUrl ?? clinicDto?.Provider?.AvatarUrl
                 ),
-                appt.ServiceType,
+                appt.ServiceType ?? clinicDto?.ServiceType,
                 appt.ScheduledAt.ToString("O"),
                 appt.DurationMinutes,
                 appt.Status.ToString(),
                 appt.Notes,
-                appt.Subject,
-                appt.ChiefComplaint
+                appt.Subject ?? clinicDto?.Subject,
+                appt.ChiefComplaint ?? clinicDto?.ChiefComplaint,
+                clinicDto?.ClinicalAssessment,
+                clinicDto?.DoctorPlan,
+                clinicDto?.PrescriptionsSummary,
+                clinicDto?.PrescriptionPublicVerificationUrl
             ));
         }
 

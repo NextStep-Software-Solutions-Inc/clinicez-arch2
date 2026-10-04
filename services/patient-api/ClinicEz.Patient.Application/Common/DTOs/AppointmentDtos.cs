@@ -17,7 +17,11 @@ public sealed record AppointmentDto(
     string Status,
     string? Notes,
     string? Subject,
-    string? ChiefComplaint);
+    string? ChiefComplaint,
+    string? ClinicalAssessment = null,
+    string? DoctorPlan = null,
+    string? PrescriptionsSummary = null,
+    string? PrescriptionPublicVerificationUrl = null);
 
 public sealed record AppointmentsResponse(
     IReadOnlyList<AppointmentDto> Items,

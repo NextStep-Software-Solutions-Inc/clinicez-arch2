@@ -13,6 +13,12 @@ public sealed class PatientGovernmentIdConfiguration : IEntityTypeConfiguration<
         builder.Property(g => g.IdType).HasConversion<string>().HasMaxLength(30);
         builder.Property(g => g.CreatedBy).HasMaxLength(128).IsRequired();
         builder.Property(g => g.UpdatedBy).HasMaxLength(128);
+        builder.Property(g => g.SponsorPin).HasMaxLength(50);
+        builder.Property(g => g.SponsorLastName).HasMaxLength(100);
+        builder.Property(g => g.SponsorFirstName).HasMaxLength(100);
+        builder.Property(g => g.SponsorMiddleName).HasMaxLength(100);
+        builder.Property(g => g.SponsorSuffix).HasMaxLength(20);
+        builder.Property(g => g.SponsorRelationship).HasMaxLength(50);
 
         builder.HasOne(g => g.Patient)
             .WithMany(p => p.GovernmentIds)

@@ -25,7 +25,8 @@ public sealed record PrescriptionInput(
     int? DurationDays = null,
     int Refills = 0,
     bool IsDangerousDrug = false,
-    string? Remarks = null);
+    string? Remarks = null,
+    string? PhilHealthDrugCode = null);
 
 public sealed record CreateConsultationCommand(
     Guid PatientId,
@@ -39,7 +40,11 @@ public sealed record CreateConsultationCommand(
     string? Assessment = null,
     string? Plan = null,
     List<DiagnosisInput>? Diagnoses = null,
-    List<PrescriptionInput>? Prescriptions = null) : IRequest<ConsultationEncounterDto>;
+    List<PrescriptionInput>? Prescriptions = null,
+    bool IsYakapEligible = false,
+    string? PhilHealthSignSympCode = null,
+    string? PhilHealthOtherComplaint = null,
+    string? PhilHealthPainSite = null) : IRequest<ConsultationEncounterDto>;
 
 public sealed class CreateConsultationCommandValidator : AbstractValidator<CreateConsultationCommand>
 {
@@ -89,6 +94,10 @@ public sealed class CreateConsultationCommandHandler : IRequestHandler<CreateCon
             Objective = request.Objective ?? string.Empty,
             Assessment = request.Assessment ?? string.Empty,
             Plan = request.Plan ?? string.Empty,
+            IsYakapEligible = request.IsYakapEligible,
+            PhilHealthSignSympCode = request.PhilHealthSignSympCode,
+            PhilHealthOtherComplaint = request.PhilHealthOtherComplaint,
+            PhilHealthPainSite = request.PhilHealthPainSite,
             IsSigned = false,
             CreatedAt = DateTime.UtcNow,
             CreatedBy = request.DoctorName
@@ -129,6 +138,7 @@ public sealed class CreateConsultationCommandHandler : IRequestHandler<CreateCon
                     Refills = rx.Refills,
                     IsDangerousDrug = rx.IsDangerousDrug,
                     Remarks = rx.Remarks?.Trim(),
+                    PhilHealthDrugCode = rx.PhilHealthDrugCode?.Trim(),
                     CreatedAt = DateTime.UtcNow,
                     CreatedBy = request.DoctorName
                 });
@@ -179,6 +189,12 @@ public sealed class CreateConsultationCommandHandler : IRequestHandler<CreateCon
             encounter.IsSigned,
             encounter.SignedAt,
             encounter.Diagnoses.Select(d => new EncounterDiagnosisDto(d.Id, d.Icd10Code, d.Description, d.IsPrimary)).ToList(),
-            encounter.Prescriptions.Select(p => new PrescriptionItemDto(p.Id, p.GenericName, p.BrandName, p.Dosage, p.Form, p.Sig, p.Quantity, p.DurationDays, p.Refills, p.IsDangerousDrug, p.Remarks)).ToList());
+            encounter.Prescriptions.Select(p => new PrescriptionItemDto(p.Id, p.GenericName, p.BrandName, p.Dosage, p.Form, p.Sig, p.Quantity, p.DurationDays, p.Refills, p.IsDangerousDrug, p.Remarks, p.PhilHealthDrugCode)).ToList(),
+            encounter.IsYakapEligible,
+            encounter.PhilHealthSignSympCode,
+            encounter.PhilHealthOtherComplaint,
+            encounter.PhilHealthPainSite,
+            encounter.PhilHealthCaseNo,
+            encounter.PhilHealthSoapTransNo);
     }
 }

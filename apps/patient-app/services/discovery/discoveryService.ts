@@ -1472,6 +1472,44 @@ export async function submitBookingDraftOnline(
     return apiSubmitDraft(getToken, patientId, draftId);
 }
 
+/**
+ * Streams an in-memory decrypted external file to the clinic's isolated intake endpoint.
+ * The clinic immediately re-encrypts the payload under its Clinic Master Key (CMK) and persists it.
+ */
+export async function uploadSharedFileToClinic(
+    patientId: string,
+    clinicBaseUrl: string | undefined,
+    fileId: string,
+    fileName: string,
+    fileUri: string,
+    mimeType?: string,
+    recordType: string = 'LabResult',
+): Promise<boolean> {
+    try {
+        const rawBaseUrl = clinicBaseUrl || process.env.EXPO_PUBLIC_CLINIC_API_URL || 'http://localhost:5245';
+        const targetUrl = `${rawBaseUrl.replace(/\/+$/, '')}/api/v1/records/intake/patient-shared-file`;
+        const formData = new FormData();
+        formData.append('PatientId', patientId);
+        formData.append('FileId', fileId);
+        formData.append('RecordType', recordType);
+        formData.append('Title', fileName);
+        formData.append('File', {
+            uri: fileUri,
+            name: fileName,
+            type: mimeType || 'application/pdf',
+        } as any);
+
+        const response = await fetch(targetUrl, {
+            method: 'POST',
+            body: formData,
+        });
+        return response.ok;
+    } catch (err) {
+        console.warn('[uploadSharedFileToClinic] Failed to stream shared file to clinic intake:', err);
+        return false;
+    }
+}
+
 export async function getClinicDetailOnline(
     patientId: string,
     clinicId: string,

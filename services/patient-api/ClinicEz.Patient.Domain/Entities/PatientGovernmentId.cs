@@ -14,4 +14,12 @@ public sealed class PatientGovernmentId : BaseEntity, ISyncable
     public DateOnly? IssuedAt { get; set; }
     public DateOnly? ExpiresAt { get; set; }
     public string? PhilhealthCategory { get; set; }
+
+    public string? SponsorPin { get; set; }
+    public string? SponsorLastName { get; set; }
+    public string? SponsorFirstName { get; set; }
+    public string? SponsorMiddleName { get; set; }
+    public string? SponsorSuffix { get; set; }
+    public DateOnly? SponsorDob { get; set; }
+    public string? SponsorRelationship { get; set; }
 }

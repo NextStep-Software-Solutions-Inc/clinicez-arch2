@@ -75,6 +75,7 @@ export interface ClinicEntity {
     specialties: string[];
     featuredScore: number;
     activeMemberCount: number;
+    baseUrl?: string;
 }
 
 export interface ConsentSelection {

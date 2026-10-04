@@ -20,7 +20,11 @@ public sealed record UpdateConsultationCommand(
     string? Assessment,
     string? Plan,
     List<DiagnosisInput>? Diagnoses,
-    List<PrescriptionInput>? Prescriptions) : IRequest<ConsultationEncounterDto>;
+    List<PrescriptionInput>? Prescriptions,
+    bool? IsYakapEligible = null,
+    string? PhilHealthSignSympCode = null,
+    string? PhilHealthOtherComplaint = null,
+    string? PhilHealthPainSite = null) : IRequest<ConsultationEncounterDto>;
 
 public sealed class UpdateConsultationCommandValidator : AbstractValidator<UpdateConsultationCommand>
 {
@@ -73,6 +77,10 @@ public sealed class UpdateConsultationCommandHandler : IRequestHandler<UpdateCon
         if (request.Objective != null) encounter.Objective = request.Objective;
         if (request.Assessment != null) encounter.Assessment = request.Assessment;
         if (request.Plan != null) encounter.Plan = request.Plan;
+        if (request.IsYakapEligible.HasValue) encounter.IsYakapEligible = request.IsYakapEligible.Value;
+        if (request.PhilHealthSignSympCode != null) encounter.PhilHealthSignSympCode = request.PhilHealthSignSympCode;
+        if (request.PhilHealthOtherComplaint != null) encounter.PhilHealthOtherComplaint = request.PhilHealthOtherComplaint;
+        if (request.PhilHealthPainSite != null) encounter.PhilHealthPainSite = request.PhilHealthPainSite;
         encounter.UpdatedAt = DateTime.UtcNow;
         encounter.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "Doctor";
 
@@ -125,6 +133,7 @@ public sealed class UpdateConsultationCommandHandler : IRequestHandler<UpdateCon
                     Refills = rx.Refills,
                     IsDangerousDrug = rx.IsDangerousDrug,
                     Remarks = rx.Remarks?.Trim(),
+                    PhilHealthDrugCode = rx.PhilHealthDrugCode?.Trim(),
                     CreatedAt = DateTime.UtcNow,
                     CreatedBy = encounter.DoctorName
                 });
@@ -155,6 +164,12 @@ public sealed class UpdateConsultationCommandHandler : IRequestHandler<UpdateCon
             encounter.IsSigned,
             encounter.SignedAt,
             encounter.Diagnoses.Select(d => new EncounterDiagnosisDto(d.Id, d.Icd10Code, d.Description, d.IsPrimary)).ToList(),
-            encounter.Prescriptions.Select(p => new PrescriptionItemDto(p.Id, p.GenericName, p.BrandName, p.Dosage, p.Form, p.Sig, p.Quantity, p.DurationDays, p.Refills, p.IsDangerousDrug, p.Remarks)).ToList());
+            encounter.Prescriptions.Select(p => new PrescriptionItemDto(p.Id, p.GenericName, p.BrandName, p.Dosage, p.Form, p.Sig, p.Quantity, p.DurationDays, p.Refills, p.IsDangerousDrug, p.Remarks, p.PhilHealthDrugCode)).ToList(),
+            encounter.IsYakapEligible,
+            encounter.PhilHealthSignSympCode,
+            encounter.PhilHealthOtherComplaint,
+            encounter.PhilHealthPainSite,
+            encounter.PhilHealthCaseNo,
+            encounter.PhilHealthSoapTransNo);
     }
 }

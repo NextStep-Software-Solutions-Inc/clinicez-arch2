@@ -54,7 +54,12 @@ import {
   saveBookingDraft,
   createBookingDraftOnline,
   submitBookingDraftOnline,
+  uploadSharedFileToClinic,
 } from '../../services/discovery/discoveryService';
+import {
+  preparePreviewFile,
+  cleanupPreviewCache,
+} from '../../services/files/filesService';
 import {
   consumeAttachedFileSelection,
   initAttachedFileSelection,
@@ -64,7 +69,7 @@ import {
   fetchProviderOptions,
   fetchServiceOptions,
 } from '../../services/appointments/appointmentsService';
-import type { ClinicView } from '../../services/discovery/types';
+import type { ClinicView, ShareableFieldKey } from '../../services/discovery/types';
 import type {
   AvailableSlot,
   BookingProviderOption,
@@ -601,6 +606,15 @@ export default function BookingDraftScreen({ route }: Props) {
       ? `${subject.trim()}: ${chiefComplaint.trim()}`
       : chiefComplaint.trim();
 
+    const consentedShareFields: ShareableFieldKey[] = [
+      'fullName',
+      'dateOfBirth',
+      'sex',
+      'mobile',
+      'philhealthId',
+    ];
+    const shareFieldsJsonValue = JSON.stringify(consentedShareFields);
+
     // Create draft on backend first
     const [serverDraftId, saveErr] = await safeAwait(createBookingDraftOnline(getToken, patientId, {
       clinicId: selectedClinicId,
@@ -609,7 +623,7 @@ export default function BookingDraftScreen({ route }: Props) {
       preferredTime: selectedSlot?.time ?? null,
       reason: reasonValue,
       notes: notesValue,
-      shareFieldsJson: '[]',
+      shareFieldsJson: shareFieldsJsonValue,
       attachedFileIdsJson: JSON.stringify(attachedFileIds),
     }));
 
@@ -629,7 +643,7 @@ export default function BookingDraftScreen({ route }: Props) {
         preferredTime: selectedSlot?.time,
         reason: reasonValue,
         notes: notesValue || undefined,
-        shareFields: [],
+        shareFields: consentedShareFields,
         attachedFileIds: attachedFileIds,
       }, serverDraftId));
 
@@ -654,6 +668,28 @@ export default function BookingDraftScreen({ route }: Props) {
         return;
       }
 
+      // Stream decrypted file copies to the clinic's intake pipeline for re-encryption under clinic CMK
+      if (attachedFileIds && attachedFileIds.length > 0) {
+        for (const fileId of attachedFileIds) {
+          try {
+            const prepared = await preparePreviewFile(patientId, fileId, getToken);
+            if (prepared?.uri) {
+              await uploadSharedFileToClinic(
+                patientId,
+                selectedClinic?.baseUrl,
+                fileId,
+                prepared.name,
+                prepared.uri,
+                prepared.mimeType
+              );
+              await cleanupPreviewCache(patientId, fileId);
+            }
+          } catch (streamErr) {
+            console.warn(`[BookingDraftScreen] Decrypt & stream file ${fileId} to clinic warning:`, streamErr);
+          }
+        }
+      }
+
       await safeAwait(saveBookingDraft(patientId, {
         clinicId: selectedClinicId,
         organizationId: null,
@@ -661,7 +697,7 @@ export default function BookingDraftScreen({ route }: Props) {
         preferredTime: selectedSlot?.time,
         reason: reasonValue,
         notes: notesValue || undefined,
-        shareFields: [],
+        shareFields: consentedShareFields,
       }, serverDraftId));
 
       // Booking confirmed — mark status='ready' locally

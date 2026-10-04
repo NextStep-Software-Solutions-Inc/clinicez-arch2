@@ -32,6 +32,13 @@ internal sealed class GovernmentIdPayload
     public string? SeniorCitizenId { get; set; }
     public string? PwdIdNumber { get; set; }
     public string? HmoPolicyNumber { get; set; }
+    public string? SponsorPin { get; set; }
+    public string? SponsorLastName { get; set; }
+    public string? SponsorFirstName { get; set; }
+    public string? SponsorMiddleName { get; set; }
+    public string? SponsorSuffix { get; set; }
+    public DateOnly? SponsorDob { get; set; }
+    public string? SponsorRelationship { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
 
@@ -55,7 +62,14 @@ internal sealed class PatientGovernmentIdSyncProcessor
                 ClientId = p.ClientId, PatientId = p.PatientId,
                 IdType = Enum.TryParse<GovernmentIdType>(p.IdType, true, out var t) ? t : GovernmentIdType.PhilSys,
                 IdNumber = p.IdNumber, IssuedAt = p.IssuedAt, ExpiresAt = p.ExpiresAt,
-                PhilhealthCategory = p.PhilhealthCategory
+                PhilhealthCategory = p.PhilhealthCategory,
+                SponsorPin = p.SponsorPin,
+                SponsorLastName = p.SponsorLastName,
+                SponsorFirstName = p.SponsorFirstName,
+                SponsorMiddleName = p.SponsorMiddleName,
+                SponsorSuffix = p.SponsorSuffix,
+                SponsorDob = p.SponsorDob,
+                SponsorRelationship = p.SponsorRelationship
             };
         }
         // Otherwise use the first non-null ID from the flat record
@@ -64,7 +78,14 @@ internal sealed class PatientGovernmentIdSyncProcessor
         {
             ClientId = p.ClientId, PatientId = p.PatientId,
             IdType = type, IdNumber = number ?? string.Empty,
-            PhilhealthCategory = type == GovernmentIdType.PhilHealth ? p.PhilhealthCategory : null
+            PhilhealthCategory = type == GovernmentIdType.PhilHealth ? p.PhilhealthCategory : null,
+            SponsorPin = type == GovernmentIdType.PhilHealth ? p.SponsorPin : null,
+            SponsorLastName = type == GovernmentIdType.PhilHealth ? p.SponsorLastName : null,
+            SponsorFirstName = type == GovernmentIdType.PhilHealth ? p.SponsorFirstName : null,
+            SponsorMiddleName = type == GovernmentIdType.PhilHealth ? p.SponsorMiddleName : null,
+            SponsorSuffix = type == GovernmentIdType.PhilHealth ? p.SponsorSuffix : null,
+            SponsorDob = type == GovernmentIdType.PhilHealth ? p.SponsorDob : null,
+            SponsorRelationship = type == GovernmentIdType.PhilHealth ? p.SponsorRelationship : null
         };
     }
 
@@ -76,13 +97,33 @@ internal sealed class PatientGovernmentIdSyncProcessor
             e.IdNumber = p.IdNumber;
             e.IssuedAt = p.IssuedAt;
             e.ExpiresAt = p.ExpiresAt;
-            if (e.IdType == GovernmentIdType.PhilHealth) e.PhilhealthCategory = p.PhilhealthCategory;
+            if (e.IdType == GovernmentIdType.PhilHealth)
+            {
+                e.PhilhealthCategory = p.PhilhealthCategory;
+                e.SponsorPin = p.SponsorPin;
+                e.SponsorLastName = p.SponsorLastName;
+                e.SponsorFirstName = p.SponsorFirstName;
+                e.SponsorMiddleName = p.SponsorMiddleName;
+                e.SponsorSuffix = p.SponsorSuffix;
+                e.SponsorDob = p.SponsorDob;
+                e.SponsorRelationship = p.SponsorRelationship;
+            }
             return;
         }
         var (type, number) = ResolveFirstId(p);
         e.IdType = type;
         e.IdNumber = number ?? e.IdNumber;
-        if (type == GovernmentIdType.PhilHealth) e.PhilhealthCategory = p.PhilhealthCategory;
+        if (type == GovernmentIdType.PhilHealth)
+        {
+            e.PhilhealthCategory = p.PhilhealthCategory;
+            e.SponsorPin = p.SponsorPin;
+            e.SponsorLastName = p.SponsorLastName;
+            e.SponsorFirstName = p.SponsorFirstName;
+            e.SponsorMiddleName = p.SponsorMiddleName;
+            e.SponsorSuffix = p.SponsorSuffix;
+            e.SponsorDob = p.SponsorDob;
+            e.SponsorRelationship = p.SponsorRelationship;
+        }
     }
 
     private static (GovernmentIdType type, string? number) ResolveFirstId(GovernmentIdPayload p)

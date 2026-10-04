@@ -123,4 +123,54 @@ public sealed class PushClinicAppointmentsCommandHandlerTests
         _appointmentRepo.Received(1).Update(existing);
         await _uow.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task Handle_CompletedAppointmentWithClinicalRelease_PreservesClinicalReleaseInRawJson()
+    {
+        // Arrange
+        var patientId = Guid.NewGuid();
+        var clinicId = Guid.NewGuid();
+        var appointmentId = Guid.NewGuid();
+        var providerId = Guid.NewGuid();
+
+        _appointmentRepo.GetByPatientAsync(patientId, Arg.Any<CancellationToken>())
+            .Returns(new List<Appointment>());
+        _uow.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(1);
+
+        var payload = new List<ClinicAppointmentDto>
+        {
+            new(
+                appointmentId.ToString(),
+                clinicId.ToString(),
+                "City Health Clinic",
+                new ClinicProviderSnapshot(providerId.ToString(), "Dr. Maria Cruz", "Family Medicine", null),
+                "Consultation",
+                DateTime.UtcNow.ToString("O"),
+                30,
+                "Completed",
+                "Consultation completed and signed by Dr. Maria Cruz",
+                "Dr. Maria Cruz",
+                "Acute Bronchitis",
+                ClinicalAssessment: "Acute Bronchitis (J20.9)",
+                DoctorPlan: "Rest, oral hydration, warm saline gargle.",
+                PrescriptionsSummary: "Amoxicillin 500mg Capsule (1 cap TID) - Qty: 21",
+                PrescriptionPublicVerificationUrl: "/api/v1/public/rx-verify/tok123"
+            )
+        };
+
+        // Act
+        var result = await CreateHandler().Handle(
+            new PushClinicAppointmentsCommand(patientId, clinicId, payload), CancellationToken.None);
+
+        // Assert
+        result.Should().BeTrue();
+        await _appointmentRepo.Received(1).AddAsync(
+            Arg.Is<Appointment>(a =>
+                a.Id == appointmentId &&
+                a.Status == AppointmentStatus.Completed &&
+                a.RawJson.Contains("Acute Bronchitis") &&
+                a.RawJson.Contains("Amoxicillin") &&
+                a.RawJson.Contains("tok123")),
+            Arg.Any<CancellationToken>());
+    }
 }

@@ -18,4 +18,5 @@ public sealed class PrescriptionItem : BaseEntity
     public int Refills { get; set; } = 0;
     public bool IsDangerousDrug { get; set; } = false; // Requires S2 license
     public string? Remarks { get; set; }
+    public string? PhilHealthDrugCode { get; set; }
 }

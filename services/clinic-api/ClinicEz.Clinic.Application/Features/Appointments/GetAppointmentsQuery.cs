@@ -26,7 +26,9 @@ public sealed record AppointmentDto(
     string? ServiceType,
     string? Reason,
     string? Notes,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    string AttachedFileIdsJson = "[]",
+    string ShareFieldsJson = "[]");
 
 public sealed record GetAppointmentsQuery(
     DateOnly? Date = null,
@@ -81,7 +83,9 @@ public sealed class GetAppointmentsQueryHandler : IRequestHandler<GetAppointment
             a.ServiceType,
             a.Reason,
             a.Notes,
-            a.CreatedAt
+            a.CreatedAt,
+            a.AttachedFileIdsJson ?? "[]",
+            a.ShareFieldsJson ?? "[]"
         )).ToList();
     }
 }

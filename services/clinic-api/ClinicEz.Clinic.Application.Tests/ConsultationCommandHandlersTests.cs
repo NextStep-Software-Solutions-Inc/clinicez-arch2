@@ -169,7 +169,9 @@ public class ConsultationCommandHandlersTests
         await webhookNotifier.Received(1).PushAppointmentUpdateAsync(
             Arg.Is<ClinicPushAppointmentsPayload>(p =>
                 p.PatientId == patientId &&
-                p.Appointments[0].Status == AppointmentStatus.Completed.ToString()),
+                p.Appointments[0].Status == AppointmentStatus.Completed.ToString() &&
+                p.Appointments[0].ClinicalAssessment == "I10 Hypertension" &&
+                p.Appointments[0].DoctorPlan == "Plan"),
             Arg.Any<CancellationToken>());
     }
 

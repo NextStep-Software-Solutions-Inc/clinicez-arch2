@@ -22,7 +22,14 @@ public sealed record UploadRecordAttachmentCommand(
     string? Notes = null,
     Guid? UploadedByStaffId = null,
     string? UploadedByStaffName = null,
-    string VerificationStatus = "Verified") : IRequest<ClinicRecordAttachmentDto>;
+    string VerificationStatus = "Verified",
+    string EncryptionAlgorithm = "AES-256-GCM",
+    string? EncryptionKeyId = null,
+    string? EncryptionIvBase64 = null,
+    string? EncryptionTagBase64 = null,
+    long? EncryptedSizeBytes = null,
+    string? EncryptedHash = null,
+    string? WrappedKeyJson = null) : IRequest<ClinicRecordAttachmentDto>;
 
 public sealed class UploadRecordAttachmentCommandHandler : IRequestHandler<UploadRecordAttachmentCommand, ClinicRecordAttachmentDto>
 {
@@ -60,6 +67,13 @@ public sealed class UploadRecordAttachmentCommandHandler : IRequestHandler<Uploa
             UploadedByStaffId = request.UploadedByStaffId,
             UploadedByStaffName = request.UploadedByStaffName?.Trim(),
             VerificationStatus = string.IsNullOrWhiteSpace(request.VerificationStatus) ? "Verified" : request.VerificationStatus,
+            EncryptionAlgorithm = string.IsNullOrWhiteSpace(request.EncryptionAlgorithm) ? "AES-256-GCM" : request.EncryptionAlgorithm,
+            EncryptionKeyId = request.EncryptionKeyId,
+            EncryptionIvBase64 = request.EncryptionIvBase64,
+            EncryptionTagBase64 = request.EncryptionTagBase64,
+            EncryptedSizeBytes = request.EncryptedSizeBytes,
+            EncryptedHash = request.EncryptedHash,
+            WrappedKeyJson = request.WrappedKeyJson,
             CreatedAt = DateTime.UtcNow,
             CreatedBy = request.UploadedByStaffName ?? "ClinicStaff"
         };
@@ -88,6 +102,10 @@ public sealed class UploadRecordAttachmentCommandHandler : IRequestHandler<Uploa
             attachment.RejectionReason,
             attachment.VerifiedAt,
             attachment.VerifiedByStaffId,
-            attachment.VerifiedByStaffName);
+            attachment.VerifiedByStaffName,
+            attachment.EncryptionAlgorithm,
+            attachment.EncryptionKeyId,
+            attachment.EncryptedSizeBytes,
+            attachment.EncryptedHash);
     }
 }

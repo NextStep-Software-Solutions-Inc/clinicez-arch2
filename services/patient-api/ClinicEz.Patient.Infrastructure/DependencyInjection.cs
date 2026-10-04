@@ -87,6 +87,7 @@ public static class DependencyInjection
         services.AddMassTransit(x =>
         {
             x.AddConsumer<FacilityCreatedConsumer>();
+            x.AddConsumer<ClinicRecordVerifiedConsumer>();
             x.AddEntityFrameworkOutbox<ApplicationDbContext>(o =>
             {
                 o.UsePostgres();

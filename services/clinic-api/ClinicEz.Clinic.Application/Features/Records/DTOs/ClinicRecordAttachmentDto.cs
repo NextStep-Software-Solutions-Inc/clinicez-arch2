@@ -23,4 +23,9 @@ public sealed record ClinicRecordAttachmentDto(
     string? RejectionReason = null,
     DateTime? VerifiedAt = null,
     Guid? VerifiedByStaffId = null,
-    string? VerifiedByStaffName = null);
+    string? VerifiedByStaffName = null,
+    string EncryptionAlgorithm = "AES-256-GCM",
+    string? EncryptionKeyId = null,
+    long? EncryptedSizeBytes = null,
+    string? EncryptedHash = null);
+

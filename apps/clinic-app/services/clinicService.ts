@@ -1,4 +1,4 @@
-import { clinicApiClient, pharmacyApiClient, CLINIC_BASE_URL } from './apiClient';
+import { clinicApiClient, pharmacyApiClient, CLINIC_BASE_URL, API_PREFIX } from './apiClient';
 import { SyncStatus } from '@shared/safe';
 
 export type QueuePriority = 'Routine' | 'Urgent' | 'Emergency';
@@ -736,6 +736,10 @@ export interface ClinicRecordAttachmentRecord {
   verifiedAt?: string;
   verifiedByStaffId?: string;
   verifiedByStaffName?: string;
+  encryptionAlgorithm?: string;
+  encryptionKeyId?: string;
+  encryptedSizeBytes?: number;
+  encryptedHash?: string;
   createdAt: string;
 }
 
@@ -807,7 +811,12 @@ export interface CreateConsultationRequest {
     refills?: number;
     isDangerousDrug?: boolean;
     remarks?: string;
+    philHealthDrugCode?: string;
   }>;
+  isYakapEligible?: boolean;
+  philHealthSignSympCode?: string;
+  philHealthOtherComplaint?: string;
+  philHealthPainSite?: string;
 }
 
 export interface CreateInvoiceRequest {
@@ -1301,6 +1310,18 @@ export const clinicService = {
     });
   },
 
+  getRecordAttachmentDownloadUrl(attachmentId: string) {
+    return `${CLINIC_BASE_URL}${API_PREFIX}/records/attachments/${attachmentId}/download`;
+  },
+
+  async uploadRecordAttachmentFile(formData: FormData) {
+    return clinicApiClient.post<ClinicRecordAttachmentRecord>('/records/attachments/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+
   // Tenant Custom Fields
   async getCustomFields(entityType = 'ClinicPatient', category?: string) {
     const qs = category ? `?entityType=${entityType}&category=${encodeURIComponent(category)}` : `?entityType=${entityType}`;
@@ -1648,6 +1669,12 @@ export interface PhilHealthPatientProfile {
   pin?: string;
   memberPin?: string;
   memberType?: string;
+  memberLastName?: string;
+  memberFirstName?: string;
+  memberMiddleName?: string;
+  memberSuffix?: string;
+  memberBirthDate?: string;
+  dependentRelationship?: string;
   atc?: string;
   isWalkedIn?: string;
   bloodType?: string;

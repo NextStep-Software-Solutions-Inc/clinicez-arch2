@@ -13,6 +13,15 @@ export const patientGovernmentIds = sqliteTable('patient_government_ids', {
   philhealthCategory: text('philhealth_category', {
     enum: ['MM', 'DD'],
   }),
+  sponsorPin: text('sponsor_pin'),
+  sponsorLastName: text('sponsor_last_name'),
+  sponsorFirstName: text('sponsor_first_name'),
+  sponsorMiddleName: text('sponsor_middle_name'),
+  sponsorSuffix: text('sponsor_suffix'),
+  sponsorDob: text('sponsor_dob'),
+  sponsorRelationship: text('sponsor_relationship', {
+    enum: ['S', 'C', 'P', 'D'],
+  }),
   // Other government IDs
   sssNumber: text('sss_number'),
   gsisNumber: text('gsis_number'),

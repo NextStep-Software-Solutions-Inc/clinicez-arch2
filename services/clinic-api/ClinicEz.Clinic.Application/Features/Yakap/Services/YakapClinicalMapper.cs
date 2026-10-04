@@ -47,9 +47,37 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
             var firstEncounter = patientEncounters.First();
             vitalsMap.TryGetValue(firstEncounter.Id, out var vitals);
 
-            var pin = NormalizePin(patient.PhilHealthNumber ?? string.Empty);
+            var customProfile = ExtractCustomProfile(patient);
+            var pin = NormalizePin(!string.IsNullOrWhiteSpace(patient.PhilHealthNumber) ? patient.PhilHealthNumber : (customProfile?.Pin ?? string.Empty));
             var sex = patient.Gender.StartsWith("F", StringComparison.OrdinalIgnoreCase) ? "F" : "M";
-            var patientType = "M"; // Principal Member
+
+            var isDependent = string.Equals(customProfile?.MemberType, "DD", StringComparison.OrdinalIgnoreCase);
+            var patientType = isDependent ? "DD" : "MM";
+
+            var memPin = isDependent && !string.IsNullOrWhiteSpace(customProfile?.MemberPin)
+                ? NormalizePin(customProfile.MemberPin)
+                : pin;
+
+            var memFname = isDependent && !string.IsNullOrWhiteSpace(customProfile?.MemberFirstName)
+                ? customProfile.MemberFirstName.Trim().ToUpperInvariant()
+                : patient.FirstName;
+
+            var memMname = isDependent && customProfile?.MemberMiddleName != null
+                ? customProfile.MemberMiddleName.Trim().ToUpperInvariant()
+                : (patient.MiddleName ?? string.Empty);
+
+            var memLname = isDependent && !string.IsNullOrWhiteSpace(customProfile?.MemberLastName)
+                ? customProfile.MemberLastName.Trim().ToUpperInvariant()
+                : patient.LastName;
+
+            var memExtname = isDependent && customProfile?.MemberSuffix != null
+                ? customProfile.MemberSuffix.Trim().ToUpperInvariant()
+                : (patient.Suffix ?? string.Empty);
+
+            var memDob = isDependent && !string.IsNullOrWhiteSpace(customProfile?.MemberBirthDate)
+                ? customProfile.MemberBirthDate.Trim()
+                : patient.DateOfBirth.ToString("yyyy-MM-dd");
+
             var caseNo = !string.IsNullOrWhiteSpace(patient.PhilHealthCaseNo)
                 ? patient.PhilHealthCaseNo
                 : $"C{patient.PatientCode.Replace("-", string.Empty)}";
@@ -71,12 +99,12 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
                 EnlistStat: "1",
                 EnlistDate: firstEncounter.EncounterDate.ToString("yyyy-MM-dd"),
                 PackageType: "K",
-                MemPin: pin,
-                MemFname: patient.FirstName,
-                MemMname: patient.MiddleName ?? string.Empty,
-                MemLname: patient.LastName,
-                MemExtname: patient.Suffix ?? string.Empty,
-                MemDob: patient.DateOfBirth.ToString("yyyy-MM-dd"),
+                MemPin: memPin,
+                MemFname: memFname,
+                MemMname: memMname,
+                MemLname: memLname,
+                MemExtname: memExtname,
+                MemDob: memDob,
                 PatientPin: pin,
                 PatientFname: patient.FirstName,
                 PatientMname: patient.MiddleName ?? string.Empty,
@@ -103,8 +131,6 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
             bool isFemale = patient.Gender.StartsWith("F", StringComparison.OrdinalIgnoreCase);
             bool isPediatric = ageYears < 18;
             bool isSenior = ageYears >= 60;
-
-            var customProfile = ExtractCustomProfile(patient);
 
             // Physical exam pertinence (age-responsive: pediatric anthropometrics vs adult waist/hip)
             var pePertinent = MapPhysicalExam(vitals, customProfile, isPediatric);
@@ -154,9 +180,9 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
                 PatientPin: pin,
                 PatientType: patientType,
                 PatientAge: FormatPhilHealthAge(patient.DateOfBirth, firstEncounter.EncounterDate),
-                MemPin: pin,
+                MemPin: memPin,
                 EffYear: effectiveYear,
-                ATC: "A",
+                ATC: customProfile?.Atc ?? "A",
                 IsWalkedIn: customProfile?.IsWalkedIn ?? "Y",
                 TransDate: DateTime.UtcNow.ToString("yyyy-MM-dd"),
                 MedicalHistories: medHistories,
@@ -188,10 +214,10 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
                     SoapDate: firstEncounter.EncounterDate.ToString("yyyy-MM-dd"),
                     PatientPin: pin,
                     PatientType: patientType,
-                    MemPin: pin,
+                    MemPin: memPin,
                     EffYear: effectiveYear,
-                    ATC: "A",
-                    IsWalkedIn: "Y",
+                    ATC: customProfile?.Atc ?? "A",
+                    IsWalkedIn: customProfile?.IsWalkedIn ?? "Y",
                     CoPay: "0.00",
                     TransDate: firstEncounter.EncounterDate.ToString("yyyy-MM-dd"),
                     IllnessHistory: "First tranche baseline profiling",
@@ -254,8 +280,17 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
                         ? encounter.Subjective
                         : "Follow-up consultation";
 
-                    var signs = MapSignsAndSymptoms(encounter.Subjective);
-                    var otherComplaint = signs == "OT" ? encounter.Subjective ?? string.Empty : string.Empty;
+                    var signs = !string.IsNullOrWhiteSpace(encounter.PhilHealthSignSympCode)
+                        ? encounter.PhilHealthSignSympCode
+                        : MapSignsAndSymptoms(encounter.Subjective);
+
+                    var otherComplaint = !string.IsNullOrWhiteSpace(encounter.PhilHealthOtherComplaint)
+                        ? encounter.PhilHealthOtherComplaint
+                        : (signs == "OT" || signs == "X") ? encounter.Subjective ?? string.Empty : string.Empty;
+
+                    var painSite = !string.IsNullOrWhiteSpace(encounter.PhilHealthPainSite)
+                        ? encounter.PhilHealthPainSite
+                        : string.Empty;
 
                     var advice = !string.IsNullOrWhiteSpace(encounter.Plan)
                         ? encounter.Plan
@@ -271,16 +306,16 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
                         SoapDate: encounter.EncounterDate.ToString("yyyy-MM-dd"),
                         PatientPin: pin,
                         PatientType: patientType,
-                        MemPin: pin,
+                        MemPin: memPin,
                         EffYear: effectiveYear,
-                        ATC: "A",
-                        IsWalkedIn: "Y",
+                        ATC: customProfile?.Atc ?? "A",
+                        IsWalkedIn: customProfile?.IsWalkedIn ?? "Y",
                         CoPay: "0.00",
                         TransDate: encounter.EncounterDate.ToString("yyyy-MM-dd"),
                         IllnessHistory: illness,
                         SignsSymptoms: signs,
                         OtherComplaint: otherComplaint,
-                        PainSite: string.Empty,
+                        PainSite: painSite,
                         PhysicalExam: encPe,
                         PhysicalExamMiscs: [new YakapPhysicalExamMiscDto("1", "1", "1", "1", "1", "1", "1", "1")],
                         PhysicalExamSpecifics: new YakapPhysicalExamSpecificDto(string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty),
@@ -295,11 +330,15 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
                     {
                         foreach (var rx in encounter.Prescriptions)
                         {
+                            var resolvedDrugCode = !string.IsNullOrWhiteSpace(rx.PhilHealthDrugCode)
+                                ? FormatDrugCode(rx.PhilHealthDrugCode)
+                                : PhilHealthCatalogResolver.ResolveDrugCode(rx.GenericName, rx.Dosage);
+
                             medicines.Add(new YakapMedicineDto(
                                 HciCaseNo: caseNo,
                                 HciTransNo: encSoapTransNo,
                                 Category: "P",
-                                DrugCode: PhilHealthCatalogResolver.ResolveDrugCode(rx.GenericName, rx.Dosage),
+                                DrugCode: resolvedDrugCode,
                                 GenericCode: rx.GenericName,
                                 SaltCode: string.Empty,
                                 StrengthCode: rx.Dosage,

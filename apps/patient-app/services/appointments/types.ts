@@ -66,6 +66,12 @@ export interface AppointmentItem {
     paymentDueAt?: string | null; // ISO-8601
     invoiceAmount?: number | null; // in local currency
     currency?: string;            // e.g. 'PHP'
+
+    // Clinical Visit Summary & Sealed Care Plan from Clinic EMR
+    clinicalAssessment?: string | null;
+    doctorPlan?: string | null;
+    prescriptionsSummary?: string | null;
+    prescriptionPublicVerificationUrl?: string | null;
 }
 
 export interface AppointmentsApiResponse {

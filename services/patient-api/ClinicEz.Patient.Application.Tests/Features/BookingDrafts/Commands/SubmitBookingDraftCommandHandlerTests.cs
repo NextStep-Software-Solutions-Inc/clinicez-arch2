@@ -13,6 +13,7 @@ using FluentAssertions;
 using MassTransit;
 using NSubstitute;
 using Xunit;
+using Patient = ClinicEz.Patient.Domain.Entities.Patient;
 
 namespace ClinicEz.Patient.Application.Tests.Features.BookingDrafts.Commands;
 
@@ -25,9 +26,11 @@ public sealed class SubmitBookingDraftCommandHandlerTests
     private readonly IUnitOfWork _uow = Substitute.For<IUnitOfWork>();
     private readonly IClinicMembershipRepository _membershipRepo = Substitute.For<IClinicMembershipRepository>();
     private readonly IPublishEndpoint _publishEndpoint = Substitute.For<IPublishEndpoint>();
+    private readonly IPatientRepository _patientRepo = Substitute.For<IPatientRepository>();
+    private readonly IFileRecordRepository _fileRepo = Substitute.For<IFileRecordRepository>();
 
-    private SubmitBookingDraftCommandHandler CreateHandler() =>
-        new(_draftRepo, _clinicRepo, _clinicService, _currentUserService, _uow, _membershipRepo, _publishEndpoint);
+    private SubmitBookingDraftCommandHandler CreateHandler(IFileRecordRepository? fileRepo = null) =>
+        new(_draftRepo, _clinicRepo, _clinicService, _currentUserService, _uow, _membershipRepo, _publishEndpoint, _patientRepo, fileRepo ?? _fileRepo);
 
     [Fact]
     public async Task Handle_ValidDraft_SubmitsBookingPublishesEventAndEnsuresMembership()
@@ -58,8 +61,31 @@ public sealed class SubmitBookingDraftCommandHandlerTests
             IsPublic = true
         };
 
+        var patient = new global::ClinicEz.Patient.Domain.Entities.Patient
+        {
+            Id = patientId,
+            FirstName = "Juan",
+            LastName = "Dela Cruz",
+            Mobile = "+639171234567",
+            GovernmentIds = new List<PatientGovernmentId>
+            {
+                new()
+                {
+                    PatientId = patientId,
+                    IdType = GovernmentIdType.PhilHealth,
+                    IdNumber = "123456789012",
+                    PhilhealthCategory = "DD",
+                    SponsorPin = "987654321098",
+                    SponsorFirstName = "Maria",
+                    SponsorLastName = "Dela Cruz",
+                    SponsorRelationship = "Spouse"
+                }
+            }
+        };
+
         _draftRepo.GetByIdAsync(draftId, Arg.Any<CancellationToken>()).Returns(draft);
         _clinicRepo.GetByIdAsync(clinicId, Arg.Any<CancellationToken>()).Returns(clinic);
+        _patientRepo.GetWithProfileAsync(patientId, Arg.Any<CancellationToken>()).Returns(patient);
         _currentUserService.UserId.Returns("clerk_usr_123");
         _clinicService.SubmitBookingAsync(
             clinic.BaseUrl, patientId, draftId,
@@ -83,7 +109,15 @@ public sealed class SubmitBookingDraftCommandHandlerTests
                 e.PatientId == patientId &&
                 e.ClinicId == clinicId &&
                 e.PreferredDate == new DateOnly(2026, 10, 15) &&
-                e.PreferredTime == "14:00"),
+                e.PreferredTime == "14:00" &&
+                e.PatientFirstName == "Juan" &&
+                e.PatientLastName == "Dela Cruz" &&
+                e.PhilHealthNumber == "123456789012" &&
+                e.PhilHealthCategory == "DD" &&
+                e.SponsorPin == "987654321098" &&
+                e.SponsorFirstName == "Maria" &&
+                e.SponsorLastName == "Dela Cruz" &&
+                e.SponsorRelationship == "Spouse"),
             Arg.Any<CancellationToken>());
 
         // Pending membership added
@@ -146,4 +180,66 @@ public sealed class SubmitBookingDraftCommandHandlerTests
         await act.Should().ThrowAsync<ConflictException>();
         await _publishEndpoint.DidNotReceive().Publish(Arg.Any<AppointmentBookedEvent>(), Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task Handle_WithAttachedFiles_PopulatesAttachedFilesMetadataOnEvent()
+    {
+        // Arrange
+        var patientId = Guid.NewGuid();
+        var draftId = Guid.NewGuid();
+        var clinicId = Guid.NewGuid();
+        var fileId = Guid.NewGuid();
+
+        var draft = new BookingDraft
+        {
+            Id = draftId,
+            PatientId = patientId,
+            ClinicId = clinicId,
+            Status = BookingDraftStatus.Draft,
+            PreferredDate = new DateOnly(2026, 10, 20),
+            PreferredTime = "10:00",
+            Reason = "Follow-up",
+            ShareFieldsJson = "[]",
+            AttachedFileIdsJson = System.Text.Json.JsonSerializer.Serialize(new[] { fileId })
+        };
+
+        var clinic = new Clinic
+        {
+            Id = clinicId,
+            Name = "Metro Clinic",
+            BaseUrl = "https://metro.clinicez.net/api/v1",
+            IsPublic = true
+        };
+
+        var fileRecord = new FileRecord
+        {
+            Id = fileId,
+            PatientId = patientId,
+            FileName = "chest_xray.pdf",
+            MimeType = "application/pdf",
+            SizeBytes = 204800,
+            DocumentType = new DocumentType { Code = "xray", Label = "X-Ray" }
+        };
+
+        _draftRepo.GetByIdAsync(draftId, Arg.Any<CancellationToken>()).Returns(draft);
+        _clinicRepo.GetByIdAsync(clinicId, Arg.Any<CancellationToken>()).Returns(clinic);
+        _fileRepo.GetByIdAsync(fileId, Arg.Any<CancellationToken>()).Returns(fileRecord);
+        _patientRepo.GetWithProfileAsync(patientId, Arg.Any<CancellationToken>()).Returns((global::ClinicEz.Patient.Domain.Entities.Patient?)null);
+        _uow.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(1);
+
+        // Act
+        var result = await CreateHandler().Handle(new SubmitBookingDraftCommand(patientId, draftId), CancellationToken.None);
+
+        // Assert
+        await _publishEndpoint.Received(1).Publish(
+            Arg.Is<AppointmentBookedEvent>(e =>
+                e.AttachedFiles.Count == 1 &&
+                e.AttachedFiles[0].FileId == fileId &&
+                e.AttachedFiles[0].FileName == "chest_xray.pdf" &&
+                e.AttachedFiles[0].DocumentTypeCode == "xray" &&
+                e.AttachedFiles[0].SizeBytes == 204800
+            ),
+            Arg.Any<CancellationToken>());
+    }
 }
+

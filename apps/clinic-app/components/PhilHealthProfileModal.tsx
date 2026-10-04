@@ -67,6 +67,26 @@ export default function PhilHealthProfileModal({
 
   const handleSave = async () => {
     if (!patient || !profile) return;
+
+    if (profile.memberType === 'DD') {
+      if (!profile.memberPin?.trim()) {
+        Alert.alert('Validation Error', 'Principal Member PIN is required for PhilHealth dependent claim transmittal.');
+        return;
+      }
+      if (!profile.memberLastName?.trim() || !profile.memberFirstName?.trim()) {
+        Alert.alert('Validation Error', 'Principal Member Last Name and First Name are required.');
+        return;
+      }
+      if (!profile.memberBirthDate?.trim()) {
+        Alert.alert('Validation Error', 'Principal Member Date of Birth (YYYY-MM-DD) is required.');
+        return;
+      }
+      if (!profile.dependentRelationship) {
+        Alert.alert('Validation Error', 'Please select the dependent relationship to the principal member.');
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       const [data, err] = await clinicService.updatePhilHealthPatientProfile(patient.id, profile);
@@ -200,7 +220,13 @@ export default function PhilHealthProfileModal({
                       <TextInput
                         style={styles.input}
                         value={profile.pin || ''}
-                        onChangeText={(txt) => setProfile({ ...profile, pin: txt, memberPin: txt })}
+                        onChangeText={(txt) =>
+                          setProfile({
+                            ...profile,
+                            pin: txt,
+                            ...(profile.memberType === 'MM' ? { memberPin: txt } : {}),
+                          })
+                        }
                         placeholder="12-digit PIN"
                         keyboardType="numeric"
                       />
@@ -209,7 +235,13 @@ export default function PhilHealthProfileModal({
                       <ThemedText style={styles.label}>Member Type</ThemedText>
                       <View style={styles.chipRow}>
                         <Pressable
-                          onPress={() => setProfile({ ...profile, memberType: 'MM' })}
+                          onPress={() =>
+                            setProfile({
+                              ...profile,
+                              memberType: 'MM',
+                              memberPin: profile.pin || '',
+                            })
+                          }
                           style={[styles.chip, profile.memberType === 'MM' && styles.chipActive]}
                         >
                           <ThemedText style={profile.memberType === 'MM' ? styles.chipTextActive : styles.chipText}>
@@ -217,7 +249,14 @@ export default function PhilHealthProfileModal({
                           </ThemedText>
                         </Pressable>
                         <Pressable
-                          onPress={() => setProfile({ ...profile, memberType: 'DD' })}
+                          onPress={() =>
+                            setProfile({
+                              ...profile,
+                              memberType: 'DD',
+                              memberLastName: profile.memberLastName || patient?.lastName || '',
+                              dependentRelationship: profile.dependentRelationship || (isPediatric ? 'C' : 'S'),
+                            })
+                          }
                           style={[styles.chip, profile.memberType === 'DD' && styles.chipActive]}
                         >
                           <ThemedText style={profile.memberType === 'DD' ? styles.chipTextActive : styles.chipText}>
@@ -236,6 +275,112 @@ export default function PhilHealthProfileModal({
                       />
                     </View>
                   </View>
+
+                  {profile.memberType === 'DD' && (
+                    <View style={styles.sponsorCard}>
+                      <View style={styles.sponsorHeader}>
+                        <ThemedText style={styles.sponsorBadge}>SPONSOR</ThemedText>
+                        <ThemedText style={styles.sponsorTitle}>Principal Member / Sponsor Credentials</ThemedText>
+                      </View>
+                      <ThemedText style={styles.sponsorSubtitle}>
+                        Required for PhilHealth Konsulta dependent claim transmittal. Enter the sponsoring Principal Member's legal details.
+                      </ThemedText>
+
+                      <View style={[styles.formRow, { marginTop: 12 }]}>
+                        <View style={styles.fieldCol}>
+                          <ThemedText style={styles.label}>Principal Member PIN *</ThemedText>
+                          <TextInput
+                            style={styles.input}
+                            value={profile.memberPin || ''}
+                            onChangeText={(txt) => setProfile({ ...profile, memberPin: txt })}
+                            placeholder="12-digit Sponsor PIN"
+                            keyboardType="numeric"
+                          />
+                        </View>
+                        <View style={styles.fieldCol}>
+                          <ThemedText style={styles.label}>Relationship to Principal Member *</ThemedText>
+                          <View style={styles.chipRow}>
+                            {[
+                              { label: 'Child (C)', value: 'C' },
+                              { label: 'Spouse (S)', value: 'S' },
+                              { label: 'Parent (P)', value: 'P' },
+                              { label: 'Disabled (D)', value: 'D' },
+                            ].map((rel) => (
+                              <Pressable
+                                key={rel.value}
+                                onPress={() => setProfile({ ...profile, dependentRelationship: rel.value })}
+                                style={[
+                                  styles.chip,
+                                  profile.dependentRelationship === rel.value && styles.chipActive,
+                                ]}
+                              >
+                                <ThemedText
+                                  style={
+                                    profile.dependentRelationship === rel.value
+                                      ? styles.chipTextActive
+                                      : styles.chipText
+                                  }
+                                >
+                                  {rel.label}
+                                </ThemedText>
+                              </Pressable>
+                            ))}
+                          </View>
+                        </View>
+                      </View>
+
+                      <View style={[styles.formRow, { marginTop: 12 }]}>
+                        <View style={styles.fieldCol}>
+                          <ThemedText style={styles.label}>Member Last Name *</ThemedText>
+                          <TextInput
+                            style={styles.input}
+                            value={profile.memberLastName || ''}
+                            onChangeText={(txt) => setProfile({ ...profile, memberLastName: txt })}
+                            placeholder="Last Name"
+                          />
+                        </View>
+                        <View style={styles.fieldCol}>
+                          <ThemedText style={styles.label}>Member First Name *</ThemedText>
+                          <TextInput
+                            style={styles.input}
+                            value={profile.memberFirstName || ''}
+                            onChangeText={(txt) => setProfile({ ...profile, memberFirstName: txt })}
+                            placeholder="First Name"
+                          />
+                        </View>
+                        <View style={styles.fieldCol}>
+                          <ThemedText style={styles.label}>Middle Name</ThemedText>
+                          <TextInput
+                            style={styles.input}
+                            value={profile.memberMiddleName || ''}
+                            onChangeText={(txt) => setProfile({ ...profile, memberMiddleName: txt })}
+                            placeholder="Middle Name"
+                          />
+                        </View>
+                      </View>
+
+                      <View style={[styles.formRow, { marginTop: 12 }]}>
+                        <View style={styles.fieldCol}>
+                          <ThemedText style={styles.label}>Member Suffix</ThemedText>
+                          <TextInput
+                            style={styles.input}
+                            value={profile.memberSuffix || ''}
+                            onChangeText={(txt) => setProfile({ ...profile, memberSuffix: txt })}
+                            placeholder="e.g. Jr, Sr, III"
+                          />
+                        </View>
+                        <View style={styles.fieldCol}>
+                          <ThemedText style={styles.label}>Member Date of Birth (YYYY-MM-DD) *</ThemedText>
+                          <TextInput
+                            style={styles.input}
+                            value={profile.memberBirthDate || ''}
+                            onChangeText={(txt) => setProfile({ ...profile, memberBirthDate: txt })}
+                            placeholder="YYYY-MM-DD"
+                          />
+                        </View>
+                      </View>
+                    </View>
+                  )}
 
                   <ThemedText style={[styles.sectionTitle, { marginTop: 20 }]}>
                     Vitals & Anthropometrics {isPediatric ? '(Pediatric Protocol)' : '(Adult Protocol)'}
@@ -1200,6 +1345,40 @@ const styles = StyleSheet.create({
     color: '#334155',
     flex: 1,
     paddingRight: 12,
+  },
+  sponsorCard: {
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+    borderRadius: 10,
+    padding: 16,
+    marginTop: 16,
+  },
+  sponsorHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  sponsorBadge: {
+    backgroundColor: '#0284C7',
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  sponsorTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  sponsorSubtitle: {
+    fontSize: 12,
+    color: '#475569',
+    lineHeight: 16,
   },
   footerBar: {
     flexDirection: 'row',

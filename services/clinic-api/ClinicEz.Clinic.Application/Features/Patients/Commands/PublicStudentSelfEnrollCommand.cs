@@ -138,6 +138,8 @@ public sealed class PublicStudentSelfEnrollCommandHandler
                     Notes = doc.Notes?.Trim(),
                     UploadedByStaffName = "Student Self-Upload",
                     VerificationStatus = "PendingVerification",
+                    EncryptionAlgorithm = "AES-256-GCM",
+                    EncryptionKeyId = "cmk-v1",
                     CreatedAt = DateTime.UtcNow
                 };
 

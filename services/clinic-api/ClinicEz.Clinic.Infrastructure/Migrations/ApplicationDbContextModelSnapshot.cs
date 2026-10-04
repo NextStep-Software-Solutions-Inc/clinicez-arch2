@@ -337,6 +337,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<Guid>("LabOrderId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("PhilHealthServiceCode")
+                        .HasColumnType("text");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("character varying(50)");
@@ -449,9 +452,18 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)");
 
+                    b.Property<string>("PhilHealthCaseNo")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PhilHealthEnlistmentNo")
+                        .HasColumnType("text");
+
                     b.Property<string>("PhilHealthNumber")
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)");
+
+                    b.Property<string>("PhilHealthProfilingTransNo")
+                        .HasColumnType("text");
 
                     b.Property<string>("Province")
                         .HasColumnType("text");
@@ -531,6 +543,32 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<DateOnly>("DocumentDate")
                         .HasColumnType("date");
 
+                    b.Property<string>("EncryptedHash")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<long?>("EncryptedSizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("EncryptionAlgorithm")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasDefaultValue("AES-256-GCM");
+
+                    b.Property<string>("EncryptionIvBase64")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("EncryptionKeyId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("EncryptionTagBase64")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("FileName")
                         .IsRequired()
                         .HasMaxLength(255)
@@ -599,6 +637,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<string>("VerifiedByStaffName")
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)");
+
+                    b.Property<string>("WrappedKeyJson")
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 
@@ -740,7 +781,8 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<string>("AccreditationNumber")
-                        .HasColumnType("text");
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<Guid>("ClinicId")
                         .HasColumnType("uuid");
@@ -777,6 +819,13 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsPhilHealthConfigured")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("KonsultaEndpoint")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
                     b.Property<string>("LetterheadAddress")
                         .HasColumnType("text");
 
@@ -805,13 +854,32 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("PaperSize")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<string>("PlanTier")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PmccNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("PrimaryColorHex")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PrimaryLogoUrl")
                         .HasColumnType("text");
 
                     b.Property<string>("QueuePrefix")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<string>("SoftwareCertificateId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<string>("TaxIdentificationNumber")
                         .HasColumnType("text");
@@ -1011,6 +1079,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<bool>("IsSigned")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsYakapEligible")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Objective")
                         .IsRequired()
                         .HasColumnType("text");
@@ -1022,6 +1093,21 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)");
+
+                    b.Property<string>("PhilHealthCaseNo")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PhilHealthOtherComplaint")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PhilHealthPainSite")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PhilHealthSignSympCode")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PhilHealthSoapTransNo")
+                        .HasColumnType("text");
 
                     b.Property<string>("Plan")
                         .IsRequired()
@@ -1493,6 +1579,60 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.ToTable("Payments", "clinic_dashboard");
                 });
 
+            modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.PhilHealthSequenceTracker", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClinicId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("CurrentSequence")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EffectiveYear")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("LastAssignedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SequenceType")
+                        .IsRequired()
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("PhilHealthSequenceTrackers", "clinic_dashboard");
+                });
+
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.PrescriptionItem", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1542,6 +1682,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("PhilHealthDrugCode")
+                        .HasColumnType("text");
 
                     b.Property<int>("Quantity")
                         .HasColumnType("integer");

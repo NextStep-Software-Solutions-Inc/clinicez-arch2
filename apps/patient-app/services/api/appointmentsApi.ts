@@ -23,6 +23,10 @@ export interface RemoteAppointment {
     notes: string | null;
     subject?: string | null;
     chiefComplaint?: string | null;
+    clinicalAssessment?: string | null;
+    doctorPlan?: string | null;
+    prescriptionsSummary?: string | null;
+    prescriptionPublicVerificationUrl?: string | null;
 }
 
 export interface ClinicAppointmentsResult {

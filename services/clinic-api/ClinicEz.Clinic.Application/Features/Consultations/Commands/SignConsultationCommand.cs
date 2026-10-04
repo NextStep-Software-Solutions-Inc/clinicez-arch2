@@ -193,6 +193,13 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
         // Outbound push notification to patient-api
         var apptId = appointment?.Id ?? encounter.QueueItemId ?? encounter.Id;
         var scheduledAtStr = (appointment?.ScheduledAt ?? encounter.EncounterDate).ToString("O");
+        var rxSummary = encounter.Prescriptions.Any()
+            ? string.Join("; ", encounter.Prescriptions.Select(p => $"{p.GenericName} {p.Dosage} {p.Form} ({p.Sig}) - Qty: {p.Quantity}".Trim()))
+            : null;
+        var rxUrl = !string.IsNullOrWhiteSpace(encounter.RxPublicVerificationToken)
+            ? $"/api/v1/public/rx-verify/{encounter.RxPublicVerificationToken}"
+            : null;
+
         var pushPayload = new ClinicPushAppointmentsPayload(
             _clinicContext.ClinicId,
             encounter.PatientId,
@@ -214,7 +221,11 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
                     AppointmentStatus.Completed.ToString(),
                     $"Consultation completed and signed by {encounter.DoctorName}",
                     encounter.DoctorName,
-                    encounter.Assessment
+                    encounter.Assessment,
+                    ClinicalAssessment: encounter.Assessment,
+                    DoctorPlan: encounter.Plan,
+                    PrescriptionsSummary: rxSummary,
+                    PrescriptionPublicVerificationUrl: rxUrl
                 )
             }
         );
@@ -247,6 +258,12 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
             encounter.IsSigned,
             encounter.SignedAt,
             encounter.Diagnoses.Select(d => new EncounterDiagnosisDto(d.Id, d.Icd10Code, d.Description, d.IsPrimary)).ToList(),
-            encounter.Prescriptions.Select(p => new PrescriptionItemDto(p.Id, p.GenericName, p.BrandName, p.Dosage, p.Form, p.Sig, p.Quantity, p.DurationDays, p.Refills, p.IsDangerousDrug, p.Remarks)).ToList());
+            encounter.Prescriptions.Select(p => new PrescriptionItemDto(p.Id, p.GenericName, p.BrandName, p.Dosage, p.Form, p.Sig, p.Quantity, p.DurationDays, p.Refills, p.IsDangerousDrug, p.Remarks, p.PhilHealthDrugCode)).ToList(),
+            encounter.IsYakapEligible,
+            encounter.PhilHealthSignSympCode,
+            encounter.PhilHealthOtherComplaint,
+            encounter.PhilHealthPainSite,
+            encounter.PhilHealthCaseNo,
+            encounter.PhilHealthSoapTransNo);
     }
 }

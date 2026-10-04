@@ -39,6 +39,10 @@ public sealed class ConsultationEncounter : BaseEntity
     public DateTime? SignedAt { get; set; }
 
     // PhilHealth Konsulta / YAKAP Encounter Tracking
+    public bool IsYakapEligible { get; set; } = false;
+    public string? PhilHealthSignSympCode { get; set; }
+    public string? PhilHealthOtherComplaint { get; set; }
+    public string? PhilHealthPainSite { get; set; }
     public string? PhilHealthCaseNo { get; set; }
     public string? PhilHealthSoapTransNo { get; set; }
 

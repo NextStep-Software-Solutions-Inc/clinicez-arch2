@@ -591,5 +591,188 @@ public class YakapClinicalMapperTests
 
         profile.NcdAnswers.Qid1Yn.Should().Be("Y");
     }
+
+    [Fact]
+    public void MapToYakapReportDocument_WhenPatientIsDependent_MapsSponsorAndDependentCredentialsAccurately()
+    {
+        // Arrange
+        var clinicId = Guid.NewGuid();
+        var patientId = Guid.NewGuid();
+        var encounterId = Guid.NewGuid();
+
+        var settings = new ClinicSettings
+        {
+            TenantId = "tenant_1",
+            ClinicId = clinicId,
+            ClinicName = "Manila Health Clinic",
+            AccreditationNumber = "09214"
+        };
+
+        // Pediatric patient (Dependent)
+        var patient = new ClinicPatient
+        {
+            Id = patientId,
+            TenantId = "tenant_1",
+            ClinicId = clinicId,
+            PatientCode = "PAT-PED-001",
+            FirstName = "Maria Clara",
+            MiddleName = "Santos",
+            LastName = "Ibarra",
+            Suffix = "Jr",
+            DateOfBirth = new DateOnly(2020, 4, 10), // 6-year-old child
+            Gender = "Female",
+            ContactNumber = "09170001122",
+            PhilHealthNumber = "998877665544" // Child's PIN / Dependent PIN
+        };
+
+        // Standalone profile configured as Dependent of father Crisostomo Ibarra
+        var dependentProfile = new PhilHealthPatientProfileDto
+        {
+            Pin = "998877665544",
+            MemberType = "DD",
+            MemberPin = "123456789012",
+            MemberFirstName = "Crisostomo",
+            MemberMiddleName = "Magsaysay",
+            MemberLastName = "Ibarra",
+            MemberSuffix = "Sr",
+            MemberBirthDate = "1988-11-20",
+            DependentRelationship = "C",
+            BloodType = "B+"
+        };
+
+        patient.CustomFields["philhealth_profile"] = dependentProfile;
+
+        var encounter = new ConsultationEncounter
+        {
+            Id = encounterId,
+            TenantId = "tenant_1",
+            ClinicId = clinicId,
+            PatientId = patientId,
+            PatientName = "Maria Clara Ibarra",
+            DoctorId = Guid.NewGuid(),
+            DoctorName = "Dr. Jose Rizal",
+            EncounterDate = new DateTime(2026, 10, 3, 10, 0, 0, DateTimeKind.Utc),
+            Subjective = "Routine pediatric wellness check",
+            Plan = "Normal growth and development"
+        };
+
+        // Act - Tranche 1
+        var docTranche1 = _mapper.MapToYakapReportDocument(
+            reportTagging: "1",
+            effectiveYear: "2026",
+            settings: settings,
+            encounters: [encounter],
+            patients: new Dictionary<Guid, ClinicPatient> { [patientId] = patient },
+            vitalsMap: new Dictionary<Guid, TriageVitals>(),
+            transmittalNumber: "RHCI09214202610030099");
+
+        // Assert - Enlistment
+        var enlistment = docTranche1.Enlistments[0];
+        enlistment.PatientType.Should().Be("DD");
+        enlistment.PatientPin.Should().Be("998877665544");
+        enlistment.PatientFname.Should().Be("Maria Clara");
+        enlistment.PatientLname.Should().Be("Ibarra");
+        enlistment.MemPin.Should().Be("123456789012");
+        enlistment.MemFname.Should().Be("CRISOSTOMO");
+        enlistment.MemMname.Should().Be("MAGSAYSAY");
+        enlistment.MemLname.Should().Be("IBARRA");
+        enlistment.MemExtname.Should().Be("SR");
+        enlistment.MemDob.Should().Be("1988-11-20");
+
+        // Assert - Profile
+        var profile = docTranche1.Profiles[0];
+        profile.PatientType.Should().Be("DD");
+        profile.PatientPin.Should().Be("998877665544");
+        profile.MemPin.Should().Be("123456789012");
+
+        // Assert - Soap
+        var soap = docTranche1.Soaps[0];
+        soap.PatientType.Should().Be("DD");
+        soap.PatientPin.Should().Be("998877665544");
+        soap.MemPin.Should().Be("123456789012");
+
+        // Act - Tranche 2
+        var docTranche2 = _mapper.MapToYakapReportDocument(
+            reportTagging: "2",
+            effectiveYear: "2026",
+            settings: settings,
+            encounters: [encounter],
+            patients: new Dictionary<Guid, ClinicPatient> { [patientId] = patient },
+            vitalsMap: new Dictionary<Guid, TriageVitals>(),
+            transmittalNumber: "RHCI09214202610030099");
+
+        var soapTranche2 = docTranche2.Soaps[0];
+        soapTranche2.PatientType.Should().Be("DD");
+        soapTranche2.PatientPin.Should().Be("998877665544");
+        soapTranche2.MemPin.Should().Be("123456789012");
+    }
+
+    [Fact]
+    public void MapToYakapReportDocument_WhenPatientIsPrincipalMember_DefaultsPatientTypeToMMAndMirrorsPatientPin()
+    {
+        // Arrange
+        var clinicId = Guid.NewGuid();
+        var patientId = Guid.NewGuid();
+        var encounterId = Guid.NewGuid();
+
+        var settings = new ClinicSettings
+        {
+            TenantId = "tenant_1",
+            ClinicId = clinicId,
+            ClinicName = "Manila Health Clinic",
+            AccreditationNumber = "09214"
+        };
+
+        var patient = new ClinicPatient
+        {
+            Id = patientId,
+            TenantId = "tenant_1",
+            ClinicId = clinicId,
+            PatientCode = "PAT-ADULT-001",
+            FirstName = "Juan",
+            MiddleName = "Santos",
+            LastName = "Dela Cruz",
+            DateOfBirth = new DateOnly(1985, 5, 15),
+            Gender = "Male",
+            ContactNumber = "09171234567",
+            PhilHealthNumber = "030263078507"
+        };
+
+        var encounter = new ConsultationEncounter
+        {
+            Id = encounterId,
+            TenantId = "tenant_1",
+            ClinicId = clinicId,
+            PatientId = patientId,
+            PatientName = "Juan Dela Cruz",
+            DoctorId = Guid.NewGuid(),
+            DoctorName = "Dr. Jose Rizal",
+            EncounterDate = new DateTime(2026, 10, 3, 9, 0, 0, DateTimeKind.Utc),
+            Subjective = "Health baseline profiling"
+        };
+
+        // Act
+        var doc = _mapper.MapToYakapReportDocument(
+            reportTagging: "1",
+            effectiveYear: "2026",
+            settings: settings,
+            encounters: [encounter],
+            patients: new Dictionary<Guid, ClinicPatient> { [patientId] = patient },
+            vitalsMap: new Dictionary<Guid, TriageVitals>(),
+            transmittalNumber: "RHCI09214202610030098");
+
+        // Assert
+        doc.Enlistments[0].PatientType.Should().Be("MM");
+        doc.Enlistments[0].PatientPin.Should().Be("030263078507");
+        doc.Enlistments[0].MemPin.Should().Be("030263078507");
+        doc.Enlistments[0].MemFname.Should().Be("Juan");
+        doc.Enlistments[0].MemLname.Should().Be("Dela Cruz");
+
+        doc.Profiles[0].PatientType.Should().Be("MM");
+        doc.Profiles[0].MemPin.Should().Be("030263078507");
+
+        doc.Soaps[0].PatientType.Should().Be("MM");
+        doc.Soaps[0].MemPin.Should().Be("030263078507");
+    }
 }
 

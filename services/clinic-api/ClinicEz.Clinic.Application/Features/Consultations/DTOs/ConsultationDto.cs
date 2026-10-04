@@ -20,7 +20,8 @@ public sealed record PrescriptionItemDto(
     int? DurationDays,
     int Refills,
     bool IsDangerousDrug,
-    string? Remarks);
+    string? Remarks,
+    string? PhilHealthDrugCode = null);
 
 public sealed record ConsultationEncounterDto(
     Guid Id,
@@ -43,4 +44,10 @@ public sealed record ConsultationEncounterDto(
     bool IsSigned,
     DateTime? SignedAt,
     IReadOnlyList<EncounterDiagnosisDto> Diagnoses,
-    IReadOnlyList<PrescriptionItemDto> Prescriptions);
+    IReadOnlyList<PrescriptionItemDto> Prescriptions,
+    bool IsYakapEligible = false,
+    string? PhilHealthSignSympCode = null,
+    string? PhilHealthOtherComplaint = null,
+    string? PhilHealthPainSite = null,
+    string? PhilHealthCaseNo = null,
+    string? PhilHealthSoapTransNo = null);

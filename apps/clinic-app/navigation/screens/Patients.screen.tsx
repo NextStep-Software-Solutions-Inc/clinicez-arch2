@@ -422,67 +422,8 @@ export default function PatientsScreen() {
 
     // Fetch attachments
     const [attData] = await clinicService.getPatientRecordAttachments(patient.id);
-    if (attData && attData.length > 0) {
+    if (attData) {
       setPatientAttachments(attData);
-    } else if (patient.customFields?.classification === 'Student' || patient.customFields?.student_id) {
-      // Offline/demo sample attachments for school clinic student
-      setPatientAttachments([
-        {
-          id: `att-cor-${patient.id}`,
-          tenantId: patient.tenantId,
-          clinicId: patient.clinicId,
-          patientId: patient.id,
-          recordType: 'CertificateOfRegistration',
-          title: 'Certificate of Registration (COR - AY 2026-2027 1st Sem)',
-          fileName: 'student_cor_2026.pdf',
-          contentType: 'application/pdf',
-          fileSizeBytes: 245000,
-          storageUri: 'https://storage.clinicez.ph/school-records/cor.pdf',
-          documentDate: new Date().toISOString(),
-          notes: 'Scanned paper COR presented at intake station.',
-          uploadedByStaffName: 'Intake Station Nurse',
-          verificationStatus: 'Verified',
-          verifiedAt: new Date().toISOString(),
-          verifiedByStaffName: 'Nurse Maria Reyes, RN',
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: `att-xray-${patient.id}`,
-          tenantId: patient.tenantId,
-          clinicId: patient.clinicId,
-          patientId: patient.id,
-          recordType: 'OutsideChestXRay',
-          title: 'Outside Chest X-Ray PA View (St. Jude Diagnostic Center)',
-          fileName: 'chest_xray_film.pdf',
-          contentType: 'application/pdf',
-          fileSizeBytes: 1850000,
-          storageUri: 'https://storage.clinicez.ph/school-records/xray.pdf',
-          documentDate: new Date().toISOString(),
-          notes: 'Findings: Normal lung fields, clear costophrenic angles, normal cardiac silhouette.',
-          uploadedByStaffName: 'Student Self-Upload (Mobile Portal)',
-          verificationStatus: 'PendingVerification',
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: `att-medcert-${patient.id}`,
-          tenantId: patient.tenantId,
-          clinicId: patient.clinicId,
-          patientId: patient.id,
-          recordType: 'MedicalCertificate',
-          title: 'Outside Medical Clearance Certificate',
-          fileName: 'outside_medcert.pdf',
-          contentType: 'application/pdf',
-          fileSizeBytes: 320000,
-          storageUri: 'https://storage.clinicez.ph/school-records/medcert.pdf',
-          documentDate: new Date().toISOString(),
-          notes: 'Fit for academic and physical education enrollment.',
-          uploadedByStaffName: 'Intake Station Nurse',
-          verificationStatus: 'Verified',
-          verifiedAt: new Date().toISOString(),
-          verifiedByStaffName: 'Dr. Roberto Cruz, MD',
-          createdAt: new Date().toISOString(),
-        },
-      ]);
     } else {
       setPatientAttachments([]);
     }
@@ -526,6 +467,15 @@ export default function PatientsScreen() {
     );
   };
 
+  const handleDownloadAttachment = async (attachmentId: string) => {
+    try {
+      const url = clinicService.getRecordAttachmentDownloadUrl(attachmentId);
+      await Linking.openURL(url);
+    } catch (e: any) {
+      Alert.alert('Error', 'Unable to open document: ' + (e.message || 'Network error'));
+    }
+  };
+
   const handleUploadDocument = async () => {
     if (!selectedPatient) return;
     if (!docTitle.trim()) {
@@ -541,10 +491,12 @@ export default function PatientsScreen() {
       fileName: `${docTitle.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}.${docFileType === 'PDF' ? 'pdf' : 'jpg'}`,
       contentType: docFileType === 'PDF' ? 'application/pdf' : 'image/jpeg',
       fileSizeBytes: 1024 * 450,
-      storageUri: `https://storage.clinicez.ph/clinic-records/${selectedPatient.id}/${Date.now()}.${docFileType === 'PDF' ? 'pdf' : 'jpg'}`,
+      storageUri: `tenants/${selectedPatient.tenantId}/clinics/${selectedPatient.clinicId}/records/${Date.now()}.${docFileType === 'PDF' ? 'pdf' : 'jpg'}.cez`,
       documentDate: new Date().toISOString(),
       notes: docNotes.trim() || undefined,
       uploadedByStaffName: 'Clinic Staff',
+      encryptionAlgorithm: 'AES-256-GCM',
+      encryptionKeyId: 'cmk-v1',
     };
 
     const [newAtt, err] = await clinicService.uploadRecordAttachment(payload);
@@ -1582,11 +1534,22 @@ export default function PatientsScreen() {
                               <ThemedText style={styles.attachmentMeta}>
                                 Uploaded: {new Date(att.documentDate || att.createdAt).toLocaleDateString()} • Ingested by: {att.uploadedByStaffName || 'Clinic Staff'}
                               </ThemedText>
+                              {att.encryptionAlgorithm ? (
+                                <ThemedText style={[styles.attachmentMeta, { color: '#0D9488', fontWeight: '600' }]}>
+                                  🔐 Encrypted At-Rest ({att.encryptionAlgorithm})
+                                </ThemedText>
+                              ) : null}
                               {att.notes ? (
                                 <ThemedText style={styles.attachmentNotes}>
                                   📝 Notes: {att.notes}
                                 </ThemedText>
                               ) : null}
+                              <Pressable
+                                style={styles.viewDocBtn}
+                                onPress={() => handleDownloadAttachment(att.id)}
+                              >
+                                <ThemedText style={styles.viewDocBtnText}>📥 View / Decrypt Document</ThemedText>
+                              </Pressable>
                             </View>
                             <View style={[
                               styles.attBadge,
@@ -2749,6 +2712,20 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   rejectBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 11,
+  },
+  viewDocBtn: {
+    backgroundColor: '#0284C7',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  viewDocBtnText: {
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 11,

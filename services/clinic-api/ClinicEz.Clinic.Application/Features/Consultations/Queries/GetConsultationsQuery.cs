@@ -77,7 +77,13 @@ public sealed class GetConsultationsQueryHandler : IRequestHandler<GetConsultati
             encounter.IsSigned,
             encounter.SignedAt,
             encounter.Diagnoses.Select(d => new EncounterDiagnosisDto(d.Id, d.Icd10Code, d.Description, d.IsPrimary)).ToList(),
-            encounter.Prescriptions.Select(p => new PrescriptionItemDto(p.Id, p.GenericName, p.BrandName, p.Dosage, p.Form, p.Sig, p.Quantity, p.DurationDays, p.Refills, p.IsDangerousDrug, p.Remarks)).ToList()
+            encounter.Prescriptions.Select(p => new PrescriptionItemDto(p.Id, p.GenericName, p.BrandName, p.Dosage, p.Form, p.Sig, p.Quantity, p.DurationDays, p.Refills, p.IsDangerousDrug, p.Remarks, p.PhilHealthDrugCode)).ToList(),
+            encounter.IsYakapEligible,
+            encounter.PhilHealthSignSympCode,
+            encounter.PhilHealthOtherComplaint,
+            encounter.PhilHealthPainSite,
+            encounter.PhilHealthCaseNo,
+            encounter.PhilHealthSoapTransNo
         )).ToList();
     }
 }
@@ -130,6 +136,12 @@ public sealed class GetConsultationByIdQueryHandler : IRequestHandler<GetConsult
             encounter.IsSigned,
             encounter.SignedAt,
             encounter.Diagnoses.Select(d => new EncounterDiagnosisDto(d.Id, d.Icd10Code, d.Description, d.IsPrimary)).ToList(),
-            encounter.Prescriptions.Select(p => new PrescriptionItemDto(p.Id, p.GenericName, p.BrandName, p.Dosage, p.Form, p.Sig, p.Quantity, p.DurationDays, p.Refills, p.IsDangerousDrug, p.Remarks)).ToList());
+            encounter.Prescriptions.Select(p => new PrescriptionItemDto(p.Id, p.GenericName, p.BrandName, p.Dosage, p.Form, p.Sig, p.Quantity, p.DurationDays, p.Refills, p.IsDangerousDrug, p.Remarks, p.PhilHealthDrugCode)).ToList(),
+            encounter.IsYakapEligible,
+            encounter.PhilHealthSignSympCode,
+            encounter.PhilHealthOtherComplaint,
+            encounter.PhilHealthPainSite,
+            encounter.PhilHealthCaseNo,
+            encounter.PhilHealthSoapTransNo);
     }
 }

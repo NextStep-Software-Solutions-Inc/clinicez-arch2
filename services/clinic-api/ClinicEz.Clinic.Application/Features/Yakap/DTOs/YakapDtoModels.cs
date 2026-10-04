@@ -493,6 +493,12 @@ public sealed record PhilHealthPatientProfileDto
     public string? Pin { get; init; }
     public string? MemberPin { get; init; }
     public string? MemberType { get; init; } = "MM"; // MM = Member, DD = Dependent
+    public string? MemberLastName { get; init; }
+    public string? MemberFirstName { get; init; }
+    public string? MemberMiddleName { get; init; }
+    public string? MemberSuffix { get; init; }
+    public string? MemberBirthDate { get; init; } // yyyy-MM-dd
+    public string? DependentRelationship { get; init; } // "S" (Spouse), "C" (Child), "P" (Parent), "D" (Disabled)
     public string? Atc { get; init; } = "A";
     public string? IsWalkedIn { get; init; } = "Y";
     public string? BloodType { get; init; }

@@ -40,4 +40,16 @@ public sealed class ClinicRecordAttachment : BaseEntity
     public DateTime? VerifiedAt { get; set; }
     public Guid? VerifiedByStaffId { get; set; }
     public string? VerifiedByStaffName { get; set; }
+
+    /// <summary>
+    /// Encryption metadata (at-rest envelope encryption with Clinic Master Key)
+    /// </summary>
+    public string EncryptionAlgorithm { get; set; } = "AES-256-GCM";
+    public string? EncryptionKeyId { get; set; }
+    public string? EncryptionIvBase64 { get; set; }
+    public string? EncryptionTagBase64 { get; set; }
+    public long? EncryptedSizeBytes { get; set; }
+    public string? EncryptedHash { get; set; }
+    public string? WrappedKeyJson { get; set; }
 }
+
