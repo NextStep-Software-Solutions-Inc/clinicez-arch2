@@ -2126,6 +2126,21 @@ export default function ConsultationsScreen() {
                   <ThemedText style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 13 }}>📄 Download Official PDF</ThemedText>
                 </Pressable>
               )}
+              {previewType === 'REFERRAL' && issuedReferral && (
+                <Pressable
+                  style={{ flex: 1, backgroundColor: '#15803D', paddingVertical: 10, borderRadius: 8, alignItems: 'center' }}
+                  onPress={async () => {
+                    const url = clinicService.getReferralLetterPdfUrl(issuedReferral.id);
+                    try {
+                      await Linking.openURL(url);
+                    } catch {
+                      Alert.alert('Download Error', 'Could not open referral letter PDF. Please check connection and try again.');
+                    }
+                  }}
+                >
+                  <ThemedText style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 13 }}>📄 Download Official PDF</ThemedText>
+                </Pressable>
+              )}
               <Pressable
                 style={{ flex: 1, backgroundColor: '#0284C7', paddingVertical: 10, borderRadius: 8, alignItems: 'center' }}
                 onPress={() => setPreviewDocModal(false)}

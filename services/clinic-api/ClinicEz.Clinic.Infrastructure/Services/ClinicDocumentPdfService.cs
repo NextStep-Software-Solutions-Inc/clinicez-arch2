@@ -553,6 +553,182 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         return doc.GeneratePdf();
     }
 
+    public byte[] GenerateReferralLetterPdf(
+        ReferralLetter referral,
+        ClinicSettings settings,
+        ClinicPatient? patient = null,
+        StaffMember? doctor = null)
+    {
+        var config = MapToTenantConfig(settings);
+        var primaryColor = config.GetSafePrimaryColorHex();
+
+        var urgencyColor = referral.Urgency?.Trim().ToLowerInvariant() switch
+        {
+            "emergency" => "#DC2626",
+            "urgent" => "#EA580C",
+            _ => primaryColor
+        };
+
+        var issuedDateTime = referral.SignedAt ?? referral.CreatedAt;
+        var prcLicense = doctor?.PrcLicenseNumber ?? "PRC-DOCTOR";
+
+        var digest = _securityService.ComputeDocumentDigest(
+            referral.TenantId,
+            "REFERRAL",
+            referral.ReferralNumber,
+            referral.PatientId,
+            prcLicense,
+            issuedDateTime);
+
+        var verifyUrl = _securityService.GenerateVerificationUrl(
+            "https://clinicez.ph",
+            "referral",
+            referral.ReferralNumber,
+            digest);
+
+        var qrBytes = _qrCodeService.GenerateQrCodePng(verifyUrl, 4);
+
+        var patientAge = patient != null ? DateTime.UtcNow.Year - patient.DateOfBirth.Year : 35;
+        var patientGender = patient?.Gender.ToString() ?? "Patient";
+
+        var doc = Document.Create(container =>
+        {
+            container.Page(page =>
+            {
+                page.Size(config.PaperSize switch
+                {
+                    DocumentPaperSize.A4 => PageSizes.A4,
+                    DocumentPaperSize.A5 => PageSizes.A5,
+                    _ => PageSizes.Letter
+                });
+
+                page.Margin(config.PageMarginMm, Unit.Millimetre);
+                page.DefaultTextStyle(x => x.FontFamily("Helvetica").FontSize(9f).FontColor("#1F2937"));
+
+                page.Header().Component(new TenantLetterheadComponent(config));
+
+                page.Content().PaddingTop(6).Column(col =>
+                {
+                    // Referral Header Banner
+                    col.Item().AlignCenter().Column(c =>
+                    {
+                        c.Item().Text("OFFICIAL CLINICAL REFERRAL LETTER")
+                            .FontSize(14).Bold().FontColor(primaryColor);
+                        c.Item().Text($"Ref No: {referral.ReferralNumber} • Date: {referral.ReferralDate:MMMM dd, yyyy} • Urgency: {(referral.Urgency ?? "Routine").ToUpperInvariant()}")
+                            .FontSize(8.5f).SemiBold().FontColor(urgencyColor);
+                    });
+
+                    // Target Facility / Department Box
+                    col.Item().PaddingTop(10).Border(1).BorderColor("#CBD5E1").Background("#F8FAFC").Padding(8).Column(c =>
+                    {
+                        c.Item().Text(t =>
+                        {
+                            t.Span("REFERRED TO: ").Bold().FontColor("#111827");
+                            t.Span(referral.ReferredToFacility).Bold().FontColor(primaryColor);
+                        });
+                        c.Item().Text(t =>
+                        {
+                            t.Span("DEPARTMENT / SERVICE: ").SemiBold().FontColor("#4B5563");
+                            t.Span(referral.ReferredDepartment).SemiBold().FontColor("#111827");
+                            t.Span("  •  ATTENDING SPECIALIST: ").SemiBold().FontColor("#4B5563");
+                            t.Span(referral.ReferredToDoctor ?? "Consultant On-Duty / Specialist").FontColor("#111827");
+                        });
+                    });
+
+                    // Patient Information Strip
+                    col.Item().PaddingTop(10).Border(1).BorderColor("#E2E8F0").Background("#FFFFFF").Padding(8).Row(row =>
+                    {
+                        row.RelativeItem(2).Column(c =>
+                        {
+                            c.Item().Text("PATIENT NAME").FontSize(7.5f).Bold().FontColor("#6B7280");
+                            c.Item().Text(referral.PatientName).FontSize(10f).Bold().FontColor("#111827");
+                        });
+                        row.RelativeItem(1).Column(c =>
+                        {
+                            c.Item().Text("AGE / SEX").FontSize(7.5f).Bold().FontColor("#6B7280");
+                            c.Item().Text($"{patientAge}y • {patientGender}").FontSize(9.5f).SemiBold().FontColor("#111827");
+                        });
+                        row.RelativeItem(1.5f).Column(c =>
+                        {
+                            c.Item().Text("PHILHEALTH PIN").FontSize(7.5f).Bold().FontColor("#6B7280");
+                            c.Item().Text(patient?.PhilHealthNumber ?? "N/A").FontSize(9.5f).FontColor("#111827");
+                        });
+                    });
+
+                    // Clinical Transfer Details
+                    col.Item().PaddingTop(10).Column(c =>
+                    {
+                        // Provisional Diagnosis
+                        c.Item().Border(1).BorderColor("#E0E7FF").Background("#EEF2FF").Padding(8).Column(box =>
+                        {
+                            box.Item().Text("PROVISIONAL DIAGNOSIS / IMPRESSION").FontSize(8f).Bold().FontColor("#3730A3");
+                            box.Item().PaddingTop(2).Text(referral.ProvisionalDiagnosis).FontSize(10f).Bold().FontColor("#1E1B4B");
+                        });
+
+                        // Reason for Referral
+                        c.Item().PaddingTop(8).Border(1).BorderColor("#E2E8F0").Background("#F8FAFC").Padding(8).Column(box =>
+                        {
+                            box.Item().Text("REASON FOR REFERRAL").FontSize(8f).Bold().FontColor("#4B5563");
+                            box.Item().PaddingTop(2).Text(referral.ReasonForReferral).FontSize(9f).FontColor("#111827");
+                        });
+
+                        // Clinical Summary
+                        c.Item().PaddingTop(8).Border(1).BorderColor("#E2E8F0").Background("#FFFFFF").Padding(8).Column(box =>
+                        {
+                            box.Item().Text("CLINICAL SUMMARY & HISTORY OF PRESENT ILLNESS").FontSize(8f).Bold().FontColor("#4B5563");
+                            box.Item().PaddingTop(2).Text(referral.ClinicalSummary).FontSize(9f).FontColor("#111827");
+                        });
+
+                        // Medications & Diagnostics Grid
+                        c.Item().PaddingTop(8).Row(grid =>
+                        {
+                            grid.RelativeItem().Border(1).BorderColor("#E2E8F0").Background("#F9FAFB").Padding(6).Column(m =>
+                            {
+                                m.Item().Text("CURRENT MEDICATIONS").FontSize(7.5f).Bold().FontColor("#4B5563");
+                                m.Item().PaddingTop(2).Text(referral.CurrentMedications ?? "None reported").FontSize(8.5f).FontColor("#1F2937");
+                            });
+
+                            grid.Spacing(8);
+
+                            grid.RelativeItem().Border(1).BorderColor("#E2E8F0").Background("#F9FAFB").Padding(6).Column(d =>
+                            {
+                                d.Item().Text("ATTACHED DIAGNOSTICS / LABS").FontSize(7.5f).Bold().FontColor("#4B5563");
+                                d.Item().PaddingTop(2).Text(referral.AttachedDiagnostics ?? "None attached").FontSize(8.5f).FontColor("#1F2937");
+                            });
+                        });
+                    });
+
+                    // Referring Physician Stamp & Signature Block
+                    col.Item().PaddingTop(16).AlignRight().Width(240).Column(stamp =>
+                    {
+                        stamp.Item().AlignCenter().Text(referral.ReferringDoctorName)
+                            .FontSize(11).Bold().FontColor("#111827");
+                        stamp.Item().AlignCenter().Text("Referring Physician / Attending Clinician")
+                            .FontSize(8f).Italic().FontColor("#4B5563");
+                        stamp.Item().PaddingTop(2).AlignCenter().Text($"PRC License No: {doctor?.PrcLicenseNumber ?? prcLicense}")
+                            .FontSize(8f).SemiBold().FontColor("#374151");
+
+                        if (!string.IsNullOrWhiteSpace(doctor?.PtrNumber))
+                        {
+                            stamp.Item().AlignCenter().Text($"PTR No: {doctor.PtrNumber}").FontSize(8f).FontColor("#4B5563");
+                        }
+                        if (!string.IsNullOrWhiteSpace(doctor?.S2LicenseNumber))
+                        {
+                            stamp.Item().AlignCenter().Text($"PDEA S2: {doctor.S2LicenseNumber}").FontSize(8f).Bold().FontColor("#DC2626");
+                        }
+
+                        stamp.Item().PaddingTop(3).AlignCenter().Text("✓ Officially Certified Clinical Referral & Transfer")
+                            .FontSize(7.5f).Bold().FontColor("#16A34A");
+                    });
+                });
+
+                page.Footer().Component(new DocumentFooterComponent(config, qrBytes, digest));
+            });
+        });
+
+        return doc.GeneratePdf();
+    }
+
     private static TenantPrintoutConfig MapToTenantConfig(ClinicSettings settings)
     {
         return new TenantPrintoutConfig

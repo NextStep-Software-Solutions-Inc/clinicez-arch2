@@ -250,12 +250,12 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
                         ? encounter.Diagnoses.Select(d => d.Icd10Code).Distinct().ToList()
                         : new List<string> { "Z00.0" };
 
-                    var signs = MapSignsAndSymptoms(encounter.Subjective);
                     var illness = !string.IsNullOrWhiteSpace(encounter.Subjective)
                         ? encounter.Subjective
                         : "Follow-up consultation";
 
-                    var (signs, otherComplaint) = PhilHealthCatalogResolver.ResolveSignsAndSymptoms(encounter.Subjective);
+                    var signs = MapSignsAndSymptoms(encounter.Subjective);
+                    var otherComplaint = signs == "OT" ? encounter.Subjective ?? string.Empty : string.Empty;
 
                     var advice = !string.IsNullOrWhiteSpace(encounter.Plan)
                         ? encounter.Plan
@@ -407,7 +407,17 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
         return digits.PadLeft(12, '0');
     }
 
-    public string FormatDrugCode(string rawDrugCode) => PhilHealthCatalogResolver.ResolveDrugCode(rawDrugCode);
+    public string FormatDrugCode(string rawDrugCode)
+    {
+        if (string.IsNullOrWhiteSpace(rawDrugCode))
+            return "NOMED0000000000000000000000000";
+
+        var alphanumeric = new string(rawDrugCode.Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
+        if (alphanumeric.Length >= 30)
+            return alphanumeric[..30];
+
+        return alphanumeric.PadRight(30, '0');
+    }
 
     private static PhilHealthPatientProfileDto? ExtractCustomProfile(ClinicPatient patient)
     {

@@ -270,4 +270,92 @@ public class HardenedDocumentGenerationTests
         cert1.CertificateNumber.Should().EndWith("-0001");
         cert2.CertificateNumber.Should().EndWith("-0002");
     }
+
+    [Fact]
+    public void ClinicDocumentPdfService_Should_Generate_Valid_Referral_Letter_PDF_With_Security_Seal()
+    {
+        var settings = new ClinicSettings
+        {
+            TenantId = "tenant-001",
+            ClinicId = Guid.NewGuid(),
+            ClinicName = "Metro South Outpatient Clinic",
+            LetterheadHeader = "METRO SOUTH OUTPATIENT CLINIC",
+            LetterheadSubHeader = "Accredited Ambulatory Facility",
+            LetterheadAddress = "Alabang-Zapote Road, Las Piñas, Metro Manila",
+            PrimaryColorHex = "#0284C7",
+            PaperSize = "A4"
+        };
+
+        var referral = new ReferralLetter
+        {
+            Id = Guid.NewGuid(),
+            TenantId = settings.TenantId,
+            ClinicId = settings.ClinicId,
+            ReferralNumber = "REF-20261004-0001",
+            PatientId = Guid.NewGuid(),
+            PatientName = "Juanito Dela Cruz",
+            ReferringDoctorId = Guid.NewGuid(),
+            ReferringDoctorName = "Dr. Roberto Cruz, MD",
+            ReferredToDoctor = "Dr. Teresa Lim, MD (Cardiologist)",
+            ReferredToFacility = "Philippine Heart Center",
+            ReferredDepartment = "Department of Cardiology",
+            ReferralDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            Urgency = "Urgent",
+            ProvisionalDiagnosis = "Hypertensive Emergency with Suspected Angina (ICD-10: I16.0)",
+            ReasonForReferral = "For emergency coronary angiography and intensive blood pressure management.",
+            ClinicalSummary = "Patient presented with retrosternal chest tightness radiating to the left arm, BP 200/110 mmHg.",
+            CurrentMedications = "Amlodipine 10mg OD, Losartan 50mg OD, Aspirin 80mg OD",
+            AttachedDiagnostics = "12-Lead ECG showing ST depressions in V4-V6; Troponin I: 0.08 ng/mL",
+            IsSigned = true,
+            SignedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = "Dr. Roberto Cruz"
+        };
+
+        var doctor = new StaffMember
+        {
+            Id = referral.ReferringDoctorId,
+            TenantId = settings.TenantId,
+            ClinicId = settings.ClinicId,
+            FirstName = "Roberto",
+            LastName = "Cruz",
+            Role = StaffRole.Doctor,
+            PrcLicenseNumber = "PRC-0149281",
+            PtrNumber = "PTR-2026-8812",
+            S2LicenseNumber = "S2-0987123"
+        };
+
+        var patient = new ClinicPatient
+        {
+            Id = referral.PatientId,
+            TenantId = settings.TenantId,
+            ClinicId = settings.ClinicId,
+            PatientCode = "PAT-2026-0099",
+            ContactNumber = "+639171234567",
+            FirstName = "Juanito",
+            LastName = "Dela Cruz",
+            DateOfBirth = new DateOnly(1980, 8, 20),
+            Gender = "Male",
+            PhilHealthNumber = "PHIC-18-091238471-1"
+        };
+
+        var pdfBytes = _pdfService.GenerateReferralLetterPdf(referral, settings, patient, doctor);
+
+        pdfBytes.Should().NotBeNull();
+        pdfBytes.Length.Should().BeGreaterThan(1000);
+
+        var pdfText = Encoding.ASCII.GetString(pdfBytes);
+        pdfText.Should().StartWith("%PDF-");
+        pdfText.Should().Contain("%%EOF");
+    }
+
+    [Theory]
+    [InlineData("Juan Dela Cruz", "J**n D**a C**z")]
+    [InlineData("Maria Santos", "M***a S****s")]
+    [InlineData("Al Jo", "A* J*")]
+    public void DocumentVerificationResultDto_MaskName_Should_Protect_Patient_Privacy(string input, string expected)
+    {
+        var masked = ClinicEz.Clinic.Application.Features.Documents.DTOs.DocumentVerificationResultDto.MaskName(input);
+        masked.Should().Be(expected);
+    }
 }

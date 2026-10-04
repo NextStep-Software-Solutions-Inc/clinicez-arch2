@@ -209,7 +209,7 @@ public static class PhilHealthCatalogResolver
             {
                 if (string.IsNullOrEmpty(strength) || genLower.Contains(strength) || doseLower.Contains(strength))
                 {
-                    return code;
+                    return code.PadRight(30, '0');
                 }
             }
         }

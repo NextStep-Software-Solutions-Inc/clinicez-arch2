@@ -17,7 +17,10 @@ import {
     IconDeviceFloppy,
     IconAlertTriangle,
     IconCreditCard,
-    IconArrowRight
+    IconArrowRight,
+    IconPalette,
+    IconFileText,
+    IconCheck
 } from "@tabler/icons-react";
 import { toast } from "sonner";
 import { tenantService } from "@/services/tenant.service";
@@ -43,6 +46,15 @@ export default function SettingsPage() {
     const [timezone, setTimezone] = useState("UTC+08:00 Manila, Singapore");
     const [saving, setSaving] = useState(false);
 
+    // Document Printout & Branding Configuration
+    const [primaryColorHex, setPrimaryColorHex] = useState("#0284C7");
+    const [primaryLogoUrl, setPrimaryLogoUrl] = useState("");
+    const [paperSize, setPaperSize] = useState("Letter");
+    const [letterheadHeader, setLetterheadHeader] = useState("");
+    const [letterheadSubHeader, setLetterheadSubHeader] = useState("");
+    const [letterheadAddress, setLetterheadAddress] = useState("");
+    const [savingBranding, setSavingBranding] = useState(false);
+
     useEffect(() => {
         if (billingInfo) {
             setClinicName(billingInfo.name || billingInfo.clinicName || "");
@@ -50,8 +62,36 @@ export default function SettingsPage() {
             if ((billingInfo as any).email) {
                 setEmail((billingInfo as any).email);
             }
+            if ((billingInfo as any).primaryColorHex) setPrimaryColorHex((billingInfo as any).primaryColorHex);
+            if ((billingInfo as any).primaryLogoUrl) setPrimaryLogoUrl((billingInfo as any).primaryLogoUrl);
+            if ((billingInfo as any).paperSize) setPaperSize((billingInfo as any).paperSize);
+            if ((billingInfo as any).letterheadHeader) setLetterheadHeader((billingInfo as any).letterheadHeader);
+            if ((billingInfo as any).letterheadSubHeader) setLetterheadSubHeader((billingInfo as any).letterheadSubHeader);
+            if ((billingInfo as any).letterheadAddress) setLetterheadAddress((billingInfo as any).letterheadAddress);
         }
     }, [billingInfo]);
+
+    const handleSaveBranding = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSavingBranding(true);
+        try {
+            await tenantService.updateTenantSettings(tenantSlug, {
+                primaryColorHex,
+                primaryLogoUrl: primaryLogoUrl.trim() || undefined,
+                paperSize,
+                letterheadHeader: letterheadHeader.trim() || undefined,
+                letterheadSubHeader: letterheadSubHeader.trim() || undefined,
+                letterheadAddress: letterheadAddress.trim() || undefined,
+            });
+            toast.success("Document branding & printout settings saved");
+            mutate();
+        } catch (err: any) {
+            console.error("Failed to save branding settings", err);
+            toast.error(err.response?.data?.message || err.message || "Failed to save branding settings");
+        } finally {
+            setSavingBranding(false);
+        }
+    };
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -98,6 +138,10 @@ export default function SettingsPage() {
                         <TabsTrigger value="limits" className="px-4 sm:px-6 py-2 text-xs font-semibold flex items-center gap-1.5 shrink-0 whitespace-nowrap">
                             <IconLayersIntersect className="h-3.5 w-3.5 shrink-0" />
                             Limits & Allocations
+                        </TabsTrigger>
+                        <TabsTrigger value="branding" className="px-4 sm:px-6 py-2 text-xs font-semibold flex items-center gap-1.5 shrink-0 whitespace-nowrap">
+                            <IconPalette className="h-3.5 w-3.5 shrink-0" />
+                            Print & Branding
                         </TabsTrigger>
                     </TabsList>
                 </div>
@@ -365,6 +409,227 @@ export default function SettingsPage() {
                             )}
                         </CardContent>
                     </Card>
+                </TabsContent>
+
+                {/* 4. PRINT & DOCUMENT BRANDING TAB CONTENT */}
+                <TabsContent value="branding" className="space-y-6 outline-none">
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                        {/* Left: Branding Form */}
+                        <div className="lg:col-span-7 space-y-6">
+                            <form onSubmit={handleSaveBranding}>
+                                <Card className="rounded-3xl border-slate-100 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-950">
+                                    <CardHeader className="p-6 pb-4">
+                                        <CardTitle className="text-lg font-bold">Printout & Document Customizer</CardTitle>
+                                        <CardDescription className="text-xs font-medium text-slate-500">
+                                            Customize your facility branding, letterhead styling, color accents, and paper sizes for official Medical Certificates, Prescriptions, and Diagnostic Slips.
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="p-6 pt-0 space-y-5">
+                                        {/* Color Picker & Presets */}
+                                        <div className="space-y-2">
+                                            <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                                Primary Brand Accent Color
+                                            </Label>
+                                            <div className="flex items-center gap-3">
+                                                <input
+                                                    type="color"
+                                                    value={primaryColorHex}
+                                                    onChange={(e) => setPrimaryColorHex(e.target.value)}
+                                                    className="h-10 w-12 rounded-xl cursor-pointer border border-slate-200 p-1 bg-white"
+                                                />
+                                                <Input
+                                                    value={primaryColorHex}
+                                                    onChange={(e) => setPrimaryColorHex(e.target.value)}
+                                                    placeholder="#0284C7"
+                                                    className="font-mono text-xs max-w-[120px] rounded-xl"
+                                                />
+                                                {/* Palette Presets */}
+                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                    {[
+                                                        { color: "#0284C7", label: "Sky Blue" },
+                                                        { color: "#059669", label: "Emerald" },
+                                                        { color: "#4F46E5", label: "Indigo" },
+                                                        { color: "#0D9488", label: "Teal" },
+                                                        { color: "#E11D48", label: "Rose" },
+                                                        { color: "#334155", label: "Slate" }
+                                                    ].map((p) => (
+                                                        <button
+                                                            key={p.color}
+                                                            type="button"
+                                                            onClick={() => setPrimaryColorHex(p.color)}
+                                                            className="h-6 w-6 rounded-full border border-slate-300 transition-transform hover:scale-110 flex items-center justify-center"
+                                                            style={{ backgroundColor: p.color }}
+                                                            title={p.label}
+                                                        >
+                                                            {primaryColorHex.toLowerCase() === p.color.toLowerCase() && (
+                                                                <IconCheck className="h-3 w-3 text-white" />
+                                                            )}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Primary Facility Logo URL */}
+                                        <div className="space-y-2">
+                                            <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                                Primary Facility Logo URL
+                                            </Label>
+                                            <Input
+                                                value={primaryLogoUrl}
+                                                onChange={(e) => setPrimaryLogoUrl(e.target.value)}
+                                                placeholder="https://your-domain.com/logos/clinic-logo.png"
+                                                className="text-xs rounded-xl"
+                                            />
+                                            <p className="text-[11px] text-slate-400">
+                                                Recommended: Transparent PNG (approx. 200x200px). Displayed on the digital letterhead.
+                                            </p>
+                                        </div>
+
+                                        {/* Paper Size Selection */}
+                                        <div className="space-y-2">
+                                            <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                                Default Printout Paper Size
+                                            </Label>
+                                            <select
+                                                value={paperSize}
+                                                onChange={(e) => setPaperSize(e.target.value)}
+                                                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-medium text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            >
+                                                <option value="Letter">Letter (8.5&quot; x 11&quot; - Philippine Standard)</option>
+                                                <option value="A4">A4 (210mm x 297mm - International Standard)</option>
+                                                <option value="A5">A5 (148mm x 210mm - Compact Prescription Slip)</option>
+                                            </select>
+                                        </div>
+
+                                        {/* Letterhead Header Override */}
+                                        <div className="space-y-2">
+                                            <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                                Letterhead Facility Name
+                                            </Label>
+                                            <Input
+                                                value={letterheadHeader}
+                                                onChange={(e) => setLetterheadHeader(e.target.value)}
+                                                placeholder={clinicName || "METRO HEALTH MEDICAL CLINIC"}
+                                                className="text-xs rounded-xl"
+                                            />
+                                        </div>
+
+                                        {/* Subheader / Tagline */}
+                                        <div className="space-y-2">
+                                            <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                                Facility Subheader / Accreditation Line
+                                            </Label>
+                                            <Input
+                                                value={letterheadSubHeader}
+                                                onChange={(e) => setLetterheadSubHeader(e.target.value)}
+                                                placeholder="Accredited Outpatient Medical Facility • PhilHealth Konsulta Provider"
+                                                className="text-xs rounded-xl"
+                                            />
+                                        </div>
+
+                                        {/* Physical Address */}
+                                        <div className="space-y-2">
+                                            <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                                Facility Physical Address & Contacts
+                                            </Label>
+                                            <Input
+                                                value={letterheadAddress}
+                                                onChange={(e) => setLetterheadAddress(e.target.value)}
+                                                placeholder="Unit 201 Medical Arts Building, Manila, Philippines • (02) 8123-4567"
+                                                className="text-xs rounded-xl"
+                                            />
+                                        </div>
+                                    </CardContent>
+                                    <CardFooter className="p-6 pt-0 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+                                        <Button
+                                            type="submit"
+                                            disabled={savingBranding}
+                                            className="rounded-xl text-xs font-semibold gap-1.5 shadow-sm"
+                                        >
+                                            <IconDeviceFloppy className="h-4 w-4" />
+                                            {savingBranding ? "Saving Branding..." : "Save Printout Preferences"}
+                                        </Button>
+                                    </CardFooter>
+                                </Card>
+                            </form>
+                        </div>
+
+                        {/* Right: Live Interactive Document Simulator */}
+                        <div className="lg:col-span-5 space-y-4">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                                    <IconFileText className="h-4 w-4 text-blue-600" />
+                                    Live Document Preview ({paperSize})
+                                </span>
+                                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                    QuestPDF Hardened Canvas
+                                </span>
+                            </div>
+
+                            {/* Simulated Paper Sheet */}
+                            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-md space-y-4 text-slate-900 transition-all">
+                                {/* Letterhead */}
+                                <div className="border-b-2 pb-3 flex items-start justify-between gap-2" style={{ borderColor: primaryColorHex }}>
+                                    <div className="space-y-0.5">
+                                        <h4 className="font-extrabold text-sm uppercase tracking-wide" style={{ color: primaryColorHex }}>
+                                            {letterheadHeader || clinicName || "METRO HEALTH OUTPATIENT CLINIC"}
+                                        </h4>
+                                        <p className="text-[10px] text-slate-500 font-medium">
+                                            {letterheadSubHeader || "Accredited Outpatient Medical Facility"}
+                                        </p>
+                                        <p className="text-[9px] text-slate-400">
+                                            {letterheadAddress || "Unit 201 Medical Arts Bldg, Philippines"}
+                                        </p>
+                                    </div>
+                                    <div className="h-8 w-8 rounded-lg flex items-center justify-center font-black text-white text-xs shrink-0 shadow-sm" style={{ backgroundColor: primaryColorHex }}>
+                                        Rx
+                                    </div>
+                                </div>
+
+                                {/* Document Title */}
+                                <div className="text-center py-1">
+                                    <span className="font-black text-xs tracking-wider uppercase block" style={{ color: primaryColorHex }}>
+                                        Official Medical Certificate
+                                    </span>
+                                    <span className="text-[9px] text-slate-400 font-mono">
+                                        Doc No: MC-20261004-0001 • Date: Oct 04, 2026
+                                    </span>
+                                </div>
+
+                                {/* Body Snippet */}
+                                <div className="text-[10px] text-slate-700 leading-relaxed space-y-2 bg-slate-50/70 p-3 rounded-xl border border-slate-100">
+                                    <p>
+                                        This certifies that <strong className="text-slate-900">Juan Dela Cruz</strong>, 38y, Male, was evaluated on Oct 04, 2026.
+                                    </p>
+                                    <div className="p-2 rounded bg-white border border-slate-200/80">
+                                        <span className="font-bold text-[9px] text-slate-800 block">Diagnosis: Acute Bronchitis (J20.9)</span>
+                                        <span className="text-[9px] text-slate-500">Fitness: Unfit for work • 3 days rest recommended</span>
+                                    </div>
+                                </div>
+
+                                {/* Signature Stamp */}
+                                <div className="text-right pt-2 border-t border-slate-100 space-y-0.5">
+                                    <p className="text-[10px] font-bold text-slate-900">Dr. Roberto Cruz, MD</p>
+                                    <p className="text-[8px] text-slate-500">PRC Lic. No.: PRC-0149281 • PTR: 891247</p>
+                                    <span className="inline-block text-[8px] font-bold text-emerald-600">
+                                        ✓ Digitally Certified & Sealed
+                                    </span>
+                                </div>
+
+                                {/* Document Footer Component Simulation */}
+                                <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[8px] text-slate-400 font-mono">
+                                    <div className="flex items-center gap-1.5">
+                                        <div className="h-5 w-5 bg-slate-200 rounded flex items-center justify-center text-[7px] font-black text-slate-700">
+                                            QR
+                                        </div>
+                                        <span>SEC-SHA256-4A9F21B90</span>
+                                    </div>
+                                    <span>Page 1 of 1 ({paperSize})</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </TabsContent>
             </Tabs>
         </div>

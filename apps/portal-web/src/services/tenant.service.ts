@@ -25,6 +25,12 @@ export interface UpdateTenantSettingsPayload {
   email?: string;
   phoneNumber?: string;
   timezone?: string;
+  primaryColorHex?: string;
+  primaryLogoUrl?: string;
+  paperSize?: string;
+  letterheadHeader?: string;
+  letterheadSubHeader?: string;
+  letterheadAddress?: string;
 }
 
 export interface TenantDto {
