@@ -1,5 +1,5 @@
-# Use the official .NET 9.0 SDK image to build the application
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+# Use the official .NET 10.0 SDK image to build the application (supports net9.0 and multi-targeted shared dependencies)
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 # Copy global Directory.Build.props
