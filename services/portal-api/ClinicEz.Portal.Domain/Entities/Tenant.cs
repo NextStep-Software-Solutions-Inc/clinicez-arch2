@@ -41,4 +41,7 @@ public class Tenant : BaseEntity
     public int ActivePatientRecordsCount { get; set; } = 0;
     public int MonthlyApiQuotaUsed { get; set; } = 0;
     public int MonthlyApiQuotaLimit { get; set; } = 10000;
+
+    // Branches associated with this tenant
+    public ICollection<Branch> Branches { get; set; } = new List<Branch>();
 }

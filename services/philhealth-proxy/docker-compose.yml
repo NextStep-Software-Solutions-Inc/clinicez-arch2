@@ -20,7 +20,7 @@ services:
       - npm-default
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
-      - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}
+      - PortalApi__BaseUrl=${PORTAL_API_BASE_URL:-http://clinicez-portal-api:8080}
     restart: unless-stopped
 
 networks:

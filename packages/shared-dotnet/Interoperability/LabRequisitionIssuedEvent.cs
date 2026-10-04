@@ -40,6 +40,7 @@ public record LabRequisitionIssuedEvent
     public string OrderingFacilityId { get; init; } = string.Empty;
     public string OrderingFacilityName { get; init; } = string.Empty;
     public string TenantId { get; init; } = string.Empty;
+    public string? BranchId { get; init; }
     public string? TargetFacilityId { get; init; }
     public string? TargetTenantId { get; init; }
     public OrderingDoctorDto OrderingDoctor { get; init; } = new();

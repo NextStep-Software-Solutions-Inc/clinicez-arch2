@@ -176,6 +176,16 @@ app.UseExceptionHandler(); // Use our global exception handler
 app.UseHangfireDashboard(); // Add Hangfire Dashboard endpoint
 app.UseCors(isDevelopment ? "development" : "production");
 
+// Support root /api/internal requests from internal microservices (e.g. philhealth-proxy)
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/api/internal", out var remaining))
+    {
+        context.Request.Path = "/api/v1/internal" + remaining;
+    }
+    await next();
+});
+
 // IMPORTANT: Authentication MUST run before Authorization
 app.UseAuthentication();
 app.UseAuthorization();

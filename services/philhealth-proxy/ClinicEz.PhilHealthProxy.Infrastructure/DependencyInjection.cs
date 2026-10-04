@@ -1,11 +1,8 @@
 using Microsoft.AspNetCore.DataProtection;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using ClinicEz.PhilHealthProxy.Domain.Interfaces;
-using ClinicEz.PhilHealthProxy.Infrastructure.Persistence;
-using ClinicEz.PhilHealthProxy.Infrastructure.Persistence.Repositories;
 using ClinicEz.PhilHealthProxy.Infrastructure.Services;
 
 namespace ClinicEz.PhilHealthProxy.Infrastructure;
@@ -17,12 +14,21 @@ public static class DependencyInjection
         IConfiguration configuration,
         IHostEnvironment? env = null)
     {
-        var connectionString = configuration.GetConnectionString("DefaultConnection");
+        // Pure Stateless Zero-DB Micro-Gateway:
+        // Register in-memory cache for 1-hour statutory credentials caching
+        services.AddMemoryCache();
 
-        services.AddDbContext<ApplicationDbContext>(options =>
-            options.UseNpgsql(connectionString));
+        // Resilient HTTP Client connecting to Portal API for branch accreditation credentials
+        var portalBaseUrl = configuration["PortalApi:BaseUrl"]
+            ?? configuration["PORTAL_API_BASE_URL"]
+            ?? "http://localhost:5000";
 
-        services.AddScoped<ITenantRepository, TenantRepository>();
+        services.AddHttpClient<ITenantRepository, PortalTenantClient>(client =>
+        {
+            client.BaseAddress = new Uri(portalBaseUrl);
+            client.Timeout = TimeSpan.FromSeconds(10);
+        })
+        .AddStandardResilienceHandler();
 
         // Register CurrentTenantService as both itself (for the middleware setter)
         // and as ICurrentTenant (for handlers and the SOAP client).

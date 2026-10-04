@@ -48,6 +48,7 @@ public record PrescriptionIssuedEvent
     public string OrderingFacilityId { get; init; } = string.Empty;
     public string OrderingFacilityName { get; init; } = string.Empty;
     public string TenantId { get; init; } = string.Empty;
+    public string? BranchId { get; init; }
     public string? TargetPharmacyFacilityId { get; init; }
     public string? TargetPharmacyTenantId { get; init; }
     public PrescriberDoctorDto PrescriberDoctor { get; init; } = new();

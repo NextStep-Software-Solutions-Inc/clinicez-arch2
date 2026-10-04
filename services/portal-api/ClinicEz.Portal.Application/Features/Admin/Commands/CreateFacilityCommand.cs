@@ -29,7 +29,8 @@ public record CreateFacilityCommand(
     string? StreetAddress = null,
     string? ContactNumber = null,
     string? ContactEmail = null,
-    string? PlanTier = null
+    string? PlanTier = null,
+    Guid? BranchId = null
 ) : IRequest<bool>;
 
 public class CreateFacilityCommandHandler(
@@ -82,6 +83,7 @@ public class CreateFacilityCommandHandler(
         {
             Id = resourceId,
             TenantId = tenant.Id,
+            BranchId = request.BranchId,
             Name = request.Name,
             FacilityType = request.FacilityType,
             Status = FacilityStatus.Provisioning,

@@ -1,6 +1,7 @@
 using Clerk.BackendAPI;
 using ClinicEz.Shared.Interfaces;
 using ClinicEz.Portal.Domain.Interfaces;
+using Microsoft.AspNetCore.DataProtection;
 using MassTransit;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Application.Features.Admin.Consumers;
@@ -57,6 +58,9 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IXenditBillingService, XenditBillingService>();
         services.AddScoped<ITenantFeatureGuard, TenantFeatureGuard>();
+        services.AddDataProtection()
+            .SetApplicationName("ClinicEz.Portal");
+
         services.AddSingleton<ClinicEz.Shared.Licensing.IFacilityLicenseSigner, ClinicEz.Shared.Licensing.FacilityLicenseSigner>();
         services.AddSingleton<ClinicEz.Shared.Licensing.IFacilityLicenseValidator, ClinicEz.Shared.Licensing.FacilityLicenseValidator>();
         services.AddHttpContextAccessor();

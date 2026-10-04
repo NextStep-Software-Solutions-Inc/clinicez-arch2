@@ -9,6 +9,8 @@ namespace ClinicEz.PhilHealthProxy.Infrastructure.Services;
 public sealed class CurrentTenantService : ICurrentTenant
 {
     public Guid? TenantId { get; private set; }
+    public Guid? BranchId { get; private set; }
 
     public void SetTenantId(Guid tenantId) => TenantId = tenantId;
+    public void SetBranchId(Guid branchId) => BranchId = branchId;
 }

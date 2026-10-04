@@ -266,6 +266,105 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                     b.ToTable("BlogArticles", "main");
                 });
 
+            modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.Branch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("Barangay")
+                        .HasColumnType("text");
+
+                    b.Property<string>("City")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Code")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ContactEmail")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ContactNumber")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPhilHealthAccredited")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PhilHealthAccreditationNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PhilHealthEncryptedCipherKey")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PhilHealthEncryptedPassword")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PhilHealthEncryptedUsername")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PhilHealthKonsultaEndpoint")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PhilHealthPmccNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PhilHealthSoftwareCertificateId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Province")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Region")
+                        .HasColumnType("text");
+
+                    b.Property<string>("StreetAddress")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ZipCode")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Code")
+                        .IsUnique()
+                        .HasFilter("\"IsDeleted\" = false AND \"Code\" IS NOT NULL");
+
+                    b.ToTable("Branches", "main");
+                });
+
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.ExampleEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -319,6 +418,9 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
 
                     b.Property<string>("Barangay")
                         .HasColumnType("text");
+
+                    b.Property<Guid?>("BranchId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("City")
                         .HasColumnType("text");
@@ -440,6 +542,8 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("BranchId");
 
                     b.HasIndex("TenantId");
 
@@ -1012,13 +1116,31 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                     b.Navigation("Tenant");
                 });
 
-            modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.Facility", b =>
+            modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.Branch", b =>
                 {
                     b.HasOne("ClinicEz.Portal.Domain.Entities.Tenant", "Tenant")
                         .WithMany()
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.Facility", b =>
+                {
+                    b.HasOne("ClinicEz.Portal.Domain.Entities.Branch", "Branch")
+                        .WithMany("Facilities")
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("ClinicEz.Portal.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Branch");
 
                     b.Navigation("Tenant");
                 });
@@ -1081,6 +1203,11 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("InboxMessageId", "InboxConsumerId")
                         .HasPrincipalKey("MessageId", "ConsumerId");
+                });
+
+            modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.Branch", b =>
+                {
+                    b.Navigation("Facilities");
                 });
 
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.SubscriptionPlan", b =>

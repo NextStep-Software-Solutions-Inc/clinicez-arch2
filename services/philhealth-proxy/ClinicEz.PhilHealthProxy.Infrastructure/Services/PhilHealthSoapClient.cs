@@ -2,6 +2,7 @@ using System.Text;
 using System.Xml.Linq;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Logging;
+using ClinicEz.PhilHealthProxy.Domain.Entities;
 using ClinicEz.PhilHealthProxy.Domain.Interfaces;
 using ClinicEz.PhilHealthProxy.Domain.Models;
 
@@ -255,9 +256,17 @@ public sealed class PhilHealthSoapClient(
 
     private async Task<TenantCredentials?> ResolveTenantCredentialsAsync(CancellationToken ct)
     {
-        if (currentTenant.TenantId is null) return null;
+        PhilHealthTenant? tenant = null;
+        if (currentTenant.BranchId.HasValue)
+        {
+            tenant = await tenantRepository.GetByBranchIdAsync(currentTenant.BranchId.Value, ct);
+        }
 
-        var tenant = await tenantRepository.GetByTenantIdAsync(currentTenant.TenantId.Value, ct);
+        if (tenant is null && currentTenant.TenantId.HasValue)
+        {
+            tenant = await tenantRepository.GetByTenantIdAsync(currentTenant.TenantId.Value, ct);
+        }
+
         if (tenant is null) return null;
 
         return new TenantCredentials(

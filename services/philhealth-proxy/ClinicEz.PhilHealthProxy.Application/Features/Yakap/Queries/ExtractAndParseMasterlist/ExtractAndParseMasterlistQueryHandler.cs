@@ -1,4 +1,5 @@
 using System.Xml.Linq;
+using ClinicEz.PhilHealthProxy.Domain.Entities;
 using ClinicEz.PhilHealthProxy.Domain.Interfaces;
 using ClinicEz.PhilHealthProxy.Domain.Models;
 using ClinicEz.Shared.Common;
@@ -24,11 +25,22 @@ public sealed class ExtractAndParseMasterlistQueryHandler(
         ExtractAndParseMasterlistQuery request,
         CancellationToken cancellationToken)
     {
-        if (currentTenant.TenantId is null)
-            throw new UnauthorizedException("Tenant could not be resolved from the request.");
+        if (currentTenant.TenantId is null && currentTenant.BranchId is null)
+            throw new UnauthorizedException("Tenant or Branch could not be resolved from the request.");
 
-        var tenant = await tenantRepository.GetByTenantIdAsync(currentTenant.TenantId.Value, cancellationToken)
-            ?? throw new NotFoundException("PhilHealth configuration not found for tenant.");
+        PhilHealthTenant? tenant = null;
+        if (currentTenant.BranchId.HasValue)
+        {
+            tenant = await tenantRepository.GetByBranchIdAsync(currentTenant.BranchId.Value, cancellationToken);
+        }
+
+        if (tenant is null && currentTenant.TenantId.HasValue)
+        {
+            tenant = await tenantRepository.GetByTenantIdAsync(currentTenant.TenantId.Value, cancellationToken);
+        }
+
+        if (tenant is null)
+            throw new NotFoundException("PhilHealth configuration not found for tenant or branch.");
 
         string cipherKey = _protector.Unprotect(tenant.EncryptedCipherKey);
 

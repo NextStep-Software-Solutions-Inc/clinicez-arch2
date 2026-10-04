@@ -21,6 +21,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<AdminRole> AdminRoles { get; set; }
     public DbSet<AdminUser> AdminUsers { get; set; }
     public DbSet<Facility> Facilities { get; set; }
+    public DbSet<Branch> Branches { get; set; }
     public DbSet<StaffMember> StaffMembers { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -112,6 +113,18 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasForeignKey(r => r.TenantId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        modelBuilder.Entity<Branch>(entity =>
+        {
+            entity.HasOne(e => e.Tenant)
+                .WithMany()
+                .HasForeignKey(e => e.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.TenantId, e.Code })
+                .HasFilter("\"IsDeleted\" = false AND \"Code\" IS NOT NULL")
+                .IsUnique();
+        });
+
         modelBuilder.Entity<Facility>(entity =>
         {
             entity.Property(e => e.FacilityType).HasConversion<string>();
@@ -120,6 +133,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .WithMany()
                 .HasForeignKey(e => e.TenantId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Branch)
+                .WithMany(b => b.Facilities)
+                .HasForeignKey(e => e.BranchId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<StaffMember>(entity =>

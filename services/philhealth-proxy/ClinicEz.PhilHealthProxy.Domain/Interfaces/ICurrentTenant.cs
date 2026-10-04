@@ -4,4 +4,5 @@ namespace ClinicEz.PhilHealthProxy.Domain.Interfaces;
 public interface ICurrentTenant
 {
     Guid? TenantId { get; }
+    Guid? BranchId { get; }
 }
