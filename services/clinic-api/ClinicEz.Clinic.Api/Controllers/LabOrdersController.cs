@@ -12,6 +12,11 @@ using ClinicEz.Shared.Common;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
+using ClinicEz.Clinic.Application.Common.Interfaces;
+using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Clinic.Domain.Interfaces;
+using Microsoft.EntityFrameworkCore;
+
 namespace ClinicEz.Clinic.Api.Controllers;
 
 [ApiController]
@@ -19,10 +24,17 @@ namespace ClinicEz.Clinic.Api.Controllers;
 public sealed class LabOrdersController : ControllerBase
 {
     private readonly ISender _sender;
+    private readonly IClinicDocumentPdfService _pdfService;
+    private readonly IRepository<ClinicSettings> _settingsRepo;
 
-    public LabOrdersController(ISender sender)
+    public LabOrdersController(
+        ISender sender,
+        IClinicDocumentPdfService pdfService,
+        IRepository<ClinicSettings> settingsRepo)
     {
         _sender = sender;
+        _pdfService = pdfService;
+        _settingsRepo = settingsRepo;
     }
 
     [HttpGet]
@@ -45,6 +57,24 @@ public sealed class LabOrdersController : ControllerBase
     {
         var result = await _sender.Send(new GetClinicLabOrderSlipQuery(id), ct);
         return Ok(ApiResponse<LabOrderSlipDto>.Success(result));
+    }
+
+    [HttpGet("{id}/slip-pdf")]
+    [HasPermission(ClinicPermissions.LabOrdersRead)]
+    public async Task<IActionResult> DownloadLabOrderSlipPdf(
+        [FromRoute] Guid id,
+        CancellationToken ct)
+    {
+        var slip = await _sender.Send(new GetClinicLabOrderSlipQuery(id), ct);
+        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new ClinicSettings
+        {
+            TenantId = "default",
+            ClinicId = Guid.Empty,
+            ClinicName = slip.ClinicName
+        };
+
+        var pdfBytes = _pdfService.GenerateLabRequisitionSlipPdf(slip, settings);
+        return File(pdfBytes, "application/pdf", $"LabRequisition-{slip.OrderNumber}.pdf");
     }
 
     [HttpPost]

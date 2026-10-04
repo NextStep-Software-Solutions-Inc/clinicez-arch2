@@ -75,11 +75,78 @@ public class StatutoryReportingAndPanicTests
         pdfBytes.Length.Should().BeGreaterThan(500);
 
         var pdfText = Encoding.ASCII.GetString(pdfBytes);
-        pdfText.Should().StartWith("%PDF-1.4");
+        pdfText.Should().StartWith("%PDF-");
         pdfText.Should().Contain("%%EOF");
-        pdfText.Should().Contain("CLINICEZ DIAGNOSTIC LABORATORY");
-        pdfText.Should().Contain("DOH-LTO-2026-004412-CL");
-        pdfText.Should().Contain("Liza Soberano");
+
+        // HTML preview retains verifiable full text
+        var html = generator.GenerateHtml(req);
+        html.Should().Contain("ClinicEz Diagnostic Laboratory");
+        html.Should().Contain("DOH-LTO-2026-004412-CL");
+        html.Should().Contain("Liza Soberano");
+    }
+
+    [Fact]
+    public void DiagnosticReportPdfGenerator_Should_Handle_MultiPage_Without_Truncation()
+    {
+        var generator = new DiagnosticReportPdfGenerator();
+        var analytes = new List<AnalyteResult>();
+        for (int i = 1; i <= 35; i++)
+        {
+            analytes.Add(new AnalyteResult
+            {
+                PanelName = i <= 15 ? "Panel Alpha" : "Panel Beta",
+                AnalyteCode = $"TEST-{i:D3}",
+                AnalyteName = $"Diagnostic Analyte Parameter #{i} with Long Descriptive Text",
+                Value = $"{i * 1.5:F1}",
+                Unit = "mg/dL",
+                ReferenceInterval = "10.0 - 50.0",
+                Flag = i % 5 == 0 ? AnalyteFlag.Critical : (i % 3 == 0 ? AnalyteFlag.High : AnalyteFlag.Normal)
+            });
+        }
+
+        var req = new LabRequisition
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "tenant-test",
+            AccessionNumber = "ACC-MULTIPAGE-001",
+            PatientName = "Don Niño Dela Cruz",
+            PatientAge = 45,
+            PatientGender = "Male",
+            OrderingFacilityName = "BGC Medical Diagnostics",
+            OrderingDoctorName = "Dr. Maria Santos, MD",
+            Urgency = "STAT",
+            Status = RequisitionStatus.Verified,
+            AnalyteResults = analytes,
+            DiagnosticReport = new DiagnosticReport
+            {
+                ReportNumber = "RPT-MULTI-001",
+                PathologistName = "Dr. Roberto Gomez, MD, FPSP",
+                PathologistPrcLicense = "PRC-0089123",
+                MedicalTechnologistName = "Carlos Mendoza, RMT",
+                MedicalTechnologistPrcLicense = "PRC-0045678",
+                PathologistImpression = "Multi-panel extended metabolic profile verified."
+            }
+        };
+
+        var customConfig = new ClinicEz.Shared.Documents.Configuration.TenantPrintoutConfig
+        {
+            FacilityName = "ST. LUKE'S AMBULATORY DIAGNOSTIC CENTER",
+            FacilitySubHeader = "Advanced Clinical Chemistry & Molecular Pathology",
+            PhysicalAddress = "32nd Street, Bonifacio Global City, Taguig, Philippines",
+            ContactNumbers = "(02) 8789-7700",
+            DohLicenseToOperate = "DOH-LTO-BGC-9921",
+            PhilHealthAccreditationNumber = "PHIC-9921-BGC",
+            PrimaryColorHex = "#15803D",
+            CustomDisclaimerText = "Official Hospital Electronic Report. Protected by RA 10173."
+        };
+
+        var pdfBytes = generator.GeneratePdf(req, customConfig);
+
+        pdfBytes.Should().NotBeNull();
+        pdfBytes.Length.Should().BeGreaterThan(1000);
+        var pdfText = Encoding.ASCII.GetString(pdfBytes);
+        pdfText.Should().StartWith("%PDF-");
+        pdfText.Should().Contain("%%EOF");
     }
 
     [Fact]

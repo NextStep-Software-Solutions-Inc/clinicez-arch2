@@ -8,7 +8,7 @@ namespace ClinicEz.Pharmacy.Domain.Entities;
 
 public sealed class GamotBeneficiaryLedger : BaseEntity
 {
-    public const decimal DefaultAnnualAllocation = 9000.00m; // PHP 9,000.00 per PhilHealth Circular No. 2025-0013
+    public const decimal DefaultAnnualAllocation = 20000.00m; // PHP 20,000.00 per PhilHealth expanded GAMOT outpatient benefit policy
 
     public GamotBeneficiaryLedger() { }
 

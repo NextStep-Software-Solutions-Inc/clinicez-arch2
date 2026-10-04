@@ -27,6 +27,7 @@ export const syncQueue = sqliteTable('sync_queue', {
       'patient_male_reproductive',
       'patient_dental_vision',
       'patient_mental_health_profile',
+      'patient_ncd_questionnaire',
       'file',
       'file_folder',
       'clinic_memberships',

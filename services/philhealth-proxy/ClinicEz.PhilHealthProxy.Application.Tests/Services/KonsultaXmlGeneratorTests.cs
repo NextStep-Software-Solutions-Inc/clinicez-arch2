@@ -53,6 +53,144 @@ public sealed class KonsultaXmlGeneratorTests
     }
 
     [Fact]
+    public void GenerateTranche1Xml_PediatricMale_ShouldProduceDtdValidXml()
+    {
+        // Pediatric boy (age 3) with child immunizations, length & head circ
+        var baseDoc = CreateSampleDocument();
+        var pediatricProfile = baseDoc.Profiles[0] with
+        {
+            PatientAge = "3 YR(S), 2 MO(S), 10 DAY(S)",
+            Immunizations = new[] { new YakapImmunization("BCG", "", "", "", "") },
+            MenstrualHistory = new YakapMenstrualHistory("0", "", "0", "0", "0", "0", "", "", "", "N"),
+            PregnancyHistory = new YakapPregnancyHistory("0", "0", "X", "0", "0", "0", "0", "N", "N", "N"),
+            PhysicalExam = new YakapPhysicalExamPertinent("90", "60", "95", "22", "36.8", "95", "14", "15.5",
+                Length: "95", HeadCirc: "49", MidUpperArmCirc: "14.5", ZScore: "0"),
+            SocialHistory = new YakapSocialHistory("N", "", "N", "", "N", "N")
+        };
+
+        var doc = baseDoc with { Profiles = new[] { pediatricProfile } };
+        var xml = _generator.GenerateTranche1Xml(doc);
+
+        xml.Should().NotBeNullOrWhiteSpace();
+        xml.Should().Contain("pChildImmcode=\"BCG\"");
+        xml.Should().Contain("pLength=\"95\"");
+        xml.Should().Contain("pHeadCirc=\"49\"");
+
+        var valResult = _validator.ValidateReportXml(xml);
+        valResult.IsValid.Should().BeTrue(string.Join("; ", valResult.Errors.Select(e => e.Message)));
+    }
+
+    [Fact]
+    public void GenerateTranche1Xml_AdolescentFemale_ShouldProduceDtdValidXml()
+    {
+        // Adolescent girl (age 14) with active menstrual history and HPV immunization
+        var baseDoc = CreateSampleDocument();
+        var teenProfile = baseDoc.Profiles[0] with
+        {
+            PatientAge = "14 YR(S), 6 MO(S), 0 DAY(S)",
+            Immunizations = new[] { new YakapImmunization("", "HPV", "", "", "") },
+            MenstrualHistory = new YakapMenstrualHistory("12", "2026-09-15", "4", "28", "3", "0", "None", "N", "", "Y"),
+            PregnancyHistory = new YakapPregnancyHistory("0", "0", "X", "0", "0", "0", "0", "N", "N", "N"),
+            PhysicalExam = new YakapPhysicalExamPertinent("110", "70", "78", "18", "36.6", "155", "48", "20.0", Waist: "65", Hip: "85"),
+            SocialHistory = new YakapSocialHistory("N", "", "N", "", "N", "N")
+        };
+
+        var doc = baseDoc with { Profiles = new[] { teenProfile } };
+        var xml = _generator.GenerateTranche1Xml(doc);
+
+        xml.Should().NotBeNullOrWhiteSpace();
+        xml.Should().Contain("pYoungwImmcode=\"HPV\"");
+        xml.Should().Contain("pMenarchePeriod=\"12\"");
+
+        var valResult = _validator.ValidateReportXml(xml);
+        valResult.IsValid.Should().BeTrue(string.Join("; ", valResult.Errors.Select(e => e.Message)));
+    }
+
+    [Fact]
+    public void GenerateTranche1Xml_AdultFemalePregnant_ShouldProduceDtdValidXml()
+    {
+        // Pregnant woman (age 28, Gravida 2, Para 1) with TT immunization
+        var baseDoc = CreateSampleDocument();
+        var pregProfile = baseDoc.Profiles[0] with
+        {
+            PatientAge = "28 YR(S), 1 MO(S), 5 DAY(S)",
+            Immunizations = new[] { new YakapImmunization("", "", "TT", "", "") },
+            MenstrualHistory = new YakapMenstrualHistory("13", "2026-04-10", "3", "28", "2", "20", "None", "N", "", "Y"),
+            PregnancyHistory = new YakapPregnancyHistory("2", "1", "V", "1", "0", "0", "1", "N", "Y", "Y"),
+            PhysicalExam = new YakapPhysicalExamPertinent("115", "75", "80", "18", "36.5", "160", "62", "24.2", Waist: "88", Hip: "96")
+        };
+
+        var doc = baseDoc with { Profiles = new[] { pregProfile } };
+        var xml = _generator.GenerateTranche1Xml(doc);
+
+        xml.Should().NotBeNullOrWhiteSpace();
+        xml.Should().Contain("pPregwImmcode=\"TT\"");
+        xml.Should().Contain("pPregCnt=\"2\"");
+        xml.Should().Contain("pDeliveryCnt=\"1\"");
+
+        var valResult = _validator.ValidateReportXml(xml);
+        valResult.IsValid.Should().BeTrue(string.Join("; ", valResult.Errors.Select(e => e.Message)));
+    }
+
+    [Fact]
+    public void GenerateTranche1Xml_ElderlyPatient_ShouldProduceDtdValidXml()
+    {
+        // Senior patient (age 68) with menopause and elderly flu vaccine
+        var baseDoc = CreateSampleDocument();
+        var seniorProfile = baseDoc.Profiles[0] with
+        {
+            PatientAge = "68 YR(S), 8 MO(S), 12 DAY(S)",
+            Immunizations = new[] { new YakapImmunization("", "", "", "FLU", "") },
+            MenstrualHistory = new YakapMenstrualHistory("13", "", "0", "0", "0", "22", "None", "Y", "50", "Y"),
+            PregnancyHistory = new YakapPregnancyHistory("3", "3", "V", "3", "0", "0", "3", "N", "Y", "Y"),
+            PhysicalExam = new YakapPhysicalExamPertinent("135", "85", "70", "16", "36.4", "152", "55", "23.8", Waist: "82", Hip: "92")
+        };
+
+        var doc = baseDoc with { Profiles = new[] { seniorProfile } };
+        var xml = _generator.GenerateTranche1Xml(doc);
+
+        xml.Should().NotBeNullOrWhiteSpace();
+        xml.Should().Contain("pElderlyImmcode=\"FLU\"");
+        xml.Should().Contain("pIsMenopause=\"Y\"");
+        xml.Should().Contain("pMenopauseAge=\"50\"");
+
+        var valResult = _validator.ValidateReportXml(xml);
+        valResult.IsValid.Should().BeTrue(string.Join("; ", valResult.Errors.Select(e => e.Message)));
+    }
+
+    [Fact]
+    public void GenerateTranche1Xml_EmptyCollections_ShouldProduceDtdValidXml_ViaDefensiveFallbacks()
+    {
+        // Profile with empty lists (simulating patient with no prior history recorded)
+        var baseDoc = CreateSampleDocument();
+        var emptyProfile = baseDoc.Profiles[0] with
+        {
+            MedicalHistories = Array.Empty<YakapMedicalHistory>(),
+            MedicalSpecifics = Array.Empty<YakapSpecificHistory>(),
+            SurgicalHistories = Array.Empty<YakapSurgicalHistory>(),
+            FamilyHistories = Array.Empty<YakapMedicalHistory>(),
+            FamilySpecifics = Array.Empty<YakapSpecificHistory>(),
+            Immunizations = Array.Empty<YakapImmunization>(),
+            PhysicalExamMiscs = Array.Empty<YakapPhysicalExamMisc>()
+        };
+
+        var doc = baseDoc with { Profiles = new[] { emptyProfile } };
+        var xml = _generator.GenerateTranche1Xml(doc);
+
+        xml.Should().NotBeNullOrWhiteSpace();
+        // Fallbacks must be emitted
+        xml.Should().Contain("<MEDHIST pMdiseaseCode=\"99\"");
+        xml.Should().Contain("<MHSPECIFIC pMdiseaseCode=\"99\" pSpecificDesc=\"None\"");
+        xml.Should().Contain("<SURGHIST pSurgDesc=\"None\"");
+        xml.Should().Contain("<FAMHIST pMdiseaseCode=\"99\"");
+        xml.Should().Contain("<FHSPECIFIC pMdiseaseCode=\"99\" pSpecificDesc=\"None\"");
+        xml.Should().Contain("<PEMISC pSkinId=\"1\"");
+
+        var valResult = _validator.ValidateReportXml(xml);
+        valResult.IsValid.Should().BeTrue(string.Join("; ", valResult.Errors.Select(e => e.Message)));
+    }
+
+    [Fact]
     public void FormatAgeString_ShouldComputeCorrectAge()
     {
         var dob = new DateTime(2000, 5, 10);
@@ -83,7 +221,7 @@ public sealed class KonsultaXmlGeneratorTests
         KonsultaXmlGenerator.FormatSoapTransNumber(accreNo, date, 1).Should().Be("SH9000000120261000001");
     }
 
-    private static YakapReportDocument CreateSampleDocument()
+    public static YakapReportDocument CreateSampleDocument()
     {
         return new YakapReportDocument(
             Username: "H90000001",
@@ -142,8 +280,8 @@ public sealed class KonsultaXmlGeneratorTests
                     FamilySpecifics: new[] { new YakapSpecificHistory("006", "Type 2 Diabetes") },
                     SocialHistory: new YakapSocialHistory("N", "", "N", "", "N", "Y"),
                     Immunizations: new[] { new YakapImmunization("", "", "", "999", "") },
-                    MenstrualHistory: new YakapMenstrualHistory("0", "", "0", "0", "0", "0", "", "", "", "N"),
-                    PregnancyHistory: new YakapPregnancyHistory("0", "0", "X", "0", "0", "0", "0", "N", "N", "N"),
+                    MenstrualHistory: new YakapMenstrualHistory("", "", "", "", "", "", "", "N", "", "N"),
+                    PregnancyHistory: new YakapPregnancyHistory("", "", "", "", "", "", "", "", "", "N"),
                     PhysicalExam: new YakapPhysicalExamPertinent("120", "80", "72", "18", "36.5", "170", "68", "23.5"),
                     BloodType: "O+",
                     GenSurveyId: "1",
@@ -157,7 +295,7 @@ public sealed class KonsultaXmlGeneratorTests
             Medicines: Array.Empty<YakapMedicine>());
     }
 
-    private static YakapReportDocument CreateSampleDocumentWithSoapAndMeds()
+    public static YakapReportDocument CreateSampleDocumentWithSoapAndMeds()
     {
         var baseDoc = CreateSampleDocument();
         return baseDoc with

@@ -24,7 +24,10 @@ public sealed record UpdateClinicSettingsCommand(
     string? LetterheadSubHeader,
     string? LetterheadAddress,
     string? LetterheadContact,
-    string? LetterheadFooter) : IRequest<ClinicSettingsDto>;
+    string? LetterheadFooter,
+    string? PrimaryColorHex = null,
+    string? PrimaryLogoUrl = null,
+    string? PaperSize = null) : IRequest<ClinicSettingsDto>;
 
 public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateClinicSettingsCommand, ClinicSettingsDto>
 {
@@ -75,6 +78,12 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         settings.LetterheadAddress = request.LetterheadAddress?.Trim();
         settings.LetterheadContact = request.LetterheadContact?.Trim();
         settings.LetterheadFooter = request.LetterheadFooter?.Trim();
+        if (!string.IsNullOrWhiteSpace(request.PrimaryColorHex))
+            settings.PrimaryColorHex = request.PrimaryColorHex.Trim();
+        if (request.PrimaryLogoUrl != null)
+            settings.PrimaryLogoUrl = request.PrimaryLogoUrl.Trim();
+        if (!string.IsNullOrWhiteSpace(request.PaperSize))
+            settings.PaperSize = request.PaperSize.Trim();
         settings.UpdatedAt = DateTime.UtcNow;
         settings.UpdatedBy = "ClinicAdmin";
 
@@ -101,6 +110,15 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
             settings.LicenseToken,
             settings.PlanTier,
             settings.MaxStaffLimit,
-            settings.LicenseExpiresAt);
+            settings.LicenseExpiresAt,
+            settings.PmccNumber,
+            settings.SoftwareCertificateId,
+            settings.KonsultaEndpoint,
+            settings.IsPhilHealthConfigured,
+            settings.PrimaryColorHex,
+            settings.PrimaryLogoUrl,
+            settings.PaperSize);
     }
 }
+
+

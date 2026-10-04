@@ -24,6 +24,7 @@ public sealed class PhilHealthSoapClient(
     ITenantRepository tenantRepository,
     IDataProtectionProvider dataProtectionProvider,
     IPhilHealthTokenCache tokenCache,
+    ISoapSandboxService soapSandboxService,
     ILogger<PhilHealthSoapClient> logger)
     : IPhilHealthSoapClient
 {
@@ -297,6 +298,15 @@ public sealed class PhilHealthSoapClient(
             request.Headers.Add("Token", token);
 
         logger.LogDebug("Sending SOAP {Action} to {Endpoint}", soapAction, endpoint);
+
+        // In sandbox/simulator mode, handle locally without network I/O
+        if (endpoint.Contains("sandbox", StringComparison.OrdinalIgnoreCase) ||
+            endpoint.Contains("simulator", StringComparison.OrdinalIgnoreCase) ||
+            endpoint.EndsWith("/soap/konsulta", StringComparison.OrdinalIgnoreCase))
+        {
+            logger.LogInformation("Routing SOAP action [{Action}] to in-memory SOAP Sandbox Simulator", soapAction);
+            return await soapSandboxService.HandleSoapActionAsync(soapAction, xmlString, token, cancellationToken);
+        }
 
         HttpResponseMessage response;
         try

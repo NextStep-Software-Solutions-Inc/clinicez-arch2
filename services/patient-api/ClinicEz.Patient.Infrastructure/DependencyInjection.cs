@@ -161,6 +161,7 @@ public static class DependencyInjection
         services.AddScoped<ISyncEntityProcessor, PatientOccupationSyncProcessor>();
         services.AddScoped<ISyncEntityProcessor, PatientTravelHistorySyncProcessor>();
         services.AddScoped<ISyncEntityProcessor, PatientDentalVisionSyncProcessor>();
+        services.AddScoped<ISyncEntityProcessor, PatientNcdQuestionnaireSyncProcessor>();
         // Files
         services.AddScoped<ISyncEntityProcessor, FileFolderSyncProcessor>();
         services.AddScoped<ISyncEntityProcessor, FileRecordSyncProcessor>();

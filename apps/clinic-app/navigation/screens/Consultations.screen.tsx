@@ -2110,12 +2110,29 @@ export default function ConsultationsScreen() {
               </View>
             </ScrollView>
 
-            <Pressable
-              style={{ backgroundColor: '#0284C7', paddingVertical: 10, borderRadius: 8, alignItems: 'center' }}
-              onPress={() => setPreviewDocModal(false)}
-            >
-              <ThemedText style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 13 }}>Done / Close Preview</ThemedText>
-            </Pressable>
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+              {previewType === 'MEDCERT' && issuedMedCert && (
+                <Pressable
+                  style={{ flex: 1, backgroundColor: '#15803D', paddingVertical: 10, borderRadius: 8, alignItems: 'center' }}
+                  onPress={async () => {
+                    const url = clinicService.getMedicalCertificatePdfUrl(issuedMedCert.id);
+                    try {
+                      await Linking.openURL(url);
+                    } catch {
+                      Alert.alert('Download Error', 'Could not open medical certificate PDF. Please check connection and try again.');
+                    }
+                  }}
+                >
+                  <ThemedText style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 13 }}>📄 Download Official PDF</ThemedText>
+                </Pressable>
+              )}
+              <Pressable
+                style={{ flex: 1, backgroundColor: '#0284C7', paddingVertical: 10, borderRadius: 8, alignItems: 'center' }}
+                onPress={() => setPreviewDocModal(false)}
+              >
+                <ThemedText style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 13 }}>Done / Close Preview</ThemedText>
+              </Pressable>
+            </View>
           </View>
         </View>
       </Modal>

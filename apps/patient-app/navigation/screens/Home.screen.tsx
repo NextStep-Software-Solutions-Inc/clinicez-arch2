@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FlatList, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useNavigation, useTheme } from '@react-navigation/native';
 import { useUser } from '@clerk/expo';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -13,6 +13,11 @@ import { getHomeDashboard } from '../../services/discovery/discoveryService';
 import { HomeDashboard, HealthMetric, AppointmentLineupItem } from '../../services/discovery/types';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { db } from '@db/index';
+import { prescriptions } from '@db/schema/prescriptions';
+import { patientGovernmentIds } from '@db/schema/patientGovernmentIds';
+import { patientNcdQuestionnaire } from '@db/schema/patientNcdQuestionnaire';
+import { eq } from 'drizzle-orm';
 
 function MetricCard({ metric }: { metric: HealthMetric }) {
   const { colors } = useTheme();
@@ -73,13 +78,17 @@ function AppointmentCard({ item, onPress }: { item: AppointmentLineupItem; onPre
 
 export default function HomeScreen() {
   const { colors, dark: isDark } = useTheme();
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const { user } = useUser();
   const patientId = usePatientId();
   const [dashboard, setDashboard] = useState<HomeDashboard | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [gamotUsed, setGamotUsed] = useState(0);
+  const [hasNcd, setHasNcd] = useState(false);
+  const [philhealthPin, setPhilhealthPin] = useState<string | null>(null);
   const inset = useSafeAreaInsets();
   const tabBarHeight = (useBottomTabBarHeight?.() || 96) + inset.bottom;
+
   useEffect(() => {
     let mounted = true;
     const load = () => {
@@ -91,6 +100,40 @@ export default function HomeScreen() {
         .finally(() => {
           if (mounted) setIsLoading(false);
         });
+
+      if (patientId) {
+        db.select()
+          .from(prescriptions)
+          .where(eq(prescriptions.patientId, patientId))
+          .then((rxs) => {
+            if (!mounted) return;
+            const total = rxs
+              .filter((r) => r.isPhilHealthGamot)
+              .reduce((sum, r) => sum + (r.gamotCoverageAmount ?? 0), 0);
+            setGamotUsed(total);
+          })
+          .catch(console.error);
+
+        db.select()
+          .from(patientNcdQuestionnaire)
+          .where(eq(patientNcdQuestionnaire.patientId, patientId))
+          .then((rows) => {
+            if (!mounted) return;
+            setHasNcd(rows.length > 0 && !!rows[0].qid1Yn);
+          })
+          .catch(console.error);
+
+        db.select()
+          .from(patientGovernmentIds)
+          .where(eq(patientGovernmentIds.patientId, patientId))
+          .then((rows) => {
+            if (!mounted) return;
+            if (rows.length > 0 && rows[0].philhealthId) {
+              setPhilhealthPin(rows[0].philhealthId);
+            }
+          })
+          .catch(console.error);
+      }
     };
 
     load();
@@ -128,6 +171,69 @@ export default function HomeScreen() {
         ) : (
           dashboard?.healthMetrics.map((metric) => <MetricCard key={metric.label} metric={metric} />)
         )}
+      </ThemedView>
+
+      {/* PhilHealth YAKAP & GAMOT ₱20,000 Benefit Tracker Card */}
+      <ThemedView style={[styles.yakapCard, { borderColor: colors.border, backgroundColor: colors.card }]}>
+        <View style={styles.yakapCardTop}>
+          <View style={styles.yakapHeaderLeft}>
+            <ThemedText style={{ fontSize: 24 }}>🇵🇭</ThemedText>
+            <View>
+              <ThemedText style={styles.yakapCardTitle}>PhilHealth YAKAP Benefit</ThemedText>
+              <ThemedText style={[styles.yakapCardSubtitle, { color: colors.text }]}>
+                {philhealthPin ? `PIN: ${philhealthPin} • Mod-11 Verified` : 'Link PhilHealth PIN in Government IDs'}
+              </ThemedText>
+            </View>
+          </View>
+          <View style={styles.yakapBudgetBadge}>
+            <ThemedText style={styles.yakapBudgetBadgeText}>₱20,000/yr</ThemedText>
+          </View>
+        </View>
+
+        <View style={styles.yakapProgressSection}>
+          <View style={styles.yakapProgressLabels}>
+            <ThemedText style={styles.yakapProgressTitle}>GAMOT Outpatient Drug Allocation</ThemedText>
+            <ThemedText style={styles.yakapProgressPercent}>
+              {Math.min(100, Math.round((gamotUsed / 20000) * 100))}% used
+            </ThemedText>
+          </View>
+          <View style={[styles.progressBarTrack, { backgroundColor: isDark ? '#334155' : '#E2E8F0' }]}>
+            <View
+              style={[
+                styles.progressBarFill,
+                {
+                  width: `${Math.min(100, Math.max(gamotUsed > 0 ? 3 : 0, Math.round((gamotUsed / 20000) * 100)))}%`,
+                  backgroundColor: '#10B981',
+                },
+              ]}
+            />
+          </View>
+          <View style={styles.yakapProgressLabels}>
+            <ThemedText style={styles.yakapBalanceSub}>
+              Claimed: ₱{gamotUsed.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </ThemedText>
+            <ThemedText style={[styles.yakapBalanceSub, { fontWeight: '700', color: '#10B981' }]}>
+              Balance: ₱{Math.max(0, 20000 - gamotUsed).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </ThemedText>
+          </View>
+        </View>
+
+        <View style={styles.yakapActionRow}>
+          <Pressable
+            style={[styles.yakapActionButton, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9', borderColor: colors.border }]}
+            onPress={() => navigation.navigate('Main', { screen: 'NcdQuestionnaireScreen' })}
+          >
+            <ThemedText style={styles.yakapActionText}>
+              {hasNcd ? '📋 Review NCD (24 Qs)' : '📋 Fill NCD Assessment'}
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            style={[styles.yakapActionButton, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9', borderColor: colors.border }]}
+            onPress={() => navigation.navigate('Main', { screen: 'PrescriptionsScreen' })}
+          >
+            <ThemedText style={styles.yakapActionText}>💊 Digital Rx (UPSC QR)</ThemedText>
+          </Pressable>
+        </View>
       </ThemedView>
 
       <SettingsSection title="Quick Actions">
@@ -354,5 +460,88 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     lineHeight: 20,
+  },
+  yakapCard: {
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 16,
+    gap: 14,
+  },
+  yakapCardTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  yakapHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  yakapCardTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  yakapCardSubtitle: {
+    fontSize: 12,
+    opacity: 0.7,
+  },
+  yakapBudgetBadge: {
+    backgroundColor: '#0284C7',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  yakapBudgetBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  yakapProgressSection: {
+    gap: 6,
+  },
+  yakapProgressLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  yakapProgressTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    opacity: 0.85,
+  },
+  yakapProgressPercent: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0284C7',
+  },
+  progressBarTrack: {
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  yakapBalanceSub: {
+    fontSize: 12,
+    opacity: 0.8,
+  },
+  yakapActionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 2,
+  },
+  yakapActionButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  yakapActionText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

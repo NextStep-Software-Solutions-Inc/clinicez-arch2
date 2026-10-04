@@ -147,4 +147,140 @@ public sealed class PhilHealthProxyClient : IPhilHealthProxyClient
             return ApiResponse<IReadOnlyList<YakapCatalogItemDto>>.Fail(ex.Message);
         }
     }
+
+    public async Task<ApiResponse<SoapSimulationReportDto>> RunSoapSimulationAsync(
+        RunSoapSimulationProxyRequest request,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var url = $"{_baseUrl}/api/soap-sandbox/run-e2e";
+            _logger.LogInformation("[PhilHealthProxy] Calling run SOAP sandbox simulation: {Url}", url);
+
+            var response = await _httpClient.PostAsJsonAsync(url, request, ct);
+            var content = await response.Content.ReadFromJsonAsync<ApiResponse<SoapSimulationReportDto>>(JsonOptions, ct);
+
+            return content ?? ApiResponse<SoapSimulationReportDto>.Fail($"Empty response from proxy (HTTP {(int)response.StatusCode})");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[PhilHealthProxy] Error calling RunSoapSimulationAsync");
+            return ApiResponse<SoapSimulationReportDto>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<ApiResponse<SoapSandboxStatusDto>> GetSoapSandboxStatusAsync(
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var url = $"{_baseUrl}/api/soap-sandbox/status";
+            var response = await _httpClient.GetFromJsonAsync<ApiResponse<SoapSandboxStatusDto>>(url, JsonOptions, ct);
+            return response ?? ApiResponse<SoapSandboxStatusDto>.Fail("Empty response from proxy");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[PhilHealthProxy] Error calling GetSoapSandboxStatusAsync");
+            return ApiResponse<SoapSandboxStatusDto>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<ApiResponse<SoapSandboxStatusDto>> SetSoapSandboxScenarioAsync(
+        SetSimulationScenarioRequest request,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var url = $"{_baseUrl}/api/soap-sandbox/scenario";
+            var response = await _httpClient.PostAsJsonAsync(url, request, ct);
+            var content = await response.Content.ReadFromJsonAsync<ApiResponse<SoapSandboxStatusDto>>(JsonOptions, ct);
+            return content ?? ApiResponse<SoapSandboxStatusDto>.Fail($"Empty response from proxy (HTTP {(int)response.StatusCode})");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[PhilHealthProxy] Error calling SetSoapSandboxScenarioAsync");
+            return ApiResponse<SoapSandboxStatusDto>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<ApiResponse<SoapSandboxStatusDto>> ResetSoapSandboxAsync(
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var url = $"{_baseUrl}/api/soap-sandbox/reset";
+            var response = await _httpClient.PostAsync(url, null, ct);
+            var content = await response.Content.ReadFromJsonAsync<ApiResponse<SoapSandboxStatusDto>>(JsonOptions, ct);
+            return content ?? ApiResponse<SoapSandboxStatusDto>.Fail($"Empty response from proxy (HTTP {(int)response.StatusCode})");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[PhilHealthProxy] Error calling ResetSoapSandboxAsync");
+            return ApiResponse<SoapSandboxStatusDto>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<ApiResponse<PhilHealthConfigStatusResponse>> ConfigureTenantCredentialsAsync(
+        ConfigurePhilHealthCredentialsProxyRequest request,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var url = $"{_baseUrl}/api/tenants/configure";
+            _logger.LogInformation("[PhilHealthProxy] Calling configure tenant credentials: {Url}", url);
+
+            var response = await _httpClient.PostAsJsonAsync(url, request, ct);
+            var content = await response.Content.ReadFromJsonAsync<ApiResponse<PhilHealthConfigStatusResponse>>(JsonOptions, ct);
+
+            return content ?? ApiResponse<PhilHealthConfigStatusResponse>.Fail(
+                $"Empty response from proxy (HTTP {(int)response.StatusCode})");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[PhilHealthProxy] Error calling ConfigureTenantCredentialsAsync");
+            return ApiResponse<PhilHealthConfigStatusResponse>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<ApiResponse<PhilHealthConfigStatusResponse>> GetTenantConfigurationStatusAsync(
+        Guid? tenantId = null,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var url = tenantId.HasValue && tenantId.Value != Guid.Empty
+                ? $"{_baseUrl}/api/tenants/status?tenantId={tenantId.Value}"
+                : $"{_baseUrl}/api/tenants/status";
+
+            var response = await _httpClient.GetFromJsonAsync<ApiResponse<PhilHealthConfigStatusResponse>>(url, JsonOptions, ct);
+            return response ?? ApiResponse<PhilHealthConfigStatusResponse>.Fail("Empty response from proxy");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[PhilHealthProxy] Error calling GetTenantConfigurationStatusAsync");
+            return ApiResponse<PhilHealthConfigStatusResponse>.Fail(ex.Message);
+        }
+    }
+
+    public async Task<ApiResponse<string>> TestTenantConnectionAsync(
+        Guid? tenantId = null,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var url = tenantId.HasValue && tenantId.Value != Guid.Empty
+                ? $"{_baseUrl}/api/tenants/test-connection?tenantId={tenantId.Value}"
+                : $"{_baseUrl}/api/tenants/test-connection";
+
+            var response = await _httpClient.PostAsync(url, null, ct);
+            var content = await response.Content.ReadFromJsonAsync<ApiResponse<string>>(JsonOptions, ct);
+            return content ?? ApiResponse<string>.Fail($"Empty response from proxy (HTTP {(int)response.StatusCode})");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[PhilHealthProxy] Error calling TestTenantConnectionAsync");
+            return ApiResponse<string>.Fail(ex.Message);
+        }
+    }
 }
+

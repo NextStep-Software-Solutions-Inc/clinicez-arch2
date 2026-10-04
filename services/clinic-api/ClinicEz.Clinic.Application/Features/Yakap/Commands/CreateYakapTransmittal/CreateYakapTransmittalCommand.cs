@@ -42,6 +42,7 @@ public sealed class CreateYakapTransmittalCommandHandler : IRequestHandler<Creat
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IYakapClinicalMapper _mapper;
+    private readonly IPhilHealthSequenceGenerator? _sequenceGenerator;
 
     public CreateYakapTransmittalCommandHandler(
         IRepository<YakapTransmittal> transmittalRepo,
@@ -51,7 +52,8 @@ public sealed class CreateYakapTransmittalCommandHandler : IRequestHandler<Creat
         IRepository<ClinicSettings> settingsRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
-        IYakapClinicalMapper mapper)
+        IYakapClinicalMapper mapper,
+        IPhilHealthSequenceGenerator? sequenceGenerator = null)
     {
         _transmittalRepo = transmittalRepo;
         _encounterRepo = encounterRepo;
@@ -61,6 +63,7 @@ public sealed class CreateYakapTransmittalCommandHandler : IRequestHandler<Creat
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
         _mapper = mapper;
+        _sequenceGenerator = sequenceGenerator;
     }
 
     public async Task<ApiResponse<YakapTransmittalDto>> Handle(
@@ -115,9 +118,32 @@ public sealed class CreateYakapTransmittalCommandHandler : IRequestHandler<Creat
         };
 
         var effectiveYear = request.EffectiveYear ?? DateTime.UtcNow.Year.ToString();
-        var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
-        var accreditationShort = (settings.AccreditationNumber ?? "000000000").Replace("-", string.Empty);
-        var transmittalNumber = $"RHCI{accreditationShort}{effectiveYear}{timestamp}";
+        string transmittalNumber;
+
+        if (_sequenceGenerator != null)
+        {
+            var accreClean = settings.AccreditationNumber ?? "000921";
+            transmittalNumber = await _sequenceGenerator.GenerateTransmittalNumberAsync(
+                tenantId, clinicId, accreClean, effectiveYear, cancellationToken);
+
+            foreach (var p in patientsList)
+            {
+                await _sequenceGenerator.AssignPatientJourneyNumbersAsync(
+                    tenantId, clinicId, p.Id, null, accreClean, effectiveYear, cancellationToken);
+            }
+
+            foreach (var enc in encounters)
+            {
+                await _sequenceGenerator.AssignPatientJourneyNumbersAsync(
+                    tenantId, clinicId, enc.PatientId, enc.Id, accreClean, effectiveYear, cancellationToken);
+            }
+        }
+        else
+        {
+            var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
+            var accreditationShort = (settings.AccreditationNumber ?? "000000000").Replace("-", string.Empty);
+            transmittalNumber = $"RHCI{accreditationShort}{effectiveYear}{timestamp}";
+        }
 
         // 5. Generate mapping document
         _mapper.MapToYakapReportDocument(

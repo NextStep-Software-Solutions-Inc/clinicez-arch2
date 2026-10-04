@@ -23,7 +23,14 @@ import {
   GamotFormularyItem,
   UpscVerifyResult,
   YakapMasterlistAssignment,
+  SoapSimulationReport,
+  SoapSimulationStepResult,
+  SoapSimulationScenario,
+  SoapSandboxStatus,
+  PhilHealthCredentialPayload,
+  PhilHealthConfigStatus,
 } from '../../services/clinicService';
+
 
 // Sample fallback transmittals for immediate demonstration
 const SAMPLE_TRANSMITTALS: YakapTransmittal[] = [
@@ -120,7 +127,7 @@ export default function YakapScreen() {
   const navigation = useNavigation<any>();
 
   // State
-  const [activeTab, setActiveTab] = useState<'transmittals' | 'gamot' | 'masterlist' | 'pin-checker'>('transmittals');
+  const [activeTab, setActiveTab] = useState<'transmittals' | 'gamot' | 'masterlist' | 'pin-checker' | 'simulation'>('transmittals');
   const [transmittals, setTransmittals] = useState<YakapTransmittal[]>(SAMPLE_TRANSMITTALS);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -157,6 +164,159 @@ export default function YakapScreen() {
   // Real-time PIN Checker State
   const [pinToCheck, setPinToCheck] = useState('');
   const [pinValidationResult, setPinValidationResult] = useState<{ isValid?: boolean; formatted?: string; error?: string } | null>(null);
+
+  // SOAP Sandbox Simulation State
+  const [simulationScenario, setSimulationScenario] = useState<SoapSimulationScenario>('HappyPath');
+  const [simulationReport, setSimulationReport] = useState<SoapSimulationReport | null>(null);
+  const [isRunningSimulation, setIsRunningSimulation] = useState(false);
+  const [expandedStepIndex, setExpandedStepIndex] = useState<number | null>(null);
+  const [sandboxStatus, setSandboxStatus] = useState<SoapSandboxStatus | null>(null);
+  const [isResettingSandbox, setIsResettingSandbox] = useState(false);
+  const [activePayloadTab, setActivePayloadTab] = useState<'request' | 'response'>('response');
+
+  // PhilHealth Credentials State
+  const [isCredentialsModalVisible, setIsCredentialsModalVisible] = useState(false);
+  const [isSavingCredentials, setIsSavingCredentials] = useState(false);
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [testConnectionResult, setTestConnectionResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [credFacilityName, setCredFacilityName] = useState('');
+  const [credAccreditationNo, setCredAccreditationNo] = useState('');
+  const [credPmccNo, setCredPmccNo] = useState('');
+  const [credSoftwareCertId, setCredSoftwareCertId] = useState('');
+  const [credUsername, setCredUsername] = useState('');
+  const [credPassword, setCredPassword] = useState('');
+  const [credCipherKey, setCredCipherKey] = useState('');
+  const [credEndpoint, setCredEndpoint] = useState('/soap/konsulta');
+  const [philHealthConfigStatus, setPhilHealthConfigStatus] = useState<PhilHealthConfigStatus | null>(null);
+
+  const fetchPhilHealthConfigStatus = useCallback(async () => {
+    const [status] = await clinicService.getPhilHealthConfigStatus();
+    if (status) {
+      setPhilHealthConfigStatus(status);
+      setCredFacilityName(status.facilityName || '');
+      setCredAccreditationNo(status.accreditationNumber || '');
+      setCredPmccNo(status.pmccNumber || '');
+      setCredSoftwareCertId(status.softwareCertificateId || '');
+      setCredEndpoint(status.konsultaEndpoint || '/soap/konsulta');
+      if (status.accreditationNumber) {
+        setHciNumber(status.accreditationNumber);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPhilHealthConfigStatus();
+  }, [fetchPhilHealthConfigStatus]);
+
+  const handleOpenCredentials = () => {
+    fetchPhilHealthConfigStatus();
+    setTestConnectionResult(null);
+    setIsCredentialsModalVisible(true);
+  };
+
+  const handleSaveCredentials = async () => {
+    if (!credAccreditationNo.trim() || !credUsername.trim()) {
+      Alert.alert('Validation Error', 'Accreditation Number and SOAP Username are required.');
+      return;
+    }
+    if (!philHealthConfigStatus?.isConfigured && !credPassword.trim()) {
+      Alert.alert('Validation Error', 'SOAP Password is required for initial configuration.');
+      return;
+    }
+
+    setIsSavingCredentials(true);
+    const [res, err] = await clinicService.configurePhilHealthCredentials({
+      facilityName: credFacilityName.trim() || 'Accredited Health Facility',
+      accreditationNumber: credAccreditationNo.trim(),
+      pmccNumber: credPmccNo.trim(),
+      softwareCertificateId: credSoftwareCertId.trim(),
+      username: credUsername.trim(),
+      password: credPassword.trim() || undefined,
+      cipherKey: credCipherKey.trim() || undefined,
+      konsultaEndpoint: credEndpoint.trim() || '/soap/konsulta',
+    });
+    setIsSavingCredentials(false);
+
+    if (res) {
+      setPhilHealthConfigStatus(res);
+      setCredPassword('');
+      setHciNumber(res.accreditationNumber);
+      Alert.alert('Configuration Saved', 'PhilHealth SOAP credentials successfully encrypted and saved.');
+    } else {
+      Alert.alert('Save Failed', err?.message || 'Failed to save credentials.');
+    }
+  };
+
+  const handleTestConnection = async () => {
+    setIsTestingConnection(true);
+    setTestConnectionResult(null);
+    const [msg, err] = await clinicService.testPhilHealthConnection();
+    setIsTestingConnection(false);
+
+    if (msg) {
+      setTestConnectionResult({ success: true, message: msg });
+    } else {
+      setTestConnectionResult({
+        success: false,
+        message: err?.message || 'PhilHealth gateway rejected connection or credentials.',
+      });
+    }
+  };
+
+  // Fetch initial sandbox status
+  const fetchSandboxStatus = useCallback(async () => {
+
+    const [data] = await clinicService.getSoapSandboxStatus();
+    if (data) {
+      setSandboxStatus(data);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'simulation') {
+      fetchSandboxStatus();
+    }
+  }, [activeTab, fetchSandboxStatus]);
+
+  const handleScenarioChange = async (scenario: SoapSimulationScenario) => {
+    setSimulationScenario(scenario);
+    const [updated] = await clinicService.setSoapSandboxScenario(scenario);
+    if (updated) {
+      setSandboxStatus(updated);
+    }
+  };
+
+  const handleRunSimulation = async () => {
+    setIsRunningSimulation(true);
+    setSimulationReport(null);
+    setExpandedStepIndex(null);
+    const [report, err] = await clinicService.runSoapSimulation({
+      accreditationNumber: hciNumber || 'HCI-NCR-00921',
+      cipherKey: cipherKey || 'CLINICEZ-YAKAP-DEV-KEY-32BYTES!',
+    });
+    setIsRunningSimulation(false);
+    if (report) {
+      setSimulationReport(report);
+      const failedIdx = report.steps.findIndex((s) => s.status === 'Failed' || s.status === 3);
+      setExpandedStepIndex(failedIdx >= 0 ? failedIdx : 0);
+      fetchSandboxStatus();
+    } else {
+      Alert.alert('Simulation Error', err?.message || 'Failed to execute SOAP simulation.');
+    }
+  };
+
+  const handleResetSandbox = async () => {
+    setIsResettingSandbox(true);
+    const [status] = await clinicService.resetSoapSandbox();
+    setIsResettingSandbox(false);
+    if (status) {
+      setSandboxStatus(status);
+      setSimulationScenario('HappyPath');
+      setSimulationReport(null);
+      setExpandedStepIndex(null);
+      Alert.alert('Simulator Reset', 'SOAP Sandbox reset to HappyPath with zero metrics.');
+    }
+  };
 
   // Fetch Transmittals
   const fetchTransmittals = useCallback(async () => {
@@ -295,9 +455,9 @@ export default function YakapScreen() {
         patientName: 'Juan Dela Cruz',
         philHealthIdentificationNumber: searchPin.replace(/[^0-9]/g, '').padStart(12, '0'),
         benefitYear: '2026',
-        annualAllocation: 9000.0,
+        annualAllocation: 20000.0,
         totalAmountUtilized: 1845.5,
-        remainingBalance: 7154.5,
+        remainingBalance: 18154.5,
         transactions: [
           {
             id: 'txn-1',
@@ -502,14 +662,23 @@ export default function YakapScreen() {
       headerTitle="PhilHealth Yakap & GAMOT"
       headerSubtitle="PKA v1.1 transmittals, XML DTD validation, beneficiary benefit ledgers, and UPSC dispensing"
       rightAction={
-        <Button
-          title="+ New Transmittal"
-          variant="primary"
-          size="sm"
-          onPress={() => setIsNewModalVisible(true)}
-          style={styles.newBatchBtn}
-        />
+        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <Button
+            title="⚙️ Credentials"
+            variant="outline"
+            size="sm"
+            onPress={handleOpenCredentials}
+          />
+          <Button
+            title="+ New Transmittal"
+            variant="primary"
+            size="sm"
+            onPress={() => setIsNewModalVisible(true)}
+            style={styles.newBatchBtn}
+          />
+        </View>
       }
+
     >
       <ScrollView
         style={styles.container}
@@ -539,7 +708,7 @@ export default function YakapScreen() {
           />
           <StatCard
             label="GAMOT Allocation"
-            value="₱9,000"
+            value="₱20,000"
             subtext="Per Beneficiary / Year"
             icon="💊"
             style={styles.statCard}
@@ -578,6 +747,14 @@ export default function YakapScreen() {
           >
             <ThemedText style={[styles.tabText, activeTab === 'pin-checker' && styles.tabTextActive]}>
               🔍 PIN Mod-11 Tool
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            onPress={() => setActiveTab('simulation')}
+            style={[styles.tabButton, activeTab === 'simulation' && styles.tabButtonActive]}
+          >
+            <ThemedText style={[styles.tabText, activeTab === 'simulation' && styles.tabTextActive]}>
+              ⚡ SOAP Sandbox & E2E
             </ThemedText>
           </Pressable>
         </View>
@@ -766,7 +943,7 @@ export default function YakapScreen() {
                 PhilHealth GAMOT Beneficiary Ledger Lookup
               </ThemedText>
               <ThemedText variant="body" color={theme.colors.textMuted} style={{ marginBottom: 12 }}>
-                Enter the beneficiary's 12-digit PhilHealth PIN to verify available annual allocation (₱9,000.00/yr).
+                Enter the beneficiary's 12-digit PhilHealth PIN to verify available annual allocation (₱20,000.00/yr).
               </ThemedText>
               <View style={styles.searchRow}>
                 <Input
@@ -1088,6 +1265,270 @@ export default function YakapScreen() {
             </View>
           </Card>
         )}
+
+        {/* ========================================================================= */}
+        {/* TAB 5: PHILHEALTH SOAP SANDBOX SIMULATION & E2E VALIDATION               */}
+        {/* ========================================================================= */}
+        {activeTab === 'simulation' && (
+          <View style={{ gap: 16 }}>
+            {/* Control & Scenario Bar */}
+            <Card style={styles.simulationControlCard}>
+              <View style={styles.simulationHeaderRow}>
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <ThemedText variant="h3">PhilHealth SOAP 1.1 Sandbox Simulator</ThemedText>
+                    <Badge variant="success" label="EMULATED GATEWAY" />
+                  </View>
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    High-fidelity emulation of all 7 PhilHealth Konsulta / YAKAP operations with Mod-11 verification, Annex D cryptography, and KonsultaData_v1.14.dtd validation.
+                  </ThemedText>
+                </View>
+                <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                  <Badge
+                    variant="neutral"
+                    label={`Calls: ${sandboxStatus?.totalSimulatedCalls ?? 0}`}
+                  />
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    Endpoint: {sandboxStatus?.endpointUrl || '/soap/konsulta'}
+                  </ThemedText>
+                </View>
+              </View>
+
+              {/* Scenario Picker */}
+              <View style={{ marginTop: 16 }}>
+                <ThemedText variant="caption" style={{ fontWeight: '700', marginBottom: 8 }}>
+                  FAULT INJECTION & SIMULATION SCENARIO
+                </ThemedText>
+                <View style={styles.chipRow}>
+                  {[
+                    { key: 'HappyPath', label: '🟢 HappyPath (All 7 Pass)' },
+                    { key: 'DtdValidationError', label: '🔴 DTD Validation Error' },
+                    { key: 'ExpiredToken', label: '🟡 Expired Token' },
+                    { key: 'InvalidPin', label: '🟠 Invalid PIN Check' },
+                    { key: 'NetworkTimeout', label: '⏱️ Gateway Timeout' },
+                    { key: 'SoapFault500', label: '💥 SOAP Fault 500' },
+                  ].map((s) => {
+                    const isSelected = simulationScenario === s.key;
+                    return (
+                      <Pressable
+                        key={s.key}
+                        onPress={() => handleScenarioChange(s.key as SoapSimulationScenario)}
+                        style={[
+                          styles.scenarioChip,
+                          isSelected && styles.scenarioChipActive,
+                        ]}
+                      >
+                        <ThemedText
+                          style={[
+                            styles.scenarioChipText,
+                            isSelected && styles.scenarioChipTextActive,
+                          ]}
+                        >
+                          {s.label}
+                        </ThemedText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Action Buttons */}
+              <View style={styles.simulationActionRow}>
+                <Button
+                  title={isRunningSimulation ? 'Running 7-Step Sequence...' : '▶ Run 7-Step E2E Simulation'}
+                  variant="primary"
+                  onPress={handleRunSimulation}
+                  disabled={isRunningSimulation}
+                  style={{ minWidth: 240 }}
+                />
+                <Button
+                  title="🔄 Reset Simulator"
+                  variant="outline"
+                  onPress={handleResetSandbox}
+                  disabled={isResettingSandbox || isRunningSimulation}
+                />
+              </View>
+            </Card>
+
+            {/* Simulation Progress */}
+            {isRunningSimulation && (
+              <Card style={{ padding: 24, alignItems: 'center', justifyContent: 'center' }}>
+                <ActivityIndicator size="large" color={theme.colors.primary} />
+                <ThemedText style={{ marginTop: 12, fontWeight: '600' }}>
+                  Executing full 7-step PhilHealth SOAP sequence...
+                </ThemedText>
+                <ThemedText variant="caption" color={theme.colors.textMuted} style={{ marginTop: 4 }}>
+                  Authenticating → Mod-11 PIN → ATC Check → Masterlist → DTD Validator → Submit → Upload Status
+                </ThemedText>
+              </Card>
+            )}
+
+            {/* Simulation Report */}
+            {simulationReport && !isRunningSimulation && (
+              <View style={{ gap: 16 }}>
+                {/* Summary Banner */}
+                <Card
+                  style={simulationReport.passed ? styles.reportCardPass : styles.reportCardFail}
+                >
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, minWidth: 260 }}>
+                      <ThemedText style={{ fontSize: 32 }}>
+                        {simulationReport.passed ? '🎉' : '⚠️'}
+                      </ThemedText>
+                      <View>
+                        <ThemedText variant="h3" style={{ color: simulationReport.passed ? theme.colors.successText : theme.colors.emergencyText }}>
+                          {simulationReport.passed ? 'E2E Sequence Passed (7 / 7 Steps Verified)' : `E2E Sequence Failed (${simulationReport.failedSteps} step(s) failed)`}
+                        </ThemedText>
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>
+                          Executed at {new Date(simulationReport.timestamp).toLocaleTimeString()} • Scenario: {String(simulationReport.scenario)}
+                        </ThemedText>
+                      </View>
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 12 }}>
+                      <StatCard
+                        label="Total Duration"
+                        value={`${simulationReport.totalDurationMs} ms`}
+                        icon="⚡"
+                        style={{ minWidth: 130 }}
+                      />
+                      <StatCard
+                        label="Steps Passed"
+                        value={`${simulationReport.passedSteps} / ${simulationReport.totalSteps}`}
+                        icon="✅"
+                        style={{ minWidth: 130 }}
+                      />
+                    </View>
+                  </View>
+                </Card>
+
+                {/* Step-by-Step Breakdown */}
+                <Card style={{ padding: 16 }}>
+                  <ThemedText variant="h3" style={{ marginBottom: 12 }}>
+                    Sequential Protocol Telemetry & Step Breakdown
+                  </ThemedText>
+
+                  <View style={{ gap: 10 }}>
+                    {simulationReport.steps.map((step, idx) => {
+                      const isPassed = step.status === 'Passed' || step.status === 2;
+                      const isExpanded = expandedStepIndex === idx;
+
+                      return (
+                        <View
+                          key={step.stepNumber}
+                          style={[
+                            styles.stepCard,
+                            isPassed ? styles.stepCardPass : styles.stepCardFail,
+                          ]}
+                        >
+                          <Pressable
+                            onPress={() => setExpandedStepIndex(isExpanded ? null : idx)}
+                            style={styles.stepHeader}
+                          >
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+                              <View
+                                style={[
+                                  styles.stepNumberBadge,
+                                  { backgroundColor: isPassed ? theme.colors.successBg : theme.colors.emergencyBg },
+                                ]}
+                              >
+                                <ThemedText
+                                  style={{
+                                    fontWeight: '700',
+                                    color: isPassed ? theme.colors.successText : theme.colors.emergencyText,
+                                  }}
+                                >
+                                  {step.stepNumber}
+                                </ThemedText>
+                              </View>
+                              <View style={{ flex: 1 }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                  <ThemedText style={{ fontWeight: '700', fontSize: 15 }}>
+                                    {step.actionName}
+                                  </ThemedText>
+                                  <Badge
+                                    variant={isPassed ? 'success' : 'emergency'}
+                                    label={isPassed ? 'PASSED' : 'FAILED'}
+                                  />
+                                </View>
+                                <ThemedText variant="caption" color={theme.colors.textMuted} style={{ marginTop: 2 }}>
+                                  {step.summary}
+                                </ThemedText>
+                                {step.errorMessage && (
+                                  <ThemedText variant="caption" color={theme.colors.emergencyText} style={{ marginTop: 2, fontWeight: '600' }}>
+                                    Error: {step.errorMessage}
+                                  </ThemedText>
+                                )}
+                              </View>
+                            </View>
+
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                              <Badge variant="neutral" label={`${step.durationMs} ms`} />
+                              <ThemedText style={{ fontSize: 16 }}>
+                                {isExpanded ? '▲' : '▼'}
+                              </ThemedText>
+                            </View>
+                          </Pressable>
+
+                          {/* Expanded Raw Payload Inspector */}
+                          {isExpanded && (
+                            <View style={styles.payloadInspector}>
+                              <View style={styles.payloadTabsRow}>
+                                <Pressable
+                                  onPress={() => setActivePayloadTab('response')}
+                                  style={[
+                                    styles.payloadTabBtn,
+                                    activePayloadTab === 'response' && styles.payloadTabBtnActive,
+                                  ]}
+                                >
+                                  <ThemedText
+                                    style={[
+                                      styles.payloadTabText,
+                                      activePayloadTab === 'response' && styles.payloadTabTextActive,
+                                    ]}
+                                  >
+                                    SOAP Response XML / Receipt
+                                  </ThemedText>
+                                </Pressable>
+                                <Pressable
+                                  onPress={() => setActivePayloadTab('request')}
+                                  style={[
+                                    styles.payloadTabBtn,
+                                    activePayloadTab === 'request' && styles.payloadTabBtnActive,
+                                  ]}
+                                >
+                                  <ThemedText
+                                    style={[
+                                      styles.payloadTabText,
+                                      activePayloadTab === 'request' && styles.payloadTabTextActive,
+                                    ]}
+                                  >
+                                    SOAP Request XML
+                                  </ThemedText>
+                                </Pressable>
+                              </View>
+
+                              <ScrollView
+                                horizontal
+                                style={styles.xmlCodeContainer}
+                                contentContainerStyle={{ padding: 12 }}
+                              >
+                                <ThemedText style={styles.xmlCodeText}>
+                                  {activePayloadTab === 'response'
+                                    ? (step.responseXml || 'No response payload recorded.')
+                                    : (step.requestXml || 'No request payload recorded.')}
+                                </ThemedText>
+                              </ScrollView>
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
+                </Card>
+              </View>
+            )}
+          </View>
+        )}
       </ScrollView>
 
       {/* ========================================================================= */}
@@ -1219,7 +1660,211 @@ export default function YakapScreen() {
           </Card>
         </View>
       </Modal>
+
+      {/* ========================================================================= */}
+      {/* MODAL: PHILHEALTH GATEWAY & FACILITY CREDENTIALS                          */}
+      {/* ========================================================================= */}
+      <Modal visible={isCredentialsModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <Card style={styles.credModalCard}>
+            <View style={styles.detailHeader}>
+              <View style={{ flex: 1 }}>
+                <ThemedText variant="h3">⚙️ PhilHealth Gateway Credentials</ThemedText>
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  Configure facility accreditation, certificate keys, and encrypted SOAP gateway access.
+                </ThemedText>
+              </View>
+              <Pressable onPress={() => setIsCredentialsModalVisible(false)}>
+                <ThemedText style={{ fontSize: 20 }}>✕</ThemedText>
+              </Pressable>
+            </View>
+
+            <ScrollView style={{ marginTop: 12, maxHeight: 460 }}>
+              {/* Status Banner */}
+              <View
+                style={[
+                  styles.credStatusBanner,
+                  philHealthConfigStatus?.isConfigured
+                    ? styles.credStatusBannerConfigured
+                    : styles.credStatusBannerUnconfigured,
+                ]}
+              >
+                <View style={{ flex: 1 }}>
+                  <ThemedText
+                    style={{
+                      fontWeight: '700',
+                      color: philHealthConfigStatus?.isConfigured ? '#166534' : '#9a3412',
+                    }}
+                  >
+                    {philHealthConfigStatus?.isConfigured
+                      ? '✓ PhilHealth Gateway Configured & Active'
+                      : '⚠️ Gateway Credentials Not Configured'}
+                  </ThemedText>
+                  <ThemedText variant="caption" color={theme.colors.textSecondary} style={{ marginTop: 2 }}>
+                    {philHealthConfigStatus?.isConfigured
+                      ? `Accreditation: ${philHealthConfigStatus.accreditationNumber} • PMCC: ${philHealthConfigStatus.pmccNumber || 'None'} • Endpoint: ${philHealthConfigStatus.konsultaEndpoint}`
+                      : 'Please enter and save your accreditation and SOAP credentials below to enable live reporting and ledger queries.'}
+                  </ThemedText>
+                </View>
+                <Badge
+                  variant={philHealthConfigStatus?.isConfigured ? 'success' : 'warning'}
+                  label={philHealthConfigStatus?.isConfigured ? 'Configured' : 'Missing'}
+                />
+              </View>
+
+              {/* Facility & Accreditation Details */}
+              <ThemedText variant="caption" style={[styles.inputLabel, { marginTop: 12 }]}>
+                FACILITY NAME
+              </ThemedText>
+              <Input
+                value={credFacilityName}
+                onChangeText={setCredFacilityName}
+                placeholder="e.g. St. Jude Family Medical Clinic & Diagnostic Center"
+              />
+
+              <View style={styles.formRowTwoCol}>
+                <View style={{ flex: 1 }}>
+                  <ThemedText variant="caption" style={[styles.inputLabel, { marginTop: 10 }]}>
+                    ACCREDITATION NUMBER *
+                  </ThemedText>
+                  <Input
+                    value={credAccreditationNo}
+                    onChangeText={setCredAccreditationNo}
+                    placeholder="PHIC-KONSULTA-09214"
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <ThemedText variant="caption" style={[styles.inputLabel, { marginTop: 10 }]}>
+                    PMCC FACILITY CODE
+                  </ThemedText>
+                  <Input
+                    value={credPmccNo}
+                    onChangeText={setCredPmccNo}
+                    placeholder="PMCC-00123"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.formRowTwoCol}>
+                <View style={{ flex: 1 }}>
+                  <ThemedText variant="caption" style={[styles.inputLabel, { marginTop: 10 }]}>
+                    SOFTWARE CERTIFICATE ID
+                  </ThemedText>
+                  <Input
+                    value={credSoftwareCertId}
+                    onChangeText={setCredSoftwareCertId}
+                    placeholder="CERT-PHILHEALTH-PKA-2026"
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <ThemedText variant="caption" style={[styles.inputLabel, { marginTop: 10 }]}>
+                    GATEWAY SOAP ENDPOINT
+                  </ThemedText>
+                  <Input
+                    value={credEndpoint}
+                    onChangeText={setCredEndpoint}
+                    placeholder="/soap/konsulta"
+                  />
+                </View>
+              </View>
+
+              {/* Sensitive Credentials */}
+              <View style={styles.formRowTwoCol}>
+                <View style={{ flex: 1 }}>
+                  <ThemedText variant="caption" style={[styles.inputLabel, { marginTop: 10 }]}>
+                    SOAP USERNAME *
+                  </ThemedText>
+                  <Input
+                    value={credUsername}
+                    onChangeText={setCredUsername}
+                    placeholder="pka_clinic_admin"
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <ThemedText variant="caption" style={[styles.inputLabel, { marginTop: 10 }]}>
+                    SOAP PASSWORD *
+                  </ThemedText>
+                  <Input
+                    value={credPassword}
+                    onChangeText={setCredPassword}
+                    placeholder={philHealthConfigStatus?.isConfigured ? '•••••••• (Unchanged)' : 'Enter SOAP password'}
+                    secureTextEntry
+                  />
+                </View>
+              </View>
+
+              <ThemedText variant="caption" style={[styles.inputLabel, { marginTop: 10 }]}>
+                32-BYTE AES CIPHER KEY (PAYLOAD ENCRYPTION)
+              </ThemedText>
+              <Input
+                value={credCipherKey}
+                onChangeText={setCredCipherKey}
+                placeholder="CLINICEZ-YAKAP-DEV-KEY-32BYTES!"
+              />
+              <ThemedText variant="caption" color={theme.colors.textMuted} style={{ marginTop: 2 }}>
+                Used for PhilHealth PKA symmetric XML encryption and XML payload validation.
+              </ThemedText>
+
+              {/* Diagnostic Test Connection */}
+              <View style={styles.testConnectionCard}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <ThemedText style={{ fontWeight: '700' }}>Live Gateway Connectivity Test</ThemedText>
+                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                      Performs real-time SOAP authentication (`getToken`) against the configured endpoint.
+                    </ThemedText>
+                  </View>
+                  <Button
+                    title={isTestingConnection ? 'Testing...' : '⚡ Test Connection'}
+                    variant="outline"
+                    size="sm"
+                    onPress={handleTestConnection}
+                    disabled={isTestingConnection}
+                  />
+                </View>
+
+                {testConnectionResult && (
+                  <View
+                    style={[
+                      styles.testResultBox,
+                      testConnectionResult.success ? styles.testSuccessBox : styles.testErrorBox,
+                    ]}
+                  >
+                    <ThemedText
+                      style={{
+                        fontWeight: '600',
+                        fontSize: 12,
+                        color: testConnectionResult.success ? '#166534' : '#991b1b',
+                      }}
+                    >
+                      {testConnectionResult.success ? '✓ Gateway Verified: ' : '✕ Connection Error: '}
+                      {testConnectionResult.message}
+                    </ThemedText>
+                  </View>
+                )}
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalActionsRow}>
+              <Button
+                title="Cancel"
+                variant="outline"
+                onPress={() => setIsCredentialsModalVisible(false)}
+                style={{ flex: 1, marginRight: 8 }}
+              />
+              <Button
+                title={isSavingCredentials ? 'Encrypting & Saving...' : 'Save & Encrypt'}
+                variant="primary"
+                onPress={handleSaveCredentials}
+                disabled={isSavingCredentials}
+                style={{ flex: 1 }}
+              />
+            </View>
+          </Card>
+        </View>
+      </Modal>
     </ResponsiveLayout>
+
   );
 }
 
@@ -1538,4 +2183,166 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.borderLight,
   },
+  simulationControlCard: {
+    padding: 16,
+  },
+  simulationHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  scenarioChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceSubtle,
+  },
+  scenarioChipActive: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primaryLight,
+  },
+  scenarioChipText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: theme.colors.textSecondary,
+  },
+  scenarioChipTextActive: {
+    color: theme.colors.primary,
+    fontWeight: '700',
+  },
+  simulationActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 16,
+    flexWrap: 'wrap',
+  },
+  reportCardPass: {
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: theme.colors.successBorder,
+    backgroundColor: theme.colors.successBg,
+  },
+  reportCardFail: {
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: theme.colors.emergencyBorder,
+    backgroundColor: theme.colors.emergencyBg,
+  },
+  stepCard: {
+    borderRadius: 8,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  stepCardPass: {
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+  },
+  stepCardFail: {
+    borderColor: theme.colors.emergencyBorder || '#ef4444',
+    backgroundColor: '#fffbfa',
+  },
+  stepHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+  },
+  stepNumberBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  payloadInspector: {
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.borderLight,
+    backgroundColor: theme.colors.surfaceSubtle,
+    padding: 12,
+  },
+  payloadTabsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  payloadTabBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  payloadTabBtnActive: {
+    backgroundColor: theme.colors.primary,
+  },
+  payloadTabText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: theme.colors.textSecondary,
+  },
+  payloadTabTextActive: {
+    color: '#ffffff',
+  },
+  xmlCodeContainer: {
+    backgroundColor: '#1e293b',
+    borderRadius: 6,
+    maxHeight: 220,
+  },
+  xmlCodeText: {
+    fontFamily: 'monospace',
+    fontSize: 11,
+    color: '#e2e8f0',
+  },
+  credModalCard: {
+    width: '100%',
+    maxWidth: 640,
+    padding: 20,
+  },
+  credStatusBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  credStatusBannerConfigured: {
+    backgroundColor: '#f0fdf4',
+    borderColor: '#86efac',
+  },
+  credStatusBannerUnconfigured: {
+    backgroundColor: '#fff7ed',
+    borderColor: '#fed7aa',
+  },
+  formRowTwoCol: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  testConnectionCard: {
+    marginTop: 16,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  testResultBox: {
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  testSuccessBox: {
+    backgroundColor: '#f0fdf4',
+    borderColor: '#bbf7d0',
+  },
+  testErrorBox: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#fecaca',
+  },
 });
+

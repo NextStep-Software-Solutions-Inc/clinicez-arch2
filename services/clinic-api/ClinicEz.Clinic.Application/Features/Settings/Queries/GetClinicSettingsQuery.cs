@@ -83,6 +83,14 @@ public sealed class GetClinicSettingsQueryHandler : IRequestHandler<GetClinicSet
             settings.LicenseToken,
             settings.PlanTier,
             settings.MaxStaffLimit,
-            settings.LicenseExpiresAt);
+            settings.LicenseExpiresAt,
+            settings.PmccNumber,
+            settings.SoftwareCertificateId,
+            settings.KonsultaEndpoint,
+            settings.IsPhilHealthConfigured,
+            settings.PrimaryColorHex,
+            settings.PrimaryLogoUrl,
+            settings.PaperSize);
     }
 }
+

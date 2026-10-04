@@ -1,7 +1,7 @@
 import React from 'react';
-import { View, StyleSheet, ScrollView, Modal, Pressable, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, Modal, Pressable, Alert, Linking } from 'react-native';
 import ThemedText from './ui/ThemedText';
-import { PrescriptionSlipData } from '../services/clinicService';
+import { PrescriptionSlipData, clinicService } from '../services/clinicService';
 
 interface PrescriptionSlipModalProps {
   visible: boolean;
@@ -103,7 +103,7 @@ export default function PrescriptionSlipModal({
                 <View style={styles.gamotBannerBox}>
                   <ThemedText style={styles.gamotBannerTitle}>🛡️ PHILHEALTH YAKAP & GAMOT BENEFIT</ThemedText>
                   <ThemedText style={styles.gamotBannerSub}>
-                    Beneficiary PIN: {slip.philHealthNumber} • Covered under annual ₱9,000.00 GAMOT allocation (PhilHealth Circular No. 2025-0013).
+                    Beneficiary PIN: {slip.philHealthNumber} • Covered under annual ₱20,000.00 GAMOT allocation (PhilHealth Outpatient Drug Benefit).
                   </ThemedText>
                 </View>
               )}
@@ -262,9 +262,18 @@ export default function PrescriptionSlipModal({
           <View style={styles.footerBar}>
             <Pressable
               style={styles.printBtn}
-              onPress={() => Alert.alert('Print Prescription', 'Digital Prescription dispatched to connected printer.')}
+              onPress={async () => {
+                try {
+                  const url = slip.consultationId
+                    ? clinicService.getPrescriptionSlipPdfUrl(slip.consultationId)
+                    : clinicService.getPrescriptionSlipPdfByNumberUrl(slip.prescriptionNumber);
+                  await Linking.openURL(url);
+                } catch {
+                  Alert.alert('Download Error', 'Could not open official prescription PDF. Please check connection and try again.');
+                }
+              }}
             >
-              <ThemedText style={styles.printBtnText}>🖨️ Print Prescription</ThemedText>
+              <ThemedText style={styles.printBtnText}>🖨️ Download / Print Official PDF</ThemedText>
             </Pressable>
             <Pressable style={styles.closeBtn} onPress={onClose}>
               <ThemedText style={styles.closeBtnText}>Close</ThemedText>

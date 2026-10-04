@@ -38,6 +38,10 @@ public sealed class ConsultationEncounter : BaseEntity
     public bool IsSigned { get; set; } = false;
     public DateTime? SignedAt { get; set; }
 
+    // PhilHealth Konsulta / YAKAP Encounter Tracking
+    public string? PhilHealthCaseNo { get; set; }
+    public string? PhilHealthSoapTransNo { get; set; }
+
     // E-Prescription Interoperability & External Verification
     public string? PrescriptionNumber { get; set; }
     public string? RxPublicVerificationToken { get; set; }

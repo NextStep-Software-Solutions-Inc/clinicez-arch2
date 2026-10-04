@@ -49,6 +49,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<ClinicSettings> ClinicSettings { get; set; } = null!;
     public DbSet<YakapTransmittal> YakapTransmittals { get; set; } = null!;
     public DbSet<YakapTransmittalItem> YakapTransmittalItems { get; set; } = null!;
+    public DbSet<PhilHealthSequenceTracker> PhilHealthSequenceTrackers { get; set; } = null!;
 
     public Guid CurrentClinicId => _clinicContext?.ClinicId ?? Guid.Empty;
 
@@ -412,10 +413,15 @@ public class ApplicationDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
             entity.Property(e => e.ClinicName).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.AccreditationNumber).HasMaxLength(100);
+            entity.Property(e => e.PmccNumber).HasMaxLength(100);
+            entity.Property(e => e.SoftwareCertificateId).HasMaxLength(100);
+            entity.Property(e => e.KonsultaEndpoint).HasMaxLength(255);
             entity.Property(e => e.DefaultConsultationFee).HasPrecision(18, 2);
             entity.Property(e => e.VatRate).HasPrecision(5, 4);
             entity.HasIndex(e => new { e.TenantId, e.ClinicId }).IsUnique();
         });
+
 
         modelBuilder.Entity<YakapTransmittal>(entity =>
         {

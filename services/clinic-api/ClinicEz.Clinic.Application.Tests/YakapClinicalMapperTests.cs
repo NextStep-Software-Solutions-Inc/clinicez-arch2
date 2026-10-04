@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
 using ClinicEz.Clinic.Application.Features.Yakap.Services;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
@@ -254,4 +255,341 @@ public class YakapClinicalMapperTests
         med.DispensingPersonnel.Should().Be("Pharm. Gabriela Silang");
         med.Quantity.Should().Be("30");
     }
+
+    [Fact]
+    public void MapToYakapReportDocument_PediatricMale_EnforcesPediatricRulesAndDisablesMensAndPreg()
+    {
+        // Arrange
+        var clinicId = Guid.NewGuid();
+        var patientId = Guid.NewGuid();
+        var encounterId = Guid.NewGuid();
+
+        var settings = new ClinicSettings { TenantId = "tenant_1", ClinicId = clinicId, ClinicName = "Manila Clinic", AccreditationNumber = "09214" };
+        var patient = new ClinicPatient
+        {
+            Id = patientId,
+            TenantId = "tenant_1",
+            ClinicId = clinicId,
+            PatientCode = "PAT-PED-001",
+            FirstName = "Totoy",
+            LastName = "Bato",
+            DateOfBirth = new DateOnly(2022, 1, 1), // 4-year-old boy
+            Gender = "Male",
+            ContactNumber = "09171112233",
+            PhilHealthNumber = "12-345678901-2"
+        };
+
+        var encounter = new ConsultationEncounter
+        {
+            Id = encounterId,
+            TenantId = "tenant_1",
+            ClinicId = clinicId,
+            PatientId = patientId,
+            PatientName = "Totoy Bato",
+            DoctorId = Guid.NewGuid(),
+            DoctorName = "Dr. Jose Rizal",
+            EncounterDate = new DateTime(2026, 10, 3, 8, 0, 0, DateTimeKind.Utc),
+            Subjective = "Pediatric wellness check"
+        };
+
+        var doc = _mapper.MapToYakapReportDocument(
+            reportTagging: "1",
+            effectiveYear: "2026",
+            settings: settings,
+            encounters: [encounter],
+            patients: new Dictionary<Guid, ClinicPatient> { [patientId] = patient },
+            vitalsMap: new Dictionary<Guid, TriageVitals>(),
+            transmittalNumber: "RHCI09214202610030003");
+
+        // Assert
+        var profile = doc.Profiles[0];
+        profile.MenstrualHistory.IsApplicable.Should().Be("N");
+        profile.PregnancyHistory.IsApplicable.Should().Be("N");
+        profile.SocialHistory.IsSmoker.Should().Be("N");
+        profile.SocialHistory.IsAdrinker.Should().Be("N");
+        profile.Immunizations.Should().ContainSingle(i => i.OtherImm == "999");
+        profile.NcdAnswers.Qid1Yn.Should().Be("N"); // Pediatric defaults to N
+    }
+
+    [Fact]
+    public void MapToYakapReportDocument_AdolescentFemale_EnablesMenstrualHistory()
+    {
+        // Arrange
+        var clinicId = Guid.NewGuid();
+        var patientId = Guid.NewGuid();
+        var encounterId = Guid.NewGuid();
+
+        var settings = new ClinicSettings { TenantId = "tenant_1", ClinicId = clinicId, ClinicName = "Manila Clinic", AccreditationNumber = "09214" };
+        var patient = new ClinicPatient
+        {
+            Id = patientId,
+            TenantId = "tenant_1",
+            ClinicId = clinicId,
+            PatientCode = "PAT-TEEN-001",
+            FirstName = "Angelica",
+            LastName = "Dela Cruz",
+            DateOfBirth = new DateOnly(2012, 6, 15), // 14-year-old girl
+            Gender = "Female",
+            ContactNumber = "09171112244",
+            PhilHealthNumber = "12-345678901-2"
+        };
+
+        var encounter = new ConsultationEncounter
+        {
+            Id = encounterId,
+            TenantId = "tenant_1",
+            ClinicId = clinicId,
+            PatientId = patientId,
+            PatientName = "Angelica Dela Cruz",
+            DoctorId = Guid.NewGuid(),
+            DoctorName = "Dr. Jose Rizal",
+            EncounterDate = new DateTime(2026, 10, 3, 8, 0, 0, DateTimeKind.Utc),
+            Subjective = "Adolescent checkup"
+        };
+
+        var doc = _mapper.MapToYakapReportDocument(
+            reportTagging: "1",
+            effectiveYear: "2026",
+            settings: settings,
+            encounters: [encounter],
+            patients: new Dictionary<Guid, ClinicPatient> { [patientId] = patient },
+            vitalsMap: new Dictionary<Guid, TriageVitals>(),
+            transmittalNumber: "RHCI09214202610030004");
+
+        // Assert
+        var profile = doc.Profiles[0];
+        profile.MenstrualHistory.IsApplicable.Should().Be("Y");
+        profile.MenstrualHistory.MenarchePeriod.Should().BeEmpty(); // Unopinionated: blank until answered
+        profile.PregnancyHistory.IsApplicable.Should().Be("N"); // Defaults to false/N
+        profile.PregnancyHistory.PregCnt.Should().BeEmpty(); // Blank fallback per DTD
+        profile.PregnancyHistory.DeliveryCnt.Should().BeEmpty();
+        profile.Immunizations.Should().ContainSingle(i => i.OtherImm == "999");
+    }
+
+    [Fact]
+    public void MapToYakapReportDocument_AdolescentFemalePregnant_OverwritableAndProducesActivePregnancyHistory()
+    {
+        // Adolescent female age 16 who is pregnant (Gravida 1, Para 0)
+        var clinicId = Guid.NewGuid();
+        var patientId = Guid.NewGuid();
+        var encounterId = Guid.NewGuid();
+
+        var settings = new ClinicSettings { TenantId = "tenant_1", ClinicId = clinicId, ClinicName = "Manila Clinic", AccreditationNumber = "09214" };
+        var patient = new ClinicPatient
+        {
+            Id = patientId,
+            TenantId = "tenant_1",
+            ClinicId = clinicId,
+            PatientCode = "PAT-TEEN-002",
+            FirstName = "Maria",
+            LastName = "Clara",
+            DateOfBirth = new DateOnly(2010, 8, 20), // 16-year-old adolescent
+            Gender = "Female",
+            ContactNumber = "09171112245",
+            PhilHealthNumber = "12-345678901-2"
+        };
+
+        // Explicitly recorded pregnancy history in CustomFields
+        patient.CustomFields["philhealth_profile"] = new PhilHealthPatientProfileDto
+        {
+            Pin = "123456789012",
+            MenstrualApplicable = true,
+            MenarcheAge = "12",
+            LastMensPeriod = "2026-03-01",
+            PregnancyApplicable = true,
+            Gravida = 1,
+            Para = 0,
+            DeliveryType = "V",
+            FullTermCount = 0,
+            PrematureCount = 0,
+            AbortionCount = 0,
+            LivingChildrenCount = 0,
+            PreEclampsiaHypertension = false,
+            FamilyPlanningCounseling = true
+        };
+
+        var encounter = new ConsultationEncounter
+        {
+            Id = encounterId,
+            TenantId = "tenant_1",
+            ClinicId = clinicId,
+            PatientId = patientId,
+            PatientName = "Maria Clara",
+            DoctorId = Guid.NewGuid(),
+            DoctorName = "Dr. Jose Rizal",
+            EncounterDate = new DateTime(2026, 10, 3, 8, 0, 0, DateTimeKind.Utc),
+            Subjective = "Adolescent prenatal baseline"
+        };
+
+        var doc = _mapper.MapToYakapReportDocument(
+            reportTagging: "1",
+            effectiveYear: "2026",
+            settings: settings,
+            encounters: [encounter],
+            patients: new Dictionary<Guid, ClinicPatient> { [patientId] = patient },
+            vitalsMap: new Dictionary<Guid, TriageVitals>(),
+            transmittalNumber: "RHCI09214202610030004B");
+
+        var profile = doc.Profiles[0];
+        profile.MenstrualHistory.IsApplicable.Should().Be("Y");
+        profile.PregnancyHistory.IsApplicable.Should().Be("Y");
+        profile.PregnancyHistory.PregCnt.Should().Be("1");
+        profile.PregnancyHistory.DeliveryCnt.Should().Be("0");
+        profile.PregnancyHistory.WFamPlan.Should().Be("Y");
+    }
+
+    [Fact]
+    public void MapToYakapReportDocument_FemaleOverwritesMenstrualToFalse_OutputsBlankFallbacks()
+    {
+        var clinicId = Guid.NewGuid();
+        var patientId = Guid.NewGuid();
+        var encounterId = Guid.NewGuid();
+
+        var settings = new ClinicSettings { TenantId = "tenant_1", ClinicId = clinicId, ClinicName = "Manila Clinic", AccreditationNumber = "09214" };
+        var patient = new ClinicPatient
+        {
+            Id = patientId,
+            TenantId = "tenant_1",
+            ClinicId = clinicId,
+            PatientCode = "PAT-FEM-003",
+            FirstName = "Luz",
+            LastName = "Vi Minda",
+            DateOfBirth = new DateOnly(2000, 1, 1),
+            Gender = "Female",
+            ContactNumber = "09171112246",
+            PhilHealthNumber = "12-345678901-2"
+        };
+
+        // Explicitly set MenstrualApplicable to false
+        patient.CustomFields["philhealth_profile"] = new PhilHealthPatientProfileDto
+        {
+            Pin = "123456789012",
+            MenstrualApplicable = false,
+            PregnancyApplicable = false
+        };
+
+        var encounter = new ConsultationEncounter
+        {
+            Id = encounterId,
+            TenantId = "tenant_1",
+            ClinicId = clinicId,
+            PatientId = patientId,
+            PatientName = "Luz Vi Minda",
+            DoctorId = Guid.NewGuid(),
+            DoctorName = "Dr. Jose Rizal",
+            EncounterDate = new DateTime(2026, 10, 3, 8, 0, 0, DateTimeKind.Utc),
+            Subjective = "General checkup"
+        };
+
+        var doc = _mapper.MapToYakapReportDocument(
+            reportTagging: "1",
+            effectiveYear: "2026",
+            settings: settings,
+            encounters: [encounter],
+            patients: new Dictionary<Guid, ClinicPatient> { [patientId] = patient },
+            vitalsMap: new Dictionary<Guid, TriageVitals>(),
+            transmittalNumber: "RHCI09214202610030004C");
+
+        var profile = doc.Profiles[0];
+        profile.MenstrualHistory.IsApplicable.Should().Be("N");
+        profile.MenstrualHistory.MenarchePeriod.Should().BeEmpty();
+        profile.MenstrualHistory.PeriodDuration.Should().BeEmpty();
+        profile.PregnancyHistory.IsApplicable.Should().Be("N");
+        profile.PregnancyHistory.PregCnt.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void MapToYakapReportDocument_WithStandaloneProfileCustomField_UsesCustomData()
+    {
+        // Arrange
+        var clinicId = Guid.NewGuid();
+        var patientId = Guid.NewGuid();
+        var encounterId = Guid.NewGuid();
+
+        var settings = new ClinicSettings { TenantId = "tenant_1", ClinicId = clinicId, ClinicName = "Manila Clinic", AccreditationNumber = "09214" };
+        var patient = new ClinicPatient
+        {
+            Id = patientId,
+            TenantId = "tenant_1",
+            ClinicId = clinicId,
+            PatientCode = "PAT-STANDALONE-001",
+            FirstName = "Corazon",
+            LastName = "Aquino",
+            DateOfBirth = new DateOnly(1975, 1, 25), // 51-year-old female
+            Gender = "Female",
+            ContactNumber = "09171112255",
+            PhilHealthNumber = "12-345678901-2"
+        };
+
+        // Standalone profile stored in CustomFields["philhealth_profile"]
+        var standaloneProfile = new PhilHealthPatientProfileDto
+        {
+            Pin = "123456789012",
+            BloodType = "AB+",
+            MenstrualApplicable = true,
+            MenarcheAge = "11",
+            PeriodDurationDays = "4",
+            CycleIntervalDays = "28",
+            PadsPerDay = "3",
+            IsMenopause = true,
+            MenopauseAge = "50",
+            PregnancyApplicable = true,
+            Gravida = 3,
+            Para = 3,
+            DeliveryType = "V",
+            FullTermCount = 3,
+            LivingChildrenCount = 3,
+            MedicalHistories = [new PhilHealthConditionEntryDto("011", "Hypertension Stage 2")],
+            SurgicalHistories = [new PhilHealthSurgicalEntryDto("Appendectomy", "2010-05-12")],
+            FamilyHistories = [new PhilHealthConditionEntryDto("006", "T2DM maternal")],
+            SkinId = "1",
+            ChestId = "1",
+            ChestRemarks = "Clear breath sounds",
+            NcdAnswers = new YakapNcdAnswersDto(Qid1Yn: "Y", Qid2Yn: "N")
+        };
+
+        patient.CustomFields["philhealth_profile"] = standaloneProfile;
+
+        var encounter = new ConsultationEncounter
+        {
+            Id = encounterId,
+            TenantId = "tenant_1",
+            ClinicId = clinicId,
+            PatientId = patientId,
+            PatientName = "Corazon Aquino",
+            DoctorId = Guid.NewGuid(),
+            DoctorName = "Dr. Jose Rizal",
+            EncounterDate = new DateTime(2026, 10, 3, 8, 0, 0, DateTimeKind.Utc),
+            Subjective = "Annual health check"
+        };
+
+        var doc = _mapper.MapToYakapReportDocument(
+            reportTagging: "1",
+            effectiveYear: "2026",
+            settings: settings,
+            encounters: [encounter],
+            patients: new Dictionary<Guid, ClinicPatient> { [patientId] = patient },
+            vitalsMap: new Dictionary<Guid, TriageVitals>(),
+            transmittalNumber: "RHCI09214202610030005");
+
+        // Assert
+        var profile = doc.Profiles[0];
+        profile.BloodType.Should().Be("AB+");
+        profile.MenstrualHistory.IsApplicable.Should().Be("Y");
+        profile.MenstrualHistory.MenarchePeriod.Should().Be("11");
+        profile.MenstrualHistory.IsMenopause.Should().Be("Y");
+        profile.MenstrualHistory.MenopauseAge.Should().Be("50");
+
+        profile.PregnancyHistory.IsApplicable.Should().Be("Y");
+        profile.PregnancyHistory.PregCnt.Should().Be("3");
+        profile.PregnancyHistory.DeliveryCnt.Should().Be("3");
+
+        profile.MedicalHistories.Should().ContainSingle(m => m.MdiseaseCode == "011");
+        profile.MedicalSpecifics.Should().ContainSingle(m => m.SpecificDesc == "Hypertension Stage 2");
+        profile.SurgicalHistories.Should().ContainSingle(s => s.SurgDesc == "Appendectomy");
+        profile.FamilyHistories.Should().ContainSingle(f => f.MdiseaseCode == "006");
+
+        profile.NcdAnswers.Qid1Yn.Should().Be("Y");
+    }
 }
+

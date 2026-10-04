@@ -9,6 +9,7 @@ import {
   TextInput,
   Modal,
   Alert,
+  Linking,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { ThemedText, Badge, Button, Input, Card } from '@ui';
@@ -16,6 +17,7 @@ import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
 import PrescriptionSlipModal from '../../components/PrescriptionSlipModal';
 import RecordExternalDispenseModal from '../../components/RecordExternalDispenseModal';
+import PhilHealthProfileModal from '../../components/PhilHealthProfileModal';
 import {
   clinicService,
   ClinicPatient,
@@ -239,6 +241,10 @@ export default function PatientsScreen() {
   const [selectedPatient, setSelectedPatient] = useState<ClinicPatient | null>(null);
   const [patientChart, setPatientChart] = useState<PatientChart | null>(null);
   const [loadingChart, setLoadingChart] = useState(false);
+
+  // Standalone PhilHealth Profile Modal state
+  const [philHealthProfileModalVisible, setPhilHealthProfileModalVisible] = useState(false);
+  const [selectedPatientForProfile, setSelectedPatientForProfile] = useState<ClinicPatient | null>(null);
 
   // Lab Slip & External Results Interoperability state
   const [selectedSlip, setSelectedSlip] = useState<LabOrderSlipData | null>(null);
@@ -481,6 +487,15 @@ export default function PatientsScreen() {
       setPatientAttachments([]);
     }
     setLoadingAttachments(false);
+  };
+
+  const handleOpenPhilHealthProfile = (patient: ClinicPatient) => {
+    setSelectedPatientForProfile(patient);
+    setPhilHealthProfileModalVisible(true);
+  };
+
+  const handlePhilHealthProfileSaved = () => {
+    fetchPatients();
   };
 
   const handleVerifyAttachment = async (attachmentId: string, isApproved: boolean) => {
@@ -917,6 +932,12 @@ export default function PatientsScreen() {
                     <ThemedText style={styles.chartBtnText}>📋 View Chart</ThemedText>
                   </Pressable>
                   <Pressable
+                    style={[styles.chartBtn, { backgroundColor: '#EEF2FF', borderColor: '#C7D2FE' }]}
+                    onPress={() => handleOpenPhilHealthProfile(item)}
+                  >
+                    <ThemedText style={[styles.chartBtnText, { color: '#4F46E5' }]}>🏥 PhilHealth Profile</ThemedText>
+                  </Pressable>
+                  <Pressable
                     style={styles.appointmentBtn}
                     onPress={() => navigation.navigate('Appointments', { patientId: item.id, patientName: item.fullName })}
                   >
@@ -1214,9 +1235,19 @@ export default function PatientsScreen() {
                 <ThemedText style={styles.modalTitle}>Longitudinal Medical Chart</ThemedText>
                 <ThemedText style={styles.subtitle}>{selectedPatient?.fullName}</ThemedText>
               </View>
-              <Pressable onPress={() => setChartVisible(false)}>
-                <ThemedText style={styles.modalCloseText}>✕</ThemedText>
-              </Pressable>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                {selectedPatient && (
+                  <Pressable
+                    style={[styles.chartBtn, { backgroundColor: '#EEF2FF', borderColor: '#C7D2FE', paddingVertical: 6, paddingHorizontal: 12 }]}
+                    onPress={() => handleOpenPhilHealthProfile(selectedPatient)}
+                  >
+                    <ThemedText style={[styles.chartBtnText, { color: '#4F46E5' }]}>🏥 PhilHealth Profile</ThemedText>
+                  </Pressable>
+                )}
+                <Pressable onPress={() => setChartVisible(false)}>
+                  <ThemedText style={styles.modalCloseText}>✕</ThemedText>
+                </Pressable>
+              </View>
             </View>
 
             {loadingChart ? (
@@ -1684,12 +1715,27 @@ export default function PatientsScreen() {
               </View>
             </ScrollView>
 
-            <View style={{ alignItems: 'flex-end', marginTop: 12 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 12 }}>
+              {selectedSlip?.orderId && (
+                <Pressable
+                  style={[styles.closeSlipBtn, { backgroundColor: '#15803D' }]}
+                  onPress={async () => {
+                    const url = clinicService.getLabOrderSlipPdfUrl(selectedSlip.orderId);
+                    try {
+                      await Linking.openURL(url);
+                    } catch {
+                      Alert.alert('Download Error', 'Could not open requisition slip PDF. Please check connection and try again.');
+                    }
+                  }}
+                >
+                  <ThemedText style={styles.closeSlipBtnText}>📄 Download Official Requisition PDF</ThemedText>
+                </Pressable>
+              )}
               <Pressable
                 style={styles.closeSlipBtn}
                 onPress={() => setSlipModalVisible(false)}
               >
-                <ThemedText style={styles.closeSlipBtnText}>Close Requisition Slip</ThemedText>
+                <ThemedText style={styles.closeSlipBtnText}>Close</ThemedText>
               </Pressable>
             </View>
           </View>
@@ -1897,6 +1943,17 @@ export default function PatientsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Standalone PhilHealth Patient Profile Modal (Offline & Walk-In Capable) */}
+      <PhilHealthProfileModal
+        visible={philHealthProfileModalVisible}
+        onClose={() => {
+          setPhilHealthProfileModalVisible(false);
+          setSelectedPatientForProfile(null);
+        }}
+        patient={selectedPatientForProfile}
+        onSaved={handlePhilHealthProfileSaved}
+      />
     </ScrollView>
   </ResponsiveLayout>
 );

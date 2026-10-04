@@ -9,6 +9,7 @@ import {
   TextInput,
   Image,
   Alert,
+  Platform,
 } from 'react-native';
 import { useTheme } from '@react-navigation/native';
 import ThemedText from '@ui/ThemedText';
@@ -43,7 +44,7 @@ const COMMON_DRUGSTORES = [
 export default function PrescriptionsScreen() {
   const patientId = usePatientId();
   const { getClinicName } = useClinicNameMap();
-  const { colors } = useTheme();
+  const { colors, dark: isDark } = useTheme();
 
   const [records, setRecords] = useState<any[]>([]);
   const [selectedRx, setSelectedRx] = useState<any | null>(null);
@@ -57,6 +58,10 @@ export default function PrescriptionsScreen() {
   const [branchLocation, setBranchLocation] = useState('Fuente Osmeña Branch');
   const [receiptNumber, setReceiptNumber] = useState('');
   const [receiptPhotoUri, setReceiptPhotoUri] = useState<string | null>(null);
+
+  const totalGamotClaimed = records
+    .filter((r) => r.isPhilHealthGamot)
+    .reduce((sum, r) => sum + (r.gamotCoverageAmount ?? 0), 0);
 
   useEffect(() => {
     db.select()
@@ -89,6 +94,10 @@ export default function PrescriptionsScreen() {
               verificationToken: 'rx-tok-98124a9c8b7e',
               dispenseStatus: 'Pending',
               isDangerousDrug: false,
+              isPhilHealthGamot: true,
+              philHealthDrugCode: 'PHIL-AMLO-5MG-001',
+              uniquePrescriptionSecurityCode: 'UPSC-HCI990001-2026-000142',
+              gamotCoverageAmount: 450.0,
             },
             {
               id: 'rx-demo-002',
@@ -118,6 +127,11 @@ export default function PrescriptionsScreen() {
       })
       .catch(console.error);
   }, [patientId]);
+
+  const copyUpscToken = async (token: string) => {
+    await Clipboard.setStringAsync(token);
+    Alert.alert('UPSC Copied', `Unique Prescription Security Code "${token}" copied to clipboard.`);
+  };
 
   const handleOpenSlip = (item: any) => {
     setSelectedRx(item);
@@ -206,11 +220,50 @@ export default function PrescriptionsScreen() {
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={styles.content}
         ListHeaderComponent={
-          <View style={styles.headerBanner}>
-            <ThemedText style={styles.bannerTitle}>Dual-Path Electronic Prescriptions</ThemedText>
-            <ThemedText style={styles.bannerSubtitle}>
-              Your official Philippine e-Prescriptions (RA 6675 compliant). Pick up at ClinicEz partner pharmacies (Path A) or present the digital QR slip at Mercury Drug, Watsons, or Rose Pharmacy (Path B).
-            </ThemedText>
+          <View style={{ gap: 12, marginBottom: 12 }}>
+            {/* PhilHealth GAMOT ₱20,000 Allocation Card */}
+            <View style={[styles.gamotHeaderCard, { backgroundColor: isDark ? '#1E293B' : '#F0FDF4', borderColor: '#10B981' }]}>
+              <View style={styles.rowBetween}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <ThemedText style={{ fontSize: 20 }}>🇵🇭</ThemedText>
+                  <View>
+                    <ThemedText style={styles.gamotHeaderTitle}>PhilHealth GAMOT Benefit</ThemedText>
+                    <ThemedText style={styles.gamotHeaderSub}>Outpatient Drug Package (Circular 2026-0012)</ThemedText>
+                  </View>
+                </View>
+                <View style={styles.gamotHeaderBadge}>
+                  <ThemedText style={styles.gamotHeaderBadgeText}>₱20,000.00 / yr</ThemedText>
+                </View>
+              </View>
+
+              <View style={styles.gamotStatsRow}>
+                <View style={styles.gamotStatItem}>
+                  <ThemedText style={styles.gamotStatLabel}>ANNUAL CEILING</ThemedText>
+                  <ThemedText style={styles.gamotStatVal}>₱20,000.00</ThemedText>
+                </View>
+                <View style={styles.gamotStatDivider} />
+                <View style={styles.gamotStatItem}>
+                  <ThemedText style={styles.gamotStatLabel}>CLAIMED</ThemedText>
+                  <ThemedText style={[styles.gamotStatVal, { color: '#0284C7' }]}>
+                    ₱{totalGamotClaimed.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </ThemedText>
+                </View>
+                <View style={styles.gamotStatDivider} />
+                <View style={styles.gamotStatItem}>
+                  <ThemedText style={styles.gamotStatLabel}>AVAILABLE</ThemedText>
+                  <ThemedText style={[styles.gamotStatVal, { color: '#10B981' }]}>
+                    ₱{Math.max(0, 20000 - totalGamotClaimed).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </ThemedText>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.headerBanner}>
+              <ThemedText style={styles.bannerTitle}>Dual-Path Electronic Prescriptions</ThemedText>
+              <ThemedText style={styles.bannerSubtitle}>
+                Your official Philippine e-Prescriptions (RA 6675 compliant). Pick up at ClinicEz partner pharmacies (Path A) or present the digital QR slip at Mercury Drug, Watsons, or Rose Pharmacy (Path B).
+              </ThemedText>
+            </View>
           </View>
         }
         ListEmptyComponent={<ProfileSectionHeader title="" description="No prescriptions recorded yet." />}
@@ -259,6 +312,19 @@ export default function PrescriptionsScreen() {
                   </ThemedText>
                 </View>
               </View>
+
+              {item.isPhilHealthGamot && (
+                <View style={styles.gamotPillBadge}>
+                  <ThemedText style={styles.gamotPillText}>
+                    🇵🇭 PhilHealth GAMOT (₱{(item.gamotCoverageAmount ?? 450).toFixed(2)} Covered)
+                  </ThemedText>
+                  {item.philHealthDrugCode && (
+                    <ThemedText style={styles.gamotDrugCodeText}>
+                      Code: {item.philHealthDrugCode}
+                    </ThemedText>
+                  )}
+                </View>
+              )}
 
               {/* Prescription Details */}
               <View style={styles.detailsGrid}>
@@ -375,6 +441,77 @@ export default function PrescriptionsScreen() {
                   <ThemedText style={styles.instructionMeta}>Note: {selectedRx.specialInstructions}</ThemedText>
                 )}
               </View>
+
+              {/* PhilHealth GAMOT Benefit Box */}
+              {selectedRx?.isPhilHealthGamot && (
+                <View
+                  style={[
+                    styles.slipBox,
+                    styles.gamotSlipBox,
+                    { backgroundColor: isDark ? '#064E3B' : '#ECFDF5', borderColor: '#10B981' },
+                  ]}
+                >
+                  <View style={styles.rowBetween}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <ThemedText style={{ fontSize: 18 }}>🇵🇭</ThemedText>
+                      <ThemedText style={[styles.gamotBoxHeading, { color: isDark ? '#A7F3D0' : '#065F46' }]}>
+                        PhilHealth GAMOT Benefit
+                      </ThemedText>
+                    </View>
+                    <View style={styles.gamotCeilingBadge}>
+                      <ThemedText style={styles.gamotCeilingText}>₱20,000.00 / yr</ThemedText>
+                    </View>
+                  </View>
+                  <ThemedText style={[styles.gamotBoxSub, { color: isDark ? '#D1FAE5' : '#047857' }]}>
+                    Outpatient drug benefit covered under PhilHealth Circular 2026-0012. Verified with Modulus-11 UPSC token.
+                  </ThemedText>
+
+                  <View style={styles.gamotDetailRow}>
+                    <ThemedText style={styles.gamotDetailLabel}>PhilHealth Drug Code:</ThemedText>
+                    <ThemedText style={styles.gamotDetailValue}>
+                      {selectedRx.philHealthDrugCode || 'PHIL-AMLO-5MG-001'}
+                    </ThemedText>
+                  </View>
+
+                  <View style={styles.gamotDetailRow}>
+                    <ThemedText style={styles.gamotDetailLabel}>Covered Amount:</ThemedText>
+                    <ThemedText style={[styles.gamotDetailValue, { color: '#10B981', fontWeight: '800' }]}>
+                      ₱{(selectedRx.gamotCoverageAmount ?? 450).toFixed(2)}
+                    </ThemedText>
+                  </View>
+
+                  <View style={styles.upscContainer}>
+                    <ThemedText style={styles.upscLabel}>Unique Prescription Security Code (UPSC):</ThemedText>
+                    <View style={styles.upscCodeBox}>
+                      <ThemedText style={styles.upscCodeText}>
+                        {selectedRx.uniquePrescriptionSecurityCode || 'UPSC-HCI990001-2026-000142'}
+                      </ThemedText>
+                      <Pressable
+                        style={styles.copyUpscBtn}
+                        onPress={() =>
+                          copyUpscToken(selectedRx.uniquePrescriptionSecurityCode || 'UPSC-HCI990001-2026-000142')
+                        }
+                      >
+                        <ThemedText style={styles.copyUpscBtnText}>Copy</ThemedText>
+                      </Pressable>
+                    </View>
+                  </View>
+
+                  {/* Scannable UPSC QR Code Payload */}
+                  <View style={styles.qrCodeCard}>
+                    <View style={[styles.qrGraphic, { backgroundColor: '#0284C7' }]}>
+                      <ThemedText style={{ fontSize: 26 }}>🛡️</ThemedText>
+                      <ThemedText style={[styles.qrGraphicText, { color: '#fff' }]}>UPSC QR</ThemedText>
+                    </View>
+                    <View style={{ flex: 1, gap: 4 }}>
+                      <ThemedText style={styles.qrPayloadLabel}>PhilHealth UPSC QR Payload:</ThemedText>
+                      <ThemedText style={styles.qrPayloadText}>
+                        PHILHEALTH:YAKAP:UPSC:{selectedRx.uniquePrescriptionSecurityCode || 'UPSC-HCI990001-2026-000142'}
+                      </ThemedText>
+                    </View>
+                  </View>
+                </View>
+              )}
 
               {/* Dual-Path Interoperability QR Code Section */}
               <View style={[styles.slipBox, styles.qrContainerBox]}>
@@ -997,5 +1134,156 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  gamotHeaderCard: {
+    borderRadius: 16,
+    borderWidth: 1.5,
+    padding: 14,
+    gap: 12,
+  },
+  gamotHeaderTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  gamotHeaderSub: {
+    fontSize: 11,
+    opacity: 0.7,
+  },
+  gamotHeaderBadge: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  gamotHeaderBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  gamotStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(0,0,0,0.03)',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+  },
+  gamotStatItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 2,
+  },
+  gamotStatLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    opacity: 0.6,
+    letterSpacing: 0.5,
+  },
+  gamotStatVal: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  gamotStatDivider: {
+    width: StyleSheet.hairlineWidth,
+    height: 24,
+    backgroundColor: '#CBD5E1',
+  },
+  gamotPillBadge: {
+    marginTop: 8,
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    borderWidth: 1,
+    borderColor: '#10B981',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  gamotPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#059669',
+  },
+  gamotDrugCodeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#0284C7',
+  },
+  gamotSlipBox: {
+    borderWidth: 1.5,
+    gap: 8,
+  },
+  gamotBoxHeading: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  gamotBoxSub: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 4,
+  },
+  gamotCeilingBadge: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  gamotCeilingText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  gamotDetailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  gamotDetailLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    opacity: 0.8,
+  },
+  gamotDetailValue: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  upscContainer: {
+    gap: 4,
+    marginTop: 4,
+  },
+  upscLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    opacity: 0.7,
+    textTransform: 'uppercase',
+  },
+  upscCodeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#0F172A',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  upscCodeText: {
+    color: '#38BDF8',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  copyUpscBtn: {
+    backgroundColor: '#0284C7',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  copyUpscBtnText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
   },
 });

@@ -14,7 +14,8 @@ public interface IYakapClinicalMapper
         IReadOnlyList<ConsultationEncounter> encounters,
         IReadOnlyDictionary<Guid, ClinicPatient> patients,
         IReadOnlyDictionary<Guid, TriageVitals> vitalsMap,
-        string transmittalNumber);
+        string transmittalNumber,
+        IReadOnlyDictionary<Guid, YakapNcdAnswersDto>? ncdMap = null);
 
     string FormatPhilHealthAge(DateOnly birthDate, DateTime asOfDate);
 

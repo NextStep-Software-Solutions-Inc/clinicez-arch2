@@ -29,6 +29,7 @@ public static class SyncableEntityTypes
     public const string PatientPregnancy            = "patient_pregnancies";
     public const string PatientMaleReproductive     = "patient_male_reproductive";
     public const string PatientDentalVision         = "patient_dental_vision";
+    public const string PatientNcdQuestionnaire     = "patient_ncd_questionnaire";
 
     // ── Files & folders ──────────────────────────────────────────────────────
     public const string FileRecord   = "file";
@@ -49,6 +50,7 @@ public static class SyncableEntityTypes
         PatientHealthcareProvider, PatientImmunizationSelf, PatientDisability,
         PatientOccupation, PatientTravelHistory, PatientContraceptiveHistory,
         PatientPregnancy, PatientMaleReproductive, PatientDentalVision,
+        PatientNcdQuestionnaire,
         FileRecord, FileFolder,
         ClinicMembership, OrganizationMembership, BookingDraft, NotificationPreferences,
     ];

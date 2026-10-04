@@ -447,3 +447,145 @@ public sealed record YakapMasterlistProxyResponse(
     IReadOnlyList<YakapBeneficiaryDto> Beneficiaries,
     string? RawXml,
     string? ErrorMessage);
+
+public sealed record ConfigurePhilHealthCredentialsProxyRequest(
+    System.Guid TenantId,
+    string FacilityName,
+    string AccreditationNumber,
+    string PmccNumber,
+    string SoftwareCertificateId,
+    string Username,
+    string Password,
+    string CipherKey,
+    string? KonsultaEndpoint = null);
+
+public sealed record PhilHealthConfigStatusResponse(
+    System.Guid TenantId,
+    string FacilityName,
+    string AccreditationNumber,
+    string PmccNumber,
+    string SoftwareCertificateId,
+    string KonsultaEndpoint,
+    bool IsConfigured,
+    bool IsActive,
+    System.DateTimeOffset? UpdatedAt);
+
+public sealed record ConfigureClinicPhilHealthCredentialsRequest(
+    string FacilityName,
+    string AccreditationNumber,
+    string PmccNumber,
+    string SoftwareCertificateId,
+    string Username,
+    string Password,
+    string CipherKey,
+    string? KonsultaEndpoint = null);
+
+public sealed record PhilHealthConditionEntryDto(
+    string Code,
+    string? SpecificDesc = null);
+
+public sealed record PhilHealthSurgicalEntryDto(
+    string ProcedureDesc,
+    string? ProcedureDate = null);
+
+public sealed record PhilHealthPatientProfileDto
+{
+    public string? Pin { get; init; }
+    public string? MemberPin { get; init; }
+    public string? MemberType { get; init; } = "MM"; // MM = Member, DD = Dependent
+    public string? Atc { get; init; } = "A";
+    public string? IsWalkedIn { get; init; } = "Y";
+    public string? BloodType { get; init; }
+
+    // Medical & Surgical Histories
+    public List<PhilHealthConditionEntryDto> MedicalHistories { get; init; } = [];
+    public List<PhilHealthSurgicalEntryDto> SurgicalHistories { get; init; } = [];
+    public List<PhilHealthConditionEntryDto> FamilyHistories { get; init; } = [];
+
+    // Social History
+    public bool IsSmoker { get; init; }
+    public string? CigarettesPerDay { get; init; }
+    public bool IsAlcoholDrinker { get; init; }
+    public string? BottlesPerDay { get; init; }
+    public bool IllDrugUser { get; init; }
+    public bool IsSexuallyActive { get; init; }
+
+    // Immunizations
+    public List<string> ChildImmunizations { get; init; } = [];
+    public List<string> YoungWomanImmunizations { get; init; } = [];
+    public List<string> PregnantWomanImmunizations { get; init; } = [];
+    public List<string> ElderlyImmunizations { get; init; } = [];
+    public List<string> OtherImmunizations { get; init; } = [];
+
+    // Menstrual History (Female >= 9)
+    public bool MenstrualApplicable { get; init; }
+    public string? MenarcheAge { get; init; }
+    public string? LastMensPeriod { get; init; }
+    public string? PeriodDurationDays { get; init; }
+    public string? CycleIntervalDays { get; init; }
+    public string? PadsPerDay { get; init; }
+    public string? CoitarcheAge { get; init; }
+    public string? BirthControlMethod { get; init; }
+    public bool IsMenopause { get; init; }
+    public string? MenopauseAge { get; init; }
+
+    // Obstetric History (Female)
+    public bool PregnancyApplicable { get; init; }
+    public int Gravida { get; init; }
+    public int Para { get; init; }
+    public string? DeliveryType { get; init; } // V = Vaginal, C = Cesarean, X = N/A
+    public int FullTermCount { get; init; }
+    public int PrematureCount { get; init; }
+    public int AbortionCount { get; init; }
+    public int LivingChildrenCount { get; init; }
+    public bool PreEclampsiaHypertension { get; init; }
+    public bool FamilyPlanningCounseling { get; init; }
+
+    // Physical Examination Pertinents
+    public string? Systolic { get; init; }
+    public string? Diastolic { get; init; }
+    public string? HeartRate { get; init; }
+    public string? RespiratoryRate { get; init; }
+    public string? Temperature { get; init; }
+    public string? HeightCm { get; init; }
+    public string? WeightKg { get; init; }
+    public string? Bmi { get; init; }
+    public string? WaistCm { get; init; }
+    public string? HipCm { get; init; }
+    public string? LengthCm { get; init; }
+    public string? HeadCircCm { get; init; }
+    public string? SkinfoldThicknessMm { get; init; }
+    public string? MuacCm { get; init; }
+    public string? ZScore { get; init; }
+    public string? VisualAcuityLeft { get; init; }
+    public string? VisualAcuityRight { get; init; }
+
+    // Organ Systems (1 = Normal, 2 = Abnormal)
+    public string SkinId { get; init; } = "1";
+    public string? SkinRemarks { get; init; }
+    public string HeentId { get; init; } = "1";
+    public string? HeentRemarks { get; init; }
+    public string ChestId { get; init; } = "1";
+    public string? ChestRemarks { get; init; }
+    public string HeartId { get; init; } = "1";
+    public string? HeartRemarks { get; init; }
+    public string AbdomenId { get; init; } = "1";
+    public string? AbdomenRemarks { get; init; }
+    public string NeuroId { get; init; } = "1";
+    public string? NeuroRemarks { get; init; }
+    public string RectalId { get; init; } = "1";
+    public string? RectalRemarks { get; init; }
+    public string GuId { get; init; } = "1";
+    public string? GuRemarks { get; init; }
+
+    // General Survey
+    public string GenSurveyId { get; init; } = "1";
+    public string? GenSurveyRemarks { get; init; }
+
+    // PhilPEN 24 Questions
+    public YakapNcdAnswersDto NcdAnswers { get; init; } = new();
+
+    public System.DateTimeOffset? LastUpdatedAt { get; init; }
+    public string? UpdatedBy { get; init; }
+}
+

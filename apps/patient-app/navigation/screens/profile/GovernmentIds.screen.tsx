@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
+import { useEffect, useState, useMemo } from 'react';
+import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useForm, Controller } from 'react-hook-form';
 import { db } from '@db/index';
@@ -11,13 +11,63 @@ import ProfileToggle from 'components/profile/ProfileToggle';
 import ProfileDatePicker from 'components/profile/ProfileDatePicker';
 import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
 import ProfileSaveBar from 'components/profile/ProfileSaveBar';
+import ThemedText from '@ui/ThemedText';
 import { randomUUID } from 'expo-crypto';
 import { usePatientId } from 'hooks/usePatientId';
+import { useAuth } from 'contexts/AuthContext';
+import { addToSyncQueue, syncPendingProfileWrites } from 'services/api/syncService';
 
 type PhilhealthCategory = 'MM' | 'DD';
 type DisabilityType = 'Physical' | 'Sensory' | 'Intellectual' | 'Psychosocial';
 type HmoPlanType = 'Individual' | 'Group' | 'Family';
 
+interface Mod11Result {
+  isValid: boolean;
+  isComplete: boolean;
+  expectedDigit?: number;
+  actualDigit?: number;
+  message?: string;
+}
+
+const MOD11_WEIGHTS = [6, 5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
+
+function validatePhilHealthPinMod11(rawPin: string): Mod11Result {
+  const digits = rawPin.replace(/\D/g, '');
+  if (digits.length === 0) {
+    return { isValid: false, isComplete: false };
+  }
+  if (digits.length < 12) {
+    return {
+      isValid: false,
+      isComplete: false,
+      message: `Incomplete PIN (${digits.length}/12 digits)`,
+    };
+  }
+
+  let sum = 0;
+  for (let i = 0; i < 11; i++) {
+    sum += parseInt(digits[i], 10) * MOD11_WEIGHTS[i];
+  }
+
+  const remainder = sum % 11;
+  const expectedCheckDigit = (11 - remainder) % 11;
+  const actualCheckDigit = parseInt(digits[11], 10);
+
+  // In PhilHealth Modulus-11, check digit 10 can be represented as 0
+  const isValid =
+    (expectedCheckDigit === 10 && actualCheckDigit === 0) ||
+    expectedCheckDigit === actualCheckDigit;
+
+  return {
+    isValid,
+    isComplete: true,
+    expectedDigit: expectedCheckDigit,
+    actualDigit: actualCheckDigit,
+    message: isValid
+      ? '✓ Valid PhilHealth PIN (Mod-11 Verified)'
+      : `⚠️ Check digit mismatch (Expected ${expectedCheckDigit}, found ${actualCheckDigit})`,
+  };
+}
 
 type FormValues = {
   philhealthId: string;
@@ -85,6 +135,7 @@ const formatTinNumber = (value: string) => {
 
 export default function GovernmentIdsScreen() {
   const patientId = usePatientId();
+  const { getToken } = useAuth();
   const navigation = useNavigation();
   const [saving, setSaving] = useState(false);
   const [modal, setModal] = useState<'philhealth' | 'disability' | 'hmoPlan' | null>(null);
@@ -100,6 +151,8 @@ export default function GovernmentIdsScreen() {
   });
 
   const isPwd = watch('isPwd');
+  const philhealthId = watch('philhealthId');
+  const mod11Status = useMemo(() => validatePhilHealthPinMod11(philhealthId || ''), [philhealthId]);
 
   useEffect(() => {
     db.query.patientGovernmentIds.findFirst({ where: eq(patientGovernmentIds.patientId, patientId) })
@@ -158,6 +211,11 @@ export default function GovernmentIdsScreen() {
         target: patientGovernmentIds.patientId,
         set: { ...payload, updatedAt: new Date() },
       });
+
+      // Queue for background sync
+      await addToSyncQueue('patient_government_ids', patientId, 'update', payload);
+      syncPendingProfileWrites(patientId, getToken).catch(console.error);
+
       reset(data);
       navigation.goBack();
     } catch (e) {
@@ -172,7 +230,41 @@ export default function GovernmentIdsScreen() {
       <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <ProfileSectionHeader title="PhilHealth" />
         <Controller control={control} name="philhealthId" render={({ field }) => (
-          <ProfileFormField label="PhilHealth ID" value={field.value} onChangeText={(text) => field.onChange(formatPhilhealthId(text))} keyboardType="numeric" placeholder="00-000000000-0" maxLength={14} />
+          <>
+            <ProfileFormField
+              label="PhilHealth ID (PIN)"
+              value={field.value}
+              onChangeText={(text) => field.onChange(formatPhilhealthId(text))}
+              keyboardType="numeric"
+              placeholder="00-000000000-0"
+              maxLength={14}
+            />
+            {mod11Status.message && (
+              <View
+                style={[
+                  styles.mod11Badge,
+                  mod11Status.isValid
+                    ? styles.mod11BadgeValid
+                    : mod11Status.isComplete
+                    ? styles.mod11BadgeInvalid
+                    : styles.mod11BadgeIncomplete,
+                ]}
+              >
+                <ThemedText
+                  style={[
+                    styles.mod11BadgeText,
+                    mod11Status.isValid
+                      ? styles.mod11TextValid
+                      : mod11Status.isComplete
+                      ? styles.mod11TextInvalid
+                      : styles.mod11TextIncomplete,
+                  ]}
+                >
+                  {mod11Status.message}
+                </ThemedText>
+              </View>
+            )}
+          </>
         )} />
         <Controller control={control} name="philhealthCategory" render={({ field }) => (
           <ProfileFormField
@@ -261,4 +353,38 @@ export default function GovernmentIdsScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   content: { padding: 16, paddingBottom: 24 },
+  mod11Badge: {
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginTop: -8,
+    marginBottom: 12,
+    alignSelf: 'flex-start',
+  },
+  mod11BadgeValid: {
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    borderColor: '#10B981',
+  },
+  mod11BadgeInvalid: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderColor: '#EF4444',
+  },
+  mod11BadgeIncomplete: {
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    borderColor: '#F59E0B',
+  },
+  mod11BadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  mod11TextValid: {
+    color: '#059669',
+  },
+  mod11TextInvalid: {
+    color: '#DC2626',
+  },
+  mod11TextIncomplete: {
+    color: '#D97706',
+  },
 });

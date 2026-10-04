@@ -281,7 +281,7 @@ public class GamotApplicationFeaturesTests
         var ledger = await ledgerRepo.Query(l => l.PhilHealthIdentificationNumber == "123456789012").Include(l => l.Transactions).FirstOrDefaultAsync();
         ledger.Should().NotBeNull();
         ledger!.TotalAmountUtilized.Should().Be(45.00m);
-        ledger.RemainingBalance.Should().Be(8955.00m);
+        ledger.RemainingBalance.Should().Be(19955.00m);
         ledger.Transactions.Should().ContainSingle();
 
         // Check audit record created
@@ -381,10 +381,10 @@ public class GamotApplicationFeaturesTests
         response.Succeeded.Should().BeTrue();
         response.Data!.Status.Should().Be(GamotTransactionStatus.Reversed);
 
-        // Check ledger balance restored to PHP 9,000.00
+        // Check ledger balance restored to PHP 20,000.00
         var updatedLedger = await ledgerRepo.Query(l => l.Id == ledger.Id).Include(l => l.Transactions).FirstAsync();
         updatedLedger.TotalAmountUtilized.Should().Be(0.00m);
-        updatedLedger.RemainingBalance.Should().Be(9000.00m);
+        updatedLedger.RemainingBalance.Should().Be(20000.00m);
 
         // Check prescription item reverted to Pending
         var updatedOrder = await orderRepo.Query(o => o.Id == orderId).Include(o => o.Items).FirstAsync();
@@ -406,9 +406,9 @@ public class GamotApplicationFeaturesTests
 
         result.Succeeded.Should().BeTrue();
         result.Data.Should().NotBeNull();
-        result.Data!.AnnualAllocation.Should().Be(9000.00m);
+        result.Data!.AnnualAllocation.Should().Be(20000.00m);
         result.Data.TotalAmountUtilized.Should().Be(0.00m);
-        result.Data.RemainingBalance.Should().Be(9000.00m);
+        result.Data.RemainingBalance.Should().Be(20000.00m);
         result.Data.Transactions.Should().BeEmpty();
     }
 }

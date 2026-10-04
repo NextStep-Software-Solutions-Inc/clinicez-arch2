@@ -10,7 +10,7 @@ namespace ClinicEz.Pharmacy.Application.Tests;
 public class GamotBenefitLedgerTests
 {
     [Fact]
-    public void New_Ledger_Should_Have_Default_Php_9000_Annual_Allocation()
+    public void New_Ledger_Should_Have_Default_Php_20000_Annual_Allocation()
     {
         var ledger = new GamotBeneficiaryLedger
         {
@@ -23,11 +23,11 @@ public class GamotBenefitLedgerTests
             BenefitYear = "2026"
         };
 
-        ledger.AnnualAllocation.Should().Be(9000.00m);
+        ledger.AnnualAllocation.Should().Be(20000.00m);
         ledger.TotalAmountUtilized.Should().Be(0.00m);
-        ledger.RemainingBalance.Should().Be(9000.00m);
-        ledger.CanCover(9000.00m).Should().BeTrue();
-        ledger.CanCover(9000.01m).Should().BeFalse();
+        ledger.RemainingBalance.Should().Be(20000.00m);
+        ledger.CanCover(20000.00m).Should().BeTrue();
+        ledger.CanCover(20000.01m).Should().BeFalse();
     }
 
     [Fact]
@@ -63,7 +63,7 @@ public class GamotBenefitLedgerTests
         txn.Status.Should().Be(GamotTransactionStatus.Dispensed);
 
         ledger.TotalAmountUtilized.Should().Be(45.00m);
-        ledger.RemainingBalance.Should().Be(8955.00m);
+        ledger.RemainingBalance.Should().Be(19955.00m);
         ledger.Transactions.Should().ContainSingle();
     }
 
@@ -79,7 +79,7 @@ public class GamotBenefitLedgerTests
             PatientName = "Pedro Penduko",
             PhilHealthIdentificationNumber = "111222333444",
             BenefitYear = "2026",
-            TotalAmountUtilized = 8900.00m // Only 100.00 left
+            TotalAmountUtilized = 19900.00m // Only 100.00 left
         };
 
         ledger.RemainingBalance.Should().Be(100.00m);
@@ -131,14 +131,14 @@ public class GamotBenefitLedgerTests
             hciAccreditationNumber: "HCI-01");
 
         ledger.TotalAmountUtilized.Should().Be(200.00m);
-        ledger.RemainingBalance.Should().Be(8800.00m);
+        ledger.RemainingBalance.Should().Be(19800.00m);
 
         ledger.ReverseTransaction(txn.Id, "Patient cancellation request");
 
         txn.Status.Should().Be(GamotTransactionStatus.Reversed);
         txn.Notes.Should().Contain("Reversed: Patient cancellation request");
         ledger.TotalAmountUtilized.Should().Be(0.00m);
-        ledger.RemainingBalance.Should().Be(9000.00m);
+        ledger.RemainingBalance.Should().Be(20000.00m);
 
         // Attempting to reverse again should throw
         var reverseAgain = () => ledger.ReverseTransaction(txn.Id, "Duplicate attempt");

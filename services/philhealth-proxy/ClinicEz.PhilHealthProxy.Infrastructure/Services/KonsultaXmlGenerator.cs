@@ -179,52 +179,105 @@ public sealed class KonsultaXmlGenerator : IKonsultaXmlGenerator
                 new XAttribute("pReportStatus", p.ReportStatus),
                 new XAttribute("pDeficiencyRemarks", p.DeficiencyRemarks));
 
-            // MEDHISTS
+            // MEDHISTS (DTD mandates MEDHIST+)
             var medHistsElem = new XElement("MEDHISTS");
-            foreach (var mh in p.MedicalHistories)
+            if (p.MedicalHistories != null && p.MedicalHistories.Count > 0)
+            {
+                foreach (var mh in p.MedicalHistories)
+                    medHistsElem.Add(new XElement("MEDHIST",
+                        new XAttribute("pMdiseaseCode", mh.MdiseaseCode),
+                        new XAttribute("pReportStatus", mh.ReportStatus),
+                        new XAttribute("pDeficiencyRemarks", mh.DeficiencyRemarks)));
+            }
+            else
+            {
                 medHistsElem.Add(new XElement("MEDHIST",
-                    new XAttribute("pMdiseaseCode", mh.MdiseaseCode),
-                    new XAttribute("pReportStatus", mh.ReportStatus),
-                    new XAttribute("pDeficiencyRemarks", mh.DeficiencyRemarks)));
+                    new XAttribute("pMdiseaseCode", "99"),
+                    new XAttribute("pReportStatus", "U"),
+                    new XAttribute("pDeficiencyRemarks", string.Empty)));
+            }
             profileElem.Add(medHistsElem);
 
-            // MHSPECIFICS
+            // MHSPECIFICS (DTD mandates MHSPECIFIC+)
             var mhSpecsElem = new XElement("MHSPECIFICS");
-            foreach (var mhs in p.MedicalSpecifics)
+            if (p.MedicalSpecifics != null && p.MedicalSpecifics.Count > 0)
+            {
+                foreach (var mhs in p.MedicalSpecifics)
+                    mhSpecsElem.Add(new XElement("MHSPECIFIC",
+                        new XAttribute("pMdiseaseCode", mhs.MdiseaseCode),
+                        new XAttribute("pSpecificDesc", mhs.SpecificDesc),
+                        new XAttribute("pReportStatus", mhs.ReportStatus),
+                        new XAttribute("pDeficiencyRemarks", mhs.DeficiencyRemarks)));
+            }
+            else
+            {
                 mhSpecsElem.Add(new XElement("MHSPECIFIC",
-                    new XAttribute("pMdiseaseCode", mhs.MdiseaseCode),
-                    new XAttribute("pSpecificDesc", mhs.SpecificDesc),
-                    new XAttribute("pReportStatus", mhs.ReportStatus),
-                    new XAttribute("pDeficiencyRemarks", mhs.DeficiencyRemarks)));
+                    new XAttribute("pMdiseaseCode", "99"),
+                    new XAttribute("pSpecificDesc", "None"),
+                    new XAttribute("pReportStatus", "U"),
+                    new XAttribute("pDeficiencyRemarks", string.Empty)));
+            }
             profileElem.Add(mhSpecsElem);
 
-            // SURGHISTS
+            // SURGHISTS (DTD mandates SURGHIST+)
             var surgHistsElem = new XElement("SURGHISTS");
-            foreach (var sh in p.SurgicalHistories)
+            if (p.SurgicalHistories != null && p.SurgicalHistories.Count > 0)
+            {
+                foreach (var sh in p.SurgicalHistories)
+                    surgHistsElem.Add(new XElement("SURGHIST",
+                        new XAttribute("pSurgDesc", sh.SurgDesc),
+                        new XAttribute("pSurgDate", sh.SurgDate),
+                        new XAttribute("pReportStatus", sh.ReportStatus),
+                        new XAttribute("pDeficiencyRemarks", sh.DeficiencyRemarks)));
+            }
+            else
+            {
                 surgHistsElem.Add(new XElement("SURGHIST",
-                    new XAttribute("pSurgDesc", sh.SurgDesc),
-                    new XAttribute("pSurgDate", sh.SurgDate),
-                    new XAttribute("pReportStatus", sh.ReportStatus),
-                    new XAttribute("pDeficiencyRemarks", sh.DeficiencyRemarks)));
+                    new XAttribute("pSurgDesc", "None"),
+                    new XAttribute("pSurgDate", string.Empty),
+                    new XAttribute("pReportStatus", "U"),
+                    new XAttribute("pDeficiencyRemarks", string.Empty)));
+            }
             profileElem.Add(surgHistsElem);
 
-            // FAMHISTS
+            // FAMHISTS (DTD mandates FAMHIST+)
             var famHistsElem = new XElement("FAMHISTS");
-            foreach (var fh in p.FamilyHistories)
+            if (p.FamilyHistories != null && p.FamilyHistories.Count > 0)
+            {
+                foreach (var fh in p.FamilyHistories)
+                    famHistsElem.Add(new XElement("FAMHIST",
+                        new XAttribute("pMdiseaseCode", fh.MdiseaseCode),
+                        new XAttribute("pReportStatus", fh.ReportStatus),
+                        new XAttribute("pDeficiencyRemarks", fh.DeficiencyRemarks)));
+            }
+            else
+            {
                 famHistsElem.Add(new XElement("FAMHIST",
-                    new XAttribute("pMdiseaseCode", fh.MdiseaseCode),
-                    new XAttribute("pReportStatus", fh.ReportStatus),
-                    new XAttribute("pDeficiencyRemarks", fh.DeficiencyRemarks)));
+                    new XAttribute("pMdiseaseCode", "99"),
+                    new XAttribute("pReportStatus", "U"),
+                    new XAttribute("pDeficiencyRemarks", string.Empty)));
+            }
             profileElem.Add(famHistsElem);
 
-            // FHSPECIFICS
+            // FHSPECIFICS (DTD mandates FHSPECIFIC+)
             var fhSpecsElem = new XElement("FHSPECIFICS");
-            foreach (var fhs in p.FamilySpecifics)
+            if (p.FamilySpecifics != null && p.FamilySpecifics.Count > 0)
+            {
+                foreach (var fhs in p.FamilySpecifics)
+                    fhSpecsElem.Add(new XElement("FHSPECIFIC",
+                        new XAttribute("pMdiseaseCode", fhs.MdiseaseCode),
+                        new XAttribute("pSpecificDesc", fhs.SpecificDesc),
+                        new XAttribute("pReportStatus", fhs.ReportStatus),
+                        new XAttribute("pDeficiencyRemarks", fhs.DeficiencyRemarks)));
+            }
+            else
+            {
                 fhSpecsElem.Add(new XElement("FHSPECIFIC",
-                    new XAttribute("pMdiseaseCode", fhs.MdiseaseCode),
-                    new XAttribute("pSpecificDesc", fhs.SpecificDesc),
-                    new XAttribute("pReportStatus", fhs.ReportStatus),
-                    new XAttribute("pDeficiencyRemarks", fhs.DeficiencyRemarks)));
+                    new XAttribute("pMdiseaseCode", "99"),
+                    new XAttribute("pSpecificDesc", "None"),
+                    new XAttribute("pReportStatus", "U"),
+                    new XAttribute("pDeficiencyRemarks", string.Empty)));
+            }
             profileElem.Add(fhSpecsElem);
 
             // SOCHIST
@@ -239,50 +292,64 @@ public sealed class KonsultaXmlGenerator : IKonsultaXmlGenerator
                 new XAttribute("pReportStatus", shist.ReportStatus),
                 new XAttribute("pDeficiencyRemarks", shist.DeficiencyRemarks)));
 
-            // IMMUNIZATIONS
+            // IMMUNIZATIONS (DTD mandates IMMUNIZATION+)
             var immElem = new XElement("IMMUNIZATIONS");
-            foreach (var imm in p.Immunizations)
+            if (p.Immunizations != null && p.Immunizations.Count > 0)
+            {
+                foreach (var imm in p.Immunizations)
+                    immElem.Add(new XElement("IMMUNIZATION",
+                        new XAttribute("pChildImmcode", imm.ChildImmcode ?? string.Empty),
+                        new XAttribute("pYoungwImmcode", imm.YoungwImmcode ?? string.Empty),
+                        new XAttribute("pPregwImmcode", imm.PregwImmcode ?? string.Empty),
+                        new XAttribute("pElderlyImmcode", imm.ElderlyImmcode ?? string.Empty),
+                        new XAttribute("pOtherImm", imm.OtherImm ?? string.Empty),
+                        new XAttribute("pReportStatus", imm.ReportStatus),
+                        new XAttribute("pDeficiencyRemarks", imm.DeficiencyRemarks)));
+            }
+            else
+            {
                 immElem.Add(new XElement("IMMUNIZATION",
-                    new XAttribute("pChildImmcode", imm.ChildImmcode ?? string.Empty),
-                    new XAttribute("pYoungwImmcode", imm.YoungwImmcode ?? string.Empty),
-                    new XAttribute("pPregwImmcode", imm.PregwImmcode ?? string.Empty),
-                    new XAttribute("pElderlyImmcode", imm.ElderlyImmcode ?? string.Empty),
-                    new XAttribute("pOtherImm", imm.OtherImm ?? string.Empty),
-                    new XAttribute("pReportStatus", imm.ReportStatus),
-                    new XAttribute("pDeficiencyRemarks", imm.DeficiencyRemarks)));
+                    new XAttribute("pChildImmcode", string.Empty),
+                    new XAttribute("pYoungwImmcode", string.Empty),
+                    new XAttribute("pPregwImmcode", string.Empty),
+                    new XAttribute("pElderlyImmcode", string.Empty),
+                    new XAttribute("pOtherImm", "999"),
+                    new XAttribute("pReportStatus", "U"),
+                    new XAttribute("pDeficiencyRemarks", string.Empty)));
+            }
             profileElem.Add(immElem);
 
             // MENSHIST
             var m = p.MenstrualHistory;
             profileElem.Add(new XElement("MENSHIST",
-                new XAttribute("pMenarchePeriod", m.MenarchePeriod),
+                new XAttribute("pMenarchePeriod", m.MenarchePeriod ?? string.Empty),
                 new XAttribute("pLastMensPeriod", m.LastMensPeriod ?? string.Empty),
-                new XAttribute("pPeriodDuration", m.PeriodDuration),
-                new XAttribute("pMensInterval", m.MensInterval),
-                new XAttribute("pPadsPerDay", m.PadsPerDay),
-                new XAttribute("pOnsetSexIc", m.OnsetSexIc),
+                new XAttribute("pPeriodDuration", m.PeriodDuration ?? string.Empty),
+                new XAttribute("pMensInterval", m.MensInterval ?? string.Empty),
+                new XAttribute("pPadsPerDay", m.PadsPerDay ?? string.Empty),
+                new XAttribute("pOnsetSexIc", m.OnsetSexIc ?? string.Empty),
                 new XAttribute("pBirthCtrlMethod", m.BirthCtrlMethod ?? string.Empty),
                 new XAttribute("pIsMenopause", m.IsMenopause ?? string.Empty),
                 new XAttribute("pMenopauseAge", m.MenopauseAge ?? string.Empty),
                 new XAttribute("pIsApplicable", m.IsApplicable),
                 new XAttribute("pReportStatus", m.ReportStatus),
-                new XAttribute("pDeficiencyRemarks", m.DeficiencyRemarks)));
+                new XAttribute("pDeficiencyRemarks", m.DeficiencyRemarks ?? string.Empty)));
 
             // PREGHIST
             var preg = p.PregnancyHistory;
             profileElem.Add(new XElement("PREGHIST",
-                new XAttribute("pPregCnt", preg.PregCnt),
-                new XAttribute("pDeliveryCnt", preg.DeliveryCnt),
-                new XAttribute("pDeliveryTyp", preg.DeliveryTyp),
-                new XAttribute("pFullTermCnt", preg.FullTermCnt),
-                new XAttribute("pPrematureCnt", preg.PrematureCnt),
-                new XAttribute("pAbortionCnt", preg.AbortionCnt),
-                new XAttribute("pLivChildrenCnt", preg.LivChildrenCnt),
-                new XAttribute("pWPregIndhyp", preg.WPregIndhyp),
-                new XAttribute("pWFamPlan", preg.WFamPlan),
+                new XAttribute("pPregCnt", preg.PregCnt ?? string.Empty),
+                new XAttribute("pDeliveryCnt", preg.DeliveryCnt ?? string.Empty),
+                new XAttribute("pDeliveryTyp", preg.DeliveryTyp ?? string.Empty),
+                new XAttribute("pFullTermCnt", preg.FullTermCnt ?? string.Empty),
+                new XAttribute("pPrematureCnt", preg.PrematureCnt ?? string.Empty),
+                new XAttribute("pAbortionCnt", preg.AbortionCnt ?? string.Empty),
+                new XAttribute("pLivChildrenCnt", preg.LivChildrenCnt ?? string.Empty),
+                new XAttribute("pWPregIndhyp", preg.WPregIndhyp ?? string.Empty),
+                new XAttribute("pWFamPlan", preg.WFamPlan ?? string.Empty),
                 new XAttribute("pIsApplicable", preg.IsApplicable),
                 new XAttribute("pReportStatus", preg.ReportStatus),
-                new XAttribute("pDeficiencyRemarks", preg.DeficiencyRemarks)));
+                new XAttribute("pDeficiencyRemarks", preg.DeficiencyRemarks ?? string.Empty)));
 
             // PEPERT
             profileElem.Add(BuildPepertElement(p.PhysicalExam));
@@ -300,20 +367,37 @@ public sealed class KonsultaXmlGenerator : IKonsultaXmlGenerator
                 new XAttribute("pReportStatus", "U"),
                 new XAttribute("pDeficiencyRemarks", string.Empty)));
 
-            // PEMISCS
+            // PEMISCS (DTD mandates PEMISC+)
             var pemiscsElem = new XElement("PEMISCS");
-            foreach (var misc in p.PhysicalExamMiscs)
+            if (p.PhysicalExamMiscs != null && p.PhysicalExamMiscs.Count > 0)
+            {
+                foreach (var misc in p.PhysicalExamMiscs)
+                    pemiscsElem.Add(new XElement("PEMISC",
+                        new XAttribute("pSkinId", misc.SkinId ?? string.Empty),
+                        new XAttribute("pHeentId", misc.HeentId ?? string.Empty),
+                        new XAttribute("pChestId", misc.ChestId ?? string.Empty),
+                        new XAttribute("pHeartId", misc.HeartId ?? string.Empty),
+                        new XAttribute("pAbdomenId", misc.AbdomenId ?? string.Empty),
+                        new XAttribute("pNeuroId", misc.NeuroId ?? string.Empty),
+                        new XAttribute("pGuId", misc.GuId ?? string.Empty),
+                        new XAttribute("pRectalId", misc.RectalId ?? string.Empty),
+                        new XAttribute("pReportStatus", misc.ReportStatus),
+                        new XAttribute("pDeficiencyRemarks", misc.DeficiencyRemarks)));
+            }
+            else
+            {
                 pemiscsElem.Add(new XElement("PEMISC",
-                    new XAttribute("pSkinId", misc.SkinId ?? string.Empty),
-                    new XAttribute("pHeentId", misc.HeentId ?? string.Empty),
-                    new XAttribute("pChestId", misc.ChestId ?? string.Empty),
-                    new XAttribute("pHeartId", misc.HeartId ?? string.Empty),
-                    new XAttribute("pAbdomenId", misc.AbdomenId ?? string.Empty),
-                    new XAttribute("pNeuroId", misc.NeuroId ?? string.Empty),
-                    new XAttribute("pGuId", misc.GuId ?? string.Empty),
-                    new XAttribute("pRectalId", misc.RectalId ?? string.Empty),
-                    new XAttribute("pReportStatus", misc.ReportStatus),
-                    new XAttribute("pDeficiencyRemarks", misc.DeficiencyRemarks)));
+                    new XAttribute("pSkinId", "1"),
+                    new XAttribute("pHeentId", "1"),
+                    new XAttribute("pChestId", "1"),
+                    new XAttribute("pHeartId", "1"),
+                    new XAttribute("pAbdomenId", "1"),
+                    new XAttribute("pNeuroId", "1"),
+                    new XAttribute("pGuId", "1"),
+                    new XAttribute("pRectalId", "1"),
+                    new XAttribute("pReportStatus", "U"),
+                    new XAttribute("pDeficiencyRemarks", string.Empty)));
+            }
             profileElem.Add(pemiscsElem);
 
             // PESPECIFIC
@@ -405,18 +489,35 @@ public sealed class KonsultaXmlGenerator : IKonsultaXmlGenerator
             soapElem.Add(BuildPepertElement(s.PhysicalExam));
 
             var pemiscsElem = new XElement("PEMISCS");
-            foreach (var m in s.PhysicalExamMiscs)
+            if (s.PhysicalExamMiscs != null && s.PhysicalExamMiscs.Count > 0)
+            {
+                foreach (var m in s.PhysicalExamMiscs)
+                    pemiscsElem.Add(new XElement("PEMISC",
+                        new XAttribute("pSkinId", m.SkinId ?? string.Empty),
+                        new XAttribute("pHeentId", m.HeentId ?? string.Empty),
+                        new XAttribute("pChestId", m.ChestId ?? string.Empty),
+                        new XAttribute("pHeartId", m.HeartId ?? string.Empty),
+                        new XAttribute("pAbdomenId", m.AbdomenId ?? string.Empty),
+                        new XAttribute("pNeuroId", m.NeuroId ?? string.Empty),
+                        new XAttribute("pGuId", m.GuId ?? string.Empty),
+                        new XAttribute("pRectalId", m.RectalId ?? string.Empty),
+                        new XAttribute("pReportStatus", m.ReportStatus),
+                        new XAttribute("pDeficiencyRemarks", m.DeficiencyRemarks)));
+            }
+            else
+            {
                 pemiscsElem.Add(new XElement("PEMISC",
-                    new XAttribute("pSkinId", m.SkinId ?? string.Empty),
-                    new XAttribute("pHeentId", m.HeentId ?? string.Empty),
-                    new XAttribute("pChestId", m.ChestId ?? string.Empty),
-                    new XAttribute("pHeartId", m.HeartId ?? string.Empty),
-                    new XAttribute("pAbdomenId", m.AbdomenId ?? string.Empty),
-                    new XAttribute("pNeuroId", m.NeuroId ?? string.Empty),
-                    new XAttribute("pGuId", m.GuId ?? string.Empty),
-                    new XAttribute("pRectalId", m.RectalId ?? string.Empty),
-                    new XAttribute("pReportStatus", m.ReportStatus),
-                    new XAttribute("pDeficiencyRemarks", m.DeficiencyRemarks)));
+                    new XAttribute("pSkinId", "1"),
+                    new XAttribute("pHeentId", "1"),
+                    new XAttribute("pChestId", "1"),
+                    new XAttribute("pHeartId", "1"),
+                    new XAttribute("pAbdomenId", "1"),
+                    new XAttribute("pNeuroId", "1"),
+                    new XAttribute("pGuId", "1"),
+                    new XAttribute("pRectalId", "1"),
+                    new XAttribute("pReportStatus", "U"),
+                    new XAttribute("pDeficiencyRemarks", string.Empty)));
+            }
             soapElem.Add(pemiscsElem);
 
             var pes = s.PhysicalExamSpecifics;
@@ -433,11 +534,21 @@ public sealed class KonsultaXmlGenerator : IKonsultaXmlGenerator
                 new XAttribute("pDeficiencyRemarks", pes.DeficiencyRemarks)));
 
             var icdsElem = new XElement("ICDS");
-            foreach (var code in s.IcdCodes)
+            if (s.IcdCodes != null && s.IcdCodes.Count > 0)
+            {
+                foreach (var code in s.IcdCodes)
+                    icdsElem.Add(new XElement("ICD",
+                        new XAttribute("pIcdCode", code),
+                        new XAttribute("pReportStatus", "U"),
+                        new XAttribute("pDeficiencyRemarks", string.Empty)));
+            }
+            else
+            {
                 icdsElem.Add(new XElement("ICD",
-                    new XAttribute("pIcdCode", code),
+                    new XAttribute("pIcdCode", "Z00.0"),
                     new XAttribute("pReportStatus", "U"),
                     new XAttribute("pDeficiencyRemarks", string.Empty)));
+            }
             soapElem.Add(icdsElem);
 
             var diagElem = new XElement("DIAGNOSTICS");
@@ -452,12 +563,23 @@ public sealed class KonsultaXmlGenerator : IKonsultaXmlGenerator
             soapElem.Add(diagElem);
 
             var mgmtElem = new XElement("MANAGEMENTS");
-            foreach (var mgmt in s.Managements)
+            if (s.Managements != null && s.Managements.Count > 0)
+            {
+                foreach (var mgmt in s.Managements)
+                    mgmtElem.Add(new XElement("MANAGEMENT",
+                        new XAttribute("pManagementId", mgmt.ManagementId),
+                        new XAttribute("pOthRemarks", mgmt.OthRemarks ?? string.Empty),
+                        new XAttribute("pReportStatus", mgmt.ReportStatus),
+                        new XAttribute("pDeficiencyRemarks", mgmt.DeficiencyRemarks)));
+            }
+            else
+            {
                 mgmtElem.Add(new XElement("MANAGEMENT",
-                    new XAttribute("pManagementId", mgmt.ManagementId),
-                    new XAttribute("pOthRemarks", mgmt.OthRemarks ?? string.Empty),
-                    new XAttribute("pReportStatus", mgmt.ReportStatus),
-                    new XAttribute("pDeficiencyRemarks", mgmt.DeficiencyRemarks)));
+                    new XAttribute("pManagementId", "6"),
+                    new XAttribute("pOthRemarks", "General counseling"),
+                    new XAttribute("pReportStatus", "U"),
+                    new XAttribute("pDeficiencyRemarks", string.Empty)));
+            }
             soapElem.Add(mgmtElem);
 
             soapElem.Add(new XElement("ADVICE",

@@ -11,6 +11,10 @@ public sealed class ClinicSettings : BaseEntity
     public required string ClinicName { get; set; }
     public string? TaxIdentificationNumber { get; set; } // TIN
     public string? AccreditationNumber { get; set; }     // e.g. PHIC-KONSULTA-09214
+    public string? PmccNumber { get; set; }
+    public string? SoftwareCertificateId { get; set; }
+    public string? KonsultaEndpoint { get; set; } = "/soap/konsulta";
+    public bool IsPhilHealthConfigured { get; set; }
 
     // Cryptographic License & Hard Limit Profile
     public string? LicenseToken { get; set; }
@@ -37,4 +41,7 @@ public sealed class ClinicSettings : BaseEntity
     public string? LetterheadAddress { get; set; }
     public string? LetterheadContact { get; set; }
     public string? LetterheadFooter { get; set; }
+    public string PrimaryColorHex { get; set; } = "#0284C7";
+    public string? PrimaryLogoUrl { get; set; }
+    public string PaperSize { get; set; } = "Letter";
 }

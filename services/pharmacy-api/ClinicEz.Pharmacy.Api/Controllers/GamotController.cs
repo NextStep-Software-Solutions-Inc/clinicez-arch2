@@ -26,7 +26,7 @@ public sealed class GamotController : ControllerBase
 
     /// <summary>
     /// Retrieves the PhilHealth GAMOT beneficiary ledger, balance, and transaction history by PhilHealth PIN.
-    /// Default allocation is PHP 9,000.00 per benefit year per PhilHealth Circular No. 2025-0013.
+    /// Default allocation is PHP 20,000.00 per benefit year per PhilHealth expanded GAMOT outpatient benefit policy.
     /// </summary>
     [HttpGet("ledger/{pin}")]
     public async Task<ActionResult<ApiResponse<GamotBeneficiaryLedgerDto>>> GetLedgerByPin(

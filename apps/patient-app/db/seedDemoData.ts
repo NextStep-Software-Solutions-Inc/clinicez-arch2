@@ -480,6 +480,10 @@ export async function seedDemoHealthRecords(patientId: string, clerkUserId: stri
             prescribingPhysician: 'Dr. Maria Santos',
             refillsAllowed: 2,
             specialInstructions: 'Take at the same time daily; monitor BP three times per week.',
+            isPhilHealthGamot: true,
+            philHealthDrugCode: 'PHIL-AMLO-5MG-001',
+            uniquePrescriptionSecurityCode: 'UPSC-HCI990001-2026-000142',
+            gamotCoverageAmount: 450.0,
             serverCreatedAt: d28,
         },
         {

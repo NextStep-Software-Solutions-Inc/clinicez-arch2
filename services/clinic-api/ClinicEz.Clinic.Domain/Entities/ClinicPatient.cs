@@ -37,6 +37,9 @@ public sealed class ClinicPatient : BaseEntity
 
     // Philippine Healthcare IDs
     public string? PhilHealthNumber { get; set; } // e.g. 12-345678901-2
+    public string? PhilHealthCaseNo { get; set; } // Active Annual Case No, e.g. C00921202600001
+    public string? PhilHealthEnlistmentNo { get; set; } // Enlistment Trans No, e.g. E00921202600001
+    public string? PhilHealthProfilingTransNo { get; set; } // Profiling Trans No, e.g. P00921202600001
     public string? SeniorCitizenId { get; set; }  // RA 9994
     public string? PwdId { get; set; }            // RA 10754
 

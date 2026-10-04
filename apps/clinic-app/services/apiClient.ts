@@ -1,9 +1,9 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { safeAwait, ApiResponse, ApiError } from '@shared/safe';
 
-const CLINIC_BASE_URL = (process.env.EXPO_PUBLIC_CLINIC_API_URL ?? 'http://localhost:5245').replace(/\/+$/, '');
-const PHARMACY_BASE_URL = (process.env.EXPO_PUBLIC_PHARMACY_API_URL ?? 'http://localhost:5245').replace(/\/+$/, '');
-const API_PREFIX = '/api/v1';
+export const CLINIC_BASE_URL = (process.env.EXPO_PUBLIC_CLINIC_API_URL ?? 'http://localhost:5245').replace(/\/+$/, '');
+export const PHARMACY_BASE_URL = (process.env.EXPO_PUBLIC_PHARMACY_API_URL ?? 'http://localhost:5245').replace(/\/+$/, '');
+export const API_PREFIX = '/api/v1';
 
 export class ClinicApiClient {
   private client: AxiosInstance;

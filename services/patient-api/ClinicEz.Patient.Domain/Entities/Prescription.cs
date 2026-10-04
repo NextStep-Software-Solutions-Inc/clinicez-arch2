@@ -19,4 +19,10 @@ public sealed class Prescription : BaseEntity
     public int? Quantity { get; set; }
     public DateTime IssuedAt { get; set; }
     public bool IsDispensed { get; set; }
+
+    // PhilHealth GAMOT Benefit & UPSC Interoperability
+    public bool IsPhilHealthGamot { get; set; }
+    public string? PhilHealthDrugCode { get; set; }
+    public string? UniquePrescriptionSecurityCode { get; set; }
+    public decimal? GamotCoverageAmount { get; set; }
 }

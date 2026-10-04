@@ -3,6 +3,7 @@ using ClinicEz.Laboratory.Application.Common.Interfaces;
 using ClinicEz.Laboratory.Infrastructure.Persistence;
 using ClinicEz.Laboratory.Infrastructure.Persistence.Repositories;
 using ClinicEz.Laboratory.Infrastructure.Services;
+using ClinicEz.Shared.Documents;
 using Hangfire;
 using Hangfire.PostgreSql;
 using MassTransit;
@@ -39,6 +40,7 @@ public static class DependencyInjection
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddSingleton<ClinicEz.Shared.Licensing.IFacilityLicenseValidator, ClinicEz.Shared.Licensing.FacilityLicenseValidator>();
+        services.AddClinicEzDocumentEngine();
 
         // Register publisher & clinical engine services
         services.AddScoped<IDiagnosticReportPublisher, DiagnosticReportPublisher>();

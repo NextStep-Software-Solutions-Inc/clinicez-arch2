@@ -47,66 +47,90 @@ public sealed class IssueMedicalCertificateCommandHandler : IRequestHandler<Issu
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var datePrefix = today.ToString("yyyyMMdd");
+        var prefixPattern = $"MC-{datePrefix}-";
 
-        var count = await _medCertRepo.Query()
-            .CountAsync(m => m.IssueDate == today, ct);
-
-        var certNumber = $"MC-{datePrefix}-{(count + 1):D4}";
-
-        var cert = new MedicalCertificate
+        for (int attempt = 1; attempt <= 3; attempt++)
         {
-            Id = Guid.NewGuid(),
-            TenantId = _clinicContext.TenantId,
-            ClinicId = _clinicContext.ClinicId,
-            CertificateNumber = certNumber,
-            PatientId = request.PatientId,
-            PatientName = request.PatientName.Trim(),
-            ConsultationId = request.ConsultationId,
-            DoctorId = request.DoctorId,
-            DoctorName = request.DoctorName.Trim(),
-            PrcLicenseNumber = request.PrcLicenseNumber.Trim(),
-            PtrNumber = request.PtrNumber?.Trim(),
-            IssueDate = today,
-            Diagnosis = request.Diagnosis.Trim(),
-            ClinicalFindings = request.ClinicalFindings?.Trim(),
-            FitnessStatus = string.IsNullOrWhiteSpace(request.FitnessStatus) ? "FitToWork" : request.FitnessStatus,
-            RecommendedRestDays = request.RecommendedRestDays,
-            RestStartDate = request.RestStartDate,
-            RestEndDate = request.RestEndDate,
-            Purpose = string.IsNullOrWhiteSpace(request.Purpose) ? "Employment" : request.Purpose,
-            Remarks = request.Remarks?.Trim(),
-            IsSigned = true,
-            SignedAt = DateTime.UtcNow,
-            CreatedAt = DateTime.UtcNow,
-            CreatedBy = request.DoctorName
-        };
+            var existingCerts = await _medCertRepo.Query()
+                .Where(m => m.TenantId == _clinicContext.TenantId && m.ClinicId == _clinicContext.ClinicId && m.IssueDate == today)
+                .Select(m => m.CertificateNumber)
+                .ToListAsync(ct);
 
-        await _medCertRepo.AddAsync(cert, ct);
-        await _unitOfWork.SaveChangesAsync(ct);
+            int maxSeq = 0;
+            foreach (var num in existingCerts)
+            {
+                if (num.StartsWith(prefixPattern) && int.TryParse(num[prefixPattern.Length..], out var parsed) && parsed > maxSeq)
+                {
+                    maxSeq = parsed;
+                }
+            }
 
-        return new MedicalCertificateDto(
-            cert.Id,
-            cert.TenantId,
-            cert.ClinicId,
-            cert.CertificateNumber,
-            cert.PatientId,
-            cert.PatientName,
-            cert.ConsultationId,
-            cert.DoctorId,
-            cert.DoctorName,
-            cert.PrcLicenseNumber,
-            cert.PtrNumber,
-            cert.IssueDate,
-            cert.Diagnosis,
-            cert.ClinicalFindings,
-            cert.FitnessStatus,
-            cert.RecommendedRestDays,
-            cert.RestStartDate,
-            cert.RestEndDate,
-            cert.Purpose,
-            cert.Remarks,
-            cert.IsSigned,
-            cert.SignedAt,
-            cert.CreatedAt);
+            var certNumber = $"{prefixPattern}{(maxSeq + attempt):D4}";
+
+            var cert = new MedicalCertificate
+            {
+                Id = Guid.NewGuid(),
+                TenantId = _clinicContext.TenantId,
+                ClinicId = _clinicContext.ClinicId,
+                CertificateNumber = certNumber,
+                PatientId = request.PatientId,
+                PatientName = request.PatientName.Trim(),
+                ConsultationId = request.ConsultationId,
+                DoctorId = request.DoctorId,
+                DoctorName = request.DoctorName.Trim(),
+                PrcLicenseNumber = request.PrcLicenseNumber.Trim(),
+                PtrNumber = request.PtrNumber?.Trim(),
+                IssueDate = today,
+                Diagnosis = request.Diagnosis.Trim(),
+                ClinicalFindings = request.ClinicalFindings?.Trim(),
+                FitnessStatus = string.IsNullOrWhiteSpace(request.FitnessStatus) ? "FitToWork" : request.FitnessStatus,
+                RecommendedRestDays = request.RecommendedRestDays,
+                RestStartDate = request.RestStartDate,
+                RestEndDate = request.RestEndDate,
+                Purpose = string.IsNullOrWhiteSpace(request.Purpose) ? "Employment" : request.Purpose,
+                Remarks = request.Remarks?.Trim(),
+                IsSigned = true,
+                SignedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = request.DoctorName
+            };
+
+            try
+            {
+                await _medCertRepo.AddAsync(cert, ct);
+                await _unitOfWork.SaveChangesAsync(ct);
+
+                return new MedicalCertificateDto(
+                    cert.Id,
+                    cert.TenantId,
+                    cert.ClinicId,
+                    cert.CertificateNumber,
+                    cert.PatientId,
+                    cert.PatientName,
+                    cert.ConsultationId,
+                    cert.DoctorId,
+                    cert.DoctorName,
+                    cert.PrcLicenseNumber,
+                    cert.PtrNumber,
+                    cert.IssueDate,
+                    cert.Diagnosis,
+                    cert.ClinicalFindings,
+                    cert.FitnessStatus,
+                    cert.RecommendedRestDays,
+                    cert.RestStartDate,
+                    cert.RestEndDate,
+                    cert.Purpose,
+                    cert.Remarks,
+                    cert.IsSigned,
+                    cert.SignedAt,
+                    cert.CreatedAt);
+            }
+            catch (DbUpdateException) when (attempt < 3)
+            {
+                await Task.Delay(50 * attempt, ct);
+            }
+        }
+
+        throw new InvalidOperationException("Failed to generate a unique medical certificate number after multiple attempts.");
     }
 }

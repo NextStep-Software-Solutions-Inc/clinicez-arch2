@@ -42,6 +42,7 @@ public static class DependencyInjection
         services.AddSingleton<IKonsultaXmlValidator, KonsultaXmlValidator>();
         services.AddSingleton<IKonsultaXmlGenerator, KonsultaXmlGenerator>();
         services.AddSingleton<IKonsultaMasterlistParser, KonsultaMasterlistParser>();
+        services.AddSingleton<ISoapSandboxService, SoapSandboxService>();
 
         services.AddDataProtection()
             .SetApplicationName("ClinicEz.PhilHealthProxy");

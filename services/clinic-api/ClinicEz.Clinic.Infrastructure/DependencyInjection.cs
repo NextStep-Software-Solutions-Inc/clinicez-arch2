@@ -5,6 +5,7 @@ using ClinicEz.Clinic.Infrastructure.Context;
 using ClinicEz.Clinic.Infrastructure.Persistence;
 using ClinicEz.Clinic.Infrastructure.Persistence.Repositories;
 using ClinicEz.Clinic.Infrastructure.Services;
+using ClinicEz.Shared.Documents;
 using Hangfire;
 using Hangfire.PostgreSql;
 using MassTransit;
@@ -50,10 +51,13 @@ public static class DependencyInjection
 
         // Outbound PhilHealth Yakap integration client
         services.AddHttpClient<IPhilHealthProxyClient, PhilHealthProxyClient>();
+        services.AddScoped<ClinicEz.Clinic.Application.Features.Yakap.Services.IPhilHealthSequenceGenerator, PhilHealthSequenceGenerator>();
 
         // Outbound interoperability publisher
         services.AddScoped<ILabRequisitionPublisher, LabRequisitionPublisher>();
         services.AddScoped<IPrescriptionPublisher, PrescriptionPublisher>();
+        services.AddClinicEzDocumentEngine();
+        services.AddScoped<IClinicDocumentPdfService, ClinicDocumentPdfService>();
 
         // Add Hangfire
         services.AddHangfire(config => config

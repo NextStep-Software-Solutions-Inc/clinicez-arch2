@@ -23,4 +23,12 @@ public sealed record ClinicSettingsDto(
     string? LicenseToken = null,
     string? PlanTier = "Community",
     int MaxStaffLimit = 5,
-    DateTime? LicenseExpiresAt = null);
+    DateTime? LicenseExpiresAt = null,
+    string? PmccNumber = null,
+    string? SoftwareCertificateId = null,
+    string? KonsultaEndpoint = "/soap/konsulta",
+    bool IsPhilHealthConfigured = false,
+    string PrimaryColorHex = "#0284C7",
+    string? PrimaryLogoUrl = null,
+    string PaperSize = "Letter");
+

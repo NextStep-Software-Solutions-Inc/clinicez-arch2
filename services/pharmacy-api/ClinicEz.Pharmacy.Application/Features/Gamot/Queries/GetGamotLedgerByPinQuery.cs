@@ -69,7 +69,7 @@ public sealed class GetGamotLedgerByPinQueryHandler : IRequestHandler<GetGamotLe
                 RemainingBalance: GamotBeneficiaryLedger.DefaultAnnualAllocation,
                 Transactions: Array.Empty<GamotLedgerTransactionDto>());
 
-            return ApiResponse<GamotBeneficiaryLedgerDto>.Success(defaultDto, "Beneficiary has an available annual GAMOT benefit allocation of PHP 9,000.00.");
+            return ApiResponse<GamotBeneficiaryLedgerDto>.Success(defaultDto, "Beneficiary has an available annual GAMOT benefit allocation of PHP 20,000.00.");
         }
 
         var transactionDtos = ledger.Transactions

@@ -10,6 +10,11 @@ using ClinicEz.Shared.Common;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
+using ClinicEz.Clinic.Application.Common.Interfaces;
+using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Clinic.Domain.Interfaces;
+using Microsoft.EntityFrameworkCore;
+
 namespace ClinicEz.Clinic.Api.Controllers;
 
 [ApiController]
@@ -17,10 +22,17 @@ namespace ClinicEz.Clinic.Api.Controllers;
 public sealed class PrescriptionsController : ControllerBase
 {
     private readonly ISender _sender;
+    private readonly IClinicDocumentPdfService _pdfService;
+    private readonly IRepository<ClinicSettings> _settingsRepo;
 
-    public PrescriptionsController(ISender sender)
+    public PrescriptionsController(
+        ISender sender,
+        IClinicDocumentPdfService pdfService,
+        IRepository<ClinicSettings> settingsRepo)
     {
         _sender = sender;
+        _pdfService = pdfService;
+        _settingsRepo = settingsRepo;
     }
 
     [HttpGet("{consultationId:guid}/slip")]
@@ -33,6 +45,24 @@ public sealed class PrescriptionsController : ControllerBase
         return Ok(ApiResponse<PrescriptionSlipDto>.Success(result));
     }
 
+    [HttpGet("{consultationId:guid}/slip-pdf")]
+    [HasPermission(ClinicPermissions.ConsultationsRead)]
+    public async Task<IActionResult> DownloadPrescriptionPdfByConsultationId(
+        [FromRoute] Guid consultationId,
+        CancellationToken ct = default)
+    {
+        var slip = await _sender.Send(new GetPrescriptionSlipQuery(ConsultationId: consultationId), ct);
+        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new ClinicSettings
+        {
+            TenantId = "default",
+            ClinicId = Guid.Empty,
+            ClinicName = slip.ClinicName
+        };
+
+        var pdfBytes = _pdfService.GeneratePrescriptionPdf(slip, settings);
+        return File(pdfBytes, "application/pdf", $"Prescription-{slip.PrescriptionNumber}.pdf");
+    }
+
     [HttpGet("by-number/{prescriptionNumber}/slip")]
     [HasPermission(ClinicPermissions.ConsultationsRead)]
     public async Task<ActionResult<ApiResponse<PrescriptionSlipDto>>> GetSlipByPrescriptionNumber(
@@ -41,6 +71,24 @@ public sealed class PrescriptionsController : ControllerBase
     {
         var result = await _sender.Send(new GetPrescriptionSlipQuery(PrescriptionNumber: prescriptionNumber), ct);
         return Ok(ApiResponse<PrescriptionSlipDto>.Success(result));
+    }
+
+    [HttpGet("by-number/{prescriptionNumber}/slip-pdf")]
+    [HasPermission(ClinicPermissions.ConsultationsRead)]
+    public async Task<IActionResult> DownloadPrescriptionPdfByNumber(
+        [FromRoute] string prescriptionNumber,
+        CancellationToken ct = default)
+    {
+        var slip = await _sender.Send(new GetPrescriptionSlipQuery(PrescriptionNumber: prescriptionNumber), ct);
+        var settings = await _settingsRepo.Query().FirstOrDefaultAsync(ct) ?? new ClinicSettings
+        {
+            TenantId = "default",
+            ClinicId = Guid.Empty,
+            ClinicName = slip.ClinicName
+        };
+
+        var pdfBytes = _pdfService.GeneratePrescriptionPdf(slip, settings);
+        return File(pdfBytes, "application/pdf", $"Prescription-{slip.PrescriptionNumber}.pdf");
     }
 
     [HttpPost("{consultationId:guid}/record-external-dispense")]

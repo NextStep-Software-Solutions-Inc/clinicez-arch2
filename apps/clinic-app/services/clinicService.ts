@@ -1,4 +1,4 @@
-import { clinicApiClient, pharmacyApiClient } from './apiClient';
+import { clinicApiClient, pharmacyApiClient, CLINIC_BASE_URL } from './apiClient';
 import { SyncStatus } from '@shared/safe';
 
 export type QueuePriority = 'Routine' | 'Urgent' | 'Emergency';
@@ -903,6 +903,14 @@ export const clinicService = {
     return clinicApiClient.post<PrescriptionSlipData>(`/prescriptions/${consultationId}/record-external-dispense`, payload);
   },
 
+  getPrescriptionSlipPdfUrl(consultationId: string) {
+    return `${CLINIC_BASE_URL}/api/v1/prescriptions/${consultationId}/slip-pdf`;
+  },
+
+  getPrescriptionSlipPdfByNumberUrl(prescriptionNumber: string) {
+    return `${CLINIC_BASE_URL}/api/v1/prescriptions/by-number/${encodeURIComponent(prescriptionNumber)}/slip-pdf`;
+  },
+
   // ICD-10 Search
   async searchIcd10(query?: string) {
     const qs = query ? `?q=${encodeURIComponent(query)}` : '';
@@ -1030,8 +1038,11 @@ export const clinicService = {
   },
 
   getLabReportPdfUrl(orderId: string) {
-    const baseUrl = (process.env.EXPO_PUBLIC_CLINIC_API_URL ?? 'http://localhost:5000').replace(/\/+$/, '');
-    return `${baseUrl}/api/v1/lab-orders/${orderId}/report-pdf`;
+    return `${CLINIC_BASE_URL}/api/v1/lab-orders/${orderId}/report-pdf`;
+  },
+
+  getLabOrderSlipPdfUrl(orderId: string) {
+    return `${CLINIC_BASE_URL}/api/v1/lab-orders/${orderId}/slip-pdf`;
   },
 
   // Clinical Decision Support (CDS) Safety Engine
@@ -1205,6 +1216,10 @@ export const clinicService = {
     return clinicApiClient.get<MedicalCertificateRecord[]>(`/documents/medical-certificates${qs ? `?${qs}` : ''}`);
   },
 
+  getMedicalCertificatePdfUrl(id: string) {
+    return `${CLINIC_BASE_URL}/api/v1/documents/medical-certificates/${id}/pdf`;
+  },
+
   async issueReferralLetter(payload: {
     patientId: string;
     patientName: string;
@@ -1321,6 +1336,46 @@ export const clinicService = {
   async getPhilHealthCatalog(catalogType: string) {
     return clinicApiClient.get<PhilHealthCatalogItem[]>(`/yakap/catalogs/${encodeURIComponent(catalogType)}`);
   },
+
+  // PhilHealth SOAP Sandbox & Simulation
+  async runSoapSimulation(payload?: { accreditationNumber?: string; cipherKey?: string }) {
+    return clinicApiClient.post<SoapSimulationReport>('/yakap/simulation/run-e2e', payload || {});
+  },
+
+  async getSoapSandboxStatus() {
+    return clinicApiClient.get<SoapSandboxStatus>('/yakap/simulation/status');
+  },
+
+  async setSoapSandboxScenario(scenario: SoapSimulationScenario | number) {
+    return clinicApiClient.post<SoapSandboxStatus>('/yakap/simulation/scenario', { scenario });
+  },
+
+  async resetSoapSandbox() {
+    return clinicApiClient.post<SoapSandboxStatus>('/yakap/simulation/reset', {});
+  },
+
+  // PhilHealth Credential Configuration & Connectivity
+  async configurePhilHealthCredentials(payload: PhilHealthCredentialPayload) {
+    return clinicApiClient.post<PhilHealthConfigStatus>('/yakap/credentials/configure', payload);
+  },
+
+  async getPhilHealthConfigStatus() {
+    return clinicApiClient.get<PhilHealthConfigStatus>('/yakap/credentials/status');
+  },
+
+  async testPhilHealthConnection() {
+    return clinicApiClient.post<string>('/yakap/credentials/test-connection', {});
+  },
+
+  // Standalone PhilHealth Patient Profile (Online, Offline & On-Premise)
+  async getPhilHealthPatientProfile(patientId: string) {
+    return clinicApiClient.get<PhilHealthPatientProfile>(`/yakap/patients/${patientId}/profile`);
+  },
+
+  async updatePhilHealthPatientProfile(patientId: string, profile: PhilHealthPatientProfile) {
+    return clinicApiClient.put<PhilHealthPatientProfile>(`/yakap/patients/${patientId}/profile`, profile);
+  },
+
 
   // PhilHealth GAMOT & UPSC
   async getGamotLedger(pin: string, year?: string) {
@@ -1490,6 +1545,51 @@ export interface PinValidationResult {
   failureReason?: string;
 }
 
+export type SoapSimulationScenario =
+  | 'HappyPath'
+  | 'DtdValidationError'
+  | 'ExpiredToken'
+  | 'InvalidPin'
+  | 'NetworkTimeout'
+  | 'SoapFault500';
+
+export type SoapSimulationStepStatus =
+  | 'Pending'
+  | 'Running'
+  | 'Passed'
+  | 'Failed'
+  | 'Skipped';
+
+export interface SoapSimulationStepResult {
+  stepNumber: number;
+  actionName: string;
+  status: SoapSimulationStepStatus | number;
+  durationMs: number;
+  summary: string;
+  requestXml?: string;
+  responseXml?: string;
+  errorMessage?: string;
+}
+
+export interface SoapSimulationReport {
+  scenario: SoapSimulationScenario | number;
+  passed: boolean;
+  totalSteps: number;
+  passedSteps: number;
+  failedSteps: number;
+  totalDurationMs: number;
+  steps: SoapSimulationStepResult[];
+  timestamp: string;
+}
+
+export interface SoapSandboxStatus {
+  isActive: boolean;
+  activeScenario: SoapSimulationScenario | number;
+  endpointUrl: string;
+  totalSimulatedCalls: number;
+  availableScenarios: string[];
+}
+
 export interface YakapMasterlistAssignment {
   philHealthIdentificationNumber: string;
   memberPhilHealthIdentificationNumber?: string;
@@ -1508,6 +1608,107 @@ export interface PhilHealthCatalogItem {
   code: string;
   description: string;
   category?: string;
+}
+
+export interface PhilHealthConditionEntry {
+  code: string;
+  specificDesc?: string;
+}
+
+export interface PhilHealthSurgicalEntry {
+  procedureDesc: string;
+  procedureDate?: string;
+}
+
+export interface PhilHealthPatientProfile {
+  pin?: string;
+  memberPin?: string;
+  memberType?: string;
+  atc?: string;
+  isWalkedIn?: string;
+  bloodType?: string;
+
+  medicalHistories: PhilHealthConditionEntry[];
+  surgicalHistories: PhilHealthSurgicalEntry[];
+  familyHistories: PhilHealthConditionEntry[];
+
+  isSmoker: boolean;
+  cigarettesPerDay?: string;
+  isAlcoholDrinker: boolean;
+  bottlesPerDay?: string;
+  illDrugUser: boolean;
+  isSexuallyActive: boolean;
+
+  childImmunizations: string[];
+  youngWomanImmunizations: string[];
+  pregnantWomanImmunizations: string[];
+  elderlyImmunizations: string[];
+  otherImmunizations: string[];
+
+  menstrualApplicable: boolean;
+  menarcheAge?: string;
+  lastMensPeriod?: string;
+  periodDurationDays?: string;
+  cycleIntervalDays?: string;
+  padsPerDay?: string;
+  coitarcheAge?: string;
+  birthControlMethod?: string;
+  isMenopause: boolean;
+  menopauseAge?: string;
+
+  pregnancyApplicable: boolean;
+  gravida: number;
+  para: number;
+  deliveryType?: string;
+  fullTermCount: number;
+  prematureCount: number;
+  abortionCount: number;
+  livingChildrenCount: number;
+  preEclampsiaHypertension: boolean;
+  familyPlanningCounseling: boolean;
+
+  systolic?: string;
+  diastolic?: string;
+  heartRate?: string;
+  respiratoryRate?: string;
+  temperature?: string;
+  heightCm?: string;
+  weightKg?: string;
+  bmi?: string;
+  waistCm?: string;
+  hipCm?: string;
+  lengthCm?: string;
+  headCircCm?: string;
+  skinfoldThicknessMm?: string;
+  muacCm?: string;
+  zScore?: string;
+  visualAcuityLeft?: string;
+  visualAcuityRight?: string;
+
+  skinId: string;
+  skinRemarks?: string;
+  heentId: string;
+  heentRemarks?: string;
+  chestId: string;
+  chestRemarks?: string;
+  heartId: string;
+  heartRemarks?: string;
+  abdomenId: string;
+  abdomenRemarks?: string;
+  neuroId: string;
+  neuroRemarks?: string;
+  rectalId: string;
+  rectalRemarks?: string;
+  guId: string;
+  guRemarks?: string;
+
+  genSurveyId: string;
+  genSurveyRemarks?: string;
+
+  ncdAnswers: Record<string, string>;
+
+  lastUpdatedAt?: string;
+  updatedBy?: string;
 }
 
 export interface GamotLedgerTransaction {
@@ -1600,6 +1801,29 @@ export interface DispenseGamotPayload {
 export interface ReverseGamotPayload {
   reason: string;
   reversedBy: string;
+}
+
+export interface PhilHealthCredentialPayload {
+  facilityName: string;
+  accreditationNumber: string;
+  pmccNumber?: string;
+  softwareCertificateId?: string;
+  username: string;
+  password?: string;
+  cipherKey?: string;
+  konsultaEndpoint?: string;
+}
+
+export interface PhilHealthConfigStatus {
+  tenantId: string;
+  facilityName: string;
+  accreditationNumber: string;
+  pmccNumber?: string;
+  softwareCertificateId?: string;
+  konsultaEndpoint: string;
+  isConfigured: boolean;
+  isActive: boolean;
+  updatedAt?: string;
 }
 
 
