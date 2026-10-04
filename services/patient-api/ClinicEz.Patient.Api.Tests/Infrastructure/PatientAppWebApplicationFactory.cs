@@ -23,16 +23,19 @@ namespace ClinicEz.Patient.Api.Tests.Infrastructure;
 public sealed class PatientAppWebApplicationFactory
     : WebApplicationFactory<Program>, IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:16-alpine")
-        .WithDatabase("patientapp_test")
-        .WithUsername("patientapp_test")
-        .WithPassword("patientapp_test_secret")
-        .Build();
-
-    private readonly RedisContainer _redis = new RedisBuilder("redis:7-alpine").Build();
+    private PostgreSqlContainer? _postgres;
+    private RedisContainer? _redis;
 
     public async Task InitializeAsync()
     {
+        _postgres = new PostgreSqlBuilder("postgres:16-alpine")
+            .WithDatabase("patientapp_test")
+            .WithUsername("patientapp_test")
+            .WithPassword("patientapp_test_secret")
+            .Build();
+
+        _redis = new RedisBuilder("redis:7-alpine").Build();
+
         await _postgres.StartAsync();
         await _redis.StartAsync();
 
@@ -60,8 +63,8 @@ public sealed class PatientAppWebApplicationFactory
     public new async Task DisposeAsync()
     {
         Dispose();  // stop the test server first, then stop containers
-        await _postgres.DisposeAsync();
-        await _redis.DisposeAsync();
+        if (_postgres != null) await _postgres.DisposeAsync();
+        if (_redis != null) await _redis.DisposeAsync();
 
         // Clear injected environment variables
         Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", null);

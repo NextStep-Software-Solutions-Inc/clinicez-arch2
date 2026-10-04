@@ -39,7 +39,7 @@ public sealed class PatientsIntegrationTests : IClassFixture<PatientAppWebApplic
 
     // ── Tests ─────────────────────────────────────────────────────────────────
 
-    [Fact]
+    [DockerAvailableFact]
     public async Task CreatePatient_Returns201_WithPatientId()
     {
         var response = await _client.PostAsJsonAsync("/api/v1/patients", CreatePatientPayload());
@@ -52,7 +52,7 @@ public sealed class PatientsIntegrationTests : IClassFixture<PatientAppWebApplic
         body.Data.Should().NotBeEmpty();
     }
 
-    [Fact]
+    [DockerAvailableFact]
     public async Task CreatePatient_WhenDuplicateClerkId_Returns409()
     {
         var clerkId = $"clerk_dup_{Guid.NewGuid():N}";
@@ -65,7 +65,7 @@ public sealed class PatientsIntegrationTests : IClassFixture<PatientAppWebApplic
         response.StatusCode.Should().Be(HttpStatusCode.Conflict);
     }
 
-    [Fact]
+    [DockerAvailableFact]
     public async Task GetPatientProfile_WhenPatientExists_Returns200WithProfile()
     {
         var patientId = await CreateTestPatientAsync();
@@ -82,7 +82,7 @@ public sealed class PatientsIntegrationTests : IClassFixture<PatientAppWebApplic
         body.Data.EmergencyContacts.Should().BeEmpty();
     }
 
-    [Fact]
+    [DockerAvailableFact]
     public async Task GetPatientProfile_WhenPatientDoesNotExist_Returns404()
     {
         var nonExistentId = Guid.NewGuid();
@@ -95,7 +95,7 @@ public sealed class PatientsIntegrationTests : IClassFixture<PatientAppWebApplic
         body!.Succeeded.Should().BeFalse();
     }
 
-    [Fact]
+    [DockerAvailableFact]
     public async Task GetPatientByClerkId_WhenPatientExists_Returns200()
     {
         var clerkId = $"clerk_gcbi_{Guid.NewGuid():N}";

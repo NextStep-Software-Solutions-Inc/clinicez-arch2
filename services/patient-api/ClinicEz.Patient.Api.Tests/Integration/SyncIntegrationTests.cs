@@ -50,7 +50,7 @@ public sealed class SyncIntegrationTests : IClassFixture<PatientAppWebApplicatio
 
     // ── Tests ─────────────────────────────────────────────────────────────────
 
-    [Fact]
+    [DockerAvailableFact]
     public async Task PushSync_WithNewItems_Returns202AndAcceptsAll()
     {
         var patientId = await CreatePatientAsync();
@@ -68,7 +68,7 @@ public sealed class SyncIntegrationTests : IClassFixture<PatientAppWebApplicatio
         body.Data.AcknowledgedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
     }
 
-    [Fact]
+    [DockerAvailableFact]
     public async Task PushSync_WithDuplicateIdempotencyKey_ReturnsAlreadyProcessed()
     {
         var patientId = await CreatePatientAsync();
@@ -91,7 +91,7 @@ public sealed class SyncIntegrationTests : IClassFixture<PatientAppWebApplicatio
         body.Data.AlreadyProcessed.Should().Be(1);
     }
 
-    [Fact]
+    [DockerAvailableFact]
     public async Task GetSyncStatus_AfterPush_Returns200WithCounts()
     {
         var patientId = await CreatePatientAsync();
