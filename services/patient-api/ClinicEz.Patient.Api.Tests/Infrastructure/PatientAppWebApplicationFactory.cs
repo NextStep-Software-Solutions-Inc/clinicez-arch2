@@ -108,6 +108,14 @@ public sealed class PatientAppWebApplicationFactory
             // Remove ClinicPingBackgroundService so it doesn't query database during startup/migrations
             var clinicPingService = services.FirstOrDefault(d => d.ImplementationType == typeof(ClinicEz.Patient.Infrastructure.Services.Workers.ClinicPingBackgroundService));
             if (clinicPingService is not null) services.Remove(clinicPingService);
+
+            // Remove MassTransit hosted service so tests don't fail on missing RabbitMQ broker
+            var massTransitHostedService = services.FirstOrDefault(d => d.ImplementationType?.Name == "MassTransitHostedService");
+            if (massTransitHostedService is not null) services.Remove(massTransitHostedService);
+
+            // Remove Hangfire server hosted service so it doesn't poll background tables during tests
+            var hangfireServer = services.FirstOrDefault(d => d.ImplementationType?.Name == "BackgroundJobServerHostedService");
+            if (hangfireServer is not null) services.Remove(hangfireServer);
         });
     }
 }

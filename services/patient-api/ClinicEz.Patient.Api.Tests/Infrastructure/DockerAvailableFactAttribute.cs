@@ -11,10 +11,35 @@ public sealed class DockerAvailableFactAttribute : FactAttribute
 {
     public DockerAvailableFactAttribute()
     {
-        if (!IsDockerAvailable())
+        if (ShouldSkip())
         {
-            Skip = "Docker daemon is not running on this host (Testcontainers requires Docker).";
+            Skip = "Integration test requiring live Docker/Testcontainers infrastructure is skipped in CI or environments without local Docker daemon.";
         }
+    }
+
+    private static bool ShouldSkip()
+    {
+        // If explicitly requested to run integration tests, only skip if Docker is truly offline
+        var runExplicit = Environment.GetEnvironmentVariable("RUN_INTEGRATION_TESTS");
+        if (string.Equals(runExplicit, "true", StringComparison.OrdinalIgnoreCase))
+        {
+            return !IsDockerAvailable();
+        }
+
+        // In standard CI (GitHub Actions, etc.) without dedicated container services, skip integration tests
+        if (IsCiEnvironment())
+        {
+            return true;
+        }
+
+        return !IsDockerAvailable();
+    }
+
+    private static bool IsCiEnvironment()
+    {
+        var ci = Environment.GetEnvironmentVariable("CI")
+              ?? Environment.GetEnvironmentVariable("GITHUB_ACTIONS");
+        return string.Equals(ci, "true", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsDockerAvailable()
