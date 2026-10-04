@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
@@ -11,9 +11,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Version-matched to EF Core: net9 consumers keep 9.x; net10 consumers use 10.x -->
-    <PackageReference Include="EFCore.BulkExtensions" Version="9.0.1" Condition="'$(TargetFramework)' == 'net9.0'" />
-    <PackageReference Include="EFCore.BulkExtensions" Version="10.0.1" Condition="'$(TargetFramework)' == 'net10.0'" />
+    <PackageReference Include="EFCore.BulkExtensions" Version="10.0.1" />
     <PackageReference Include="Sieve" Version="2.5.5" />
     <PackageReference Include="QuestPDF" Version="2026.5.0" />
     <PackageReference Include="QRCoder" Version="1.4.1" />

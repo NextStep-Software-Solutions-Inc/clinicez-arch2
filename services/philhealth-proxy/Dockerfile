@@ -1,4 +1,4 @@
-# Use the official .NET 10.0 SDK image to build the application (supports net9.0 and multi-targeted shared dependencies)
+# Use the official .NET 10.0 SDK image to build the application
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
@@ -23,7 +23,7 @@ RUN dotnet build "ClinicEz.PhilHealthProxy.Api.csproj" -c Release -o /app/build
 RUN dotnet publish "ClinicEz.PhilHealthProxy.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 # Use the official ASP.NET Core runtime image
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 COPY --from=build /app/publish .
 

@@ -2,6 +2,7 @@ using ClinicEz.PhilHealthProxy.Api;
 using ClinicEz.PhilHealthProxy.Api.Middlewares;
 using ClinicEz.PhilHealthProxy.Application;
 using ClinicEz.PhilHealthProxy.Infrastructure;
+using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 var env = builder.Environment;
@@ -19,8 +20,8 @@ var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    app.MapOpenApi();
+    app.MapScalarApiReference(opts => opts.WithTitle("ClinicEz PhilHealth Proxy API"));
 }
 
 app.UseHttpsRedirection();
