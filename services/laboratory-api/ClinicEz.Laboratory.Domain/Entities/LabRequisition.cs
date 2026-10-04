@@ -8,6 +8,7 @@ namespace ClinicEz.Laboratory.Domain.Entities;
 public sealed class LabRequisition : BaseEntity
 {
     public required string TenantId { get; set; }
+    public string? BranchId { get; set; }
     public Guid LaboratoryId { get; set; }
 
     public Guid? ExternalRequisitionId { get; set; }

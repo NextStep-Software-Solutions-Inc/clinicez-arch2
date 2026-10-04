@@ -49,6 +49,7 @@ public class LabRequisitionIssuedConsumer : IConsumer<LabRequisitionIssuedEvent>
         var requisition = new LabRequisition
         {
             TenantId = !string.IsNullOrWhiteSpace(msg.TargetTenantId) ? msg.TargetTenantId : (!string.IsNullOrWhiteSpace(msg.TenantId) ? msg.TenantId : "default"),
+            BranchId = msg.BranchId,
             ExternalRequisitionId = msg.RequisitionId,
             AccessionNumber = msg.AccessionNumber,
             OrderingFacilityId = msg.OrderingFacilityId,

@@ -53,6 +53,7 @@ public class PrescriptionIssuedConsumer : IConsumer<PrescriptionIssuedEvent>
         var order = new PrescriptionOrder
         {
             TenantId = !string.IsNullOrWhiteSpace(msg.TargetPharmacyTenantId) ? msg.TargetPharmacyTenantId : (!string.IsNullOrWhiteSpace(msg.TenantId) ? msg.TenantId : "default"),
+            BranchId = msg.BranchId,
             PharmacyId = !string.IsNullOrWhiteSpace(msg.TargetPharmacyFacilityId) ? msg.TargetPharmacyFacilityId : "pharmacy-main",
             ExternalPrescriptionId = msg.PrescriptionId,
             PrescriptionNumber = msg.PrescriptionNumber,

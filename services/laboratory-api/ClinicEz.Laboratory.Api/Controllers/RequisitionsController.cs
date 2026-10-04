@@ -26,11 +26,12 @@ public sealed class RequisitionsController : ControllerBase
     public async Task<ActionResult<ApiResponse<List<LabRequisitionDto>>>> GetWorklist(
         [FromQuery] string? status,
         [FromQuery] string? searchTerm,
+        [FromQuery] string? branchId = null,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 50,
         CancellationToken ct = default)
     {
-        var result = await _sender.Send(new GetWorklistQuery(status, searchTerm, pageNumber, pageSize), ct);
+        var result = await _sender.Send(new GetWorklistQuery(status, searchTerm, branchId, pageNumber, pageSize), ct);
         return Ok(ApiResponse<List<LabRequisitionDto>>.Success(result));
     }
 

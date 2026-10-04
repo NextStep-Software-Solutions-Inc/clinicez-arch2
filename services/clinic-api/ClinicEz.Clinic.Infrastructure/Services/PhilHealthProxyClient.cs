@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
+using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Common;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -17,6 +18,7 @@ public sealed class PhilHealthProxyClient : IPhilHealthProxyClient
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<PhilHealthProxyClient> _logger;
+    private readonly IClinicContext? _clinicContext;
     private readonly string _baseUrl;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -26,11 +28,47 @@ public sealed class PhilHealthProxyClient : IPhilHealthProxyClient
     public PhilHealthProxyClient(
         HttpClient httpClient,
         IConfiguration configuration,
-        ILogger<PhilHealthProxyClient> logger)
+        ILogger<PhilHealthProxyClient> logger,
+        IClinicContext? clinicContext = null)
     {
         _httpClient = httpClient;
         _logger = logger;
+        _clinicContext = clinicContext;
         _baseUrl = (configuration["PhilHealthProxy:BaseUrl"] ?? "http://localhost:5025").TrimEnd('/');
+    }
+
+    private HttpRequestMessage CreateRequest(HttpMethod method, string url, object? jsonBody = null)
+    {
+        var request = new HttpRequestMessage(method, url);
+        if (jsonBody != null)
+        {
+            request.Content = JsonContent.Create(jsonBody, options: JsonOptions);
+        }
+
+        if (_clinicContext != null)
+        {
+            if (!string.IsNullOrWhiteSpace(_clinicContext.TenantId))
+            {
+                request.Headers.TryAddWithoutValidation("X-Tenant-Id", _clinicContext.TenantId);
+            }
+            if (_clinicContext.BranchId.HasValue && _clinicContext.BranchId.Value != Guid.Empty)
+            {
+                request.Headers.TryAddWithoutValidation("X-Branch-Id", _clinicContext.BranchId.Value.ToString());
+            }
+            if (_clinicContext.ClinicId != Guid.Empty)
+            {
+                request.Headers.TryAddWithoutValidation("X-Facility-Id", _clinicContext.ClinicId.ToString());
+            }
+        }
+
+        return request;
+    }
+
+    private async Task<ApiResponse<T>> SendAsync<T>(HttpRequestMessage request, CancellationToken ct)
+    {
+        var response = await _httpClient.SendAsync(request, ct);
+        var content = await response.Content.ReadFromJsonAsync<ApiResponse<T>>(JsonOptions, ct);
+        return content ?? ApiResponse<T>.Fail($"Empty response from proxy (HTTP {(int)response.StatusCode})");
     }
 
     public async Task<ApiResponse<YakapValidationProxyResponse>> ValidateReportAsync(
@@ -42,16 +80,8 @@ public sealed class PhilHealthProxyClient : IPhilHealthProxyClient
             var url = $"{_baseUrl}/api/yakap/reports/validate";
             _logger.LogInformation("[PhilHealthProxy] Calling validate report: {Url}", url);
 
-            var response = await _httpClient.PostAsJsonAsync(url, request, ct);
-            var content = await response.Content.ReadFromJsonAsync<ApiResponse<YakapValidationProxyResponse>>(JsonOptions, ct);
-
-            if (content != null)
-            {
-                return content;
-            }
-
-            return ApiResponse<YakapValidationProxyResponse>.Fail(
-                $"Empty response from proxy (HTTP {(int)response.StatusCode})");
+            using var req = CreateRequest(HttpMethod.Post, url, request);
+            return await SendAsync<YakapValidationProxyResponse>(req, ct);
         }
         catch (Exception ex)
         {
@@ -69,16 +99,8 @@ public sealed class PhilHealthProxyClient : IPhilHealthProxyClient
             var url = $"{_baseUrl}/api/yakap/reports/submit";
             _logger.LogInformation("[PhilHealthProxy] Calling submit report: {Url}", url);
 
-            var response = await _httpClient.PostAsJsonAsync(url, request, ct);
-            var content = await response.Content.ReadFromJsonAsync<ApiResponse<YakapSubmissionProxyResponse>>(JsonOptions, ct);
-
-            if (content != null)
-            {
-                return content;
-            }
-
-            return ApiResponse<YakapSubmissionProxyResponse>.Fail(
-                $"Empty response from proxy (HTTP {(int)response.StatusCode})");
+            using var req = CreateRequest(HttpMethod.Post, url, request);
+            return await SendAsync<YakapSubmissionProxyResponse>(req, ct);
         }
         catch (Exception ex)
         {
@@ -96,16 +118,8 @@ public sealed class PhilHealthProxyClient : IPhilHealthProxyClient
             var url = $"{_baseUrl}/api/yakap/masterlist/extract";
             _logger.LogInformation("[PhilHealthProxy] Calling extract masterlist: {Url}", url);
 
-            var response = await _httpClient.PostAsJsonAsync(url, request, ct);
-            var content = await response.Content.ReadFromJsonAsync<ApiResponse<YakapMasterlistProxyResponse>>(JsonOptions, ct);
-
-            if (content != null)
-            {
-                return content;
-            }
-
-            return ApiResponse<YakapMasterlistProxyResponse>.Fail(
-                $"Empty response from proxy (HTTP {(int)response.StatusCode})");
+            using var req = CreateRequest(HttpMethod.Post, url, request);
+            return await SendAsync<YakapMasterlistProxyResponse>(req, ct);
         }
         catch (Exception ex)
         {
@@ -121,8 +135,8 @@ public sealed class PhilHealthProxyClient : IPhilHealthProxyClient
         try
         {
             var url = $"{_baseUrl}/api/yakap/pin/{Uri.EscapeDataString(pin)}/validate";
-            var response = await _httpClient.GetFromJsonAsync<ApiResponse<bool>>(url, JsonOptions, ct);
-            return response ?? ApiResponse<bool>.Fail("Empty response from proxy");
+            using var req = CreateRequest(HttpMethod.Get, url);
+            return await SendAsync<bool>(req, ct);
         }
         catch (Exception ex)
         {
@@ -138,8 +152,8 @@ public sealed class PhilHealthProxyClient : IPhilHealthProxyClient
         try
         {
             var url = $"{_baseUrl}/api/yakap/catalogs/{Uri.EscapeDataString(catalogType)}";
-            var response = await _httpClient.GetFromJsonAsync<ApiResponse<IReadOnlyList<YakapCatalogItemDto>>>(url, JsonOptions, ct);
-            return response ?? ApiResponse<IReadOnlyList<YakapCatalogItemDto>>.Fail("Empty response from proxy");
+            using var req = CreateRequest(HttpMethod.Get, url);
+            return await SendAsync<IReadOnlyList<YakapCatalogItemDto>>(req, ct);
         }
         catch (Exception ex)
         {
@@ -157,10 +171,8 @@ public sealed class PhilHealthProxyClient : IPhilHealthProxyClient
             var url = $"{_baseUrl}/api/soap-sandbox/run-e2e";
             _logger.LogInformation("[PhilHealthProxy] Calling run SOAP sandbox simulation: {Url}", url);
 
-            var response = await _httpClient.PostAsJsonAsync(url, request, ct);
-            var content = await response.Content.ReadFromJsonAsync<ApiResponse<SoapSimulationReportDto>>(JsonOptions, ct);
-
-            return content ?? ApiResponse<SoapSimulationReportDto>.Fail($"Empty response from proxy (HTTP {(int)response.StatusCode})");
+            using var req = CreateRequest(HttpMethod.Post, url, request);
+            return await SendAsync<SoapSimulationReportDto>(req, ct);
         }
         catch (Exception ex)
         {
@@ -175,8 +187,8 @@ public sealed class PhilHealthProxyClient : IPhilHealthProxyClient
         try
         {
             var url = $"{_baseUrl}/api/soap-sandbox/status";
-            var response = await _httpClient.GetFromJsonAsync<ApiResponse<SoapSandboxStatusDto>>(url, JsonOptions, ct);
-            return response ?? ApiResponse<SoapSandboxStatusDto>.Fail("Empty response from proxy");
+            using var req = CreateRequest(HttpMethod.Get, url);
+            return await SendAsync<SoapSandboxStatusDto>(req, ct);
         }
         catch (Exception ex)
         {
@@ -192,9 +204,8 @@ public sealed class PhilHealthProxyClient : IPhilHealthProxyClient
         try
         {
             var url = $"{_baseUrl}/api/soap-sandbox/scenario";
-            var response = await _httpClient.PostAsJsonAsync(url, request, ct);
-            var content = await response.Content.ReadFromJsonAsync<ApiResponse<SoapSandboxStatusDto>>(JsonOptions, ct);
-            return content ?? ApiResponse<SoapSandboxStatusDto>.Fail($"Empty response from proxy (HTTP {(int)response.StatusCode})");
+            using var req = CreateRequest(HttpMethod.Post, url, request);
+            return await SendAsync<SoapSandboxStatusDto>(req, ct);
         }
         catch (Exception ex)
         {
@@ -209,9 +220,8 @@ public sealed class PhilHealthProxyClient : IPhilHealthProxyClient
         try
         {
             var url = $"{_baseUrl}/api/soap-sandbox/reset";
-            var response = await _httpClient.PostAsync(url, null, ct);
-            var content = await response.Content.ReadFromJsonAsync<ApiResponse<SoapSandboxStatusDto>>(JsonOptions, ct);
-            return content ?? ApiResponse<SoapSandboxStatusDto>.Fail($"Empty response from proxy (HTTP {(int)response.StatusCode})");
+            using var req = CreateRequest(HttpMethod.Post, url);
+            return await SendAsync<SoapSandboxStatusDto>(req, ct);
         }
         catch (Exception ex)
         {
@@ -229,11 +239,8 @@ public sealed class PhilHealthProxyClient : IPhilHealthProxyClient
             var url = $"{_baseUrl}/api/tenants/configure";
             _logger.LogInformation("[PhilHealthProxy] Calling configure tenant credentials: {Url}", url);
 
-            var response = await _httpClient.PostAsJsonAsync(url, request, ct);
-            var content = await response.Content.ReadFromJsonAsync<ApiResponse<PhilHealthConfigStatusResponse>>(JsonOptions, ct);
-
-            return content ?? ApiResponse<PhilHealthConfigStatusResponse>.Fail(
-                $"Empty response from proxy (HTTP {(int)response.StatusCode})");
+            using var req = CreateRequest(HttpMethod.Post, url, request);
+            return await SendAsync<PhilHealthConfigStatusResponse>(req, ct);
         }
         catch (Exception ex)
         {
@@ -248,12 +255,16 @@ public sealed class PhilHealthProxyClient : IPhilHealthProxyClient
     {
         try
         {
-            var url = tenantId.HasValue && tenantId.Value != Guid.Empty
-                ? $"{_baseUrl}/api/tenants/status?tenantId={tenantId.Value}"
+            var effectiveTenantId = tenantId.HasValue && tenantId.Value != Guid.Empty
+                ? tenantId.Value.ToString()
+                : _clinicContext?.TenantId;
+
+            var url = !string.IsNullOrWhiteSpace(effectiveTenantId)
+                ? $"{_baseUrl}/api/tenants/status?tenantId={effectiveTenantId}"
                 : $"{_baseUrl}/api/tenants/status";
 
-            var response = await _httpClient.GetFromJsonAsync<ApiResponse<PhilHealthConfigStatusResponse>>(url, JsonOptions, ct);
-            return response ?? ApiResponse<PhilHealthConfigStatusResponse>.Fail("Empty response from proxy");
+            using var req = CreateRequest(HttpMethod.Get, url);
+            return await SendAsync<PhilHealthConfigStatusResponse>(req, ct);
         }
         catch (Exception ex)
         {
@@ -268,13 +279,16 @@ public sealed class PhilHealthProxyClient : IPhilHealthProxyClient
     {
         try
         {
-            var url = tenantId.HasValue && tenantId.Value != Guid.Empty
-                ? $"{_baseUrl}/api/tenants/test-connection?tenantId={tenantId.Value}"
+            var effectiveTenantId = tenantId.HasValue && tenantId.Value != Guid.Empty
+                ? tenantId.Value.ToString()
+                : _clinicContext?.TenantId;
+
+            var url = !string.IsNullOrWhiteSpace(effectiveTenantId)
+                ? $"{_baseUrl}/api/tenants/test-connection?tenantId={effectiveTenantId}"
                 : $"{_baseUrl}/api/tenants/test-connection";
 
-            var response = await _httpClient.PostAsync(url, null, ct);
-            var content = await response.Content.ReadFromJsonAsync<ApiResponse<string>>(JsonOptions, ct);
-            return content ?? ApiResponse<string>.Fail($"Empty response from proxy (HTTP {(int)response.StatusCode})");
+            using var req = CreateRequest(HttpMethod.Post, url);
+            return await SendAsync<string>(req, ct);
         }
         catch (Exception ex)
         {
@@ -283,4 +297,5 @@ public sealed class PhilHealthProxyClient : IPhilHealthProxyClient
         }
     }
 }
+
 

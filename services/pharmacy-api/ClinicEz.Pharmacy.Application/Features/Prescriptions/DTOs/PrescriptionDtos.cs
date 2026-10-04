@@ -69,5 +69,6 @@ public record PrescriptionOrderDto(
     string? DispensingPharmacistPrc,
     decimal TotalAmount,
     List<PrescriptionItemResponseDto> Items,
-    List<DispenseAuditRecordDto> DispenseRecords
+    List<DispenseAuditRecordDto> DispenseRecords,
+    string? BranchId = null
 );

@@ -15,6 +15,7 @@ namespace ClinicEz.Laboratory.Application.Features.Requisitions.Queries;
 public record GetWorklistQuery(
     string? Status = null,
     string? SearchTerm = null,
+    string? BranchId = null,
     int PageNumber = 1,
     int PageSize = 50
 ) : IRequest<List<LabRequisitionDto>>;
@@ -41,6 +42,11 @@ public class GetWorklistQueryHandler : IRequestHandler<GetWorklistQuery, List<La
             query = query.Where(r => r.Status == parsedStatus);
         }
 
+        if (!string.IsNullOrWhiteSpace(request.BranchId))
+        {
+            query = query.Where(r => r.BranchId == request.BranchId);
+        }
+
         if (!string.IsNullOrWhiteSpace(request.SearchTerm))
         {
             var term = request.SearchTerm.Trim().ToLower();
@@ -65,6 +71,7 @@ public class GetWorklistQueryHandler : IRequestHandler<GetWorklistQuery, List<La
         return new LabRequisitionDto
         {
             Id = r.Id,
+            BranchId = r.BranchId,
             ExternalRequisitionId = r.ExternalRequisitionId,
             AccessionNumber = r.AccessionNumber,
             OrderingFacilityName = r.OrderingFacilityName,

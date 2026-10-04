@@ -14,7 +14,8 @@ namespace ClinicEz.Pharmacy.Application.Features.Prescriptions.Queries;
 
 public record GetPrescriptionsQueueQuery(
     PrescriptionStatus? Status = null,
-    string? Search = null
+    string? Search = null,
+    string? BranchId = null
 ) : IRequest<List<PrescriptionOrderDto>>;
 
 public class GetPrescriptionsQueueQueryHandler : IRequestHandler<GetPrescriptionsQueueQuery, List<PrescriptionOrderDto>>
@@ -36,6 +37,11 @@ public class GetPrescriptionsQueueQueryHandler : IRequestHandler<GetPrescription
         if (request.Status.HasValue)
         {
             query = query.Where(o => o.Status == request.Status.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.BranchId))
+        {
+            query = query.Where(o => o.BranchId == request.BranchId);
         }
 
         if (!string.IsNullOrWhiteSpace(request.Search))
@@ -105,7 +111,8 @@ public class GetPrescriptionsQueueQueryHandler : IRequestHandler<GetPrescription
                 d.ReceiptNumber,
                 d.BatchDeductionsJson,
                 d.Notes
-            )).ToList()
+            )).ToList(),
+            o.BranchId
         )).ToList();
     }
 }

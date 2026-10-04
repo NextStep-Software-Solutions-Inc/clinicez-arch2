@@ -78,6 +78,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.PrescriptionNumber).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.BranchId).HasMaxLength(100);
+            entity.HasIndex(e => e.BranchId);
             entity.Property(e => e.PatientName).IsRequired().HasMaxLength(255);
             entity.Property(e => e.OrderingDoctorName).HasMaxLength(255);
             entity.Property(e => e.TotalAmount).HasPrecision(18, 2);

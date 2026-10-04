@@ -13,6 +13,9 @@ public sealed class PrescriptionOrder : BaseEntity
     [Sieve(CanFilter = true, CanSort = true)]
     public string TenantId { get; set; } = string.Empty;
 
+    [Sieve(CanFilter = true, CanSort = true)]
+    public string? BranchId { get; set; }
+
     public string PharmacyId { get; set; } = string.Empty;
 
     [Sieve(CanFilter = true, CanSort = true)]

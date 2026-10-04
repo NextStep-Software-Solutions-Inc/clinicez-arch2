@@ -27,9 +27,10 @@ public sealed class PrescriptionsController : ControllerBase
     public async Task<ActionResult<ApiResponse<List<PrescriptionOrderDto>>>> GetQueue(
         [FromQuery] PrescriptionStatus? status,
         [FromQuery] string? search,
+        [FromQuery] string? branchId = null,
         CancellationToken ct = default)
     {
-        var result = await _sender.Send(new GetPrescriptionsQueueQuery(status, search), ct);
+        var result = await _sender.Send(new GetPrescriptionsQueueQuery(status, search, branchId), ct);
         return Ok(ApiResponse<List<PrescriptionOrderDto>>.Success(result));
     }
 

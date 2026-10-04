@@ -126,6 +126,7 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
                 OrderingFacilityId = _clinicContext.ClinicId.ToString(),
                 OrderingFacilityName = "ClinicEz Primary Care Clinic",
                 TenantId = _clinicContext.TenantId ?? "tenant-default",
+                BranchId = _clinicContext.BranchId?.ToString(),
                 TargetFacilityId = request.TargetFacilityId,
                 TargetTenantId = request.TargetTenantId,
                 OrderingDoctor = new OrderingDoctorDto

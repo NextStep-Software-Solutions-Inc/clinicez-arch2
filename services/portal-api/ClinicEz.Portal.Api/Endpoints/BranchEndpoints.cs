@@ -498,6 +498,88 @@ public class BranchEndpoints : IEndpoint
         .WithName("AssignFacilitiesToBranch")
         .WithDescription("Associates one or more facilities (Clinic, Lab, Pharmacy) to a physical branch.");
 
+        // Unlink a facility from a branch
+        branches.MapDelete("/{id:guid}/facilities/{facilityId:guid}", async (
+            Guid id,
+            Guid facilityId,
+            HttpContext httpContext,
+            IApplicationDbContext context) =>
+        {
+            var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(clerkUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var facility = await context.Facilities.FirstOrDefaultAsync(f => f.Id == facilityId && f.BranchId == id && !f.IsDeleted);
+            if (facility == null)
+            {
+                return Results.NotFound(new { Message = "Facility not found in this branch." });
+            }
+
+            facility.BranchId = null;
+            facility.UpdatedAt = DateTime.UtcNow;
+            facility.UpdatedBy = clerkUserId;
+
+            await context.SaveChangesAsync(CancellationToken.None);
+            return Results.Ok(ApiResponse<bool>.Success(true, "Facility unlinked from branch."));
+        })
+        .RequireAuthorization()
+        .WithName("UnlinkFacilityFromBranch");
+
+        // Delete a branch (soft delete and decouple facilities)
+        branches.MapDelete("/{id:guid}", async (
+            Guid id,
+            HttpContext httpContext,
+            IApplicationDbContext context) =>
+        {
+            var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(clerkUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var branch = await context.Branches
+                .Include(b => b.Facilities)
+                .FirstOrDefaultAsync(b => b.Id == id && !b.IsDeleted);
+
+            if (branch == null)
+            {
+                return Results.NotFound(new { Message = "Branch not found." });
+            }
+
+            var tenant = await context.Tenants.FirstOrDefaultAsync(t => t.Id == branch.TenantId);
+            if (tenant == null)
+            {
+                return Results.NotFound(new { Message = "Workspace not found." });
+            }
+
+            var isOwner = tenant.OwnerId == clerkUserId;
+            var isAdmin = !isOwner && await context.StaffMembers.AnyAsync(s =>
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == "Admin" && s.Status == "Active");
+
+            if (!isOwner && !isAdmin)
+            {
+                return Results.Forbid();
+            }
+
+            foreach (var fac in branch.Facilities)
+            {
+                fac.BranchId = null;
+                fac.UpdatedAt = DateTime.UtcNow;
+                fac.UpdatedBy = clerkUserId;
+            }
+
+            branch.IsDeleted = true;
+            branch.DeletedAt = DateTime.UtcNow;
+            branch.DeletedBy = clerkUserId;
+
+            await context.SaveChangesAsync(CancellationToken.None);
+            return Results.Ok(ApiResponse<bool>.Success(true, "Branch deleted successfully."));
+        })
+        .RequireAuthorization()
+        .WithName("DeleteBranch");
+
         // ── Internal Endpoints (Invoked by philhealth-proxy via resilient HTTP) ──────
         var internalApi = app.MapGroup("/internal").WithTags("Internal PhilHealth Proxy Gateway");
 

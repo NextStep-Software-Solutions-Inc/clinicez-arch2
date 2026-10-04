@@ -65,6 +65,7 @@ public record DiagnosticReportDto
 public record LabRequisitionDto
 {
     public Guid Id { get; init; }
+    public string? BranchId { get; init; }
     public Guid? ExternalRequisitionId { get; init; }
     public string AccessionNumber { get; init; } = string.Empty;
     public string OrderingFacilityName { get; init; } = string.Empty;

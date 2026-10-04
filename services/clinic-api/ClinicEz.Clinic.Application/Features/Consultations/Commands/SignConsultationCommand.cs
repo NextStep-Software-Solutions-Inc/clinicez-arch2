@@ -150,6 +150,7 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
                 OrderingFacilityId = _clinicContext.ClinicId.ToString(),
                 OrderingFacilityName = "Clinic Operations Hub",
                 TenantId = _clinicContext.TenantId,
+                BranchId = _clinicContext.BranchId?.ToString(),
                 PrescriberDoctor = new ClinicEz.Shared.Interoperability.PrescriberDoctorDto
                 {
                     DoctorId = encounter.DoctorId.ToString(),

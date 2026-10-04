@@ -56,9 +56,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasKey(e => e.Id);
             entity.Property(e => e.AccessionNumber).IsRequired().HasMaxLength(50);
             entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.BranchId).HasMaxLength(100);
             entity.Property(e => e.PatientName).IsRequired().HasMaxLength(255);
             entity.HasIndex(e => e.AccessionNumber).IsUnique();
             entity.HasIndex(e => e.ExternalRequisitionId);
+            entity.HasIndex(e => e.BranchId);
             entity.HasMany(e => e.Specimens).WithOne().HasForeignKey(s => s.LabRequisitionId).OnDelete(DeleteBehavior.Cascade);
             entity.HasMany(e => e.AnalyteResults).WithOne().HasForeignKey(r => r.LabRequisitionId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(e => e.DiagnosticReport).WithOne().HasForeignKey<DiagnosticReport>(d => d.LabRequisitionId).OnDelete(DeleteBehavior.Cascade);

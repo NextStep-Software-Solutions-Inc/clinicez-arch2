@@ -262,4 +262,63 @@ public class LaboratoryInteroperabilityTests
         saved.Specimens.Should().Contain(s => s.ContainerType == SpecimenContainerType.Purple_EDTA);
         saved.Specimens.Should().Contain(s => s.ContainerType == SpecimenContainerType.Yellow_SST);
     }
+
+    [Fact]
+    public async Task LabRequisitionIssuedConsumer_Should_Ingest_BranchId_And_Filter_By_Branch()
+    {
+        var (db, uow, sieve) = LabTestDbHelper.CreateTestContext();
+        var repo = LabTestDbHelper.CreateRepository<LabRequisition>(db, sieve);
+        var logger = Substitute.For<ILogger<LabRequisitionIssuedConsumer>>();
+        var consumer = new LabRequisitionIssuedConsumer(repo, uow, logger);
+
+        var branchAId = Guid.NewGuid().ToString();
+        var branchBId = Guid.NewGuid().ToString();
+
+        var eventA = new LabRequisitionIssuedEvent
+        {
+            RequisitionId = Guid.NewGuid(),
+            AccessionNumber = "REQ-BRANCH-A-01",
+            OrderingFacilityId = "clinic-branch-a",
+            OrderingFacilityName = "Downtown Medical Clinic",
+            TenantId = "tenant-downtown",
+            BranchId = branchAId,
+            OrderingDoctor = new OrderingDoctorDto { DoctorName = "Dr. Branch A" },
+            Patient = new RequisitionPatientDto { PatientId = Guid.NewGuid(), FullName = "Patient Branch A" },
+            Items = new List<RequisitionItemDto> { new() { ItemName = "CBC", Category = "Hematology" } }
+        };
+
+        var eventB = new LabRequisitionIssuedEvent
+        {
+            RequisitionId = Guid.NewGuid(),
+            AccessionNumber = "REQ-BRANCH-B-01",
+            OrderingFacilityId = "clinic-branch-b",
+            OrderingFacilityName = "Uptown Medical Clinic",
+            TenantId = "tenant-downtown",
+            BranchId = branchBId,
+            OrderingDoctor = new OrderingDoctorDto { DoctorName = "Dr. Branch B" },
+            Patient = new RequisitionPatientDto { PatientId = Guid.NewGuid(), FullName = "Patient Branch B" },
+            Items = new List<RequisitionItemDto> { new() { ItemName = "Urinalysis", Category = "Clinical Microscopy" } }
+        };
+
+        var contextA = Substitute.For<ConsumeContext<LabRequisitionIssuedEvent>>();
+        contextA.Message.Returns(eventA);
+        contextA.CancellationToken.Returns(CancellationToken.None);
+        await consumer.Consume(contextA);
+
+        var contextB = Substitute.For<ConsumeContext<LabRequisitionIssuedEvent>>();
+        contextB.Message.Returns(eventB);
+        contextB.CancellationToken.Returns(CancellationToken.None);
+        await consumer.Consume(contextB);
+
+        var savedA = await db.LabRequisitions.FirstOrDefaultAsync(r => r.AccessionNumber == "REQ-BRANCH-A-01");
+        savedA.Should().NotBeNull();
+        savedA!.BranchId.Should().Be(branchAId);
+
+        // Verify GetWorklistQuery filtered by branchAId
+        var queryHandler = new GetWorklistQueryHandler(repo);
+        var worklistA = await queryHandler.Handle(new GetWorklistQuery(BranchId: branchAId), CancellationToken.None);
+        worklistA.Should().HaveCount(1);
+        worklistA[0].AccessionNumber.Should().Be("REQ-BRANCH-A-01");
+        worklistA[0].BranchId.Should().Be(branchAId);
+    }
 }

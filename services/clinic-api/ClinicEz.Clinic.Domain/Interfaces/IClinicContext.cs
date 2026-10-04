@@ -7,6 +7,7 @@ public interface IClinicContext
 {
     string TenantId { get; }
     Guid ClinicId { get; }
+    Guid? BranchId { get; }
     Guid? StaffId { get; }
     IReadOnlyList<string> Permissions { get; }
     bool HasPermission(string permission);

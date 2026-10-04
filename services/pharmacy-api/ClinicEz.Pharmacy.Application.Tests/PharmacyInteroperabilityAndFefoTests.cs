@@ -355,4 +355,70 @@ public class PharmacyInteroperabilityAndFefoTests
         await act.Should().ThrowAsync<BadRequestException>()
             .WithMessage("*RA 9165*S2 License*");
     }
+
+    [Fact]
+    public async Task PrescriptionIssuedConsumer_Should_Ingest_BranchId_And_Filter_By_Branch()
+    {
+        var (db, uow, sieve) = PharmacyTestDbHelper.CreateTestContext();
+        var orderRepo = PharmacyTestDbHelper.CreateRepository<PrescriptionOrder>(db, sieve);
+        var inventoryRepo = PharmacyTestDbHelper.CreateRepository<PharmacyInventoryItem>(db, sieve);
+        var logger = Substitute.For<ILogger<PrescriptionIssuedConsumer>>();
+        var consumer = new PrescriptionIssuedConsumer(orderRepo, inventoryRepo, uow, logger);
+
+        var branchAId = Guid.NewGuid().ToString();
+        var branchBId = Guid.NewGuid().ToString();
+
+        var rxEventA = new PrescriptionIssuedEvent
+        {
+            PrescriptionId = Guid.NewGuid(),
+            PrescriptionNumber = "RX-BRANCH-A-01",
+            OrderingFacilityId = "clinic-branch-a",
+            OrderingFacilityName = "Downtown Medical Clinic",
+            TenantId = "tenant-downtown",
+            BranchId = branchAId,
+            PrescriberDoctor = new PrescriberDoctorDto { DoctorName = "Dr. Branch A", PrcLicenseNumber = "PRC-001" },
+            Patient = new PrescriptionPatientDto { PatientId = Guid.NewGuid(), FullName = "Patient Branch A" },
+            Items = new List<PrescriptionItemDto>
+            {
+                new() { GenericName = "Amoxicillin", Dosage = "500mg", Quantity = 21 }
+            }
+        };
+
+        var rxEventB = new PrescriptionIssuedEvent
+        {
+            PrescriptionId = Guid.NewGuid(),
+            PrescriptionNumber = "RX-BRANCH-B-01",
+            OrderingFacilityId = "clinic-branch-b",
+            OrderingFacilityName = "Uptown Medical Clinic",
+            TenantId = "tenant-downtown",
+            BranchId = branchBId,
+            PrescriberDoctor = new PrescriberDoctorDto { DoctorName = "Dr. Branch B", PrcLicenseNumber = "PRC-002" },
+            Patient = new PrescriptionPatientDto { PatientId = Guid.NewGuid(), FullName = "Patient Branch B" },
+            Items = new List<PrescriptionItemDto>
+            {
+                new() { GenericName = "Paracetamol", Dosage = "500mg", Quantity = 10 }
+            }
+        };
+
+        var contextA = Substitute.For<ConsumeContext<PrescriptionIssuedEvent>>();
+        contextA.Message.Returns(rxEventA);
+        contextA.CancellationToken.Returns(CancellationToken.None);
+        await consumer.Consume(contextA);
+
+        var contextB = Substitute.For<ConsumeContext<PrescriptionIssuedEvent>>();
+        contextB.Message.Returns(rxEventB);
+        contextB.CancellationToken.Returns(CancellationToken.None);
+        await consumer.Consume(contextB);
+
+        var savedA = await db.PrescriptionOrders.FirstOrDefaultAsync(p => p.PrescriptionNumber == "RX-BRANCH-A-01");
+        savedA.Should().NotBeNull();
+        savedA!.BranchId.Should().Be(branchAId);
+
+        // Verify GetPrescriptionsQueueQuery filtered by branchAId
+        var queryHandler = new GetPrescriptionsQueueQueryHandler(orderRepo);
+        var queueA = await queryHandler.Handle(new GetPrescriptionsQueueQuery(BranchId: branchAId), CancellationToken.None);
+        queueA.Should().HaveCount(1);
+        queueA[0].PrescriptionNumber.Should().Be("RX-BRANCH-A-01");
+        queueA[0].BranchId.Should().Be(branchAId);
+    }
 }

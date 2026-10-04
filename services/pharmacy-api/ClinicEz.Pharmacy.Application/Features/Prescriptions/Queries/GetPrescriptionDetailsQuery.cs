@@ -134,7 +134,8 @@ public class GetPrescriptionDetailsQueryHandler : IRequestHandler<GetPrescriptio
                 d.ReceiptNumber,
                 d.BatchDeductionsJson,
                 d.Notes
-            )).ToList()
+            )).ToList(),
+            order.BranchId
         );
     }
 }

@@ -12,6 +12,7 @@ import {
   IconTestPipe,
   IconCreditCard,
   IconUsers,
+  IconMapPin,
 } from "@tabler/icons-react"
 
 import { NavMain } from "@/components/dashboard/nav-main"
@@ -57,6 +58,11 @@ export function AppSidebar({
         title: "Facilities",
         icon: IconBuilding,
         items: [
+          {
+            title: "Branches & Locations",
+            url: `/dashboard/branches`,
+            icon: IconMapPin,
+          },
           {
             title: "Clinics",
             url: `/dashboard/clinics`,

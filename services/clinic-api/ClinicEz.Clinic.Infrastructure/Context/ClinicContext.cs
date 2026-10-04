@@ -74,6 +74,35 @@ public sealed class ClinicContext : IClinicContext
         }
     }
 
+    public Guid? BranchId
+    {
+        get
+        {
+            var httpContext = _httpContextAccessor.HttpContext;
+            if (httpContext != null)
+            {
+                if (httpContext.Request.Headers.TryGetValue("X-Branch-Id", out var branchHeader) &&
+                    Guid.TryParse(branchHeader.ToString(), out var branchGuid))
+                {
+                    return branchGuid;
+                }
+
+                var claimBranch = httpContext.User.FindFirst("branch_id")?.Value;
+                if (!string.IsNullOrWhiteSpace(claimBranch) && Guid.TryParse(claimBranch, out var claimGuid))
+                {
+                    return claimGuid;
+                }
+            }
+
+            if (Guid.TryParse(_configuration["ClinicSettings:BranchId"], out var configBranchGuid))
+            {
+                return configBranchGuid;
+            }
+
+            return null;
+        }
+    }
+
     public Guid? StaffId
     {
         get

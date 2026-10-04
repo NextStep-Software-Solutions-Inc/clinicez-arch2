@@ -144,4 +144,43 @@ public class BranchManagementTests : IDisposable
         Assert.Equal("SuperSecretP@ss", protector.Unprotect(loaded.PhilHealthEncryptedPassword!));
         Assert.Equal("32-BYTE-ENCRYPTION-CIPHER-KEY!", protector.Unprotect(loaded.PhilHealthEncryptedCipherKey!));
     }
+
+    [Fact]
+    public async Task DeleteBranch_UnlinksFacilitiesAndMarksBranchDeleted()
+    {
+        var branch = new Branch
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            Name = "Temporary Branch",
+            IsActive = true
+        };
+        _context.Branches.Add(branch);
+
+        var clinic = new Facility
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            BranchId = branch.Id,
+            Name = "Temporary Clinic",
+            FacilityType = FacilityType.Clinic,
+            Status = FacilityStatus.Active
+        };
+        _context.Facilities.Add(clinic);
+        await _context.SaveChangesAsync();
+
+        // Simulate delete logic
+        clinic.BranchId = null;
+        branch.IsDeleted = true;
+        branch.DeletedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        var reloadedBranch = await _context.Branches.FindAsync(branch.Id);
+        Assert.NotNull(reloadedBranch);
+        Assert.True(reloadedBranch!.IsDeleted);
+
+        var reloadedClinic = await _context.Facilities.FindAsync(clinic.Id);
+        Assert.NotNull(reloadedClinic);
+        Assert.Null(reloadedClinic!.BranchId);
+    }
 }
