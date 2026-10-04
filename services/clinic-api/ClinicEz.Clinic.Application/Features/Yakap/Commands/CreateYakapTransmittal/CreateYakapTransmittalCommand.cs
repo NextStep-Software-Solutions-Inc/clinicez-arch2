@@ -16,7 +16,7 @@ using Microsoft.EntityFrameworkCore;
 namespace ClinicEz.Clinic.Application.Features.Yakap.Commands.CreateYakapTransmittal;
 
 public sealed record CreateYakapTransmittalCommand(
-    IReadOnlyList<Guid> ConsultationEncounterIds,
+    IReadOnlyList<Guid>? ConsultationEncounterIds = null,
     string ReportTagging = "1",
     string? EffectiveYear = null) : IRequest<ApiResponse<YakapTransmittalDto>>;
 
@@ -24,8 +24,6 @@ public sealed class CreateYakapTransmittalCommandValidator : AbstractValidator<C
 {
     public CreateYakapTransmittalCommandValidator()
     {
-        RuleFor(x => x.ConsultationEncounterIds)
-            .NotEmpty().WithMessage("At least one consultation encounter is required for transmittal.");
         RuleFor(x => x.ReportTagging)
             .Must(t => t == "1" || t == "2")
             .WithMessage("ReportTagging must be '1' (First Tranche) or '2' (Second Tranche).");
@@ -39,6 +37,8 @@ public sealed class CreateYakapTransmittalCommandHandler : IRequestHandler<Creat
     private readonly IRepository<ClinicPatient> _patientRepo;
     private readonly IRepository<TriageVitals> _vitalsRepo;
     private readonly IRepository<ClinicSettings> _settingsRepo;
+    private readonly IRepository<ClinicLabOrder> _labOrderRepo;
+    private readonly IRepository<ClinicServiceItem> _serviceItemRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IYakapClinicalMapper _mapper;
@@ -50,6 +50,8 @@ public sealed class CreateYakapTransmittalCommandHandler : IRequestHandler<Creat
         IRepository<ClinicPatient> patientRepo,
         IRepository<TriageVitals> vitalsRepo,
         IRepository<ClinicSettings> settingsRepo,
+        IRepository<ClinicLabOrder> labOrderRepo,
+        IRepository<ClinicServiceItem> serviceItemRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
         IYakapClinicalMapper mapper,
@@ -60,6 +62,8 @@ public sealed class CreateYakapTransmittalCommandHandler : IRequestHandler<Creat
         _patientRepo = patientRepo;
         _vitalsRepo = vitalsRepo;
         _settingsRepo = settingsRepo;
+        _labOrderRepo = labOrderRepo;
+        _serviceItemRepo = serviceItemRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
         _mapper = mapper;
@@ -74,10 +78,40 @@ public sealed class CreateYakapTransmittalCommandHandler : IRequestHandler<Creat
         var tenantId = _clinicContext.TenantId;
 
         // 1. Load encounters
-        var encounters = await _encounterRepo.Query(e => request.ConsultationEncounterIds.Contains(e.Id))
-            .Include(e => e.Diagnoses)
-            .Include(e => e.Prescriptions)
-            .ToListAsync(cancellationToken);
+        List<ConsultationEncounter> encounters;
+        if (request.ConsultationEncounterIds != null && request.ConsultationEncounterIds.Count > 0)
+        {
+            encounters = await _encounterRepo.Query(e => e.ClinicId == clinicId && request.ConsultationEncounterIds.Contains(e.Id))
+                .Include(e => e.Diagnoses)
+                .Include(e => e.Prescriptions)
+                .ToListAsync(cancellationToken);
+        }
+        else
+        {
+            var submittedEncounterIds = await _transmittalRepo.Query(t =>
+                    t.ClinicId == clinicId &&
+                    t.Status != YakapTransmittalStatus.Failed)
+                .SelectMany(t => t.Items)
+                .Where(i => i.ConsultationEncounterId.HasValue)
+                .Select(i => i.ConsultationEncounterId!.Value)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
+            var query = _encounterRepo.Query(e =>
+                    e.ClinicId == clinicId &&
+                    !submittedEncounterIds.Contains(e.Id));
+
+            if (request.ReportTagging == "2")
+            {
+                query = query.Where(e => e.IsSigned);
+            }
+
+            encounters = await query
+                .Include(e => e.Diagnoses)
+                .Include(e => e.Prescriptions)
+                .OrderBy(e => e.EncounterDate)
+                .ToListAsync(cancellationToken);
+        }
 
         if (encounters.Count == 0)
         {
@@ -145,7 +179,31 @@ public sealed class CreateYakapTransmittalCommandHandler : IRequestHandler<Creat
             transmittalNumber = $"RHCI{accreditationShort}{effectiveYear}{timestamp}";
         }
 
-        // 5. Generate mapping document
+        // 5. Load lab orders and fee schedule
+        var encIds = encounters.Select(e => e.Id).ToList();
+        var labOrders = await _labOrderRepo.Query(l => l.ConsultationId.HasValue && encIds.Contains(l.ConsultationId.Value))
+            .Include(l => l.Items)
+            .ToListAsync(cancellationToken);
+
+        var labOrdersMap = labOrders
+            .GroupBy(l => l.ConsultationId!.Value)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var serviceItems = await _serviceItemRepo.Query(s => s.ClinicId == clinicId || s.TenantId == tenantId)
+            .ToListAsync(cancellationToken);
+
+        var feeScheduleMap = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in serviceItems)
+        {
+            if (!string.IsNullOrWhiteSpace(item.PhilHealthCode))
+                feeScheduleMap[item.PhilHealthCode] = item.StandardPrice;
+            if (!string.IsNullOrWhiteSpace(item.Code))
+                feeScheduleMap[item.Code] = item.StandardPrice;
+            if (!string.IsNullOrWhiteSpace(item.Name))
+                feeScheduleMap[item.Name] = item.StandardPrice;
+        }
+
+        // 6. Generate mapping document
         _mapper.MapToYakapReportDocument(
             request.ReportTagging,
             effectiveYear,
@@ -153,7 +211,10 @@ public sealed class CreateYakapTransmittalCommandHandler : IRequestHandler<Creat
             encounters,
             patientsMap,
             vitalsMap,
-            transmittalNumber);
+            transmittalNumber,
+            ncdMap: null,
+            labOrdersMap: labOrdersMap,
+            feeScheduleMap: feeScheduleMap);
 
         // 6. Build Transmittal Entity
         var transmittal = new YakapTransmittal

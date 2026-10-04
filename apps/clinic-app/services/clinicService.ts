@@ -1403,12 +1403,35 @@ export const clinicService = {
     return clinicApiClient.get<YakapTransmittal[]>(`/yakap/transmittals${qs ? `?${qs}` : ''}`);
   },
 
+  async getEligibleYakapEncounters(params?: {
+    reportTagging?: string;
+    startDate?: string;
+    endDate?: string;
+    patientId?: string;
+  }) {
+    const qp = new URLSearchParams();
+    if (params?.reportTagging) qp.append('reportTagging', params.reportTagging);
+    if (params?.startDate) qp.append('startDate', params.startDate);
+    if (params?.endDate) qp.append('endDate', params.endDate);
+    if (params?.patientId) qp.append('patientId', params.patientId);
+    const qs = qp.toString();
+    return clinicApiClient.get<EligibleYakapEncounter[]>(`/yakap/encounters/eligible${qs ? `?${qs}` : ''}`);
+  },
+
   async getYakapTransmittalById(id: string) {
     return clinicApiClient.get<YakapTransmittal>(`/yakap/transmittals/${id}`);
   },
 
+  async getYakapTransmittalRawXml(id: string) {
+    return clinicApiClient.get<string>(`/yakap/transmittals/${id}/raw-xml`);
+  },
+
   async createYakapTransmittal(payload: CreateYakapTransmittalPayload) {
-    return clinicApiClient.post<YakapTransmittal>('/yakap/transmittals', payload);
+    const body = {
+      ...payload,
+      consultationEncounterIds: payload.consultationEncounterIds || payload.encounterIds,
+    };
+    return clinicApiClient.post<YakapTransmittal>('/yakap/transmittals', body);
   },
 
   async validateYakapTransmittal(id: string) {
@@ -1625,10 +1648,27 @@ export interface YakapTransmittal {
   items: YakapTransmittalItem[];
 }
 
+export interface EligibleYakapEncounter {
+  encounterId: string;
+  patientId: string;
+  patientName: string;
+  philHealthIdentificationNumber?: string;
+  encounterDate: string;
+  doctorName: string;
+  primaryDiagnosis: string;
+  diagnosesCount: number;
+  prescriptionsCount: number;
+  diagnosticsCount: number;
+  isYakapEligible: boolean;
+  hasPhilHealthPin: boolean;
+  totalMedicationAmount: number;
+}
+
 export interface CreateYakapTransmittalPayload {
   reportTagging: '1' | '2';
-  effectiveYear: string;
+  effectiveYear?: string;
   packageType?: string;
+  consultationEncounterIds?: string[];
   encounterIds?: string[];
   notes?: string;
 }

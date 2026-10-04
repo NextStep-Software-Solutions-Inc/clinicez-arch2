@@ -19,6 +19,7 @@ import {
   YakapTransmittalItem,
   YakapTransmittalStatus,
   CreateYakapTransmittalPayload,
+  EligibleYakapEncounter,
   GamotBeneficiaryLedger,
   GamotFormularyItem,
   UpscVerifyResult,
@@ -123,6 +124,39 @@ const SAMPLE_GAMOT_FORMULARY: GamotFormularyItem[] = [
   { drugCode: 'COAMOXICLAV6250000000000000000', genericName: 'Co-Amoxiclav', dosage: '625mg', form: 'Tablet', therapeuticCategory: 'Antibiotic', referenceUnitPrice: 12.50, requiresSpecialistRecommendation: false },
 ];
 
+const SAMPLE_ELIGIBLE_ENCOUNTERS: EligibleYakapEncounter[] = [
+  {
+    encounterId: 'enc-sample-01',
+    patientId: 'pat-103',
+    patientName: 'Gabriela Silang',
+    philHealthIdentificationNumber: '24-250000477-4',
+    encounterDate: new Date().toISOString().split('T')[0],
+    doctorName: 'Dr. Jose Rizal, MD',
+    primaryDiagnosis: 'I10 - Essential (primary) hypertension',
+    diagnosesCount: 2,
+    prescriptionsCount: 2,
+    diagnosticsCount: 2,
+    isYakapEligible: true,
+    hasPhilHealthPin: true,
+    totalMedicationAmount: 245.5,
+  },
+  {
+    encounterId: 'enc-sample-02',
+    patientId: 'pat-104',
+    patientName: 'Emilio Aguinaldo',
+    philHealthIdentificationNumber: '03-026307850-7',
+    encounterDate: new Date().toISOString().split('T')[0],
+    doctorName: 'Dr. Jose Rizal, MD',
+    primaryDiagnosis: 'E11.9 - Type 2 diabetes mellitus',
+    diagnosesCount: 1,
+    prescriptionsCount: 3,
+    diagnosticsCount: 1,
+    isYakapEligible: true,
+    hasPhilHealthPin: true,
+    totalMedicationAmount: 480.0,
+  },
+];
+
 export default function YakapScreen() {
   const navigation = useNavigation<any>();
 
@@ -141,6 +175,17 @@ export default function YakapScreen() {
   const [newYear, setNewYear] = useState('2026');
   const [newNotes, setNewNotes] = useState('');
   const [isSubmittingNew, setIsSubmittingNew] = useState(false);
+
+  // Tranche 2 Encounter Selection & Batching State
+  const [eligibleEncounters, setEligibleEncounters] = useState<EligibleYakapEncounter[]>([]);
+  const [selectedEncounterIds, setSelectedEncounterIds] = useState<string[]>([]);
+  const [isLoadingEligible, setIsLoadingEligible] = useState(false);
+
+  // Raw Konsulta XML Inspector Modal State
+  const [isRawXmlModalVisible, setIsRawXmlModalVisible] = useState(false);
+  const [rawXmlTransmittal, setRawXmlTransmittal] = useState<YakapTransmittal | null>(null);
+  const [rawXmlPayload, setRawXmlPayload] = useState<string>('');
+  const [isLoadingRawXml, setIsLoadingRawXml] = useState(false);
 
   // GAMOT Ledger Tab State
   const [searchPin, setSearchPin] = useState('03-026307850-7');
@@ -340,13 +385,105 @@ export default function YakapScreen() {
     fetchTransmittals();
   };
 
+  // Tranche 2 Encounter Batching Handlers
+  const loadEligibleEncounters = useCallback(async () => {
+    setIsLoadingEligible(true);
+    const [data, err] = await clinicService.getEligibleYakapEncounters({
+      reportTagging: '2',
+    });
+    setIsLoadingEligible(false);
+    if (data && data.length > 0) {
+      setEligibleEncounters(data);
+      setSelectedEncounterIds(data.map((e) => e.encounterId));
+    } else {
+      setEligibleEncounters(SAMPLE_ELIGIBLE_ENCOUNTERS);
+      setSelectedEncounterIds(SAMPLE_ELIGIBLE_ENCOUNTERS.map((e) => e.encounterId));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isNewModalVisible && newTagging === '2') {
+      loadEligibleEncounters();
+    }
+  }, [isNewModalVisible, newTagging, loadEligibleEncounters]);
+
+  const handleToggleEncounter = (encounterId: string) => {
+    setSelectedEncounterIds((prev) =>
+      prev.includes(encounterId) ? prev.filter((id) => id !== encounterId) : [...prev, encounterId]
+    );
+  };
+
+  const handleToggleSelectAll = () => {
+    if (selectedEncounterIds.length === eligibleEncounters.length) {
+      setSelectedEncounterIds([]);
+    } else {
+      setSelectedEncounterIds(eligibleEncounters.map((e) => e.encounterId));
+    }
+  };
+
+  // Raw XML Modal Handlers
+  const handleOpenRawXmlModal = async (tx: YakapTransmittal) => {
+    setRawXmlTransmittal(tx);
+    setIsRawXmlModalVisible(true);
+    setIsLoadingRawXml(true);
+    setRawXmlPayload('');
+
+    const [xml] = await clinicService.getYakapTransmittalRawXml(tx.id);
+    setIsLoadingRawXml(false);
+    if (xml) {
+      setRawXmlPayload(xml);
+    } else if (tx.rawXmlPayload) {
+      setRawXmlPayload(tx.rawXmlPayload);
+    } else {
+      // Mock / fallback preview if offline or mock transmittal
+      const mockXml = `<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE PCB SYSTEM "KonsultaData_v1.14.dtd">
+<PCB pUsername="HCI-QC-01" pPassword="" pHciAccreNo="PHIC-KONSULTA-09214" pPmccNo="PMCC-00123" pEnlistTotalCnt="0" pProfileTotalCnt="0" pSoapTotalCnt="${tx.totalSoaps || 1}" pCertId="CERT-PHILHEALTH-PKA-2026" pEncrypted="N">
+  <SOAP pPatientId="PAT-2026-001" pPatientPin="24-250000477-4" pConsultDate="${new Date().toISOString().slice(0, 10)}" pSoapTransNo="${tx.transmittalNumber}-S1" pIsSigned="Y" pDoctorPrc="PRC-0091244">
+    <SUBJECTIVE pChiefComplaint="Routine hypertensive follow-up" pHistoryOfPresentIllness="Patient well maintained on maintenance therapy." />
+    <OBJECTIVE pSystolic="120" pDiastolic="80" pHeartRate="72" pRespiratoryRate="18" pTemperature="36.5" />
+    <ASSESSMENT pIcd10Code="I10" pDiagnosisDesc="Essential (primary) hypertension" />
+    <PLAN pManagementRemarks="Continue current antihypertensive maintenance therapy." />
+    <DIAGNOSTICS>
+      <DIAGNOSTIC pDiagnosticId="01" pOthRemarks="Fasting Blood Sugar" />
+      <DIAGNOSTIC pDiagnosticId="03" pOthRemarks="Complete Blood Count" />
+    </DIAGNOSTICS>
+  </SOAP>
+  <MEDICINES>
+    <MEDICINE pDrugCode="AMLODIPINE5MG00000000000000000" pGenericName="Amlodipine" pQuantity="30" pActualUnitPrice="0.65" pTotalAmtPrice="19.50" pIsDispensed="Y" />
+  </MEDICINES>
+</PCB>`;
+      setRawXmlPayload(mockXml);
+    }
+  };
+
+  const handleCopyXml = async () => {
+    if (!rawXmlPayload) return;
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(rawXmlPayload);
+        Alert.alert('Copied to Clipboard', 'Konsulta XML payload copied successfully.');
+      } else {
+        Alert.alert('XML Ready', 'Payload is selectable and visible in the inspector.');
+      }
+    } catch {
+      Alert.alert('XML Ready', 'Payload is selectable and visible in the inspector.');
+    }
+  };
+
   // Create New Transmittal
   const handleCreateTransmittal = async () => {
+    if (newTagging === '2' && eligibleEncounters.length > 0 && selectedEncounterIds.length === 0) {
+      Alert.alert('Selection Required', 'Please select at least one clinical encounter to batch into Tranche 2.');
+      return;
+    }
+
     setIsSubmittingNew(true);
     const payload: CreateYakapTransmittalPayload = {
       reportTagging: newTagging,
       effectiveYear: newYear,
       packageType: 'K',
+      consultationEncounterIds: newTagging === '2' ? selectedEncounterIds : undefined,
       notes: newNotes.trim() || undefined,
     };
 
@@ -363,8 +500,8 @@ export default function YakapScreen() {
         status: 'Draft',
         totalEnlistments: newTagging === '1' ? 5 : 0,
         totalProfiles: newTagging === '1' ? 5 : 0,
-        totalSoaps: newTagging === '2' ? 5 : 0,
-        totalMedicines: newTagging === '2' ? 8 : 0,
+        totalSoaps: newTagging === '2' ? selectedEncounterIds.length : 0,
+        totalMedicines: newTagging === '2' ? selectedEncounterIds.length * 2 : 0,
         createdAt: new Date().toISOString(),
         notes: newNotes,
         items: [],
@@ -903,6 +1040,14 @@ export default function YakapScreen() {
                       variant="outline"
                       size="sm"
                       onPress={() => setSelectedTransmittal(tx)}
+                      style={styles.actionBtn}
+                    />
+
+                    <Button
+                      title="📄 Raw XML"
+                      variant="outline"
+                      size="sm"
+                      onPress={() => handleOpenRawXmlModal(tx)}
                       style={styles.actionBtn}
                     />
 
@@ -1536,54 +1681,138 @@ export default function YakapScreen() {
       {/* ========================================================================= */}
       <Modal visible={isNewModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <Card style={styles.modalCard}>
-            <ThemedText variant="h3">Draft New Yakap Transmittal</ThemedText>
-            <ThemedText variant="caption" color={theme.colors.textMuted} style={{ marginBottom: 16 }}>
-              Select report tranche, year, and target encounters.
-            </ThemedText>
-
-            <ThemedText variant="caption" style={styles.inputLabel}>
-              REPORT TRANCHE
-            </ThemedText>
-            <View style={styles.trancheSelector}>
-              <Pressable
-                onPress={() => setNewTagging('1')}
-                style={[styles.trancheOption, newTagging === '1' && styles.trancheOptionActive]}
-              >
-                <ThemedText style={{ fontWeight: '700', color: newTagging === '1' ? theme.colors.primary : theme.colors.text }}>
-                  First Tranche (Tagging 1)
+          <Card style={styles.newBatchModalCard}>
+            <View style={styles.detailHeader}>
+              <View>
+                <ThemedText variant="h3">Draft New Yakap Transmittal</ThemedText>
+                <ThemedText variant="caption" color={theme.colors.textMuted} style={{ marginBottom: 8 }}>
+                  Select report tranche, year, and target encounters.
                 </ThemedText>
-                <ThemedText variant="caption" color={theme.colors.textMuted}>
-                  Patient Enlistments & Initial Profiling
-                </ThemedText>
-              </Pressable>
-
-              <Pressable
-                onPress={() => setNewTagging('2')}
-                style={[styles.trancheOption, newTagging === '2' && styles.trancheOptionActive]}
-              >
-                <ThemedText style={{ fontWeight: '700', color: newTagging === '2' ? theme.colors.primary : theme.colors.text }}>
-                  Second Tranche (Tagging 2)
-                </ThemedText>
-                <ThemedText variant="caption" color={theme.colors.textMuted}>
-                  SOAP Encounters, Labs & GAMOT Prescriptions
-                </ThemedText>
+              </View>
+              <Pressable onPress={() => setIsNewModalVisible(false)}>
+                <ThemedText style={{ fontSize: 20 }}>✕</ThemedText>
               </Pressable>
             </View>
 
-            <ThemedText variant="caption" style={styles.inputLabel}>
-              EFFECTIVE BENEFIT YEAR
-            </ThemedText>
-            <Input value={newYear} onChangeText={setNewYear} placeholder="2026" />
+            <ScrollView style={{ marginTop: 12, maxHeight: 520 }}>
+              <ThemedText variant="caption" style={styles.inputLabel}>
+                REPORT TRANCHE
+              </ThemedText>
+              <View style={styles.trancheSelector}>
+                <Pressable
+                  onPress={() => setNewTagging('1')}
+                  style={[styles.trancheOption, newTagging === '1' && styles.trancheOptionActive]}
+                >
+                  <ThemedText style={{ fontWeight: '700', color: newTagging === '1' ? theme.colors.primary : theme.colors.text }}>
+                    First Tranche (Tagging 1)
+                  </ThemedText>
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    Patient Enlistments & Initial Profiling
+                  </ThemedText>
+                </Pressable>
 
-            <ThemedText variant="caption" style={[styles.inputLabel, { marginTop: 12 }]}>
-              BATCH NOTES / REMARKS
-            </ThemedText>
-            <Input
-              value={newNotes}
-              onChangeText={setNewNotes}
-              placeholder="e.g. Weekly ambulatory transmittal batch"
-            />
+                <Pressable
+                  onPress={() => setNewTagging('2')}
+                  style={[styles.trancheOption, newTagging === '2' && styles.trancheOptionActive]}
+                >
+                  <ThemedText style={{ fontWeight: '700', color: newTagging === '2' ? theme.colors.primary : theme.colors.text }}>
+                    Second Tranche (Tagging 2)
+                  </ThemedText>
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    SOAP Encounters, Labs & GAMOT Prescriptions
+                  </ThemedText>
+                </Pressable>
+              </View>
+
+              <ThemedText variant="caption" style={styles.inputLabel}>
+                EFFECTIVE BENEFIT YEAR
+              </ThemedText>
+              <Input value={newYear} onChangeText={setNewYear} placeholder="2026" />
+
+              {/* Tranche 2 Encounter Batch Selector */}
+              {newTagging === '2' && (
+                <View style={styles.batchSelectorContainer}>
+                  <View style={styles.batchSelectorHeader}>
+                    <View style={{ flex: 1 }}>
+                      <ThemedText variant="bodyBold">Select Clinical Encounters for Batch</ThemedText>
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        Signed encounters with PhilHealth PINs not in submitted batches
+                      </ThemedText>
+                    </View>
+                    {eligibleEncounters.length > 0 && (
+                      <Pressable onPress={handleToggleSelectAll} style={styles.selectAllBtn}>
+                        <ThemedText style={styles.selectAllText}>
+                          {selectedEncounterIds.length === eligibleEncounters.length ? 'Deselect All' : 'Select All'}
+                        </ThemedText>
+                      </Pressable>
+                    )}
+                  </View>
+
+                  {isLoadingEligible ? (
+                    <View style={{ padding: 20, alignItems: 'center' }}>
+                      <ActivityIndicator size="small" color={theme.colors.primary} />
+                      <ThemedText variant="caption" color={theme.colors.textMuted} style={{ marginTop: 6 }}>
+                        Loading eligible encounters...
+                      </ThemedText>
+                    </View>
+                  ) : eligibleEncounters.length === 0 ? (
+                    <View style={styles.emptyEncounterBox}>
+                      <ThemedText variant="caption" color={theme.colors.textMuted} style={{ textAlign: 'center' }}>
+                        No unbatched signed encounters found for effective year {newYear}.
+                      </ThemedText>
+                    </View>
+                  ) : (
+                    <View style={{ maxHeight: 220 }}>
+                      <ScrollView nestedScrollEnabled style={{ maxHeight: 220 }}>
+                        {eligibleEncounters.map((enc) => {
+                          const isSelected = selectedEncounterIds.includes(enc.encounterId);
+                          return (
+                            <Pressable
+                              key={enc.encounterId}
+                              onPress={() => handleToggleEncounter(enc.encounterId)}
+                              style={[styles.encounterRow, isSelected && styles.encounterRowSelected]}
+                            >
+                              <View style={[styles.checkbox, isSelected && styles.checkboxActive]}>
+                                {isSelected && <ThemedText style={styles.checkmark}>✓</ThemedText>}
+                              </View>
+                              <View style={{ flex: 1, marginLeft: 10 }}>
+                                <ThemedText style={{ fontWeight: '600', fontSize: 13 }}>
+                                  {enc.patientName}
+                                </ThemedText>
+                                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                                  PIN: {enc.philHealthIdentificationNumber || 'None'} • Dr. {enc.doctorName}
+                                </ThemedText>
+                                <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                                  Dx: {enc.primaryDiagnosis} • Labs: {enc.diagnosticsCount} • Rx: {enc.prescriptionsCount}
+                                </ThemedText>
+                              </View>
+                              <View style={{ alignItems: 'flex-end', marginLeft: 6 }}>
+                                <Badge
+                                  variant={enc.prescriptionsCount > 0 ? 'purple' : 'neutral'}
+                                  label={enc.prescriptionsCount > 0 ? `Rx (₱${enc.totalMedicationAmount.toFixed(2)})` : 'Consult'}
+                                />
+                              </View>
+                            </Pressable>
+                          );
+                        })}
+                      </ScrollView>
+                    </View>
+                  )}
+                  <ThemedText variant="caption" color={theme.colors.primaryDark} style={{ marginTop: 6 }}>
+                    {selectedEncounterIds.length} of {eligibleEncounters.length} encounter(s) selected
+                  </ThemedText>
+                </View>
+              )}
+
+              <ThemedText variant="caption" style={[styles.inputLabel, { marginTop: 12 }]}>
+                BATCH NOTES / REMARKS
+              </ThemedText>
+              <Input
+                value={newNotes}
+                onChangeText={setNewNotes}
+                placeholder="e.g. Weekly ambulatory transmittal batch"
+              />
+            </ScrollView>
 
             <View style={styles.modalActionsRow}>
               <Button
@@ -1651,12 +1880,88 @@ export default function YakapScreen() {
               )}
             </ScrollView>
 
-            <Button
-              title="Close"
-              variant="outline"
-              onPress={() => setSelectedTransmittal(null)}
-              style={{ marginTop: 16 }}
-            />
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 16 }}>
+              <Button
+                title="📄 View Konsulta XML"
+                variant="secondary"
+                onPress={() => {
+                  if (selectedTransmittal) {
+                    handleOpenRawXmlModal(selectedTransmittal);
+                  }
+                }}
+                style={{ flex: 1 }}
+              />
+              <Button
+                title="Close"
+                variant="outline"
+                onPress={() => setSelectedTransmittal(null)}
+                style={{ flex: 1 }}
+              />
+            </View>
+          </Card>
+        </View>
+      </Modal>
+
+      {/* ========================================================================= */}
+      {/* MODAL: RAW KONSULTA XML INSPECTOR                                         */}
+      {/* ========================================================================= */}
+      <Modal visible={isRawXmlModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <Card style={styles.xmlModalCard}>
+            <View style={styles.detailHeader}>
+              <View style={{ flex: 1 }}>
+                <ThemedText variant="h3">📄 Konsulta Transmittal XML Payload</ThemedText>
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  Unencrypted XML conforming to KonsultaData_v1.14.dtd for batch {rawXmlTransmittal?.transmittalNumber}
+                </ThemedText>
+              </View>
+              <Pressable onPress={() => setIsRawXmlModalVisible(false)}>
+                <ThemedText style={{ fontSize: 20 }}>✕</ThemedText>
+              </Pressable>
+            </View>
+
+            <View style={styles.xmlToolbar}>
+              <Badge
+                variant={rawXmlTransmittal?.reportTagging === '2' ? 'primary' : 'purple'}
+                label={rawXmlTransmittal?.reportTagging === '2' ? 'Tranche 2 (SOAP/Rx/Labs)' : 'Tranche 1 (Profile)'}
+              />
+              <Badge
+                variant="neutral"
+                label={`Status: ${rawXmlTransmittal?.status}`}
+              />
+              <Button
+                title="📋 Copy XML"
+                variant="outline"
+                size="sm"
+                onPress={handleCopyXml}
+                disabled={isLoadingRawXml || !rawXmlPayload}
+              />
+            </View>
+
+            {isLoadingRawXml ? (
+              <View style={{ padding: 40, alignItems: 'center' }}>
+                <ActivityIndicator size="large" color={theme.colors.primary} />
+                <ThemedText style={{ marginTop: 12 }}>Generating and loading raw Konsulta XML...</ThemedText>
+              </View>
+            ) : (
+              <ScrollView
+                style={styles.rawXmlScrollView}
+                contentContainerStyle={{ padding: 12 }}
+              >
+                <ThemedText style={styles.rawXmlMonospaceText} selectable>
+                  {rawXmlPayload || 'No XML content available.'}
+                </ThemedText>
+              </ScrollView>
+            )}
+
+            <View style={styles.modalActionsRow}>
+              <Button
+                title="Close Inspector"
+                variant="outline"
+                onPress={() => setIsRawXmlModalVisible(false)}
+                style={{ flex: 1 }}
+              />
+            </View>
           </Card>
         </View>
       </Modal>
@@ -2344,5 +2649,103 @@ const styles = StyleSheet.create({
     backgroundColor: '#fef2f2',
     borderColor: '#fecaca',
   },
+  newBatchModalCard: {
+    width: '100%',
+    maxWidth: 640,
+    padding: 20,
+  },
+  batchSelectorContainer: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: theme.colors.surfaceSubtle,
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  batchSelectorHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  selectAllBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 4,
+    backgroundColor: theme.colors.primaryLight,
+  },
+  selectAllText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.colors.primary,
+  },
+  emptyEncounterBox: {
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  encounterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+    backgroundColor: theme.colors.surface,
+    marginBottom: 6,
+  },
+  encounterRowSelected: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primaryLight,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+  },
+  checkboxActive: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primary,
+  },
+  checkmark: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  xmlModalCard: {
+    width: '100%',
+    maxWidth: 720,
+    maxHeight: '85%',
+    padding: 20,
+  },
+  xmlToolbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginTop: 12,
+    marginBottom: 12,
+    flexWrap: 'wrap',
+  },
+  rawXmlScrollView: {
+    backgroundColor: '#0f172a',
+    borderRadius: 8,
+    maxHeight: 420,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  rawXmlMonospaceText: {
+    fontFamily: 'monospace',
+    fontSize: 12,
+    color: '#38bdf8',
+    lineHeight: 18,
+  },
 });
+
 

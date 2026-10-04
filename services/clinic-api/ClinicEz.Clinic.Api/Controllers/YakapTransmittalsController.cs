@@ -8,7 +8,9 @@ using ClinicEz.Clinic.Application.Features.Yakap.Commands.CreateYakapTransmittal
 using ClinicEz.Clinic.Application.Features.Yakap.Commands.SubmitYakapTransmittal;
 using ClinicEz.Clinic.Application.Features.Yakap.Commands.ValidateYakapTransmittal;
 using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
+using ClinicEz.Clinic.Application.Features.Yakap.Queries.GetEligibleYakapEncounters;
 using ClinicEz.Clinic.Application.Features.Yakap.Queries.GetYakapTransmittalById;
+using ClinicEz.Clinic.Application.Features.Yakap.Queries.GetYakapTransmittalRawXml;
 using ClinicEz.Clinic.Application.Features.Yakap.Queries.GetYakapTransmittals;
 using ClinicEz.Clinic.Domain.Constants;
 using ClinicEz.Clinic.Domain.Enums;
@@ -66,6 +68,22 @@ public sealed class YakapTransmittalsController : ControllerBase
     }
 
     /// <summary>
+    /// Retrieves signed clinical encounters eligible for Yakap Transmittal (Tranche 1 or 2 batching).
+    /// </summary>
+    [HttpGet("encounters/eligible")]
+    [HasPermission(ClinicPermissions.YakapRead)]
+    public async Task<ActionResult<ApiResponse<List<EligibleYakapEncounterDto>>>> GetEligibleEncounters(
+        [FromQuery] string reportTagging = "2",
+        [FromQuery] DateTime? startDate = null,
+        [FromQuery] DateTime? endDate = null,
+        [FromQuery] Guid? patientId = null,
+        CancellationToken ct = default)
+    {
+        var result = await _sender.Send(new GetEligibleYakapEncountersQuery(reportTagging, startDate, endDate, patientId), ct);
+        return Ok(result);
+    }
+
+    /// <summary>
     /// Gets detailed information for a specific Yakap transmittal including its line items.
     /// </summary>
     [HttpGet("transmittals/{id:guid}")]
@@ -75,6 +93,24 @@ public sealed class YakapTransmittalsController : ControllerBase
         CancellationToken ct)
     {
         var result = await _sender.Send(new GetYakapTransmittalByIdQuery(id), ct);
+        if (!result.Succeeded)
+        {
+            return NotFound(result);
+        }
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Retrieves unencrypted raw Konsulta XML document for an encounter batch transmittal.
+    /// </summary>
+    [HttpGet("transmittals/{id:guid}/raw-xml")]
+    [HasPermission(ClinicPermissions.YakapRead)]
+    public async Task<ActionResult<ApiResponse<string>>> GetTransmittalRawXml(
+        Guid id,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new GetYakapTransmittalRawXmlQuery(id), ct);
         if (!result.Succeeded)
         {
             return NotFound(result);

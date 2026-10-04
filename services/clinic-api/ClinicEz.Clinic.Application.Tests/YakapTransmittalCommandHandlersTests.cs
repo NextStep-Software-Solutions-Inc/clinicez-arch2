@@ -47,6 +47,8 @@ public class YakapTransmittalCommandHandlersTests
         var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
         var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
         var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var serviceItemRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
 
         var patient = new ClinicPatient
         {
@@ -90,6 +92,7 @@ public class YakapTransmittalCommandHandlersTests
 
         var handler = new CreateYakapTransmittalCommandHandler(
             transmittalRepo, encounterRepo, patientRepo, vitalsRepo, settingsRepo,
+            labOrderRepo, serviceItemRepo,
             uow, _clinicContext, _mapper);
 
         // Act
@@ -118,6 +121,8 @@ public class YakapTransmittalCommandHandlersTests
         var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
         var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
         var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var serviceItemRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
 
         var proxyClient = Substitute.For<IPhilHealthProxyClient>();
         proxyClient.ValidateReportAsync(Arg.Any<GenerateAndValidateReportProxyRequest>(), Arg.Any<CancellationToken>())
@@ -145,6 +150,7 @@ public class YakapTransmittalCommandHandlersTests
 
         var handler = new ValidateYakapTransmittalCommandHandler(
             transmittalRepo, encounterRepo, patientRepo, vitalsRepo, settingsRepo,
+            labOrderRepo, serviceItemRepo,
             proxyClient, uow, _clinicContext, _mapper);
 
         // Act
@@ -172,6 +178,8 @@ public class YakapTransmittalCommandHandlersTests
         var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
         var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
         var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var serviceItemRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
 
         var proxyClient = Substitute.For<IPhilHealthProxyClient>();
         proxyClient.ValidateReportAsync(Arg.Any<GenerateAndValidateReportProxyRequest>(), Arg.Any<CancellationToken>())
@@ -199,6 +207,7 @@ public class YakapTransmittalCommandHandlersTests
 
         var handler = new ValidateYakapTransmittalCommandHandler(
             transmittalRepo, encounterRepo, patientRepo, vitalsRepo, settingsRepo,
+            labOrderRepo, serviceItemRepo,
             proxyClient, uow, _clinicContext, _mapper);
 
         // Act
@@ -226,6 +235,8 @@ public class YakapTransmittalCommandHandlersTests
         var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
         var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
         var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+        var serviceItemRepo = TestDbHelper.CreateRepository<ClinicServiceItem>(context, sieve);
 
         var proxyClient = Substitute.For<IPhilHealthProxyClient>();
         proxyClient.SubmitReportAsync(Arg.Any<GenerateAndSubmitReportProxyRequest>(), Arg.Any<CancellationToken>())
@@ -253,6 +264,7 @@ public class YakapTransmittalCommandHandlersTests
 
         var handler = new SubmitYakapTransmittalCommandHandler(
             transmittalRepo, encounterRepo, patientRepo, vitalsRepo, settingsRepo,
+            labOrderRepo, serviceItemRepo,
             proxyClient, uow, _clinicContext, _mapper);
 
         // Act

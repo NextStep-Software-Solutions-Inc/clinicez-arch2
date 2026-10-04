@@ -552,14 +552,27 @@ public sealed class KonsultaXmlGenerator : IKonsultaXmlGenerator
             soapElem.Add(icdsElem);
 
             var diagElem = new XElement("DIAGNOSTICS");
-            foreach (var d in s.Diagnostics)
+            if (s.Diagnostics != null && s.Diagnostics.Count > 0)
+            {
+                foreach (var d in s.Diagnostics)
+                    diagElem.Add(new XElement("DIAGNOSTIC",
+                        new XAttribute("pDiagnosticId", d.DiagnosticId),
+                        new XAttribute("pOthRemarks", d.OthRemarks ?? string.Empty),
+                        new XAttribute("pIsPhysicianRecommendation", d.IsPhysicianRecommendation),
+                        new XAttribute("pPatientRemarks", d.PatientRemarks),
+                        new XAttribute("pReportStatus", d.ReportStatus),
+                        new XAttribute("pDeficiencyRemarks", d.DeficiencyRemarks)));
+            }
+            else
+            {
                 diagElem.Add(new XElement("DIAGNOSTIC",
-                    new XAttribute("pDiagnosticId", d.DiagnosticId),
-                    new XAttribute("pOthRemarks", d.OthRemarks ?? string.Empty),
-                    new XAttribute("pIsPhysicianRecommendation", d.IsPhysicianRecommendation),
-                    new XAttribute("pPatientRemarks", d.PatientRemarks),
-                    new XAttribute("pReportStatus", d.ReportStatus),
-                    new XAttribute("pDeficiencyRemarks", d.DeficiencyRemarks)));
+                    new XAttribute("pDiagnosticId", "99"),
+                    new XAttribute("pOthRemarks", "None"),
+                    new XAttribute("pIsPhysicianRecommendation", "N"),
+                    new XAttribute("pPatientRemarks", string.Empty),
+                    new XAttribute("pReportStatus", "U"),
+                    new XAttribute("pDeficiencyRemarks", string.Empty)));
+            }
             soapElem.Add(diagElem);
 
             var mgmtElem = new XElement("MANAGEMENTS");

@@ -33,6 +33,8 @@ public sealed class ValidateYakapTransmittalCommandHandler : IRequestHandler<Val
     private readonly IRepository<ClinicPatient> _patientRepo;
     private readonly IRepository<TriageVitals> _vitalsRepo;
     private readonly IRepository<ClinicSettings> _settingsRepo;
+    private readonly IRepository<ClinicLabOrder> _labOrderRepo;
+    private readonly IRepository<ClinicServiceItem> _serviceItemRepo;
     private readonly IPhilHealthProxyClient _proxyClient;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
@@ -44,6 +46,8 @@ public sealed class ValidateYakapTransmittalCommandHandler : IRequestHandler<Val
         IRepository<ClinicPatient> patientRepo,
         IRepository<TriageVitals> vitalsRepo,
         IRepository<ClinicSettings> settingsRepo,
+        IRepository<ClinicLabOrder> labOrderRepo,
+        IRepository<ClinicServiceItem> serviceItemRepo,
         IPhilHealthProxyClient proxyClient,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
@@ -54,6 +58,8 @@ public sealed class ValidateYakapTransmittalCommandHandler : IRequestHandler<Val
         _patientRepo = patientRepo;
         _vitalsRepo = vitalsRepo;
         _settingsRepo = settingsRepo;
+        _labOrderRepo = labOrderRepo;
+        _serviceItemRepo = serviceItemRepo;
         _proxyClient = proxyClient;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
@@ -113,6 +119,29 @@ public sealed class ValidateYakapTransmittalCommandHandler : IRequestHandler<Val
             AccreditationNumber = "000000000"
         };
 
+        var encIds = encounters.Select(e => e.Id).ToList();
+        var labOrders = await _labOrderRepo.Query(l => l.ConsultationId.HasValue && encIds.Contains(l.ConsultationId.Value))
+            .Include(l => l.Items)
+            .ToListAsync(cancellationToken);
+
+        var labOrdersMap = labOrders
+            .GroupBy(l => l.ConsultationId!.Value)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var serviceItems = await _serviceItemRepo.Query(s => s.ClinicId == _clinicContext.ClinicId || s.TenantId == _clinicContext.TenantId)
+            .ToListAsync(cancellationToken);
+
+        var feeScheduleMap = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in serviceItems)
+        {
+            if (!string.IsNullOrWhiteSpace(item.PhilHealthCode))
+                feeScheduleMap[item.PhilHealthCode] = item.StandardPrice;
+            if (!string.IsNullOrWhiteSpace(item.Code))
+                feeScheduleMap[item.Code] = item.StandardPrice;
+            if (!string.IsNullOrWhiteSpace(item.Name))
+                feeScheduleMap[item.Name] = item.StandardPrice;
+        }
+
         var doc = _mapper.MapToYakapReportDocument(
             transmittal.ReportTagging,
             transmittal.EffectiveYear,
@@ -120,7 +149,10 @@ public sealed class ValidateYakapTransmittalCommandHandler : IRequestHandler<Val
             encounters,
             patientsMap,
             vitalsMap,
-            transmittal.TransmittalNumber);
+            transmittal.TransmittalNumber,
+            ncdMap: null,
+            labOrdersMap: labOrdersMap,
+            feeScheduleMap: feeScheduleMap);
 
         var proxyResponse = await _proxyClient.ValidateReportAsync(
             new GenerateAndValidateReportProxyRequest
