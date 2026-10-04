@@ -47,13 +47,6 @@ public static class DependencyInjection
         services.AddDataProtection()
             .SetApplicationName("ClinicEz.PhilHealthProxy");
 
-        if (env is not null && env.IsDevelopment())
-        {
-            using var scope = services.BuildServiceProvider().CreateScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            dbContext.Database.EnsureCreated();
-        }
-
         return services;
     }
 }
