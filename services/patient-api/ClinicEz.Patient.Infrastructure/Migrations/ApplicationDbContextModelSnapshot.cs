@@ -2871,6 +2871,40 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("philhealth_category");
 
+                    b.Property<DateOnly?>("SponsorDob")
+                        .HasColumnType("date")
+                        .HasColumnName("sponsor_dob");
+
+                    b.Property<string>("SponsorFirstName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("sponsor_first_name");
+
+                    b.Property<string>("SponsorLastName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("sponsor_last_name");
+
+                    b.Property<string>("SponsorMiddleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("sponsor_middle_name");
+
+                    b.Property<string>("SponsorPin")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("sponsor_pin");
+
+                    b.Property<string>("SponsorRelationship")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("sponsor_relationship");
+
+                    b.Property<string>("SponsorSuffix")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("sponsor_suffix");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -4602,6 +4636,10 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("frequency");
 
+                    b.Property<decimal?>("GamotCoverageAmount")
+                        .HasColumnType("numeric")
+                        .HasColumnName("gamot_coverage_amount");
+
                     b.Property<string>("GenericName")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
@@ -4620,6 +4658,10 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_dispensed");
 
+                    b.Property<bool>("IsPhilHealthGamot")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_phil_health_gamot");
+
                     b.Property<DateTime>("IssuedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("issued_at");
@@ -4634,9 +4676,17 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("patient_id");
 
+                    b.Property<string>("PhilHealthDrugCode")
+                        .HasColumnType("text")
+                        .HasColumnName("phil_health_drug_code");
+
                     b.Property<int?>("Quantity")
                         .HasColumnType("integer")
                         .HasColumnName("quantity");
+
+                    b.Property<string>("UniquePrescriptionSecurityCode")
+                        .HasColumnType("text")
+                        .HasColumnName("unique_prescription_security_code");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")

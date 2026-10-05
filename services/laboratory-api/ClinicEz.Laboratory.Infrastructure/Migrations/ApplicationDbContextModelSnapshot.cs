@@ -277,6 +277,10 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<string>("BranchId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("ClinicalDiagnosis")
                         .HasColumnType("text");
 
@@ -363,6 +367,8 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
 
                     b.HasIndex("AccessionNumber")
                         .IsUnique();
+
+                    b.HasIndex("BranchId");
 
                     b.HasIndex("ExternalRequisitionId");
 

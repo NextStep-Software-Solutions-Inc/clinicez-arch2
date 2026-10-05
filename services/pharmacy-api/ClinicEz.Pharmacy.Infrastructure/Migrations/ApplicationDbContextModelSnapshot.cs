@@ -579,6 +579,10 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("BranchId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("ClinicalDiagnosis")
                         .HasColumnType("text");
 
@@ -706,6 +710,8 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("BranchId");
 
                     b.ToTable("PrescriptionOrders", "pharmacy_dashboard");
                 });
