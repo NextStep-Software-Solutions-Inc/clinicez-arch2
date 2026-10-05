@@ -116,7 +116,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         modelBuilder.Entity<Branch>(entity =>
         {
             entity.HasOne(e => e.Tenant)
-                .WithMany()
+                .WithMany(t => t.Branches)
                 .HasForeignKey(e => e.TenantId)
                 .OnDelete(DeleteBehavior.Cascade);
 

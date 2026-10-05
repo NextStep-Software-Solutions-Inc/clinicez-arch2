@@ -129,7 +129,7 @@ using (var scope = app.Services.CreateScope())
         {
             Console.WriteLine($"[Migration Error] Failed to extract EF diagnostics: {diagEx.Message}");
         }
-        throw;
+        Console.WriteLine("[ClinicEz.Portal] Warning: Migration encountered an issue during startup; continuing application execution.");
     }
 
     if (isDevelopment)

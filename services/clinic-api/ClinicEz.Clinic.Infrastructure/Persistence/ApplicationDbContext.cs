@@ -5,6 +5,7 @@ using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Microsoft.Extensions.Configuration;
@@ -120,13 +121,28 @@ public class ApplicationDbContext : DbContext
             v => string.IsNullOrEmpty(v) ? new List<string>() : JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null) ?? new List<string>()
         );
 
+        var stringListComparer = new ValueComparer<List<string>>(
+            (c1, c2) => c1 != null && c2 != null ? c1.SequenceEqual(c2) : c1 == c2,
+            c => c.Aggregate(0, (a, v) => HashCode.Combine(a, v.GetHashCode())),
+            c => c.ToList());
+
+        var customFieldsConverter = new ValueConverter<Dictionary<string, object?>, string>(
+            v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+            v => string.IsNullOrEmpty(v) ? new Dictionary<string, object?>() : JsonSerializer.Deserialize<Dictionary<string, object?>>(v, (JsonSerializerOptions?)null) ?? new Dictionary<string, object?>()
+        );
+
+        var customFieldsComparer = new ValueComparer<Dictionary<string, object?>>(
+            (d1, d2) => d1 != null && d2 != null ? d1.Count == d2.Count && !d1.Except(d2).Any() : d1 == d2,
+            d => d == null ? 0 : d.Aggregate(0, (a, p) => HashCode.Combine(a, p.Key.GetHashCode(), p.Value != null ? p.Value.GetHashCode() : 0)),
+            d => d == null ? new Dictionary<string, object?>() : new Dictionary<string, object?>(d));
+
         modelBuilder.Entity<ClinicRole>(entity =>
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Description).HasMaxLength(255);
-            entity.Property(e => e.Permissions).HasConversion(permissionsConverter);
+            entity.Property(e => e.Permissions).HasConversion(permissionsConverter, stringListComparer);
             entity.HasIndex(e => new { e.TenantId, e.ClinicId });
         });
 
@@ -350,10 +366,7 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.PwdId).HasMaxLength(50);
             entity.Property(e => e.VerificationStatus).HasMaxLength(50).HasDefaultValue("Verified");
             entity.Property(e => e.CustomFields)
-                .HasConversion(
-                    v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
-                    v => string.IsNullOrEmpty(v) ? new Dictionary<string, object?>() : JsonSerializer.Deserialize<Dictionary<string, object?>>(v, (JsonSerializerOptions?)null) ?? new Dictionary<string, object?>()
-                );
+                .HasConversion(customFieldsConverter, customFieldsComparer);
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientCode }).IsUnique();
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.LastName, e.FirstName });
         });
@@ -444,7 +457,7 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.PhilHealthTransactionNumber).HasMaxLength(100);
             entity.Property(e => e.EncryptedPayloadHash).HasMaxLength(128);
             entity.Property(e => e.SubmittedBy).HasMaxLength(150);
-            entity.Property(e => e.ValidationErrors).HasConversion(permissionsConverter);
+            entity.Property(e => e.ValidationErrors).HasConversion(permissionsConverter, stringListComparer);
 
             entity.HasMany(e => e.Items)
                 .WithOne(i => i.Transmittal)
