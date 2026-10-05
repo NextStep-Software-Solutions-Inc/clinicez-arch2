@@ -72,7 +72,7 @@ const Tab = createBottomTabNavigator({
     Yakap: {
       screen: YakapScreen,
       options: {
-        title: 'Yakap',
+        title: 'PhilHealth Desk',
         tabBarIcon: () => <ThemedText style={{ fontSize: 20 }}>🛡️</ThemedText>,
       },
     },

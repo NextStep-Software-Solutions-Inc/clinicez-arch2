@@ -9,6 +9,7 @@ public sealed class YakapTransmittal : BaseEntity
 {
     public required string TenantId { get; set; }
     public Guid ClinicId { get; set; }
+    public Guid? BranchId { get; set; }
 
     /// <summary>
     /// PhilHealth transmittal number, e.g. "RHCI09214202600001" or generated reference.

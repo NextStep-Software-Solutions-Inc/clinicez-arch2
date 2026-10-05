@@ -18,7 +18,8 @@ namespace ClinicEz.Clinic.Application.Features.Yakap.Commands.CreateYakapTransmi
 public sealed record CreateYakapTransmittalCommand(
     IReadOnlyList<Guid>? ConsultationEncounterIds = null,
     string ReportTagging = "1",
-    string? EffectiveYear = null) : IRequest<ApiResponse<YakapTransmittalDto>>;
+    string? EffectiveYear = null,
+    Guid? BranchId = null) : IRequest<ApiResponse<YakapTransmittalDto>>;
 
 public sealed class CreateYakapTransmittalCommandValidator : AbstractValidator<CreateYakapTransmittalCommand>
 {
@@ -76,12 +77,15 @@ public sealed class CreateYakapTransmittalCommandHandler : IRequestHandler<Creat
     {
         var clinicId = _clinicContext.ClinicId;
         var tenantId = _clinicContext.TenantId;
+        var targetBranchId = request.BranchId ?? _clinicContext.BranchId;
 
         // 1. Load encounters
         List<ConsultationEncounter> encounters;
         if (request.ConsultationEncounterIds != null && request.ConsultationEncounterIds.Count > 0)
         {
-            encounters = await _encounterRepo.Query(e => e.ClinicId == clinicId && request.ConsultationEncounterIds.Contains(e.Id))
+            encounters = await _encounterRepo.Query(e =>
+                    request.ConsultationEncounterIds.Contains(e.Id) &&
+                    (targetBranchId.HasValue ? e.BranchId == targetBranchId.Value : e.ClinicId == clinicId))
                 .Include(e => e.Diagnoses)
                 .Include(e => e.Prescriptions)
                 .ToListAsync(cancellationToken);
@@ -89,7 +93,7 @@ public sealed class CreateYakapTransmittalCommandHandler : IRequestHandler<Creat
         else
         {
             var submittedEncounterIds = await _transmittalRepo.Query(t =>
-                    t.ClinicId == clinicId &&
+                    (targetBranchId.HasValue ? t.BranchId == targetBranchId.Value : t.ClinicId == clinicId) &&
                     t.Status != YakapTransmittalStatus.Failed)
                 .SelectMany(t => t.Items)
                 .Where(i => i.ConsultationEncounterId.HasValue)
@@ -98,7 +102,7 @@ public sealed class CreateYakapTransmittalCommandHandler : IRequestHandler<Creat
                 .ToListAsync(cancellationToken);
 
             var query = _encounterRepo.Query(e =>
-                    e.ClinicId == clinicId &&
+                    (targetBranchId.HasValue ? e.BranchId == targetBranchId.Value : e.ClinicId == clinicId) &&
                     !submittedEncounterIds.Contains(e.Id));
 
             if (request.ReportTagging == "2")
@@ -222,6 +226,7 @@ public sealed class CreateYakapTransmittalCommandHandler : IRequestHandler<Creat
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             ClinicId = clinicId,
+            BranchId = targetBranchId,
             TransmittalNumber = transmittalNumber,
             ReportTagging = request.ReportTagging,
             EffectiveYear = effectiveYear,
@@ -308,7 +313,8 @@ public sealed class CreateYakapTransmittalCommandHandler : IRequestHandler<Creat
                 EncounterDate: i.EncounterDate,
                 ItemType: i.ItemType,
                 ReportStatus: i.ReportStatus,
-                DeficiencyRemarks: i.DeficiencyRemarks)).ToList());
+                DeficiencyRemarks: i.DeficiencyRemarks)).ToList(),
+            BranchId: transmittal.BranchId);
 
         return ApiResponse<YakapTransmittalDto>.Success(dto);
     }

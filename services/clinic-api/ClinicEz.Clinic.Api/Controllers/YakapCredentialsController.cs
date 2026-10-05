@@ -18,6 +18,7 @@ namespace ClinicEz.Clinic.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/yakap/credentials")]
+[Obsolete("Facility PhilHealth statutory credentials are now managed per-branch in Portal Web.")]
 public sealed class YakapCredentialsController : ControllerBase
 {
     private readonly IPhilHealthProxyClient _proxyClient;

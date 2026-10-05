@@ -14,7 +14,8 @@ namespace ClinicEz.Clinic.Application.Features.Yakap.Queries.GetYakapTransmittal
 
 public sealed record GetYakapTransmittalsQuery(
     YakapTransmittalStatus? Status = null,
-    string? ReportTagging = null) : IRequest<ApiResponse<IReadOnlyList<YakapTransmittalDto>>>;
+    string? ReportTagging = null,
+    Guid? BranchId = null) : IRequest<ApiResponse<IReadOnlyList<YakapTransmittalDto>>>;
 
 public sealed class GetYakapTransmittalsQueryHandler : IRequestHandler<GetYakapTransmittalsQuery, ApiResponse<IReadOnlyList<YakapTransmittalDto>>>
 {
@@ -41,6 +42,11 @@ public sealed class GetYakapTransmittalsQueryHandler : IRequestHandler<GetYakapT
         if (!string.IsNullOrWhiteSpace(request.ReportTagging))
         {
             query = query.Where(t => t.ReportTagging == request.ReportTagging);
+        }
+
+        if (request.BranchId.HasValue)
+        {
+            query = query.Where(t => t.BranchId == request.BranchId.Value);
         }
 
         var list = await query
@@ -71,7 +77,8 @@ public sealed class GetYakapTransmittalsQueryHandler : IRequestHandler<GetYakapT
                 EncounterDate: i.EncounterDate,
                 ItemType: i.ItemType,
                 ReportStatus: i.ReportStatus,
-                DeficiencyRemarks: i.DeficiencyRemarks)).ToList())).ToList();
+                DeficiencyRemarks: i.DeficiencyRemarks)).ToList(),
+            BranchId: transmittal.BranchId)).ToList();
 
         return ApiResponse<IReadOnlyList<YakapTransmittalDto>>.Success(dtos);
     }

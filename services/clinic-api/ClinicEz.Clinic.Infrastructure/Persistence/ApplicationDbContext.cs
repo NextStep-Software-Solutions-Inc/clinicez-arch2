@@ -222,6 +222,7 @@ public class ApplicationDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
+            entity.HasIndex(e => new { e.TenantId, e.BranchId });
         });
 
         modelBuilder.Entity<EncounterDiagnosis>(entity =>
@@ -451,6 +452,7 @@ public class ApplicationDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.TransmittalNumber });
+            entity.HasIndex(e => new { e.TenantId, e.BranchId });
         });
 
         modelBuilder.Entity<YakapTransmittalItem>(entity =>

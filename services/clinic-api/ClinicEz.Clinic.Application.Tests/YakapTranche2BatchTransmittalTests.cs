@@ -188,6 +188,85 @@ public class YakapTranche2BatchTransmittalTests
     }
 
     [Fact]
+    public async Task GetEligibleYakapEncounters_WithBranchId_FiltersToSpecificBranch()
+    {
+        // Arrange
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
+        var transmittalRepo = TestDbHelper.CreateRepository<YakapTransmittal>(context, sieve);
+        var encounterRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
+        var labOrderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
+
+        var branchA = Guid.NewGuid();
+        var branchB = Guid.NewGuid();
+
+        var patient = new ClinicPatient
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            PatientCode = "PAT-BRANCH",
+            FirstName = "Apolinario",
+            LastName = "Mabini",
+            DateOfBirth = new DateOnly(1980, 7, 23),
+            Gender = "Male",
+            ContactNumber = "09171234567",
+            PhilHealthNumber = "123456789012"
+        };
+        await patientRepo.AddAsync(patient);
+
+        var encBranchA = new ConsultationEncounter
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            BranchId = branchA,
+            PatientId = patient.Id,
+            PatientName = "Apolinario Mabini",
+            DoctorId = Guid.NewGuid(),
+            DoctorName = "Dr. Rizal",
+            EncounterDate = DateTime.UtcNow,
+            IsSigned = true,
+            Subjective = "Branch A Consult"
+        };
+
+        var encBranchB = new ConsultationEncounter
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            ClinicId = _clinicId,
+            BranchId = branchB,
+            PatientId = patient.Id,
+            PatientName = "Apolinario Mabini",
+            DoctorId = Guid.NewGuid(),
+            DoctorName = "Dr. Rizal",
+            EncounterDate = DateTime.UtcNow,
+            IsSigned = true,
+            Subjective = "Branch B Consult"
+        };
+
+        await encounterRepo.AddAsync(encBranchA);
+        await encounterRepo.AddAsync(encBranchB);
+        await uow.SaveChangesAsync();
+
+        var queryHandler = new GetEligibleYakapEncountersQueryHandler(
+            encounterRepo, patientRepo, transmittalRepo, labOrderRepo, _clinicContext);
+
+        // Act
+        var resultA = await queryHandler.Handle(new GetEligibleYakapEncountersQuery(ReportTagging: "2", BranchId: branchA), CancellationToken.None);
+        var resultB = await queryHandler.Handle(new GetEligibleYakapEncountersQuery(ReportTagging: "2", BranchId: branchB), CancellationToken.None);
+
+        // Assert
+        resultA.Succeeded.Should().BeTrue();
+        resultA.Data.Should().HaveCount(1);
+        resultA.Data![0].EncounterId.Should().Be(encBranchA.Id);
+
+        resultB.Succeeded.Should().BeTrue();
+        resultB.Data.Should().HaveCount(1);
+        resultB.Data![0].EncounterId.Should().Be(encBranchB.Id);
+    }
+
+    [Fact]
     public async Task CreateYakapTransmittal_Tranche2_MapsDiagnosticsResultsAndFeeSchedulePricing()
     {
         // Arrange

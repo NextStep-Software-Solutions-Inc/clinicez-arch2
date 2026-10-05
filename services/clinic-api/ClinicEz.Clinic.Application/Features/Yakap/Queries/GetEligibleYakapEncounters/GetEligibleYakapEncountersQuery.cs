@@ -17,7 +17,8 @@ public record GetEligibleYakapEncountersQuery(
     string ReportTagging = "2",
     DateTime? StartDate = null,
     DateTime? EndDate = null,
-    Guid? PatientId = null
+    Guid? PatientId = null,
+    Guid? BranchId = null
 ) : IRequest<ApiResponse<List<EligibleYakapEncounterDto>>>;
 
 public class GetEligibleYakapEncountersQueryHandler : IRequestHandler<GetEligibleYakapEncountersQuery, ApiResponse<List<EligibleYakapEncounterDto>>>
@@ -47,10 +48,11 @@ public class GetEligibleYakapEncountersQueryHandler : IRequestHandler<GetEligibl
         CancellationToken cancellationToken)
     {
         var clinicId = _clinicContext.ClinicId;
+        var targetBranchId = request.BranchId ?? _clinicContext.BranchId;
 
         // 1. Find encounter IDs already submitted or approved in non-failed transmittals
         var submittedEncounterIds = await _transmittalRepo.Query(t =>
-                t.ClinicId == clinicId &&
+                (targetBranchId.HasValue ? t.BranchId == targetBranchId.Value : t.ClinicId == clinicId) &&
                 t.Status != YakapTransmittalStatus.Failed)
             .SelectMany(t => t.Items)
             .Where(i => i.ConsultationEncounterId.HasValue)
@@ -60,12 +62,20 @@ public class GetEligibleYakapEncountersQueryHandler : IRequestHandler<GetEligibl
 
         // 2. Query signed encounters
         var query = _encounterRepo.Query(e =>
-                e.ClinicId == clinicId &&
                 e.IsSigned &&
                 !submittedEncounterIds.Contains(e.Id))
             .Include(e => e.Diagnoses)
             .Include(e => e.Prescriptions)
             .AsQueryable();
+
+        if (targetBranchId.HasValue)
+        {
+            query = query.Where(e => e.BranchId == targetBranchId.Value);
+        }
+        else
+        {
+            query = query.Where(e => e.ClinicId == clinicId);
+        }
 
         if (request.PatientId.HasValue)
         {

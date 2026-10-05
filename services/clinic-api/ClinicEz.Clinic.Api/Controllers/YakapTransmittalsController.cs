@@ -61,9 +61,10 @@ public sealed class YakapTransmittalsController : ControllerBase
     public async Task<ActionResult<ApiResponse<IReadOnlyList<YakapTransmittalDto>>>> GetTransmittals(
         [FromQuery] YakapTransmittalStatus? status,
         [FromQuery] string? reportTagging,
+        [FromQuery] Guid? branchId,
         CancellationToken ct)
     {
-        var result = await _sender.Send(new GetYakapTransmittalsQuery(status, reportTagging), ct);
+        var result = await _sender.Send(new GetYakapTransmittalsQuery(status, reportTagging, branchId), ct);
         return Ok(result);
     }
 
@@ -77,9 +78,10 @@ public sealed class YakapTransmittalsController : ControllerBase
         [FromQuery] DateTime? startDate = null,
         [FromQuery] DateTime? endDate = null,
         [FromQuery] Guid? patientId = null,
+        [FromQuery] Guid? branchId = null,
         CancellationToken ct = default)
     {
-        var result = await _sender.Send(new GetEligibleYakapEncountersQuery(reportTagging, startDate, endDate, patientId), ct);
+        var result = await _sender.Send(new GetEligibleYakapEncountersQuery(reportTagging, startDate, endDate, patientId, branchId), ct);
         return Ok(result);
     }
 

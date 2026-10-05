@@ -60,7 +60,8 @@ public sealed class GetYakapTransmittalByIdQueryHandler : IRequestHandler<GetYak
                 EncounterDate: i.EncounterDate,
                 ItemType: i.ItemType,
                 ReportStatus: i.ReportStatus,
-                DeficiencyRemarks: i.DeficiencyRemarks)).ToList());
+                DeficiencyRemarks: i.DeficiencyRemarks)).ToList(),
+            BranchId: transmittal.BranchId);
 
         return ApiResponse<YakapTransmittalDto>.Success(dto);
     }

@@ -68,6 +68,15 @@ public static class DependencyInjection
         // Register Xendit Typed HTTP Client with Resilience
         services.AddXenditClient();
 
+        // Register Clinic API Typed HTTP Client with Resilience
+        services.AddHttpClient<ClinicEz.Portal.Application.Interfaces.IClinicApiClient, ClinicEz.Portal.Infrastructure.Clinic.ClinicApiClient>((sp, client) =>
+        {
+            var clinicUrl = configuration["Services:ClinicApiUrl"] ?? configuration["ClinicSettings:ClinicApiUrl"] ?? "http://localhost:5245";
+            client.BaseAddress = new Uri(clinicUrl.EndsWith('/') ? clinicUrl : $"{clinicUrl}/");
+            client.Timeout = TimeSpan.FromSeconds(60);
+        })
+        .AddStandardResilienceHandler();
+
         // Add Hangfire
         services.AddHangfire(config => config
             .UseSimpleAssemblyNameTypeSerializer()

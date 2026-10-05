@@ -30,7 +30,8 @@ public sealed record YakapTransmittalDto(
     string? SubmittedBy,
     DateTime CreatedAt,
     int TotalItemsCount,
-    IReadOnlyList<YakapTransmittalItemDto> Items);
+    IReadOnlyList<YakapTransmittalItemDto> Items,
+    Guid? BranchId = null);
 
 public sealed record YakapValidationResultDto(
     Guid TransmittalId,

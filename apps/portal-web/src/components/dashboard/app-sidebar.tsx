@@ -13,6 +13,7 @@ import {
   IconCreditCard,
   IconUsers,
   IconMapPin,
+  IconFileCertificate,
 } from "@tabler/icons-react"
 
 import { NavMain } from "@/components/dashboard/nav-main"
@@ -82,6 +83,11 @@ export function AppSidebar({
             title: "Pharmacies",
             url: `/dashboard/pharmacies`,
             icon: IconPill,
+          },
+          {
+            title: "YAKAP Transmittals",
+            url: `/dashboard/yakap`,
+            icon: IconFileCertificate,
           },
         ]
       },

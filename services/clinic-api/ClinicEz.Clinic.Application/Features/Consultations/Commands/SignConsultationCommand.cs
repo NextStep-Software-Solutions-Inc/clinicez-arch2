@@ -96,6 +96,7 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
 
         encounter.IsSigned = true;
         encounter.SignedAt = DateTime.UtcNow;
+        encounter.BranchId ??= _clinicContext.BranchId;
         encounter.UpdatedAt = DateTime.UtcNow;
         encounter.UpdatedBy = encounter.DoctorName;
 

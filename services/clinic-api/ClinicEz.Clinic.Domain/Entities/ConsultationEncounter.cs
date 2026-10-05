@@ -8,6 +8,7 @@ public sealed class ConsultationEncounter : BaseEntity
 {
     public required string TenantId { get; set; }
     public Guid ClinicId { get; set; }
+    public Guid? BranchId { get; set; }
 
     public Guid? QueueItemId { get; set; }
     public QueueItem? QueueItem { get; set; }
