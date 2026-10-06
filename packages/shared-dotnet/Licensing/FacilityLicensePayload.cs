@@ -15,6 +15,9 @@ public record FacilityLicensePayload
     [JsonPropertyName("tenantId")]
     public string TenantId { get; init; } = string.Empty;
 
+    [JsonPropertyName("tenantSlug")]
+    public string? TenantSlug { get; init; }
+
     [JsonPropertyName("facilityName")]
     public string FacilityName { get; init; } = string.Empty;
 

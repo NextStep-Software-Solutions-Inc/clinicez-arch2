@@ -48,6 +48,7 @@ public static class DependencyInjection
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddSingleton<ClinicEz.Shared.Licensing.IFacilityLicenseValidator, ClinicEz.Shared.Licensing.FacilityLicenseValidator>();
+        services.AddHttpClient<ITenantLookupService, TenantLookupService>();
 
         // Outbound patient webhook notifier
         services.AddHttpClient<IPatientWebhookNotifier, PatientWebhookNotifier>();

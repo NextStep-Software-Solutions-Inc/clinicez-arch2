@@ -26,6 +26,7 @@
     <ProjectReference Include="..\ClinicEz.Clinic.Application\ClinicEz.Clinic.Application.csproj" />
     <ProjectReference Include="..\ClinicEz.Clinic.Domain\ClinicEz.Clinic.Domain.csproj" />
     <ProjectReference Include="..\ClinicEz.Clinic.Infrastructure\ClinicEz.Clinic.Infrastructure.csproj" />
+    <ProjectReference Include="..\ClinicEz.Clinic.Api\ClinicEz.Clinic.Api.csproj" />
   </ItemGroup>
 
 </Project>

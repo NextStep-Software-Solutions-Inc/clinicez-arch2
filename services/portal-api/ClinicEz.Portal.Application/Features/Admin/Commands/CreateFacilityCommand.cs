@@ -67,6 +67,7 @@ public class CreateFacilityCommandHandler(
         {
             FacilityId = resourceId,
             TenantId = tenant.Id.ToString(),
+            TenantSlug = tenant.TenantSlug,
             FacilityName = request.Name,
             FacilityType = request.FacilityType.ToString(),
             PlanTier = planTier,
@@ -117,6 +118,7 @@ public class CreateFacilityCommandHandler(
         await publishEndpoint.Publish(new FacilityCreatedEvent
         {
             TenantId = tenant.Id.ToString(),
+            TenantSlug = tenant.TenantSlug,
             FacilityType = request.FacilityType,
             ResourceId = resourceId,
             Name = request.Name,

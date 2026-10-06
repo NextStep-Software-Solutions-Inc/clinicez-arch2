@@ -153,4 +153,32 @@ public class FacilityLicenseTests
         Assert.False(resultEmpty.IsValid);
         Assert.True(resultEmpty.IsMissing);
     }
+
+    [Fact]
+    public void Validate_WhenExpectedTenantIdMatchesTenantSlug_ShouldSucceed()
+    {
+        var facilityId = Guid.NewGuid();
+        var tenantGuid = Guid.NewGuid().ToString();
+        var tenantSlug = "apex-health-center";
+
+        var payload = new FacilityLicensePayload
+        {
+            FacilityId = facilityId,
+            TenantId = tenantGuid,
+            TenantSlug = tenantSlug,
+            FacilityName = "Apex Health Facility",
+            IssuedAtUtc = DateTime.UtcNow,
+            ExpiresAtUtc = DateTime.UtcNow.AddYears(1)
+        };
+
+        var token = _signer.SignLicense(payload);
+
+        // Validation with expectedTenantId = slug should succeed even though payload.TenantId is a GUID
+        var result = _validator.Validate(token, facilityId, tenantSlug);
+
+        Assert.True(result.IsValid);
+        Assert.False(result.IsTampered);
+        Assert.NotNull(result.Payload);
+        Assert.Equal(tenantSlug, result.Payload.TenantSlug);
+    }
 }

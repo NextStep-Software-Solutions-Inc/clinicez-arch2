@@ -51,6 +51,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<YakapTransmittal> YakapTransmittals { get; set; } = null!;
     public DbSet<YakapTransmittalItem> YakapTransmittalItems { get; set; } = null!;
     public DbSet<PhilHealthSequenceTracker> PhilHealthSequenceTrackers { get; set; } = null!;
+    public DbSet<TenantLookupRecord> Tenants { get; set; } = null!;
 
     public Guid CurrentClinicId => _clinicContext?.ClinicId ?? Guid.Empty;
 
@@ -479,6 +480,15 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.DeficiencyRemarks).HasMaxLength(500);
 
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.YakapTransmittalId });
+        });
+
+        modelBuilder.Entity<TenantLookupRecord>(entity =>
+        {
+            entity.ToTable("Tenants", "main");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantSlug);
+            entity.Property(e => e.Name);
+            entity.Property(e => e.IsDeleted);
         });
 
         // MassTransit outbox

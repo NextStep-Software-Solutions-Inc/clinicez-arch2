@@ -35,19 +35,22 @@ public sealed class LicenseController : ControllerBase
     private readonly IFacilityLicenseValidator _licenseValidator;
     private readonly IClinicContext _clinicContext;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ITenantLookupService _tenantLookup;
 
     public LicenseController(
         IRepository<ClinicSettings> settingsRepo,
         IRepository<StaffMember> staffRepo,
         IFacilityLicenseValidator licenseValidator,
         IClinicContext clinicContext,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ITenantLookupService tenantLookup)
     {
         _settingsRepo = settingsRepo;
         _staffRepo = staffRepo;
         _licenseValidator = licenseValidator;
         _clinicContext = clinicContext;
         _unitOfWork = unitOfWork;
+        _tenantLookup = tenantLookup;
     }
 
     [HttpGet]
@@ -59,30 +62,68 @@ public sealed class LicenseController : ControllerBase
         var dummyDefaultId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
         ClinicSettings? settings = null;
+        TenantLookupDto? tenantInfo = null;
 
-        // 1. If explicit non-dummy ClinicId was requested in headers
-        if (targetClinicId != Guid.Empty && targetClinicId != dummyDefaultId)
+        // 1. If TenantId was provided (subdomain, query param, or header) and it is not tenant_default
+        if (!string.IsNullOrWhiteSpace(targetTenantId) && !string.Equals(targetTenantId, "tenant_default", StringComparison.OrdinalIgnoreCase))
         {
+            tenantInfo = await _tenantLookup.LookupAsync(targetTenantId, ct);
+            if (tenantInfo == null)
+            {
+                return NotFound(ApiResponse<FacilityLicenseStatusDto>.Fail(
+                    $"Workspace '{targetTenantId}' was not found. Please verify the subdomain or register your workspace."));
+            }
+
+            var tenantGuidStr = tenantInfo.Id.ToString().ToLowerInvariant();
+            var tenantSlugStr = tenantInfo.Slug.ToLowerInvariant();
+            var rawTenantStr = targetTenantId.ToLowerInvariant();
+
             settings = await _settingsRepo.IgnoreQueryFilters()
-                .FirstOrDefaultAsync(s => s.ClinicId == targetClinicId && !s.IsDeleted, ct);
-        }
+                .FirstOrDefaultAsync(s => !s.IsDeleted && (
+                    s.TenantId.ToLower() == tenantGuidStr ||
+                    s.TenantId.ToLower() == tenantSlugStr ||
+                    s.TenantId.ToLower() == rawTenantStr ||
+                    (targetClinicId != Guid.Empty && targetClinicId != dummyDefaultId && s.ClinicId == targetClinicId)
+                ), ct);
 
-        // 2. If TenantId was provided (subdomain, query param, or header), match settings by TenantId
-        if (settings == null && !string.IsNullOrWhiteSpace(targetTenantId) && targetTenantId != "tenant_default")
-        {
-            settings = await _settingsRepo.IgnoreQueryFilters()
-                .FirstOrDefaultAsync(s => s.TenantId.ToLower() == targetTenantId.ToLower() && !s.IsDeleted, ct);
-        }
+            // If tenant is known but facility has not yet activated a license, return activation required
+            if (settings == null)
+            {
+                var defaultLimits = PlanTierDefaults.GetLimitsForTier("Community");
+                var defaultFeatures = PlanTierDefaults.GetFeaturesForTier("Community");
+                var unactivatedDto = new FacilityLicenseStatusDto(
+                    "ActivationRequired",
+                    Guid.Empty,
+                    tenantInfo.Name,
+                    "Community",
+                    defaultLimits,
+                    0,
+                    defaultFeatures,
+                    null,
+                    false,
+                    null);
 
-        // 3. Fallback to default or first settings row
-        if (settings == null)
+                return Ok(ApiResponse<FacilityLicenseStatusDto>.Success(unactivatedDto));
+            }
+        }
+        else
         {
-            settings = await _settingsRepo.Query(s => s.ClinicId == targetClinicId)
-                .FirstOrDefaultAsync(ct) ?? await _settingsRepo.Query().FirstOrDefaultAsync(ct);
+            // Fallback for single-tenant / on-premise default flow
+            if (targetClinicId != Guid.Empty && targetClinicId != dummyDefaultId)
+            {
+                settings = await _settingsRepo.IgnoreQueryFilters()
+                    .FirstOrDefaultAsync(s => s.ClinicId == targetClinicId && !s.IsDeleted, ct);
+            }
+
+            if (settings == null)
+            {
+                settings = await _settingsRepo.Query(s => s.ClinicId == targetClinicId)
+                    .FirstOrDefaultAsync(ct) ?? await _settingsRepo.Query().FirstOrDefaultAsync(ct);
+            }
         }
 
         var resolvedClinicId = settings?.ClinicId ?? targetClinicId;
-        var resolvedTenantId = settings?.TenantId ?? targetTenantId;
+        var resolvedTenantId = settings?.TenantId ?? (tenantInfo?.Id.ToString() ?? targetTenantId);
 
         var activeStaffCount = await _staffRepo.Query(s => s.ClinicId == resolvedClinicId && s.IsActive)
             .CountAsync(ct);
@@ -101,7 +142,7 @@ public sealed class LicenseController : ControllerBase
         var dto = new FacilityLicenseStatusDto(
             status,
             resolvedClinicId,
-            settings?.ClinicName ?? "Clinic Facility",
+            settings?.ClinicName ?? (tenantInfo?.Name ?? "Clinic Facility"),
             validation.Payload?.PlanTier ?? settings?.PlanTier ?? "Community",
             limits,
             activeStaffCount,
@@ -135,25 +176,55 @@ public sealed class LicenseController : ControllerBase
         var targetClinicId = payload?.FacilityId != null && payload.FacilityId != Guid.Empty
             ? payload.FacilityId
             : _clinicContext.ClinicId;
-        var targetTenantId = !string.IsNullOrWhiteSpace(payload?.TenantId)
-            ? payload.TenantId
-            : _clinicContext.TenantId;
 
         // Tenant binding verification: If the request explicitly specified a tenant context (subdomain/header),
         // ensure the token belongs to that tenant to prevent accidental or unauthorized cross-tenant license reuse.
-        if (!string.IsNullOrWhiteSpace(_clinicContext.TenantId) &&
-            _clinicContext.TenantId != "tenant_default" &&
-            !string.IsNullOrWhiteSpace(payload?.TenantId) &&
-            !string.Equals(_clinicContext.TenantId, payload.TenantId, StringComparison.OrdinalIgnoreCase))
+        var contextTenant = _clinicContext.TenantId;
+        if (!string.IsNullOrWhiteSpace(contextTenant) &&
+            !string.Equals(contextTenant, "tenant_default", StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(payload?.TenantId))
         {
-            return BadRequest(ApiResponse<FacilityLicenseStatusDto>.Fail(
-                $"License tenant mismatch: This license key was issued for tenant '{payload.TenantId}', but you are activating workspace '{_clinicContext.TenantId}'."));
+            bool isDirectMatch = string.Equals(contextTenant, payload.TenantId, StringComparison.OrdinalIgnoreCase);
+            bool isSlugMatch = !string.IsNullOrWhiteSpace(payload.TenantSlug) &&
+                               string.Equals(contextTenant, payload.TenantSlug, StringComparison.OrdinalIgnoreCase);
+
+            if (!isDirectMatch && !isSlugMatch)
+            {
+                var tenantLookup = await _tenantLookup.LookupAsync(contextTenant, ct);
+                if (tenantLookup == null || !string.Equals(tenantLookup.Id.ToString(), payload.TenantId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return BadRequest(ApiResponse<FacilityLicenseStatusDto>.Fail(
+                        $"License tenant mismatch: This license key was issued for tenant '{payload.TenantId}', but you are activating workspace '{contextTenant}'."));
+                }
+            }
         }
 
-        var settings = await _settingsRepo.IgnoreQueryFilters()
-            .FirstOrDefaultAsync(s => s.ClinicId == targetClinicId && !s.IsDeleted, ct)
-            ?? await _settingsRepo.IgnoreQueryFilters()
-            .FirstOrDefaultAsync(s => s.TenantId.ToLower() == targetTenantId.ToLower() && !s.IsDeleted, ct);
+        var targetTenantId = !string.IsNullOrWhiteSpace(payload?.TenantId)
+            ? payload.TenantId
+            : contextTenant;
+
+        var dummyDefaultId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+
+        ClinicSettings? settings = null;
+        if (targetClinicId != Guid.Empty && targetClinicId != dummyDefaultId)
+        {
+            settings = await _settingsRepo.IgnoreQueryFilters()
+                .FirstOrDefaultAsync(s => s.ClinicId == targetClinicId && !s.IsDeleted, ct);
+        }
+
+        if (settings == null && !string.IsNullOrWhiteSpace(targetTenantId))
+        {
+            var tenantIdStr = targetTenantId.ToLowerInvariant();
+            var tenantSlugStr = payload?.TenantSlug?.ToLowerInvariant();
+            var contextTenantStr = contextTenant?.ToLowerInvariant();
+
+            settings = await _settingsRepo.IgnoreQueryFilters()
+                .FirstOrDefaultAsync(s => !s.IsDeleted && (
+                    s.TenantId.ToLower() == tenantIdStr ||
+                    (tenantSlugStr != null && s.TenantId.ToLower() == tenantSlugStr) ||
+                    (contextTenantStr != null && s.TenantId.ToLower() == contextTenantStr)
+                ), ct);
+        }
 
         if (settings == null)
         {

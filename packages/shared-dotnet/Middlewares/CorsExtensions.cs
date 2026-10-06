@@ -81,7 +81,7 @@ public static class CorsExtensions
                             return true;
                         }
 
-                        return extraOrigins.Any(o => string.Equals(o, origin, StringComparison.OrdinalIgnoreCase));
+                        return IsOriginMatched(extraOrigins, origin);
                     })
                     .AllowAnyHeader()
                     .AllowAnyMethod()
@@ -123,7 +123,7 @@ public static class CorsExtensions
                                 return true;
                             }
 
-                            return extraOrigins.Any(o => string.Equals(o, origin, StringComparison.OrdinalIgnoreCase));
+                            return IsOriginMatched(extraOrigins, origin);
                         })
                         .AllowAnyHeader()
                         .AllowAnyMethod()
@@ -133,5 +133,25 @@ public static class CorsExtensions
         });
 
         return services;
+    }
+
+    private static bool IsOriginMatched(string[] extraOrigins, string origin)
+    {
+        if (extraOrigins.Length == 0 || string.IsNullOrWhiteSpace(origin))
+            return false;
+
+        return extraOrigins.Any(o =>
+        {
+            if (string.Equals(o, origin, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (o.Contains('*'))
+            {
+                var pattern = "^" + System.Text.RegularExpressions.Regex.Escape(o).Replace("\\*", ".*") + "$";
+                return System.Text.RegularExpressions.Regex.IsMatch(origin, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            }
+
+            return false;
+        });
     }
 }

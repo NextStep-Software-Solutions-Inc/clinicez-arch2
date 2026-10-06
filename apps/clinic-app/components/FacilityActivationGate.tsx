@@ -53,6 +53,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
   const [workspaceInput, setWorkspaceInput] = useState(() => getStoredTenantSlug() || '');
   const [license, setLicense] = useState<FacilityLicenseStatus | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isNotFound, setIsNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tokenInput, setTokenInput] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -68,10 +69,12 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
 
     setIsLoading(true);
     setError(null);
+    setIsNotFound(false);
     try {
       const [res, err] = await clinicService.getLicenseStatus();
       if (err) {
         if (err.status === 404) {
+          setIsNotFound(true);
           setError(`Workspace "${currentTenant}" was not found or has no active facilities registered.`);
         } else {
           setError(err.message || 'Unable to communicate with clinic service.');
@@ -106,6 +109,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
     setError(null);
     setSubmitError(null);
     setLicense(null);
+    setIsNotFound(false);
 
     // If on web and on wildcard root domain, navigate to dedicated tenant subdomain
     if (typeof window !== 'undefined' && window.location) {
@@ -127,6 +131,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
     setLicense(null);
     setError(null);
     setSubmitError(null);
+    setIsNotFound(false);
     setWorkspaceInput('');
 
     // If on a tenant subdomain on web, return to root domain
@@ -250,7 +255,50 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
     );
   }
 
-  // 3. Unactivated / Expired / Tampered State -> Show Mandatory Activation Gate
+  // 3. Workspace Not Found (404) Screen
+  if (isNotFound) {
+    const portalUrl =
+      Platform.OS === 'web' && typeof window !== 'undefined' && window.location.hostname.includes('dev.clinicez.net')
+        ? 'https://dev.clinicez.net'
+        : 'https://clinicez.net';
+
+    return (
+      <FacilityLicenseContext.Provider value={contextValue}>
+        <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.centerContainer}>
+          <View style={styles.activationCard}>
+            <View style={[styles.badgePill, { backgroundColor: '#FEE2E2' }]}>
+              <Text style={[styles.badgeText, { color: '#DC2626' }]}>Workspace Not Found (404)</Text>
+            </View>
+
+            <Text style={styles.cardHeaderTitle}>Workspace Not Found</Text>
+            <Text style={styles.cardHeaderDesc}>
+              The clinic workspace{' '}
+              <Text style={{ fontWeight: '700', color: '#111827' }}>"{activeTenant}"</Text> could not be found or has not been registered in ClinicEz.
+            </Text>
+
+            <View style={{ marginTop: 16, gap: 12 }}>
+              <Pressable style={styles.primaryBtn} onPress={handleSwitchWorkspace}>
+                <Text style={styles.primaryBtnText}>← Choose Another Workspace</Text>
+              </Pressable>
+
+              {Platform.OS === 'web' && typeof window !== 'undefined' && (
+                <Pressable
+                  style={[styles.primaryBtn, { backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB' }]}
+                  onPress={() => {
+                    window.location.href = portalUrl;
+                  }}
+                >
+                  <Text style={[styles.primaryBtnText, { color: '#374151' }]}>Open ClinicEz Portal ↗</Text>
+                </Pressable>
+              )}
+            </View>
+          </View>
+        </ScrollView>
+      </FacilityLicenseContext.Provider>
+    );
+  }
+
+  // 4. Unactivated / Expired / Tampered State -> Show Mandatory Activation Gate
   const isGateBlocked =
     !license ||
     license.status === 'ActivationRequired' ||

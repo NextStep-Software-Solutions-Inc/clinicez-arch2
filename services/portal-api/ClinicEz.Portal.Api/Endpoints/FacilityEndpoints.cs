@@ -259,6 +259,7 @@ public class FacilityEndpoints : IEndpoint
             {
                 FacilityId = facility.Id,
                 TenantId = tenant.Id.ToString(),
+                TenantSlug = tenant.TenantSlug,
                 FacilityName = facility.Name,
                 FacilityType = facility.FacilityType.ToString(),
                 PlanTier = planTier,
@@ -279,6 +280,7 @@ public class FacilityEndpoints : IEndpoint
             await publishEndpoint.Publish(new FacilityCreatedEvent
             {
                 TenantId = tenant.Id.ToString(),
+                TenantSlug = tenant.TenantSlug,
                 FacilityType = facility.FacilityType,
                 ResourceId = facility.Id,
                 Name = facility.Name,
@@ -339,6 +341,7 @@ public class FacilityEndpoints : IEndpoint
                 {
                     FacilityId = facility.Id,
                     TenantId = tenant.Id.ToString(),
+                    TenantSlug = tenant.TenantSlug,
                     FacilityName = facility.Name,
                     FacilityType = facility.FacilityType.ToString(),
                     PlanTier = planTier,

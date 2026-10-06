@@ -102,11 +102,17 @@ KWkfi0XuuzOnWSELSo2NW474YcOHecbnhfLn+hHQeQmfFyGoOqkXUSbudQ==
 
         // Tenant binding check
         if (!string.IsNullOrWhiteSpace(expectedTenantId) &&
-            !string.IsNullOrWhiteSpace(payload.TenantId) &&
-            !string.Equals(payload.TenantId, expectedTenantId, StringComparison.OrdinalIgnoreCase))
+            !string.IsNullOrWhiteSpace(payload.TenantId))
         {
-            return LicenseValidationResult.Tampered(
-                $"License tenant binding mismatch. Key belongs to tenant '{payload.TenantId}', but attempted to use with '{expectedTenantId}'.");
+            bool matchesId = string.Equals(payload.TenantId, expectedTenantId, StringComparison.OrdinalIgnoreCase);
+            bool matchesSlug = !string.IsNullOrWhiteSpace(payload.TenantSlug) &&
+                               string.Equals(payload.TenantSlug, expectedTenantId, StringComparison.OrdinalIgnoreCase);
+
+            if (!matchesId && !matchesSlug)
+            {
+                return LicenseValidationResult.Tampered(
+                    $"License tenant binding mismatch. Key belongs to tenant '{payload.TenantId}', but attempted to use with '{expectedTenantId}'.");
+            }
         }
 
         // Expiration check
