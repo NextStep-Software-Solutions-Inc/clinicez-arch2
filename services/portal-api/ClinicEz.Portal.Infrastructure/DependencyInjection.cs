@@ -98,7 +98,13 @@ public static class DependencyInjection
 
             x.UsingRabbitMq((context, cfg) =>
             {
-                cfg.Host(configuration["RabbitMq:Host"] ?? "localhost", configuration["RabbitMq:VirtualHost"] ?? "/", h =>
+                var host = configuration["RabbitMq:Host"];
+                if (string.IsNullOrWhiteSpace(host) || host == "localhost")
+                {
+                    host = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true" ? "clinicez-rabbitmq" : (string.IsNullOrWhiteSpace(host) ? "localhost" : host);
+                }
+
+                cfg.Host(host, configuration["RabbitMq:VirtualHost"] ?? "/", h =>
                 {
                     h.Username(configuration["RabbitMq:Username"] ?? "rabbitmq");
 					h.Password(configuration["RabbitMq:Password"] ?? "nextstep-rabbitmq-2o2G");

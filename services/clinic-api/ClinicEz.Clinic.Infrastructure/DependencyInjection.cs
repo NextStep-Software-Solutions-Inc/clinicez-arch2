@@ -90,7 +90,11 @@ public static class DependencyInjection
 
             x.UsingRabbitMq((context, cfg) =>
             {
-                var host = configuration["RabbitMq:Host"] ?? "localhost";
+                var host = configuration["RabbitMq:Host"];
+                if (string.IsNullOrWhiteSpace(host) || host == "localhost")
+                {
+                    host = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true" ? "clinicez-rabbitmq" : (string.IsNullOrWhiteSpace(host) ? "localhost" : host);
+                }
                 var portStr = configuration["RabbitMq:Port"];
                 ushort port = !string.IsNullOrEmpty(portStr) && ushort.TryParse(portStr, out var p) ? p : (ushort)5672;
                 var useSsl = configuration.GetValue<bool>("RabbitMq:UseSsl", port == 5671);

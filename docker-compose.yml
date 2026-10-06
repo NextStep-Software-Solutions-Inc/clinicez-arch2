@@ -10,8 +10,15 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: rabbitmq
       RABBITMQ_DEFAULT_PASS: nextstep-rabbitmq-2o2G
+    networks:
+      - data-network
+      - default
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+
+networks:
+  data-network:
+    external: true
 
 volumes:
   rabbitmq_data:

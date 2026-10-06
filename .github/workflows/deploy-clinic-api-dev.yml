@@ -87,8 +87,9 @@ jobs:
         IMAGE_NAME: ${{ env.IMAGE_NAME }}
         IMAGE_TAG: ${{ env.IMAGE_TAG }}
         BASE_DOMAIN: ${{ secrets.BASE_DOMAIN || 'dev.clinicez.net' }}
+        SERVICES_PORTAL_API_URL: ${{ secrets.SERVICES_PORTAL_API_URL || 'http://clinicez-portal-api:8080' }}
       run: |
-        for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING RABBITMQ_HOST RABBITMQ_USERNAME RABBITMQ_PASSWORD IMAGE_NAME IMAGE_TAG BASE_DOMAIN; do
+        for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING RABBITMQ_HOST RABBITMQ_USERNAME RABBITMQ_PASSWORD IMAGE_NAME IMAGE_TAG BASE_DOMAIN SERVICES_PORTAL_API_URL; do
           echo "$var=$(printenv $var)" >> services/clinic-api/.env
         done
 

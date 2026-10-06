@@ -42,23 +42,38 @@ public class TenantLookupService : ITenantLookupService
         var clean = identifier.Trim().ToLowerInvariant();
         var isGuid = Guid.TryParse(identifier, out var guid);
 
-        // 1. Direct PostgreSQL query against shared main."Tenants" table
+        // 1. Direct PostgreSQL query against shared main."Tenants" and main."Facilities" tables
         try
         {
-            var query = _dbContext.Tenants.AsNoTracking().Where(t => !t.IsDeleted);
+            var tenantQuery = _dbContext.Tenants.AsNoTracking().Where(t => !t.IsDeleted);
 
-            var dbRecord = isGuid
-                ? await query.FirstOrDefaultAsync(t => t.Id == guid, ct)
-                : await query.FirstOrDefaultAsync(t => t.TenantSlug.ToLower() == clean, ct);
+            var dbTenant = isGuid
+                ? await tenantQuery.FirstOrDefaultAsync(t => t.Id == guid, ct)
+                : await tenantQuery.FirstOrDefaultAsync(t => t.TenantSlug.ToLower() == clean, ct);
 
-            if (dbRecord != null)
+            if (dbTenant != null)
             {
-                return new TenantLookupDto(dbRecord.Id, dbRecord.TenantSlug, dbRecord.Name);
+                return new TenantLookupDto(dbTenant.Id, dbTenant.TenantSlug, dbTenant.Name);
+            }
+
+            // Also check main."Facilities" table for facility slug lookup (e.g. "clinic-b")
+            var facQuery = _dbContext.Facilities.AsNoTracking().Where(f => !f.IsDeleted);
+            var dbFacility = isGuid
+                ? await facQuery.FirstOrDefaultAsync(f => f.Id == guid, ct)
+                : await facQuery.FirstOrDefaultAsync(f => f.Slug.ToLower() == clean, ct);
+
+            if (dbFacility != null)
+            {
+                var parentTenant = await tenantQuery.FirstOrDefaultAsync(t => t.Id == dbFacility.TenantId, ct);
+                if (parentTenant != null)
+                {
+                    return new TenantLookupDto(parentTenant.Id, parentTenant.TenantSlug, dbFacility.Name, dbFacility.Id, dbFacility.Slug);
+                }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "[TenantLookup] Direct database query for tenant '{Identifier}' failed. Falling back to HTTP lookup.", identifier);
+            _logger.LogWarning(ex, "[TenantLookup] Direct database query for tenant/facility '{Identifier}' failed. Falling back to HTTP lookup.", identifier);
         }
 
         // 2. HTTP Fallback to Portal API
@@ -67,7 +82,8 @@ public class TenantLookupService : ITenantLookupService
             var portalBase = _configuration["Services:PortalApiUrl"] ??
                              _configuration["PortalSettings:PortalApiUrl"] ??
                              Environment.GetEnvironmentVariable("PORTAL_API_URL") ??
-                             "http://localhost:5200";
+                             Environment.GetEnvironmentVariable("SERVICES_PORTAL_API_URL") ??
+                             "https://clinicez-portal.api.dev.nextstep-software.com";
 
             portalBase = portalBase.TrimEnd('/');
             var lookupSlug = isGuid ? identifier : clean;
@@ -78,13 +94,19 @@ public class TenantLookupService : ITenantLookupService
                 var payload = await response.Content.ReadFromJsonAsync<PortalTenantLookupResponse>(cancellationToken: ct);
                 if (payload != null && payload.Exists && Guid.TryParse(payload.TenantId, out var parsedGuid))
                 {
-                    return new TenantLookupDto(parsedGuid, payload.TenantSlug ?? clean, payload.Name ?? clean);
+                    Guid? parsedFacilityId = Guid.TryParse(payload.FacilityId, out var fId) ? fId : null;
+                    return new TenantLookupDto(
+                        parsedGuid,
+                        payload.TenantSlug ?? clean,
+                        payload.Name ?? clean,
+                        parsedFacilityId,
+                        payload.FacilitySlug);
                 }
             }
         }
         catch (Exception httpEx)
         {
-            _logger.LogDebug(httpEx, "[TenantLookup] Portal API HTTP lookup for tenant '{Identifier}' failed.", identifier);
+            _logger.LogWarning(httpEx, "[TenantLookup] Portal API HTTP lookup for tenant '{Identifier}' failed.", identifier);
         }
 
         return null;
@@ -100,6 +122,12 @@ public class TenantLookupService : ITenantLookupService
 
         [JsonPropertyName("tenantSlug")]
         public string? TenantSlug { get; set; }
+
+        [JsonPropertyName("facilityId")]
+        public string? FacilityId { get; set; }
+
+        [JsonPropertyName("facilitySlug")]
+        public string? FacilitySlug { get; set; }
 
         [JsonPropertyName("name")]
         public string? Name { get; set; }

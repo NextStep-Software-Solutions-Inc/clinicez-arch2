@@ -236,7 +236,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
               placeholder="e.g. metro-health"
               autoCapitalize="none"
               autoCorrect={false}
-              helperText="You can find this in your Portal address, for example metro-health."
+              helperText="You can find this in your Portal address, for example metro-health or your clinic slug (e.g. clinic-b)."
             />
 
             <Button title="Continue" size="lg" onPress={handleSelectWorkspace} />

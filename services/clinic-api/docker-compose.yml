@@ -24,6 +24,7 @@ services:
       - RabbitMq__Host=${RABBITMQ_HOST}
       - RabbitMq__Username=${RABBITMQ_USERNAME}
       - RabbitMq__Password=${RABBITMQ_PASSWORD}
+      - Services__PortalApiUrl=${SERVICES_PORTAL_API_URL:-http://clinicez-portal-api:8080}
       - Facility__BaseDomain=${BASE_DOMAIN:-dev.clinicez.net}
     restart: unless-stopped
 

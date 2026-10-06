@@ -342,7 +342,7 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                                     ) : (
                                         <IconClockPlay className="h-3.5 w-3.5 animate-spin" />
                                     )}
-                                    <span>Provisioning...</span>
+                                    <span>Activate Facility</span>
                                 </Button>
                             ) : fac.status === "Active" ? (
                                 <Button
@@ -453,7 +453,7 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                                                     ) : (
                                                         <IconClockPlay className="h-3.5 w-3.5 animate-spin" />
                                                     )}
-                                                    <span>Provisioning...</span>
+                                                    <span>Activate Facility</span>
                                                 </Button>
                                             ) : fac.status === "Active" ? (
                                                 <Button

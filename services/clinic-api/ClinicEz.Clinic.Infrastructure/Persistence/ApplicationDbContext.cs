@@ -52,6 +52,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<YakapTransmittalItem> YakapTransmittalItems { get; set; } = null!;
     public DbSet<PhilHealthSequenceTracker> PhilHealthSequenceTrackers { get; set; } = null!;
     public DbSet<TenantLookupRecord> Tenants { get; set; } = null!;
+    public DbSet<FacilityLookupRecord> Facilities { get; set; } = null!;
 
     public Guid CurrentClinicId => _clinicContext?.ClinicId ?? Guid.Empty;
 
@@ -488,6 +489,16 @@ public class ApplicationDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.TenantSlug);
             entity.Property(e => e.Name);
+            entity.Property(e => e.IsDeleted);
+        });
+
+        modelBuilder.Entity<FacilityLookupRecord>(entity =>
+        {
+            entity.ToTable("Facilities", "main");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId);
+            entity.Property(e => e.Name);
+            entity.Property(e => e.Slug);
             entity.Property(e => e.IsDeleted);
         });
 

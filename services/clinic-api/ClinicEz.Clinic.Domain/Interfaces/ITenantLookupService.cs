@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 
 namespace ClinicEz.Clinic.Domain.Interfaces;
 
-public record TenantLookupDto(Guid Id, string Slug, string Name);
+public record TenantLookupDto(Guid Id, string Slug, string Name, Guid? FacilityId = null, string? FacilitySlug = null);
 
 public interface ITenantLookupService
 {

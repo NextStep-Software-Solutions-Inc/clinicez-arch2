@@ -16,6 +16,17 @@ const resolveDefaultBaseUrl = (fallbackPort: number = 5245): string => {
       return `${protocol}//${hostname}:${fallbackPort}`;
     }
 
+    // Dev environment on clinicez.net or nextstep-software.com defaults to deployed dev clinic API
+    if (hostname.endsWith('.dev.clinicez.net') || hostname.endsWith('.dev.nextstep-software.com')) {
+      return 'https://clinicez-clinic.api.dev.nextstep-software.com';
+    }
+
+    // Subdomain-based cloud or enterprise deployment (e.g. <facility>.clinic.<baseDomain> or clinic.<baseDomain>)
+    const match = hostname.match(/^(?:[a-z0-9-]+\.)?clinic\.(.+)$/);
+    if (match) {
+      return `https://clinic-api.${match[1]}`;
+    }
+
     // Default to same-origin for ingress reverse-proxy routing
     return `${protocol}//${hostname}`;
   }
@@ -50,6 +61,9 @@ export class ClinicApiClient {
       const context = resolveTenantContext();
       if (context.tenantSlug) {
         config.headers['X-Tenant-Id'] = context.tenantSlug;
+      }
+      if (context.facilitySlug) {
+        config.headers['X-Facility-Slug'] = context.facilitySlug;
       }
       if (context.clinicId) {
         config.headers['X-Clinic-Id'] = context.clinicId;

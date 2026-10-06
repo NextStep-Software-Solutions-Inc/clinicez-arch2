@@ -1,5 +1,6 @@
 export interface TenantContext {
   tenantSlug: string | null;
+  facilitySlug?: string | null;
   clinicId: string | null;
   source: 'subdomain' | 'query' | 'storage' | 'none';
   isRoot: boolean;
@@ -172,6 +173,10 @@ export function resolveTenantContext(): TenantContext {
 
   // 1. Subdomain Check (Only if not a recognized root domain)
   if (!isRoot) {
+    const cleanHost = hostname.toLowerCase().split(':')[0].trim();
+    const serviceMatch = cleanHost.match(/^([a-z0-9-]+)\.(?:clinic|lab|pharmacy|org)\.(.+)$/);
+    const facilitySlug = serviceMatch && isValidTenantSlug(serviceMatch[1]) ? serviceMatch[1] : null;
+
     const subdomainTenant = extractTenantFromHostname(hostname);
     if (subdomainTenant && isValidTenantSlug(subdomainTenant)) {
       const cachedClinic =
@@ -179,6 +184,7 @@ export function resolveTenantContext(): TenantContext {
         localStorage.getItem(STORAGE_KEY_CLINIC);
       return {
         tenantSlug: subdomainTenant,
+        facilitySlug: facilitySlug || undefined,
         clinicId: cachedClinic || null,
         source: 'subdomain',
         isRoot: false,

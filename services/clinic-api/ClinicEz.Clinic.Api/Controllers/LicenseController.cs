@@ -80,10 +80,11 @@ public sealed class LicenseController : ControllerBase
 
             settings = await _settingsRepo.IgnoreQueryFilters()
                 .FirstOrDefaultAsync(s => !s.IsDeleted && (
+                    (tenantInfo.FacilityId.HasValue && s.ClinicId == tenantInfo.FacilityId.Value) ||
+                    (targetClinicId != Guid.Empty && targetClinicId != dummyDefaultId && s.ClinicId == targetClinicId) ||
                     s.TenantId.ToLower() == tenantGuidStr ||
                     s.TenantId.ToLower() == tenantSlugStr ||
-                    s.TenantId.ToLower() == rawTenantStr ||
-                    (targetClinicId != Guid.Empty && targetClinicId != dummyDefaultId && s.ClinicId == targetClinicId)
+                    s.TenantId.ToLower() == rawTenantStr
                 ), ct);
 
             // If tenant is known but facility has not yet activated a license, return activation required
@@ -93,7 +94,7 @@ public sealed class LicenseController : ControllerBase
                 var defaultFeatures = PlanTierDefaults.GetFeaturesForTier("Community");
                 var unactivatedDto = new FacilityLicenseStatusDto(
                     "ActivationRequired",
-                    Guid.Empty,
+                    tenantInfo.FacilityId ?? Guid.Empty,
                     tenantInfo.Name,
                     "Community",
                     defaultLimits,

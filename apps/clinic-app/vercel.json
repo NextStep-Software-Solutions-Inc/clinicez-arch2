@@ -6,6 +6,10 @@
   "installCommand": "bun install",
   "rewrites": [
     {
+      "source": "/api/v1/:path*",
+      "destination": "https://clinicez-clinic.api.dev.nextstep-software.com/api/v1/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
