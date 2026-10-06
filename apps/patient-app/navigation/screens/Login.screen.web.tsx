@@ -193,6 +193,14 @@ export default function LoginScreenWeb() {
             <ThemedText style={styles.createAccountLink}>Create account</ThemedText>
           </Pressable>
         </View>
+
+        {/* Back to Landing Page */}
+        <Pressable
+          onPress={() => navigation.navigate('Onboarding', { screen: 'Welcome' })}
+          style={({ pressed }) => [styles.backToHomeBtn, pressed && { opacity: 0.7 }]}
+        >
+          <ThemedText style={styles.backToHomeText}>← Back to Clinic EZ overview</ThemedText>
+        </Pressable>
       </View>
     </ScrollView>
   );
@@ -334,5 +342,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#3B82F6',
+  },
+  backToHomeBtn: {
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  backToHomeText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
   },
 });

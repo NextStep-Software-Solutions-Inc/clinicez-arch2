@@ -56,10 +56,10 @@ export default function WelcomeScreenWeb() {
     });
   };
 
-  const handleDirectLogin = async () => {
-    // If the user already wants to log in directly from the welcome landing page,
-    // mark onboarding as complete so the auth stack opens cleanly
-    await complete();
+  const handleDirectLogin = () => {
+    navigation.navigate('Auth', {
+      screen: 'Login',
+    });
   };
 
   return (

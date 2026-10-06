@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, Pressable, useWindowDimensions, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useTheme } from '@react-navigation/native';
+import { useNavigation, useTheme } from '@react-navigation/native';
 import ThemedText from '@ui/ThemedText';
 import { useOnboarding } from 'contexts/OnboardingContext';
 
@@ -61,6 +61,7 @@ const slides: Slide[] = [
 ];
 
 export default function OnboardScreenWeb() {
+  const navigation = useNavigation<any>();
   const { width } = useWindowDimensions();
   const { colors, dark: isDark } = useTheme();
   const { complete } = useOnboarding();
@@ -76,6 +77,7 @@ export default function OnboardScreenWeb() {
     setIsSubmitting(true);
     try {
       await complete();
+      navigation.navigate('Auth', { screen: 'Login' });
     } finally {
       setIsSubmitting(false);
     }

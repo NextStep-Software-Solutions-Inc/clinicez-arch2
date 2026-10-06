@@ -8,8 +8,14 @@ export const linking: LinkingOptions<RootParamList> = {
       Loading: 'loading',
       Onboarding: {
         screens: {
-          Welcome: 'welcome',
-          Onboard: 'onboard',
+          Welcome: {
+            path: '',
+            alias: ['welcome'],
+          },
+          Onboard: {
+            path: 'onboard',
+            alias: ['intro'],
+          },
         },
       },
       Auth: {
