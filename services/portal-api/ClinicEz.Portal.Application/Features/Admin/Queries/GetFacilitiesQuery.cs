@@ -71,8 +71,8 @@ public class GetFacilitiesQueryHandler(
 
         return rawFacilities.Select(f =>
         {
-            var slug = GenerateFacilitySlug(f.Name);
-            var consoleUrl = ResolveConsoleUrl(configuration, f.FacilityType, f.Status, f.Id, tenant.TenantSlug);
+            var slug = !string.IsNullOrWhiteSpace(f.Slug) ? f.Slug : GenerateFacilitySlug(f.Name);
+            var consoleUrl = ResolveConsoleUrl(configuration, f.FacilityType, f.Status, f.Id, slug, tenant.TenantSlug);
 
             return new FacilityDto(
                 f.Id,
@@ -115,7 +115,8 @@ public class GetFacilitiesQueryHandler(
         FacilityType facilityType,
         FacilityStatus status,
         Guid facilityId,
-        string tenantSlug)
+        string facilitySlug,
+        string? tenantSlug = null)
     {
         if (status != FacilityStatus.Active)
         {
@@ -136,7 +137,8 @@ public class GetFacilitiesQueryHandler(
                 _ => "8081"
             };
 
-            return $"http://localhost:{devPort}?tenant={tenantSlug}&facilityId={facilityId}";
+            var devTenant = !string.IsNullOrWhiteSpace(tenantSlug) ? tenantSlug : facilitySlug;
+            return $"http://localhost:{devPort}?tenant={devTenant}&facilityId={facilityId}";
         }
 
         var isDev = string.Equals(configuration["ASPNETCORE_ENVIRONMENT"], "Development", StringComparison.OrdinalIgnoreCase) ||
@@ -158,13 +160,13 @@ public class GetFacilitiesQueryHandler(
             _ => "clinic"
         };
 
-        var cleanTenant = tenantSlug?.Trim().ToLowerInvariant();
-        if (string.IsNullOrEmpty(cleanTenant))
+        var cleanSlug = facilitySlug?.Trim().ToLowerInvariant();
+        if (string.IsNullOrEmpty(cleanSlug))
         {
             return $"https://{subdomain}.{baseDomain}?facilityId={facilityId}";
         }
 
-        return $"https://{cleanTenant}.{subdomain}.{baseDomain}?facilityId={facilityId}";
+        return $"https://{cleanSlug}.{subdomain}.{baseDomain}?facilityId={facilityId}";
     }
 
     public static string GenerateFacilitySlug(string name)

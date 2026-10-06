@@ -507,6 +507,10 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                     b.Property<string>("Region")
                         .HasColumnType("text");
 
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<string>("StampPhysicianName")
                         .HasColumnType("text");
 
@@ -544,6 +548,10 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("BranchId");
+
+                    b.HasIndex("Slug")
+                        .IsUnique()
+                        .HasFilter("\"IsDeleted\" = false");
 
                     b.HasIndex("TenantId", "Name")
                         .IsUnique()

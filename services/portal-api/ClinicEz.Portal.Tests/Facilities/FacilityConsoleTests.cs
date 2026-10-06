@@ -77,7 +77,7 @@ public class FacilityConsoleTests : IDisposable
         Assert.Single(result);
         var dto = result[0];
         Assert.Equal("downtown-family-clinic", dto.Slug);
-        Assert.Equal($"https://{TenantSlug}.clinic.dev.clinicez.net?facilityId={facility.Id}", dto.ConsoleUrl);
+        Assert.Equal($"https://{dto.Slug}.clinic.dev.clinicez.net?facilityId={facility.Id}", dto.ConsoleUrl);
     }
 
     [Fact]
@@ -144,7 +144,7 @@ public class FacilityConsoleTests : IDisposable
         Assert.Single(result);
         var dto = result[0];
         Assert.Equal("metro-st-jude-diagnostic-lab", dto.Slug);
-        Assert.Equal($"https://{TenantSlug}.lab.clinicez.net?facilityId={facility.Id}", dto.ConsoleUrl);
+        Assert.Equal($"https://{dto.Slug}.lab.clinicez.net?facilityId={facility.Id}", dto.ConsoleUrl);
     }
 
     [Fact]
@@ -194,8 +194,62 @@ public class FacilityConsoleTests : IDisposable
         var facility = await _context.Facilities.FirstOrDefaultAsync(f => f.Name == "Brand New Clinic");
         Assert.NotNull(facility);
         Assert.Equal(FacilityStatus.Provisioning, facility.Status);
+        Assert.Equal("brand-new-clinic", facility.Slug);
         Assert.NotNull(facility.LicenseToken);
         Assert.Equal(5, facility.MaxStaffLimit);
+    }
+
+    [Fact]
+    public async Task CreateFacilityCommand_WithCustomSlug_AssignsCustomSlug()
+    {
+        var mockPublish = new Mock<IPublishEndpoint>();
+        var mockGuard = new Mock<ITenantFeatureGuard>();
+        var licenseSigner = new ClinicEz.Shared.Licensing.FacilityLicenseSigner();
+
+        var handler = new CreateFacilityCommandHandler(_context, mockPublish.Object, mockGuard.Object, licenseSigner);
+        var command = new CreateFacilityCommand(
+            _tenantId.ToString(), 
+            FacilityType.Clinic, 
+            "Apex Health Manila", 
+            Slug: "apex-mnl");
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        Assert.True(result);
+        var facility = await _context.Facilities.FirstOrDefaultAsync(f => f.Name == "Apex Health Manila");
+        Assert.NotNull(facility);
+        Assert.Equal("apex-mnl", facility.Slug);
+    }
+
+    [Fact]
+    public async Task CreateFacilityCommand_WithDuplicateSlug_ThrowsInvalidOperationException()
+    {
+        var facility = new Facility
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            Name = "Existing Facility",
+            Slug = "taken-subdomain",
+            FacilityType = FacilityType.Clinic,
+            Status = FacilityStatus.Active,
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.Facilities.Add(facility);
+        await _context.SaveChangesAsync();
+
+        var mockPublish = new Mock<IPublishEndpoint>();
+        var mockGuard = new Mock<ITenantFeatureGuard>();
+        var licenseSigner = new ClinicEz.Shared.Licensing.FacilityLicenseSigner();
+
+        var handler = new CreateFacilityCommandHandler(_context, mockPublish.Object, mockGuard.Object, licenseSigner);
+        var command = new CreateFacilityCommand(
+            _tenantId.ToString(), 
+            FacilityType.Clinic, 
+            "Another Clinic", 
+            Slug: "taken-subdomain");
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => handler.Handle(command, CancellationToken.None));
+        Assert.Contains("already taken", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

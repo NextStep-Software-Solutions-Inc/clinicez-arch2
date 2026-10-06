@@ -29,7 +29,27 @@ public sealed class LookupTenantEndpoint : IEndpoint
 
             if (tenant == null)
             {
-                return Results.NotFound(new { Exists = false, Message = $"Workspace '{slug}' was not found." });
+                var facility = await context.Facilities
+                    .Include(f => f.Tenant)
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(f => !f.IsDeleted && f.Slug.ToLower() == cleanSlug, ct);
+
+                if (facility?.Tenant != null)
+                {
+                    return Results.Ok(new
+                    {
+                        Exists = true,
+                        TenantId = facility.Tenant.Id.ToString(),
+                        TenantSlug = facility.Tenant.TenantSlug,
+                        FacilityId = facility.Id.ToString(),
+                        FacilitySlug = facility.Slug,
+                        Name = facility.Name,
+                        TenantType = facility.Tenant.TenantType,
+                        Status = facility.Tenant.SubscriptionStatus
+                    });
+                }
+
+                return Results.NotFound(new { Exists = false, Message = $"Workspace or facility '{slug}' was not found." });
             }
 
             return Results.Ok(new

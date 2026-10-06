@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,13 @@ import {
   IconInfoCircle,
 } from "@tabler/icons-react";
 
+const APP_SUBDOMAINS: Record<string, string> = {
+  Clinic: "clinic",
+  Laboratory: "lab",
+  Pharmacy: "pharmacy",
+  Organization: "org",
+};
+
 interface FacilityOnboardingWizardProps {
   initialType?: "clinic" | "laboratory" | "pharmacy" | "organization" | null;
   open: boolean;
@@ -62,6 +69,23 @@ export default function FacilityOnboardingWizard({
   // Step 1: Classification & Facility Identity
   const [name, setName] = useState("");
   const [classification, setClassification] = useState("");
+  const [slug, setSlug] = useState("");
+  const [isSlugCustomized, setIsSlugCustomized] = useState(false);
+  const [slugError, setSlugError] = useState<string | null>(null);
+  const [isCheckingSlug, setIsCheckingSlug] = useState(false);
+  const slugCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const slugify = (text: string) => {
+    return text
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  };
+
+  const isDev = typeof window !== "undefined" && window.location.hostname.includes("dev.clinicez.net");
+  const baseDomain = isDev ? "dev.clinicez.net" : "clinicez.net";
+  const sub = APP_SUBDOMAINS[normalizedFacilityType] || "clinic";
 
   // Step 2: Regulatory & Statutory Profile
   const [licenseToOperate, setLicenseToOperate] = useState("");
@@ -87,12 +111,12 @@ export default function FacilityOnboardingWizard({
   const activeCity: PhilippineCity | undefined = cityOptions.find((c) => c.name === selectedCityName) || cityOptions[0];
   const barangayOptions: string[] = activeCity?.barangays || [];
 
-  // Existing facilities for unique name validation
-  const [existingFacilities, setExistingFacilities] = useState<Array<{ id: string; name: string }>>([]);
+  // Existing facilities for unique name and slug validation
+  const [existingFacilities, setExistingFacilities] = useState<Array<{ id: string; name: string; slug?: string }>>([]);
 
   useEffect(() => {
     if (open && tenantSlug) {
-      apiClient.get<Array<{ id: string; name: string }>>(`/facilities?tenantSlug=${tenantSlug}`)
+      apiClient.get<Array<{ id: string; name: string; slug?: string }>>(`/facilities?tenantSlug=${tenantSlug}`)
         .then((res) => {
           setExistingFacilities(res.data || []);
         })
@@ -105,6 +129,77 @@ export default function FacilityOnboardingWizard({
   const isDuplicateName = existingFacilities.some(
     (f) => f.name.trim().toLowerCase() === name.trim().toLowerCase()
   );
+
+  const validateSlug = useCallback(async (candidate: string) => {
+    const clean = candidate.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    if (!clean) {
+      setSlugError("Facility subdomain slug is required.");
+      return;
+    }
+    if (clean.length < 2 || clean.length > 63) {
+      setSlugError("Slug must be between 2 and 63 alphanumeric or hyphen characters.");
+      return;
+    }
+
+    const localMatch = existingFacilities.some(
+      (f) => f.slug?.toLowerCase() === clean.toLowerCase()
+    );
+    if (localMatch) {
+      setSlugError(`Subdomain slug "${clean}" is already in use in this workspace.`);
+      return;
+    }
+
+    setIsCheckingSlug(true);
+    try {
+      const res = await apiClient.get<{ available: boolean; message?: string }>(`/facilities/check-slug/${encodeURIComponent(clean)}`);
+      if (res.data && !res.data.available) {
+        setSlugError(res.data.message || `Subdomain slug "${clean}" is already taken.`);
+      } else {
+        setSlugError(null);
+      }
+    } catch {
+      setSlugError(null);
+    } finally {
+      setIsCheckingSlug(false);
+    }
+  }, [existingFacilities]);
+
+  const handleNameChange = (val: string) => {
+    setName(val);
+    if (!isSlugCustomized) {
+      const generated = slugify(val);
+      setSlug(generated);
+      if (slugCheckTimeoutRef.current) clearTimeout(slugCheckTimeoutRef.current);
+      if (generated.length >= 2) {
+        slugCheckTimeoutRef.current = setTimeout(() => {
+          validateSlug(generated);
+        }, 350);
+      } else {
+        setSlugError(null);
+      }
+    }
+  };
+
+  const handleSlugInput = (val: string) => {
+    const sanitized = val.toLowerCase().replace(/[^a-z0-9-]/g, "");
+    setSlug(sanitized);
+    setIsSlugCustomized(true);
+
+    if (slugCheckTimeoutRef.current) clearTimeout(slugCheckTimeoutRef.current);
+
+    if (!sanitized) {
+      setSlugError("Facility subdomain slug is required.");
+      return;
+    }
+    if (sanitized.length < 2) {
+      setSlugError("Slug must be at least 2 characters.");
+      return;
+    }
+
+    slugCheckTimeoutRef.current = setTimeout(() => {
+      validateSlug(sanitized);
+    }, 350);
+  };
 
   // Reset or initialize default classification when type changes
   useEffect(() => {
@@ -184,6 +279,9 @@ export default function FacilityOnboardingWizard({
     }
     setCurrentStep(1);
     setName("");
+    setSlug("");
+    setIsSlugCustomized(false);
+    setSlugError(null);
   };
 
   const handleNext = () => {
@@ -194,6 +292,14 @@ export default function FacilityOnboardingWizard({
       }
       if (isDuplicateName) {
         toast.error(`A facility named "${name.trim()}" already exists in this workspace.`);
+        return;
+      }
+      if (!slug.trim()) {
+        toast.error("Please provide a facility subdomain slug.");
+        return;
+      }
+      if (slugError) {
+        toast.error(slugError);
         return;
       }
     }
@@ -216,12 +322,17 @@ export default function FacilityOnboardingWizard({
       toast.error(`A facility named "${name.trim()}" already exists in this workspace.`);
       return;
     }
+    if (slugError) {
+      toast.error(slugError);
+      return;
+    }
     setSubmitting(true);
     try {
       const payload = {
         tenantId: tenantSlug,
         facilityType: normalizedFacilityType,
         name: name.trim(),
+        slug: slug.trim() || undefined,
         classification: classification || undefined,
         licenseToOperate: licenseToOperate.trim() || undefined,
         philHealthAccreditationNumber: philHealthAccreditationNumber.trim() || undefined,
@@ -337,7 +448,7 @@ export default function FacilityOnboardingWizard({
                   id="facility-name"
                   placeholder={`e.g. St. Jude Medical Clinic - BGC Branch`}
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => handleNameChange(e.target.value)}
                   className={`h-10 rounded-xl text-sm font-semibold ${
                     isDuplicateName ? "border-rose-500 focus-visible:ring-rose-500 bg-rose-50/20" : ""
                   }`}
@@ -352,6 +463,50 @@ export default function FacilityOnboardingWizard({
                 )}
                 <p className="text-[11px] text-slate-400">
                   This name will appear on printed official prescription slips, lab results, and patient receipts.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="facility-slug" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Facility Subdomain / URL Slug <span className="text-rose-500">*</span>
+                  </Label>
+                  {isCheckingSlug ? (
+                    <span className="text-[11px] text-slate-400 flex items-center gap-1 font-medium">
+                      <IconLoader className="h-3 w-3 animate-spin text-primary" /> Checking availability...
+                    </span>
+                  ) : slug && !slugError && slug.length >= 2 ? (
+                    <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                      <IconCheck className="h-3.5 w-3.5" /> Subdomain available
+                    </span>
+                  ) : null}
+                </div>
+                <div className="relative flex items-center">
+                  <Input
+                    id="facility-slug"
+                    placeholder="e.g. st-jude-clinic"
+                    value={slug}
+                    onChange={(e) => handleSlugInput(e.target.value)}
+                    className={`h-10 rounded-xl text-sm font-mono lowercase ${
+                      slugError ? "border-rose-500 focus-visible:ring-rose-500 bg-rose-50/20" : ""
+                    }`}
+                    required
+                  />
+                </div>
+                {slugError && (
+                  <p className="text-xs text-rose-500 font-semibold flex items-center gap-1.5 mt-1 animate-in fade-in-50">
+                    <IconAlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    {slugError}
+                  </p>
+                )}
+                <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400 flex items-center justify-between gap-2 overflow-hidden">
+                  <span className="text-[11px] text-slate-400 font-medium shrink-0">Console URL:</span>
+                  <span className="font-mono text-primary font-bold text-xs truncate">
+                    https://{slug || "facility-slug"}.{sub}.{baseDomain}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Each facility has its own unique subdomain. It is auto-suggested from the facility name, but you can choose your own.
                 </p>
               </div>
 
@@ -730,7 +885,7 @@ export default function FacilityOnboardingWizard({
               <Button
                 type="button"
                 onClick={handleNext}
-                disabled={currentStep === 1 && (!name.trim() || isDuplicateName)}
+                disabled={currentStep === 1 && (!name.trim() || isDuplicateName || !slug.trim() || !!slugError || isCheckingSlug)}
                 className="rounded-xl text-xs font-bold px-5 h-9 bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5 shadow-sm"
               >
                 <span>Continue</span>

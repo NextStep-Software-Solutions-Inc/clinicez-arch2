@@ -142,6 +142,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(e => new { e.TenantId, e.Name })
                 .HasFilter("\"IsDeleted\" = false")
                 .IsUnique();
+
+            entity.HasIndex(e => e.Slug)
+                .HasFilter("\"IsDeleted\" = false")
+                .IsUnique();
         });
 
         modelBuilder.Entity<StaffMember>(entity =>

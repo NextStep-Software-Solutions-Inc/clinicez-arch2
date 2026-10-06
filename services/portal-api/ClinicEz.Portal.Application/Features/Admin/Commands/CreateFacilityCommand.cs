@@ -30,7 +30,8 @@ public record CreateFacilityCommand(
     string? ContactNumber = null,
     string? ContactEmail = null,
     string? PlanTier = null,
-    Guid? BranchId = null
+    Guid? BranchId = null,
+    string? Slug = null
 ) : IRequest<bool>;
 
 public class CreateFacilityCommandHandler(
@@ -52,12 +53,30 @@ public class CreateFacilityCommandHandler(
 
         var trimmedName = request.Name.Trim();
         var nameExists = await context.Facilities.AnyAsync(f => 
-            f.TenantId == tenant.Id && f.Name.ToLower() == trimmedName.ToLower(), 
+            f.TenantId == tenant.Id && !f.IsDeleted && f.Name.ToLower() == trimmedName.ToLower(), 
             cancellationToken);
 
         if (nameExists)
         {
             throw new InvalidOperationException($"A facility named '{trimmedName}' already exists in this workspace.");
+        }
+
+        var candidateSlug = !string.IsNullOrWhiteSpace(request.Slug)
+            ? ClinicEz.Portal.Application.Features.Admin.Queries.GetFacilitiesQueryHandler.GenerateFacilitySlug(request.Slug)
+            : ClinicEz.Portal.Application.Features.Admin.Queries.GetFacilitiesQueryHandler.GenerateFacilitySlug(trimmedName);
+
+        if (candidateSlug.Length < 2 || candidateSlug.Length > 63)
+        {
+            throw new InvalidOperationException("Facility slug must be between 2 and 63 characters.");
+        }
+
+        var slugExists = await context.Facilities.AnyAsync(f => 
+            !f.IsDeleted && f.Slug.ToLower() == candidateSlug.ToLower(), 
+            cancellationToken);
+
+        if (slugExists)
+        {
+            throw new InvalidOperationException($"The facility slug '{candidateSlug}' is already taken. Please choose another unique subdomain slug.");
         }
 
         // Verify workspace plan allocations and limits before provisioning
@@ -96,6 +115,7 @@ public class CreateFacilityCommandHandler(
             TenantId = tenant.Id,
             BranchId = request.BranchId,
             Name = trimmedName,
+            Slug = candidateSlug,
             FacilityType = request.FacilityType,
             Status = FacilityStatus.Provisioning,
             LicenseToken = licenseToken,
@@ -132,6 +152,7 @@ public class CreateFacilityCommandHandler(
             FacilityType = request.FacilityType,
             ResourceId = resourceId,
             Name = trimmedName,
+            Slug = candidateSlug,
             LicenseToken = licenseToken,
             Limits = limits,
             PlanTier = planTier,

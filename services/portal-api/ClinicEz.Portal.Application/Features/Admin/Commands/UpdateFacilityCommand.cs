@@ -13,7 +13,8 @@ public record UpdateFacilityCommand(
     Guid Id,
     string TenantId,
     string Name,
-    FacilityStatus? Status = null
+    FacilityStatus? Status = null,
+    string? Slug = null
 ) : IRequest<bool>;
 
 public class UpdateFacilityCommandValidator : AbstractValidator<UpdateFacilityCommand>
@@ -42,7 +43,7 @@ public class UpdateFacilityCommandHandler(IApplicationDbContext context) : IRequ
 
         var trimmedName = request.Name.Trim();
         var duplicateExists = await context.Facilities.AnyAsync(f => 
-            f.TenantId == tenant.Id && f.Id != request.Id && f.Name.ToLower() == trimmedName.ToLower(), 
+            f.TenantId == tenant.Id && f.Id != request.Id && !f.IsDeleted && f.Name.ToLower() == trimmedName.ToLower(), 
             cancellationToken);
 
         if (duplicateExists)
@@ -51,6 +52,27 @@ public class UpdateFacilityCommandHandler(IApplicationDbContext context) : IRequ
         }
 
         facility.Name = trimmedName;
+
+        if (!string.IsNullOrWhiteSpace(request.Slug))
+        {
+            var cleanSlug = ClinicEz.Portal.Application.Features.Admin.Queries.GetFacilitiesQueryHandler.GenerateFacilitySlug(request.Slug);
+            if (cleanSlug.Length < 2 || cleanSlug.Length > 63)
+            {
+                throw new InvalidOperationException("Facility slug must be between 2 and 63 characters.");
+            }
+
+            var slugDuplicate = await context.Facilities.AnyAsync(f => 
+                f.Id != request.Id && !f.IsDeleted && f.Slug.ToLower() == cleanSlug.ToLower(), 
+                cancellationToken);
+
+            if (slugDuplicate)
+            {
+                throw new InvalidOperationException($"The facility slug '{cleanSlug}' is already taken. Please choose another unique subdomain slug.");
+            }
+
+            facility.Slug = cleanSlug;
+        }
+
         if (request.Status.HasValue)
         {
             facility.Status = request.Status.Value;

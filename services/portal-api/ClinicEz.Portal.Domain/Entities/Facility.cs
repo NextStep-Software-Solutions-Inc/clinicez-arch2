@@ -21,6 +21,7 @@ public class Facility : BaseEntity
     public Guid? BranchId { get; set; }
     public Branch? Branch { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string Slug { get; set; } = string.Empty;
     public FacilityType FacilityType { get; set; }
     public FacilityStatus Status { get; set; } = FacilityStatus.Provisioning;
 

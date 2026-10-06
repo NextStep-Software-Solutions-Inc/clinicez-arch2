@@ -147,12 +147,16 @@ public class FacilityEndpoints : IEndpoint
                 return Results.NotFound(new { Message = "Facility not found." });
             }
 
-            var slug = GetFacilitiesQueryHandler.GenerateFacilitySlug(facility.Name);
+            var slug = !string.IsNullOrWhiteSpace(facility.Slug)
+                ? facility.Slug
+                : GetFacilitiesQueryHandler.GenerateFacilitySlug(facility.Name);
+
             var consoleUrl = GetFacilitiesQueryHandler.ResolveConsoleUrl(
                 configuration,
                 facility.FacilityType,
                 facility.Status,
                 facility.Id,
+                slug,
                 tenant.TenantSlug);
 
             return Results.Ok(new 
@@ -167,6 +171,44 @@ public class FacilityEndpoints : IEndpoint
         .WithName("GetFacilityConsoleUrl")
         .WithDescription("Resolves environment-aware subdomain console URL for a specific facility.")
         .WithTags("Facilities");
+
+        // 3b. Check whether a facility subdomain slug is available
+        app.MapGet("/facilities/check-slug/{slug}", async (
+            string slug,
+            IApplicationDbContext context,
+            CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(slug))
+            {
+                return Results.BadRequest(new { Available = false, Message = "Slug cannot be empty." });
+            }
+
+            var cleanSlug = GetFacilitiesQueryHandler.GenerateFacilitySlug(slug);
+            if (cleanSlug.Length < 2 || cleanSlug.Length > 63)
+            {
+                return Results.Ok(new 
+                { 
+                    Available = false, 
+                    Slug = cleanSlug, 
+                    Message = "Slug must be between 2 and 63 alphanumeric or hyphen characters." 
+                });
+            }
+
+            var exists = await context.Facilities.AnyAsync(f => 
+                !f.IsDeleted && f.Slug.ToLower() == cleanSlug.ToLower(), 
+                ct);
+
+            return Results.Ok(new
+            {
+                Available = !exists,
+                Slug = cleanSlug,
+                Message = exists ? $"Subdomain slug '{cleanSlug}' is already taken." : "Slug is available."
+            });
+        })
+        .WithName("CheckFacilitySlug")
+        .WithDescription("Checks whether a facility subdomain slug is available.")
+        .WithTags("Facilities")
+        .AllowAnonymous();
 
         // 4. Update an existing facility
         app.MapPut("/facilities/{id:guid}", async (
@@ -192,7 +234,7 @@ public class FacilityEndpoints : IEndpoint
 
             try
             {
-                var success = await sender.Send(new UpdateFacilityCommand(id, tenant.TenantSlug, request.Name, request.Status));
+                var success = await sender.Send(new UpdateFacilityCommand(id, tenant.TenantSlug, request.Name, request.Status, request.Slug));
                 return success ? Results.Ok(new { Success = true }) : Results.NotFound(new { Message = "Facility not found." });
             }
             catch (InvalidOperationException ex)
@@ -411,6 +453,19 @@ public class FacilityEndpoints : IEndpoint
             if (facility == null) return Results.NotFound(new { Message = "Facility not found." });
 
             if (!string.IsNullOrWhiteSpace(request.Name)) facility.Name = request.Name.Trim();
+
+            if (!string.IsNullOrWhiteSpace(request.Slug))
+            {
+                var cleanSlug = GetFacilitiesQueryHandler.GenerateFacilitySlug(request.Slug);
+                var slugExists = await context.Facilities.AnyAsync(f => 
+                    f.Id != id && !f.IsDeleted && f.Slug.ToLower() == cleanSlug.ToLower());
+                if (slugExists)
+                {
+                    return Results.BadRequest(new { Message = $"The facility slug '{cleanSlug}' is already taken. Please choose another unique subdomain slug." });
+                }
+                facility.Slug = cleanSlug;
+            }
+
             if (request.Status.HasValue) facility.Status = request.Status.Value;
             if (request.Classification != null) facility.Classification = request.Classification;
             if (request.LicenseToOperate != null) facility.LicenseToOperate = request.LicenseToOperate;
@@ -448,11 +503,12 @@ public class FacilityEndpoints : IEndpoint
     }
 }
 
-public record UpdateFacilityRequest(string TenantSlug, string Name, ClinicEz.Portal.Domain.Entities.FacilityStatus? Status = null);
+public record UpdateFacilityRequest(string TenantSlug, string Name, ClinicEz.Portal.Domain.Entities.FacilityStatus? Status = null, string? Slug = null);
 
 public record UpdateFacilitySettingsRequest(
     string TenantSlug,
     string? Name = null,
+    string? Slug = null,
     ClinicEz.Portal.Domain.Entities.FacilityStatus? Status = null,
     string? Classification = null,
     string? LicenseToOperate = null,

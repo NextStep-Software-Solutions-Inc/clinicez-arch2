@@ -41,6 +41,14 @@ const APP_SUBDOMAINS: Record<string, string> = {
     Organization: "org"
 };
 
+function getFacilityDomain(fac: Facility, tenantSlug: string) {
+    const isDev = typeof window !== "undefined" && window.location.hostname.includes("dev.clinicez.net");
+    const baseDomain = isDev ? "dev.clinicez.net" : "clinicez.net";
+    const sub = APP_SUBDOMAINS[fac.facilityType] || "clinic";
+    const targetSlug = fac.slug || tenantSlug;
+    return `${targetSlug}.${sub}.${baseDomain}`;
+}
+
 export default function FacilityTable({ facilityType }: FacilityTableProps) {
     const params = useParams();
     const router = useRouter();
@@ -51,6 +59,7 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
     // Edit Modal state
     const [editingFacility, setEditingFacility] = useState<Facility | null>(null);
     const [editName, setEditName] = useState("");
+    const [editSlug, setEditSlug] = useState("");
     const [editStatus, setEditStatus] = useState<Facility["status"]>("Active");
     const [savingEdit, setSavingEdit] = useState(false);
 
@@ -122,18 +131,30 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
             const isDev = typeof window !== "undefined" && window.location.hostname.includes("dev.clinicez.net");
             const baseDomain = isDev ? "dev.clinicez.net" : "clinicez.net";
             const sub = APP_SUBDOMAINS[facility.facilityType] || "clinic";
-            window.open(`https://${tenantSlug}.${sub}.${baseDomain}?facilityId=${facility.id}`, "_blank");
+            const targetSlug = facility.slug || tenantSlug;
+            window.open(`https://${targetSlug}.${sub}.${baseDomain}?facilityId=${facility.id}`, "_blank");
         }
     };
 
     const handleOpenEdit = (fac: Facility) => {
         setEditingFacility(fac);
         setEditName(fac.name);
+        setEditSlug(fac.slug || "");
         setEditStatus(fac.status);
     };
 
     const isEditDuplicate = facilities.some(
         (f) => f.id !== editingFacility?.id && f.name.trim().toLowerCase() === editName.trim().toLowerCase()
+    );
+
+    const isEditDuplicateSlug = facilities.some(
+        (f) => f.id !== editingFacility?.id && !!f.slug && !!editSlug.trim() && f.slug.trim().toLowerCase() === editSlug.trim().toLowerCase()
+    );
+
+    const isEditSlugInvalid = !!editSlug.trim() && (
+        editSlug.trim().length < 2 ||
+        editSlug.trim().length > 63 ||
+        !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(editSlug.trim())
     );
 
     const handleSaveEdit = async (e: React.FormEvent) => {
@@ -145,11 +166,22 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
             return;
         }
 
+        if (isEditDuplicateSlug) {
+            toast.error(`A facility with slug "${editSlug.trim()}" already exists in this workspace.`);
+            return;
+        }
+
+        if (isEditSlugInvalid) {
+            toast.error("Facility slug must be between 2 and 63 lowercase alphanumeric characters or hyphens.");
+            return;
+        }
+
         setSavingEdit(true);
         try {
             await apiClient.put(`/facilities/${editingFacility.id}`, {
                 tenantSlug,
                 name: editName.trim(),
+                slug: editSlug.trim() || undefined,
                 status: editStatus
             });
             toast.success("Facility updated successfully");
@@ -264,7 +296,7 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                                     </span>
                                     <span>•</span>
                                     <span className="font-mono text-[11px] text-primary/85 dark:text-primary/75 truncate">
-                                        {`${APP_SUBDOMAINS[fac.facilityType] || "clinic"}.clinicez.net`}
+                                        {getFacilityDomain(fac, tenantSlug)}
                                     </span>
                                 </div>
                             </div>
@@ -382,7 +414,7 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                                             <span className="font-bold uppercase tracking-wider text-[10px]">{fac.facilityType}</span>
                                             <span>•</span>
                                             <span className="font-mono text-[11px] text-primary/85 dark:text-primary/75">
-                                                {`${APP_SUBDOMAINS[fac.facilityType] || "clinic"}.clinicez.net`}
+                                                {getFacilityDomain(fac, tenantSlug)}
                                             </span>
                                         </div>
                                     </td>
@@ -506,6 +538,39 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                             )}
                         </div>
                         <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                                <Label htmlFor="editSlug" className="text-xs font-bold">Facility Subdomain / URL Slug</Label>
+                                <span className="text-[10px] text-slate-400 font-mono">Unique subdomain</span>
+                            </div>
+                            <Input
+                                id="editSlug"
+                                value={editSlug}
+                                onChange={(e) => setEditSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                                placeholder="e.g. metro-makati"
+                                className={`h-9 text-xs font-mono rounded-xl ${
+                                    isEditDuplicateSlug || isEditSlugInvalid ? "border-rose-500 focus-visible:ring-rose-500 bg-rose-50/20" : ""
+                                }`}
+                            />
+                            {isEditDuplicateSlug && (
+                                <p className="text-xs text-rose-500 font-semibold flex items-center gap-1 mt-1 animate-in fade-in-50">
+                                    <IconAlertCircle className="h-3.5 w-3.5 shrink-0" />
+                                    Slug &ldquo;{editSlug.trim()}&rdquo; is already taken in this workspace.
+                                </p>
+                            )}
+                            {isEditSlugInvalid && (
+                                <p className="text-xs text-rose-500 font-semibold flex items-center gap-1 mt-1 animate-in fade-in-50">
+                                    <IconAlertCircle className="h-3.5 w-3.5 shrink-0" />
+                                    Slug must be 2-63 characters, lowercase letters, numbers, and hyphens only (cannot start or end with a hyphen).
+                                </p>
+                            )}
+                            <div className="rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 p-2.5 flex items-center gap-2">
+                                <span className="text-[11px] text-slate-400 font-semibold">Live Preview:</span>
+                                <span className="font-mono text-xs text-primary font-bold truncate">
+                                    {`https://${editSlug.trim() || "slug"}.${APP_SUBDOMAINS[editingFacility?.facilityType || facilityType] || "clinic"}.${typeof window !== "undefined" && window.location.hostname.includes("dev.clinicez.net") ? "dev.clinicez.net" : "clinicez.net"}`}
+                                </span>
+                            </div>
+                        </div>
+                        <div className="space-y-1.5">
                             <Label htmlFor="editStatus" className="text-xs font-bold">Operational Status</Label>
                             <select
                                 id="editStatus"
@@ -531,7 +596,7 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                             </Button>
                             <Button 
                                 type="submit" 
-                                disabled={savingEdit || !editName.trim() || isEditDuplicate} 
+                                disabled={savingEdit || !editName.trim() || isEditDuplicate || isEditDuplicateSlug || isEditSlugInvalid} 
                                 className="w-full sm:w-auto rounded-xl text-xs font-semibold gap-1.5"
                             >
                                 {savingEdit && <IconLoader className="h-3.5 w-3.5 animate-spin" />}

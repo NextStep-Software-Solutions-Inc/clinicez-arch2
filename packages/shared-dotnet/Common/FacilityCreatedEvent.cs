@@ -11,6 +11,7 @@ public record FacilityCreatedEvent
     public FacilityType FacilityType { get; init; }
     public Guid ResourceId { get; init; }
     public string Name { get; init; } = string.Empty;
+    public string? Slug { get; init; }
     public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
 
     // Cryptographically signed license information rooted upon facility activation
