@@ -20,7 +20,8 @@ export default function WebNavBar({ state, descriptors, navigation }: BottomTabB
   const { user } = useUser();
   const { logout } = useAuth();
 
-  const isDesktop = width >= 768;
+  // Desktop (large screens) vs Small-to-Medium screens (mobile & tablet)
+  const isDesktop = width >= 1024;
 
   const displayName =
     user?.fullName ||
@@ -29,71 +30,83 @@ export default function WebNavBar({ state, descriptors, navigation }: BottomTabB
     'Patient';
 
   if (!isDesktop) {
-    // Mobile view: Render standard bottom tab bar
+    // Small to medium screens (mobile & tablet): Render bottom navigation bar (same as mobile app)
     return (
       <View
         style={[
           styles.mobileTabBar,
           {
-            backgroundColor: colors.card,
-            borderTopColor: colors.border,
+            backgroundColor: isDark ? '#0F172A' : '#FFFFFF',
+            borderTopColor: isDark ? '#1E293B' : '#E2E8F0',
           },
         ]}
       >
-        {state.routes.map((route, index) => {
-          const { options } = descriptors[route.key];
-          const label =
-            options.tabBarLabel !== undefined
-              ? options.tabBarLabel
-              : options.title !== undefined
-                ? options.title
-                : route.name;
+        <View style={styles.mobileTabBarInner}>
+          {state.routes.map((route, index) => {
+            const { options } = descriptors[route.key];
+            const label =
+              options.tabBarLabel !== undefined
+                ? options.tabBarLabel
+                : options.title !== undefined
+                  ? options.title
+                  : route.name;
 
-          const isFocused = state.index === index;
-          const iconName = TAB_ICONS[route.name] || 'home';
+            const isFocused = state.index === index;
+            const iconName = TAB_ICONS[route.name] || 'home';
 
-          const onPress = () => {
-            const event = navigation.emit({
-              type: 'tabPress',
-              target: route.key,
-              canPreventDefault: true,
-            });
+            const onPress = () => {
+              const event = navigation.emit({
+                type: 'tabPress',
+                target: route.key,
+                canPreventDefault: true,
+              });
 
-            if (!isFocused && !event.defaultPrevented) {
-              navigation.navigate(route.name);
-            }
-          };
+              if (!isFocused && !event.defaultPrevented) {
+                navigation.navigate(route.name);
+              }
+            };
 
-          return (
-            <Pressable
-              key={route.key}
-              onPress={onPress}
-              style={({ pressed }) => [styles.mobileTabItem, pressed && { opacity: 0.7 }]}
-            >
-              <AppIcon
-                name={iconName}
-                color={isFocused ? '#3B82F6' : isDark ? '#94A3B8' : '#64748B'}
-                size={22}
-              />
-              <ThemedText
-                style={[
-                  styles.mobileTabLabel,
-                  {
-                    color: isFocused ? '#3B82F6' : isDark ? '#94A3B8' : '#64748B',
-                    fontWeight: isFocused ? '700' : '500',
-                  },
+            return (
+              <Pressable
+                key={route.key}
+                onPress={onPress}
+                accessibilityRole="button"
+                accessibilityState={isFocused ? { selected: true } : {}}
+                style={({ pressed }) => [
+                  styles.mobileTabItem,
+                  isFocused && styles.mobileTabItemFocused,
+                  pressed && { opacity: 0.7 },
                 ]}
               >
-                {typeof label === 'string' ? label : route.name}
-              </ThemedText>
-            </Pressable>
-          );
-        })}
+                <View style={styles.iconContainer}>
+                  <AppIcon
+                    name={iconName}
+                    color={isFocused ? '#3B82F6' : isDark ? '#94A3B8' : '#64748B'}
+                    size={22}
+                  />
+                  {isFocused && <View style={styles.mobileActiveDot} />}
+                </View>
+                <ThemedText
+                  style={[
+                    styles.mobileTabLabel,
+                    {
+                      color: isFocused ? '#3B82F6' : isDark ? '#94A3B8' : '#64748B',
+                      fontWeight: isFocused ? '700' : '500',
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {typeof label === 'string' ? label : route.name}
+                </ThemedText>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
     );
   }
 
-  // Desktop view: Top navigation bar
+  // Large screens (desktop): Render top navigation bar with order: -1
   return (
     <View
       style={[
@@ -145,12 +158,16 @@ export default function WebNavBar({ state, descriptors, navigation }: BottomTabB
               <Pressable
                 key={route.key}
                 onPress={onPress}
+                accessibilityRole="button"
+                accessibilityState={isFocused ? { selected: true } : {}}
                 style={({ pressed }) => [
                   styles.navLinkItem,
                   isFocused && [
                     styles.navLinkItemActive,
                     {
-                      backgroundColor: isDark ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.08)',
+                      backgroundColor: isDark
+                        ? 'rgba(59, 130, 246, 0.15)'
+                        : 'rgba(59, 130, 246, 0.08)',
                     },
                   ],
                   pressed && { opacity: 0.8 },
@@ -208,7 +225,9 @@ export default function WebNavBar({ state, descriptors, navigation }: BottomTabB
 }
 
 const styles = StyleSheet.create({
+  // Desktop Top Navigation Bar (order: -1 brings it to the top of the flex container)
   desktopNavWrapper: {
+    order: -1,
     width: '100%',
     borderBottomWidth: 1,
     shadowColor: '#000',
@@ -217,7 +236,7 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 3,
     zIndex: 100,
-  },
+  } as any,
   desktopNavInner: {
     maxWidth: 1280,
     width: '100%',
@@ -324,22 +343,53 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#EF4444',
   },
-  // Mobile Bottom Tab Bar Styles
+
+  // Small & Medium Screen Bottom Navigation Bar (Same as mobile app)
   mobileTabBar: {
-    flexDirection: 'row',
+    width: '100%',
     borderTopWidth: 1,
-    height: 60,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 8,
+    zIndex: 100,
+  },
+  mobileTabBarInner: {
+    flexDirection: 'row',
+    width: '100%',
+    maxWidth: 640,
+    marginHorizontal: 'auto',
+    height: 64,
     alignItems: 'center',
     justifyContent: 'space-around',
-    paddingBottom: 4,
+    paddingHorizontal: 12,
   },
   mobileTabItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 6,
     gap: 3,
+  },
+  mobileTabItemFocused: {
+    transform: [{ scale: 1.02 }],
+  },
+  iconContainer: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mobileActiveDot: {
+    position: 'absolute',
+    bottom: -4,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#3B82F6',
   },
   mobileTabLabel: {
     fontSize: 11,
+    marginTop: 2,
   },
 });

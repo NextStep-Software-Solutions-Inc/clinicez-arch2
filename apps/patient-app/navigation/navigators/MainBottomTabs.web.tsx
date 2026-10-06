@@ -10,7 +10,6 @@ import ProfileStack from './ProfileStack';
 const MainBottomTabsWeb = createBottomTabNavigator({
   tabBar: (props) => <WebNavBar {...props} />,
   screenOptions: {
-    tabBarPosition: 'top',
     headerShown: false,
   },
   screens: {

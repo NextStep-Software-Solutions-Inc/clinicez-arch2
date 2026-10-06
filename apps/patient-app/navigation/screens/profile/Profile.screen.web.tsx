@@ -426,7 +426,7 @@ async function loadCounts(): Promise<Counts> {
 export default function ProfileScreenWeb() {
   const { colors, dark: isDark } = useTheme();
   const navigation = useNavigation<any>();
-  const { internalPatientId, getToken } = useAuth();
+  const { internalPatientId, getToken, logout } = useAuth();
   const { showOfflineAlert } = useOfflineAlert();
   const { width } = useWindowDimensions();
 
@@ -509,7 +509,7 @@ export default function ProfileScreenWeb() {
   return (
     <ScrollView
       style={[styles.root, { backgroundColor: colors.background }]}
-      contentContainerStyle={styles.scrollContent}
+      contentContainerStyle={[styles.scrollContent, { paddingBottom: isDesktop ? 32 : 96 }]}
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.container}>
@@ -527,21 +527,36 @@ export default function ProfileScreenWeb() {
             </ThemedText>
           </View>
 
-          <Pressable
-            onPress={handleRefresh}
-            disabled={isRefreshing}
-            style={({ pressed }) => [
-              styles.syncButton,
-              { borderColor: isDark ? '#334155' : '#CBD5E1' },
-              pressed && { opacity: 0.7 },
-            ]}
-          >
-            {isRefreshing ? (
-              <ActivityIndicator size="small" color="#3B82F6" />
-            ) : (
-              <ThemedText style={styles.syncButtonText}>🔄 Sync Server</ThemedText>
+          <View style={styles.headerActions}>
+            <Pressable
+              onPress={handleRefresh}
+              disabled={isRefreshing}
+              style={({ pressed }) => [
+                styles.syncButton,
+                { borderColor: isDark ? '#334155' : '#CBD5E1' },
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              {isRefreshing ? (
+                <ActivityIndicator size="small" color="#3B82F6" />
+              ) : (
+                <ThemedText style={styles.syncButtonText}>🔄 Sync Server</ThemedText>
+              )}
+            </Pressable>
+
+            {!isDesktop && (
+              <Pressable
+                onPress={() => logout()}
+                style={({ pressed }) => [
+                  styles.signOutButtonMobile,
+                  { borderColor: isDark ? '#334155' : '#CBD5E1' },
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <ThemedText style={styles.signOutButtonText}>Sign Out</ThemedText>
+              </Pressable>
             )}
-          </Pressable>
+          </View>
         </View>
 
         {/* Filter Tabs & Search Bar */}
@@ -716,6 +731,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#3B82F6',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  signOutButtonMobile: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  signOutButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#EF4444',
   },
   controlsRow: {
     flexDirection: 'row',

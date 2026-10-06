@@ -117,7 +117,7 @@ export default function HomeScreenWeb() {
   const [hasNcd, setHasNcd] = useState(false);
   const [philhealthPin, setPhilhealthPin] = useState<string | null>(null);
 
-  const isDesktop = width >= 960;
+  const isDesktop = width >= 1024;
 
   useEffect(() => {
     let mounted = true;
@@ -183,7 +183,7 @@ export default function HomeScreenWeb() {
   return (
     <ScrollView
       style={[styles.root, { backgroundColor: colors.background }]}
-      contentContainerStyle={styles.scrollContent}
+      contentContainerStyle={[styles.scrollContent, { paddingBottom: isDesktop ? 32 : 96 }]}
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.container}>
