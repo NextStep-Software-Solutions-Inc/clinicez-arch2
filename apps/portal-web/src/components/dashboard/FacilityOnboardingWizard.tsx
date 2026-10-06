@@ -87,6 +87,25 @@ export default function FacilityOnboardingWizard({
   const activeCity: PhilippineCity | undefined = cityOptions.find((c) => c.name === selectedCityName) || cityOptions[0];
   const barangayOptions: string[] = activeCity?.barangays || [];
 
+  // Existing facilities for unique name validation
+  const [existingFacilities, setExistingFacilities] = useState<Array<{ id: string; name: string }>>([]);
+
+  useEffect(() => {
+    if (open && tenantSlug) {
+      apiClient.get<Array<{ id: string; name: string }>>(`/facilities?tenantSlug=${tenantSlug}`)
+        .then((res) => {
+          setExistingFacilities(res.data || []);
+        })
+        .catch((err) => {
+          console.error("Failed to load existing facilities for uniqueness check", err);
+        });
+    }
+  }, [open, tenantSlug]);
+
+  const isDuplicateName = existingFacilities.some(
+    (f) => f.name.trim().toLowerCase() === name.trim().toLowerCase()
+  );
+
   // Reset or initialize default classification when type changes
   useEffect(() => {
     const list = FACILITY_CLASSIFICATIONS[normalizedFacilityType] || FACILITY_CLASSIFICATIONS.Clinic;
@@ -173,6 +192,10 @@ export default function FacilityOnboardingWizard({
         toast.error("Please provide the legal or official operating name of the facility.");
         return;
       }
+      if (isDuplicateName) {
+        toast.error(`A facility named "${name.trim()}" already exists in this workspace.`);
+        return;
+      }
     }
     if (currentStep === 3) {
       if (!streetAddress.trim()) {
@@ -189,6 +212,10 @@ export default function FacilityOnboardingWizard({
 
   const handleFinalSubmit = async () => {
     if (!name.trim() || !tenantSlug) return;
+    if (isDuplicateName) {
+      toast.error(`A facility named "${name.trim()}" already exists in this workspace.`);
+      return;
+    }
     setSubmitting(true);
     try {
       const payload = {
@@ -311,10 +338,18 @@ export default function FacilityOnboardingWizard({
                   placeholder={`e.g. St. Jude Medical Clinic - BGC Branch`}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="h-10 rounded-xl text-sm font-semibold"
+                  className={`h-10 rounded-xl text-sm font-semibold ${
+                    isDuplicateName ? "border-rose-500 focus-visible:ring-rose-500 bg-rose-50/20" : ""
+                  }`}
                   autoFocus
                   required
                 />
+                {isDuplicateName && (
+                  <p className="text-xs text-rose-500 font-semibold flex items-center gap-1.5 mt-1 animate-in fade-in-50">
+                    <IconAlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    A facility named &ldquo;{name.trim()}&rdquo; already exists in this workspace. Please choose a unique name.
+                  </p>
+                )}
                 <p className="text-[11px] text-slate-400">
                   This name will appear on printed official prescription slips, lab results, and patient receipts.
                 </p>
@@ -695,7 +730,7 @@ export default function FacilityOnboardingWizard({
               <Button
                 type="button"
                 onClick={handleNext}
-                disabled={currentStep === 1 && !name.trim()}
+                disabled={currentStep === 1 && (!name.trim() || isDuplicateName)}
                 className="rounded-xl text-xs font-bold px-5 h-9 bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5 shadow-sm"
               >
                 <span>Continue</span>

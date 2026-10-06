@@ -1,8 +1,12 @@
 using ClinicEz.Portal.Application.Features.Admin.Commands;
+using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Portal.Infrastructure.Persistence;
 using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Licensing;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using Moq;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -68,6 +72,102 @@ public class FacilityLifecycleTests : IDisposable
         Assert.NotNull(facilityInDb);
         Assert.Equal("Metro Care BGC", facilityInDb.Name);
         Assert.Equal(FacilityStatus.Suspended, facilityInDb.Status);
+    }
+
+    [Fact]
+    public async Task UpdateFacility_DuplicateNameInSameTenant_ThrowsInvalidOperationException()
+    {
+        // Add a second facility in the same tenant
+        var secondFacilityId = Guid.NewGuid();
+        _context.Facilities.Add(new Facility
+        {
+            Id = secondFacilityId,
+            TenantId = _tenantId,
+            Name = "Metro Care Alabang",
+            FacilityType = FacilityType.Clinic,
+            Status = FacilityStatus.Active
+        });
+        await _context.SaveChangesAsync();
+
+        var handler = new UpdateFacilityCommandHandler(_context);
+        // Try renaming second facility to first facility's name (case-insensitive)
+        var command = new UpdateFacilityCommand(secondFacilityId, TenantSlug, "metro care makati");
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            handler.Handle(command, CancellationToken.None));
+
+        Assert.Contains("already exists", ex.Message);
+    }
+
+    [Fact]
+    public async Task UpdateFacility_SameFacilitySameName_Succeeds()
+    {
+        var handler = new UpdateFacilityCommandHandler(_context);
+        var command = new UpdateFacilityCommand(_facilityId, TenantSlug, "Metro Care Makati");
+
+        var success = await handler.Handle(command, CancellationToken.None);
+
+        Assert.True(success);
+    }
+
+    [Fact]
+    public async Task CreateFacility_DuplicateNameInSameTenant_ThrowsInvalidOperationException()
+    {
+        var mockPublish = new Mock<IPublishEndpoint>();
+        var mockGuard = new Mock<ITenantFeatureGuard>();
+        var licenseSigner = new FacilityLicenseSigner();
+
+        var handler = new CreateFacilityCommandHandler(_context, mockPublish.Object, mockGuard.Object, licenseSigner);
+        // Try creating facility with exact existing name
+        var command = new CreateFacilityCommand(TenantSlug, FacilityType.Laboratory, "Metro Care Makati");
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            handler.Handle(command, CancellationToken.None));
+
+        Assert.Contains("already exists in this workspace", ex.Message);
+    }
+
+    [Fact]
+    public async Task CreateFacility_DuplicateNameCaseInsensitive_ThrowsInvalidOperationException()
+    {
+        var mockPublish = new Mock<IPublishEndpoint>();
+        var mockGuard = new Mock<ITenantFeatureGuard>();
+        var licenseSigner = new FacilityLicenseSigner();
+
+        var handler = new CreateFacilityCommandHandler(_context, mockPublish.Object, mockGuard.Object, licenseSigner);
+        // Try creating facility with different casing and leading/trailing spaces
+        var command = new CreateFacilityCommand(TenantSlug, FacilityType.Pharmacy, "   metro care makati   ");
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            handler.Handle(command, CancellationToken.None));
+
+        Assert.Contains("already exists in this workspace", ex.Message);
+    }
+
+    [Fact]
+    public async Task CreateFacility_SameNameInDifferentTenant_Succeeds()
+    {
+        var otherTenantId = Guid.NewGuid();
+        _context.Tenants.Add(new Tenant
+        {
+            Id = otherTenantId,
+            TenantSlug = "other-tenant",
+            Name = "Other Tenant",
+            OwnerId = "other_owner"
+        });
+        await _context.SaveChangesAsync();
+
+        var mockPublish = new Mock<IPublishEndpoint>();
+        var mockGuard = new Mock<ITenantFeatureGuard>();
+        var licenseSigner = new FacilityLicenseSigner();
+
+        var handler = new CreateFacilityCommandHandler(_context, mockPublish.Object, mockGuard.Object, licenseSigner);
+        // Create facility with "Metro Care Makati" in other-tenant
+        var command = new CreateFacilityCommand("other-tenant", FacilityType.Clinic, "Metro Care Makati");
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        Assert.True(result);
     }
 
     [Fact]

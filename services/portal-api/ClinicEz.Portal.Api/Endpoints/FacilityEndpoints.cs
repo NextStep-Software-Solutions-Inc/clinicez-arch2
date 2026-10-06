@@ -190,8 +190,19 @@ public class FacilityEndpoints : IEndpoint
 
             if (!isOwner && !isAdmin) return Results.Forbid();
 
-            var success = await sender.Send(new UpdateFacilityCommand(id, tenant.TenantSlug, request.Name, request.Status));
-            return success ? Results.Ok(new { Success = true }) : Results.NotFound(new { Message = "Facility not found." });
+            try
+            {
+                var success = await sender.Send(new UpdateFacilityCommand(id, tenant.TenantSlug, request.Name, request.Status));
+                return success ? Results.Ok(new { Success = true }) : Results.NotFound(new { Message = "Facility not found." });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
         })
         .RequireAuthorization()
         .WithName("UpdateFacility")

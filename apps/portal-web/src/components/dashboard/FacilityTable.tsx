@@ -130,9 +130,18 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
         setEditStatus(fac.status);
     };
 
+    const isEditDuplicate = facilities.some(
+        (f) => f.id !== editingFacility?.id && f.name.trim().toLowerCase() === editName.trim().toLowerCase()
+    );
+
     const handleSaveEdit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!editingFacility || !editName.trim()) return;
+
+        if (isEditDuplicate) {
+            toast.error(`A facility named "${editName.trim()}" already exists in this workspace.`);
+            return;
+        }
 
         setSavingEdit(true);
         try {
@@ -278,12 +287,18 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                         <div className="flex items-center gap-2 pt-1">
                             {fac.status === "Provisioning" ? (
                                 <Button
-                                    disabled
+                                    onClick={() => handleActivateFacility(fac)}
+                                    disabled={activatingId === fac.id}
                                     variant="outline"
                                     size="sm"
-                                    className="flex-1 rounded-xl text-xs font-bold h-9 border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 flex items-center justify-center gap-1.5"
+                                    title="Provisioning in progress. Tap to force activate if taking too long."
+                                    className="flex-1 rounded-xl text-xs font-bold h-9 border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 hover:bg-amber-100 hover:text-amber-800 flex items-center justify-center gap-1.5 shadow-xs transition-colors"
                                 >
-                                    <IconClockPlay className="h-3.5 w-3.5 animate-spin" />
+                                    {activatingId === fac.id ? (
+                                        <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                        <IconClockPlay className="h-3.5 w-3.5 animate-spin" />
+                                    )}
                                     <span>Provisioning...</span>
                                 </Button>
                             ) : fac.status === "Active" ? (
@@ -383,12 +398,18 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                                         <div className="inline-flex items-center gap-1.5 justify-end">
                                             {fac.status === "Provisioning" ? (
                                                 <Button
-                                                    disabled
+                                                    onClick={() => handleActivateFacility(fac)}
+                                                    disabled={activatingId === fac.id}
                                                     variant="outline"
                                                     size="sm"
-                                                    className="rounded-xl text-xs font-bold h-8 border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 gap-1.5"
+                                                    title="Provisioning in progress. Click to force activate if taking too long."
+                                                    className="rounded-xl text-xs font-bold h-8 border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400 hover:bg-amber-100 hover:text-amber-800 gap-1.5 transition-colors"
                                                 >
-                                                    <IconClockPlay className="h-3.5 w-3.5 animate-spin" />
+                                                    {activatingId === fac.id ? (
+                                                        <IconLoader className="h-3.5 w-3.5 animate-spin" />
+                                                    ) : (
+                                                        <IconClockPlay className="h-3.5 w-3.5 animate-spin" />
+                                                    )}
                                                     <span>Provisioning...</span>
                                                 </Button>
                                             ) : fac.status === "Active" ? (
@@ -470,9 +491,17 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                                 value={editName}
                                 onChange={(e) => setEditName(e.target.value)}
                                 placeholder="e.g. Metro Clinic Makati"
-                                className="h-9 text-xs rounded-xl"
+                                className={`h-9 text-xs rounded-xl ${
+                                    isEditDuplicate ? "border-rose-500 focus-visible:ring-rose-500 bg-rose-50/20" : ""
+                                }`}
                                 required
                             />
+                            {isEditDuplicate && (
+                                <p className="text-xs text-rose-500 font-semibold flex items-center gap-1 mt-1 animate-in fade-in-50">
+                                    <IconAlertCircle className="h-3.5 w-3.5 shrink-0" />
+                                    A facility named &ldquo;{editName.trim()}&rdquo; already exists in this workspace.
+                                </p>
+                            )}
                         </div>
                         <div className="space-y-1.5">
                             <Label htmlFor="editStatus" className="text-xs font-bold">Operational Status</Label>
@@ -500,7 +529,7 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                             </Button>
                             <Button 
                                 type="submit" 
-                                disabled={savingEdit || !editName.trim()} 
+                                disabled={savingEdit || !editName.trim() || isEditDuplicate} 
                                 className="w-full sm:w-auto rounded-xl text-xs font-semibold gap-1.5"
                             >
                                 {savingEdit && <IconLoader className="h-3.5 w-3.5 animate-spin" />}

@@ -50,6 +50,16 @@ public class CreateFacilityCommandHandler(
 
         if (tenant == null) return false;
 
+        var trimmedName = request.Name.Trim();
+        var nameExists = await context.Facilities.AnyAsync(f => 
+            f.TenantId == tenant.Id && f.Name.ToLower() == trimmedName.ToLower(), 
+            cancellationToken);
+
+        if (nameExists)
+        {
+            throw new InvalidOperationException($"A facility named '{trimmedName}' already exists in this workspace.");
+        }
+
         // Verify workspace plan allocations and limits before provisioning
         await tenantFeatureGuard.EnsureCanCreateFacilityAsync(tenant.Id.ToString(), request.FacilityType, cancellationToken);
 
@@ -68,7 +78,7 @@ public class CreateFacilityCommandHandler(
             FacilityId = resourceId,
             TenantId = tenant.Id.ToString(),
             TenantSlug = tenant.TenantSlug,
-            FacilityName = request.Name,
+            FacilityName = trimmedName,
             FacilityType = request.FacilityType.ToString(),
             PlanTier = planTier,
             Limits = limits,
@@ -85,7 +95,7 @@ public class CreateFacilityCommandHandler(
             Id = resourceId,
             TenantId = tenant.Id,
             BranchId = request.BranchId,
-            Name = request.Name,
+            Name = trimmedName,
             FacilityType = request.FacilityType,
             Status = FacilityStatus.Provisioning,
             LicenseToken = licenseToken,
@@ -105,7 +115,7 @@ public class CreateFacilityCommandHandler(
             StreetAddress = request.StreetAddress,
             ContactNumber = request.ContactNumber,
             ContactEmail = request.ContactEmail,
-            LetterheadHeader = request.Name.ToUpper(),
+            LetterheadHeader = trimmedName.ToUpper(),
             LetterheadAddress = string.Join(", ", new[] { request.StreetAddress, request.Barangay, request.City, request.Province }.Where(s => !string.IsNullOrWhiteSpace(s))),
             LetterheadContact = request.ContactNumber
         };
@@ -121,7 +131,7 @@ public class CreateFacilityCommandHandler(
             TenantSlug = tenant.TenantSlug,
             FacilityType = request.FacilityType,
             ResourceId = resourceId,
-            Name = request.Name,
+            Name = trimmedName,
             LicenseToken = licenseToken,
             Limits = limits,
             PlanTier = planTier,

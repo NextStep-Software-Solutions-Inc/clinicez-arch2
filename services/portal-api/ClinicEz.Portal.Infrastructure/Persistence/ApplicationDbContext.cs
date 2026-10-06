@@ -138,6 +138,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .WithMany(b => b.Facilities)
                 .HasForeignKey(e => e.BranchId)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(e => new { e.TenantId, e.Name })
+                .HasFilter("\"IsDeleted\" = false")
+                .IsUnique();
         });
 
         modelBuilder.Entity<StaffMember>(entity =>

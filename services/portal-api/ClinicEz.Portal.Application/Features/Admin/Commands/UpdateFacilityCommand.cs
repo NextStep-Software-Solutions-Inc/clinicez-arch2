@@ -40,7 +40,17 @@ public class UpdateFacilityCommandHandler(IApplicationDbContext context) : IRequ
 
         if (facility == null) return false;
 
-        facility.Name = request.Name.Trim();
+        var trimmedName = request.Name.Trim();
+        var duplicateExists = await context.Facilities.AnyAsync(f => 
+            f.TenantId == tenant.Id && f.Id != request.Id && f.Name.ToLower() == trimmedName.ToLower(), 
+            cancellationToken);
+
+        if (duplicateExists)
+        {
+            throw new InvalidOperationException($"A facility named '{trimmedName}' already exists in this workspace.");
+        }
+
+        facility.Name = trimmedName;
         if (request.Status.HasValue)
         {
             facility.Status = request.Status.Value;
