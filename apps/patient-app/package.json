@@ -17,6 +17,7 @@
     "@react-navigation/native-stack": "^8.0.0-alpha.34",
     "@shared/safe": "workspace:*",
     "axios": "^1.18.0",
+    "buffer": "^6.0.3",
     "date-fns": "^4.4.0",
     "drizzle-orm": "^0.45.2",
     "expo": "~56.0.8",
