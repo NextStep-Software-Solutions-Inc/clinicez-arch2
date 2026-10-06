@@ -16,7 +16,7 @@ export default ({ config }: ConfigContext): ExpoConfig =>
     ...config,
     name: appNames[APP_VARIANT] ?? 'Clinic EZ',
     owner: 'nextstep-software',
-    slug: 'PatientAppFE',
+    slug: 'patient-app-bun-56',
     version: '1.0.0',
     orientation: 'portrait',
     icon: './assets/icon.png',
