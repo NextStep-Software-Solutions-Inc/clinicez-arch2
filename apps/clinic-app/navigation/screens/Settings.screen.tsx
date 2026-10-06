@@ -1,19 +1,28 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { View, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
 import {
-  View,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  ActivityIndicator,
-  RefreshControl,
-  TextInput,
+  ThemedText,
+  Badge,
+  Button,
+  Input,
+  Card,
+  CardHeader,
+  CardContent,
+  Icon,
   Modal,
-} from 'react-native';
-import { ThemedText, Badge, Button, Input, Card } from '@ui';
+  EmptyState,
+  ErrorState,
+  SkeletonList,
+  StatCard,
+} from '@ui';
+import type { BadgeVariant } from '@ui';
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
+import { Alert, notify } from '@utils/feedback';
 import { useFacilityLicense } from '../../components/FacilityActivationGate';
 import { BulkStudentImportModal } from '../../components/BulkStudentImportModal';
+import { useClinic } from '../../context/ClinicContext';
+import { useStaff } from '../../context/StaffContext';
 import {
   clinicService,
   DailyEodReport,
@@ -28,115 +37,115 @@ import PhilHealthCatalogMappingModal, {
 } from '../../components/PhilHealthCatalogMappingModal';
 import CsvCatalogImportModal from '../../components/CsvCatalogImportModal';
 
-const DEFAULT_CUSTOM_FIELDS: ClinicCustomFieldDefinition[] = [
-  {
-    id: 'cf-student-id',
-    tenantId: 'tenant-default',
-    clinicId: 'clinic-default',
-    entityType: 'ClinicPatient',
-    fieldKey: 'student_id',
-    label: 'Student ID / LRN',
-    category: 'Student',
-    dataType: 'Text',
-    isRequired: true,
-    displayOrder: 1,
-    placeholder: 'e.g. 2026-10492',
-    isActive: true,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'cf-college',
-    tenantId: 'tenant-default',
-    clinicId: 'clinic-default',
-    entityType: 'ClinicPatient',
-    fieldKey: 'college',
-    label: 'College / Faculty',
-    category: 'Student',
-    dataType: 'Text',
-    isRequired: false,
-    displayOrder: 2,
-    placeholder: 'e.g. College of Computer Studies',
-    isActive: true,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'cf-program',
-    tenantId: 'tenant-default',
-    clinicId: 'clinic-default',
-    entityType: 'ClinicPatient',
-    fieldKey: 'program',
-    label: 'Degree Program / Course',
-    category: 'Student',
-    dataType: 'Text',
-    isRequired: false,
-    displayOrder: 3,
-    placeholder: 'e.g. BS Computer Science',
-    isActive: true,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'cf-year-level',
-    tenantId: 'tenant-default',
-    clinicId: 'clinic-default',
-    entityType: 'ClinicPatient',
-    fieldKey: 'year_level',
-    label: 'Year Level',
-    category: 'Student',
-    dataType: 'Select',
-    optionsJson: JSON.stringify(['1st Year', '2nd Year', '3rd Year', '4th Year', 'Graduate Studies']),
-    isRequired: true,
-    displayOrder: 4,
-    placeholder: 'Select Year Level',
-    isActive: true,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'cf-employee-id',
-    tenantId: 'tenant-default',
-    clinicId: 'clinic-default',
-    entityType: 'ClinicPatient',
-    fieldKey: 'employee_id',
-    label: 'Employee ID',
-    category: 'Employee',
-    dataType: 'Text',
-    isRequired: true,
-    displayOrder: 5,
-    placeholder: 'e.g. EMP-2026-042',
-    isActive: true,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'cf-department',
-    tenantId: 'tenant-default',
-    clinicId: 'clinic-default',
-    entityType: 'ClinicPatient',
-    fieldKey: 'department',
-    label: 'Department / Unit',
-    category: 'Employee',
-    dataType: 'Text',
-    isRequired: false,
-    displayOrder: 6,
-    placeholder: 'e.g. Registrar / Human Resources',
-    isActive: true,
-    createdAt: new Date().toISOString(),
-  },
-];
+const formatPeso = (amount: number | undefined | null) =>
+  `₱${(amount ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
+
+/** Selectable pill used for category filters and single-choice form options. */
+function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      style={[styles.chip, active && styles.chipActive]}
+    >
+      <ThemedText variant={active ? 'smallBold' : 'small'} color={active ? theme.colors.primary : theme.colors.textSecondary}>
+        {label}
+      </ThemedText>
+    </Pressable>
+  );
+}
+
+function InfoRow({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) {
+  return (
+    <View style={styles.infoRow}>
+      <ThemedText variant="small" color={theme.colors.textSecondary}>
+        {label}
+      </ThemedText>
+      <ThemedText variant="smallBold" color={valueColor}>
+        {value}
+      </ThemedText>
+    </View>
+  );
+}
+
+function FormError({ message }: { message: string }) {
+  return (
+    <View style={styles.formError}>
+      <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
+      <ThemedText variant="small" color={theme.colors.emergencyText} style={styles.flex}>
+        {message}
+      </ThemedText>
+    </View>
+  );
+}
+
+function FieldGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <View style={styles.fieldGroup}>
+      <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+        {label}
+      </ThemedText>
+      {children}
+    </View>
+  );
+}
+
+const FIELD_TYPE_BADGE: Record<ClinicCustomFieldDefinition['dataType'], BadgeVariant> = {
+  Text: 'primary',
+  Number: 'warning',
+  Date: 'info',
+  Select: 'purple',
+  Boolean: 'neutral',
+};
+
+const FIELD_CATEGORY_LABEL: Record<string, string> = {
+  All: 'All fields',
+  Student: 'Students',
+  Employee: 'Employees',
+  General: 'General',
+};
+
+const SERVICE_CATEGORY_LABEL: Record<string, string> = {
+  All: 'All services',
+  Medicine: 'Medicines',
+  Diagnostic: 'Diagnostics',
+  Procedure: 'Procedures',
+  Consultation: 'Consultations',
+  NursingService: 'Nursing',
+};
+
+const LICENSE_STATUS: Record<string, { label: string; variant: BadgeVariant }> = {
+  Active: { label: 'Active', variant: 'success' },
+  ActivationRequired: { label: 'Activation required', variant: 'warning' },
+  Expired: { label: 'Expired', variant: 'emergency' },
+  Tampered: { label: 'Verification failed', variant: 'emergency' },
+};
 
 export default function SettingsScreen() {
   const { license, openActivationModal, refreshLicense } = useFacilityLicense();
+  const { refresh: refreshClinic } = useClinic();
+  const { reload: reloadStaffContext } = useStaff();
+
   const [eodReport, setEodReport] = useState<DailyEodReport | null>(null);
   const [settings, setSettings] = useState<ClinicSettingsRecord | null>(null);
   const [staff, setStaff] = useState<StaffMember[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
-  const [settingsSavedBanner, setSettingsSavedBanner] = useState(false);
+
+  // Per-section load errors, shown with a Retry instead of fabricated data.
+  const [eodLoadError, setEodLoadError] = useState<string | null>(null);
+  const [settingsLoadError, setSettingsLoadError] = useState<string | null>(null);
+  const [staffLoadError, setStaffLoadError] = useState<string | null>(null);
+  const [fieldsLoadError, setFieldsLoadError] = useState<string | null>(null);
+  const [servicesLoadError, setServicesLoadError] = useState<string | null>(null);
 
   // Staff creation modal states
   const [showAddStaffModal, setShowAddStaffModal] = useState(false);
   const [newStaffFirstName, setNewStaffFirstName] = useState('');
   const [newStaffLastName, setNewStaffLastName] = useState('');
-  const [newStaffTitle, setNewStaffTitle] = useState('Dr.');
+  const [newStaffTitle, setNewStaffTitle] = useState('');
   const [newStaffRole, setNewStaffRole] = useState<StaffRole>('Doctor');
   const [newStaffPrc, setNewStaffPrc] = useState('');
   const [newStaffSpecialty, setNewStaffSpecialty] = useState('');
@@ -145,7 +154,7 @@ export default function SettingsScreen() {
   const [staffError, setStaffError] = useState<string | null>(null);
 
   // Tenant Custom Field Builder states
-  const [customFields, setCustomFields] = useState<ClinicCustomFieldDefinition[]>(DEFAULT_CUSTOM_FIELDS);
+  const [customFields, setCustomFields] = useState<ClinicCustomFieldDefinition[]>([]);
   const [selectedFieldCategory, setSelectedFieldCategory] = useState<'All' | 'Student' | 'Employee' | 'General'>('All');
   const [showAddFieldModal, setShowAddFieldModal] = useState(false);
   const [showBulkImportModal, setShowBulkImportModal] = useState(false);
@@ -181,17 +190,24 @@ export default function SettingsScreen() {
   // Target item for inline PhilHealth mapping edit
   const [mappingTargetItem, setMappingTargetItem] = useState<ClinicServiceItem | null>(null);
 
-  // Form states for preferences
-  const [clinicName, setClinicName] = useState('St. Jude Family Clinic & Primary Care');
-  const [operatingHours, setOperatingHours] = useState('Mon-Sat 8:00 AM - 5:00 PM');
-  const [slotDuration, setSlotDuration] = useState('30');
-  const [consultationFee, setConsultationFee] = useState('400.00');
-  const [letterheadHeader, setLetterheadHeader] = useState('ST. JUDE FAMILY MEDICAL CLINIC');
-  const [letterheadAddress, setLetterheadAddress] = useState('124 Rizal Avenue, San Pedro, Laguna');
-  const [letterheadContact, setLetterheadContact] = useState('Tel: (02) 8876-5432 • Mobile: +63 917 123 4567');
+  // Form states for preferences. Start empty and are filled from the saved clinic settings.
+  const [clinicName, setClinicName] = useState('');
+  const [accreditationNumber, setAccreditationNumber] = useState('');
+  const [operatingHours, setOperatingHours] = useState('');
+  const [slotDuration, setSlotDuration] = useState('');
+  const [consultationFee, setConsultationFee] = useState('');
+  const [letterheadHeader, setLetterheadHeader] = useState('');
+  const [letterheadAddress, setLetterheadAddress] = useState('');
+  const [letterheadContact, setLetterheadContact] = useState('');
 
   const loadAll = useCallback(async () => {
-    const [[eodData], [settingsData], [staffData], [customFieldsData], [servicesData]] = await Promise.all([
+    const [
+      [eodData, eodErr],
+      [settingsData, settingsErr],
+      [staffData, staffErr],
+      [customFieldsData, fieldsErr],
+      [servicesData, servicesErr],
+    ] = await Promise.all([
       clinicService.getDailyEodReport(),
       clinicService.getSettings(),
       clinicService.getStaff(),
@@ -199,72 +215,34 @@ export default function SettingsScreen() {
       clinicService.getServices(),
     ]);
 
-    if (eodData) setEodReport(eodData);
-    if (customFieldsData && customFieldsData.length > 0) {
-      setCustomFields(customFieldsData);
-    } else {
-      setCustomFields(DEFAULT_CUSTOM_FIELDS);
-    }
-    if (servicesData && servicesData.length > 0) {
-      setServices(servicesData);
-    }
+    setEodLoadError(eodErr ? eodErr.message || 'Unable to load today\'s collections.' : null);
+    if (!eodErr) setEodReport(eodData ?? null);
+
+    setSettingsLoadError(settingsErr ? settingsErr.message || 'Unable to load clinic settings.' : null);
     if (settingsData) {
       setSettings(settingsData);
-      setClinicName(settingsData.clinicName);
-      setOperatingHours(settingsData.operatingHours);
-      setSlotDuration(String(settingsData.defaultSlotDurationMinutes));
-      setConsultationFee(String(settingsData.defaultConsultationFee));
-      if (settingsData.letterheadHeader) setLetterheadHeader(settingsData.letterheadHeader);
-      if (settingsData.letterheadAddress) setLetterheadAddress(settingsData.letterheadAddress);
-      if (settingsData.letterheadContact) setLetterheadContact(settingsData.letterheadContact);
+      setClinicName(settingsData.clinicName ?? '');
+      setAccreditationNumber(settingsData.accreditationNumber ?? '');
+      setOperatingHours(settingsData.operatingHours ?? '');
+      setSlotDuration(
+        settingsData.defaultSlotDurationMinutes != null ? String(settingsData.defaultSlotDurationMinutes) : ''
+      );
+      setConsultationFee(
+        settingsData.defaultConsultationFee != null ? String(settingsData.defaultConsultationFee) : ''
+      );
+      setLetterheadHeader(settingsData.letterheadHeader ?? '');
+      setLetterheadAddress(settingsData.letterheadAddress ?? '');
+      setLetterheadContact(settingsData.letterheadContact ?? '');
     }
-    if (staffData && staffData.length > 0) {
-      setStaff(staffData);
-    } else {
-      // Sample provider roster
-      setStaff([
-        {
-          id: 'st-1',
-          tenantId: 'tenant-default',
-          clinicId: 'clinic-default',
-          firstName: 'Roberto',
-          lastName: 'Cruz',
-          title: 'Dr.',
-          role: 'Doctor',
-          prcLicenseNumber: 'PRC-0149281',
-          ptrNumber: 'PTR-8492019',
-          s2LicenseNumber: 'S2-9482014',
-          specialty: 'Family Medicine / General Practice',
-          isActive: true,
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: 'st-2',
-          tenantId: 'tenant-default',
-          clinicId: 'clinic-default',
-          firstName: 'Bea',
-          lastName: 'Gomez',
-          title: 'Nurse',
-          role: 'Nurse',
-          prcLicenseNumber: 'PRC-0982312',
-          specialty: 'Triage & Primary Care Nursing',
-          isActive: true,
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: 'st-3',
-          tenantId: 'tenant-default',
-          clinicId: 'clinic-default',
-          firstName: 'Clara',
-          lastName: 'Santos',
-          title: 'Ms.',
-          role: 'Cashier',
-          specialty: 'Billing & PhilHealth Konsulta Claims',
-          isActive: true,
-          createdAt: new Date().toISOString(),
-        },
-      ]);
-    }
+
+    setStaffLoadError(staffErr ? staffErr.message || 'Unable to load staff.' : null);
+    if (!staffErr) setStaff(staffData ?? []);
+
+    setFieldsLoadError(fieldsErr ? fieldsErr.message || 'Unable to load custom fields.' : null);
+    if (!fieldsErr) setCustomFields(customFieldsData ?? []);
+
+    setServicesLoadError(servicesErr ? servicesErr.message || 'Unable to load the service catalog.' : null);
+    if (!servicesErr) setServices(servicesData ?? []);
   }, []);
 
   useEffect(() => {
@@ -278,21 +256,64 @@ export default function SettingsScreen() {
     setRefreshing(false);
   }, [loadAll]);
 
+  const retryAll = useCallback(async () => {
+    setLoading(true);
+    await loadAll();
+    setLoading(false);
+  }, [loadAll]);
+
   const handleSavePreferences = async () => {
+    const slotMinutes = parseInt(slotDuration, 10);
+    const fee = parseFloat(consultationFee);
+    if (!clinicName.trim()) {
+      Alert.alert('Facility name required', 'Enter the facility name before saving.');
+      return;
+    }
+    if (!slotMinutes || slotMinutes <= 0) {
+      Alert.alert('Check appointment slot', 'Enter the appointment slot length in minutes.');
+      return;
+    }
+    if (isNaN(fee) || fee < 0) {
+      Alert.alert('Check consultation fee', 'Enter the default consultation fee as a number.');
+      return;
+    }
+
     setSavingSettings(true);
-    setSettingsSavedBanner(false);
-    await clinicService.updateSettings({
+    const [saved, err] = await clinicService.updateSettings({
       clinicName: clinicName.trim(),
+      accreditationNumber: accreditationNumber.trim(),
       operatingHours: operatingHours.trim(),
-      defaultSlotDurationMinutes: parseInt(slotDuration) || 30,
-      defaultConsultationFee: parseFloat(consultationFee) || 400.0,
+      defaultSlotDurationMinutes: slotMinutes,
+      defaultConsultationFee: fee,
       letterheadHeader: letterheadHeader.trim(),
       letterheadAddress: letterheadAddress.trim(),
       letterheadContact: letterheadContact.trim(),
     });
     setSavingSettings(false);
-    setSettingsSavedBanner(true);
-    setTimeout(() => setSettingsSavedBanner(false), 4000);
+
+    if (err) {
+      notify.error(err.message || 'Could not save settings.');
+      return;
+    }
+    if (saved) setSettings(saved);
+    notify.success('Settings saved.');
+    await refreshClinic();
+  };
+
+  const maxStaffSeats = license?.limits?.maxStaff;
+  const activeStaffCount = staff.filter((s) => s.isActive).length;
+  const staffQuotaReached = maxStaffSeats != null && activeStaffCount >= maxStaffSeats;
+
+  const handleOpenAddStaff = () => {
+    if (staffQuotaReached) {
+      Alert.alert(
+        'Staff limit reached',
+        `Your ${license?.planTier ?? 'current'} plan allows ${maxStaffSeats} active staff. Update the license key to add more.`
+      );
+      return;
+    }
+    setStaffError(null);
+    setShowAddStaffModal(true);
   };
 
   const handleAddStaff = async () => {
@@ -326,19 +347,24 @@ export default function SettingsScreen() {
       setShowAddStaffModal(false);
       setNewStaffFirstName('');
       setNewStaffLastName('');
+      setNewStaffTitle('');
       setNewStaffPrc('');
       setNewStaffSpecialty('');
       setNewStaffEmail('');
       await refreshLicense();
+      await reloadStaffContext();
     }
   };
 
   const handleDeactivateStaff = async (staffId: string) => {
     const [, err] = await clinicService.deactivateStaff(staffId);
-    if (!err) {
-      setStaff((prev) => prev.filter((s) => s.id !== staffId));
-      await refreshLicense();
+    if (err) {
+      notify.error(err.message || 'Could not deactivate this staff member.');
+      return;
     }
+    setStaff((prev) => prev.filter((s) => s.id !== staffId));
+    await refreshLicense();
+    await reloadStaffContext();
   };
 
   const handleCreateCustomField = async () => {
@@ -368,29 +394,12 @@ export default function SettingsScreen() {
     const [created, err] = await clinicService.createCustomField(payload);
     setSavingField(false);
 
-    if (created) {
-      setCustomFields((prev) => [...prev, created]);
-    } else {
-      // Local fallback for resilience
-      const fallback: ClinicCustomFieldDefinition = {
-        id: `cf-${Date.now()}`,
-        tenantId: 'tenant-default',
-        clinicId: 'clinic-default',
-        entityType: 'ClinicPatient',
-        fieldKey: computedKey,
-        label: newFieldLabel.trim(),
-        category: newFieldCategory,
-        dataType: newFieldDataType,
-        isRequired: newFieldRequired,
-        displayOrder: customFields.length + 1,
-        placeholder: newFieldPlaceholder.trim() || undefined,
-        optionsJson: payload.optionsJson,
-        isActive: true,
-        createdAt: new Date().toISOString(),
-      };
-      setCustomFields((prev) => [...prev, fallback]);
+    if (err || !created) {
+      setFieldError(err?.message || 'Could not save the custom field. Please try again.');
+      return;
     }
 
+    setCustomFields((prev) => [...prev, created]);
     setShowAddFieldModal(false);
     setNewFieldLabel('');
     setNewFieldKey('');
@@ -400,7 +409,11 @@ export default function SettingsScreen() {
   };
 
   const handleDeleteCustomField = async (fieldId: string) => {
-    await clinicService.deleteCustomField(fieldId);
+    const [, err] = await clinicService.deleteCustomField(fieldId);
+    if (err) {
+      notify.error(err.message || 'Could not delete this field.');
+      return;
+    }
     setCustomFields((prev) => prev.filter((f) => f.id !== fieldId));
   };
 
@@ -520,1560 +533,958 @@ export default function SettingsScreen() {
     }
   };
 
+  const isClinicalCategory = (category: string) =>
+    category.toLowerCase() === 'medicine' || category.toLowerCase() === 'diagnostic';
+
+  const visibleFields = customFields.filter(
+    (f) => selectedFieldCategory === 'All' || f.category === selectedFieldCategory
+  );
+  const visibleServices = services.filter(
+    (s) => selectedServiceCategory === 'All' || s.category.toLowerCase() === selectedServiceCategory.toLowerCase()
+  );
+
+  const showSkeletons = loading && !refreshing;
+  const licenseStatus = license ? LICENSE_STATUS[license.status] ?? { label: license.status, variant: 'neutral' as BadgeVariant } : null;
+
   return (
-    <ResponsiveLayout
-      headerTitle="Facility Operations & Config"
-      headerSubtitle="Preferences, Letterhead, Remittance Audit & Provider Roster"
-    >
+    <ResponsiveLayout headerTitle="Settings">
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.primary]} />}
       >
-      <View style={styles.header}>
-        <ThemedText style={styles.subtitle}>Clinic Operations & Config</ThemedText>
-        <ThemedText style={styles.title}>Facility & Audit</ThemedText>
-      </View>
-
-      {/* End-of-Day Census & Cashier Remittance Card */}
-      <View style={styles.card}>
-        <View style={styles.cardHeaderRow}>
-          <ThemedText style={styles.cardTitle}>Daily Operations & Remittance</ThemedText>
-          <Pressable onPress={loadAll} style={styles.auditBtn}>
-            <ThemedText style={styles.auditBtnText}>↻ Refresh Audit</ThemedText>
-          </Pressable>
-        </View>
-
-        {loading && !refreshing ? (
-          <ActivityIndicator size="small" color="#0284C7" style={{ padding: 16 }} />
-        ) : eodReport ? (
-          <View style={styles.censusContainer}>
-            <View style={styles.remittanceHero}>
-              <View style={styles.remittanceBlock}>
-                <ThemedText style={styles.remittanceLabel}>Physical Cash in Drawer</ThemedText>
-                <ThemedText style={styles.remittanceAmount}>
-                  ₱{(eodReport.cashInDrawer ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
-                </ThemedText>
-                <ThemedText style={styles.remittanceSub}>Ready for bank deposit / handover</ThemedText>
-              </View>
-              <View style={styles.remittanceDivider} />
-              <View style={styles.remittanceBlock}>
-                <ThemedText style={styles.remittanceLabel}>Total Collections</ThemedText>
-                <ThemedText style={[styles.remittanceAmount, { color: '#0369A1' }]}>
-                  ₱{(eodReport.totalAmountCollected ?? 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
-                </ThemedText>
-                <ThemedText style={styles.remittanceSub}>Net: ₱{(eodReport.totalNetAmount ?? 0).toFixed(2)}</ThemedText>
-              </View>
-            </View>
-
-            <View style={styles.statsGrid}>
-              <View style={styles.statCell}>
-                <ThemedText style={styles.statVal}>{eodReport.totalCheckedIn}</ThemedText>
-                <ThemedText style={styles.statDesc}>Total Checked In</ThemedText>
-              </View>
-              <View style={styles.statCell}>
-                <ThemedText style={styles.statVal}>{eodReport.totalCompletedVisits}</ThemedText>
-                <ThemedText style={styles.statDesc}>Visits Completed</ThemedText>
-              </View>
-              <View style={styles.statCell}>
-                <ThemedText style={[styles.statVal, { color: '#D97706' }]}>
-                  ₱{(eodReport.totalDiscountsGiven ?? 0).toFixed(2)}
-                </ThemedText>
-                <ThemedText style={styles.statDesc}>Senior/PWD Disc.</ThemedText>
-              </View>
-              <View style={styles.statCell}>
-                <ThemedText style={[styles.statVal, { color: '#059669' }]}>
-                  ₱{(eodReport.totalPhilHealthCovered ?? 0).toFixed(2)}
-                </ThemedText>
-                <ThemedText style={styles.statDesc}>PhilHealth Konsulta</ThemedText>
-              </View>
-            </View>
-
-            {/* Payment Modes */}
-            {eodReport.collectionsByMethod && eodReport.collectionsByMethod.length > 0 && (
-              <View style={styles.subSection}>
-                <ThemedText style={styles.subSectionTitle}>Collections by Payment Mode</ThemedText>
-                {eodReport.collectionsByMethod.map((pm, idx) => (
-                  <View key={idx} style={styles.row}>
-                    <ThemedText style={styles.label}>{pm.method} ({pm.transactionCount} txn)</ThemedText>
-                    <ThemedText style={styles.value}>
-                      ₱{pm.totalAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
-                    </ThemedText>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-        ) : (
-          <ThemedText style={{ color: '#6B7280', fontSize: 13, padding: 8 }}>
-            No financial census recorded for today yet.
-          </ThemedText>
-        )}
-      </View>
-
-      {/* Operational Preferences Card */}
-      <View style={styles.card}>
-        <ThemedText style={styles.cardTitle}>Operational Preferences & Letterhead</ThemedText>
-
-        {settingsSavedBanner && (
-          <View style={styles.savedBanner}>
-            <ThemedText style={styles.savedBannerText}>✓ Preferences successfully saved & updated!</ThemedText>
-          </View>
-        )}
-
-        <View style={{ gap: 10 }}>
-          <View>
-            <ThemedText style={styles.fieldLabel}>Facility Name</ThemedText>
-            <TextInput
-              style={styles.fieldInput}
-              value={clinicName}
-              onChangeText={setClinicName}
-            />
-          </View>
-
-          <View style={styles.formRow}>
-            <View style={{ flex: 2 }}>
-              <ThemedText style={styles.fieldLabel}>Operating Schedule</ThemedText>
-              <TextInput
-                style={styles.fieldInput}
-                value={operatingHours}
-                onChangeText={setOperatingHours}
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <ThemedText style={styles.fieldLabel}>Slot (min)</ThemedText>
-              <TextInput
-                style={styles.fieldInput}
-                value={slotDuration}
-                onChangeText={setSlotDuration}
-                keyboardType="numeric"
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <ThemedText style={styles.fieldLabel}>Fee (₱)</ThemedText>
-              <TextInput
-                style={styles.fieldInput}
-                value={consultationFee}
-                onChangeText={setConsultationFee}
-                keyboardType="numeric"
-              />
-            </View>
-          </View>
-
-          <View>
-            <ThemedText style={styles.fieldLabel}>Letterhead Title / Header</ThemedText>
-            <TextInput
-              style={styles.fieldInput}
-              value={letterheadHeader}
-              onChangeText={setLetterheadHeader}
-            />
-          </View>
-
-          <View>
-            <ThemedText style={styles.fieldLabel}>Facility Address</ThemedText>
-            <TextInput
-              style={styles.fieldInput}
-              value={letterheadAddress}
-              onChangeText={setLetterheadAddress}
-            />
-          </View>
-
-          <View>
-            <ThemedText style={styles.fieldLabel}>Contact Information</ThemedText>
-            <TextInput
-              style={styles.fieldInput}
-              value={letterheadContact}
-              onChangeText={setLetterheadContact}
-            />
-          </View>
-
-          <Pressable
-            style={[styles.savePrefBtn, savingSettings && { opacity: 0.6 }]}
-            onPress={handleSavePreferences}
-            disabled={savingSettings}
-          >
-            {savingSettings ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <ThemedText style={styles.savePrefBtnText}>Save Preferences</ThemedText>
-            )}
-          </Pressable>
-        </View>
-      </View>
-
-      {/* Facility License & Signed Limits Card */}
-      <View style={styles.card}>
-        <View style={styles.cardHeaderRow}>
-          <ThemedText style={styles.cardTitle}>Facility Operating License</ThemedText>
-          <Pressable style={styles.licenseActionBtn} onPress={openActivationModal}>
-            <ThemedText style={styles.licenseActionBtnText}>🔑 Update / Renew Key</ThemedText>
-          </Pressable>
-        </View>
-
-        <View style={styles.licenseBannerRow}>
-          <View style={styles.licenseTierBadge}>
-            <ThemedText style={styles.licenseTierText}>{license?.planTier ?? 'Community'} Tier</ThemedText>
-          </View>
-          <ThemedText style={[styles.licenseStatusText, { color: license?.status === 'Active' ? '#16A34A' : '#DC2626' }]}>
-            ● {license?.status === 'Active' ? 'Cryptographically Verified (ECDSA P-256)' : (license?.status ?? 'Unverified')}
-          </ThemedText>
-        </View>
-
-        <View style={styles.row}>
-          <ThemedText style={styles.label}>Licensed Facility</ThemedText>
-          <ThemedText style={styles.value}>{license?.clinicName ?? clinicName}</ThemedText>
-        </View>
-        <View style={styles.row}>
-          <ThemedText style={styles.label}>Staff Quota Allocation</ThemedText>
-          <ThemedText style={[styles.value, { color: '#0284C7', fontWeight: '700' }]}>
-            {staff.filter((s) => s.isActive).length} / {license?.limits?.maxStaff ?? 5} active seats used
-          </ThemedText>
-        </View>
-        <View style={styles.row}>
-          <ThemedText style={styles.label}>Encounter Daily Cap</ThemedText>
-          <ThemedText style={styles.value}>
-            {license?.limits?.maxDailyEncounters === 2147483647 ? 'Unlimited' : `${license?.limits?.maxDailyEncounters ?? 100} / day`}
-          </ThemedText>
-        </View>
-        <View style={styles.row}>
-          <ThemedText style={styles.label}>Offline Edge Operation</ThemedText>
-          <ThemedText style={[styles.value, { color: '#16A34A' }]}>
-            {license?.limits?.isOfflineCapable ? 'Enabled (Full Autonomous)' : 'Standard'}
-          </ThemedText>
-        </View>
-        {license?.expiresAtUtc && (
-          <View style={styles.row}>
-            <ThemedText style={styles.label}>Expiration Date</ThemedText>
-            <ThemedText style={styles.value}>{new Date(license.expiresAtUtc).toLocaleDateString()}</ThemedText>
-          </View>
-        )}
-      </View>
-
-      {/* Staff & Healthcare Providers Roster Card */}
-      <View style={styles.card}>
-        <View style={styles.cardHeaderRow}>
-          <View>
-            <ThemedText style={styles.cardTitle}>Autonomous Staff Roster</ThemedText>
-            <ThemedText style={{ fontSize: 12, color: '#6B7280' }}>
-              Quota: {staff.filter((s) => s.isActive).length} of {license?.limits?.maxStaff ?? 5} seats used
-            </ThemedText>
-          </View>
-          <Pressable
-            style={[
-              styles.addStaffBtn,
-              staff.filter((s) => s.isActive).length >= (license?.limits?.maxStaff ?? 5) && { backgroundColor: '#9CA3AF' },
-            ]}
-            onPress={() => {
-              if (staff.filter((s) => s.isActive).length >= (license?.limits?.maxStaff ?? 5)) {
-                alert(`Staff quota limit of ${license?.limits?.maxStaff ?? 5} reached for the ${license?.planTier ?? 'Community'} tier. Please upgrade license key.`);
-                return;
-              }
-              setStaffError(null);
-              setShowAddStaffModal(true);
-            }}
-          >
-            <ThemedText style={styles.addStaffBtnText}>+ Add Staff</ThemedText>
-          </Pressable>
-        </View>
-
-        <View style={{ gap: 10, marginTop: 4 }}>
-          {staff.map((s) => (
-            <View key={s.id} style={styles.staffItem}>
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <ThemedText style={styles.staffName}>
-                    {s.title ? `${s.title} ` : ''}{s.firstName} {s.lastName}
-                  </ThemedText>
-                  <View style={[styles.roleBadge, s.role === 'Doctor' && { backgroundColor: '#E0F2FE' }]}>
-                    <ThemedText style={[styles.roleBadgeText, s.role === 'Doctor' && { color: '#0369A1' }]}>
-                      {s.role}
-                    </ThemedText>
-                  </View>
+        {/* Today's collections */}
+        <Card>
+          <CardHeader
+            title="Today's collections"
+            subtitle="End-of-day census and cashier remittance"
+            rightAction={<Button title="Refresh" icon="refresh" variant="ghost" size="sm" onPress={onRefresh} />}
+          />
+          <CardContent>
+            {showSkeletons ? (
+              <SkeletonList rows={3} />
+            ) : eodLoadError ? (
+              <ErrorState compact title="Could not load today's collections" message={eodLoadError} onRetry={onRefresh} />
+            ) : eodReport ? (
+              <>
+                <View style={styles.statGrid}>
+                  <StatCard
+                    style={styles.statCell}
+                    label="Cash in drawer"
+                    value={formatPeso(eodReport.cashInDrawer)}
+                    subtext="For bank deposit or handover"
+                    icon="cash"
+                  />
+                  <StatCard
+                    style={styles.statCell}
+                    label="Total collections"
+                    value={formatPeso(eodReport.totalAmountCollected)}
+                    subtext={`Net: ${formatPeso(eodReport.totalNetAmount)}`}
+                    icon="receipt"
+                  />
+                  <StatCard
+                    style={styles.statCell}
+                    label="Checked in"
+                    value={eodReport.totalCheckedIn}
+                    icon="patients"
+                  />
+                  <StatCard
+                    style={styles.statCell}
+                    label="Visits completed"
+                    value={eodReport.totalCompletedVisits}
+                    icon="checkCircle"
+                  />
+                  <StatCard
+                    style={styles.statCell}
+                    label="Senior / PWD discounts"
+                    value={formatPeso(eodReport.totalDiscountsGiven)}
+                    valueColor={theme.colors.warningText}
+                    icon="tag"
+                  />
+                  <StatCard
+                    style={styles.statCell}
+                    label="PhilHealth covered"
+                    value={formatPeso(eodReport.totalPhilHealthCovered)}
+                    valueColor={theme.colors.successText}
+                    icon="yakap"
+                  />
                 </View>
-                <ThemedText style={styles.specialtyText}>{s.specialty ?? 'General Staff'}</ThemedText>
-                {s.prcLicenseNumber && (
-                  <ThemedText style={styles.licenseText}>
-                    PRC: {s.prcLicenseNumber} {s.ptrNumber ? `• PTR: ${s.ptrNumber}` : ''} {s.s2LicenseNumber ? `• PDEA S2: ${s.s2LicenseNumber}` : ''}
-                  </ThemedText>
+
+                {eodReport.collectionsByMethod && eodReport.collectionsByMethod.length > 0 && (
+                  <View style={styles.subSection}>
+                    <ThemedText variant="smallBold" color={theme.colors.textSecondary}>
+                      Collections by payment method
+                    </ThemedText>
+                    {eodReport.collectionsByMethod.map((pm, idx) => (
+                      <InfoRow
+                        key={idx}
+                        label={`${pm.method} (${pm.transactionCount} transactions)`}
+                        value={formatPeso(pm.totalAmount)}
+                      />
+                    ))}
+                  </View>
                 )}
-              </View>
-              <Pressable style={styles.deactivateBtn} onPress={() => handleDeactivateStaff(s.id)}>
-                <ThemedText style={styles.deactivateBtnText}>Deactivate</ThemedText>
-              </Pressable>
-            </View>
-          ))}
-        </View>
-      </View>
-
-      {/* Tenant Custom Fields & Dynamic Form Builder Card */}
-      <View style={styles.card}>
-        <View style={styles.cardHeaderRow}>
-          <View style={{ flex: 1 }}>
-            <ThemedText style={styles.cardTitle}>Tenant Custom Fields & Dynamic Form Studio</ThemedText>
-            <ThemedText style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>
-              Build and customize demographic intake fields for Students, Employees, or Campus Programs without modifying code or schema.
-            </ThemedText>
-          </View>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <Pressable
-              style={[styles.addStaffBtn, { backgroundColor: '#059669' }]}
-              onPress={() => setShowBulkImportModal(true)}
-            >
-              <ThemedText style={styles.addStaffBtnText}>📥 Bulk Import Students</ThemedText>
-            </Pressable>
-            <Pressable
-              style={styles.addStaffBtn}
-              onPress={() => {
-                setFieldError(null);
-                setShowAddFieldModal(true);
-              }}
-            >
-              <ThemedText style={styles.addStaffBtnText}>+ Add Custom Field</ThemedText>
-            </Pressable>
-          </View>
-        </View>
-
-        {/* Category Filter Pills */}
-        <View style={{ flexDirection: 'row', gap: 6, marginVertical: 6 }}>
-          {(['All', 'Student', 'Employee', 'General'] as const).map((cat) => (
-            <Pressable
-              key={cat}
-              style={[
-                styles.categoryFilterChip,
-                selectedFieldCategory === cat && styles.categoryFilterChipActive,
-              ]}
-              onPress={() => setSelectedFieldCategory(cat)}
-            >
-              <ThemedText
-                style={[
-                  styles.categoryFilterChipText,
-                  selectedFieldCategory === cat && styles.categoryFilterChipTextActive,
-                ]}
-              >
-                {cat === 'All' ? '🌐 All Fields' : cat === 'Student' ? '🎓 Students' : cat === 'Employee' ? '💼 Employees' : '👤 General'}
-              </ThemedText>
-            </Pressable>
-          ))}
-        </View>
-
-        {/* Custom Fields List */}
-        <View style={{ gap: 8, marginTop: 4 }}>
-          {customFields
-            .filter((f) => selectedFieldCategory === 'All' || f.category === selectedFieldCategory)
-            .map((field) => (
-              <View key={field.id} style={styles.customFieldItem}>
-                <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <ThemedText style={styles.customFieldLabel}>{field.label}</ThemedText>
-                    <ThemedText style={styles.customFieldKeyBadge}>{field.fieldKey}</ThemedText>
-                    <ThemedText
-                      style={[
-                        styles.customFieldTypeBadge,
-                        field.dataType === 'Select' ? { backgroundColor: '#EDE9FE', color: '#6D28D9' } :
-                        field.dataType === 'Number' ? { backgroundColor: '#FEF3C7', color: '#B45309' } :
-                        field.dataType === 'Date' ? { backgroundColor: '#FEE2E2', color: '#B91C1C' } :
-                        { backgroundColor: '#E0F2FE', color: '#0369A1' }
-                      ]}
-                    >
-                      {field.dataType}
-                    </ThemedText>
-                    {field.isRequired ? (
-                      <ThemedText style={{ fontSize: 10, fontWeight: '700', color: '#DC2626' }}>
-                        * Required
-                      </ThemedText>
-                    ) : (
-                      <ThemedText style={{ fontSize: 10, color: '#9CA3AF' }}>
-                        Optional
-                      </ThemedText>
-                    )}
-                  </View>
-                  <ThemedText style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>
-                    Category: {field.category || 'General'} {field.placeholder ? `• Hint: "${field.placeholder}"` : ''}
-                  </ThemedText>
-                  {field.optionsJson ? (
-                    <ThemedText style={{ fontSize: 11, color: '#4B5563', fontStyle: 'italic', marginTop: 2 }}>
-                      Options: {JSON.parse(field.optionsJson || '[]').join(', ')}
-                    </ThemedText>
-                  ) : null}
-                </View>
-                <Pressable
-                  style={styles.deactivateBtn}
-                  onPress={() => handleDeleteCustomField(field.id)}
-                >
-                  <ThemedText style={styles.deactivateBtnText}>Delete</ThemedText>
-                </Pressable>
-              </View>
-            ))}
-        </View>
-      </View>
-
-      {/* Services & Formulary Catalog Studio Card */}
-      <View style={styles.card}>
-        <View style={styles.cardHeaderRow}>
-          <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <ThemedText style={styles.cardTitle}>Services & Formulary Catalog Studio</ThemedText>
-              <ThemedText style={styles.badgeFormulary}>Yakap & GAMOT Synchronized</ThemedText>
-            </View>
-            <ThemedText style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>
-              Standardize clinic inventory, fees, procedures, diagnostic exams, and medicines with statutory PhilHealth catalog binding.
-            </ThemedText>
-          </View>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <Pressable
-              style={[styles.addStaffBtn, { backgroundColor: '#059669' }]}
-              onPress={() => setShowCsvCatalogImportModal(true)}
-            >
-              <ThemedText style={styles.addStaffBtnText}>📥 Bulk Import CSV</ThemedText>
-            </Pressable>
-            <Pressable
-              style={styles.addStaffBtn}
-              onPress={handleOpenAddService}
-            >
-              <ThemedText style={styles.addStaffBtnText}>+ Add Catalog Item</ThemedText>
-            </Pressable>
-          </View>
-        </View>
-
-        {/* Category Filter Pills */}
-        <View style={{ flexDirection: 'row', gap: 6, marginVertical: 6, flexWrap: 'wrap' }}>
-          {(['All', 'Medicine', 'Diagnostic', 'Procedure', 'Consultation', 'NursingService'] as const).map((cat) => (
-            <Pressable
-              key={cat}
-              style={[
-                styles.categoryFilterChip,
-                selectedServiceCategory === cat && styles.categoryFilterChipActive,
-              ]}
-              onPress={() => setSelectedServiceCategory(cat)}
-            >
-              <ThemedText
-                style={[
-                  styles.categoryFilterChipText,
-                  selectedServiceCategory === cat && styles.categoryFilterChipTextActive,
-                ]}
-              >
-                {cat === 'All' ? '🌐 All Services' :
-                 cat === 'Medicine' ? '💊 Medicines' :
-                 cat === 'Diagnostic' ? '🔬 Diagnostics' :
-                 cat === 'Procedure' ? '🩺 Procedures' :
-                 cat === 'Consultation' ? '👨‍⚕️ Consultations' : '💉 Nursing'}
-                {' '}({cat === 'All' ? services.length : services.filter((s) => s.category.toLowerCase() === cat.toLowerCase()).length})
-              </ThemedText>
-            </Pressable>
-          ))}
-        </View>
-
-        {/* Service Items Table / List */}
-        <View style={{ gap: 8, marginTop: 4 }}>
-          {services
-            .filter((s) => selectedServiceCategory === 'All' || s.category.toLowerCase() === selectedServiceCategory.toLowerCase())
-            .map((item) => {
-              const isClinical = item.category.toLowerCase() === 'medicine' || item.category.toLowerCase() === 'diagnostic';
-              return (
-                <View key={item.id} style={styles.serviceItemCard}>
-                  <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <ThemedText style={styles.serviceItemName}>{item.name}</ThemedText>
-                      <ThemedText style={styles.serviceItemCodeBadge}>{item.code}</ThemedText>
-                      <View style={[styles.roleBadge, { backgroundColor: '#F1F5F9' }]}>
-                        <ThemedText style={[styles.roleBadgeText, { color: '#334155' }]}>{item.category}</ThemedText>
-                      </View>
-                      <ThemedText style={styles.serviceItemPrice}>₱{item.standardPrice.toFixed(2)}</ThemedText>
-                      {!item.isActive && (
-                        <ThemedText style={{ fontSize: 10, color: '#DC2626', fontWeight: '700' }}>[Inactive]</ThemedText>
-                      )}
-                    </View>
-
-                    {item.description ? (
-                      <ThemedText style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>{item.description}</ThemedText>
-                    ) : null}
-
-                    {/* PhilHealth Mapping Status Row */}
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                      {item.isPhilHealthFormulary && item.philHealthCode ? (
-                        <View style={styles.philHealthMappedPill}>
-                          <ThemedText style={styles.philHealthMappedText}>
-                            ✓ PhilHealth Mapped: {item.philHealthCode}
-                          </ThemedText>
-                          {item.philHealthDescription && (
-                            <ThemedText style={styles.philHealthMappedDesc} numberOfLines={1}>
-                              ({item.philHealthDescription})
-                            </ThemedText>
-                          )}
-                        </View>
-                      ) : isClinical ? (
-                        <View style={styles.philHealthUnmappedPill}>
-                          <ThemedText style={styles.philHealthUnmappedText}>
-                            ⚠️ Non-Formulary / Out-of-Pocket
-                          </ThemedText>
-                        </View>
-                      ) : (
-                        <View style={styles.philHealthNaPill}>
-                          <ThemedText style={styles.philHealthNaText}>Standard Clinic Service</ThemedText>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    {isClinical && (
-                      <Pressable
-                        style={styles.mapActionBtn}
-                        onPress={() => setMappingTargetItem(item)}
-                      >
-                        <ThemedText style={styles.mapActionBtnText}>
-                          {item.philHealthCode ? 'Edit Mapping' : 'Map PhilHealth'}
-                        </ThemedText>
-                      </Pressable>
-                    )}
-                    <Pressable
-                      style={[styles.deactivateBtn, !item.isActive && { backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' }]}
-                      onPress={() => handleToggleServiceActive(item)}
-                    >
-                      <ThemedText style={[styles.deactivateBtnText, !item.isActive && { color: '#059669' }]}>
-                        {item.isActive ? 'Deactivate' : 'Activate'}
-                      </ThemedText>
-                    </Pressable>
-                  </View>
-                </View>
-              );
-            })}
-        </View>
-      </View>
-
-      {/* Facility Accreditation Details */}
-      <View style={styles.card}>
-        <ThemedText style={styles.cardTitle}>Facility Details & Sync</ThemedText>
-        <View style={styles.row}>
-          <ThemedText style={styles.label}>Accreditation ID</ThemedText>
-          <ThemedText style={styles.value}>PHIC-KONSULTA-09214</ThemedText>
-        </View>
-        <View style={styles.row}>
-          <ThemedText style={styles.label}>Operating Mode</ThemedText>
-          <ThemedText style={styles.value}>Multi-Tenant Cloud + Local Edge</ThemedText>
-        </View>
-        <View style={styles.row}>
-          <ThemedText style={styles.label}>Sync Status</ThemedText>
-          <ThemedText style={[styles.value, { color: '#16A34A', fontWeight: '700' }]}>Synced (0 pending)</ThemedText>
-        </View>
-      </View>
-    </ScrollView>
-
-    {/* Add Staff Modal */}
-    <Modal
-      visible={showAddStaffModal}
-      transparent
-      animationType="fade"
-      onRequestClose={() => setShowAddStaffModal(false)}
-    >
-      <View style={styles.modalBackdrop}>
-        <View style={styles.modalContent}>
-          <ThemedText style={styles.modalHeaderTitle}>Add Clinic Staff Member</ThemedText>
-          <ThemedText style={styles.modalHeaderSub}>
-            Autonomous Edge Roster • Seats: {staff.filter((s) => s.isActive).length}/{license?.limits?.maxStaff ?? 5}
-          </ThemedText>
-
-          {staffError && (
-            <View style={styles.modalErrorBanner}>
-              <ThemedText style={styles.modalErrorBannerText}>{staffError}</ThemedText>
-            </View>
-          )}
-
-          <View style={{ gap: 8 }}>
-            <View style={styles.formRow}>
-              <View style={{ flex: 1 }}>
-                <ThemedText style={styles.fieldLabel}>Title (Dr., Nurse, etc.)</ThemedText>
-                <TextInput
-                  style={styles.fieldInput}
-                  value={newStaffTitle}
-                  onChangeText={setNewStaffTitle}
-                  placeholder="Dr. / RN / Ms."
-                />
-              </View>
-              <View style={{ flex: 2 }}>
-                <ThemedText style={styles.fieldLabel}>Role</ThemedText>
-                <View style={{ flexDirection: 'row', gap: 6, marginTop: 4 }}>
-                  {(['Doctor', 'Nurse', 'Receptionist', 'Cashier'] as const).map((r) => (
-                    <Pressable
-                      key={r}
-                      style={[
-                        styles.roleSelectChip,
-                        newStaffRole === r && styles.roleSelectChipActive,
-                      ]}
-                      onPress={() => setNewStaffRole(r)}
-                    >
-                      <ThemedText
-                        style={[
-                          styles.roleSelectChipText,
-                          newStaffRole === r && styles.roleSelectChipTextActive,
-                        ]}
-                      >
-                        {r}
-                      </ThemedText>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.formRow}>
-              <View style={{ flex: 1 }}>
-                <ThemedText style={styles.fieldLabel}>First Name *</ThemedText>
-                <TextInput
-                  style={styles.fieldInput}
-                  value={newStaffFirstName}
-                  onChangeText={setNewStaffFirstName}
-                  placeholder="Juan"
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <ThemedText style={styles.fieldLabel}>Last Name *</ThemedText>
-                <TextInput
-                  style={styles.fieldInput}
-                  value={newStaffLastName}
-                  onChangeText={setNewStaffLastName}
-                  placeholder="Dela Cruz"
-                />
-              </View>
-            </View>
-
-            <View>
-              <ThemedText style={styles.fieldLabel}>PRC License Number</ThemedText>
-              <TextInput
-                style={styles.fieldInput}
-                value={newStaffPrc}
-                onChangeText={setNewStaffPrc}
-                placeholder="PRC-0123456"
+              </>
+            ) : (
+              <EmptyState
+                icon="receipt"
+                title="No collections recorded today"
+                description="Totals appear here once payments are recorded."
               />
-            </View>
+            )}
+          </CardContent>
+        </Card>
 
-            <View>
-              <ThemedText style={styles.fieldLabel}>Specialty / Designation</ThemedText>
-              <TextInput
-                style={styles.fieldInput}
-                value={newStaffSpecialty}
-                onChangeText={setNewStaffSpecialty}
-                placeholder="Pediatrics / Primary Care"
-              />
-            </View>
-          </View>
+        {/* Clinic profile and letterhead */}
+        <Card>
+          <CardHeader
+            title="Clinic profile and letterhead"
+            subtitle="Shown on prescriptions, receipts and printed documents"
+          />
+          <CardContent>
+            {showSkeletons ? (
+              <SkeletonList rows={4} />
+            ) : settingsLoadError && !settings ? (
+              <ErrorState compact title="Could not load clinic settings" message={settingsLoadError} onRetry={retryAll} />
+            ) : (
+              <>
+                <View style={styles.formRow}>
+                  <Input
+                    containerStyle={styles.flexWide}
+                    label="Facility name"
+                    value={clinicName}
+                    onChangeText={setClinicName}
+                    placeholder="Name as registered with the DOH"
+                  />
+                  <Input
+                    containerStyle={styles.flexWide}
+                    label="Accreditation number"
+                    value={accreditationNumber}
+                    onChangeText={setAccreditationNumber}
+                    placeholder="DOH or PhilHealth accreditation no."
+                  />
+                </View>
 
-          <View style={styles.modalActionsRow}>
-            <Pressable
-              style={styles.cancelModalBtn}
-              onPress={() => setShowAddStaffModal(false)}
-              disabled={addingStaff}
-            >
-              <ThemedText style={styles.cancelModalBtnText}>Cancel</ThemedText>
-            </Pressable>
+                <View style={styles.formRow}>
+                  <Input
+                    containerStyle={styles.flexWide}
+                    label="Operating hours"
+                    value={operatingHours}
+                    onChangeText={setOperatingHours}
+                    placeholder="e.g. Mon-Sat 8:00 AM - 5:00 PM"
+                  />
+                  <Input
+                    containerStyle={styles.flexNarrow}
+                    label="Appointment slot (min)"
+                    value={slotDuration}
+                    onChangeText={setSlotDuration}
+                    placeholder="e.g. 30"
+                    keyboardType="numeric"
+                  />
+                  <Input
+                    containerStyle={styles.flexNarrow}
+                    label="Consultation fee (₱)"
+                    value={consultationFee}
+                    onChangeText={setConsultationFee}
+                    placeholder="e.g. 500.00"
+                    keyboardType="numeric"
+                  />
+                </View>
 
-            <Pressable
-              style={[styles.saveStaffBtn, addingStaff && { opacity: 0.6 }]}
-              onPress={handleAddStaff}
-              disabled={addingStaff}
-            >
-              {addingStaff ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <ThemedText style={styles.saveStaffBtnText}>Register Staff</ThemedText>
-              )}
-            </Pressable>
-          </View>
-        </View>
-      </View>
-    </Modal>
+                <Input
+                  label="Letterhead title"
+                  value={letterheadHeader}
+                  onChangeText={setLetterheadHeader}
+                  placeholder="Clinic name as it should appear at the top of documents"
+                />
+                <Input
+                  label="Address"
+                  value={letterheadAddress}
+                  onChangeText={setLetterheadAddress}
+                  placeholder="Street, barangay, city, province"
+                />
+                <Input
+                  label="Contact details"
+                  value={letterheadContact}
+                  onChangeText={setLetterheadContact}
+                  placeholder="Phone numbers and email"
+                />
 
-    {/* Add Custom Field Modal */}
-    <Modal
-      visible={showAddFieldModal}
-      transparent
-      animationType="fade"
-      onRequestClose={() => setShowAddFieldModal(false)}
-    >
-      <View style={styles.modalBackdrop}>
-        <View style={[styles.modalContent, { maxWidth: 500 }]}>
-          <ThemedText style={styles.modalHeaderTitle}>Add Tenant Custom Field</ThemedText>
-          <ThemedText style={styles.modalHeaderSub}>
-            Define new institutional demographic or clinical attributes for your facility's intake forms.
-          </ThemedText>
+                <View style={styles.actionsEnd}>
+                  <Button title="Save changes" onPress={handleSavePreferences} loading={savingSettings} />
+                </View>
+              </>
+            )}
+          </CardContent>
+        </Card>
 
-          {fieldError && (
-            <View style={styles.modalErrorBanner}>
-              <ThemedText style={styles.modalErrorBannerText}>{fieldError}</ThemedText>
-            </View>
-          )}
-
-          <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={{ gap: 10 }}>
-            <View>
-              <ThemedText style={styles.fieldLabel}>Field Display Label *</ThemedText>
-              <TextInput
-                style={styles.fieldInput}
-                value={newFieldLabel}
-                onChangeText={(text) => {
-                  setNewFieldLabel(text);
-                  if (!newFieldKey) {
-                    setNewFieldKey(text.toLowerCase().replace(/[^a-z0-9]/g, '_'));
+        {/* Facility license */}
+        <Card>
+          <CardHeader
+            title="Facility license"
+            rightAction={
+              <Button title="Update license key" icon="key" variant="outline" size="sm" onPress={openActivationModal} />
+            }
+          />
+          <CardContent>
+            {license ? (
+              <>
+                <View style={styles.licenseBadges}>
+                  <Badge label={`${license.planTier} plan`} variant="primary" />
+                  {licenseStatus ? <Badge label={licenseStatus.label} variant={licenseStatus.variant} /> : null}
+                </View>
+                <InfoRow label="Licensed facility" value={license.clinicName || clinicName || 'Not set'} />
+                <InfoRow
+                  label="Staff seats"
+                  value={
+                    maxStaffSeats != null
+                      ? `${activeStaffCount} of ${maxStaffSeats} in use`
+                      : `${activeStaffCount} active`
                   }
+                  valueColor={theme.colors.primary}
+                />
+                {license.limits?.maxDailyEncounters != null && (
+                  <InfoRow
+                    label="Daily encounter limit"
+                    value={
+                      license.limits.maxDailyEncounters === 2147483647
+                        ? 'Unlimited'
+                        : `${license.limits.maxDailyEncounters} per day`
+                    }
+                  />
+                )}
+                {license.limits?.isOfflineCapable != null && (
+                  <InfoRow
+                    label="Offline mode"
+                    value={license.limits.isOfflineCapable ? 'Available' : 'Not included'}
+                    valueColor={license.limits.isOfflineCapable ? theme.colors.successText : undefined}
+                  />
+                )}
+                {license.expiresAtUtc ? (
+                  <InfoRow label="Expires" value={new Date(license.expiresAtUtc).toLocaleDateString()} />
+                ) : null}
+              </>
+            ) : (
+              <EmptyState
+                icon="key"
+                title="No license information"
+                description="Enter a license key to activate this facility."
+                actionTitle="Enter license key"
+                onAction={openActivationModal}
+              />
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Staff roster */}
+        <Card>
+          <CardHeader
+            title="Staff"
+            subtitle={
+              maxStaffSeats != null
+                ? `${activeStaffCount} of ${maxStaffSeats} seats in use`
+                : `${activeStaffCount} active`
+            }
+            rightAction={
+              <Button
+                title="Add staff"
+                icon="plus"
+                size="sm"
+                variant={staffQuotaReached ? 'secondary' : 'primary'}
+                onPress={handleOpenAddStaff}
+              />
+            }
+          />
+          <CardContent>
+            {showSkeletons ? (
+              <SkeletonList rows={3} />
+            ) : staffLoadError ? (
+              <ErrorState compact title="Could not load staff" message={staffLoadError} onRetry={retryAll} />
+            ) : staff.length === 0 ? (
+              <EmptyState
+                icon="patients"
+                title="No staff added yet"
+                description="Add doctors, nurses and front-desk staff so they can be chosen in Working as."
+                actionTitle="Add staff"
+                onAction={handleOpenAddStaff}
+              />
+            ) : (
+              staff.map((s) => (
+                <View key={s.id} style={styles.listItem}>
+                  <View style={styles.flex}>
+                    <View style={styles.itemTitleRow}>
+                      <ThemedText variant="bodyBold">
+                        {s.title ? `${s.title} ` : ''}
+                        {s.firstName} {s.lastName}
+                      </ThemedText>
+                      <Badge label={s.role} variant={s.role === 'Doctor' ? 'primary' : 'neutral'} />
+                    </View>
+                    {s.specialty ? (
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        {s.specialty}
+                      </ThemedText>
+                    ) : null}
+                    {s.prcLicenseNumber ? (
+                      <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                        PRC: {s.prcLicenseNumber}
+                        {s.ptrNumber ? ` · PTR: ${s.ptrNumber}` : ''}
+                        {s.s2LicenseNumber ? ` · PDEA S2: ${s.s2LicenseNumber}` : ''}
+                      </ThemedText>
+                    ) : null}
+                  </View>
+                  <Button title="Deactivate" variant="secondary" size="sm" onPress={() => handleDeactivateStaff(s.id)} />
+                </View>
+              ))
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Patient custom fields */}
+        <Card>
+          <CardHeader
+            title="Patient intake fields"
+            subtitle="Extra details collected at registration for students, employees or other groups"
+            rightAction={
+              <View style={styles.headerActions}>
+                <Button
+                  title="Import students"
+                  icon="upload"
+                  variant="outline"
+                  size="sm"
+                  onPress={() => setShowBulkImportModal(true)}
+                />
+                <Button
+                  title="Add field"
+                  icon="plus"
+                  size="sm"
+                  onPress={() => {
+                    setFieldError(null);
+                    setShowAddFieldModal(true);
+                  }}
+                />
+              </View>
+            }
+          />
+          <CardContent>
+            <View style={styles.chipRow}>
+              {(['All', 'Student', 'Employee', 'General'] as const).map((cat) => (
+                <Chip
+                  key={cat}
+                  label={FIELD_CATEGORY_LABEL[cat]}
+                  active={selectedFieldCategory === cat}
+                  onPress={() => setSelectedFieldCategory(cat)}
+                />
+              ))}
+            </View>
+
+            {showSkeletons ? (
+              <SkeletonList rows={3} />
+            ) : fieldsLoadError ? (
+              <ErrorState compact title="Could not load custom fields" message={fieldsLoadError} onRetry={retryAll} />
+            ) : visibleFields.length === 0 ? (
+              <EmptyState
+                icon="clipboard"
+                title="No custom fields"
+                description={
+                  selectedFieldCategory === 'All'
+                    ? 'Add a field to collect extra details at patient registration.'
+                    : 'No fields in this category yet.'
+                }
+                actionTitle="Add field"
+                onAction={() => {
+                  setFieldError(null);
+                  setShowAddFieldModal(true);
                 }}
-                placeholder="e.g. Guardian / Parent Name"
               />
-            </View>
-
-            <View>
-              <ThemedText style={styles.fieldLabel}>System Key / Attribute Name</ThemedText>
-              <TextInput
-                style={styles.fieldInput}
-                value={newFieldKey}
-                onChangeText={setNewFieldKey}
-                placeholder="e.g. guardian_name"
-              />
-            </View>
-
-            <View>
-              <ThemedText style={styles.fieldLabel}>Target Category</ThemedText>
-              <View style={{ flexDirection: 'row', gap: 6, marginTop: 4 }}>
-                {(['Student', 'Employee', 'General'] as const).map((cat) => (
-                  <Pressable
-                    key={cat}
-                    style={[
-                      styles.roleSelectChip,
-                      newFieldCategory === cat && styles.roleSelectChipActive,
-                    ]}
-                    onPress={() => setNewFieldCategory(cat)}
-                  >
-                    <ThemedText
-                      style={[
-                        styles.roleSelectChipText,
-                        newFieldCategory === cat && styles.roleSelectChipTextActive,
-                      ]}
-                    >
-                      {cat === 'Student' ? '🎓 Student' : cat === 'Employee' ? '💼 Employee' : '👤 General'}
-                    </ThemedText>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-
-            <View>
-              <ThemedText style={styles.fieldLabel}>Data Type</ThemedText>
-              <View style={{ flexDirection: 'row', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-                {(['Text', 'Number', 'Date', 'Select', 'Boolean'] as const).map((dt) => (
-                  <Pressable
-                    key={dt}
-                    style={[
-                      styles.roleSelectChip,
-                      newFieldDataType === dt && styles.roleSelectChipActive,
-                    ]}
-                    onPress={() => setNewFieldDataType(dt)}
-                  >
-                    <ThemedText
-                      style={[
-                        styles.roleSelectChipText,
-                        newFieldDataType === dt && styles.roleSelectChipTextActive,
-                      ]}
-                    >
-                      {dt}
-                    </ThemedText>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-
-            {newFieldDataType === 'Select' && (
-              <View>
-                <ThemedText style={styles.fieldLabel}>Dropdown Options (comma separated) *</ThemedText>
-                <TextInput
-                  style={styles.fieldInput}
-                  value={newFieldOptions}
-                  onChangeText={setNewFieldOptions}
-                  placeholder="e.g. 1st Year, 2nd Year, 3rd Year, 4th Year"
-                />
-              </View>
+            ) : (
+              visibleFields.map((field) => {
+                let options: string[] = [];
+                if (field.optionsJson) {
+                  try {
+                    options = JSON.parse(field.optionsJson || '[]');
+                  } catch {
+                    options = [];
+                  }
+                }
+                return (
+                  <View key={field.id} style={styles.listItem}>
+                    <View style={styles.flex}>
+                      <View style={styles.itemTitleRow}>
+                        <ThemedText variant="bodyBold">{field.label}</ThemedText>
+                        <Badge label={field.fieldKey} variant="outline" />
+                        <Badge label={field.dataType} variant={FIELD_TYPE_BADGE[field.dataType] ?? 'neutral'} />
+                        <ThemedText
+                          variant="captionBold"
+                          color={field.isRequired ? theme.colors.emergencyText : theme.colors.textMuted}
+                        >
+                          {field.isRequired ? 'Required' : 'Optional'}
+                        </ThemedText>
+                      </View>
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        Category: {field.category || 'General'}
+                        {field.placeholder ? ` · Hint: "${field.placeholder}"` : ''}
+                      </ThemedText>
+                      {options.length > 0 ? (
+                        <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                          Options: {options.join(', ')}
+                        </ThemedText>
+                      ) : null}
+                    </View>
+                    <Button title="Delete" variant="secondary" size="sm" onPress={() => handleDeleteCustomField(field.id)} />
+                  </View>
+                );
+              })
             )}
+          </CardContent>
+        </Card>
 
-            <View>
-              <ThemedText style={styles.fieldLabel}>Placeholder / Helper Text</ThemedText>
-              <TextInput
-                style={styles.fieldInput}
-                value={newFieldPlaceholder}
-                onChangeText={setNewFieldPlaceholder}
-                placeholder="e.g. Full name of emergency guardian"
-              />
-            </View>
-
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 }}>
-              <Pressable
-                style={[
-                  styles.checkboxBox,
-                  newFieldRequired && styles.checkboxBoxActive,
-                ]}
-                onPress={() => setNewFieldRequired(!newFieldRequired)}
-              >
-                {newFieldRequired && <ThemedText style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '700' }}>✓</ThemedText>}
-              </Pressable>
-              <ThemedText style={{ fontSize: 13, color: '#374151' }}>
-                Mark field as mandatory / required during patient registration
-              </ThemedText>
-            </View>
-          </ScrollView>
-
-          <View style={styles.modalActionsRow}>
-            <Pressable
-              style={styles.cancelModalBtn}
-              onPress={() => setShowAddFieldModal(false)}
-              disabled={savingField}
-            >
-              <ThemedText style={styles.cancelModalBtnText}>Cancel</ThemedText>
-            </Pressable>
-            <Pressable
-              style={styles.saveStaffBtn}
-              onPress={handleCreateCustomField}
-              disabled={savingField}
-            >
-              {savingField ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <ThemedText style={styles.saveStaffBtnText}>Deploy Custom Field</ThemedText>
-              )}
-            </Pressable>
-          </View>
-        </View>
-      </View>
-    </Modal>
-
-    <BulkStudentImportModal
-      visible={showBulkImportModal}
-      onClose={() => setShowBulkImportModal(false)}
-      onSuccess={() => {
-        loadAll();
-      }}
-    />
-
-    {/* Add Service Catalog Item Modal */}
-    <Modal
-      visible={showAddServiceModal}
-      transparent
-      animationType="fade"
-      onRequestClose={() => setShowAddServiceModal(false)}
-    >
-      <View style={styles.modalBackdrop}>
-        <View style={[styles.modalContent, { maxWidth: 540 }]}>
-          <ThemedText style={styles.modalHeaderTitle}>Add Clinic Service / Formulary Item</ThemedText>
-          <ThemedText style={styles.modalHeaderSub}>
-            Register a new billable medical procedure, lab test, consultation, or formulary medicine into your clinic fee schedule.
-          </ThemedText>
-
-          {serviceError && (
-            <View style={styles.modalErrorBanner}>
-              <ThemedText style={styles.modalErrorBannerText}>{serviceError}</ThemedText>
-            </View>
-          )}
-
-          <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={{ gap: 10 }}>
-            <View style={styles.formRow}>
-              <View style={{ flex: 1 }}>
-                <ThemedText style={styles.fieldLabel}>Item Code *</ThemedText>
-                <TextInput
-                  style={styles.fieldInput}
-                  value={newServiceCode}
-                  onChangeText={setNewServiceCode}
-                  placeholder="e.g. MED-AMOX-500"
-                  autoCapitalize="characters"
+        {/* Services and formulary catalog */}
+        <Card>
+          <CardHeader
+            title="Services and formulary catalog"
+            subtitle="Fees, procedures, diagnostics and medicines, with PhilHealth code mapping"
+            rightAction={
+              <View style={styles.headerActions}>
+                <Button
+                  title="Import CSV"
+                  icon="upload"
+                  variant="outline"
+                  size="sm"
+                  onPress={() => setShowCsvCatalogImportModal(true)}
                 />
+                <Button title="Add item" icon="plus" size="sm" onPress={handleOpenAddService} />
               </View>
-              <View style={{ flex: 1 }}>
-                <ThemedText style={styles.fieldLabel}>Standard Fee / Price (₱) *</ThemedText>
-                <TextInput
-                  style={styles.fieldInput}
-                  value={newServicePrice}
-                  onChangeText={setNewServicePrice}
-                  placeholder="0.00"
-                  keyboardType="numeric"
-                />
-              </View>
-            </View>
-
-            <View>
-              <ThemedText style={styles.fieldLabel}>Item Display Name *</ThemedText>
-              <TextInput
-                style={styles.fieldInput}
-                value={newServiceName}
-                onChangeText={setNewServiceName}
-                placeholder="e.g. Amoxicillin 500mg Capsule or CBC with Platelet"
-              />
-            </View>
-
-            <View>
-              <ThemedText style={styles.fieldLabel}>Category</ThemedText>
-              <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                {(['Medicine', 'Diagnostic', 'Procedure', 'Consultation', 'NursingService'] as const).map((cat) => (
-                  <Pressable
+            }
+          />
+          <CardContent>
+            <View style={styles.chipRow}>
+              {(['All', 'Medicine', 'Diagnostic', 'Procedure', 'Consultation', 'NursingService'] as const).map((cat) => {
+                const count =
+                  cat === 'All'
+                    ? services.length
+                    : services.filter((s) => s.category.toLowerCase() === cat.toLowerCase()).length;
+                return (
+                  <Chip
                     key={cat}
-                    style={[
-                      styles.roleSelectChip,
-                      newServiceCategory === cat && styles.roleSelectChipActive,
-                    ]}
-                    onPress={() => setNewServiceCategory(cat)}
-                  >
-                    <ThemedText
-                      style={[
-                        styles.roleSelectChipText,
-                        newServiceCategory === cat && styles.roleSelectChipTextActive,
-                      ]}
-                    >
-                      {cat}
-                    </ThemedText>
-                  </Pressable>
-                ))}
-              </View>
+                    label={`${SERVICE_CATEGORY_LABEL[cat]} (${count})`}
+                    active={selectedServiceCategory === cat}
+                    onPress={() => setSelectedServiceCategory(cat)}
+                  />
+                );
+              })}
             </View>
 
-            <View>
-              <ThemedText style={styles.fieldLabel}>Clinical Description / Notes</ThemedText>
-              <TextInput
-                style={[styles.fieldInput, { height: 60 }]}
-                value={newServiceDesc}
-                onChangeText={setNewServiceDesc}
-                placeholder="Dosage form, clinical notes, or instructions"
-                multiline
+            {showSkeletons ? (
+              <SkeletonList rows={4} />
+            ) : servicesLoadError ? (
+              <ErrorState compact title="Could not load the catalog" message={servicesLoadError} onRetry={retryAll} />
+            ) : visibleServices.length === 0 ? (
+              <EmptyState
+                icon="clipboard"
+                title="No catalog items"
+                description={
+                  selectedServiceCategory === 'All'
+                    ? 'Add services and medicines, or import them from a CSV file.'
+                    : 'Nothing in this category yet.'
+                }
+                actionTitle="Add item"
+                onAction={handleOpenAddService}
               />
-            </View>
+            ) : (
+              visibleServices.map((item) => {
+                const isClinical = isClinicalCategory(item.category);
+                return (
+                  <View key={item.id} style={styles.listItem}>
+                    <View style={styles.flex}>
+                      <View style={styles.itemTitleRow}>
+                        <ThemedText variant="bodyBold">{item.name}</ThemedText>
+                        <Badge label={item.code} variant="outline" />
+                        <Badge label={item.category} variant="neutral" />
+                        <ThemedText variant="smallBold" color={theme.colors.successText}>
+                          {formatPeso(item.standardPrice)}
+                        </ThemedText>
+                        {!item.isActive && <Badge label="Inactive" variant="emergency" />}
+                      </View>
 
-            {(newServiceCategory === 'Medicine' || newServiceCategory === 'Diagnostic') && (
-              <View style={styles.philHealthNoticeBox}>
-                <ThemedText style={styles.philHealthNoticeTitle}>
-                  🏛️ PhilHealth Yakap / GAMOT Integration Notice
-                </ThemedText>
-                <ThemedText style={styles.philHealthNoticeSub}>
-                  Clinical items require binding to statutory PhilHealth codes for claims reimbursement. If not yet mapped, clicking "Save Catalog Item" will automatically open the PhilHealth Statutory Catalog Mapping dialog.
-                </ThemedText>
-              </View>
+                      {item.description ? (
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>
+                          {item.description}
+                        </ThemedText>
+                      ) : null}
+
+                      {/* PhilHealth mapping status */}
+                      <View style={styles.itemTitleRow}>
+                        {item.isPhilHealthFormulary && item.philHealthCode ? (
+                          <>
+                            <Badge label={`PhilHealth: ${item.philHealthCode}`} variant="success" />
+                            {item.philHealthDescription ? (
+                              <ThemedText variant="caption" color={theme.colors.textMuted} numberOfLines={1}>
+                                {item.philHealthDescription}
+                              </ThemedText>
+                            ) : null}
+                          </>
+                        ) : isClinical ? (
+                          <Badge label="Non-formulary, out of pocket" variant="warning" />
+                        ) : (
+                          <Badge label="Standard service" variant="neutral" />
+                        )}
+                      </View>
+                    </View>
+
+                    <View style={styles.itemActions}>
+                      {isClinical && (
+                        <Button
+                          title={item.philHealthCode ? 'Edit mapping' : 'Map PhilHealth'}
+                          variant="outline"
+                          size="sm"
+                          onPress={() => setMappingTargetItem(item)}
+                        />
+                      )}
+                      <Button
+                        title={item.isActive ? 'Deactivate' : 'Activate'}
+                        variant={item.isActive ? 'secondary' : 'success'}
+                        size="sm"
+                        onPress={() => handleToggleServiceActive(item)}
+                      />
+                    </View>
+                  </View>
+                );
+              })
             )}
-          </ScrollView>
+          </CardContent>
+        </Card>
+      </ScrollView>
 
-          <View style={styles.modalActionsRow}>
-            <Pressable
-              style={styles.cancelModalBtn}
-              onPress={() => setShowAddServiceModal(false)}
-              disabled={savingService}
-            >
-              <ThemedText style={styles.cancelModalBtnText}>Cancel</ThemedText>
-            </Pressable>
-
-            <Pressable
-              style={[styles.saveStaffBtn, savingService && { opacity: 0.6 }]}
-              onPress={handleInitiateSaveService}
-              disabled={savingService}
-            >
-              {savingService ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <ThemedText style={styles.saveStaffBtnText}>
-                  {(newServiceCategory === 'Medicine' || newServiceCategory === 'Diagnostic') && !newServicePhilHealthCode && !newServiceIsFormulary
-                    ? 'Map & Save Item →'
-                    : 'Save Catalog Item'}
-                </ThemedText>
-              )}
-            </Pressable>
-          </View>
-        </View>
-      </View>
-    </Modal>
-
-    {/* PhilHealth Statutory Catalog Mapping Dialog */}
-    {(showPhilHealthMappingModal || !!mappingTargetItem) && (
-      <PhilHealthCatalogMappingModal
-        visible={showPhilHealthMappingModal || !!mappingTargetItem}
-        onClose={() => {
-          setShowPhilHealthMappingModal(false);
-          setMappingTargetItem(null);
-        }}
-        itemName={mappingTargetItem ? mappingTargetItem.name : newServiceName}
-        itemType={
-          (mappingTargetItem
-            ? mappingTargetItem.category.toLowerCase() === 'medicine'
-            : newServiceCategory.toLowerCase() === 'medicine')
-            ? 'Medicine'
-            : 'Diagnostic'
+      {/* Add staff modal */}
+      <Modal
+        visible={showAddStaffModal}
+        onClose={() => setShowAddStaffModal(false)}
+        title="Add staff member"
+        subtitle={
+          maxStaffSeats != null ? `Seats in use: ${activeStaffCount} of ${maxStaffSeats}` : `Active staff: ${activeStaffCount}`
         }
-        initialGenericName={mappingTargetItem ? mappingTargetItem.name : newServiceName}
-        onSaveMapping={handlePhilHealthMappingConfirmed}
-      />
-    )}
+        maxWidth={520}
+        footer={
+          <View style={styles.modalFooter}>
+            <Button title="Cancel" variant="ghost" onPress={() => setShowAddStaffModal(false)} disabled={addingStaff} />
+            <Button title="Add staff" onPress={handleAddStaff} loading={addingStaff} />
+          </View>
+        }
+      >
+        {staffError ? <FormError message={staffError} /> : null}
 
-    {/* CSV Bulk Catalog Import Modal */}
-    <CsvCatalogImportModal
-      visible={showCsvCatalogImportModal}
-      onClose={() => setShowCsvCatalogImportModal(false)}
-      onImportSuccess={(_result) => {
-        clinicService.getServices().then(([freshServices]) => {
-          if (freshServices) setServices(freshServices);
-        });
-      }}
-    />
-  </ResponsiveLayout>
-);
+        <View style={styles.formRow}>
+          <Input
+            containerStyle={styles.flexNarrow}
+            label="Title"
+            value={newStaffTitle}
+            onChangeText={setNewStaffTitle}
+            placeholder="Dr. / RN / Ms."
+          />
+          <FieldGroup label="Role">
+            <View style={styles.chipRow}>
+              {(['Doctor', 'Nurse', 'Receptionist', 'Cashier'] as const).map((r) => (
+                <Chip key={r} label={r} active={newStaffRole === r} onPress={() => setNewStaffRole(r)} />
+              ))}
+            </View>
+          </FieldGroup>
+        </View>
+
+        <View style={styles.formRow}>
+          <Input
+            containerStyle={styles.flexWide}
+            label="First name"
+            required
+            value={newStaffFirstName}
+            onChangeText={setNewStaffFirstName}
+            placeholder="First name"
+          />
+          <Input
+            containerStyle={styles.flexWide}
+            label="Last name"
+            required
+            value={newStaffLastName}
+            onChangeText={setNewStaffLastName}
+            placeholder="Last name"
+          />
+        </View>
+
+        <Input
+          label="PRC license number"
+          value={newStaffPrc}
+          onChangeText={setNewStaffPrc}
+          placeholder="PRC license number"
+        />
+        <Input
+          label="Specialty or designation"
+          value={newStaffSpecialty}
+          onChangeText={setNewStaffSpecialty}
+          placeholder="e.g. Pediatrics, Primary care nursing"
+        />
+      </Modal>
+
+      {/* Add custom field modal */}
+      <Modal
+        visible={showAddFieldModal}
+        onClose={() => setShowAddFieldModal(false)}
+        title="Add intake field"
+        subtitle="Define a new detail to collect on patient registration forms."
+        maxWidth={500}
+        maxHeight="90%"
+        footer={
+          <View style={styles.modalFooter}>
+            <Button title="Cancel" variant="ghost" onPress={() => setShowAddFieldModal(false)} disabled={savingField} />
+            <Button title="Add field" onPress={handleCreateCustomField} loading={savingField} />
+          </View>
+        }
+      >
+        {fieldError ? <FormError message={fieldError} /> : null}
+
+        <Input
+          label="Field label"
+          required
+          value={newFieldLabel}
+          onChangeText={(text) => {
+            setNewFieldLabel(text);
+            if (!newFieldKey) {
+              setNewFieldKey(text.toLowerCase().replace(/[^a-z0-9]/g, '_'));
+            }
+          }}
+          placeholder="e.g. Guardian name"
+        />
+
+        <Input
+          label="System key"
+          value={newFieldKey}
+          onChangeText={setNewFieldKey}
+          placeholder="e.g. guardian_name"
+          helperText="Used internally and in imports. Filled in from the label if left alone."
+        />
+
+        <FieldGroup label="Applies to">
+          <View style={styles.chipRow}>
+            {(['Student', 'Employee', 'General'] as const).map((cat) => (
+              <Chip key={cat} label={cat} active={newFieldCategory === cat} onPress={() => setNewFieldCategory(cat)} />
+            ))}
+          </View>
+        </FieldGroup>
+
+        <FieldGroup label="Data type">
+          <View style={styles.chipRow}>
+            {(['Text', 'Number', 'Date', 'Select', 'Boolean'] as const).map((dt) => (
+              <Chip key={dt} label={dt} active={newFieldDataType === dt} onPress={() => setNewFieldDataType(dt)} />
+            ))}
+          </View>
+        </FieldGroup>
+
+        {newFieldDataType === 'Select' && (
+          <Input
+            label="Dropdown options"
+            required
+            value={newFieldOptions}
+            onChangeText={setNewFieldOptions}
+            placeholder="Separate options with commas"
+          />
+        )}
+
+        <Input
+          label="Hint text"
+          value={newFieldPlaceholder}
+          onChangeText={setNewFieldPlaceholder}
+          placeholder="Shown inside the empty field"
+        />
+
+        <Pressable
+          style={styles.checkRow}
+          onPress={() => setNewFieldRequired(!newFieldRequired)}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: newFieldRequired }}
+        >
+          <View style={[styles.checkbox, newFieldRequired && styles.checkboxActive]}>
+            {newFieldRequired && <Icon name="check" size={theme.sizes.iconSm} color={theme.colors.onPrimary} />}
+          </View>
+          <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.flex}>
+            Required during patient registration
+          </ThemedText>
+        </Pressable>
+      </Modal>
+
+      <BulkStudentImportModal
+        visible={showBulkImportModal}
+        onClose={() => setShowBulkImportModal(false)}
+        onSuccess={() => {
+          loadAll();
+        }}
+      />
+
+      {/* Add service catalog item modal */}
+      <Modal
+        visible={showAddServiceModal}
+        onClose={() => setShowAddServiceModal(false)}
+        title="Add service or formulary item"
+        subtitle="Add a billable procedure, lab test, consultation or medicine to your fee schedule."
+        maxWidth={540}
+        maxHeight="90%"
+        footer={
+          <View style={styles.modalFooter}>
+            <Button title="Cancel" variant="ghost" onPress={() => setShowAddServiceModal(false)} disabled={savingService} />
+            <Button
+              title={
+                isClinicalCategory(newServiceCategory) && !newServicePhilHealthCode && !newServiceIsFormulary
+                  ? 'Map and save'
+                  : 'Save item'
+              }
+              onPress={handleInitiateSaveService}
+              loading={savingService}
+            />
+          </View>
+        }
+      >
+        {serviceError ? <FormError message={serviceError} /> : null}
+
+        <View style={styles.formRow}>
+          <Input
+            containerStyle={styles.flexWide}
+            label="Item code"
+            required
+            value={newServiceCode}
+            onChangeText={setNewServiceCode}
+            placeholder="e.g. MED-AMOX-500"
+            autoCapitalize="characters"
+          />
+          <Input
+            containerStyle={styles.flexWide}
+            label="Standard price (₱)"
+            required
+            value={newServicePrice}
+            onChangeText={setNewServicePrice}
+            placeholder="0.00"
+            keyboardType="numeric"
+          />
+        </View>
+
+        <Input
+          label="Item name"
+          required
+          value={newServiceName}
+          onChangeText={setNewServiceName}
+          placeholder="e.g. Amoxicillin 500mg capsule"
+        />
+
+        <FieldGroup label="Category">
+          <View style={styles.chipRow}>
+            {(['Medicine', 'Diagnostic', 'Procedure', 'Consultation', 'NursingService'] as const).map((cat) => (
+              <Chip
+                key={cat}
+                label={SERVICE_CATEGORY_LABEL[cat]}
+                active={newServiceCategory === cat}
+                onPress={() => setNewServiceCategory(cat)}
+              />
+            ))}
+          </View>
+        </FieldGroup>
+
+        <Input
+          label="Description"
+          value={newServiceDesc}
+          onChangeText={setNewServiceDesc}
+          placeholder="Dosage form, clinical notes or instructions"
+          multiline
+        />
+
+        {isClinicalCategory(newServiceCategory) && (
+          <View style={styles.noticeBox}>
+            <ThemedText variant="smallBold" color={theme.colors.infoText}>
+              PhilHealth mapping
+            </ThemedText>
+            <ThemedText variant="caption" color={theme.colors.infoText}>
+              Medicines and diagnostics need a PhilHealth code for claims. If this item is not mapped yet, saving opens the
+              catalog mapping dialog first.
+            </ThemedText>
+          </View>
+        )}
+      </Modal>
+
+      {/* PhilHealth catalog mapping dialog */}
+      {(showPhilHealthMappingModal || !!mappingTargetItem) && (
+        <PhilHealthCatalogMappingModal
+          visible={showPhilHealthMappingModal || !!mappingTargetItem}
+          onClose={() => {
+            setShowPhilHealthMappingModal(false);
+            setMappingTargetItem(null);
+          }}
+          itemName={mappingTargetItem ? mappingTargetItem.name : newServiceName}
+          itemType={
+            (mappingTargetItem
+              ? mappingTargetItem.category.toLowerCase() === 'medicine'
+              : newServiceCategory.toLowerCase() === 'medicine')
+              ? 'Medicine'
+              : 'Diagnostic'
+          }
+          initialGenericName={mappingTargetItem ? mappingTargetItem.name : newServiceName}
+          onSaveMapping={handlePhilHealthMappingConfirmed}
+        />
+      )}
+
+      {/* CSV bulk catalog import modal */}
+      <CsvCatalogImportModal
+        visible={showCsvCatalogImportModal}
+        onClose={() => setShowCsvCatalogImportModal(false)}
+        onImportSuccess={(_result) => {
+          clinicService.getServices().then(([freshServices]) => {
+            if (freshServices) setServices(freshServices);
+          });
+        }}
+      />
+    </ResponsiveLayout>
+  );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: theme.colors.background,
   },
   content: {
-    padding: 20,
-    gap: 16,
+    padding: theme.spacing.xl,
+    gap: theme.spacing.lg,
   },
-  header: {
-    gap: 4,
-  },
-  subtitle: {
-    fontSize: 13,
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-    color: '#4B5563',
-    fontWeight: '600',
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    padding: 16,
-    gap: 12,
-  },
-  cardHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-    paddingBottom: 8,
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  auditBtn: {
-    backgroundColor: '#F0F9FF',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#BAE6FD',
-  },
-  auditBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#0284C7',
-  },
-  censusContainer: {
-    gap: 14,
-  },
-  remittanceHero: {
-    flexDirection: 'row',
-    backgroundColor: '#F0FDF4',
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
-    borderRadius: 10,
-    padding: 12,
-    alignItems: 'center',
-  },
-  remittanceBlock: {
+  flex: {
     flex: 1,
-    alignItems: 'center',
-    gap: 2,
   },
-  remittanceDivider: {
-    width: 1,
-    height: '80%',
-    backgroundColor: '#86EFAC',
+  flexWide: {
+    flex: 2,
+    minWidth: 200,
   },
-  remittanceLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#166534',
-    textTransform: 'uppercase',
-  },
-  remittanceAmount: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#15803D',
-  },
-  remittanceSub: {
-    fontSize: 10,
-    color: '#4B5563',
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  statCell: {
+  flexNarrow: {
     flex: 1,
-    minWidth: '45%',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    padding: 10,
-    alignItems: 'center',
-    gap: 2,
-  },
-  statVal: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1F2937',
-  },
-  statDesc: {
-    fontSize: 11,
-    color: '#6B7280',
-  },
-  subSection: {
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-    paddingTop: 8,
-    gap: 6,
-  },
-  subSectionTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#4B5563',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  label: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  value: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1F2937',
+    minWidth: 140,
   },
   formRow: {
     flexDirection: 'row',
-    gap: 8,
+    flexWrap: 'wrap',
+    gap: theme.spacing.md,
   },
-  fieldLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#4B5563',
-    marginBottom: 4,
+  fieldGroup: {
+    gap: theme.spacing.xs,
   },
-  fieldInput: {
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    fontSize: 13,
-    color: '#111827',
-  },
-  savePrefBtn: {
-    backgroundColor: '#0284C7',
-    borderRadius: 8,
-    paddingVertical: 10,
-    alignItems: 'center',
-    marginTop: 6,
-  },
-  savePrefBtnText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  savedBanner: {
-    backgroundColor: '#F0FDF4',
-    borderWidth: 1,
-    borderColor: '#86EFAC',
-    borderRadius: 8,
-    padding: 10,
-  },
-  savedBannerText: {
-    color: '#166534',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  staffItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    padding: 12,
-  },
-  staffName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  roleBadge: {
-    backgroundColor: '#F3F4F6',
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  roleBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#4B5563',
-  },
-  specialtyText: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  licenseText: {
-    fontSize: 11,
-    color: '#0284C7',
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  activeDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#16A34A',
-  },
-  licenseActionBtn: {
-    backgroundColor: '#F0F9FF',
-    borderWidth: 1,
-    borderColor: '#BAE6FD',
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  licenseActionBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#0284C7',
-  },
-  licenseBannerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 4,
-  },
-  licenseTierBadge: {
-    backgroundColor: '#0284C7',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  licenseTierText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-  },
-  licenseStatusText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  addStaffBtn: {
-    backgroundColor: '#0284C7',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
-  },
-  addStaffBtnText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  deactivateBtn: {
-    borderWidth: 1,
-    borderColor: '#FCA5A5',
-    backgroundColor: '#FEF2F2',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  deactivateBtnText: {
-    color: '#DC2626',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 22,
-    maxWidth: 500,
-    width: '100%',
-    gap: 12,
-  },
-  modalHeaderTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  modalHeaderSub: {
-    fontSize: 12,
-    color: '#64748B',
-  },
-  modalErrorBanner: {
-    backgroundColor: '#FEE2E2',
-    borderColor: '#F87171',
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 8,
-  },
-  modalErrorBannerText: {
-    color: '#991B1B',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  roleSelectChip: {
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: '#F8FAFC',
-  },
-  roleSelectChipActive: {
-    backgroundColor: '#0284C7',
-    borderColor: '#0284C7',
-  },
-  roleSelectChipText: {
-    fontSize: 11,
-    color: '#475569',
-    fontWeight: '600',
-  },
-  roleSelectChipTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  modalActionsRow: {
+  actionsEnd: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    gap: 10,
-    marginTop: 8,
   },
-  cancelModalBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
+  headerActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+    justifyContent: 'flex-end',
   },
-  cancelModalBtnText: {
-    color: '#475569',
-    fontSize: 13,
-    fontWeight: '600',
+  statGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.md,
   },
-  saveStaffBtn: {
-    backgroundColor: '#0284C7',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 6,
+  statCell: {
+    flex: 1,
+    minWidth: 200,
   },
-  saveStaffBtnText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
+  subSection: {
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.borderLight,
+    paddingTop: theme.spacing.md,
+    gap: theme.spacing.sm,
   },
-  categoryFilterChip: {
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 16,
-    backgroundColor: '#F1F5F9',
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
   },
-  categoryFilterChipActive: {
-    backgroundColor: '#0284C7',
-    borderColor: '#0284C7',
+  licenseBadges: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
   },
-  categoryFilterChipText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#475569',
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
   },
-  categoryFilterChipTextActive: {
-    color: '#FFFFFF',
+  chip: {
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderDark,
   },
-  customFieldItem: {
+  chipActive: {
+    backgroundColor: theme.colors.primaryLight,
+    borderColor: theme.colors.primary,
+  },
+  listItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 8,
-    padding: 10,
-    gap: 8,
+    gap: theme.spacing.md,
+    flexWrap: 'wrap',
+    padding: theme.spacing.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.surface,
   },
-  customFieldLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#0F172A',
+  itemTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
   },
-  customFieldKeyBadge: {
-    fontSize: 10,
-    fontFamily: 'monospace',
-    color: '#64748B',
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderRadius: 4,
+  itemActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
   },
-  customFieldTypeBadge: {
-    fontSize: 10,
-    fontWeight: '700',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+  modalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
   },
-  checkboxBox: {
-    width: 20,
-    height: 20,
-    borderWidth: 1,
-    borderColor: '#94A3B8',
-    borderRadius: 4,
+  formError: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.emergencySubtle,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.emergencyBorder,
+  },
+  checkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+  },
+  checkbox: {
+    width: theme.sizes.iconLg,
+    height: theme.sizes.iconLg,
+    borderRadius: theme.radii.xs,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderDark,
+    backgroundColor: theme.colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
   },
-  checkboxBoxActive: {
-    backgroundColor: '#0284C7',
-    borderColor: '#0284C7',
+  checkboxActive: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
   },
-  badgeFormulary: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#0284C7',
-    backgroundColor: '#E0F2FE',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  serviceItemCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 10,
-    padding: 12,
-    gap: 10,
-  },
-  serviceItemName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  serviceItemCodeBadge: {
-    fontSize: 11,
-    fontFamily: 'monospace',
-    color: '#475569',
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  serviceItemPrice: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#059669',
-  },
-  philHealthMappedPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#ECFDF5',
-    borderWidth: 1,
-    borderColor: '#A7F3D0',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  philHealthMappedText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#065F46',
-    fontFamily: 'monospace',
-  },
-  philHealthMappedDesc: {
-    fontSize: 10,
-    color: '#047857',
-    maxWidth: 240,
-  },
-  philHealthUnmappedPill: {
-    backgroundColor: '#FEF3C7',
-    borderWidth: 1,
-    borderColor: '#FDE68A',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  philHealthUnmappedText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#92400E',
-  },
-  philHealthNaPill: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  philHealthNaText: {
-    fontSize: 10,
-    color: '#64748B',
-    fontWeight: '600',
-  },
-  mapActionBtn: {
-    backgroundColor: '#E0F2FE',
-    borderWidth: 1,
-    borderColor: '#BAE6FD',
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  mapActionBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#0284C7',
-  },
-  philHealthNoticeBox: {
-    backgroundColor: '#EFF6FF',
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-    borderRadius: 8,
-    padding: 10,
-    marginTop: 6,
-  },
-  philHealthNoticeTitle: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#1E40AF',
-  },
-  philHealthNoticeSub: {
-    fontSize: 11,
-    color: '#1E3A8A',
-    marginTop: 2,
-    lineHeight: 16,
+  noticeBox: {
+    backgroundColor: theme.colors.infoBg,
+    borderColor: theme.colors.infoBorder,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
+    gap: theme.spacing.xs,
   },
 });

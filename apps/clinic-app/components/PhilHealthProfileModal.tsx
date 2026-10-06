@@ -1,15 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  StyleSheet,
-  ScrollView,
-  Modal,
-  Pressable,
-  TextInput,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
-import ThemedText from './ui/ThemedText';
+import { View, StyleSheet, Pressable } from 'react-native';
+import { theme } from '@constants/theme';
+import { Modal, Input, Button, Badge, Icon, ErrorState, SkeletonList, ThemedText } from '@ui';
+import { Alert } from '@utils/feedback';
 import {
   clinicService,
   PhilHealthPatientProfile,
@@ -26,6 +19,142 @@ interface PhilHealthProfileModalProps {
 
 type TabType = 'general' | 'medical' | 'lifestyle' | 'reproductive' | 'ncd';
 
+const TABS: { key: TabType; label: string }[] = [
+  { key: 'general', label: 'General and vitals' },
+  { key: 'medical', label: 'Medical and family' },
+  { key: 'lifestyle', label: 'Social and vaccines' },
+  { key: 'reproductive', label: "Women's health" },
+  { key: 'ncd', label: 'PhilPEN (24)' },
+];
+
+type ChipTone = 'primary' | 'success' | 'warning';
+
+/** Selectable option used for single-choice and multi-choice answers throughout the form. */
+function Chip({
+  label,
+  active,
+  onPress,
+  tone = 'primary',
+  marker = false,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+  tone?: ChipTone;
+  /** Shows a check/plus marker, used for toggle-style condition lists. */
+  marker?: boolean;
+}) {
+  const textColor = !active
+    ? theme.colors.textSecondary
+    : tone === 'success'
+      ? theme.colors.successText
+      : tone === 'warning'
+        ? theme.colors.warningText
+        : theme.colors.primary;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      style={[
+        styles.chip,
+        active && tone === 'primary' && styles.chipPrimary,
+        active && tone === 'success' && styles.chipSuccess,
+        active && tone === 'warning' && styles.chipWarning,
+      ]}
+    >
+      {marker ? <Icon name={active ? 'check' : 'plus'} size={theme.fontSizes.md} color={textColor} /> : null}
+      <ThemedText variant={active ? 'smallBold' : 'small'} color={textColor}>
+        {label}
+      </ThemedText>
+    </Pressable>
+  );
+}
+
+function YesNo({
+  value,
+  onChange,
+  yesTone = 'primary',
+}: {
+  value: boolean;
+  onChange: (next: boolean) => void;
+  yesTone?: ChipTone;
+}) {
+  return (
+    <View style={styles.chipRow}>
+      <Chip label="No" active={!value} onPress={() => onChange(false)} />
+      <Chip label="Yes" active={value} onPress={() => onChange(true)} tone={yesTone} />
+    </View>
+  );
+}
+
+function SectionTitle({ children, spaced }: { children: React.ReactNode; spaced?: boolean }) {
+  return (
+    <ThemedText variant="h3" style={spaced ? styles.sectionTitleSpaced : styles.sectionTitle}>
+      {children}
+    </ThemedText>
+  );
+}
+
+function Helper({ children }: { children: React.ReactNode }) {
+  return (
+    <ThemedText variant="small" color={theme.colors.textMuted} style={styles.helperText}>
+      {children}
+    </ThemedText>
+  );
+}
+
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.fieldLabel}>
+      {children}
+    </ThemedText>
+  );
+}
+
+const CONDITIONS = [
+  { code: '011', desc: 'Hypertension' },
+  { code: '006', desc: 'Diabetes Mellitus' },
+  { code: '002', desc: 'Bronchial Asthma' },
+  { code: '001', desc: 'Allergies' },
+  { code: '007', desc: 'COPD / Emphysema' },
+  { code: '004', desc: 'Stroke / CVD' },
+  { code: '005', desc: 'Coronary Artery Disease' },
+  { code: '003', desc: 'Cancer / Malignancy' },
+  { code: '010', desc: 'Dyslipidemia' },
+  { code: '015', desc: 'Tuberculosis' },
+];
+
+const FAMILY_CONDITIONS = [
+  { code: '011', desc: 'Hypertension' },
+  { code: '006', desc: 'Diabetes Mellitus' },
+  { code: '003', desc: 'Cancer' },
+  { code: '004', desc: 'Stroke' },
+  { code: '005', desc: 'Heart Disease' },
+  { code: '002', desc: 'Asthma' },
+];
+
+const ORGAN_SYSTEMS = [
+  { key: 'skinId', label: 'Skin' },
+  { key: 'heentId', label: 'HEENT' },
+  { key: 'chestId', label: 'Chest / Lungs' },
+  { key: 'heartId', label: 'Heart' },
+  { key: 'abdomenId', label: 'Abdomen' },
+  { key: 'neuroId', label: 'Neurological' },
+  { key: 'guId', label: 'Genitourinary' },
+  { key: 'rectalId', label: 'Rectal' },
+];
+
+const NCD_QUESTIONS = [
+  { id: 'ncd_qid1', q: 'Q1: Does the patient have high blood pressure / hypertension?' },
+  { id: 'ncd_qid2', q: 'Q2: Does the patient have diabetes mellitus?' },
+  { id: 'ncd_qid3', q: 'Q3: Any family history of premature cardiovascular disease?' },
+  { id: 'ncd_qid4', q: 'Q4: Does the patient currently smoke tobacco products?' },
+  { id: 'ncd_qid6', q: 'Q6: Engages in at least 150 minutes of physical activity weekly?' },
+  { id: 'ncd_qid7', q: 'Q7: Consumes fruits and vegetables daily?' },
+  { id: 'ncd_qid8', q: 'Q8: Frequently adds high-sodium condiments or salty snacks?' },
+];
+
 export default function PhilHealthProfileModal({
   visible,
   onClose,
@@ -35,6 +164,7 @@ export default function PhilHealthProfileModal({
   const [activeTab, setActiveTab] = useState<TabType>('general');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [profile, setProfile] = useState<PhilHealthPatientProfile | null>(null);
 
   const isFemale = patient?.gender?.toLowerCase().startsWith('f') ?? false;
@@ -50,16 +180,19 @@ export default function PhilHealthProfileModal({
 
   const loadProfile = async (patientId: string) => {
     setLoading(true);
+    setLoadError(null);
     try {
       const [data, err] = await clinicService.getPhilHealthPatientProfile(patientId);
       if (data) {
         setProfile(data);
       } else {
-        Alert.alert('Notice', err?.message || 'Unable to load PhilHealth profile. Initializing defaults.');
+        setProfile(null);
+        setLoadError(err?.message || 'Unable to load the PhilHealth profile.');
       }
     } catch (err: any) {
       console.error('Failed to load profile:', err);
-      Alert.alert('Error', err?.message || 'Failed to fetch PhilHealth profile.');
+      setProfile(null);
+      setLoadError(err?.message || 'Failed to fetch the PhilHealth profile.');
     } finally {
       setLoading(false);
     }
@@ -91,7 +224,7 @@ export default function PhilHealthProfileModal({
     try {
       const [data, err] = await clinicService.updatePhilHealthPatientProfile(patient.id, profile);
       if (data) {
-        Alert.alert('Success', 'PhilHealth Patient Profile saved successfully (Offline & Standalone Ready).');
+        Alert.alert('Success', 'PhilHealth patient profile saved.');
         onSaved?.(data);
         onClose();
       } else {
@@ -139,1280 +272,857 @@ export default function PhilHealthProfileModal({
     setProfile({ ...profile, [key]: updated });
   };
 
-  return (
-    <Modal visible={visible} transparent animationType="slide">
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContainer}>
-          {/* Header */}
-          <View style={styles.headerBar}>
-            <View>
-              <View style={styles.titleRow}>
-                <ThemedText style={styles.titleText}>PhilHealth Patient Profile</ThemedText>
-                <ThemedText style={styles.trancheBadge}>Tranche 1 & 2 Tagging Ready</ThemedText>
+  const renderImmunizations = (
+    title: string,
+    category: 'child' | 'youngWoman' | 'elderly',
+    codes: string[],
+    selected: string[]
+  ) => (
+    <View style={styles.subSection}>
+      <ThemedText variant="bodyBold" color={theme.colors.textSecondary} style={styles.subHeading}>
+        {title}
+      </ThemedText>
+      <View style={styles.conditionsWrap}>
+        {codes.map((v) => (
+          <Chip
+            key={v}
+            label={v}
+            marker
+            tone="success"
+            active={selected.includes(v)}
+            onPress={() => toggleImmunization(category, v)}
+          />
+        ))}
+      </View>
+    </View>
+  );
+
+  const renderBody = () => {
+    if (loading) {
+      return <SkeletonList rows={6} />;
+    }
+    if (loadError || !profile) {
+      return (
+        <ErrorState
+          title="Could not load the PhilHealth profile"
+          message={loadError || 'Something went wrong while loading this patient.'}
+          onRetry={() => loadProfile(patient.id)}
+        />
+      );
+    }
+
+    return (
+      <>
+        {/* TAB 1: General and vitals */}
+        {activeTab === 'general' && (
+          <View>
+            <SectionTitle>Identification and registration</SectionTitle>
+            <View style={styles.formRow}>
+              <Input
+                containerStyle={styles.fieldCol}
+                label="PhilHealth Identification No. (PIN)"
+                value={profile.pin || ''}
+                onChangeText={(txt) =>
+                  setProfile({
+                    ...profile,
+                    pin: txt,
+                    ...(profile.memberType === 'MM' ? { memberPin: txt } : {}),
+                  })
+                }
+                placeholder="12-digit PIN"
+                keyboardType="numeric"
+              />
+              <View style={styles.fieldCol}>
+                <FieldLabel>Member type</FieldLabel>
+                <View style={styles.chipRow}>
+                  <Chip
+                    label="Member (MM)"
+                    active={profile.memberType === 'MM'}
+                    onPress={() =>
+                      setProfile({
+                        ...profile,
+                        memberType: 'MM',
+                        memberPin: profile.pin || '',
+                      })
+                    }
+                  />
+                  <Chip
+                    label="Dependent (DD)"
+                    active={profile.memberType === 'DD'}
+                    onPress={() =>
+                      setProfile({
+                        ...profile,
+                        memberType: 'DD',
+                        memberLastName: profile.memberLastName || patient?.lastName || '',
+                        dependentRelationship: profile.dependentRelationship || (isPediatric ? 'C' : 'S'),
+                      })
+                    }
+                  />
+                </View>
               </View>
-              <ThemedText style={styles.patientSubText}>
-                {patient.fullName} • {patient.gender} • {patient.age} yrs • PIN: {patient.philHealthNumber || 'Not Enlisted'}
-              </ThemedText>
+              <Input
+                containerStyle={styles.fieldCol}
+                label="Blood type"
+                value={profile.bloodType || ''}
+                onChangeText={(txt) => setProfile({ ...profile, bloodType: txt })}
+                placeholder="e.g. O+, A+, B+"
+              />
             </View>
-            <Pressable onPress={onClose} style={styles.closeBtn}>
-              <ThemedText style={styles.closeBtnText}>✕</ThemedText>
-            </Pressable>
-          </View>
 
-          {/* Tab Navigation */}
-          <View style={styles.tabBar}>
-            <Pressable
-              onPress={() => setActiveTab('general')}
-              style={[styles.tabItem, activeTab === 'general' && styles.tabItemActive]}
-            >
-              <ThemedText style={[styles.tabText, activeTab === 'general' && styles.tabTextActive]}>
-                General & Vitals
-              </ThemedText>
-            </Pressable>
-            <Pressable
-              onPress={() => setActiveTab('medical')}
-              style={[styles.tabItem, activeTab === 'medical' && styles.tabItemActive]}
-            >
-              <ThemedText style={[styles.tabText, activeTab === 'medical' && styles.tabTextActive]}>
-                Medical & Family
-              </ThemedText>
-            </Pressable>
-            <Pressable
-              onPress={() => setActiveTab('lifestyle')}
-              style={[styles.tabItem, activeTab === 'lifestyle' && styles.tabItemActive]}
-            >
-              <ThemedText style={[styles.tabText, activeTab === 'lifestyle' && styles.tabTextActive]}>
-                Social & Vaccines
-              </ThemedText>
-            </Pressable>
-            <Pressable
-              onPress={() => setActiveTab('reproductive')}
-              style={[styles.tabItem, activeTab === 'reproductive' && styles.tabItemActive]}
-            >
-              <ThemedText style={[styles.tabText, activeTab === 'reproductive' && styles.tabTextActive]}>
-                Women's Health
-              </ThemedText>
-            </Pressable>
-            <Pressable
-              onPress={() => setActiveTab('ncd')}
-              style={[styles.tabItem, activeTab === 'ncd' && styles.tabItemActive]}
-            >
-              <ThemedText style={[styles.tabText, activeTab === 'ncd' && styles.tabTextActive]}>
-                PhilPEN (24)
-              </ThemedText>
-            </Pressable>
-          </View>
+            {profile.memberType === 'DD' && (
+              <View style={styles.sponsorCard}>
+                <View style={styles.sponsorHeader}>
+                  <Badge label="Sponsor" variant="primary" />
+                  <ThemedText variant="bodyBold">Principal member credentials</ThemedText>
+                </View>
+                <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                  Required for PhilHealth Konsulta dependent claim transmittal. Enter the principal member's legal details.
+                </ThemedText>
 
-          {loading || !profile ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#0284C7" />
-              <ThemedText style={styles.loadingText}>Loading PhilHealth clinical profile...</ThemedText>
+                <View style={styles.formRow}>
+                  <Input
+                    containerStyle={styles.fieldCol}
+                    label="Principal member PIN"
+                    required
+                    value={profile.memberPin || ''}
+                    onChangeText={(txt) => setProfile({ ...profile, memberPin: txt })}
+                    placeholder="12-digit PIN"
+                    keyboardType="numeric"
+                  />
+                  <View style={styles.fieldCol}>
+                    <FieldLabel>Relationship to principal member *</FieldLabel>
+                    <View style={styles.chipRow}>
+                      {[
+                        { label: 'Child (C)', value: 'C' },
+                        { label: 'Spouse (S)', value: 'S' },
+                        { label: 'Parent (P)', value: 'P' },
+                        { label: 'Disabled (D)', value: 'D' },
+                      ].map((rel) => (
+                        <Chip
+                          key={rel.value}
+                          label={rel.label}
+                          active={profile.dependentRelationship === rel.value}
+                          onPress={() => setProfile({ ...profile, dependentRelationship: rel.value })}
+                        />
+                      ))}
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.formRow}>
+                  <Input
+                    containerStyle={styles.fieldCol}
+                    label="Member last name"
+                    required
+                    value={profile.memberLastName || ''}
+                    onChangeText={(txt) => setProfile({ ...profile, memberLastName: txt })}
+                    placeholder="Last name"
+                  />
+                  <Input
+                    containerStyle={styles.fieldCol}
+                    label="Member first name"
+                    required
+                    value={profile.memberFirstName || ''}
+                    onChangeText={(txt) => setProfile({ ...profile, memberFirstName: txt })}
+                    placeholder="First name"
+                  />
+                  <Input
+                    containerStyle={styles.fieldCol}
+                    label="Middle name"
+                    value={profile.memberMiddleName || ''}
+                    onChangeText={(txt) => setProfile({ ...profile, memberMiddleName: txt })}
+                    placeholder="Middle name"
+                  />
+                </View>
+
+                <View style={styles.formRow}>
+                  <Input
+                    containerStyle={styles.fieldCol}
+                    label="Member suffix"
+                    value={profile.memberSuffix || ''}
+                    onChangeText={(txt) => setProfile({ ...profile, memberSuffix: txt })}
+                    placeholder="e.g. Jr, Sr, III"
+                  />
+                  <Input
+                    containerStyle={styles.fieldCol}
+                    label="Member date of birth"
+                    required
+                    value={profile.memberBirthDate || ''}
+                    onChangeText={(txt) => setProfile({ ...profile, memberBirthDate: txt })}
+                    placeholder="YYYY-MM-DD"
+                  />
+                </View>
+              </View>
+            )}
+
+            <SectionTitle spaced>
+              Vitals and anthropometrics {isPediatric ? '(pediatric protocol)' : '(adult protocol)'}
+            </SectionTitle>
+            <View style={styles.formRow}>
+              <Input
+                containerStyle={styles.fieldCol}
+                label="BP systolic (mmHg)"
+                value={profile.systolic || ''}
+                onChangeText={(txt) => setProfile({ ...profile, systolic: txt })}
+                keyboardType="numeric"
+              />
+              <Input
+                containerStyle={styles.fieldCol}
+                label="BP diastolic (mmHg)"
+                value={profile.diastolic || ''}
+                onChangeText={(txt) => setProfile({ ...profile, diastolic: txt })}
+                keyboardType="numeric"
+              />
+              <Input
+                containerStyle={styles.fieldCol}
+                label="Heart rate (bpm)"
+                value={profile.heartRate || ''}
+                onChangeText={(txt) => setProfile({ ...profile, heartRate: txt })}
+                keyboardType="numeric"
+              />
+              <Input
+                containerStyle={styles.fieldCol}
+                label="Temperature (°C)"
+                value={profile.temperature || ''}
+                onChangeText={(txt) => setProfile({ ...profile, temperature: txt })}
+                keyboardType="numeric"
+              />
             </View>
-          ) : (
-            <ScrollView style={styles.scrollArea} contentContainerStyle={styles.scrollContent}>
-              {/* TAB 1: General & Vitals */}
-              {activeTab === 'general' && (
-                <View style={styles.sectionCard}>
-                  <ThemedText style={styles.sectionTitle}>Identification & Registration</ThemedText>
+
+            <View style={styles.formRow}>
+              <Input
+                containerStyle={styles.fieldCol}
+                label="Height / length (cm)"
+                value={profile.heightCm || ''}
+                onChangeText={(txt) => setProfile({ ...profile, heightCm: txt })}
+                keyboardType="numeric"
+              />
+              <Input
+                containerStyle={styles.fieldCol}
+                label="Weight (kg)"
+                value={profile.weightKg || ''}
+                onChangeText={(txt) => setProfile({ ...profile, weightKg: txt })}
+                keyboardType="numeric"
+              />
+              {!isPediatric ? (
+                <>
+                  <Input
+                    containerStyle={styles.fieldCol}
+                    label="Waist circumference (cm)"
+                    value={profile.waistCm || ''}
+                    onChangeText={(txt) => setProfile({ ...profile, waistCm: txt })}
+                    keyboardType="numeric"
+                  />
+                  <Input
+                    containerStyle={styles.fieldCol}
+                    label="Hip circumference (cm)"
+                    value={profile.hipCm || ''}
+                    onChangeText={(txt) => setProfile({ ...profile, hipCm: txt })}
+                    keyboardType="numeric"
+                  />
+                </>
+              ) : (
+                <>
+                  <Input
+                    containerStyle={styles.fieldCol}
+                    label="Head circumference (cm)"
+                    value={profile.headCircCm || ''}
+                    onChangeText={(txt) => setProfile({ ...profile, headCircCm: txt })}
+                    keyboardType="numeric"
+                  />
+                  <Input
+                    containerStyle={styles.fieldCol}
+                    label="MUAC (cm)"
+                    value={profile.muacCm || ''}
+                    onChangeText={(txt) => setProfile({ ...profile, muacCm: txt })}
+                    keyboardType="numeric"
+                  />
+                </>
+              )}
+            </View>
+
+            <SectionTitle spaced>Organ systems examination</SectionTitle>
+            <View style={styles.organsGrid}>
+              {ORGAN_SYSTEMS.map((item) => {
+                const isNorm = (profile as any)[item.key] === '1';
+                return (
+                  <View key={item.key} style={styles.organRow}>
+                    <ThemedText variant="bodyBold" color={theme.colors.textSecondary}>
+                      {item.label}
+                    </ThemedText>
+                    <View style={styles.chipRow}>
+                      <Chip
+                        label="Normal"
+                        tone="success"
+                        active={isNorm}
+                        onPress={() => setProfile({ ...profile, [item.key]: '1' })}
+                      />
+                      <Chip
+                        label="Findings"
+                        tone="warning"
+                        active={!isNorm}
+                        onPress={() => setProfile({ ...profile, [item.key]: '2' })}
+                      />
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
+        {/* TAB 2: Medical and family */}
+        {activeTab === 'medical' && (
+          <View>
+            <SectionTitle>Past medical history (personal)</SectionTitle>
+            <Helper>Select documented non-communicable and chronic diseases for the patient.</Helper>
+            <View style={styles.conditionsWrap}>
+              {CONDITIONS.map((c) => (
+                <Chip
+                  key={c.code}
+                  label={c.desc}
+                  marker
+                  tone="success"
+                  active={profile.medicalHistories.some((m) => m.code === c.code)}
+                  onPress={() => toggleCondition(c.code, c.desc)}
+                />
+              ))}
+            </View>
+
+            <SectionTitle spaced>Family medical history</SectionTitle>
+            <Helper>Hereditary and familial risk factors.</Helper>
+            <View style={styles.conditionsWrap}>
+              {FAMILY_CONDITIONS.map((c) => (
+                <Chip
+                  key={`fam-${c.code}`}
+                  label={c.desc}
+                  marker
+                  tone="success"
+                  active={profile.familyHistories.some((m) => m.code === c.code)}
+                  onPress={() => toggleFamilyCondition(c.code, c.desc)}
+                />
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* TAB 3: Social and vaccines */}
+        {activeTab === 'lifestyle' && (
+          <View>
+            <SectionTitle>Social and behavioral history</SectionTitle>
+            {isPediatric ? (
+              <View style={styles.pediatricBanner}>
+                <ThemedText variant="small" color={theme.colors.infoText}>
+                  Pediatric patient ({age} yrs): behavioral factors (smoking, alcohol, substance use) are preset to
+                  non-applicable / non-user per PhilHealth protocol.
+                </ThemedText>
+              </View>
+            ) : (
+              <View style={styles.behavioralGrid}>
+                <View style={styles.behavioralRow}>
+                  <ThemedText variant="bodyBold" color={theme.colors.textSecondary}>
+                    Tobacco / cigarette smoker?
+                  </ThemedText>
+                  <YesNo value={!!profile.isSmoker} onChange={(v) => setProfile({ ...profile, isSmoker: v })} />
+                </View>
+
+                <View style={styles.behavioralRow}>
+                  <ThemedText variant="bodyBold" color={theme.colors.textSecondary}>
+                    Alcohol drinker?
+                  </ThemedText>
+                  <YesNo
+                    value={!!profile.isAlcoholDrinker}
+                    onChange={(v) => setProfile({ ...profile, isAlcoholDrinker: v })}
+                  />
+                </View>
+              </View>
+            )}
+
+            <SectionTitle spaced>Immunizations (vaccines)</SectionTitle>
+            {isPediatric &&
+              renderImmunizations(
+                'Child vaccines (EPI)',
+                'child',
+                ['BCG', 'DPT', 'OPV', 'MEASLES', 'HEPB', 'HIB', 'ROTA', 'PCV'],
+                profile.childImmunizations
+              )}
+
+            {isFemale &&
+              age >= 10 &&
+              age <= 49 &&
+              renderImmunizations(
+                'Young woman vaccines (HPV / Rubella)',
+                'youngWoman',
+                ['HPV', 'RUBELLA'],
+                profile.youngWomanImmunizations
+              )}
+
+            {isSenior && renderImmunizations('Senior citizen vaccines', 'elderly', ['FLU', 'PNEUM'], profile.elderlyImmunizations)}
+          </View>
+        )}
+
+        {/* TAB 4: Reproductive (women's health) */}
+        {activeTab === 'reproductive' && (
+          <View>
+            {!isFemale ? (
+              <View style={styles.noticeBox}>
+                <ThemedText variant="h3" color={theme.colors.textSecondary}>
+                  Not applicable
+                </ThemedText>
+                <ThemedText variant="body" color={theme.colors.textMuted}>
+                  Menstrual and obstetric history does not apply to male patients. These sections are sent to PhilHealth
+                  as not applicable with zero counts.
+                </ThemedText>
+              </View>
+            ) : (
+              <>
+                <View style={styles.toggleHeader}>
+                  <View style={styles.toggleHeaderText}>
+                    <SectionTitle>Menstrual history</SectionTitle>
+                    <Helper>Record observed menstrual history. Can be marked not applicable.</Helper>
+                  </View>
+                  <View style={styles.chipRow}>
+                    <Chip
+                      label="Not applicable (N)"
+                      active={!profile.menstrualApplicable}
+                      onPress={() => setProfile({ ...profile, menstrualApplicable: false })}
+                    />
+                    <Chip
+                      label="Applicable (Y)"
+                      active={!!profile.menstrualApplicable}
+                      onPress={() => setProfile({ ...profile, menstrualApplicable: true })}
+                    />
+                  </View>
+                </View>
+
+                {profile.menstrualApplicable ? (
                   <View style={styles.formRow}>
-                    <View style={styles.fieldCol}>
-                      <ThemedText style={styles.label}>PhilHealth Identification No. (PIN)</ThemedText>
-                      <TextInput
-                        style={styles.input}
-                        value={profile.pin || ''}
+                    <Input
+                      containerStyle={styles.fieldCol}
+                      label="Menarche age (yrs)"
+                      value={profile.menarcheAge || ''}
+                      onChangeText={(txt) => setProfile({ ...profile, menarcheAge: txt, menstrualApplicable: true })}
+                      placeholder="Age in years"
+                      keyboardType="numeric"
+                    />
+                    <Input
+                      containerStyle={styles.fieldCol}
+                      label="LMP date"
+                      value={profile.lastMensPeriod || ''}
+                      onChangeText={(txt) => setProfile({ ...profile, lastMensPeriod: txt, menstrualApplicable: true })}
+                      placeholder="YYYY-MM-DD"
+                    />
+                    <Input
+                      containerStyle={styles.fieldCol}
+                      label="Duration (days)"
+                      value={profile.periodDurationDays || ''}
+                      onChangeText={(txt) => setProfile({ ...profile, periodDurationDays: txt })}
+                      placeholder="Days"
+                      keyboardType="numeric"
+                    />
+                    <Input
+                      containerStyle={styles.fieldCol}
+                      label="Cycle interval (days)"
+                      value={profile.cycleIntervalDays || ''}
+                      onChangeText={(txt) => setProfile({ ...profile, cycleIntervalDays: txt })}
+                      placeholder="Days"
+                      keyboardType="numeric"
+                    />
+                  </View>
+                ) : (
+                  <View style={styles.noticeBox}>
+                    <ThemedText variant="body" color={theme.colors.textMuted}>
+                      Menstrual history is marked not applicable (N). It will be left blank in PhilHealth transmissions.
+                    </ThemedText>
+                  </View>
+                )}
+
+                <View style={[styles.toggleHeader, styles.toggleHeaderSpaced]}>
+                  <View style={styles.toggleHeaderText}>
+                    <SectionTitle>Obstetric history (pregnancies)</SectionTitle>
+                    <Helper>Record obstetric history if applicable. Can be changed for adolescent or adult patients.</Helper>
+                  </View>
+                  <View style={styles.chipRow}>
+                    <Chip
+                      label="Not applicable (N)"
+                      active={!profile.pregnancyApplicable}
+                      onPress={() =>
+                        setProfile({
+                          ...profile,
+                          pregnancyApplicable: false,
+                          gravida: 0,
+                          para: 0,
+                          fullTermCount: 0,
+                          prematureCount: 0,
+                          abortionCount: 0,
+                          livingChildrenCount: 0,
+                        })
+                      }
+                    />
+                    <Chip
+                      label="Applicable (Y)"
+                      active={!!profile.pregnancyApplicable}
+                      onPress={() =>
+                        setProfile({
+                          ...profile,
+                          pregnancyApplicable: true,
+                          gravida: profile.gravida > 0 ? profile.gravida : 1,
+                        })
+                      }
+                    />
+                  </View>
+                </View>
+
+                {profile.pregnancyApplicable ? (
+                  <>
+                    <View style={styles.formRow}>
+                      <Input
+                        containerStyle={styles.fieldCol}
+                        label="Gravida (total pregnancies)"
+                        value={profile.gravida.toString()}
                         onChangeText={(txt) =>
                           setProfile({
                             ...profile,
-                            pin: txt,
-                            ...(profile.memberType === 'MM' ? { memberPin: txt } : {}),
+                            gravida: parseInt(txt, 10) || 0,
+                            pregnancyApplicable: true,
                           })
                         }
-                        placeholder="12-digit PIN"
                         keyboardType="numeric"
                       />
-                    </View>
-                    <View style={styles.fieldCol}>
-                      <ThemedText style={styles.label}>Member Type</ThemedText>
-                      <View style={styles.chipRow}>
-                        <Pressable
-                          onPress={() =>
-                            setProfile({
-                              ...profile,
-                              memberType: 'MM',
-                              memberPin: profile.pin || '',
-                            })
-                          }
-                          style={[styles.chip, profile.memberType === 'MM' && styles.chipActive]}
-                        >
-                          <ThemedText style={profile.memberType === 'MM' ? styles.chipTextActive : styles.chipText}>
-                            Member (MM)
-                          </ThemedText>
-                        </Pressable>
-                        <Pressable
-                          onPress={() =>
-                            setProfile({
-                              ...profile,
-                              memberType: 'DD',
-                              memberLastName: profile.memberLastName || patient?.lastName || '',
-                              dependentRelationship: profile.dependentRelationship || (isPediatric ? 'C' : 'S'),
-                            })
-                          }
-                          style={[styles.chip, profile.memberType === 'DD' && styles.chipActive]}
-                        >
-                          <ThemedText style={profile.memberType === 'DD' ? styles.chipTextActive : styles.chipText}>
-                            Dependent (DD)
-                          </ThemedText>
-                        </Pressable>
-                      </View>
-                    </View>
-                    <View style={styles.fieldCol}>
-                      <ThemedText style={styles.label}>Blood Type</ThemedText>
-                      <TextInput
-                        style={styles.input}
-                        value={profile.bloodType || 'O+'}
-                        onChangeText={(txt) => setProfile({ ...profile, bloodType: txt })}
-                        placeholder="e.g. O+, A+, B+"
-                      />
-                    </View>
-                  </View>
-
-                  {profile.memberType === 'DD' && (
-                    <View style={styles.sponsorCard}>
-                      <View style={styles.sponsorHeader}>
-                        <ThemedText style={styles.sponsorBadge}>SPONSOR</ThemedText>
-                        <ThemedText style={styles.sponsorTitle}>Principal Member / Sponsor Credentials</ThemedText>
-                      </View>
-                      <ThemedText style={styles.sponsorSubtitle}>
-                        Required for PhilHealth Konsulta dependent claim transmittal. Enter the sponsoring Principal Member's legal details.
-                      </ThemedText>
-
-                      <View style={[styles.formRow, { marginTop: 12 }]}>
-                        <View style={styles.fieldCol}>
-                          <ThemedText style={styles.label}>Principal Member PIN *</ThemedText>
-                          <TextInput
-                            style={styles.input}
-                            value={profile.memberPin || ''}
-                            onChangeText={(txt) => setProfile({ ...profile, memberPin: txt })}
-                            placeholder="12-digit Sponsor PIN"
-                            keyboardType="numeric"
-                          />
-                        </View>
-                        <View style={styles.fieldCol}>
-                          <ThemedText style={styles.label}>Relationship to Principal Member *</ThemedText>
-                          <View style={styles.chipRow}>
-                            {[
-                              { label: 'Child (C)', value: 'C' },
-                              { label: 'Spouse (S)', value: 'S' },
-                              { label: 'Parent (P)', value: 'P' },
-                              { label: 'Disabled (D)', value: 'D' },
-                            ].map((rel) => (
-                              <Pressable
-                                key={rel.value}
-                                onPress={() => setProfile({ ...profile, dependentRelationship: rel.value })}
-                                style={[
-                                  styles.chip,
-                                  profile.dependentRelationship === rel.value && styles.chipActive,
-                                ]}
-                              >
-                                <ThemedText
-                                  style={
-                                    profile.dependentRelationship === rel.value
-                                      ? styles.chipTextActive
-                                      : styles.chipText
-                                  }
-                                >
-                                  {rel.label}
-                                </ThemedText>
-                              </Pressable>
-                            ))}
-                          </View>
-                        </View>
-                      </View>
-
-                      <View style={[styles.formRow, { marginTop: 12 }]}>
-                        <View style={styles.fieldCol}>
-                          <ThemedText style={styles.label}>Member Last Name *</ThemedText>
-                          <TextInput
-                            style={styles.input}
-                            value={profile.memberLastName || ''}
-                            onChangeText={(txt) => setProfile({ ...profile, memberLastName: txt })}
-                            placeholder="Last Name"
-                          />
-                        </View>
-                        <View style={styles.fieldCol}>
-                          <ThemedText style={styles.label}>Member First Name *</ThemedText>
-                          <TextInput
-                            style={styles.input}
-                            value={profile.memberFirstName || ''}
-                            onChangeText={(txt) => setProfile({ ...profile, memberFirstName: txt })}
-                            placeholder="First Name"
-                          />
-                        </View>
-                        <View style={styles.fieldCol}>
-                          <ThemedText style={styles.label}>Middle Name</ThemedText>
-                          <TextInput
-                            style={styles.input}
-                            value={profile.memberMiddleName || ''}
-                            onChangeText={(txt) => setProfile({ ...profile, memberMiddleName: txt })}
-                            placeholder="Middle Name"
-                          />
-                        </View>
-                      </View>
-
-                      <View style={[styles.formRow, { marginTop: 12 }]}>
-                        <View style={styles.fieldCol}>
-                          <ThemedText style={styles.label}>Member Suffix</ThemedText>
-                          <TextInput
-                            style={styles.input}
-                            value={profile.memberSuffix || ''}
-                            onChangeText={(txt) => setProfile({ ...profile, memberSuffix: txt })}
-                            placeholder="e.g. Jr, Sr, III"
-                          />
-                        </View>
-                        <View style={styles.fieldCol}>
-                          <ThemedText style={styles.label}>Member Date of Birth (YYYY-MM-DD) *</ThemedText>
-                          <TextInput
-                            style={styles.input}
-                            value={profile.memberBirthDate || ''}
-                            onChangeText={(txt) => setProfile({ ...profile, memberBirthDate: txt })}
-                            placeholder="YYYY-MM-DD"
-                          />
-                        </View>
-                      </View>
-                    </View>
-                  )}
-
-                  <ThemedText style={[styles.sectionTitle, { marginTop: 20 }]}>
-                    Vitals & Anthropometrics {isPediatric ? '(Pediatric Protocol)' : '(Adult Protocol)'}
-                  </ThemedText>
-                  <View style={styles.formRow}>
-                    <View style={styles.fieldCol}>
-                      <ThemedText style={styles.label}>BP Systolic (mmHg)</ThemedText>
-                      <TextInput
-                        style={styles.input}
-                        value={profile.systolic || ''}
-                        onChangeText={(txt) => setProfile({ ...profile, systolic: txt })}
+                      <Input
+                        containerStyle={styles.fieldCol}
+                        label="Para (total deliveries)"
+                        value={profile.para.toString()}
+                        onChangeText={(txt) => setProfile({ ...profile, para: parseInt(txt, 10) || 0 })}
                         keyboardType="numeric"
                       />
-                    </View>
-                    <View style={styles.fieldCol}>
-                      <ThemedText style={styles.label}>BP Diastolic (mmHg)</ThemedText>
-                      <TextInput
-                        style={styles.input}
-                        value={profile.diastolic || ''}
-                        onChangeText={(txt) => setProfile({ ...profile, diastolic: txt })}
-                        keyboardType="numeric"
-                      />
-                    </View>
-                    <View style={styles.fieldCol}>
-                      <ThemedText style={styles.label}>Heart Rate (bpm)</ThemedText>
-                      <TextInput
-                        style={styles.input}
-                        value={profile.heartRate || ''}
-                        onChangeText={(txt) => setProfile({ ...profile, heartRate: txt })}
-                        keyboardType="numeric"
-                      />
-                    </View>
-                    <View style={styles.fieldCol}>
-                      <ThemedText style={styles.label}>Temp (°C)</ThemedText>
-                      <TextInput
-                        style={styles.input}
-                        value={profile.temperature || ''}
-                        onChangeText={(txt) => setProfile({ ...profile, temperature: txt })}
-                        keyboardType="numeric"
-                      />
-                    </View>
-                  </View>
-
-                  <View style={styles.formRow}>
-                    <View style={styles.fieldCol}>
-                      <ThemedText style={styles.label}>Height / Length (cm)</ThemedText>
-                      <TextInput
-                        style={styles.input}
-                        value={profile.heightCm || ''}
-                        onChangeText={(txt) => setProfile({ ...profile, heightCm: txt })}
-                        keyboardType="numeric"
-                      />
-                    </View>
-                    <View style={styles.fieldCol}>
-                      <ThemedText style={styles.label}>Weight (kg)</ThemedText>
-                      <TextInput
-                        style={styles.input}
-                        value={profile.weightKg || ''}
-                        onChangeText={(txt) => setProfile({ ...profile, weightKg: txt })}
-                        keyboardType="numeric"
-                      />
-                    </View>
-                    {!isPediatric ? (
-                      <>
-                        <View style={styles.fieldCol}>
-                          <ThemedText style={styles.label}>Waist Circ (cm)</ThemedText>
-                          <TextInput
-                            style={styles.input}
-                            value={profile.waistCm || ''}
-                            onChangeText={(txt) => setProfile({ ...profile, waistCm: txt })}
-                            keyboardType="numeric"
-                          />
-                        </View>
-                        <View style={styles.fieldCol}>
-                          <ThemedText style={styles.label}>Hip Circ (cm)</ThemedText>
-                          <TextInput
-                            style={styles.input}
-                            value={profile.hipCm || ''}
-                            onChangeText={(txt) => setProfile({ ...profile, hipCm: txt })}
-                            keyboardType="numeric"
-                          />
-                        </View>
-                      </>
-                    ) : (
-                      <>
-                        <View style={styles.fieldCol}>
-                          <ThemedText style={styles.label}>Head Circ (cm)</ThemedText>
-                          <TextInput
-                            style={styles.input}
-                            value={profile.headCircCm || ''}
-                            onChangeText={(txt) => setProfile({ ...profile, headCircCm: txt })}
-                            keyboardType="numeric"
-                          />
-                        </View>
-                        <View style={styles.fieldCol}>
-                          <ThemedText style={styles.label}>MUAC (cm)</ThemedText>
-                          <TextInput
-                            style={styles.input}
-                            value={profile.muacCm || ''}
-                            onChangeText={(txt) => setProfile({ ...profile, muacCm: txt })}
-                            keyboardType="numeric"
-                          />
-                        </View>
-                      </>
-                    )}
-                  </View>
-
-                  <ThemedText style={[styles.sectionTitle, { marginTop: 20 }]}>Organ Systems Examination</ThemedText>
-                  <View style={styles.organsGrid}>
-                    {[
-                      { key: 'skinId', remKey: 'skinRemarks', label: 'Skin' },
-                      { key: 'heentId', remKey: 'heentRemarks', label: 'HEENT' },
-                      { key: 'chestId', remKey: 'chestRemarks', label: 'Chest / Lungs' },
-                      { key: 'heartId', remKey: 'heartRemarks', label: 'Heart' },
-                      { key: 'abdomenId', remKey: 'abdomenRemarks', label: 'Abdomen' },
-                      { key: 'neuroId', remKey: 'neuroRemarks', label: 'Neurological' },
-                      { key: 'guId', remKey: 'guRemarks', label: 'Genitourinary' },
-                      { key: 'rectalId', remKey: 'rectalRemarks', label: 'Rectal' },
-                    ].map((item) => {
-                      const isNorm = (profile as any)[item.key] === '1';
-                      return (
-                        <View key={item.key} style={styles.organRow}>
-                          <ThemedText style={styles.organLabel}>{item.label}</ThemedText>
-                          <View style={styles.organControls}>
-                            <Pressable
-                              onPress={() => setProfile({ ...profile, [item.key]: '1' })}
-                              style={[styles.smallChip, isNorm && styles.smallChipGreen]}
-                            >
-                              <ThemedText style={isNorm ? styles.smallChipTextActive : styles.smallChipText}>
-                                Normal (1)
-                              </ThemedText>
-                            </Pressable>
-                            <Pressable
-                              onPress={() => setProfile({ ...profile, [item.key]: '2' })}
-                              style={[styles.smallChip, !isNorm && styles.smallChipAmber]}
-                            >
-                              <ThemedText style={!isNorm ? styles.smallChipTextActive : styles.smallChipText}>
-                                Findings (2)
-                              </ThemedText>
-                            </Pressable>
-                          </View>
-                        </View>
-                      );
-                    })}
-                  </View>
-                </View>
-              )}
-
-              {/* TAB 2: Medical & Family */}
-              {activeTab === 'medical' && (
-                <View style={styles.sectionCard}>
-                  <ThemedText style={styles.sectionTitle}>Past Medical History (Personal)</ThemedText>
-                  <ThemedText style={styles.helperText}>
-                    Select documented non-communicable and chronic diseases for the patient:
-                  </ThemedText>
-                  <View style={styles.conditionsWrap}>
-                    {[
-                      { code: '011', desc: 'Hypertension' },
-                      { code: '006', desc: 'Diabetes Mellitus' },
-                      { code: '002', desc: 'Bronchial Asthma' },
-                      { code: '001', desc: 'Allergies' },
-                      { code: '007', desc: 'COPD / Emphysema' },
-                      { code: '004', desc: 'Stroke / CVD' },
-                      { code: '005', desc: 'Coronary Artery Disease' },
-                      { code: '003', desc: 'Cancer / Malignancy' },
-                      { code: '010', desc: 'Dyslipidemia' },
-                      { code: '015', desc: 'Tuberculosis' },
-                    ].map((c) => {
-                      const active = profile.medicalHistories.some((m) => m.code === c.code);
-                      return (
-                        <Pressable
-                          key={c.code}
-                          onPress={() => toggleCondition(c.code, c.desc)}
-                          style={[styles.conditionChip, active && styles.conditionChipActive]}
-                        >
-                          <ThemedText style={active ? styles.conditionChipTextActive : styles.conditionChipText}>
-                            {active ? '✓ ' : '+ '}
-                            {c.desc}
-                          </ThemedText>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-
-                  <ThemedText style={[styles.sectionTitle, { marginTop: 24 }]}>Family Medical History</ThemedText>
-                  <ThemedText style={styles.helperText}>Hereditary and familial risk factors:</ThemedText>
-                  <View style={styles.conditionsWrap}>
-                    {[
-                      { code: '011', desc: 'Hypertension' },
-                      { code: '006', desc: 'Diabetes Mellitus' },
-                      { code: '003', desc: 'Cancer' },
-                      { code: '004', desc: 'Stroke' },
-                      { code: '005', desc: 'Heart Disease' },
-                      { code: '002', desc: 'Asthma' },
-                    ].map((c) => {
-                      const active = profile.familyHistories.some((m) => m.code === c.code);
-                      return (
-                        <Pressable
-                          key={`fam-${c.code}`}
-                          onPress={() => toggleFamilyCondition(c.code, c.desc)}
-                          style={[styles.conditionChip, active && styles.conditionChipActive]}
-                        >
-                          <ThemedText style={active ? styles.conditionChipTextActive : styles.conditionChipText}>
-                            {active ? '✓ ' : '+ '}
-                            {c.desc}
-                          </ThemedText>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </View>
-              )}
-
-              {/* TAB 3: Social & Vaccines */}
-              {activeTab === 'lifestyle' && (
-                <View style={styles.sectionCard}>
-                  <ThemedText style={styles.sectionTitle}>Social & Behavioral History</ThemedText>
-                  {isPediatric ? (
-                    <View style={styles.pediatricBanner}>
-                      <ThemedText style={styles.bannerText}>
-                        👶 Pediatric patient ({age} yrs): Behavioral factors (smoking, alcohol, substance use) are
-                        preset to non-applicable / non-user per PhilHealth protocol.
-                      </ThemedText>
-                    </View>
-                  ) : (
-                    <View style={styles.behavioralGrid}>
-                      <View style={styles.behavioralRow}>
-                        <ThemedText style={styles.label}>Tobacco / Cigarette Smoker?</ThemedText>
+                      <View style={styles.fieldCol}>
+                        <FieldLabel>Delivery type</FieldLabel>
                         <View style={styles.chipRow}>
-                          <Pressable
-                            onPress={() => setProfile({ ...profile, isSmoker: false })}
-                            style={[styles.chip, !profile.isSmoker && styles.chipActive]}
-                          >
-                            <ThemedText style={!profile.isSmoker ? styles.chipTextActive : styles.chipText}>No</ThemedText>
-                          </Pressable>
-                          <Pressable
-                            onPress={() => setProfile({ ...profile, isSmoker: true })}
-                            style={[styles.chip, profile.isSmoker && styles.chipActive]}
-                          >
-                            <ThemedText style={profile.isSmoker ? styles.chipTextActive : styles.chipText}>Yes</ThemedText>
-                          </Pressable>
+                          <Chip
+                            label="Vaginal (V)"
+                            active={(profile.deliveryType || 'V') === 'V'}
+                            onPress={() => setProfile({ ...profile, deliveryType: 'V' })}
+                          />
+                          <Chip
+                            label="Cesarean (C)"
+                            active={profile.deliveryType === 'C'}
+                            onPress={() => setProfile({ ...profile, deliveryType: 'C' })}
+                          />
                         </View>
                       </View>
+                      <Input
+                        containerStyle={styles.fieldCol}
+                        label="Full-term deliveries"
+                        value={profile.fullTermCount.toString()}
+                        onChangeText={(txt) => setProfile({ ...profile, fullTermCount: parseInt(txt, 10) || 0 })}
+                        keyboardType="numeric"
+                      />
+                    </View>
 
-                      <View style={styles.behavioralRow}>
-                        <ThemedText style={styles.label}>Alcohol Drinker?</ThemedText>
-                        <View style={styles.chipRow}>
-                          <Pressable
-                            onPress={() => setProfile({ ...profile, isAlcoholDrinker: false })}
-                            style={[styles.chip, !profile.isAlcoholDrinker && styles.chipActive]}
-                          >
-                            <ThemedText style={!profile.isAlcoholDrinker ? styles.chipTextActive : styles.chipText}>No</ThemedText>
-                          </Pressable>
-                          <Pressable
-                            onPress={() => setProfile({ ...profile, isAlcoholDrinker: true })}
-                            style={[styles.chip, profile.isAlcoholDrinker && styles.chipActive]}
-                          >
-                            <ThemedText style={profile.isAlcoholDrinker ? styles.chipTextActive : styles.chipText}>Yes</ThemedText>
-                          </Pressable>
-                        </View>
+                    <View style={styles.formRow}>
+                      <Input
+                        containerStyle={styles.fieldCol}
+                        label="Premature count"
+                        value={profile.prematureCount.toString()}
+                        onChangeText={(txt) => setProfile({ ...profile, prematureCount: parseInt(txt, 10) || 0 })}
+                        keyboardType="numeric"
+                      />
+                      <Input
+                        containerStyle={styles.fieldCol}
+                        label="Abortion count"
+                        value={profile.abortionCount.toString()}
+                        onChangeText={(txt) => setProfile({ ...profile, abortionCount: parseInt(txt, 10) || 0 })}
+                        keyboardType="numeric"
+                      />
+                      <Input
+                        containerStyle={styles.fieldCol}
+                        label="Living children count"
+                        value={profile.livingChildrenCount.toString()}
+                        onChangeText={(txt) => setProfile({ ...profile, livingChildrenCount: parseInt(txt, 10) || 0 })}
+                        keyboardType="numeric"
+                      />
+                      <View style={styles.fieldCol}>
+                        <FieldLabel>Pregnancy-induced hypertension / pre-eclampsia?</FieldLabel>
+                        <YesNo
+                          value={!!profile.preEclampsiaHypertension}
+                          onChange={(v) => setProfile({ ...profile, preEclampsiaHypertension: v })}
+                        />
                       </View>
                     </View>
-                  )}
-
-                  <ThemedText style={[styles.sectionTitle, { marginTop: 24 }]}>Immunizations (Vaccines)</ThemedText>
-                  {isPediatric && (
-                    <View style={{ marginBottom: 16 }}>
-                      <ThemedText style={styles.subHeading}>Child Vaccines (EPI)</ThemedText>
-                      <View style={styles.conditionsWrap}>
-                        {['BCG', 'DPT', 'OPV', 'MEASLES', 'HEPB', 'HIB', 'ROTA', 'PCV'].map((v) => {
-                          const active = profile.childImmunizations.includes(v);
-                          return (
-                            <Pressable
-                              key={v}
-                              onPress={() => toggleImmunization('child', v)}
-                              style={[styles.conditionChip, active && styles.conditionChipActive]}
-                            >
-                              <ThemedText style={active ? styles.conditionChipTextActive : styles.conditionChipText}>
-                                {active ? '✓ ' : '+ '}
-                                {v}
-                              </ThemedText>
-                            </Pressable>
-                          );
-                        })}
-                      </View>
-                    </View>
-                  )}
-
-                  {isFemale && age >= 10 && age <= 49 && (
-                    <View style={{ marginBottom: 16 }}>
-                      <ThemedText style={styles.subHeading}>Young Woman Vaccines (HPV / Rubella)</ThemedText>
-                      <View style={styles.conditionsWrap}>
-                        {['HPV', 'RUBELLA'].map((v) => {
-                          const active = profile.youngWomanImmunizations.includes(v);
-                          return (
-                            <Pressable
-                              key={v}
-                              onPress={() => toggleImmunization('youngWoman', v)}
-                              style={[styles.conditionChip, active && styles.conditionChipActive]}
-                            >
-                              <ThemedText style={active ? styles.conditionChipTextActive : styles.conditionChipText}>
-                                {active ? '✓ ' : '+ '}
-                                {v}
-                              </ThemedText>
-                            </Pressable>
-                          );
-                        })}
-                      </View>
-                    </View>
-                  )}
-
-                  {isSenior && (
-                    <View style={{ marginBottom: 16 }}>
-                      <ThemedText style={styles.subHeading}>Senior Citizen Vaccines</ThemedText>
-                      <View style={styles.conditionsWrap}>
-                        {['FLU', 'PNEUM'].map((v) => {
-                          const active = profile.elderlyImmunizations.includes(v);
-                          return (
-                            <Pressable
-                              key={v}
-                              onPress={() => toggleImmunization('elderly', v)}
-                              style={[styles.conditionChip, active && styles.conditionChipActive]}
-                            >
-                              <ThemedText style={active ? styles.conditionChipTextActive : styles.conditionChipText}>
-                                {active ? '✓ ' : '+ '}
-                                {v}
-                              </ThemedText>
-                            </Pressable>
-                          );
-                        })}
-                      </View>
-                    </View>
-                  )}
-                </View>
-              )}
-
-              {/* TAB 4: Reproductive (Women's Health) */}
-              {activeTab === 'reproductive' && (
-                <View style={styles.sectionCard}>
-                  {!isFemale ? (
-                    <View style={styles.maleNoticeBox}>
-                      <ThemedText style={styles.maleNoticeTitle}>Not Applicable</ThemedText>
-                      <ThemedText style={styles.maleNoticeText}>
-                        Menstrual and obstetric history is strictly not applicable for male patients. In PhilHealth PKA
-                        XML transmissions, these elements are automatically flagged with `pIsApplicable="N"` and zeroed
-                        counts to ensure schema validity.
-                      </ThemedText>
-                    </View>
-                  ) : (
-                    <>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                        <View style={{ flex: 1, paddingRight: 12 }}>
-                          <ThemedText style={styles.sectionTitle}>Menstrual History</ThemedText>
-                          <ThemedText style={styles.helperText}>
-                            Record observed menstrual history. Overwritable if not applicable.
-                          </ThemedText>
-                        </View>
-                        <View style={styles.chipRow}>
-                          <Pressable
-                            onPress={() => setProfile({ ...profile, menstrualApplicable: false })}
-                            style={[styles.chip, !profile.menstrualApplicable && styles.chipActive]}
-                          >
-                            <ThemedText style={!profile.menstrualApplicable ? styles.chipTextActive : styles.chipText}>
-                              Not Applicable (N)
-                            </ThemedText>
-                          </Pressable>
-                          <Pressable
-                            onPress={() => setProfile({ ...profile, menstrualApplicable: true })}
-                            style={[styles.chip, profile.menstrualApplicable && styles.chipActive]}
-                          >
-                            <ThemedText style={profile.menstrualApplicable ? styles.chipTextActive : styles.chipText}>
-                              Applicable (Y)
-                            </ThemedText>
-                          </Pressable>
-                        </View>
-                      </View>
-
-                      {profile.menstrualApplicable ? (
-                        <View style={styles.formRow}>
-                          <View style={styles.fieldCol}>
-                            <ThemedText style={styles.label}>Menarche Age (yrs)</ThemedText>
-                            <TextInput
-                              style={styles.input}
-                              value={profile.menarcheAge || ''}
-                              onChangeText={(txt) => setProfile({ ...profile, menarcheAge: txt, menstrualApplicable: true })}
-                              placeholder="Age in yrs"
-                              keyboardType="numeric"
-                            />
-                          </View>
-                          <View style={styles.fieldCol}>
-                            <ThemedText style={styles.label}>LMP Date (YYYY-MM-DD)</ThemedText>
-                            <TextInput
-                              style={styles.input}
-                              value={profile.lastMensPeriod || ''}
-                              onChangeText={(txt) => setProfile({ ...profile, lastMensPeriod: txt, menstrualApplicable: true })}
-                              placeholder="e.g. 2026-09-15"
-                            />
-                          </View>
-                          <View style={styles.fieldCol}>
-                            <ThemedText style={styles.label}>Duration (Days)</ThemedText>
-                            <TextInput
-                              style={styles.input}
-                              value={profile.periodDurationDays || ''}
-                              onChangeText={(txt) => setProfile({ ...profile, periodDurationDays: txt })}
-                              placeholder="Days"
-                              keyboardType="numeric"
-                            />
-                          </View>
-                          <View style={styles.fieldCol}>
-                            <ThemedText style={styles.label}>Cycle Interval (Days)</ThemedText>
-                            <TextInput
-                              style={styles.input}
-                              value={profile.cycleIntervalDays || ''}
-                              onChangeText={(txt) => setProfile({ ...profile, cycleIntervalDays: txt })}
-                              placeholder="Days"
-                              keyboardType="numeric"
-                            />
-                          </View>
-                        </View>
-                      ) : (
-                        <View style={[styles.maleNoticeBox, { marginTop: 0, marginBottom: 16 }]}>
-                          <ThemedText style={styles.maleNoticeText}>
-                            Menstrual history marked as Not Applicable (N). Will be output as blank in PhilHealth DTD transmissions.
-                          </ThemedText>
-                        </View>
-                      )}
-
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, marginBottom: 12 }}>
-                        <View style={{ flex: 1, paddingRight: 12 }}>
-                          <ThemedText style={styles.sectionTitle}>Obstetric History (Pregnancies)</ThemedText>
-                          <ThemedText style={styles.helperText}>
-                            Record obstetric history if applicable. Overwritable for adolescent or adult patients.
-                          </ThemedText>
-                        </View>
-                        <View style={styles.chipRow}>
-                          <Pressable
-                            onPress={() =>
-                              setProfile({
-                                ...profile,
-                                pregnancyApplicable: false,
-                                gravida: 0,
-                                para: 0,
-                                fullTermCount: 0,
-                                prematureCount: 0,
-                                abortionCount: 0,
-                                livingChildrenCount: 0,
-                              })
-                            }
-                            style={[styles.chip, !profile.pregnancyApplicable && styles.chipActive]}
-                          >
-                            <ThemedText style={!profile.pregnancyApplicable ? styles.chipTextActive : styles.chipText}>
-                              Not Applicable (N)
-                            </ThemedText>
-                          </Pressable>
-                          <Pressable
-                            onPress={() =>
-                              setProfile({
-                                ...profile,
-                                pregnancyApplicable: true,
-                                gravida: profile.gravida > 0 ? profile.gravida : 1,
-                              })
-                            }
-                            style={[styles.chip, profile.pregnancyApplicable && styles.chipActive]}
-                          >
-                            <ThemedText style={profile.pregnancyApplicable ? styles.chipTextActive : styles.chipText}>
-                              Applicable (Y)
-                            </ThemedText>
-                          </Pressable>
-                        </View>
-                      </View>
-
-                      {profile.pregnancyApplicable ? (
-                        <>
-                          <View style={styles.formRow}>
-                            <View style={styles.fieldCol}>
-                              <ThemedText style={styles.label}>Gravida (Total Pregnancies)</ThemedText>
-                              <TextInput
-                                style={styles.input}
-                                value={profile.gravida.toString()}
-                                onChangeText={(txt) =>
-                                  setProfile({
-                                    ...profile,
-                                    gravida: parseInt(txt, 10) || 0,
-                                    pregnancyApplicable: true,
-                                  })
-                                }
-                                keyboardType="numeric"
-                              />
-                            </View>
-                            <View style={styles.fieldCol}>
-                              <ThemedText style={styles.label}>Para (Total Deliveries)</ThemedText>
-                              <TextInput
-                                style={styles.input}
-                                value={profile.para.toString()}
-                                onChangeText={(txt) => setProfile({ ...profile, para: parseInt(txt, 10) || 0 })}
-                                keyboardType="numeric"
-                              />
-                            </View>
-                            <View style={styles.fieldCol}>
-                              <ThemedText style={styles.label}>Delivery Type</ThemedText>
-                              <View style={styles.chipRow}>
-                                <Pressable
-                                  onPress={() => setProfile({ ...profile, deliveryType: 'V' })}
-                                  style={[styles.chip, (profile.deliveryType || 'V') === 'V' && styles.chipActive]}
-                                >
-                                  <ThemedText style={(profile.deliveryType || 'V') === 'V' ? styles.chipTextActive : styles.chipText}>
-                                    Vaginal (V)
-                                  </ThemedText>
-                                </Pressable>
-                                <Pressable
-                                  onPress={() => setProfile({ ...profile, deliveryType: 'C' })}
-                                  style={[styles.chip, profile.deliveryType === 'C' && styles.chipActive]}
-                                >
-                                  <ThemedText style={profile.deliveryType === 'C' ? styles.chipTextActive : styles.chipText}>
-                                    Cesarean (C)
-                                  </ThemedText>
-                                </Pressable>
-                              </View>
-                            </View>
-                            <View style={styles.fieldCol}>
-                              <ThemedText style={styles.label}>Full-Term Deliveries</ThemedText>
-                              <TextInput
-                                style={styles.input}
-                                value={profile.fullTermCount.toString()}
-                                onChangeText={(txt) => setProfile({ ...profile, fullTermCount: parseInt(txt, 10) || 0 })}
-                                keyboardType="numeric"
-                              />
-                            </View>
-                          </View>
-
-                          <View style={styles.formRow}>
-                            <View style={styles.fieldCol}>
-                              <ThemedText style={styles.label}>Premature Count</ThemedText>
-                              <TextInput
-                                style={styles.input}
-                                value={profile.prematureCount.toString()}
-                                onChangeText={(txt) => setProfile({ ...profile, prematureCount: parseInt(txt, 10) || 0 })}
-                                keyboardType="numeric"
-                              />
-                            </View>
-                            <View style={styles.fieldCol}>
-                              <ThemedText style={styles.label}>Abortion Count</ThemedText>
-                              <TextInput
-                                style={styles.input}
-                                value={profile.abortionCount.toString()}
-                                onChangeText={(txt) => setProfile({ ...profile, abortionCount: parseInt(txt, 10) || 0 })}
-                                keyboardType="numeric"
-                              />
-                            </View>
-                            <View style={styles.fieldCol}>
-                              <ThemedText style={styles.label}>Living Children Count</ThemedText>
-                              <TextInput
-                                style={styles.input}
-                                value={profile.livingChildrenCount.toString()}
-                                onChangeText={(txt) => setProfile({ ...profile, livingChildrenCount: parseInt(txt, 10) || 0 })}
-                                keyboardType="numeric"
-                              />
-                            </View>
-                            <View style={styles.fieldCol}>
-                              <ThemedText style={styles.label}>Pregnancy-Induced Hypertension / Pre-Eclampsia?</ThemedText>
-                              <View style={styles.chipRow}>
-                                <Pressable
-                                  onPress={() => setProfile({ ...profile, preEclampsiaHypertension: false })}
-                                  style={[styles.chip, !profile.preEclampsiaHypertension && styles.chipActive]}
-                                >
-                                  <ThemedText style={!profile.preEclampsiaHypertension ? styles.chipTextActive : styles.chipText}>No</ThemedText>
-                                </Pressable>
-                                <Pressable
-                                  onPress={() => setProfile({ ...profile, preEclampsiaHypertension: true })}
-                                  style={[styles.chip, profile.preEclampsiaHypertension && styles.chipActive]}
-                                >
-                                  <ThemedText style={profile.preEclampsiaHypertension ? styles.chipTextActive : styles.chipText}>Yes</ThemedText>
-                                </Pressable>
-                              </View>
-                            </View>
-                          </View>
-                        </>
-                      ) : (
-                        <View style={[styles.maleNoticeBox, { marginTop: 0 }]}>
-                          <ThemedText style={styles.maleNoticeText}>
-                            Obstetric history marked as Not Applicable (N). Will be output as blank in PhilHealth DTD transmissions.
-                          </ThemedText>
-                        </View>
-                      )}
-                    </>
-                  )}
-                </View>
-              )}
-
-              {/* TAB 5: PhilPEN 24 Questions */}
-              {activeTab === 'ncd' && (
-                <View style={styles.sectionCard}>
-                  <ThemedText style={styles.sectionTitle}>PhilPEN Non-Communicable Disease Risk Assessment</ThemedText>
-                  <ThemedText style={styles.helperText}>
-                    PhilHealth standard 24 questions for cardiovascular and metabolic risk profiling:
-                  </ThemedText>
-
-                  {[
-                    { id: 'ncd_qid1', q: 'Q1: Does the patient have high blood pressure / hypertension?' },
-                    { id: 'ncd_qid2', q: 'Q2: Does the patient have diabetes mellitus?' },
-                    { id: 'ncd_qid3', q: 'Q3: Any family history of premature cardiovascular disease?' },
-                    { id: 'ncd_qid4', q: 'Q4: Does the patient currently smoke tobacco products?' },
-                    { id: 'ncd_qid6', q: 'Q6: Engages in at least 150 minutes of physical activity weekly?' },
-                    { id: 'ncd_qid7', q: 'Q7: Consumes fruits and vegetables daily?' },
-                    { id: 'ncd_qid8', q: 'Q8: Frequently adds high-sodium condiments or salty snacks?' },
-                  ].map((item) => {
-                    const ans = profile.ncdAnswers[item.id] || 'N';
-                    return (
-                      <View key={item.id} style={styles.ncdRow}>
-                        <ThemedText style={styles.ncdText}>{item.q}</ThemedText>
-                        <View style={styles.chipRow}>
-                          <Pressable
-                            onPress={() =>
-                              setProfile({
-                                ...profile,
-                                ncdAnswers: { ...profile.ncdAnswers, [item.id]: 'N' },
-                              })
-                            }
-                            style={[styles.smallChip, ans === 'N' && styles.smallChipGreen]}
-                          >
-                            <ThemedText style={ans === 'N' ? styles.smallChipTextActive : styles.smallChipText}>
-                              No
-                            </ThemedText>
-                          </Pressable>
-                          <Pressable
-                            onPress={() =>
-                              setProfile({
-                                ...profile,
-                                ncdAnswers: { ...profile.ncdAnswers, [item.id]: 'Y' },
-                              })
-                            }
-                            style={[styles.smallChip, ans === 'Y' && styles.smallChipAmber]}
-                          >
-                            <ThemedText style={ans === 'Y' ? styles.smallChipTextActive : styles.smallChipText}>
-                              Yes
-                            </ThemedText>
-                          </Pressable>
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
-              )}
-            </ScrollView>
-          )}
-
-          {/* Footer Bar */}
-          <View style={styles.footerBar}>
-            <Pressable onPress={onClose} style={styles.cancelBtn}>
-              <ThemedText style={styles.cancelBtnText}>Cancel</ThemedText>
-            </Pressable>
-            <Pressable onPress={handleSave} disabled={saving || loading} style={styles.saveBtn}>
-              {saving ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <ThemedText style={styles.saveBtnText}>💾 Save Profile (Standalone / Offline)</ThemedText>
-              )}
-            </Pressable>
+                  </>
+                ) : (
+                  <View style={styles.noticeBox}>
+                    <ThemedText variant="body" color={theme.colors.textMuted}>
+                      Obstetric history is marked not applicable (N). It will be left blank in PhilHealth transmissions.
+                    </ThemedText>
+                  </View>
+                )}
+              </>
+            )}
           </View>
+        )}
+
+        {/* TAB 5: PhilPEN 24 questions */}
+        {activeTab === 'ncd' && (
+          <View>
+            <SectionTitle>PhilPEN non-communicable disease risk assessment</SectionTitle>
+            <Helper>PhilHealth standard 24 questions for cardiovascular and metabolic risk profiling.</Helper>
+
+            {NCD_QUESTIONS.map((item) => {
+              const ans = profile.ncdAnswers[item.id] || 'N';
+              return (
+                <View key={item.id} style={styles.ncdRow}>
+                  <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.ncdText}>
+                    {item.q}
+                  </ThemedText>
+                  <View style={styles.chipRow}>
+                    <Chip
+                      label="No"
+                      tone="success"
+                      active={ans === 'N'}
+                      onPress={() =>
+                        setProfile({
+                          ...profile,
+                          ncdAnswers: { ...profile.ncdAnswers, [item.id]: 'N' },
+                        })
+                      }
+                    />
+                    <Chip
+                      label="Yes"
+                      tone="warning"
+                      active={ans === 'Y'}
+                      onPress={() =>
+                        setProfile({
+                          ...profile,
+                          ncdAnswers: { ...profile.ncdAnswers, [item.id]: 'Y' },
+                        })
+                      }
+                    />
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
+      </>
+    );
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      onClose={onClose}
+      title="PhilHealth patient profile"
+      subtitle={`${patient.fullName} · ${patient.gender} · ${patient.age} yrs · PIN: ${patient.philHealthNumber || 'Not enlisted'}`}
+      maxWidth={900}
+      maxHeight="92%"
+      footer={
+        <View style={styles.footerBar}>
+          <Button title="Cancel" variant="ghost" onPress={onClose} disabled={saving} />
+          <Button
+            title="Save profile"
+            onPress={handleSave}
+            loading={saving}
+            disabled={saving || loading || !profile}
+          />
         </View>
+      }
+    >
+      {/* Tab navigation */}
+      <View style={styles.tabBar}>
+        {TABS.map((tab) => {
+          const isActive = activeTab === tab.key;
+          return (
+            <Pressable
+              key={tab.key}
+              onPress={() => setActiveTab(tab.key)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: isActive }}
+              style={[styles.tabItem, isActive && styles.tabItemActive]}
+            >
+              <ThemedText
+                variant={isActive ? 'smallBold' : 'small'}
+                color={isActive ? theme.colors.primary : theme.colors.textMuted}
+              >
+                {tab.label}
+              </ThemedText>
+            </Pressable>
+          );
+        })}
       </View>
+
+      {renderBody()}
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.75)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
-  },
-  modalContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    width: '100%',
-    maxWidth: 900,
-    maxHeight: '90%',
-    flexDirection: 'column',
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  headerBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  titleText: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  trancheBadge: {
-    backgroundColor: '#DCFCE7',
-    color: '#166534',
-    fontSize: 12,
-    fontWeight: '700',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  patientSubText: {
-    fontSize: 13,
-    color: '#64748B',
-    marginTop: 4,
-  },
-  closeBtn: {
-    padding: 6,
-    borderRadius: 8,
-    backgroundColor: '#F1F5F9',
-  },
-  closeBtnText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#64748B',
-  },
-  tabBar: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-    backgroundColor: '#F8FAFC',
-  },
-  tabItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  tabItemActive: {
-    borderBottomColor: '#0284C7',
-    backgroundColor: '#FFFFFF',
-  },
-  tabText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#64748B',
-  },
-  tabTextActive: {
-    color: '#0284C7',
-    fontWeight: '700',
-  },
-  loadingContainer: {
-    padding: 60,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: '#64748B',
-  },
-  scrollArea: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 24,
-  },
-  sectionCard: {
-    backgroundColor: '#FFFFFF',
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1E293B',
-    marginBottom: 8,
-  },
-  helperText: {
-    fontSize: 13,
-    color: '#64748B',
-    marginBottom: 12,
-  },
-  subHeading: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#334155',
-    marginBottom: 8,
-  },
-  formRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 16,
-    marginBottom: 12,
-  },
-  fieldCol: {
-    flex: 1,
-    minWidth: 180,
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#475569',
-    marginBottom: 6,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 14,
-    color: '#0F172A',
-    backgroundColor: '#F8FAFC',
-  },
-  chipRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#F1F5F9',
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-  },
-  chipActive: {
-    backgroundColor: '#E0F2FE',
-    borderColor: '#0284C7',
-  },
-  chipText: {
-    fontSize: 13,
-    color: '#475569',
-    fontWeight: '600',
-  },
-  chipTextActive: {
-    fontSize: 13,
-    color: '#0284C7',
-    fontWeight: '700',
-  },
-  conditionsWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  conditionChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  conditionChipActive: {
-    backgroundColor: '#F0FDF4',
-    borderColor: '#22C55E',
-  },
-  conditionChipText: {
-    fontSize: 13,
-    color: '#475569',
-    fontWeight: '600',
-  },
-  conditionChipTextActive: {
-    fontSize: 13,
-    color: '#15803D',
-    fontWeight: '700',
-  },
-  organsGrid: {
-    gap: 10,
-  },
-  organRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-  },
-  organLabel: {
-    fontSize: 14,
-    color: '#334155',
-    fontWeight: '600',
-  },
-  organControls: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  smallChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
-    backgroundColor: '#F1F5F9',
-  },
-  smallChipGreen: {
-    backgroundColor: '#DCFCE7',
-  },
-  smallChipAmber: {
-    backgroundColor: '#FEF3C7',
-  },
-  smallChipText: {
-    fontSize: 12,
-    color: '#64748B',
-    fontWeight: '600',
-  },
-  smallChipTextActive: {
-    fontSize: 12,
-    color: '#0F172A',
-    fontWeight: '700',
-  },
-  pediatricBanner: {
-    backgroundColor: '#EFF6FF',
-    padding: 14,
-    borderRadius: 10,
-    borderColor: '#BFDBFE',
-    borderWidth: 1,
-  },
-  maleNoticeBox: {
-    backgroundColor: '#F8FAFC',
-    padding: 20,
-    borderRadius: 12,
-    borderColor: '#CBD5E1',
-    borderWidth: 1,
-  },
-  maleNoticeTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#475569',
-    marginBottom: 6,
-  },
-  maleNoticeText: {
-    fontSize: 14,
-    color: '#64748B',
-    lineHeight: 20,
-  },
-  bannerText: {
-    fontSize: 13,
-    color: '#1D4ED8',
-    lineHeight: 18,
-  },
-  behavioralGrid: {
-    gap: 16,
-  },
-  behavioralRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  ncdRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-  },
-  ncdText: {
-    fontSize: 13,
-    color: '#334155',
-    flex: 1,
-    paddingRight: 12,
-  },
-  sponsorCard: {
-    backgroundColor: '#F0FDF4',
-    borderWidth: 1,
-    borderColor: '#86EFAC',
-    borderRadius: 10,
-    padding: 16,
-    marginTop: 16,
-  },
-  sponsorHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
-  },
-  sponsorBadge: {
-    backgroundColor: '#0284C7',
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '800',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  sponsorTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  sponsorSubtitle: {
-    fontSize: 12,
-    color: '#475569',
-    lineHeight: 16,
-  },
   footerBar: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
     alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    backgroundColor: '#F8FAFC',
+    gap: theme.spacing.sm,
   },
-  cancelBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
+  tabBar: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
+    borderBottomWidth: theme.sizes.borderWidth,
+    borderBottomColor: theme.colors.border,
   },
-  cancelBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#64748B',
+  tabItem: {
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+    borderBottomWidth: 2,
+    borderBottomColor: theme.colors.transparent,
   },
-  saveBtn: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: '#0284C7',
+  tabItemActive: {
+    borderBottomColor: theme.colors.primary,
   },
-  saveBtnText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#FFFFFF',
+  sectionTitle: {
+    marginBottom: theme.spacing.sm,
+  },
+  sectionTitleSpaced: {
+    marginTop: theme.spacing['2xl'],
+    marginBottom: theme.spacing.sm,
+  },
+  helperText: {
+    marginBottom: theme.spacing.md,
+  },
+  subSection: {
+    marginBottom: theme.spacing.lg,
+  },
+  subHeading: {
+    marginBottom: theme.spacing.sm,
+  },
+  formRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
+  },
+  fieldCol: {
+    flex: 1,
+    minWidth: 180,
+    gap: theme.spacing.xs,
+  },
+  fieldLabel: {
+    marginBottom: theme.spacing.xs,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderDark,
+  },
+  chipPrimary: {
+    backgroundColor: theme.colors.primaryLight,
+    borderColor: theme.colors.primary,
+  },
+  chipSuccess: {
+    backgroundColor: theme.colors.successBg,
+    borderColor: theme.colors.success,
+  },
+  chipWarning: {
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warning,
+  },
+  conditionsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
+  organsGrid: {
+    gap: theme.spacing.xs,
+  },
+  organRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    paddingVertical: theme.spacing.sm,
+    borderBottomWidth: theme.sizes.borderWidth,
+    borderBottomColor: theme.colors.borderLight,
+  },
+  pediatricBanner: {
+    backgroundColor: theme.colors.infoBg,
+    padding: theme.spacing.lg,
+    borderRadius: theme.radii.lg,
+    borderColor: theme.colors.infoBorder,
+    borderWidth: theme.sizes.borderWidth,
+  },
+  noticeBox: {
+    backgroundColor: theme.colors.surfaceMuted,
+    padding: theme.spacing.lg,
+    borderRadius: theme.radii.lg,
+    borderColor: theme.colors.border,
+    borderWidth: theme.sizes.borderWidth,
+    gap: theme.spacing.xs,
+    marginBottom: theme.spacing.lg,
+  },
+  behavioralGrid: {
+    gap: theme.spacing.lg,
+  },
+  behavioralRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  toggleHeader: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+  },
+  toggleHeaderSpaced: {
+    marginTop: theme.spacing['2xl'],
+  },
+  toggleHeaderText: {
+    flex: 1,
+    minWidth: 240,
+  },
+  ncdRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    borderBottomWidth: theme.sizes.borderWidth,
+    borderBottomColor: theme.colors.borderLight,
+  },
+  ncdText: {
+    flex: 1,
+    minWidth: 240,
+  },
+  sponsorCard: {
+    backgroundColor: theme.colors.successBg,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.successBorder,
+    borderRadius: theme.radii.lg,
+    padding: theme.spacing.lg,
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.lg,
+  },
+  sponsorHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
   },
 });

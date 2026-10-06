@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Modal, Pressable, TextInput, Alert, ActivityIndicator } from 'react-native';
-import ThemedText from './ui/ThemedText';
+import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { theme } from '@constants/theme';
+import { Modal, Input, Button, Badge, ThemedText } from '@ui';
+import { Alert } from '@utils/feedback';
 import { clinicService, BulkImportServiceItem, BulkImportResult } from '../services/clinicService';
 import PhilHealthCatalogMappingModal, {
   CatalogMappingResult,
@@ -19,16 +21,7 @@ export interface ParsedImportRow extends BulkImportServiceItem {
   mappingStatus: 'Mapped' | 'NeedsMapping' | 'NonFormulary' | 'N/A';
 }
 
-const SAMPLE_CSV = `Code,Name,Category,StandardPrice,Description,PhilHealthCode
-MED-AMOX-500,Amoxicillin 500mg Capsule,Medicine,15.00,Broad-spectrum penicillin antibiotic,AMOXC0000000500CAP00000000100
-MED-LOSAR-50,Losartan Potassium 50mg Tablet,Medicine,18.00,Angiotensin receptor blocker,LOSAR0000000050TAB00000000100
-MED-METFO-500,Metformin HCl 500mg Tablet,Medicine,10.00,Oral antidiabetic biguanide,
-MED-CUSTOM-SYRUP,Herbal Cough Tonic 120ml,Medicine,120.00,Over the counter private brand syrup,
-DIAG-CBC,Complete Blood Count with Platelet,Diagnostic,250.00,Automated 5-part differential CBC,1
-DIAG-FBS,Fasting Blood Sugar Test,Diagnostic,180.00,Enzymatic glucose assay,
-DIAG-CHEST-PA,Chest X-Ray PA View,Diagnostic,450.00,Digital radiograph,11
-PROC-NEB,Nebulization Therapy Session,Procedure,250.00,Single dose salbutamol nebulization,
-CONS-GEN,General Medical Consultation,Consultation,500.00,Outpatient comprehensive consult,`;
+const CSV_HEADERS = 'Code,Name,Category,StandardPrice,Description,PhilHealthCode';
 
 export default function CsvCatalogImportModal({
   visible,
@@ -45,8 +38,8 @@ export default function CsvCatalogImportModal({
 
   const activeMappingRow = parsedRows.find((r) => r.id === activeMappingRowId);
 
-  const handleLoadSample = () => {
-    setCsvRawText(SAMPLE_CSV.trim());
+  const handleInsertHeaders = () => {
+    setCsvRawText((current) => (current.trim() ? current : `${CSV_HEADERS}\n`));
   };
 
   const autoMatchPhilHealth = (name: string, category: string, explicitCode?: string): {
@@ -232,7 +225,7 @@ export default function CsvCatalogImportModal({
       if (data) {
         Alert.alert(
           'Import Completed',
-          `Successfully processed ${data.totalProcessed} items!\n\n• Created: ${data.totalCreated}\n• Updated: ${data.totalUpdated}\n• Yakap Formularies: ${data.totalMappedToPhilHealth}\n• Non-Formulary: ${data.totalNonFormulary}`
+          `Successfully processed ${data.totalProcessed} items!\n\nâ€¢ Created: ${data.totalCreated}\nâ€¢ Updated: ${data.totalUpdated}\nâ€¢ Yakap Formularies: ${data.totalMappedToPhilHealth}\nâ€¢ Non-Formulary: ${data.totalNonFormulary}`
         );
         onImportSuccess(data);
         onClose();
@@ -252,201 +245,210 @@ export default function CsvCatalogImportModal({
     (r) => r.mappingStatus === 'NonFormulary' || r.mappingStatus === 'N/A'
   ).length;
 
+  const footer =
+    step === 'input' ? (
+      <View style={styles.footerRow}>
+        <Button title="Cancel" variant="ghost" onPress={onClose} />
+        <Button title="Parse and match PhilHealth catalog" onPress={parseCsv} disabled={!csvRawText.trim()} />
+      </View>
+    ) : (
+      <View style={styles.footerRow}>
+        <Button title="Edit CSV" variant="ghost" onPress={() => setStep('input')} disabled={isSubmitting} />
+        <Button
+          title={`Import ${parsedRows.length} item(s)`}
+          onPress={handleCommitImport}
+          loading={isSubmitting}
+          disabled={isSubmitting}
+        />
+      </View>
+    );
+
   return (
     <>
-      <Modal visible={visible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            {/* Header */}
-            <View style={styles.headerBar}>
-              <View>
-                <View style={styles.titleRow}>
-                  <ThemedText style={styles.titleText}>Bulk Import Services & Formulary Catalog</ThemedText>
-                  <ThemedText style={styles.badgeText}>CSV Import Engine</ThemedText>
-                </View>
-                <ThemedText style={styles.subText}>
-                  Batch ingest clinical services, medicines, and diagnostics with automated statutory PhilHealth mapping.
-                </ThemedText>
-              </View>
-              <Pressable onPress={onClose} style={styles.closeBtn}>
-                <ThemedText style={styles.closeBtnText}>✕</ThemedText>
-              </Pressable>
-            </View>
-
-            {/* Step Navigation */}
-            <View style={styles.stepTabs}>
-              <Pressable
-                style={[styles.stepTab, step === 'input' && styles.stepTabActive]}
-                onPress={() => setStep('input')}
-              >
-                <ThemedText style={[styles.stepTabText, step === 'input' && styles.stepTabTextActive]}>
-                  1. Paste / Upload CSV
-                </ThemedText>
-              </Pressable>
-              <Pressable
-                style={[styles.stepTab, step === 'preview' && styles.stepTabActive]}
-                onPress={() => parsedRows.length > 0 && setStep('preview')}
-                disabled={parsedRows.length === 0}
-              >
-                <ThemedText style={[styles.stepTabText, step === 'preview' && styles.stepTabTextActive]}>
-                  2. Review & PhilHealth Mapping ({parsedRows.length})
-                </ThemedText>
-              </Pressable>
-            </View>
-
-            {/* Step 1: Input CSV */}
-            {step === 'input' && (
-              <View style={{ flex: 1 }}>
-                <View style={styles.toolBar}>
-                  <ThemedText style={styles.sectionLabel}>Paste Comma-Separated Values</ThemedText>
-                  <Pressable style={styles.sampleBtn} onPress={handleLoadSample}>
-                    <ThemedText style={styles.sampleBtnText}>📋 Load Sample CSV Template</ThemedText>
-                  </Pressable>
-                </View>
-
-                <TextInput
-                  style={styles.csvInput}
-                  multiline
-                  placeholder="Code,Name,Category,StandardPrice,Description,PhilHealthCode&#10;MED-001,Amoxicillin 500mg,Medicine,15.00,Oral antibiotic,AMOXC0000000500CAP00000000100"
-                  placeholderTextColor="#9CA3AF"
-                  value={csvRawText}
-                  onChangeText={setCsvRawText}
-                />
-
-                <ThemedText style={styles.hintText}>
-                  💡 Column headers supported: <ThemedText style={{ fontWeight: '700' }}>Code, Name, Category, StandardPrice, Description, PhilHealthCode</ThemedText>. If PhilHealthCode is left blank, our engine will automatically search the statutory GAMOT and Yakap catalogs.
-                </ThemedText>
-
-                <View style={styles.footerRow}>
-                  <Pressable style={styles.cancelBtn} onPress={onClose}>
-                    <ThemedText style={styles.cancelBtnText}>Cancel</ThemedText>
-                  </Pressable>
-                  <Pressable style={styles.primaryBtn} onPress={parseCsv}>
-                    <ThemedText style={styles.primaryBtnText}>Parse & Match PhilHealth Catalog →</ThemedText>
-                  </Pressable>
-                </View>
-              </View>
-            )}
-
-            {/* Step 2: Preview & Mapping Verification */}
-            {step === 'preview' && (
-              <View style={{ flex: 1 }}>
-                {/* Stats Summary Bar */}
-                <View style={styles.statsBar}>
-                  <View style={styles.statItem}>
-                    <ThemedText style={styles.statLabel}>Total Items</ThemedText>
-                    <ThemedText style={styles.statVal}>{parsedRows.length}</ThemedText>
-                  </View>
-                  <View style={styles.statDivider} />
-                  <View style={styles.statItem}>
-                    <ThemedText style={styles.statLabel}>✓ Yakap Mapped</ThemedText>
-                    <ThemedText style={[styles.statVal, { color: '#059669' }]}>{mappedCount}</ThemedText>
-                  </View>
-                  <View style={styles.statDivider} />
-                  <View style={styles.statItem}>
-                    <ThemedText style={styles.statLabel}>⚠️ Needs Mapping</ThemedText>
-                    <ThemedText style={[styles.statVal, { color: '#D97706' }]}>{needsMappingCount}</ThemedText>
-                  </View>
-                  <View style={styles.statDivider} />
-                  <View style={styles.statItem}>
-                    <ThemedText style={styles.statLabel}>Out-of-Pocket / General</ThemedText>
-                    <ThemedText style={[styles.statVal, { color: '#4B5563' }]}>{nonFormularyCount}</ThemedText>
-                  </View>
-                </View>
-
-                {/* Table Header */}
-                <View style={styles.tableHeader}>
-                  <ThemedText style={[styles.colHeader, { flex: 2 }]}>Code & Name</ThemedText>
-                  <ThemedText style={[styles.colHeader, { flex: 1.2 }]}>Category / Fee</ThemedText>
-                  <ThemedText style={[styles.colHeader, { flex: 2.2 }]}>PhilHealth Statutory Mapping</ThemedText>
-                  <ThemedText style={[styles.colHeader, { flex: 1, textAlign: 'right' }]}>Action</ThemedText>
-                </View>
-
-                {/* Table Rows */}
-                <ScrollView style={styles.tableScroll}>
-                  {parsedRows.map((row) => {
-                    const isClinical = row.category.toLowerCase() === 'medicine' || row.category.toLowerCase() === 'diagnostic';
-                    return (
-                      <View key={row.id} style={styles.tableRow}>
-                        <View style={{ flex: 2 }}>
-                          <ThemedText style={styles.rowTitle}>{row.name}</ThemedText>
-                          <ThemedText style={styles.rowSubtitle}>{row.code}</ThemedText>
-                        </View>
-
-                        <View style={{ flex: 1.2 }}>
-                          <ThemedText style={styles.rowCategory}>{row.category}</ThemedText>
-                          <ThemedText style={styles.rowPrice}>₱{row.standardPrice.toFixed(2)}</ThemedText>
-                        </View>
-
-                        <View style={{ flex: 2.2 }}>
-                          {row.mappingStatus === 'Mapped' && (
-                            <View style={styles.mappedBadge}>
-                              <ThemedText style={styles.mappedBadgeText}>✓ {row.philHealthCode}</ThemedText>
-                              <ThemedText numberOfLines={1} style={styles.mappedDescText}>
-                                {row.philHealthDescription}
-                              </ThemedText>
-                            </View>
-                          )}
-                          {row.mappingStatus === 'NeedsMapping' && (
-                            <View style={styles.unmappedBadge}>
-                              <ThemedText style={styles.unmappedBadgeText}>⚠️ Action Required: Unmapped</ThemedText>
-                            </View>
-                          )}
-                          {(row.mappingStatus === 'NonFormulary' || row.mappingStatus === 'N/A') && (
-                            <View style={styles.neutralBadge}>
-                              <ThemedText style={styles.neutralBadgeText}>
-                                {isClinical ? 'Non-Formulary Out-of-Pocket' : 'Standard Service'}
-                              </ThemedText>
-                            </View>
-                          )}
-                        </View>
-
-                        <View style={{ flex: 1, alignItems: 'flex-end' }}>
-                          {isClinical ? (
-                            <Pressable
-                              style={styles.mapBtn}
-                              onPress={() => handleOpenRowMapping(row.id)}
-                            >
-                              <ThemedText style={styles.mapBtnText}>
-                                {row.mappingStatus === 'Mapped' ? 'Edit' : 'Map'}
-                              </ThemedText>
-                            </Pressable>
-                          ) : (
-                            <ThemedText style={styles.rowNaText}>—</ThemedText>
-                          )}
-                        </View>
-                      </View>
-                    );
-                  })}
-                </ScrollView>
-
-                {/* Footer Controls */}
-                <View style={styles.footerRow}>
-                  <Pressable
-                    style={styles.cancelBtn}
-                    onPress={() => setStep('input')}
-                    disabled={isSubmitting}
-                  >
-                    <ThemedText style={styles.cancelBtnText}>← Edit CSV</ThemedText>
-                  </Pressable>
-                  <Pressable
-                    style={[styles.primaryBtn, isSubmitting && styles.btnDisabled]}
-                    onPress={handleCommitImport}
-                    disabled={isSubmitting}
-                  >
-                    {isSubmitting ? (
-                      <ActivityIndicator size="small" color="#FFFFFF" />
-                    ) : (
-                      <ThemedText style={styles.primaryBtnText}>
-                        ✓ Commit Bulk Import ({parsedRows.length} items)
-                      </ThemedText>
-                    )}
-                  </Pressable>
-                </View>
-              </View>
-            )}
-          </View>
+      <Modal
+        visible={visible}
+        onClose={onClose}
+        title="Import services and formulary catalog"
+        subtitle="Add clinic services, medicines and diagnostics from a CSV file, matched to PhilHealth codes."
+        maxWidth={880}
+        maxHeight="92%"
+        footer={footer}
+      >
+        {/* Step Navigation */}
+        <View style={styles.stepTabs}>
+          <Pressable
+            style={[styles.stepTab, step === 'input' && styles.stepTabActive]}
+            onPress={() => setStep('input')}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: step === 'input' }}
+          >
+            <ThemedText variant="smallBold" color={step === 'input' ? theme.colors.primary : theme.colors.textMuted}>
+              1. Paste CSV
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            style={[styles.stepTab, step === 'preview' && styles.stepTabActive]}
+            onPress={() => parsedRows.length > 0 && setStep('preview')}
+            disabled={parsedRows.length === 0}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: step === 'preview', disabled: parsedRows.length === 0 }}
+          >
+            <ThemedText
+              variant="smallBold"
+              color={step === 'preview' ? theme.colors.primary : theme.colors.textMuted}
+            >
+              2. Review and map ({parsedRows.length})
+            </ThemedText>
+          </Pressable>
         </View>
+
+        {/* Step 1: Input CSV */}
+        {step === 'input' && (
+          <>
+            <View style={styles.toolBar}>
+              <ThemedText variant="smallBold" color={theme.colors.textSecondary}>
+                CSV content
+              </ThemedText>
+              <Button title="Insert column headers" variant="outline" size="sm" onPress={handleInsertHeaders} />
+            </View>
+
+            <Input
+              multiline
+              numberOfLines={12}
+              placeholder={`${CSV_HEADERS}\n`}
+              value={csvRawText}
+              onChangeText={setCsvRawText}
+              textAlignVertical="top"
+              inputStyle={styles.csvInput}
+            />
+
+            <ThemedText variant="caption" color={theme.colors.textMuted}>
+              Supported columns: {CSV_HEADERS.split(',').join(', ')}. If PhilHealthCode is blank, the import searches the
+              GAMOT and Yakap catalogs for a match.
+            </ThemedText>
+          </>
+        )}
+
+        {/* Step 2: Preview and mapping verification */}
+        {step === 'preview' && (
+          <>
+            {/* Stats Summary Bar */}
+            <View style={styles.statsBar}>
+              <View style={styles.statItem}>
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  Total items
+                </ThemedText>
+                <ThemedText variant="h3">{parsedRows.length}</ThemedText>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  Yakap mapped
+                </ThemedText>
+                <ThemedText variant="h3" color={theme.colors.successText}>
+                  {mappedCount}
+                </ThemedText>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  Needs mapping
+                </ThemedText>
+                <ThemedText variant="h3" color={theme.colors.warningText}>
+                  {needsMappingCount}
+                </ThemedText>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  Out of pocket / general
+                </ThemedText>
+                <ThemedText variant="h3" color={theme.colors.textSecondary}>
+                  {nonFormularyCount}
+                </ThemedText>
+              </View>
+            </View>
+
+            {/* Table Header */}
+            <View style={styles.tableHeader}>
+              <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.colName}>
+                Code and name
+              </ThemedText>
+              <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.colCategory}>
+                Category and fee
+              </ThemedText>
+              <ThemedText variant="captionBold" color={theme.colors.textSecondary} style={styles.colMapping}>
+                PhilHealth mapping
+              </ThemedText>
+              <ThemedText
+                variant="captionBold"
+                color={theme.colors.textSecondary}
+                style={[styles.colAction, styles.alignRight]}
+              >
+                Action
+              </ThemedText>
+            </View>
+
+            {/* Table Rows */}
+            <ScrollView style={styles.tableScroll} nestedScrollEnabled>
+              {parsedRows.map((row) => {
+                const isClinical =
+                  row.category.toLowerCase() === 'medicine' || row.category.toLowerCase() === 'diagnostic';
+                return (
+                  <View key={row.id} style={styles.tableRow}>
+                    <View style={styles.colName}>
+                      <ThemedText variant="smallBold">{row.name}</ThemedText>
+                      <ThemedText variant="code" color={theme.colors.textMuted}>
+                        {row.code}
+                      </ThemedText>
+                    </View>
+
+                    <View style={styles.colCategory}>
+                      <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                        {row.category}
+                      </ThemedText>
+                      <ThemedText variant="captionBold" color={theme.colors.successText}>
+                        ₱{row.standardPrice.toFixed(2)}
+                      </ThemedText>
+                    </View>
+
+                    <View style={styles.colMapping}>
+                      {row.mappingStatus === 'Mapped' && (
+                        <View style={styles.mappedBox}>
+                          <ThemedText variant="code" color={theme.colors.successText}>
+                            {row.philHealthCode}
+                          </ThemedText>
+                          <ThemedText variant="caption" numberOfLines={1} color={theme.colors.successText}>
+                            {row.philHealthDescription}
+                          </ThemedText>
+                        </View>
+                      )}
+                      {row.mappingStatus === 'NeedsMapping' && <Badge label="Needs mapping" variant="warning" />}
+                      {(row.mappingStatus === 'NonFormulary' || row.mappingStatus === 'N/A') && (
+                        <Badge label={isClinical ? 'Non-formulary, out of pocket' : 'Standard service'} variant="neutral" />
+                      )}
+                    </View>
+
+                    <View style={[styles.colAction, styles.alignRight]}>
+                      {isClinical ? (
+                        <Button
+                          title={row.mappingStatus === 'Mapped' ? 'Edit' : 'Map'}
+                          variant="outline"
+                          size="sm"
+                          onPress={() => handleOpenRowMapping(row.id)}
+                        />
+                      ) : (
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>
+                          None needed
+                        </ThemedText>
+                      )}
+                    </View>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </>
+        )}
       </Modal>
 
       {/* Row-Level Mapping Dialog Interception */}
@@ -465,305 +467,96 @@ export default function CsvCatalogImportModal({
 }
 
 const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
-  },
-  modalContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    width: '100%',
-    maxWidth: 880,
-    height: '88%',
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    elevation: 8,
-  },
-  headerBar: {
+  footerRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-    paddingBottom: 16,
-    marginBottom: 16,
-  },
-  titleRow: {
-    flexDirection: 'row',
+    justifyContent: 'flex-end',
     alignItems: 'center',
-    gap: 8,
-  },
-  titleText: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#111827',
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#0284C7',
-    backgroundColor: '#E0F2FE',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  subText: {
-    fontSize: 13,
-    color: '#6B7280',
-    marginTop: 4,
-  },
-  closeBtn: {
-    padding: 8,
-  },
-  closeBtnText: {
-    fontSize: 18,
-    color: '#9CA3AF',
-    fontWeight: '700',
+    gap: theme.spacing.sm,
   },
   stepTabs: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 16,
+    gap: theme.spacing.sm,
   },
   stepTab: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    backgroundColor: '#F3F4F6',
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.surfaceSubtle,
   },
   stepTabActive: {
-    backgroundColor: '#E0F2FE',
-  },
-  stepTabText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#6B7280',
-  },
-  stepTabTextActive: {
-    color: '#0284C7',
+    backgroundColor: theme.colors.primaryLight,
   },
   toolBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
-  },
-  sectionLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#374151',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  sampleBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    backgroundColor: '#F3F4F6',
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  sampleBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#4B5563',
   },
   csvInput: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 10,
-    padding: 12,
-    fontFamily: 'monospace',
-    fontSize: 12,
-    color: '#111827',
-    textAlignVertical: 'top',
-  },
-  hintText: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 10,
-    lineHeight: 18,
+    fontFamily: theme.fonts.mono['400'],
+    fontSize: theme.fontSizes.xs,
+    minHeight: 240,
   },
   statsBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.lg,
+    padding: theme.spacing.lg,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
   },
   statItem: {
     flex: 1,
     alignItems: 'center',
-  },
-  statLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#6B7280',
-  },
-  statVal: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#111827',
-    marginTop: 2,
+    gap: 2,
   },
   statDivider: {
-    width: 1,
-    height: 24,
-    backgroundColor: '#E5E7EB',
+    width: theme.sizes.borderWidth,
+    height: theme.spacing['2xl'],
+    backgroundColor: theme.colors.border,
   },
   tableHeader: {
     flexDirection: 'row',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: '#F3F4F6',
-    borderRadius: 8,
-    marginBottom: 6,
-  },
-  colHeader: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#4B5563',
-    textTransform: 'uppercase',
+    gap: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderRadius: theme.radii.md,
   },
   tableScroll: {
-    flex: 1,
+    maxHeight: 360,
   },
   tableRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    gap: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+    borderBottomWidth: theme.sizes.borderWidth,
+    borderBottomColor: theme.colors.borderLight,
   },
-  rowTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#111827',
+  colName: {
+    flex: 2,
   },
-  rowSubtitle: {
-    fontSize: 11,
-    fontFamily: 'monospace',
-    color: '#6B7280',
-    marginTop: 1,
+  colCategory: {
+    flex: 1.2,
   },
-  rowCategory: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#374151',
+  colMapping: {
+    flex: 2.2,
   },
-  rowPrice: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#059669',
-    marginTop: 1,
+  colAction: {
+    flex: 1,
   },
-  mappedBadge: {
-    backgroundColor: '#ECFDF5',
-    borderWidth: 1,
-    borderColor: '#A7F3D0',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+  alignRight: {
+    alignItems: 'flex-end',
+    textAlign: 'right',
   },
-  mappedBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#065F46',
-    fontFamily: 'monospace',
-  },
-  mappedDescText: {
-    fontSize: 10,
-    color: '#047857',
-    marginTop: 2,
-  },
-  unmappedBadge: {
-    backgroundColor: '#FEF3C7',
-    borderWidth: 1,
-    borderColor: '#FDE68A',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  unmappedBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#92400E',
-  },
-  neutralBadge: {
-    backgroundColor: '#F3F4F6',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  neutralBadgeText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#6B7280',
-  },
-  mapBtn: {
-    backgroundColor: '#E0F2FE',
-    borderWidth: 1,
-    borderColor: '#BAE6FD',
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  mapBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#0284C7',
-  },
-  rowNaText: {
-    fontSize: 12,
-    color: '#9CA3AF',
-  },
-  footerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 12,
-    marginTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-    paddingTop: 16,
-  },
-  cancelBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
-  },
-  cancelBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#4B5563',
-  },
-  primaryBtn: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: '#0284C7',
-  },
-  btnDisabled: {
-    backgroundColor: '#9CA3AF',
-  },
-  primaryBtnText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#FFFFFF',
+  mappedBox: {
+    backgroundColor: theme.colors.successBg,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.successBorder,
+    borderRadius: theme.radii.sm,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
   },
 });

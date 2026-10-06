@@ -1,15 +1,8 @@
 import React, { useState } from 'react';
-import {
-  Modal,
-  View,
-  ScrollView,
-  Pressable,
-  TextInput,
-  ActivityIndicator,
-  Alert,
-  StyleSheet,
-} from 'react-native';
-import ThemedText from './ui/ThemedText';
+import { View, ScrollView, StyleSheet } from 'react-native';
+import { theme } from '@constants/theme';
+import { Modal, Input, Button, Icon, ThemedText } from '@ui';
+import { Alert } from '@utils/feedback';
 import { clinicService, RegisterPatientPayload } from '../services/clinicService';
 
 interface BulkStudentImportModalProps {
@@ -18,12 +11,8 @@ interface BulkStudentImportModalProps {
   onSuccess?: (importedCount: number) => void;
 }
 
-const SAMPLE_CSV = `student_id,first_name,last_name,middle_name,gender,dob,contact_number,email,college,program,year_level
-2026-10001,Juan,Dela Cruz,Santos,Male,2004-05-12,09171234567,jdelacruz@univ.edu.ph,College of Computer Studies,BS Computer Science,1st Year
-2026-10002,Maria,Santos,Flores,Female,2004-08-20,09181234567,msantos@univ.edu.ph,College of Engineering,BS Civil Engineering,1st Year
-2026-10003,Karl,Gonzales,Aquino,Male,2003-11-04,09191234567,kgonzales@univ.edu.ph,College of Business Administration,BS Accountancy,2nd Year
-2026-10004,Angela,Reyes,Dizon,Female,2005-02-14,09201234567,areyes@univ.edu.ph,College of Nursing,BS Nursing,1st Year
-2026-10005,Paolo,Bautista,Mercado,Male,2003-09-30,09211234567,pbautista@univ.edu.ph,College of Education,BSEd English,3rd Year`;
+const CSV_COLUMNS =
+  'student_id,first_name,last_name,middle_name,gender,dob,contact_number,email,college,program,year_level';
 
 export function BulkStudentImportModal({
   visible,
@@ -51,8 +40,8 @@ export function BulkStudentImportModal({
     onClose();
   };
 
-  const handleLoadSample = () => {
-    setCsvText(SAMPLE_CSV);
+  const handleInsertColumns = () => {
+    setCsvText((current) => (current.trim() ? current : `${CSV_COLUMNS}\n`));
   };
 
   const parseCsvContent = () => {
@@ -88,16 +77,25 @@ export function BulkStudentImportModal({
       const lastName = record['last_name'] || record['lastname'] || record['lname'] || '';
       const middleName = record['middle_name'] || record['middlename'] || record['mname'] || '';
       const studentId = record['student_id'] || record['id_number'] || record['studentid'] || record['id'] || '';
-      const gender = (record['gender']?.toLowerCase().startsWith('f') ? 'Female' : 'Male') as 'Male' | 'Female';
-      const dob = record['dob'] || record['date_of_birth'] || record['birthdate'] || '2005-01-01';
-      const contactNumber = record['contact_number'] || record['contact'] || record['phone'] || '09000000000';
+      const genderRaw = (record['gender'] || record['sex'] || '').toLowerCase();
+      const gender = (genderRaw.startsWith('f') ? 'Female' : 'Male') as 'Male' | 'Female';
+      const dob = record['dob'] || record['date_of_birth'] || record['birthdate'] || '';
+      const contactNumber = record['contact_number'] || record['contact'] || record['phone'] || '';
       const email = record['email'] || undefined;
       const college = record['college'] || record['department'] || undefined;
       const program = record['program'] || record['course'] || undefined;
-      const yearLevel = record['year_level'] || record['year'] || '1st Year';
+      const yearLevel = record['year_level'] || record['year'] || undefined;
 
       if (!firstName || !lastName) {
-        errors.push(`Row ${rowNum}: Missing required First Name or Last Name.`);
+        errors.push(`Row ${rowNum}: Missing required first name or last name.`);
+        return;
+      }
+      if (!genderRaw) {
+        errors.push(`Row ${rowNum}: Missing gender.`);
+        return;
+      }
+      if (!dob || !contactNumber) {
+        errors.push(`Row ${rowNum}: Missing date of birth or contact number.`);
         return;
       }
 
@@ -113,7 +111,7 @@ export function BulkStudentImportModal({
         verificationStatus: 'Verified',
         customFields: {
           classification: 'Student',
-          student_id: studentId || `TEMP-${Date.now().toString().slice(-5)}-${idx}`,
+          student_id: studentId || undefined,
           college,
           program,
           year_level: yearLevel,
@@ -151,404 +149,232 @@ export function BulkStudentImportModal({
     }
   };
 
+  const title =
+    step === 'input' ? 'Import student list' : step === 'preview' ? 'Review students' : 'Import complete';
+  const subtitle =
+    step === 'input'
+      ? 'Paste CSV data exported from the registrar to register students in bulk.'
+      : step === 'preview'
+        ? `Review ${parsedPatients.length} parsed student record(s) before importing.`
+        : 'The students have been added to the patient registry.';
+
+  const footer =
+    step === 'input' ? (
+      <View style={styles.footer}>
+        <Button title="Cancel" variant="ghost" onPress={handleClose} />
+        <Button title="Parse and preview" onPress={parseCsvContent} disabled={!csvText.trim()} />
+      </View>
+    ) : step === 'preview' ? (
+      <View style={styles.footer}>
+        <Button title="Back to CSV" variant="ghost" onPress={() => setStep('input')} disabled={isImporting} />
+        <Button
+          title={`Register ${parsedPatients.length} student(s)`}
+          onPress={handleExecuteImport}
+          loading={isImporting}
+          disabled={isImporting}
+        />
+      </View>
+    ) : (
+      <View style={styles.footer}>
+        <Button title="Close" variant="success" onPress={handleClose} />
+      </View>
+    );
+
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
-      <View style={styles.backdrop}>
-        <View style={styles.modalCard}>
-          {/* Header */}
-          <View style={styles.header}>
-            <View>
-              <ThemedText style={styles.headerTitle}>
-                {step === 'input' && '📥 Bulk Import Student Masterlist'}
-                {step === 'preview' && '🔍 Preview Registrar Cohort'}
-                {step === 'success' && '✅ Import Complete'}
-              </ThemedText>
-              <ThemedText style={styles.headerSubtitle}>
-                {step === 'input' && 'Paste CSV data from the Registrar SIS to register students in bulk.'}
-                {step === 'preview' && `Review ${parsedPatients.length} parsed student record(s) before importing.`}
-                {step === 'success' && 'The student cohort has been recorded in the Master Patient Index.'}
-              </ThemedText>
-            </View>
-            <Pressable onPress={handleClose} style={styles.closeBtn}>
-              <ThemedText style={styles.closeBtnText}>✕</ThemedText>
-            </Pressable>
+    <Modal
+      visible={visible}
+      onClose={handleClose}
+      title={title}
+      subtitle={subtitle}
+      maxWidth={680}
+      maxHeight="90%"
+      footer={footer}
+    >
+      {/* Step 1: Input CSV */}
+      {step === 'input' && (
+        <>
+          <View style={styles.formatInfoBox}>
+            <ThemedText variant="captionBold" color={theme.colors.primaryDark}>
+              Supported CSV columns
+            </ThemedText>
+            <ThemedText variant="caption" color={theme.colors.primary} style={styles.mono}>
+              {CSV_COLUMNS.split(',').join(', ')}
+            </ThemedText>
           </View>
 
-          {/* Step 1: Input CSV */}
-          {step === 'input' && (
-            <ScrollView style={styles.body} contentContainerStyle={{ gap: 14 }}>
-              <View style={styles.formatInfoBox}>
-                <ThemedText style={styles.formatInfoTitle}>Supported CSV Columns:</ThemedText>
-                <ThemedText style={styles.formatInfoText}>
-                  student_id, first_name, last_name, middle_name, gender, dob, contact_number, email, college, program, year_level
-                </ThemedText>
-              </View>
+          <View style={styles.rightRow}>
+            <Button title="Insert column headers" variant="outline" size="sm" onPress={handleInsertColumns} />
+          </View>
 
-              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
-                <Pressable style={styles.sampleBtn} onPress={handleLoadSample}>
-                  <ThemedText style={styles.sampleBtnText}>📋 Load Sample CSV Template</ThemedText>
-                </Pressable>
-              </View>
+          <Input
+            label="CSV content"
+            multiline
+            numberOfLines={10}
+            placeholder="Paste student rows here, separated by commas."
+            value={csvText}
+            onChangeText={setCsvText}
+            textAlignVertical="top"
+            inputStyle={styles.csvInput}
+          />
+        </>
+      )}
 
-              <View>
-                <ThemedText style={styles.fieldLabel}>Paste CSV Content:</ThemedText>
-                <TextInput
-                  style={styles.csvTextArea}
-                  multiline
-                  numberOfLines={10}
-                  placeholder="Paste student rows here with comma separators..."
-                  placeholderTextColor="#9CA3AF"
-                  value={csvText}
-                  onChangeText={setCsvText}
-                  textAlignVertical="top"
-                />
-              </View>
+      {/* Step 2: Preview and validation */}
+      {step === 'preview' && (
+        <>
+          <View style={styles.summaryBar}>
+            <ThemedText variant="bodyBold" color={theme.colors.successText}>
+              Ready to import: {parsedPatients.length} student(s)
+            </ThemedText>
+            {parseErrors.length > 0 && (
+              <ThemedText variant="caption" color={theme.colors.warningText}>
+                {parseErrors.length} row(s) skipped due to missing required fields.
+              </ThemedText>
+            )}
+          </View>
 
-              <View style={styles.actionRow}>
-                <Pressable style={styles.cancelBtn} onPress={handleClose}>
-                  <ThemedText style={styles.cancelBtnText}>Cancel</ThemedText>
-                </Pressable>
-                <Pressable
-                  style={[styles.primaryBtn, !csvText.trim() && { opacity: 0.5 }]}
-                  onPress={parseCsvContent}
-                  disabled={!csvText.trim()}
-                >
-                  <ThemedText style={styles.primaryBtnText}>Parse & Preview →</ThemedText>
-                </Pressable>
-              </View>
-            </ScrollView>
-          )}
-
-          {/* Step 2: Preview & Validation */}
-          {step === 'preview' && (
-            <ScrollView style={styles.body} contentContainerStyle={{ gap: 14 }}>
-              <View style={styles.summaryBar}>
-                <View style={{ flex: 1 }}>
-                  <ThemedText style={styles.summaryTitle}>
-                    Ready to Import: {parsedPatients.length} Student(s)
+          <ThemedText variant="smallBold" color={theme.colors.textSecondary}>
+            Preview
+          </ThemedText>
+          <ScrollView style={styles.previewContainer} nestedScrollEnabled>
+            {parsedPatients.map((p, idx) => (
+              <View key={idx} style={styles.previewRow}>
+                <View style={styles.previewIdx}>
+                  <ThemedText variant="captionBold" color={theme.colors.textMuted}>
+                    {idx + 1}
                   </ThemedText>
-                  {parseErrors.length > 0 && (
-                    <ThemedText style={styles.summaryWarn}>
-                      ⚠️ {parseErrors.length} row(s) skipped due to missing required fields.
+                </View>
+                <View style={styles.previewBody}>
+                  <View style={styles.nameRow}>
+                    <ThemedText variant="smallBold">
+                      {p.lastName}, {p.firstName} {p.middleName ? `${p.middleName[0]}.` : ''}
                     </ThemedText>
-                  )}
+                    <ThemedText variant="captionBold" color={theme.colors.primary} style={styles.studentIdPill}>
+                      {p.customFields?.['student_id'] ?? 'N/A'}
+                    </ThemedText>
+                  </View>
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    {p.customFields?.['college'] || 'General'} · {p.customFields?.['program'] || 'No program'} ·{' '}
+                    {p.customFields?.['year_level'] || '—'}
+                  </ThemedText>
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    {p.contactNumber} · {p.email || 'No email'}
+                  </ThemedText>
                 </View>
               </View>
+            ))}
+          </ScrollView>
+        </>
+      )}
 
-              <ThemedText style={styles.fieldLabel}>Cohort Preview:</ThemedText>
-              <View style={styles.previewContainer}>
-                {parsedPatients.map((p, idx) => (
-                  <View key={idx} style={styles.previewRow}>
-                    <View style={styles.previewIdxBadge}>
-                      <ThemedText style={styles.previewIdxText}>#{idx + 1}</ThemedText>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <ThemedText style={styles.studentName}>
-                          {p.lastName}, {p.firstName} {p.middleName ? `${p.middleName[0]}.` : ''}
-                        </ThemedText>
-                        <ThemedText style={styles.studentIdBadge}>
-                          {p.customFields?.['student_id'] ?? 'N/A'}
-                        </ThemedText>
-                      </View>
-                      <ThemedText style={styles.studentMeta}>
-                        {p.customFields?.['college'] || 'General'} • {p.customFields?.['program'] || 'No Program'} • {p.customFields?.['year_level'] || '1st Year'}
-                      </ThemedText>
-                      <ThemedText style={styles.studentContact}>
-                        📞 {p.contactNumber} • ✉️ {p.email || 'No email'}
-                      </ThemedText>
-                    </View>
-                  </View>
-                ))}
-              </View>
-
-              <View style={styles.actionRow}>
-                <Pressable
-                  style={styles.cancelBtn}
-                  onPress={() => setStep('input')}
-                  disabled={isImporting}
-                >
-                  <ThemedText style={styles.cancelBtnText}>← Back to CSV</ThemedText>
-                </Pressable>
-                <Pressable
-                  style={[styles.primaryBtn, isImporting && { opacity: 0.6 }]}
-                  onPress={handleExecuteImport}
-                  disabled={isImporting}
-                >
-                  {isImporting ? (
-                    <ActivityIndicator color="#FFFFFF" />
-                  ) : (
-                    <ThemedText style={styles.primaryBtnText}>
-                      ✓ Bulk Register {parsedPatients.length} Student(s)
-                    </ThemedText>
-                  )}
-                </Pressable>
-              </View>
-            </ScrollView>
-          )}
-
-          {/* Step 3: Success Screen */}
-          {step === 'success' && (
-            <View style={styles.successBody}>
-              <View style={styles.successIconCircle}>
-                <ThemedText style={{ fontSize: 36 }}>🎓</ThemedText>
-              </View>
-              <ThemedText style={styles.successHeading}>Import Completed!</ThemedText>
-              <ThemedText style={styles.successSubheading}>
-                Successfully pre-registered {importedCount} students into the clinic database.
-                Students are now searchable in the Master Patient Index and ready for annual check-ups.
-              </ThemedText>
-
-              <Pressable style={styles.doneBtn} onPress={handleClose}>
-                <ThemedText style={styles.doneBtnText}>Close & Refresh Registry</ThemedText>
-              </Pressable>
-            </View>
-          )}
+      {/* Step 3: Success */}
+      {step === 'success' && (
+        <View style={styles.successBody}>
+          <View style={styles.successIconCircle}>
+            <Icon name="checkCircle" size={theme.sizes.iconLg} color={theme.colors.successText} />
+          </View>
+          <ThemedText variant="h2" color={theme.colors.successText}>
+            {importedCount} student(s) registered
+          </ThemedText>
+          <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.successText}>
+            Students are now searchable in the patient registry.
+          </ThemedText>
         </View>
-      </View>
+      )}
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
-  },
-  modalCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    width: '100%',
-    maxWidth: 680,
-    maxHeight: '90%',
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 8,
-    overflow: 'hidden',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    padding: 18,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    backgroundColor: '#F8FAFC',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    color: '#64748B',
-    marginTop: 2,
-  },
-  closeBtn: {
-    padding: 6,
-  },
-  closeBtnText: {
-    fontSize: 18,
-    color: '#94A3B8',
-    fontWeight: '600',
-  },
-  body: {
-    padding: 18,
-  },
-  formatInfoBox: {
-    backgroundColor: '#F0F9FF',
-    borderWidth: 1,
-    borderColor: '#BAE6FD',
-    borderRadius: 8,
-    padding: 12,
-  },
-  formatInfoTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#0369A1',
-    marginBottom: 4,
-  },
-  formatInfoText: {
-    fontSize: 11,
-    color: '#0284C7',
-    fontFamily: 'monospace',
-  },
-  sampleBtn: {
-    backgroundColor: '#F1F5F9',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-  },
-  sampleBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#334155',
-  },
-  fieldLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#334155',
-    marginBottom: 6,
-  },
-  csvTextArea: {
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 12,
-    fontFamily: 'monospace',
-    color: '#1E293B',
-    backgroundColor: '#FFFFFF',
-    minHeight: 180,
-  },
-  actionRow: {
+  footer: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    gap: 10,
-    marginTop: 16,
-    marginBottom: 10,
-  },
-  cancelBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    justifyContent: 'center',
     alignItems: 'center',
+    gap: theme.spacing.sm,
   },
-  cancelBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#64748B',
+  rightRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
   },
-  primaryBtn: {
-    backgroundColor: '#0284C7',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
+  formatInfoBox: {
+    backgroundColor: theme.colors.primarySubtle,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primaryBorder,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
+    gap: theme.spacing.xs,
   },
-  primaryBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#FFFFFF',
+  mono: {
+    fontFamily: theme.fonts.mono['400'],
+  },
+  csvInput: {
+    fontFamily: theme.fonts.mono['400'],
+    fontSize: theme.fontSizes.xs,
+    minHeight: 180,
   },
   summaryBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ECFDF5',
-    borderWidth: 1,
-    borderColor: '#A7F3D0',
-    borderRadius: 8,
-    padding: 12,
-  },
-  summaryTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#065F46',
-  },
-  summaryWarn: {
-    fontSize: 11,
-    color: '#B45309',
-    marginTop: 2,
+    backgroundColor: theme.colors.successBg,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.successBorder,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
+    gap: theme.spacing.xs,
   },
   previewContainer: {
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 8,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.md,
     maxHeight: 280,
-    overflow: 'hidden',
   },
   previewRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-    gap: 10,
+    padding: theme.spacing.md,
+    borderBottomWidth: theme.sizes.borderWidth,
+    borderBottomColor: theme.colors.borderLight,
+    gap: theme.spacing.md,
   },
-  previewIdxBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#F1F5F9',
+  previewIdx: {
+    width: theme.sizes.controlSm,
+    height: theme.sizes.controlSm,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.surfaceSubtle,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  previewIdxText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#64748B',
+  previewBody: {
+    flex: 1,
+    gap: 2,
   },
-  studentName: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#1E293B',
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
   },
-  studentIdBadge: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#0284C7',
-    backgroundColor: '#E0F2FE',
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 4,
-  },
-  studentMeta: {
-    fontSize: 11,
-    color: '#64748B',
-    marginTop: 1,
-  },
-  studentContact: {
-    fontSize: 10,
-    color: '#94A3B8',
-    marginTop: 2,
+  studentIdPill: {
+    backgroundColor: theme.colors.primaryLight,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 2,
+    borderRadius: theme.radii.xs,
+    overflow: 'hidden',
   },
   successBody: {
-    padding: 36,
+    paddingVertical: theme.spacing['2xl'],
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    gap: theme.spacing.md,
   },
   successIconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: '#DCFCE7',
+    width: theme.sizes.controlLg + theme.spacing['2xl'],
+    height: theme.sizes.controlLg + theme.spacing['2xl'],
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.successBg,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  successHeading: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#065F46',
-  },
-  successSubheading: {
-    fontSize: 13,
-    color: '#475569',
+  successText: {
     textAlign: 'center',
     maxWidth: 440,
-    lineHeight: 18,
-  },
-  doneBtn: {
-    backgroundColor: '#059669',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-    marginTop: 16,
-  },
-  doneBtnText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 14,
   },
 });

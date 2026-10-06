@@ -1,21 +1,34 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   StyleSheet,
   ScrollView,
-  TextInput,
   Pressable,
   ActivityIndicator,
-  Modal,
   Linking,
-  Alert,
 } from 'react-native';
+import { Alert, notify } from '@utils/feedback';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { ThemedText, Badge, Button, Input, Card } from '@ui';
+import {
+  ThemedText,
+  Badge,
+  BadgeVariant,
+  Button,
+  Input,
+  Card,
+  CardHeader,
+  Icon,
+  EmptyState,
+  ErrorState,
+  SkeletonList,
+  Modal,
+} from '@ui';
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
 import PrescriptionSlipModal from '../../components/PrescriptionSlipModal';
 import RecordExternalDispenseModal from '../../components/RecordExternalDispenseModal';
+import { useClinic } from '../../context/ClinicContext';
+import { useStaff, formatStaffName } from '../../context/StaffContext';
 import {
   clinicService,
   PatientQueueItem,
@@ -25,8 +38,11 @@ import {
   ReferralLetterRecord,
   PrescriptionSlipData,
   ClinicLabOrderRecord,
+  ClinicPatient,
   CdsAlert,
+  CdsAlertSeverity,
   ClinicServiceItem,
+  CreateInvoiceRequest,
 } from '../../services/clinicService';
 
 interface LocalPrescription {
@@ -53,6 +69,7 @@ export interface StatutorySymptom {
   description: string;
 }
 
+// PhilHealth statutory sign/symptom library (reference data, not patient data).
 const STATUTORY_SYMPTOMS: StatutorySymptom[] = [
   { code: '14', name: 'Headache', description: 'Headache / Cephalalgia' },
   { code: '7', name: 'Cough', description: 'Cough / Productive or Dry' },
@@ -66,6 +83,7 @@ const STATUTORY_SYMPTOMS: StatutorySymptom[] = [
   { code: 'X', name: 'Other complaint', description: 'Other complaint (Requires specific description)' },
 ];
 
+// PhilHealth Yakap GAMOT core formulary (reference data, not patient data).
 const YAKAP_GAMOT_QUICK_PICKS = [
   { genericName: 'Amlodipine Besylate', dosage: '5mg', form: 'Tablet', sig: '1 tab once daily in the morning', drugCode: 'AMLOD0000000005TAB00000000100', label: 'Amlodipine 5mg' },
   { genericName: 'Losartan Potassium', dosage: '50mg', form: 'Tablet', sig: '1 tab once daily', drugCode: 'LOSAR0000000050TAB00000000100', label: 'Losartan 50mg' },
@@ -86,6 +104,7 @@ const YAKAP_LAB_CODE_MAP: Record<string, string> = {
   '12-Lead ECG with Interpretation': '12',
 };
 
+// Common ICD-10 suggestions shown before the user searches (reference data).
 const COMMON_ICD10: Icd10Code[] = [
   { code: 'I10', description: 'Essential (primary) hypertension, Stage 1', category: 'Circulatory' },
   { code: 'E11.9', description: 'Type 2 diabetes mellitus without complications', category: 'Endocrine' },
@@ -107,265 +126,191 @@ const COMMON_LAB_TESTS = [
   'Random Blood Sugar (RBS) Rapid Test',
 ];
 
-const COMMON_PROCEDURES = [
-  { code: 'PROC-NEB', name: 'Nebulization Therapy', category: 'Procedure', fee: 250 },
-  { code: 'PROC-WOUND', name: 'Wound Dressing & Debridement', category: 'Procedure', fee: 350 },
-  { code: 'PROC-ECG', name: '12-Lead Electrocardiogram', category: 'Diagnostic', fee: 450 },
-  { code: 'PROC-VAX', name: 'Vaccine Administration', category: 'NursingService', fee: 250 },
+const FITNESS_OPTIONS = [
+  { value: 'FitToWork', label: 'Fit to work' },
+  { value: 'UnfitToWork', label: 'Unfit to work' },
+  { value: 'FitToSchool', label: 'Fit to school' },
+  { value: 'LightDuty', label: 'Light duty' },
 ];
 
-const SAMPLE_PATIENTS: PatientQueueItem[] = [
-  {
-    id: 'q-001',
-    tenantId: 'tenant-default',
-    clinicId: 'clinic-default',
-    queueNumber: 'Q-001',
-    sequenceNumber: 1,
-    queueDate: new Date().toISOString().split('T')[0],
-    patientId: 'pat-101',
-    patientName: 'Maria Santos (42F)',
-    doctorId: 'doc-001',
-    doctorName: 'Dr. Cruz',
-    priority: 'Routine',
-    status: 'InConsultation',
-    checkInTime: new Date(Date.now() - 40 * 60 * 1000).toISOString(),
-    chiefComplaint: 'Occasional morning headaches for 2 weeks',
-    hasVitals: true,
-    vitalsSummary: 'BP: 138/88 • HR: 76 • BMI: 24.2',
-  },
-  {
-    id: 'q-002',
-    tenantId: 'tenant-default',
-    clinicId: 'clinic-default',
-    queueNumber: 'Q-002',
-    sequenceNumber: 2,
-    queueDate: new Date().toISOString().split('T')[0],
-    patientId: 'pat-102',
-    patientName: 'Juan Dela Cruz (55M)',
-    doctorId: 'doc-001',
-    doctorName: 'Dr. Cruz',
-    priority: 'Urgent',
-    status: 'Triaged',
-    checkInTime: new Date(Date.now() - 25 * 60 * 1000).toISOString(),
-    chiefComplaint: 'Acute chest discomfort, heaviness upon exertion',
-    hasVitals: true,
-    vitalsSummary: 'BP: 145/95 • HR: 88 • BMI: 27.8',
-  },
-  {
-    id: 'q-003',
-    tenantId: 'tenant-default',
-    clinicId: 'clinic-default',
-    queueNumber: 'Q-003',
-    sequenceNumber: 3,
-    queueDate: new Date().toISOString().split('T')[0],
-    patientId: 'pat-103',
-    patientName: 'Elena Ramos (28F)',
-    doctorId: 'doc-002',
-    doctorName: 'Dr. Reyes',
-    priority: 'Routine',
-    status: 'Waiting',
-    checkInTime: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-    chiefComplaint: 'Second trimester routine prenatal check',
-    hasVitals: false,
-    vitalsSummary: undefined,
-  },
-];
+const REFERRAL_URGENCIES = ['Routine', 'Urgent', 'Emergency'];
 
-const SAMPLE_VITALS: Record<string, TriageVitals> = {
-  'q-001': {
-    id: 'vit-001',
-    tenantId: 'tenant-default',
-    clinicId: 'clinic-default',
-    queueItemId: 'q-001',
-    patientId: 'pat-101',
-    recordedByNurseName: 'Nurse Bea Gomez, RN',
-    recordedAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-    systolicBp: 138,
-    diastolicBp: 88,
-    heartRateBpm: 76,
-    temperatureCelsius: 36.6,
-    respiratoryRateBreathsPerMin: 18,
-    oxygenSaturationPercent: 98,
-    heightCm: 160,
-    weightKg: 62,
-    bmi: 24.2,
-    painScore: 2,
-    notes: 'Patient well-hydrated, no acute distress.',
-  },
-  'q-002': {
-    id: 'vit-002',
-    tenantId: 'tenant-default',
-    clinicId: 'clinic-default',
-    queueItemId: 'q-002',
-    patientId: 'pat-102',
-    recordedByNurseName: 'Nurse Bea Gomez, RN',
-    recordedAt: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
-    systolicBp: 145,
-    diastolicBp: 95,
-    heartRateBpm: 88,
-    temperatureCelsius: 36.8,
-    respiratoryRateBreathsPerMin: 20,
-    oxygenSaturationPercent: 96,
-    heightCm: 172,
-    weightKg: 82,
-    bmi: 27.7,
-    painScore: 5,
-    notes: 'Substernal chest heaviness, ECG requested stat.',
-  },
+/** "ResultsReceived" -> "Results Received" */
+const humanize = (value: string) => value.replace(/([a-z])([A-Z])/g, '$1 $2');
+
+const formatDate = (iso?: string) => {
+  if (!iso) return '';
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString();
 };
 
-const SAMPLE_LAB_RESULTS: Record<string, ClinicLabOrderRecord[]> = {
-  'pat-101': [
-    {
-      id: 'lab-ord-101',
-      tenantId: 'tenant-default',
-      clinicId: 'clinic-default',
-      orderNumber: 'ACC-2026-0041',
-      patientId: 'pat-101',
-      patientName: 'Maria Santos',
-      orderDate: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-      status: 'ResultsReceived',
-      clinicalDiagnosis: 'Essential Hypertension',
-      externalLabName: 'ClinicEz Central Diagnostic Laboratory',
-      pathologistImpression: 'Fasting blood glucose and lipid panel within acceptable targets. Normal renal clearance.',
-      verifiedByPathologist: 'Dr. Roberto Gomez, MD, FPSP',
-      pathologistPrcLicense: 'PRC-0089123',
-      reportReleasedAt: new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString(),
-      observationsJson: JSON.stringify([
-        { analyteCode: 'FBS', analyteName: 'Fasting Blood Sugar', value: '94.0', unit: 'mg/dL', referenceInterval: '70.0 - 99.0', flag: 'Normal' },
-        { analyteCode: 'CREA', analyteName: 'Serum Creatinine', value: '0.85', unit: 'mg/dL', referenceInterval: '0.6 - 1.1', flag: 'Normal' },
-        { analyteCode: 'EGFR', analyteName: 'eGFR (CKD-EPI)', value: '88.5', unit: 'mL/min/1.73m2', referenceInterval: '> 60.0', flag: 'Normal' },
-        { analyteCode: 'CHOL', analyteName: 'Total Cholesterol', value: '185', unit: 'mg/dL', referenceInterval: '< 200', flag: 'Normal' },
-        { analyteCode: 'TRIG', analyteName: 'Triglycerides', value: '130', unit: 'mg/dL', referenceInterval: '< 150', flag: 'Normal' },
-      ]),
-      items: [
-        { id: 'item-1', testName: 'Fasting Blood Sugar (FBS)', category: 'Clinical Chemistry', status: 'ResultsReceived' },
-        { id: 'item-2', testName: 'Lipid Profile', category: 'Clinical Chemistry', status: 'ResultsReceived' },
-      ],
-      hasCriticalPanicAlert: false,
+const priorityVariant = (priority: string): BadgeVariant =>
+  priority === 'Emergency' ? 'emergency' : priority === 'Urgent' ? 'urgent' : 'routine';
+
+const severityTone = (severity: CdsAlertSeverity) => {
+  switch (severity) {
+    case 'Critical':
+      return { variant: 'emergency' as BadgeVariant, bg: theme.colors.emergencySubtle, border: theme.colors.emergencyBorder };
+    case 'Major':
+      return { variant: 'urgent' as BadgeVariant, bg: theme.colors.urgentBg, border: theme.colors.urgentBorder };
+    case 'Moderate':
+      return { variant: 'warning' as BadgeVariant, bg: theme.colors.warningBg, border: theme.colors.warningBorder };
+    default:
+      return { variant: 'info' as BadgeVariant, bg: theme.colors.infoBg, border: theme.colors.infoBorder };
+  }
+};
+
+/** Critical findings arrive either as plain text or as a JSON array of analyte results. */
+function formatCriticalFindings(order: ClinicLabOrderRecord): string | undefined {
+  if (order.criticalFindings) return order.criticalFindings;
+  if (!order.criticalFindingsJson) return undefined;
+  try {
+    const parsed = JSON.parse(order.criticalFindingsJson);
+    if (Array.isArray(parsed)) {
+      const lines = parsed
+        .map((f: Record<string, unknown>) => {
+          const value = [f.observedValue ?? f.value, f.unit].filter(Boolean).join(' ');
+          const head = [f.analyteName, value].filter(Boolean).join(': ');
+          return f.alertDescription ? `${head}. ${f.alertDescription}` : head;
+        })
+        .filter(Boolean);
+      if (lines.length > 0) return lines.join('\n');
     }
-  ],
-  'pat-102': [
-    {
-      id: 'lab-ord-102',
-      tenantId: 'tenant-default',
-      clinicId: 'clinic-default',
-      orderNumber: 'ACC-2026-0042',
-      patientId: 'pat-102',
-      patientName: 'Juan Dela Cruz',
-      orderDate: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
-      status: 'ResultsReceived',
-      clinicalDiagnosis: 'Chest discomfort & Type 2 Diabetes',
-      externalLabName: 'ClinicEz Central Diagnostic Laboratory',
-      pathologistImpression: 'Renal panel demonstrates moderate renal impairment (eGFR 38.0 mL/min). Recommend dose adjustment for renally eliminated medications.',
-      verifiedByPathologist: 'Dr. Roberto Gomez, MD, FPSP',
-      pathologistPrcLicense: 'PRC-0089123',
-      reportReleasedAt: new Date(Date.now() - 44 * 60 * 60 * 1000).toISOString(),
-      observationsJson: JSON.stringify([
-        { analyteCode: 'FBS', analyteName: 'Fasting Blood Sugar', value: '142.0', unit: 'mg/dL', referenceInterval: '70.0 - 99.0', flag: 'High' },
-        { analyteCode: 'CREA', analyteName: 'Serum Creatinine', value: '1.85', unit: 'mg/dL', referenceInterval: '0.7 - 1.3', flag: 'High' },
-        { analyteCode: 'EGFR', analyteName: 'eGFR (CKD-EPI)', value: '38.0', unit: 'mL/min/1.73m2', referenceInterval: '> 60.0', flag: 'Low' },
-      ]),
-      items: [
-        { id: 'item-3', testName: 'Serum Creatinine & eGFR', category: 'Clinical Chemistry', status: 'ResultsReceived' },
-      ],
-      hasCriticalPanicAlert: false,
-    }
-  ],
-  'pat-103': [
-    {
-      id: 'lab-ord-103',
-      tenantId: 'tenant-default',
-      clinicId: 'clinic-default',
-      orderNumber: 'ACC-2026-0043',
-      patientId: 'pat-103',
-      patientName: 'Elena Ramos',
-      orderDate: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-      status: 'ResultsReceived',
-      clinicalDiagnosis: 'Routine Prenatal Screening & Weakness',
-      externalLabName: 'ClinicEz Central Diagnostic Laboratory',
-      pathologistImpression: 'STAT PANIC RESULT: Severe hyperkalemia (Potassium 6.8 mmol/L). Immediate telephone notification executed to clinic.',
-      verifiedByPathologist: 'Dr. Roberto Gomez, MD, FPSP',
-      pathologistPrcLicense: 'PRC-0089123',
-      reportReleasedAt: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
-      hasCriticalPanicAlert: true,
-      panicAlertTriggeredAt: new Date(Date.now() - 50 * 60 * 1000).toISOString(),
-      criticalFindingsJson: JSON.stringify([
-        {
-          analyteCode: 'K',
-          analyteName: 'Serum Potassium',
-          observedValue: '6.8',
-          unit: 'mmol/L',
-          referenceInterval: '3.5 - 5.1',
-          alertDescription: 'Severe Hyperkalemia exceeding 6.2 mmol/L panic limit. Cardiac dysrhythmia risk.'
+  } catch {
+    // Not JSON - show the raw text below.
+  }
+  return order.criticalFindingsJson;
+}
+
+interface ToggleChipProps {
+  label: string;
+  meta?: string;
+  selected: boolean;
+  onPress: () => void;
+  disabled?: boolean;
+  tone?: 'primary' | 'success';
+  showIcon?: boolean;
+}
+
+/** Selectable pill used for statutory symptoms, orders, formulary picks and option sets. */
+function ToggleChip({ label, meta, selected, onPress, disabled, tone = 'primary', showIcon = true }: ToggleChipProps) {
+  const colors =
+    tone === 'success'
+      ? {
+          selectedBg: theme.colors.successBg,
+          selectedBorder: theme.colors.success,
+          selectedText: theme.colors.successText,
+          idleBorder: theme.colors.successBorder,
         }
-      ]),
-      observationsJson: JSON.stringify([
-        { analyteCode: 'K', analyteName: 'Serum Potassium', value: '6.8', unit: 'mmol/L', referenceInterval: '3.5 - 5.1', flag: 'Critical' },
-        { analyteCode: 'NA', analyteName: 'Serum Sodium', value: '138', unit: 'mmol/L', referenceInterval: '135 - 145', flag: 'Normal' },
-      ]),
-      items: [
-        { id: 'item-4', testName: 'Serum Electrolytes (Na, K, Cl)', category: 'Clinical Chemistry', status: 'ResultsReceived' },
-      ],
-    }
-  ]
-};
+      : {
+          selectedBg: theme.colors.primaryLight,
+          selectedBorder: theme.colors.primary,
+          selectedText: theme.colors.primaryDark,
+          idleBorder: theme.colors.borderDark,
+        };
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected, disabled: !!disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.chip,
+        { borderColor: selected ? colors.selectedBorder : colors.idleBorder },
+        selected && { backgroundColor: colors.selectedBg },
+        pressed && styles.pressed,
+        disabled && styles.disabled,
+      ]}
+    >
+      {showIcon ? (
+        <Icon
+          name={selected ? 'check' : 'plus'}
+          size={theme.sizes.iconSm}
+          color={selected ? colors.selectedText : theme.colors.textMuted}
+        />
+      ) : null}
+      <ThemedText variant="small" color={selected ? colors.selectedText : theme.colors.textSecondary}>
+        {label}
+      </ThemedText>
+      {meta ? (
+        <ThemedText variant="caption" color={selected ? colors.selectedText : theme.colors.textMuted}>
+          {meta}
+        </ThemedText>
+      ) : null}
+    </Pressable>
+  );
+}
 
-const PATIENT_ALLERGIES_MAP: Record<string, string> = {
-  'pat-101': 'Penicillin, Aspirin',
-  'pat-102': 'None known',
-  'pat-103': 'Penicillin',
-};
+interface CheckRowProps {
+  checked: boolean;
+  onPress: () => void;
+  label: string;
+  disabled?: boolean;
+}
+
+function CheckRow({ checked, onPress, label, disabled }: CheckRowProps) {
+  return (
+    <Pressable
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked, disabled: !!disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={[styles.checkRow, disabled && styles.disabled]}
+    >
+      <View style={[styles.checkBox, checked && styles.checkBoxChecked]}>
+        {checked ? <Icon name="check" size={theme.sizes.iconSm} color={theme.colors.onPrimary} /> : null}
+      </View>
+      <ThemedText variant="body" style={styles.flex}>
+        {label}
+      </ThemedText>
+    </Pressable>
+  );
+}
 
 export default function ConsultationsScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const [patients, setPatients] = useState<PatientQueueItem[]>(SAMPLE_PATIENTS);
-  const [selectedPatient, setSelectedPatient] = useState<PatientQueueItem>(SAMPLE_PATIENTS[0]);
-  const [vitals, setVitals] = useState<TriageVitals | null>(SAMPLE_VITALS['q-001']);
+  const { facilityName, accreditationNumber, letterhead } = useClinic();
+  const { current, staff } = useStaff();
+
+  // Queue
+  const [patients, setPatients] = useState<PatientQueueItem[]>([]);
+  const [queueLoading, setQueueLoading] = useState(true);
+  const [queueError, setQueueError] = useState<string | null>(null);
+  const [selectedPatient, setSelectedPatient] = useState<PatientQueueItem | null>(null);
+
+  // Selected patient context (loaded from the API when a queue item is chosen)
+  const [vitals, setVitals] = useState<TriageVitals | null>(null);
+  const [vitalsError, setVitalsError] = useState<string | null>(null);
+  const [patientRecord, setPatientRecord] = useState<ClinicPatient | null>(null);
+  const [recordError, setRecordError] = useState<string | null>(null);
+  const [labOrders, setLabOrders] = useState<ClinicLabOrderRecord[]>([]);
+  const [labError, setLabError] = useState<string | null>(null);
+  const [contextLoading, setContextLoading] = useState(false);
+  const activePatientId = useRef<string | null>(null);
+  const appliedRouteKey = useRef<string | null>(null);
 
   // SOAP Inputs
-  const [subjective, setSubjective] = useState(
-    'Patient reports mild occasional headaches for 2 weeks, no dizziness, nausea, or blurring of vision. Currently compliant with Amlodipine 5mg once daily.'
-  );
-  const [objective, setObjective] = useState(
-    'Alert, conscious, ambulatory, not in acute cardiorespiratory distress. S1/S2 heard, regular rate and rhythm, no murmurs. Lungs clear to auscultation, no crackles or wheezes. No peripheral bipedal edema.'
-  );
-  const [assessment, setAssessment] = useState('Essential (primary) hypertension, Stage 1 - controlled.');
-  const [plan, setPlan] = useState(
-    '1. Continue Amlodipine 5mg OD po.\n2. Request Fasting Blood Sugar, Lipid Profile, Serum Creatinine.\n3. Low sodium, DASH diet counseling provided.\n4. Follow up in 4 weeks with lab results.'
-  );
+  const [subjective, setSubjective] = useState('');
+  const [objective, setObjective] = useState('');
+  const [assessment, setAssessment] = useState('');
+  const [plan, setPlan] = useState('');
 
   // ICD-10 Search & Selection
   const [icdQuery, setIcdQuery] = useState('');
   const [icdResults, setIcdResults] = useState<Icd10Code[]>(COMMON_ICD10);
-  const [selectedDiagnoses, setSelectedDiagnoses] = useState<LocalDiagnosis[]>([
-    { icd10Code: 'I10', description: 'Essential (primary) hypertension, Stage 1', isPrimary: true },
-  ]);
+  const [icdNotice, setIcdNotice] = useState<string | null>(null);
+  const [selectedDiagnoses, setSelectedDiagnoses] = useState<LocalDiagnosis[]>([]);
   const [showIcdDropdown, setShowIcdDropdown] = useState(false);
 
   // Prescriptions
-  const [prescriptions, setPrescriptions] = useState<LocalPrescription[]>([
-    {
-      id: 'rx-1',
-      genericName: 'Amlodipine besylate',
-      dosage: '5 mg',
-      form: 'Tablet',
-      sig: '1 tablet once daily in the morning',
-      quantity: 30,
-      durationDays: 30,
-      isDangerousDrug: false,
-    },
-  ]);
+  const [prescriptions, setPrescriptions] = useState<LocalPrescription[]>([]);
 
   // Diagnostic Lab Orders & In-Clinic Procedures
-  const [orderedLabs, setOrderedLabs] = useState<string[]>([
-    'Fasting Blood Sugar (FBS)',
-    'Lipid Profile (Chol, Trig, HDL, LDL)',
-  ]);
+  const [orderedLabs, setOrderedLabs] = useState<string[]>([]);
   const [orderedProcedures, setOrderedProcedures] = useState<string[]>([]);
 
-  // New Prescription Modal / Input Form State
+  // New Prescription Form State
   const [showAddRx, setShowAddRx] = useState(false);
   const [newRxGeneric, setNewRxGeneric] = useState('');
   const [newRxDosage, setNewRxDosage] = useState('');
@@ -376,10 +321,16 @@ export default function ConsultationsScreen() {
   const [newRxDrugCode, setNewRxDrugCode] = useState<string>('');
 
   // PhilHealth Yakap Tagging & Statutory Mapping State
-  const [isYakapEligible, setIsYakapEligible] = useState<boolean>(true);
-  const [selectedSymptomCodes, setSelectedSymptomCodes] = useState<string[]>(['14', '37']);
+  const [isYakapEligible, setIsYakapEligible] = useState<boolean>(false);
+  const [selectedSymptomCodes, setSelectedSymptomCodes] = useState<string[]>([]);
   const [symptomOtherDesc, setSymptomOtherDesc] = useState<string>('');
   const [symptomPainSite, setSymptomPainSite] = useState<string>('');
+
+  // Sign & Sync Status
+  const [isSigning, setIsSigning] = useState(false);
+  const [isSigned, setIsSigned] = useState(false);
+  const [signedAt, setSignedAt] = useState<string | null>(null);
+  const [banner, setBanner] = useState<{ text: string; isError?: boolean } | null>(null);
 
   const handleToggleSymptom = (symptom: StatutorySymptom) => {
     if (isSigned) return;
@@ -389,7 +340,7 @@ export default function ConsultationsScreen() {
       updated = selectedSymptomCodes.filter((c) => c !== symptom.code);
     } else {
       updated = [...selectedSymptomCodes, symptom.code];
-      // Priority 1: When selected, automatically seed/append into free-text subjective narrative!
+      // When selected, automatically seed/append into the free-text subjective narrative.
       if (!subjective.trim()) {
         setSubjective(`${symptom.name}, `);
       } else if (!subjective.toLowerCase().includes(symptom.name.toLowerCase())) {
@@ -420,16 +371,34 @@ export default function ConsultationsScreen() {
     setNewRxDrugCode(item.drugCode);
   };
 
-  // Tenant Mapped Services & Formulary Catalog
+  // Tenant Mapped Services & Formulary Catalog (fee schedule)
   const [clinicCatalog, setClinicCatalog] = useState<ClinicServiceItem[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+
+  const loadCatalog = useCallback(async () => {
+    setCatalogLoading(true);
+    const [items, err] = await clinicService.getServices();
+    if (err || !items) {
+      setCatalogError(err?.message || 'Unable to load the fee schedule.');
+    } else {
+      setClinicCatalog(items);
+      setCatalogError(null);
+    }
+    setCatalogLoading(false);
+  }, []);
 
   useEffect(() => {
-    clinicService.getServices().then(([items]) => {
-      if (items && items.length > 0) {
-        setClinicCatalog(items);
-      }
-    });
-  }, []);
+    loadCatalog();
+  }, [loadCatalog]);
+
+  const activeCatalog = clinicCatalog.filter((s) => s.isActive);
+  const catalogByCategory = (...categories: string[]) =>
+    activeCatalog.filter((s) => categories.includes(s.category.toLowerCase()));
+  const medicineCatalog = catalogByCategory('medicine');
+  const extraDiagnosticCatalog = catalogByCategory('diagnostic').filter((s) => !COMMON_LAB_TESTS.includes(s.name));
+  const procedureCatalog = catalogByCategory('procedure', 'nursingservice');
+  const consultationFee = catalogByCategory('consultation')[0];
 
   const handleSelectCatalogMedicine = (item: ClinicServiceItem) => {
     setNewRxGeneric(item.name);
@@ -441,37 +410,63 @@ export default function ConsultationsScreen() {
     }
   };
 
-  // Doctor Regulatory Credentials
-  const [doctorPrc, setDoctorPrc] = useState('PRC-0149281');
-  const [doctorPtr, setDoctorPtr] = useState('PTR-8492019');
-  const [doctorS2, setDoctorS2] = useState('S2-9482014');
+  // Acting doctor: the staff member this workstation is "working as", else the queue item's doctor.
+  const assignedStaff = useMemo(
+    () => staff.find((s) => s.id === selectedPatient?.doctorId) ?? null,
+    [staff, selectedPatient?.doctorId],
+  );
+  const signerStaff = current ?? assignedStaff;
+  const signer = signerStaff
+    ? { id: signerStaff.id, name: formatStaffName(signerStaff) }
+    : selectedPatient?.doctorId && selectedPatient.doctorName
+      ? { id: selectedPatient.doctorId, name: selectedPatient.doctorName }
+      : null;
+  const signerName = signer?.name ?? '';
+
+  // Doctor Regulatory Credentials (prefilled from the staff record, editable)
+  const [doctorPrc, setDoctorPrc] = useState('');
+  const [doctorPtr, setDoctorPtr] = useState('');
+  const [doctorS2, setDoctorS2] = useState('');
+  const signerStaffId = signerStaff?.id;
+  useEffect(() => {
+    setDoctorPrc(signerStaff?.prcLicenseNumber ?? '');
+    setDoctorPtr(signerStaff?.ptrNumber ?? '');
+    setDoctorS2(signerStaff?.s2LicenseNumber ?? '');
+    // Only re-seed when the acting doctor changes, so manual edits are not overwritten.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signerStaffId]);
+
+  const requireSigner = () => {
+    if (!signer) {
+      Alert.alert(
+        'Choose who is working',
+        "Select your name under 'Working as' in the sidebar or header before continuing.",
+      );
+      return null;
+    }
+    return signer;
+  };
 
   // Clinical Document Issuance States
   const [medCertModalVisible, setMedCertModalVisible] = useState(false);
   const [issuingMedCert, setIssuingMedCert] = useState(false);
   const [medCertFitness, setMedCertFitness] = useState('FitToWork');
-  const [medCertRestDays, setMedCertRestDays] = useState('3');
-  const [medCertPurpose, setMedCertPurpose] = useState('Employment / Sick Leave');
-  const [medCertRemarks, setMedCertRemarks] = useState('Advised adequate hydration and rest.');
+  const [medCertRestDays, setMedCertRestDays] = useState('');
+  const [medCertPurpose, setMedCertPurpose] = useState('');
+  const [medCertRemarks, setMedCertRemarks] = useState('');
   const [issuedMedCert, setIssuedMedCert] = useState<MedicalCertificateRecord | null>(null);
 
   const [referralModalVisible, setReferralModalVisible] = useState(false);
   const [issuingReferral, setIssuingReferral] = useState(false);
-  const [refFacility, setRefFacility] = useState('Provincial General Hospital');
-  const [refDepartment, setRefDepartment] = useState('Cardiology');
+  const [refFacility, setRefFacility] = useState('');
+  const [refDepartment, setRefDepartment] = useState('');
   const [refUrgency, setRefUrgency] = useState('Routine');
-  const [refReason, setRefReason] = useState('Evaluation & specialized diagnostic management');
+  const [refReason, setRefReason] = useState('');
   const [refSummary, setRefSummary] = useState('');
   const [issuedReferral, setIssuedReferral] = useState<ReferralLetterRecord | null>(null);
 
   const [previewDocModal, setPreviewDocModal] = useState(false);
   const [previewType, setPreviewType] = useState<'MEDCERT' | 'REFERRAL'>('MEDCERT');
-
-  // Sign & Sync Status
-  const [isSigning, setIsSigning] = useState(false);
-  const [isSigned, setIsSigned] = useState(false);
-  const [signedAt, setSignedAt] = useState<string | null>(null);
-  const [banner, setBanner] = useState<{ text: string; isError?: boolean } | null>(null);
 
   // E-Prescription Slip & Dual-Path Interoperability States
   const [signedConsultationId, setSignedConsultationId] = useState<string | null>(null);
@@ -479,15 +474,14 @@ export default function ConsultationsScreen() {
   const [prescriptionSlipModalVisible, setPrescriptionSlipModalVisible] = useState(false);
 
   // Lab Results & STAT Panic Alerts
-  const [labOrders, setLabOrders] = useState<ClinicLabOrderRecord[]>(SAMPLE_LAB_RESULTS['pat-101'] ?? []);
   const [panicModalVisible, setPanicModalVisible] = useState(false);
   const [selectedPanicOrder, setSelectedPanicOrder] = useState<ClinicLabOrderRecord | null>(null);
-  const [panicAckNotes, setPanicAckNotes] = useState('Attending physician notified via clinic alert. Initiated patient telemetry and stabilization protocol.');
+  const [panicAckNotes, setPanicAckNotes] = useState('');
   const [isAcknowledgingPanic, setIsAcknowledgingPanic] = useState(false);
-  const [expandedLabOrderId, setExpandedLabOrderId] = useState<string | null>(null);
 
   // Clinical Decision Support (CDS) Safety Engine States
   const [cdsAlerts, setCdsAlerts] = useState<CdsAlert[]>([]);
+  const [cdsUsedLocalRules, setCdsUsedLocalRules] = useState(false);
   const [evaluatingCds, setEvaluatingCds] = useState(false);
   const [cdsOverrideReason, setCdsOverrideReason] = useState('');
   const [showOverrideInput, setShowOverrideInput] = useState(false);
@@ -496,44 +490,54 @@ export default function ConsultationsScreen() {
   const [loadingSlip, setLoadingSlip] = useState(false);
 
   // Computed Interop & CDS helpers
-  const activePanicAlert = labOrders.find(o => o.hasCriticalPanicAlert && !(o.isPanicAcknowledged ?? Boolean(o.panicAcknowledgedAt))) || labOrders.find(o => o.hasCriticalPanicAlert);
-  const patientLabResults = labOrders;
-  const hasCriticalCdsAlert = cdsAlerts.some(a => a.severity === 'Critical');
-  const attendingDoctorName = selectedPatient?.doctorName || 'Dr. Cruz, MD';
+  const activePanicAlert =
+    labOrders.find((o) => o.hasCriticalPanicAlert && !(o.isPanicAcknowledged ?? Boolean(o.panicAcknowledgedAt))) ||
+    labOrders.find((o) => o.hasCriticalPanicAlert);
+  const hasCriticalCdsAlert = cdsAlerts.some((a) => a.severity === 'Critical');
+  const facilityHeader = letterhead.header || facilityName;
 
   const handleOpenPrescriptionSlip = async () => {
+    if (!selectedPatient) return;
     if (signedConsultationId) {
       setLoadingSlip(true);
-      const [slip] = await clinicService.getPrescriptionSlip(signedConsultationId);
+      const [slip, slipErr] = await clinicService.getPrescriptionSlip(signedConsultationId);
       setLoadingSlip(false);
       if (slip) {
         setPrescriptionSlip(slip);
         setPrescriptionSlipModalVisible(true);
-        return;
+      } else {
+        notify.error(slipErr?.message || 'Unable to load the e-prescription slip. Please try again.');
       }
+      return;
     }
 
-    // Dynamic fallback / draft preview
+    // Unsigned encounter: preview a draft built only from the real patient, facility and doctor records.
+    const doctor = requireSigner();
+    if (!doctor) return;
+    if (!patientRecord) {
+      notify.error('Patient details have not loaded yet, so a draft slip cannot be previewed.');
+      return;
+    }
     const draftSlip: PrescriptionSlipData = {
-      consultationId: signedConsultationId || 'draft-encounter',
-      prescriptionNumber: prescriptionSlip?.prescriptionNumber || `RX-${new Date().getFullYear()}-00912`,
+      consultationId: '',
+      prescriptionNumber: 'Draft',
       issuedAt: new Date().toISOString(),
-      clinicName: 'Metro Health Outpatient Clinic',
-      clinicAddress: 'Unit 201 Medical Arts Bldg, San Pedro, Laguna',
-      clinicContact: '(02) 8123-4567 • rx@metrohealth.ph',
-      doctorName: selectedPatient.doctorName || 'Dr. Roberto Cruz, MD',
-      doctorPrcLicense: doctorPrc || 'PRC-0149281',
-      doctorPtr: doctorPtr || 'PTR-892104',
-      doctorS2License: doctorS2 || 'S2-9482014',
-      doctorSpecialization: 'General Outpatient Medicine',
+      clinicName: facilityHeader,
+      clinicAddress: letterhead.address,
+      clinicContact: letterhead.contact,
+      doctorName: doctor.name,
+      doctorPrcLicense: doctorPrc,
+      doctorPtr: doctorPtr || undefined,
+      doctorS2License: doctorS2 || undefined,
+      doctorSpecialization: signerStaff?.specialty,
       patientId: selectedPatient.patientId,
       patientName: selectedPatient.patientName,
-      patientAge: 42,
-      patientGender: 'Male',
-      philHealthNumber: '12-092819281-9',
-      patientAllergies: selectedPatient.vitalsSummary?.includes('Penicillin') ? 'Penicillin' : undefined,
-      clinicalDiagnosis: assessment || 'Acute Bronchitis & Hypertension Stage 1',
-      specialInstructions: plan || 'Take medications with meals. Complete full antibiotic course.',
+      patientAge: patientRecord.age,
+      patientGender: patientRecord.gender,
+      philHealthNumber: patientRecord.philHealthNumber,
+      patientAllergies: patientRecord.allergies || undefined,
+      clinicalDiagnosis: assessment || undefined,
+      specialInstructions: plan || undefined,
       items: prescriptions.map((p, idx) => ({
         itemId: p.id || `item-${idx}`,
         genericName: p.genericName,
@@ -542,69 +546,58 @@ export default function ConsultationsScreen() {
         form: p.form,
         sig: p.sig,
         quantity: p.quantity,
-        durationDays: 7,
+        durationDays: p.durationDays,
         refills: 0,
         isDangerousDrug: p.isDangerousDrug,
+        philHealthDrugCode: p.philHealthDrugCode,
       })),
-      publicVerificationToken: prescriptionSlip?.publicVerificationToken || 'rx-tok-98124a9c',
-      publicVerificationUrl: prescriptionSlip?.publicVerificationUrl || 'https://portal.clinicez.ph/api/v1/public/rx-verify/rx-tok-98124a9c',
-      qrPayload: prescriptionSlip?.qrPayload || `CLINICEZ:RX:RX-${new Date().getFullYear()}-00912:rx-tok-98124a9c`,
-      dispenseStatus: prescriptionSlip?.dispenseStatus || (isSigned ? 'Pending' : 'Draft'),
-      dispensedPharmacyName: prescriptionSlip?.dispensedPharmacyName,
-      dispensedPharmacistName: prescriptionSlip?.dispensedPharmacistName,
-      dispensedPharmacistPrc: prescriptionSlip?.dispensedPharmacistPrc,
-      dispensedReceiptNumber: prescriptionSlip?.dispensedReceiptNumber,
-      dispensedAt: prescriptionSlip?.dispensedAt,
-      dispenseNotes: prescriptionSlip?.dispenseNotes,
+      publicVerificationToken: '',
+      publicVerificationUrl: '',
+      qrPayload: '',
+      dispenseStatus: 'Draft',
     };
     setPrescriptionSlip(draftSlip);
     setPrescriptionSlipModalVisible(true);
   };
 
+  const primaryDiagnosisText = () =>
+    assessment.trim() || selectedDiagnoses.find((d) => d.isPrimary)?.description || selectedDiagnoses[0]?.description || '';
+
   const handleIssueMedCert = async () => {
     if (!selectedPatient) return;
+    const doctor = requireSigner();
+    if (!doctor) return;
+    const diagnosis = primaryDiagnosisText();
+    if (!diagnosis) {
+      Alert.alert('Diagnosis required', 'Enter an assessment or add a diagnosis before issuing a medical certificate.');
+      return;
+    }
+    if (!doctorPrc.trim()) {
+      Alert.alert('PRC license required', 'Enter the PRC license number under Attending physician before issuing documents.');
+      return;
+    }
     setIssuingMedCert(true);
-    const [cert] = await clinicService.issueMedicalCertificate({
+    const [cert, certErr] = await clinicService.issueMedicalCertificate({
       patientId: selectedPatient.patientId,
       patientName: selectedPatient.patientName,
-      doctorId: 'doc-001',
-      doctorName: 'Dr. Cruz, MD',
-      prcLicenseNumber: doctorPrc,
-      ptrNumber: doctorPtr,
-      diagnosis: assessment || 'Acute illness under medical evaluation',
-      clinicalFindings: objective || 'Physical examination within normal limits',
+      doctorId: doctor.id,
+      doctorName: doctor.name,
+      prcLicenseNumber: doctorPrc.trim(),
+      ptrNumber: doctorPtr.trim() || undefined,
+      diagnosis,
+      clinicalFindings: objective.trim() || undefined,
       fitnessStatus: medCertFitness,
-      recommendedRestDays: parseInt(medCertRestDays) || undefined,
-      purpose: medCertPurpose,
-      remarks: medCertRemarks,
+      recommendedRestDays: parseInt(medCertRestDays, 10) || undefined,
+      purpose: medCertPurpose.trim() || undefined,
+      remarks: medCertRemarks.trim() || undefined,
     });
     setIssuingMedCert(false);
 
-    if (cert) {
-      setIssuedMedCert(cert);
-    } else {
-      setIssuedMedCert({
-        id: `mc-${Date.now()}`,
-        tenantId: 'tenant-default',
-        clinicId: 'clinic-default',
-        certificateNumber: `MC-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-0001`,
-        patientId: selectedPatient.patientId,
-        patientName: selectedPatient.patientName,
-        doctorId: 'doc-001',
-        doctorName: 'Dr. Cruz, MD',
-        prcLicenseNumber: doctorPrc,
-        ptrNumber: doctorPtr,
-        issueDate: new Date().toISOString().slice(0, 10),
-        diagnosis: assessment || 'Acute illness under medical evaluation',
-        clinicalFindings: objective,
-        fitnessStatus: medCertFitness,
-        recommendedRestDays: parseInt(medCertRestDays) || 3,
-        purpose: medCertPurpose,
-        remarks: medCertRemarks,
-        isSigned: true,
-        createdAt: new Date().toISOString(),
-      });
+    if (certErr || !cert) {
+      Alert.alert('Certificate not issued', certErr?.message || 'The medical certificate could not be issued. Please try again.');
+      return;
     }
+    setIssuedMedCert(cert);
     setMedCertModalVisible(false);
     setPreviewType('MEDCERT');
     setPreviewDocModal(true);
@@ -612,106 +605,181 @@ export default function ConsultationsScreen() {
 
   const handleIssueReferral = async () => {
     if (!selectedPatient) return;
+    const doctor = requireSigner();
+    if (!doctor) return;
+    if (!refFacility.trim() || !refDepartment.trim()) {
+      Alert.alert('Incomplete referral', 'Enter the receiving facility and department / specialty.');
+      return;
+    }
+    const diagnosis = primaryDiagnosisText();
+    const summary = refSummary.trim() || subjective.trim();
+    if (!diagnosis || !summary || !refReason.trim()) {
+      Alert.alert(
+        'Incomplete referral',
+        'Enter the reason for referral, a clinical summary (or subjective notes) and an assessment before issuing.',
+      );
+      return;
+    }
     setIssuingReferral(true);
-    const [ref] = await clinicService.issueReferralLetter({
+    const [ref, refErr] = await clinicService.issueReferralLetter({
       patientId: selectedPatient.patientId,
       patientName: selectedPatient.patientName,
-      referringDoctorId: 'doc-001',
-      referringDoctorName: 'Dr. Cruz, MD',
-      referredToFacility: refFacility,
-      referredDepartment: refDepartment,
+      referringDoctorId: doctor.id,
+      referringDoctorName: doctor.name,
+      referredToFacility: refFacility.trim(),
+      referredDepartment: refDepartment.trim(),
       urgency: refUrgency,
-      reasonForReferral: refReason,
-      provisionalDiagnosis: assessment || 'Clinical condition requiring specialist review',
-      clinicalSummary: refSummary || subjective || 'Patient referred for diagnostic workup.',
+      reasonForReferral: refReason.trim(),
+      provisionalDiagnosis: diagnosis,
+      clinicalSummary: summary,
     });
     setIssuingReferral(false);
 
-    if (ref) {
-      setIssuedReferral(ref);
-    } else {
-      setIssuedReferral({
-        id: `ref-${Date.now()}`,
-        tenantId: 'tenant-default',
-        clinicId: 'clinic-default',
-        referralNumber: `REF-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-0001`,
-        patientId: selectedPatient.patientId,
-        patientName: selectedPatient.patientName,
-        referringDoctorId: 'doc-001',
-        referringDoctorName: 'Dr. Cruz, MD',
-        referredToFacility: refFacility,
-        referredDepartment: refDepartment,
-        referralDate: new Date().toISOString().slice(0, 10),
-        urgency: refUrgency,
-        reasonForReferral: refReason,
-        provisionalDiagnosis: assessment || 'Clinical condition requiring specialist review',
-        clinicalSummary: refSummary || subjective,
-        isSigned: true,
-        createdAt: new Date().toISOString(),
-      });
+    if (refErr || !ref) {
+      Alert.alert('Referral not issued', refErr?.message || 'The referral letter could not be issued. Please try again.');
+      return;
     }
+    setIssuedReferral(ref);
     setReferralModalVisible(false);
     setPreviewType('REFERRAL');
     setPreviewDocModal(true);
   };
 
-  // Load real queue patients if available
   const loadQueue = useCallback(async () => {
+    setQueueLoading(true);
     const [queueData, queueErr] = await clinicService.getQueue();
-    if (!queueErr && queueData && queueData.length > 0) {
+    if (queueErr || !queueData) {
+      setQueueError(queueErr?.message || 'Unable to load the patient queue.');
+    } else {
       setPatients(queueData);
+      setQueueError(null);
     }
+    setQueueLoading(false);
   }, []);
 
   useEffect(() => {
     loadQueue();
   }, [loadQueue]);
 
-  // Load vitals & lab results when selected patient changes
-  const handleSelectPatient = async (p: PatientQueueItem) => {
-    setSelectedPatient(p);
+  // Load triage vitals, the patient record (allergies, age, PhilHealth) and lab results for a queue item.
+  const loadPatientContext = useCallback(async (p: PatientQueueItem) => {
+    activePatientId.current = p.id;
+    setContextLoading(true);
+    const [triageRes, recordRes, labRes] = await Promise.all([
+      clinicService.getTriage(p.id),
+      clinicService.getPatientById(p.patientId),
+      clinicService.getLabOrders(p.patientId),
+    ]);
+    if (activePatientId.current !== p.id) return;
+
+    const [triageData, triageErr] = triageRes;
+    if (triageErr) {
+      setVitals(null);
+      // 404 means triage has simply not been recorded yet.
+      setVitalsError(triageErr.status === 404 ? null : triageErr.message || 'Unable to load triage vitals.');
+    } else {
+      setVitals(triageData);
+      setVitalsError(null);
+    }
+
+    const [record, recordErr] = recordRes;
+    if (recordErr || !record) {
+      setPatientRecord(null);
+      setRecordError(recordErr?.message || 'Unable to load patient details.');
+    } else {
+      setPatientRecord(record);
+      setRecordError(null);
+      setIsYakapEligible(Boolean(record.philHealthNumber));
+    }
+
+    const [labData, labErr] = labRes;
+    if (labErr || !labData) {
+      setLabOrders([]);
+      setLabError(labErr?.message || 'Unable to load laboratory results.');
+    } else {
+      setLabOrders(labData);
+      setLabError(null);
+    }
+    setContextLoading(false);
+  }, []);
+
+  const resetEncounter = (p: PatientQueueItem) => {
     setIsSigned(false);
     setSignedAt(null);
     setBanner(null);
-
-    const [triageData, triageErr] = await clinicService.getTriage(p.id);
-    if (!triageErr && triageData) {
-      setVitals(triageData);
-    } else {
-      setVitals(SAMPLE_VITALS[p.id] ?? null);
-    }
-
-    if (p.chiefComplaint) {
-      setSubjective(`Patient presents with: ${p.chiefComplaint}.`);
-    }
-
-    // Ingest patient lab orders & diagnostic reports
-    const [labData] = await clinicService.getLabOrders(p.patientId);
-    let ordersList = SAMPLE_LAB_RESULTS[p.patientId] ?? [];
-    if (labData && labData.length > 0) {
-      ordersList = labData;
-    }
-    setLabOrders(ordersList);
-
-    // Run CDS evaluation
-    runCdsScreening(prescriptions, p.patientId, ordersList);
+    setSubjective(p.chiefComplaint ? `Patient presents with: ${p.chiefComplaint}.` : '');
+    setObjective('');
+    setAssessment('');
+    setPlan('');
+    setSelectedDiagnoses([]);
+    setPrescriptions([]);
+    setOrderedLabs([]);
+    setOrderedProcedures([]);
+    setSelectedSymptomCodes([]);
+    setSymptomOtherDesc('');
+    setSymptomPainSite('');
+    setCdsAlerts([]);
+    setCdsUsedLocalRules(false);
+    setCdsOverrideReason('');
+    setShowOverrideInput(false);
+    setOverrideConfirmed(false);
+    setIssuedMedCert(null);
+    setIssuedReferral(null);
+    setSignedConsultationId(null);
+    setPrescriptionSlip(null);
+    setShowAddRx(false);
+    setIcdQuery('');
+    setIcdResults(COMMON_ICD10);
+    setIcdNotice(null);
+    setShowIcdDropdown(false);
+    setVitals(null);
+    setVitalsError(null);
+    setPatientRecord(null);
+    setRecordError(null);
+    setLabOrders([]);
+    setLabError(null);
+    setIsYakapEligible(false);
   };
 
-  const runCdsScreening = async (
-    currentPrescriptions: LocalPrescription[],
-    overridePatientId?: string,
-    overrideOrders?: ClinicLabOrderRecord[]
-  ) => {
-    const patId = overridePatientId ?? selectedPatient?.patientId;
-    const orders = overrideOrders ?? labOrders;
-    const allergies = PATIENT_ALLERGIES_MAP[patId] ?? 'None';
+  const handleSelectPatient = (p: PatientQueueItem) => {
+    if (p.id === selectedPatient?.id) return;
+    setSelectedPatient(p);
+    resetEncounter(p);
+    loadPatientContext(p);
+  };
+
+  useEffect(() => {
+    const params = route.params as { queueId?: string; patientId?: string } | undefined;
+    const key = `${params?.queueId ?? ''}|${params?.patientId ?? ''}`;
+    if (key === '|' || appliedRouteKey.current === key) return;
+    const target = params?.queueId
+      ? patients.find((x) => x.id === params.queueId)
+      : patients.find((x) => x.patientId === params?.patientId);
+    if (target) {
+      appliedRouteKey.current = key;
+      handleSelectPatient(target);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route.params, patients]);
+
+  const runCdsScreening = async (currentPrescriptions: LocalPrescription[]) => {
+    if (!selectedPatient) return;
+    if (currentPrescriptions.length === 0) {
+      setCdsAlerts([]);
+      setCdsUsedLocalRules(false);
+      setShowOverrideInput(false);
+      setOverrideConfirmed(false);
+      return;
+    }
+    const patId = selectedPatient.patientId;
+    const allergies = patientRecord?.allergies ?? '';
 
     // Extract latest renal & electrolyte lab values from recent orders if available
     let latestCreatinine: number | undefined;
     let latestEgfr: number | undefined;
     let latestPotassium: number | undefined;
 
-    for (const ord of orders) {
+    for (const ord of labOrders) {
       if (ord.observationsJson) {
         try {
           const obs = JSON.parse(ord.observationsJson);
@@ -733,8 +801,8 @@ export default function ConsultationsScreen() {
     try {
       const [res, err] = await clinicService.evaluateCds({
         patientId: patId,
-        patientAllergies: allergies,
-        prescriptions: currentPrescriptions.map(p => ({ genericName: p.genericName, dosage: p.dosage })),
+        patientAllergies: allergies || undefined,
+        prescriptions: currentPrescriptions.map((p) => ({ genericName: p.genericName, dosage: p.dosage })),
         serumCreatinineMgDl: latestCreatinine,
         egfrMlMin: latestEgfr,
         serumPotassiumMmolL: latestPotassium,
@@ -742,6 +810,7 @@ export default function ConsultationsScreen() {
 
       if (!err && res && res.alerts) {
         setCdsAlerts(res.alerts);
+        setCdsUsedLocalRules(false);
         if (res.hasCriticalAlerts) {
           setShowOverrideInput(true);
         } else {
@@ -751,14 +820,15 @@ export default function ConsultationsScreen() {
         return;
       }
     } catch {
-      // Fallback local screening
+      // Fall through to local screening.
     } finally {
       setEvaluatingCds(false);
     }
 
-    // Local client-side fallback CDS rules
+    // The server check was unavailable: run basic client-side rules and say so in the UI.
+    setCdsUsedLocalRules(true);
     const localAlerts: CdsAlert[] = [];
-    const allNames = currentPrescriptions.map(p => p.genericName.toLowerCase());
+    const allNames = currentPrescriptions.map((p) => p.genericName.toLowerCase());
 
     // Allergy checks
     if (allergies.toLowerCase().includes('penicillin')) {
@@ -769,7 +839,7 @@ export default function ConsultationsScreen() {
             alertId: `loc-allergy-${rx.id}`,
             type: 'DrugAllergy',
             severity: 'Critical',
-            title: `🚨 CONTRAINDICATION: Patient has documented Penicillin allergy`,
+            title: 'Contraindication: patient has a documented penicillin allergy',
             clinicalMechanism: `${rx.genericName} is a beta-lactam penicillin. High risk of anaphylaxis and severe cutaneous reaction.`,
             recommendation: 'Do not prescribe. Substitute Macrolide or alternative class.',
             offendingDrug: rx.genericName,
@@ -780,7 +850,7 @@ export default function ConsultationsScreen() {
             alertId: `loc-cross-${rx.id}`,
             type: 'DrugAllergy',
             severity: 'Major',
-            title: `⚠️ CROSS-REACTIVITY WARNING: Cephalosporin in Penicillin-allergic patient`,
+            title: 'Cross-reactivity warning: cephalosporin in a penicillin-allergic patient',
             clinicalMechanism: `${rx.genericName} shares structural beta-lactam motifs with penicillin (~2-5% cross-reactivity).`,
             recommendation: 'Verify reaction history. Avoid if previous reaction was angioedema or anaphylaxis.',
             offendingDrug: rx.genericName,
@@ -799,7 +869,7 @@ export default function ConsultationsScreen() {
             alertId: `loc-nsaid-allergy-${rx.id}`,
             type: 'DrugAllergy',
             severity: 'Critical',
-            title: `🚨 CONTRAINDICATION: NSAID prescribed to Aspirin/NSAID-sensitive patient`,
+            title: 'Contraindication: NSAID prescribed to an aspirin/NSAID-sensitive patient',
             clinicalMechanism: `${rx.genericName} inhibits COX-1, triggering severe bronchospasm or urticaria in aspirin-exacerbated respiratory disease.`,
             recommendation: 'Do not prescribe NSAIDs. Use Paracetamol for mild analgesia.',
             offendingDrug: rx.genericName,
@@ -810,12 +880,12 @@ export default function ConsultationsScreen() {
     }
 
     // Warfarin + NSAID
-    if (allNames.some(n => n.includes('warfarin')) && allNames.some(n => n.includes('mefenamic') || n.includes('ibuprofen') || n.includes('aspirin') || n.includes('ketorolac'))) {
+    if (allNames.some((n) => n.includes('warfarin')) && allNames.some((n) => n.includes('mefenamic') || n.includes('ibuprofen') || n.includes('aspirin') || n.includes('ketorolac'))) {
       localAlerts.push({
         alertId: 'loc-warf-nsaid',
         type: 'DrugDrugInteraction',
         severity: 'Critical',
-        title: '🚨 SEVERE BLEEDING RISK: Warfarin + NSAID',
+        title: 'Severe bleeding risk: warfarin + NSAID',
         clinicalMechanism: 'Synergistic GI mucosal ulceration and platelet inhibition markedly increases major internal hemorrhage risk.',
         recommendation: 'Avoid combination. Consider Paracetamol for analgesia with INR monitoring.',
         offendingDrug: 'NSAID',
@@ -825,12 +895,12 @@ export default function ConsultationsScreen() {
     }
 
     // ACEi/ARB + Spironolactone / Potassium
-    if (allNames.some(n => n.includes('losartan') || n.includes('enalapril')) && allNames.some(n => n.includes('spironolactone') || n.includes('potassium'))) {
+    if (allNames.some((n) => n.includes('losartan') || n.includes('enalapril')) && allNames.some((n) => n.includes('spironolactone') || n.includes('potassium'))) {
       localAlerts.push({
         alertId: 'loc-ace-k',
         type: 'DrugDrugInteraction',
         severity: 'Major',
-        title: '⚠️ HYPERKALEMIA RISK: ACEi/ARB + Potassium-Sparing Agent',
+        title: 'Hyperkalemia risk: ACEi/ARB + potassium-sparing agent',
         clinicalMechanism: 'Combined aldosterone suppression impairs renal potassium excretion, risking severe hyperkalemia.',
         recommendation: 'Monitor serum potassium and renal panel within 1-2 weeks of initiation.',
         offendingDrug: 'Spironolactone',
@@ -840,13 +910,13 @@ export default function ConsultationsScreen() {
     }
 
     // Renal check for Metformin
-    if (allNames.some(n => n.includes('metformin'))) {
+    if (allNames.some((n) => n.includes('metformin'))) {
       if (latestEgfr && latestEgfr < 30) {
         localAlerts.push({
           alertId: 'loc-met-30',
           type: 'RenalDoseAdjustment',
           severity: 'Critical',
-          title: `🚨 RENAL CONTRAINDICATION: Metformin in Severe CKD (eGFR ${latestEgfr.toFixed(1)} mL/min)`,
+          title: `Renal contraindication: metformin in severe CKD (eGFR ${latestEgfr.toFixed(1)} mL/min)`,
           clinicalMechanism: 'Drug accumulation in severe renal impairment triggers potentially fatal lactic acidosis.',
           recommendation: 'Discontinue Metformin. Switch to Linagliptin or Insulin.',
           offendingDrug: 'Metformin',
@@ -857,7 +927,7 @@ export default function ConsultationsScreen() {
           alertId: 'loc-met-45',
           type: 'RenalDoseAdjustment',
           severity: 'Major',
-          title: `⚠️ RENAL DOSE ADJUSTMENT: Metformin in Moderate CKD (eGFR ${latestEgfr.toFixed(1)} mL/min)`,
+          title: `Renal dose adjustment: metformin in moderate CKD (eGFR ${latestEgfr.toFixed(1)} mL/min)`,
           clinicalMechanism: 'Decreased clearance increases toxicity. Maximum safe dose is 1,000 mg/day.',
           recommendation: 'Limit dose to 500mg BID and monitor renal profile every 3 months.',
           offendingDrug: 'Metformin',
@@ -867,7 +937,7 @@ export default function ConsultationsScreen() {
     }
 
     setCdsAlerts(localAlerts);
-    if (localAlerts.some(a => a.requiresOverrideReason)) {
+    if (localAlerts.some((a) => a.requiresOverrideReason)) {
       setShowOverrideInput(true);
     } else {
       setShowOverrideInput(false);
@@ -877,70 +947,60 @@ export default function ConsultationsScreen() {
 
   const handleAcknowledgePanic = async () => {
     if (!selectedPanicOrder) return;
-    setIsAcknowledgingPanic(true);
-    try {
-      const [res, err] = await clinicService.acknowledgePanicAlert(
-        selectedPanicOrder.id,
-        doctorPrc || 'Attending Physician',
-        panicAckNotes
-      );
-      if (!err && res) {
-        setLabOrders(prev => prev.map(o => o.id === selectedPanicOrder.id ? res : o));
-      } else {
-        // Local update
-        setLabOrders(prev => prev.map(o => o.id === selectedPanicOrder.id ? {
-          ...o,
-          panicAcknowledgedAt: new Date().toISOString(),
-          panicAcknowledgedBy: doctorPrc || 'Dr. Cruz, MD'
-        } : o));
-      }
-      setPanicModalVisible(false);
-      Alert.alert('STAT Panic Alert Acknowledged', 'Emergency telephone notification and clinical action logged in patient record.');
-    } catch {
-      Alert.alert('Error', 'Failed to acknowledge panic alert.');
-    } finally {
-      setIsAcknowledgingPanic(false);
+    const doctor = requireSigner();
+    if (!doctor) return;
+    if (!panicAckNotes.trim()) {
+      Alert.alert('Notes required', 'Record the readback notes and immediate clinical actions before confirming.');
+      return;
     }
+    setIsAcknowledgingPanic(true);
+    const [res, err] = await clinicService.acknowledgePanicAlert(selectedPanicOrder.id, doctor.name, panicAckNotes.trim());
+    setIsAcknowledgingPanic(false);
+    if (err || !res) {
+      Alert.alert('Acknowledgment failed', err?.message || 'Failed to acknowledge the critical value. Please try again.');
+      return;
+    }
+    setLabOrders((prev) => prev.map((o) => (o.id === selectedPanicOrder.id ? res : o)));
+    setPanicModalVisible(false);
+    setPanicAckNotes('');
+    notify.success('Critical value readback recorded in the patient record.');
   };
 
   const handleOpenLabPdf = (orderOrId: ClinicLabOrderRecord | string) => {
     const orderId = typeof orderOrId === 'string' ? orderOrId : orderOrId.id;
-    const found = typeof orderOrId === 'string' ? labOrders.find(o => o.id === orderOrId) : orderOrId;
+    const found = typeof orderOrId === 'string' ? labOrders.find((o) => o.id === orderOrId) : orderOrId;
     const url = clinicService.getLabReportPdfUrl(orderId);
     Linking.openURL(url).catch(() => {
       Alert.alert(
-        'Diagnostic PDF Report',
-        `Accession #${found?.orderNumber ?? orderId.slice(0, 8)}\nVerified by: ${found?.verifiedByPathologist ?? 'Pathologist'}\nPathologist Impression:\n${found?.pathologistImpression ?? 'Normal intervals.'}`
+        'Could not open the PDF report',
+        [
+          `Accession #${found?.orderNumber ?? orderId.slice(0, 8)}`,
+          found?.verifiedByPathologist ? `Verified by: ${found.verifiedByPathologist}` : null,
+          found?.pathologistImpression ? `Pathologist impression:\n${found.pathologistImpression}` : null,
+        ]
+          .filter(Boolean)
+          .join('\n'),
       );
     });
   };
 
-  useEffect(() => {
-    const params = route.params as { queueId?: string; patientId?: string } | undefined;
-    if (params?.queueId) {
-      const p = patients.find((x) => x.id === params.queueId);
-      if (p) handleSelectPatient(p);
-    } else if (params?.patientId) {
-      const p = patients.find((x) => x.patientId === params.patientId);
-      if (p) handleSelectPatient(p);
-    }
-  }, [route.params, patients]);
-
   // Search ICD-10 codes
   const handleSearchIcd10 = async (q: string) => {
     setIcdQuery(q);
+    setIcdNotice(null);
     if (!q.trim()) {
       setIcdResults(COMMON_ICD10);
       return;
     }
     const [data, err] = await clinicService.searchIcd10(q);
-    if (!err && data && data.length > 0) {
+    if (!err && data) {
       setIcdResults(data);
     } else {
-      const filtered = COMMON_ICD10.filter(
-        (i) => i.code.toLowerCase().includes(q.toLowerCase()) || i.description.toLowerCase().includes(q.toLowerCase())
+      const needle = q.toLowerCase();
+      setIcdResults(
+        COMMON_ICD10.filter((i) => i.code.toLowerCase().includes(needle) || i.description.toLowerCase().includes(needle)),
       );
-      setIcdResults(filtered);
+      setIcdNotice('ICD-10 search is unavailable right now. Showing common codes only.');
     }
   };
 
@@ -960,20 +1020,16 @@ export default function ConsultationsScreen() {
   };
 
   const handleToggleLab = (labName: string) => {
-    setOrderedLabs(prev =>
-      prev.includes(labName) ? prev.filter(l => l !== labName) : [...prev, labName]
-    );
+    setOrderedLabs((prev) => (prev.includes(labName) ? prev.filter((l) => l !== labName) : [...prev, labName]));
   };
 
   const handleToggleProcedure = (procName: string) => {
-    setOrderedProcedures(prev =>
-      prev.includes(procName) ? prev.filter(p => p !== procName) : [...prev, procName]
-    );
+    setOrderedProcedures((prev) => (prev.includes(procName) ? prev.filter((p) => p !== procName) : [...prev, procName]));
   };
 
   const handleAddPrescription = () => {
     if (!newRxGeneric.trim() || !newRxDosage.trim() || !newRxSig.trim()) {
-      Alert.alert('Incomplete Prescription', 'Please provide Generic Name, Dosage, and Directions (Sig).');
+      Alert.alert('Incomplete prescription', 'Please provide the generic name, dosage and directions (sig).');
       return;
     }
     const newRx: LocalPrescription = {
@@ -1005,13 +1061,17 @@ export default function ConsultationsScreen() {
   };
 
   const handleSignAndSync = async () => {
+    if (!selectedPatient) return;
     setBanner(null);
 
+    const doctor = requireSigner();
+    if (!doctor) return;
+
     // Clinical Decision Support (CDS) Critical Override Gate
-    const criticalAlerts = cdsAlerts.filter(a => a.requiresOverrideReason);
+    const criticalAlerts = cdsAlerts.filter((a) => a.requiresOverrideReason);
     if (criticalAlerts.length > 0 && (!cdsOverrideReason.trim() || !overrideConfirmed)) {
       setBanner({
-        text: `🚨 CDS Safety Gate: ${criticalAlerts.length} critical drug allergy / severe interaction alert(s) require clinical override justification before signing encounter.`,
+        text: `Safety check: ${criticalAlerts.length} critical drug allergy or severe interaction alert(s) need a documented clinical override before the encounter can be signed.`,
         isError: true,
       });
       setShowOverrideInput(true);
@@ -1022,7 +1082,7 @@ export default function ConsultationsScreen() {
     const hasDangerousDrug = prescriptions.some((p) => p.isDangerousDrug);
     if (hasDangerousDrug && (!doctorS2 || !doctorS2.trim())) {
       setBanner({
-        text: '⚠️ Regulatory Alert: S2 License Number is strictly required to prescribe PDEA dangerous drugs.',
+        text: 'An S2 license number is required to prescribe PDEA dangerous drugs.',
         isError: true,
       });
       return;
@@ -1030,7 +1090,7 @@ export default function ConsultationsScreen() {
 
     if (!doctorPrc || !doctorPrc.trim()) {
       setBanner({
-        text: '⚠️ PRC License Number is mandatory to sign clinical encounters.',
+        text: 'A PRC license number is required to sign clinical encounters.',
         isError: true,
       });
       return;
@@ -1038,2871 +1098,1955 @@ export default function ConsultationsScreen() {
 
     setIsSigning(true);
 
-    const payload = {
-      patientId: selectedPatient.patientId,
-      patientName: selectedPatient.patientName,
-      doctorId: selectedPatient.doctorId ?? 'doc-001',
-      doctorName: selectedPatient.doctorName ?? 'Dr. Cruz',
-      queueItemId: selectedPatient.id,
-      appointmentId: selectedPatient.appointmentId,
-      subjective,
-      objective,
-      assessment,
-      plan,
-      isYakapEligible,
-      philHealthSignSympCode: selectedSymptomCodes.join(','),
-      philHealthOtherComplaint: selectedSymptomCodes.includes('X') ? (symptomOtherDesc || subjective) : undefined,
-      philHealthPainSite: selectedSymptomCodes.includes('38') ? symptomPainSite : undefined,
-      diagnoses: selectedDiagnoses.map((d) => ({
-        icd10Code: d.icd10Code,
-        description: d.description,
-        isPrimary: d.isPrimary,
-      })),
-      prescriptions: prescriptions.map((p) => ({
-        genericName: p.genericName,
-        dosage: p.dosage,
-        form: p.form,
-        sig: p.sig,
-        quantity: p.quantity,
-        isDangerousDrug: p.isDangerousDrug,
-        philHealthDrugCode: p.philHealthDrugCode,
-      })),
-    };
-
-    const [consultation] = await clinicService.createConsultation(payload);
-
-    if (consultation?.id) {
-      setSignedConsultationId(consultation.id);
-      await clinicService.signConsultation(consultation.id, {
-        prcLicenseNumber: doctorPrc,
-        ptrNumber: doctorPtr,
-        s2LicenseNumber: doctorS2,
+    let consultationId = signedConsultationId;
+    if (!consultationId) {
+      const [consultation, createErr] = await clinicService.createConsultation({
+        patientId: selectedPatient.patientId,
+        patientName: selectedPatient.patientName,
+        doctorId: doctor.id,
+        doctorName: doctor.name,
+        queueItemId: selectedPatient.id,
+        appointmentId: selectedPatient.appointmentId,
+        subjective,
+        objective,
+        assessment,
+        plan,
+        isYakapEligible,
+        philHealthSignSympCode: selectedSymptomCodes.join(','),
+        philHealthOtherComplaint: selectedSymptomCodes.includes('X') ? symptomOtherDesc || subjective : undefined,
+        philHealthPainSite: selectedSymptomCodes.includes('38') ? symptomPainSite : undefined,
+        diagnoses: selectedDiagnoses.map((d) => ({
+          icd10Code: d.icd10Code,
+          description: d.description,
+          isPrimary: d.isPrimary,
+        })),
+        prescriptions: prescriptions.map((p) => ({
+          genericName: p.genericName,
+          dosage: p.dosage,
+          form: p.form,
+          sig: p.sig,
+          quantity: p.quantity,
+          isDangerousDrug: p.isDangerousDrug,
+          philHealthDrugCode: p.philHealthDrugCode,
+        })),
       });
+      if (createErr || !consultation?.id) {
+        setIsSigning(false);
+        setBanner({
+          text: createErr?.message || 'The encounter could not be saved, so nothing was signed. Please try again.',
+          isError: true,
+        });
+        return;
+      }
+      consultationId = consultation.id;
+      setSignedConsultationId(consultation.id);
+    }
 
-      if (prescriptions.length > 0) {
-        const [slip] = await clinicService.getPrescriptionSlip(consultation.id);
-        if (slip) {
-          setPrescriptionSlip(slip);
-        }
+    const [, signErr] = await clinicService.signConsultation(consultationId, {
+      prcLicenseNumber: doctorPrc,
+      ptrNumber: doctorPtr,
+      s2LicenseNumber: doctorS2,
+    });
+    if (signErr) {
+      setIsSigning(false);
+      setBanner({
+        text: `The encounter was saved but could not be signed: ${signErr.message || 'unknown error'}. Press Sign again to retry.`,
+        isError: true,
+      });
+      return;
+    }
+
+    if (prescriptions.length > 0) {
+      const [slip] = await clinicService.getPrescriptionSlip(consultationId);
+      if (slip) {
+        setPrescriptionSlip(slip);
       }
     }
 
+    const followUpIssues: string[] = [];
+
     // Auto-create Diagnostic Lab Requisitions if labs were ordered
     if (orderedLabs.length > 0) {
-      await clinicService.createLabOrder({
+      const [, labErr] = await clinicService.createLabOrder({
         patientId: selectedPatient.patientId,
         patientName: selectedPatient.patientName,
-        consultationId: consultation?.id,
-        orderedByDoctorId: selectedPatient.doctorId,
-        orderedByDoctorName: selectedPatient.doctorName ?? 'Dr. Cruz',
+        consultationId,
+        orderedByDoctorId: doctor.id,
+        orderedByDoctorName: doctor.name,
         clinicalDiagnosis: assessment,
-        items: orderedLabs.map(l => ({
+        items: orderedLabs.map((l) => ({
           testName: l,
           category: l.includes('ECG') || l.includes('X-Ray') ? 'Diagnostic' : 'Clinical Laboratory',
         })),
       });
+      if (labErr) followUpIssues.push('laboratory requisition');
     }
 
     // Auto-order in-clinic procedures for the nursing station
     for (const procName of orderedProcedures) {
-      const procInfo = COMMON_PROCEDURES.find(p => p.name === procName);
-      await clinicService.orderProcedure({
+      const procInfo = procedureCatalog.find((p) => p.name === procName);
+      const [, procErr] = await clinicService.orderProcedure({
         patientId: selectedPatient.patientId,
         patientName: selectedPatient.patientName,
         queueItemId: selectedPatient.id,
-        consultationId: consultation?.id,
+        consultationId,
         procedureCode: procInfo?.code,
         procedureName: procName,
         category: procInfo?.category ?? 'Procedure',
-        orderedByDoctorId: selectedPatient.doctorId,
-        orderedByDoctorName: selectedPatient.doctorName ?? 'Dr. Cruz',
+        orderedByDoctorId: doctor.id,
+        orderedByDoctorName: doctor.name,
         clinicalNotes: `Ordered during encounter for ${assessment}`,
       });
+      if (procErr) followUpIssues.push(`procedure order (${procName})`);
     }
 
-    // Auto-create draft billing invoice for Cashier Station
-    const billItems = [
-      { description: 'General Outpatient Medical Consultation', category: 'Consultation', unitPrice: 500, quantity: 1 }
-    ];
+    // Auto-create draft billing invoice for the Cashier, priced from the clinic's fee schedule
+    const billItems: CreateInvoiceRequest['lineItems'] = [];
+    if (consultationFee) {
+      billItems.push({
+        serviceItemId: consultationFee.id,
+        itemCode: consultationFee.code,
+        description: consultationFee.name,
+        category: consultationFee.category,
+        unitPrice: consultationFee.standardPrice,
+        quantity: 1,
+      });
+    }
     for (const procName of orderedProcedures) {
-      const procInfo = COMMON_PROCEDURES.find(p => p.name === procName);
+      const procInfo = procedureCatalog.find((p) => p.name === procName);
       if (procInfo) {
         billItems.push({
+          serviceItemId: procInfo.id,
+          itemCode: procInfo.code,
           description: procInfo.name,
           category: procInfo.category,
-          unitPrice: procInfo.fee,
+          unitPrice: procInfo.standardPrice,
           quantity: 1,
         });
       }
     }
-    await clinicService.createInvoice({
-      patientId: selectedPatient.patientId,
-      patientName: selectedPatient.patientName,
-      queueItemId: selectedPatient.id,
-      consultationId: consultation?.id,
-      attendingDoctorId: selectedPatient.doctorId,
-      attendingDoctorName: selectedPatient.doctorName,
-      discountType: 'None',
-      notes: 'Consultation & procedures bill forwarded to Cashier',
-      lineItems: billItems,
-    });
+    if (billItems.length > 0) {
+      const [, invoiceErr] = await clinicService.createInvoice({
+        patientId: selectedPatient.patientId,
+        patientName: selectedPatient.patientName,
+        queueItemId: selectedPatient.id,
+        consultationId,
+        attendingDoctorId: doctor.id,
+        attendingDoctorName: doctor.name,
+        discountType: 'None',
+        notes: 'Consultation & procedures bill forwarded to Cashier',
+        lineItems: billItems,
+      });
+      if (invoiceErr) followUpIssues.push('billing invoice');
+    } else {
+      followUpIssues.push('billing invoice (no consultation fee is set in the fee schedule)');
+    }
 
     // Complete queue item
-    await clinicService.completeQueueItem(selectedPatient.id);
+    const [, completeErr] = await clinicService.completeQueueItem(selectedPatient.id);
+    if (completeErr) followUpIssues.push('queue status update');
 
     setIsSigning(false);
     setIsSigned(true);
     const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     setSignedAt(nowStr);
-    setBanner({
-      text: `✓ Clinical Encounter sealed by Dr. Cruz (${doctorPrc}) at ${nowStr}! Lab requisitions, nursing orders, and Cashier invoice dispatched.`,
-      isError: false,
-    });
+    setBanner(
+      followUpIssues.length > 0
+        ? {
+            text: `Encounter signed by ${doctor.name} at ${nowStr}, but these steps did not complete: ${followUpIssues.join(', ')}. Please redo them from the relevant station.`,
+            isError: true,
+          }
+        : {
+            text: `Encounter signed by ${doctor.name} (${doctorPrc}) at ${nowStr}. Lab requisitions, nursing orders and the cashier invoice were forwarded.`,
+            isError: false,
+          },
+    );
   };
 
-  return (
-    <ResponsiveLayout
-      headerTitle="Doctor Clinical Encounter"
-      headerSubtitle="SOAP Encounter Notes • Rx, Lab Requisitions & Medical Documents"
-    >
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <ThemedText style={styles.subtitle}>Doctor EMR & Clinical Encounter</ThemedText>
-        <ThemedText style={styles.title}>SOAP Consultation</ThemedText>
-      </View>
+  const vitalItems = (
+    vitals
+      ? [
+          vitals.systolicBp != null && vitals.diastolicBp != null
+            ? { label: 'BP', value: `${vitals.systolicBp}/${vitals.diastolicBp}` }
+            : null,
+          vitals.heartRateBpm != null ? { label: 'HR', value: `${vitals.heartRateBpm} bpm` } : null,
+          vitals.temperatureCelsius != null ? { label: 'Temp', value: `${vitals.temperatureCelsius}°C` } : null,
+          vitals.oxygenSaturationPercent != null ? { label: 'SpO2', value: `${vitals.oxygenSaturationPercent}%` } : null,
+          vitals.bmi != null ? { label: 'BMI', value: `${vitals.bmi}` } : null,
+          vitals.painScore != null ? { label: 'Pain', value: `${vitals.painScore}/10` } : null,
+        ]
+      : []
+  ).filter((v): v is { label: string; value: string } => v !== null);
 
-      {/* Patient Queue Selector */}
-      <View style={styles.selectorContainer}>
-        <ThemedText style={styles.sectionHeading}>Active Patients in Queue</ThemedText>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.patientRow}>
-          {patients.map((p) => {
-            const isSelected = selectedPatient.id === p.id;
+  const yakapMissing = [
+    selectedSymptomCodes.length === 0 ? 'a statutory complaint' : null,
+    selectedDiagnoses.length === 0 ? 'a diagnosis' : null,
+    !vitals?.systolicBp ? 'triage vitals' : null,
+  ].filter((m): m is string => m !== null);
+  const yakapReady = yakapMissing.length === 0;
+
+  const patientMeta = selectedPatient
+    ? [
+        `Ticket ${selectedPatient.queueNumber}`,
+        patientRecord ? `${patientRecord.age} yrs, ${patientRecord.gender}` : null,
+        selectedPatient.chiefComplaint ? `Chief complaint: ${selectedPatient.chiefComplaint}` : null,
+      ]
+        .filter(Boolean)
+        .join(' • ')
+    : '';
+  const allergiesText = patientRecord?.allergies?.trim();
+
+  const docSignature =
+    previewType === 'MEDCERT'
+      ? {
+          name: issuedMedCert?.doctorName,
+          prc: issuedMedCert?.prcLicenseNumber,
+          ptr: issuedMedCert?.ptrNumber,
+          signed: issuedMedCert?.isSigned,
+        }
+      : {
+          name: issuedReferral?.referringDoctorName,
+          prc: doctorPrc || undefined,
+          ptr: doctorPtr || undefined,
+          signed: issuedReferral?.isSigned,
+        };
+
+  const openPanicModal = (order: ClinicLabOrderRecord) => {
+    setSelectedPanicOrder(order);
+    setPanicModalVisible(true);
+  };
+
+  const downloadPdf = async (url: string, failureMessage: string) => {
+    try {
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert('Download error', failureMessage);
+    }
+  };
+
+  const renderLabResults = () => (
+    <Card>
+      <CardHeader
+        title="Laboratory reports"
+        icon="lab"
+        subtitle="Verified findings from the laboratory information system"
+      />
+      {labError ? (
+        <ErrorState
+          compact
+          title="Unable to load laboratory reports"
+          message={labError}
+          onRetry={() => selectedPatient && loadPatientContext(selectedPatient)}
+        />
+      ) : contextLoading && labOrders.length === 0 ? (
+        <SkeletonList rows={2} />
+      ) : labOrders.length === 0 ? (
+        <ThemedText variant="small" color={theme.colors.textMuted}>
+          No laboratory reports on file for this patient.
+        </ThemedText>
+      ) : (
+        <View style={styles.stack}>
+          {labOrders.map((order) => {
+            const isFinal = order.status === 'Completed';
+            const isAck = order.isPanicAcknowledged ?? Boolean(order.panicAcknowledgedAt);
+            const testName = order.testName || order.items?.[0]?.testName || 'Laboratory panel';
+            const orderedDate = formatDate(order.orderedAt || order.orderDate);
+            const findings = formatCriticalFindings(order);
+            const meta = [
+              order.specimenType ? `Specimen: ${order.specimenType}` : null,
+              orderedDate ? `Ordered: ${orderedDate}` : null,
+            ]
+              .filter(Boolean)
+              .join(' • ');
+
             return (
-              <Pressable
-                key={p.id}
-                onPress={() => handleSelectPatient(p)}
-                style={[styles.patientPill, isSelected && styles.patientPillActive]}
+              <View
+                key={order.id}
+                style={[styles.labCard, order.hasCriticalPanicAlert && styles.labCardCritical]}
               >
-                <ThemedText style={[styles.pillBadge, isSelected && styles.pillBadgeActive]}>
-                  {p.queueNumber}
-                </ThemedText>
-                <ThemedText style={[styles.pillName, isSelected && styles.pillNameActive]}>
-                  {p.patientName}
-                </ThemedText>
-              </Pressable>
+                <View style={styles.rowBetween}>
+                  <View style={styles.flex}>
+                    <View style={styles.rowWrap}>
+                      <ThemedText variant="bodyBold">{testName}</ThemedText>
+                      <Badge
+                        label={isFinal ? 'Final, verified' : humanize(order.status)}
+                        variant={isFinal ? 'success' : 'neutral'}
+                      />
+                      {order.hasCriticalPanicAlert ? <Badge label="Critical value" variant="emergency" /> : null}
+                    </View>
+                    {meta ? (
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        {meta}
+                      </ThemedText>
+                    ) : null}
+                  </View>
+                  <Button
+                    title="PDF report"
+                    icon="file"
+                    variant="outline"
+                    size="sm"
+                    onPress={() => handleOpenLabPdf(order.id)}
+                  />
+                </View>
+
+                {findings ? (
+                  <View style={styles.findingsBox}>
+                    <ThemedText variant="small" color={theme.colors.emergencyText}>
+                      <ThemedText variant="smallBold" color={theme.colors.emergencyText}>
+                        Findings:{' '}
+                      </ThemedText>
+                      {findings}
+                    </ThemedText>
+                  </View>
+                ) : null}
+
+                {order.hasCriticalPanicAlert && !isAck ? (
+                  <View style={styles.rowBetween}>
+                    <ThemedText variant="small" color={theme.colors.emergencyText} style={styles.flex}>
+                      The telephone readback for this critical value has not been logged yet.
+                    </ThemedText>
+                    <Button
+                      title="Acknowledge"
+                      variant="danger"
+                      size="sm"
+                      onPress={() => openPanicModal(order)}
+                    />
+                  </View>
+                ) : null}
+              </View>
             );
           })}
-        </ScrollView>
-      </View>
-
-      {/* Selected Patient Banner */}
-      <View style={styles.patientCard}>
-        <View style={styles.rowBetween}>
-          <View style={{ flex: 1 }}>
-            <ThemedText style={styles.patientName}>{selectedPatient.patientName}</ThemedText>
-            <ThemedText style={styles.patientMeta}>
-              Ticket #{selectedPatient.queueNumber} • Chief Complaint: {selectedPatient.chiefComplaint ?? 'General Consultation'}
-            </ThemedText>
-          </View>
-          <View style={[styles.priorityTag, selectedPatient.priority === 'Urgent' && styles.priorityUrgent]}>
-            <ThemedText style={styles.priorityTagText}>{selectedPatient.priority}</ThemedText>
-          </View>
-        </View>
-
-        {/* Triage Vitals Breakdown */}
-        {vitals ? (
-          <View style={styles.vitalsBox}>
-            <ThemedText style={styles.vitalsTitle}>
-              Nurse Triage Telemetry ({vitals.recordedByNurseName ?? 'Nurse Station'})
-            </ThemedText>
-            <View style={styles.vitalsGrid}>
-              <View style={styles.vitalItem}>
-                <ThemedText style={styles.vitalLabel}>BP</ThemedText>
-                <ThemedText style={styles.vitalValue}>
-                  {vitals.systolicBp}/{vitals.diastolicBp}
-                </ThemedText>
-              </View>
-              <View style={styles.vitalItem}>
-                <ThemedText style={styles.vitalLabel}>HR</ThemedText>
-                <ThemedText style={styles.vitalValue}>{vitals.heartRateBpm} bpm</ThemedText>
-              </View>
-              <View style={styles.vitalItem}>
-                <ThemedText style={styles.vitalLabel}>Temp</ThemedText>
-                <ThemedText style={styles.vitalValue}>{vitals.temperatureCelsius}°C</ThemedText>
-              </View>
-              <View style={styles.vitalItem}>
-                <ThemedText style={styles.vitalLabel}>SpO2</ThemedText>
-                <ThemedText style={styles.vitalValue}>{vitals.oxygenSaturationPercent}%</ThemedText>
-              </View>
-              <View style={styles.vitalItem}>
-                <ThemedText style={styles.vitalLabel}>BMI</ThemedText>
-                <ThemedText style={styles.vitalValue}>{vitals.bmi ?? '--'}</ThemedText>
-              </View>
-              <View style={styles.vitalItem}>
-                <ThemedText style={styles.vitalLabel}>Pain</ThemedText>
-                <ThemedText style={styles.vitalValue}>{vitals.painScore ?? 0}/10</ThemedText>
-              </View>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.vitalsPending}>
-            <ThemedText style={styles.vitalsPendingMsg}>⏳ Triage vitals not yet recorded for this patient.</ThemedText>
-          </View>
-        )}
-      </View>
-
-      {/* STAT Critical / Panic Lab Result Banner */}
-      {activePanicAlert && (() => {
-        const isAck = activePanicAlert.isPanicAcknowledged ?? Boolean(activePanicAlert.panicAcknowledgedAt);
-        const testName = activePanicAlert.testName || activePanicAlert.items?.[0]?.testName || 'Diagnostic Panel';
-        const specimenType = activePanicAlert.specimenType || 'Venous Blood';
-        const findings = activePanicAlert.criticalFindings || activePanicAlert.criticalFindingsJson;
-        return (
-          <View style={[styles.panicBanner, isAck && styles.panicBannerAcknowledged]}>
-            <View style={styles.panicHeaderRow}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
-                <ThemedText style={{ fontSize: 20 }}>🚨</ThemedText>
-                <View style={{ flex: 1 }}>
-                  <ThemedText style={styles.panicTitle}>
-                    {isAck ? 'STAT CRITICAL VALUE (ACKNOWLEDGED)' : 'STAT CRITICAL / PANIC LAB VALUE ALERT'}
-                  </ThemedText>
-                  <ThemedText style={styles.panicSubtitle}>
-                    Order #{activePanicAlert.id.slice(-6).toUpperCase()} • {testName} • Specimen: {specimenType}
-                  </ThemedText>
-                </View>
-              </View>
-              <View style={styles.panicBadgeContainer}>
-                <ThemedText style={styles.panicBadgeText}>
-                  {isAck ? 'READBACK COMPLETED' : 'TELEPHONE READBACK REQUIRED'}
-                </ThemedText>
-              </View>
-            </View>
-
-            <View style={styles.panicDetailsCard}>
-              <ThemedText style={styles.panicFindings}>
-                {findings || 'Critical threshold exceeded. Immediate clinical intervention advised.'}
-              </ThemedText>
-              {isAck ? (
-                <ThemedText style={styles.panicAckInfo}>
-                  ✓ Acknowledged by Dr. {activePanicAlert.panicAcknowledgedBy ?? attendingDoctorName} on{' '}
-                  {new Date(activePanicAlert.panicAcknowledgedAt || Date.now()).toLocaleTimeString()}
-                </ThemedText>
-              ) : (
-                <ThemedText style={styles.panicUrgentPrompt}>
-                  DOH / PRC Medical Technologist reported critical value requiring immediate physician verbal readback.
-                </ThemedText>
-              )}
-            </View>
-
-            <View style={styles.panicActionsRow}>
-              {!isAck && (
-                <Pressable
-                  style={styles.panicAckButton}
-                  onPress={() => {
-                    setSelectedPanicOrder(activePanicAlert);
-                    setPanicModalVisible(true);
-                  }}
-                >
-                  <ThemedText style={styles.panicAckButtonText}>📞 Complete Statutory Readback</ThemedText>
-                </Pressable>
-              )}
-              <Pressable
-                style={styles.panicPdfButton}
-                onPress={() => handleOpenLabPdf(activePanicAlert.id)}
-              >
-                <ThemedText style={styles.panicPdfButtonText}>📄 View Diagnostic PDF</ThemedText>
-              </Pressable>
-            </View>
-          </View>
-        );
-      })()}
-
-      {/* Notification Banner */}
-      {banner && (
-        <View style={[styles.bannerCard, banner.isError && styles.bannerCardError]}>
-          <ThemedText style={[styles.bannerText, banner.isError && styles.bannerTextError]}>
-            {banner.text}
-          </ThemedText>
         </View>
       )}
+    </Card>
+  );
 
-      {/* PhilHealth Yakap Consultation Control & Claim Readiness Banner */}
-      <View style={[styles.yakapHeaderCard, !isYakapEligible && styles.yakapHeaderCardInactive]}>
-        <View style={styles.rowBetween}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
-            <Pressable
-              style={[styles.yakapCheckbox, isYakapEligible && styles.yakapCheckboxActive]}
-              onPress={() => !isSigned && setIsYakapEligible(!isYakapEligible)}
-              disabled={isSigned}
-            >
-              <ThemedText style={styles.yakapCheckMark}>{isYakapEligible ? '✓' : ''}</ThemedText>
-            </Pressable>
-            <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <ThemedText style={styles.yakapTitle}>PhilHealth Yakap / Konsulta Consultation</ThemedText>
-                <View style={[styles.trancheBadge, isYakapEligible ? styles.trancheBadgeActive : styles.trancheBadgeInactive]}>
-                  <ThemedText style={[styles.trancheBadgeText, isYakapEligible ? styles.trancheBadgeTextActive : styles.trancheBadgeTextInactive]}>
-                    {isYakapEligible ? 'Tranche 2 E-Claims Tagged' : 'Private / Non-Yakap'}
+  return (
+    <ResponsiveLayout headerTitle="Consultations">
+      <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        {/* Patient queue */}
+        <View style={styles.queueSection}>
+          <View style={styles.rowBetween}>
+            <ThemedText variant="h3">Patient queue</ThemedText>
+            <Button
+              title="Refresh"
+              icon="refresh"
+              variant="ghost"
+              size="sm"
+              loading={queueLoading}
+              onPress={loadQueue}
+            />
+          </View>
+          {queueLoading && patients.length === 0 ? (
+            <SkeletonList rows={2} rowHeight={theme.sizes.controlMd} />
+          ) : queueError ? (
+            <ErrorState title="Unable to load the patient queue" message={queueError} onRetry={loadQueue} />
+          ) : patients.length === 0 ? (
+            <EmptyState
+              icon="patients"
+              title="No patients in the queue"
+              description="Patients appear here once they are checked in at the front desk."
+            />
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.patientRow}>
+              {patients.map((p) => (
+                <Button
+                  key={p.id}
+                  title={`${p.queueNumber}  ${p.patientName}`}
+                  size="sm"
+                  variant={selectedPatient?.id === p.id ? 'primary' : 'outline'}
+                  onPress={() => handleSelectPatient(p)}
+                />
+              ))}
+            </ScrollView>
+          )}
+        </View>
+
+        {!selectedPatient && patients.length > 0 ? (
+          <EmptyState
+            icon="consultations"
+            title="Select a patient"
+            description="Choose a patient from the queue above to start the consultation."
+          />
+        ) : null}
+
+        {selectedPatient ? (
+          <>
+            {/* Selected patient */}
+            <Card>
+              <View style={styles.rowBetween}>
+                <View style={styles.flex}>
+                  <ThemedText variant="h2">{selectedPatient.patientName}</ThemedText>
+                  <ThemedText variant="small" color={theme.colors.textSecondary}>
+                    {patientMeta}
                   </ThemedText>
                 </View>
+                <Badge label={selectedPatient.priority} variant={priorityVariant(selectedPatient.priority)} />
               </View>
-              <ThemedText style={styles.yakapSubtitle}>
-                {isYakapEligible
-                  ? `Statutory selector 1st priority • Patient PIN: Active • Auto-seeds doctor narrative`
-                  : 'Encounter will record in internal EMR only. No statutory XML generated.'}
-              </ThemedText>
-            </View>
-          </View>
 
-          {isYakapEligible && (
-            <View style={styles.claimReadinessContainer}>
-              <View style={[
-                styles.readinessPill,
-                (selectedSymptomCodes.length > 0 && selectedDiagnoses.length > 0 && vitals?.systolicBp)
-                  ? styles.readinessPillSuccess
-                  : styles.readinessPillPending
-              ]}>
-                <ThemedText style={[
-                  styles.readinessPillText,
-                  (selectedSymptomCodes.length > 0 && selectedDiagnoses.length > 0 && vitals?.systolicBp)
-                    ? styles.readinessPillTextSuccess
-                    : styles.readinessPillTextPending
-                ]}>
-                  {(selectedSymptomCodes.length > 0 && selectedDiagnoses.length > 0 && vitals?.systolicBp)
-                    ? '🟢 Tranche 2 Claim Ready'
-                    : '🟡 Incomplete for Yakap'}
-                </ThemedText>
-              </View>
-            </View>
-          )}
-        </View>
-      </View>
-
-      {/* S - Subjective */}
-      <View style={styles.section}>
-        <View style={styles.rowBetween}>
-          <ThemedText style={styles.label}>Subjective (Chief Complaint & History of Present Illness)</ThemedText>
-          {isYakapEligible && (
-            <ThemedText style={styles.statutoryTag}>⭐ 1st Priority: PhilHealth Statutory Symptoms (lib_signssymptoms)</ThemedText>
-          )}
-        </View>
-
-        {/* Priority 1: PhilHealth Statutory Symptom Selector Chips */}
-        {isYakapEligible && (
-          <View style={styles.statutorySelectorCard}>
-            <ThemedText style={styles.statutoryInstruction}>
-              Select statutory complaint to guarantee 100% claim accuracy. Selection automatically seeds the clinical narrative below for doctor expansion:
-            </ThemedText>
-            <View style={styles.symptomChipsRow}>
-              {STATUTORY_SYMPTOMS.map((symp) => {
-                const isSelected = selectedSymptomCodes.includes(symp.code);
-                return (
-                  <Pressable
-                    key={symp.code}
-                    style={[styles.symptomChip, isSelected && styles.symptomChipActive]}
-                    onPress={() => handleToggleSymptom(symp)}
-                    disabled={isSigned}
-                  >
-                    <ThemedText style={[styles.symptomChipCode, isSelected && styles.symptomChipCodeActive]}>
-                      {symp.code}
-                    </ThemedText>
-                    <ThemedText style={[styles.symptomChipText, isSelected && styles.symptomChipTextActive]}>
-                      {symp.name}
-                    </ThemedText>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            {/* If Symptom 38 (Pain) selected: Prompt pain site */}
-            {selectedSymptomCodes.includes('38') && (
-              <View style={styles.statutorySubField}>
-                <ThemedText style={styles.subFieldLabel}>Required PhilHealth Pain Site (pPainSite):</ThemedText>
-                <TextInput
-                  style={styles.statutorySubInput}
-                  placeholder="e.g. Epigastric area, Right shoulder, Lumbar spine..."
-                  placeholderTextColor="#9CA3AF"
-                  value={symptomPainSite}
-                  onChangeText={setSymptomPainSite}
-                  editable={!isSigned}
-                />
-              </View>
-            )}
-
-            {/* If Symptom X (Other Complaint) selected: Prompt specific narrative */}
-            {selectedSymptomCodes.includes('X') && (
-              <View style={styles.statutorySubField}>
-                <ThemedText style={styles.subFieldLabel}>Required PhilHealth Other Complaint (pOtherComplaint):</ThemedText>
-                <TextInput
-                  style={styles.statutorySubInput}
-                  placeholder="e.g. Generalized pruriginous urticarial lesions..."
-                  placeholderTextColor="#9CA3AF"
-                  value={symptomOtherDesc}
-                  onChangeText={setSymptomOtherDesc}
-                  editable={!isSigned}
-                />
-              </View>
-            )}
-          </View>
-        )}
-
-        <TextInput
-          style={styles.textArea}
-          multiline
-          placeholder="Enter patient narrative, symptoms, onset, and duration..."
-          placeholderTextColor="#9CA3AF"
-          value={subjective}
-          onChangeText={setSubjective}
-          editable={!isSigned}
-        />
-      </View>
-
-      {/* O - Objective */}
-      <View style={styles.section}>
-        <ThemedText style={styles.label}>Objective (Physical Findings, Auscultation, Exam)</ThemedText>
-        <TextInput
-          style={styles.textArea}
-          multiline
-          placeholder="Enter physical examination and clinical observations..."
-          placeholderTextColor="#9CA3AF"
-          value={objective}
-          onChangeText={setObjective}
-          editable={!isSigned}
-        />
-      </View>
-
-      {/* A - Assessment & ICD-10 Search */}
-      <View style={styles.section}>
-        <View style={styles.rowBetween}>
-          <ThemedText style={styles.label}>Assessment (Clinical Impression & ICD-10)</ThemedText>
-          {isYakapEligible && (
-            <ThemedText style={styles.statutoryTag}>PhilHealth ICD-10 & lib_mdisease Linked</ThemedText>
-          )}
-        </View>
-
-        {/* PhilHealth Chronic Condition Quick-Picks */}
-        {isYakapEligible && !isSigned && (
-          <View style={styles.chronicQuickPicksRow}>
-            <ThemedText style={styles.quickPickLabel}>Yakap Essential Diagnoses:</ThemedText>
-            <Pressable
-              style={styles.chronicChip}
-              onPress={() => handleQuickAddDiagnosis('I10', 'Essential (primary) hypertension')}
-            >
-              <ThemedText style={styles.chronicChipText}>+ I10 (HPN)</ThemedText>
-            </Pressable>
-            <Pressable
-              style={styles.chronicChip}
-              onPress={() => handleQuickAddDiagnosis('E11.9', 'Type 2 diabetes mellitus')}
-            >
-              <ThemedText style={styles.chronicChipText}>+ E11.9 (DM)</ThemedText>
-            </Pressable>
-            <Pressable
-              style={styles.chronicChip}
-              onPress={() => handleQuickAddDiagnosis('J45.909', 'Bronchial asthma')}
-            >
-              <ThemedText style={styles.chronicChipText}>+ J45.9 (Asthma)</ThemedText>
-            </Pressable>
-            <Pressable
-              style={styles.chronicChip}
-              onPress={() => handleQuickAddDiagnosis('J00', 'Acute nasopharyngitis [common cold]')}
-            >
-              <ThemedText style={styles.chronicChipText}>+ J00 (URTI)</ThemedText>
-            </Pressable>
-          </View>
-        )}
-
-        <TextInput
-          style={styles.input}
-          placeholder="Primary Impression Narrative..."
-          placeholderTextColor="#9CA3AF"
-          value={assessment}
-          onChangeText={setAssessment}
-          editable={!isSigned}
-        />
-
-        {/* Selected Diagnoses Badges */}
-        <View style={styles.diagnosesList}>
-          {selectedDiagnoses.map((d) => (
-            <View key={d.icd10Code} style={styles.diagBadge}>
-              <ThemedText style={styles.diagCode}>{d.icd10Code}</ThemedText>
-              <ThemedText style={styles.diagDesc} numberOfLines={1}>
-                {d.description}
-              </ThemedText>
-              {d.isPrimary && <ThemedText style={styles.primaryTag}>PRIMARY</ThemedText>}
-              {!isSigned && (
-                <Pressable onPress={() => handleRemoveDiagnosis(d.icd10Code)} style={styles.removeTag}>
-                  <ThemedText style={styles.removeTagText}>✕</ThemedText>
-                </Pressable>
-              )}
-            </View>
-          ))}
-        </View>
-
-        {/* ICD-10 Search Bar */}
-        {!isSigned && (
-          <View style={styles.icdSearchWrapper}>
-            <TextInput
-              style={styles.icdSearchInput}
-              placeholder="Search ICD-10 Codes (e.g. I10, Diabetes, Cold)..."
-              placeholderTextColor="#9CA3AF"
-              value={icdQuery}
-              onChangeText={handleSearchIcd10}
-              onFocus={() => setShowIcdDropdown(true)}
-            />
-            {showIcdDropdown && (
-              <View style={styles.icdDropdown}>
-                {icdResults.map((item) => (
-                  <Pressable
-                    key={item.code}
-                    style={styles.icdItem}
-                    onPress={() => handleAddDiagnosis(item)}
-                  >
-                    <ThemedText style={styles.icdItemCode}>{item.code}</ThemedText>
-                    <ThemedText style={styles.icdItemDesc}>{item.description}</ThemedText>
-                  </Pressable>
-                ))}
-                <Pressable style={styles.icdCloseBtn} onPress={() => setShowIcdDropdown(false)}>
-                  <ThemedText style={styles.icdCloseText}>Close Suggestions</ThemedText>
-                </Pressable>
-              </View>
-            )}
-          </View>
-        )}
-      </View>
-
-      {/* Diagnostic Lab Orders Section */}
-      <View style={styles.section}>
-        <ThemedText style={styles.label}>Diagnostic Laboratory Orders ({orderedLabs.length})</ThemedText>
-        <ThemedText style={styles.subHint}>Select diagnostic tests to generate requisition order for laboratory fulfillment.</ThemedText>
-        <View style={styles.chipsRow}>
-          {COMMON_LAB_TESTS.map(lab => {
-            const isSelected = orderedLabs.includes(lab);
-            const yakapCode = YAKAP_LAB_CODE_MAP[lab];
-            return (
-              <Pressable
-                key={lab}
-                style={[styles.chip, isSelected && styles.chipActive]}
-                onPress={() => !isSigned && handleToggleLab(lab)}
-                disabled={isSigned}
-              >
-                <ThemedText style={[styles.chipText, isSelected && styles.chipTextActive]}>
-                  {isSelected ? '✓ ' : '+ '}{lab}
-                  {isYakapEligible && yakapCode && (
-                    <ThemedText style={styles.yakapDiagnosticCode}> (Yakap {yakapCode})</ThemedText>
-                  )}
-                </ThemedText>
-              </Pressable>
-            );
-          })}
-          {clinicCatalog
-            .filter((s) => s.category.toLowerCase() === 'diagnostic' && s.isActive && !COMMON_LAB_TESTS.includes(s.name))
-            .map((diag) => {
-              const isSelected = orderedLabs.includes(diag.name);
-              const yakapCode = diag.philHealthCode || YAKAP_LAB_CODE_MAP[diag.name];
-              return (
-                <Pressable
-                  key={diag.id}
-                  style={[styles.chip, isSelected && styles.chipActive, { borderColor: '#A7F3D0' }]}
-                  onPress={() => !isSigned && handleToggleLab(diag.name)}
-                  disabled={isSigned}
-                >
-                  <ThemedText style={[styles.chipText, isSelected && styles.chipTextActive]}>
-                    {isSelected ? '✓ ' : '+ '}{diag.name} (₱{diag.standardPrice.toFixed(0)})
-                    {isYakapEligible && yakapCode && (
-                      <ThemedText style={styles.yakapDiagnosticCode}> (Yakap {yakapCode})</ThemedText>
-                    )}
+              {allergiesText ? <Badge icon="alert" label={`Allergies: ${allergiesText}`} variant="warning" /> : null}
+              {recordError && !contextLoading ? (
+                <View style={styles.rowBetween}>
+                  <ThemedText variant="small" color={theme.colors.emergencyText} style={styles.flex}>
+                    {recordError}
                   </ThemedText>
-                </Pressable>
-              );
-            })}
-        </View>
-      </View>
+                  <Button
+                    title="Retry"
+                    icon="refresh"
+                    variant="ghost"
+                    size="sm"
+                    onPress={() => loadPatientContext(selectedPatient)}
+                  />
+                </View>
+              ) : null}
 
-      {/* Diagnostic Lab Results & Pathologist Reports */}
-      {patientLabResults.length > 0 && (
-        <View style={styles.card}>
-          <View style={styles.rowBetween}>
-            <View>
-              <ThemedText style={styles.sectionHeaderTitle}>Laboratory Reports & Diagnostics ({patientLabResults.length})</ThemedText>
-              <ThemedText style={styles.subHint}>Official verified lab findings from Laboratory Information System (LIS)</ThemedText>
-            </View>
-            <ThemedText style={{ fontSize: 11, color: '#0284C7', fontWeight: '700' }}>⚡ DOH Interop Active</ThemedText>
-          </View>
-
-          <View style={{ gap: 10, marginTop: 8 }}>
-            {patientLabResults.map((order) => {
-              const isFinal = order.status === 'Completed';
-              const isAck = order.isPanicAcknowledged ?? Boolean(order.panicAcknowledgedAt);
-              const testName = order.testName || order.items?.[0]?.testName || 'Laboratory Panel';
-              const specimenType = order.specimenType || 'Venous Blood';
-              const orderedDate = order.orderedAt || order.orderDate;
-              const findings = order.criticalFindings || order.criticalFindingsJson;
-
-              return (
-                <View key={order.id} style={[styles.labResultCard, order.hasCriticalPanicAlert && styles.labResultCardPanic]}>
+              {/* Triage vitals */}
+              {contextLoading && !vitals ? (
+                <SkeletonList rows={1} rowHeight={theme.sizes.controlLg} />
+              ) : vitalsError ? (
+                <ErrorState
+                  compact
+                  title="Unable to load triage vitals"
+                  message={vitalsError}
+                  onRetry={() => loadPatientContext(selectedPatient)}
+                />
+              ) : vitals ? (
+                <View style={styles.vitalsBox}>
                   <View style={styles.rowBetween}>
-                    <View style={{ flex: 1 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <ThemedText style={styles.labResultName}>{testName}</ThemedText>
-                        <View style={[styles.labStatusBadge, isFinal ? styles.labStatusFinal : styles.labStatusPending]}>
-                          <ThemedText style={[styles.labStatusText, isFinal ? styles.labStatusFinalText : styles.labStatusPendingText]}>
-                            {isFinal ? 'FINAL / VERIFIED' : order.status.toUpperCase()}
+                    <ThemedText variant="smallBold" color={theme.colors.textSecondary}>
+                      Triage vitals
+                    </ThemedText>
+                    {vitals.recordedByNurseName ? (
+                      <ThemedText variant="caption" color={theme.colors.textMuted}>
+                        Recorded by {vitals.recordedByNurseName}
+                      </ThemedText>
+                    ) : null}
+                  </View>
+                  <View style={styles.rowWrap}>
+                    {vitalItems.map((v) => (
+                      <View key={v.label} style={styles.vitalItem}>
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>
+                          {v.label}
+                        </ThemedText>
+                        <ThemedText variant="bodyBold">{v.value}</ThemedText>
+                      </View>
+                    ))}
+                  </View>
+                  {vitals.notes ? (
+                    <ThemedText variant="small" color={theme.colors.textSecondary}>
+                      {vitals.notes}
+                    </ThemedText>
+                  ) : null}
+                </View>
+              ) : (
+                <View style={styles.row}>
+                  <Icon name="hourglass" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+                  <ThemedText variant="small" color={theme.colors.textMuted}>
+                    Triage vitals have not been recorded for this patient yet.
+                  </ThemedText>
+                </View>
+              )}
+            </Card>
+
+            {/* Critical lab value banner */}
+            {activePanicAlert
+              ? (() => {
+                  const isAck = activePanicAlert.isPanicAcknowledged ?? Boolean(activePanicAlert.panicAcknowledgedAt);
+                  const testName =
+                    activePanicAlert.testName || activePanicAlert.items?.[0]?.testName || 'Diagnostic panel';
+                  const findings = formatCriticalFindings(activePanicAlert);
+                  const meta = [
+                    `Order #${activePanicAlert.id.slice(-6).toUpperCase()}`,
+                    testName,
+                    activePanicAlert.specimenType ? `Specimen: ${activePanicAlert.specimenType}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' • ');
+                  const ackAt = activePanicAlert.panicAcknowledgedAt
+                    ? new Date(activePanicAlert.panicAcknowledgedAt).toLocaleTimeString()
+                    : '';
+                  return (
+                    <View style={[styles.panicBanner, isAck && styles.panicBannerAcknowledged]}>
+                      <View style={styles.row}>
+                        <Icon
+                          name={isAck ? 'checkCircle' : 'emergency'}
+                          size={theme.sizes.iconLg}
+                          color={isAck ? theme.colors.success : theme.colors.emergency}
+                        />
+                        <View style={styles.flex}>
+                          <ThemedText variant="h3" color={isAck ? theme.colors.successText : theme.colors.emergencyText}>
+                            {isAck ? 'Critical value acknowledged' : 'Critical lab value needs readback'}
+                          </ThemedText>
+                          <ThemedText variant="small" color={theme.colors.textSecondary}>
+                            {meta}
                           </ThemedText>
                         </View>
-                        {order.hasCriticalPanicAlert && (
-                          <View style={styles.panicPill}>
-                            <ThemedText style={styles.panicPillText}>CRITICAL PANIC</ThemedText>
-                          </View>
-                        )}
+                        <Badge
+                          label={isAck ? 'Readback completed' : 'Readback required'}
+                          variant={isAck ? 'success' : 'emergency'}
+                        />
                       </View>
-                      <ThemedText style={styles.labResultMeta}>
-                        Specimen: {specimenType} • Ordered: {new Date(orderedDate).toLocaleDateString()}
+                      <ThemedText variant="body" color={theme.colors.text}>
+                        {findings || 'The laboratory flagged a critical value for this patient.'}
                       </ThemedText>
+                      {isAck ? (
+                        <ThemedText variant="small" color={theme.colors.textSecondary}>
+                          Acknowledged by {activePanicAlert.panicAcknowledgedBy ?? signerName}
+                          {ackAt ? ` at ${ackAt}` : ''}.
+                        </ThemedText>
+                      ) : (
+                        <ThemedText variant="small" color={theme.colors.emergencyText}>
+                          The physician must confirm receipt of this critical value by verbal readback.
+                        </ThemedText>
+                      )}
+                      <View style={styles.actionRow}>
+                        {!isAck ? (
+                          <Button
+                            title="Record readback"
+                            icon="phone"
+                            variant="danger"
+                            size="sm"
+                            onPress={() => openPanicModal(activePanicAlert)}
+                          />
+                        ) : null}
+                        <Button
+                          title="View lab report (PDF)"
+                          icon="file"
+                          variant="outline"
+                          size="sm"
+                          onPress={() => handleOpenLabPdf(activePanicAlert.id)}
+                        />
+                      </View>
                     </View>
+                  );
+                })()
+              : null}
 
-                    <Pressable
-                      style={styles.labPdfBtn}
-                      onPress={() => handleOpenLabPdf(order.id)}
-                    >
-                      <ThemedText style={styles.labPdfBtnText}>📄 PDF Report</ThemedText>
-                    </Pressable>
-                  </View>
+            {/* Notification banner */}
+            {banner ? (
+              <View style={[styles.bannerCard, banner.isError && styles.bannerCardError]}>
+                <Icon
+                  name={banner.isError ? 'alertCircle' : 'checkCircle'}
+                  size={theme.sizes.iconMd}
+                  color={banner.isError ? theme.colors.emergency : theme.colors.success}
+                />
+                <ThemedText
+                  variant="bodyBold"
+                  color={banner.isError ? theme.colors.emergencyText : theme.colors.successText}
+                  style={styles.flex}
+                >
+                  {banner.text}
+                </ThemedText>
+              </View>
+            ) : null}
 
-                  {findings && (
-                    <View style={styles.labFindingsBox}>
-                      <ThemedText style={styles.labFindingsText}>
-                        <ThemedText style={{ fontWeight: '700' }}>Findings: </ThemedText>
-                        {findings}
-                      </ThemedText>
-                    </View>
-                  )}
-
-                  {order.hasCriticalPanicAlert && !isAck && (
-                    <View style={styles.unackNoticeRow}>
-                      <ThemedText style={styles.unackNoticeText}>
-                        ⚠️ Urgent: Statutory telephone readback has not yet been logged.
-                      </ThemedText>
-                      <Pressable
-                        onPress={() => {
-                          setSelectedPanicOrder(order);
-                          setPanicModalVisible(true);
-                        }}
-                      >
-                        <ThemedText style={styles.unackActionLink}>Acknowledge Now →</ThemedText>
-                      </Pressable>
-                    </View>
-                  )}
+            {/* PhilHealth Yakap tagging */}
+            <Card>
+              <View style={styles.rowBetween}>
+                <View style={styles.flex}>
+                  <CheckRow
+                    checked={isYakapEligible}
+                    disabled={isSigned}
+                    onPress={() => setIsYakapEligible(!isYakapEligible)}
+                    label="PhilHealth Yakap / Konsulta consultation"
+                  />
                 </View>
-              );
-            })}
-          </View>
-        </View>
-      )}
+                {isYakapEligible ? (
+                  <Badge label={yakapReady ? 'Claim ready' : 'Incomplete'} variant={yakapReady ? 'success' : 'warning'} />
+                ) : (
+                  <Badge label="Not tagged" variant="neutral" />
+                )}
+              </View>
+              <ThemedText variant="small" color={theme.colors.textMuted}>
+                {!isYakapEligible
+                  ? 'Recorded in the internal EMR only. No PhilHealth claim data is generated.'
+                  : yakapReady
+                    ? 'Complaint, diagnosis and vitals are on record for the claim.'
+                    : `Still needed for the claim: ${yakapMissing.join(', ')}.`}
+              </ThemedText>
+            </Card>
 
-      {/* In-Clinic Procedures Order Section */}
-      <View style={styles.section}>
-        <ThemedText style={styles.label}>In-Clinic Nursing Procedures ({orderedProcedures.length})</ThemedText>
-        <ThemedText style={styles.subHint}>Orders dispatched directly to Nurse Station for immediate treatment.</ThemedText>
-        <View style={styles.chipsRow}>
-          {COMMON_PROCEDURES.map(proc => {
-            const isSelected = orderedProcedures.includes(proc.name);
-            return (
-              <Pressable
-                key={proc.code}
-                style={[styles.chip, isSelected && styles.chipActiveProcedure]}
-                onPress={() => !isSigned && handleToggleProcedure(proc.name)}
-                disabled={isSigned}
-              >
-                <ThemedText style={[styles.chipText, isSelected && styles.chipTextActive]}>
-                  {isSelected ? '⚡ ' : '+ '}{proc.name} (₱{proc.fee})
-                </ThemedText>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
+            {/* S - Subjective */}
+            <Card>
+              <CardHeader
+                title="Subjective"
+                subtitle="Chief complaint and history of present illness"
+                rightAction={
+                  isYakapEligible ? <Badge label="PhilHealth complaint required" variant="info" /> : undefined
+                }
+              />
+              {isYakapEligible ? (
+                <View style={styles.stack}>
+                  <ThemedText variant="small" color={theme.colors.textMuted}>
+                    Select the PhilHealth complaint(s) for this visit. Each selection is added to the narrative below.
+                  </ThemedText>
+                  <View style={styles.chipsRow}>
+                    {STATUTORY_SYMPTOMS.map((symp) => (
+                      <ToggleChip
+                        key={symp.code}
+                        label={symp.name}
+                        meta={symp.code}
+                        selected={selectedSymptomCodes.includes(symp.code)}
+                        disabled={isSigned}
+                        onPress={() => handleToggleSymptom(symp)}
+                      />
+                    ))}
+                  </View>
+                  {selectedSymptomCodes.includes('38') ? (
+                    <Input
+                      label="Pain site (required by PhilHealth)"
+                      placeholder="e.g. Epigastric area, right shoulder, lumbar spine"
+                      value={symptomPainSite}
+                      onChangeText={setSymptomPainSite}
+                      editable={!isSigned}
+                    />
+                  ) : null}
+                  {selectedSymptomCodes.includes('X') ? (
+                    <Input
+                      label="Other complaint (required by PhilHealth)"
+                      placeholder="Describe the complaint"
+                      value={symptomOtherDesc}
+                      onChangeText={setSymptomOtherDesc}
+                      editable={!isSigned}
+                    />
+                  ) : null}
+                </View>
+              ) : null}
+              <Input
+                multiline
+                placeholder="Patient narrative, symptoms, onset and duration"
+                accessibilityLabel="Subjective notes"
+                value={subjective}
+                onChangeText={setSubjective}
+                editable={!isSigned}
+                inputStyle={styles.textArea}
+              />
+            </Card>
 
-      {/* P - Plan & Prescriptions */}
-      <View style={styles.section}>
-        <ThemedText style={styles.label}>Plan (Treatment, Lifestyle Counseling & Follow-up)</ThemedText>
-        <TextInput
-          style={styles.textArea}
-          multiline
-          placeholder="Enter treatment plan, requested laboratory tests, dietary advice..."
-          placeholderTextColor="#9CA3AF"
-          value={plan}
-          onChangeText={setPlan}
-          editable={!isSigned}
-        />
+            {/* O - Objective */}
+            <Card>
+              <CardHeader title="Objective" subtitle="Physical findings, auscultation and examination" />
+              <Input
+                multiline
+                placeholder="Physical examination and clinical observations"
+                accessibilityLabel="Objective notes"
+                value={objective}
+                onChangeText={setObjective}
+                editable={!isSigned}
+                inputStyle={styles.textArea}
+              />
+            </Card>
 
-        {/* Electronic Prescriptions Header */}
-        <View style={styles.rowBetween}>
-          <ThemedText style={styles.subHeading}>Electronic Prescriptions ({prescriptions.length})</ThemedText>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            {prescriptions.length > 0 && (
-              <Pressable
-                style={[styles.addRxBtn, { backgroundColor: '#F0F9FF', borderColor: '#BAE6FD' }]}
-                onPress={handleOpenPrescriptionSlip}
-                disabled={loadingSlip}
-              >
-                <ThemedText style={[styles.addRxBtnText, { color: '#0284C7' }]}>
-                  {loadingSlip ? 'Loading...' : isSigned ? '📄 View E-Rx Slip' : '👁️ Preview Slip'}
-                </ThemedText>
-              </Pressable>
-            )}
-            {!isSigned && (
-              <Pressable style={styles.addRxBtn} onPress={() => setShowAddRx(!showAddRx)}>
-                <ThemedText style={styles.addRxBtnText}>+ Add Medication</ThemedText>
-              </Pressable>
-            )}
-          </View>
-        </View>
+            {/* A - Assessment & ICD-10 */}
+            <Card>
+              <CardHeader
+                title="Assessment"
+                subtitle="Clinical impression and ICD-10 diagnoses"
+                rightAction={isYakapEligible ? <Badge label="ICD-10 linked to PhilHealth" variant="info" /> : undefined}
+              />
 
-        {/* Add Prescription Sub-Form */}
-        {showAddRx && (
-          <View style={styles.rxFormCard}>
-            <ThemedText style={styles.rxFormTitle}>New Medication Order</ThemedText>
+              {isYakapEligible && !isSigned ? (
+                <View style={styles.stack}>
+                  <ThemedText variant="small" color={theme.colors.textMuted}>
+                    Common Yakap diagnoses
+                  </ThemedText>
+                  <View style={styles.chipsRow}>
+                    <ToggleChip
+                      label="I10 (HPN)"
+                      selected={selectedDiagnoses.some((d) => d.icd10Code === 'I10')}
+                      onPress={() => handleQuickAddDiagnosis('I10', 'Essential (primary) hypertension')}
+                    />
+                    <ToggleChip
+                      label="E11.9 (DM)"
+                      selected={selectedDiagnoses.some((d) => d.icd10Code === 'E11.9')}
+                      onPress={() => handleQuickAddDiagnosis('E11.9', 'Type 2 diabetes mellitus')}
+                    />
+                    <ToggleChip
+                      label="J45.9 (Asthma)"
+                      selected={selectedDiagnoses.some((d) => d.icd10Code === 'J45.909')}
+                      onPress={() => handleQuickAddDiagnosis('J45.909', 'Bronchial asthma')}
+                    />
+                    <ToggleChip
+                      label="J00 (URTI)"
+                      selected={selectedDiagnoses.some((d) => d.icd10Code === 'J00')}
+                      onPress={() => handleQuickAddDiagnosis('J00', 'Acute nasopharyngitis [common cold]')}
+                    />
+                  </View>
+                </View>
+              ) : null}
 
-            {/* Yakap GAMOT Core Formulary Quick-Picks */}
-            {isYakapEligible && (
-              <View style={styles.gamotShelfCard}>
-                <ThemedText style={styles.gamotShelfTitle}>Yakap GAMOT Core Formulary Quick-Picks:</ThemedText>
-                <View style={styles.gamotChipsRow}>
-                  {YAKAP_GAMOT_QUICK_PICKS.map((item) => (
-                    <Pressable
-                      key={item.drugCode}
-                      style={[styles.gamotChip, newRxDrugCode === item.drugCode && styles.gamotChipActive]}
-                      onPress={() => handleSelectGamotQuickPick(item)}
-                    >
-                      <ThemedText style={[styles.gamotChipText, newRxDrugCode === item.drugCode && styles.gamotChipTextActive]}>
-                        + {item.label}
+              <Input
+                placeholder="Primary impression"
+                accessibilityLabel="Assessment"
+                value={assessment}
+                onChangeText={setAssessment}
+                editable={!isSigned}
+              />
+
+              {selectedDiagnoses.length > 0 ? (
+                <View style={styles.chipsRow}>
+                  {selectedDiagnoses.map((d) => (
+                    <View key={d.icd10Code} style={styles.diagBadge}>
+                      <ThemedText variant="smallBold" color={theme.colors.primaryDark}>
+                        {d.icd10Code}
                       </ThemedText>
-                    </Pressable>
+                      <ThemedText variant="small" color={theme.colors.primaryDark} numberOfLines={1} style={styles.diagDesc}>
+                        {d.description}
+                      </ThemedText>
+                      {d.isPrimary ? <Badge label="Primary" variant="primary" size="sm" /> : null}
+                      {!isSigned ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Remove ${d.icd10Code}`}
+                          onPress={() => handleRemoveDiagnosis(d.icd10Code)}
+                          hitSlop={theme.spacing.sm}
+                        >
+                          <Icon name="close" size={theme.sizes.iconSm} color={theme.colors.textSecondary} />
+                        </Pressable>
+                      ) : null}
+                    </View>
                   ))}
                 </View>
-                {newRxDrugCode ? (
-                  <ThemedText style={styles.gamotBoundTag}>
-                    ✓ Bound 30-char UPSC: <ThemedText style={{ fontFamily: 'monospace', fontWeight: '800' }}>{newRxDrugCode}</ThemedText>
+              ) : null}
+
+              {!isSigned ? (
+                <View style={styles.stack}>
+                  <Input
+                    leftIcon="search"
+                    placeholder="Search ICD-10 codes (e.g. I10, diabetes, cold)"
+                    accessibilityLabel="Search ICD-10 codes"
+                    value={icdQuery}
+                    onChangeText={handleSearchIcd10}
+                    onFocus={() => setShowIcdDropdown(true)}
+                  />
+                  {showIcdDropdown ? (
+                    <View style={styles.icdDropdown}>
+                      {icdNotice ? (
+                        <ThemedText variant="caption" color={theme.colors.warningText} style={styles.icdNotice}>
+                          {icdNotice}
+                        </ThemedText>
+                      ) : null}
+                      {icdResults.length === 0 ? (
+                        <ThemedText variant="small" color={theme.colors.textMuted} style={styles.icdNotice}>
+                          No matching codes.
+                        </ThemedText>
+                      ) : (
+                        icdResults.map((item) => (
+                          <Pressable key={item.code} style={styles.icdItem} onPress={() => handleAddDiagnosis(item)}>
+                            <ThemedText variant="smallBold" color={theme.colors.primary} style={styles.icdItemCode}>
+                              {item.code}
+                            </ThemedText>
+                            <ThemedText variant="small" style={styles.flex}>
+                              {item.description}
+                            </ThemedText>
+                          </Pressable>
+                        ))
+                      )}
+                      <View style={styles.icdFooter}>
+                        <Button
+                          title="Close suggestions"
+                          variant="ghost"
+                          size="sm"
+                          onPress={() => setShowIcdDropdown(false)}
+                        />
+                      </View>
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
+            </Card>
+
+            {/* Laboratory orders */}
+            <Card>
+              <CardHeader
+                title={`Laboratory orders (${orderedLabs.length})`}
+                icon="lab"
+                subtitle="Selected tests create a requisition for the laboratory when the encounter is signed"
+              />
+              <View style={styles.chipsRow}>
+                {COMMON_LAB_TESTS.map((lab) => {
+                  const yakapCode = YAKAP_LAB_CODE_MAP[lab];
+                  return (
+                    <ToggleChip
+                      key={lab}
+                      label={lab}
+                      meta={isYakapEligible && yakapCode ? `Yakap ${yakapCode}` : undefined}
+                      selected={orderedLabs.includes(lab)}
+                      disabled={isSigned}
+                      onPress={() => handleToggleLab(lab)}
+                    />
+                  );
+                })}
+                {extraDiagnosticCatalog.map((diag) => {
+                  const yakapCode = diag.philHealthCode || YAKAP_LAB_CODE_MAP[diag.name];
+                  return (
+                    <ToggleChip
+                      key={diag.id}
+                      tone="success"
+                      label={`${diag.name} (₱${diag.standardPrice.toFixed(0)})`}
+                      meta={isYakapEligible && yakapCode ? `Yakap ${yakapCode}` : undefined}
+                      selected={orderedLabs.includes(diag.name)}
+                      disabled={isSigned}
+                      onPress={() => handleToggleLab(diag.name)}
+                    />
+                  );
+                })}
+              </View>
+              {catalogError ? (
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  Clinic-specific tests could not be loaded: {catalogError}
+                </ThemedText>
+              ) : null}
+            </Card>
+
+            {/* Laboratory results */}
+            {renderLabResults()}
+
+            {/* In-clinic procedures */}
+            <Card>
+              <CardHeader
+                title={`In-clinic procedures (${orderedProcedures.length})`}
+                icon="medical"
+                subtitle="Orders go to the nurse station for immediate treatment"
+              />
+              {catalogLoading && procedureCatalog.length === 0 ? (
+                <SkeletonList rows={1} rowHeight={theme.sizes.controlMd} />
+              ) : catalogError && procedureCatalog.length === 0 ? (
+                <ErrorState compact title="Unable to load procedures" message={catalogError} onRetry={loadCatalog} />
+              ) : procedureCatalog.length === 0 ? (
+                <ThemedText variant="small" color={theme.colors.textMuted}>
+                  No procedures are set up in the clinic fee schedule yet.
+                </ThemedText>
+              ) : (
+                <View style={styles.chipsRow}>
+                  {procedureCatalog.map((proc) => (
+                    <ToggleChip
+                      key={proc.id}
+                      label={`${proc.name} (₱${proc.standardPrice.toFixed(0)})`}
+                      selected={orderedProcedures.includes(proc.name)}
+                      disabled={isSigned}
+                      onPress={() => handleToggleProcedure(proc.name)}
+                    />
+                  ))}
+                </View>
+              )}
+            </Card>
+
+            {/* P - Plan */}
+            <Card>
+              <CardHeader title="Plan" subtitle="Treatment, lifestyle counseling and follow-up" />
+              <Input
+                multiline
+                placeholder="Treatment plan, requested tests, dietary advice"
+                accessibilityLabel="Plan"
+                value={plan}
+                onChangeText={setPlan}
+                editable={!isSigned}
+                inputStyle={styles.textArea}
+              />
+            </Card>
+
+            {/* Electronic prescriptions */}
+            <Card>
+              <CardHeader
+                title={`Electronic prescriptions (${prescriptions.length})`}
+                icon="pill"
+                rightAction={
+                  <View style={styles.rowWrap}>
+                    {prescriptions.length > 0 ? (
+                      <Button
+                        title={isSigned ? 'View e-prescription' : 'Preview slip'}
+                        icon="file"
+                        variant="outline"
+                        size="sm"
+                        loading={loadingSlip}
+                        onPress={handleOpenPrescriptionSlip}
+                      />
+                    ) : null}
+                    {!isSigned ? (
+                      <Button
+                        title="Add medication"
+                        icon="plus"
+                        variant="secondary"
+                        size="sm"
+                        onPress={() => setShowAddRx(!showAddRx)}
+                      />
+                    ) : null}
+                  </View>
+                }
+              />
+
+              {showAddRx ? (
+                <View style={styles.rxForm}>
+                  <ThemedText variant="h3">New medication order</ThemedText>
+
+                  {isYakapEligible ? (
+                    <View style={styles.stack}>
+                      <ThemedText variant="small" color={theme.colors.textMuted}>
+                        Yakap GAMOT core formulary
+                      </ThemedText>
+                      <View style={styles.chipsRow}>
+                        {YAKAP_GAMOT_QUICK_PICKS.map((item) => (
+                          <ToggleChip
+                            key={item.drugCode}
+                            label={item.label}
+                            selected={newRxDrugCode === item.drugCode}
+                            onPress={() => handleSelectGamotQuickPick(item)}
+                          />
+                        ))}
+                      </View>
+                      {newRxDrugCode ? (
+                        <ThemedText variant="caption" color={theme.colors.textMuted}>
+                          PhilHealth drug code: <ThemedText variant="code">{newRxDrugCode}</ThemedText>
+                        </ThemedText>
+                      ) : null}
+                    </View>
+                  ) : null}
+
+                  {medicineCatalog.length > 0 ? (
+                    <View style={styles.stack}>
+                      <ThemedText variant="small" color={theme.colors.textMuted}>
+                        Clinic formulary and fee schedule
+                      </ThemedText>
+                      <View style={styles.chipsRow}>
+                        {medicineCatalog.map((item) => (
+                          <ToggleChip
+                            key={item.id}
+                            tone="success"
+                            label={`${item.name} (₱${item.standardPrice.toFixed(0)})`}
+                            selected={
+                              newRxGeneric.toLowerCase() === item.name.toLowerCase() ||
+                              Boolean(item.philHealthCode && newRxDrugCode === item.philHealthCode)
+                            }
+                            onPress={() => handleSelectCatalogMedicine(item)}
+                          />
+                        ))}
+                      </View>
+                    </View>
+                  ) : null}
+
+                  <Input
+                    label="Generic name"
+                    placeholder="e.g. Paracetamol, Amoxicillin"
+                    value={newRxGeneric}
+                    onChangeText={setNewRxGeneric}
+                  />
+                  <View style={styles.fieldRow}>
+                    <Input
+                      label="Dosage"
+                      placeholder="e.g. 500mg"
+                      value={newRxDosage}
+                      onChangeText={setNewRxDosage}
+                      containerStyle={styles.fieldGrow}
+                    />
+                    <Input
+                      label="Quantity"
+                      placeholder="e.g. 30"
+                      keyboardType="numeric"
+                      value={newRxQuantity}
+                      onChangeText={setNewRxQuantity}
+                      containerStyle={styles.fieldNarrow}
+                    />
+                  </View>
+                  <Input
+                    label="Directions (sig)"
+                    placeholder="e.g. 1 tab TID after meals for 7 days"
+                    value={newRxSig}
+                    onChangeText={setNewRxSig}
+                  />
+                  <CheckRow
+                    checked={newRxDangerous}
+                    onPress={() => setNewRxDangerous(!newRxDangerous)}
+                    label="Dangerous drug (PDEA S2 regulated, requires an S2 license)"
+                  />
+                  <View style={styles.actionRow}>
+                    <Button title="Cancel" variant="outline" size="sm" onPress={() => setShowAddRx(false)} />
+                    <Button title="Add prescription" size="sm" onPress={handleAddPrescription} />
+                  </View>
+                </View>
+              ) : null}
+
+              {prescriptions.length === 0 && !showAddRx ? (
+                <ThemedText variant="small" color={theme.colors.textMuted}>
+                  No medications prescribed yet.
+                </ThemedText>
+              ) : null}
+
+              {prescriptions.length > 0 ? (
+                <View style={styles.stack}>
+                  {prescriptions.map((rx) => (
+                    <View key={rx.id} style={styles.rxCard}>
+                      <View style={styles.flex}>
+                        <ThemedText variant="bodyBold">
+                          {rx.genericName}{' '}
+                          <ThemedText variant="body" color={theme.colors.textSecondary}>
+                            {rx.dosage}
+                          </ThemedText>
+                        </ThemedText>
+                        <ThemedText variant="small" color={theme.colors.textSecondary}>
+                          Sig: {rx.sig}
+                        </ThemedText>
+                        <ThemedText variant="small" color={theme.colors.textMuted}>
+                          Dispense: #{rx.quantity} {rx.form}s
+                        </ThemedText>
+                        {rx.philHealthDrugCode || rx.isDangerousDrug ? (
+                          <View style={styles.rowWrap}>
+                            {rx.philHealthDrugCode ? (
+                              <Badge label={`GAMOT ${rx.philHealthDrugCode}`} variant="info" size="sm" />
+                            ) : null}
+                            {rx.isDangerousDrug ? <Badge label="PDEA S2 dangerous drug" variant="emergency" size="sm" /> : null}
+                          </View>
+                        ) : null}
+                      </View>
+                      {!isSigned ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Remove ${rx.genericName}`}
+                          onPress={() => handleRemovePrescription(rx.id)}
+                          hitSlop={theme.spacing.sm}
+                        >
+                          <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+
+              {/* Clinical decision support */}
+              {prescriptions.length > 0 ? (
+                <Card variant="subtle">
+                  <View style={styles.rowBetween}>
+                    <View style={styles.row}>
+                      <Icon name="shield" size={theme.sizes.iconMd} color={theme.colors.primary} />
+                      <ThemedText variant="h3">Drug safety checks</ThemedText>
+                    </View>
+                    {evaluatingCds ? (
+                      <ActivityIndicator size="small" color={theme.colors.primary} />
+                    ) : (
+                      <Button
+                        title="Re-screen"
+                        icon="refresh"
+                        variant="ghost"
+                        size="sm"
+                        onPress={() => runCdsScreening(prescriptions)}
+                      />
+                    )}
+                  </View>
+
+                  {cdsUsedLocalRules ? (
+                    <ThemedText variant="caption" color={theme.colors.warningText}>
+                      The server safety check is unavailable, so only basic checks on this device were applied.
+                    </ThemedText>
+                  ) : null}
+
+                  {cdsAlerts.length === 0 && !evaluatingCds ? (
+                    <View style={styles.cdsPassed}>
+                      <Icon name="checkCircle" size={theme.sizes.iconMd} color={theme.colors.success} />
+                      <ThemedText variant="small" color={theme.colors.successText} style={styles.flex}>
+                        No drug-allergy conflicts, harmful interactions or organ-dosing warnings were found.
+                      </ThemedText>
+                    </View>
+                  ) : (
+                    <View style={styles.stack}>
+                      {cdsAlerts.map((alert, index) => {
+                        const tone = severityTone(alert.severity);
+                        const category = alert.category || alert.type;
+                        const message = alert.message || alert.title;
+                        const recommendation = alert.clinicalRecommendation || alert.recommendation;
+                        return (
+                          <View
+                            key={alert.ruleId || alert.alertId || `cds-${index}`}
+                            style={[styles.cdsAlert, { backgroundColor: tone.bg, borderColor: tone.border }]}
+                          >
+                            <View style={styles.rowBetween}>
+                              <View style={[styles.row, styles.flex]}>
+                                <Badge label={alert.severity} variant={tone.variant} size="sm" />
+                                <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                                  {humanize(category)}
+                                </ThemedText>
+                              </View>
+                              <ThemedText variant="smallBold">{alert.offendingDrug}</ThemedText>
+                            </View>
+                            <ThemedText variant="body">{message}</ThemedText>
+                            {recommendation ? (
+                              <ThemedText variant="small" color={theme.colors.textSecondary}>
+                                Recommendation: {recommendation}
+                              </ThemedText>
+                            ) : null}
+                          </View>
+                        );
+                      })}
+
+                      {hasCriticalCdsAlert ? (
+                        <View style={styles.overrideBox}>
+                          <ThemedText variant="h3" color={theme.colors.emergencyText}>
+                            Clinical override required to prescribe
+                          </ThemedText>
+                          <ThemedText variant="small" color={theme.colors.textSecondary}>
+                            A severe contraindication was flagged. Document your justification to continue:
+                          </ThemedText>
+                          <Input
+                            multiline
+                            placeholder="Clinical rationale (e.g. desensitization protocol, no alternative available, monitored)"
+                            accessibilityLabel="Override justification"
+                            value={cdsOverrideReason}
+                            onChangeText={setCdsOverrideReason}
+                            editable={!isSigned}
+                          />
+                          <CheckRow
+                            checked={overrideConfirmed}
+                            disabled={isSigned}
+                            onPress={() => setOverrideConfirmed(!overrideConfirmed)}
+                            label="I certify that the clinical benefit outweighs the severe risk and I have counseled the patient."
+                          />
+                        </View>
+                      ) : null}
+                    </View>
+                  )}
+                </Card>
+              ) : null}
+            </Card>
+
+            {/* Attending physician credentials */}
+            <Card>
+              <CardHeader
+                title="Attending physician"
+                icon="patientVerified"
+                subtitle={
+                  signerName
+                    ? `Signing as ${signerName}`
+                    : "Choose 'Working as' in the sidebar or header to sign and issue documents"
+                }
+                rightAction={!signerName ? <Badge label="No one selected" variant="warning" /> : undefined}
+              />
+              <View style={styles.fieldRow}>
+                <Input
+                  label="PRC license #"
+                  value={doctorPrc}
+                  onChangeText={setDoctorPrc}
+                  editable={!isSigned}
+                  containerStyle={styles.fieldGrow}
+                />
+                <Input
+                  label="PTR #"
+                  value={doctorPtr}
+                  onChangeText={setDoctorPtr}
+                  editable={!isSigned}
+                  containerStyle={styles.fieldGrow}
+                />
+                <Input
+                  label="PDEA S2 license #"
+                  value={doctorS2}
+                  onChangeText={setDoctorS2}
+                  editable={!isSigned}
+                  containerStyle={styles.fieldGrow}
+                />
+              </View>
+            </Card>
+
+            {/* Clinical documents */}
+            <Card>
+              <CardHeader
+                title="Clinical documents"
+                icon="file"
+                subtitle="Issue medical certificates and referral letters under your PRC and PTR numbers"
+              />
+              <View style={styles.actionRow}>
+                <Button
+                  title="Issue medical certificate"
+                  icon="file"
+                  variant="outline"
+                  onPress={() => setMedCertModalVisible(true)}
+                />
+                <Button
+                  title="Issue referral letter"
+                  icon="file"
+                  variant="outline"
+                  onPress={() => setReferralModalVisible(true)}
+                />
+              </View>
+
+              {issuedMedCert ? (
+                <View style={[styles.issuedRow, styles.issuedRowSuccess]}>
+                  <View style={styles.flex}>
+                    <ThemedText variant="bodyBold" color={theme.colors.successText}>
+                      Medical certificate {issuedMedCert.certificateNumber}
+                    </ThemedText>
+                    <ThemedText variant="small" color={theme.colors.textSecondary}>
+                      {humanize(issuedMedCert.fitnessStatus)}
+                      {issuedMedCert.recommendedRestDays ? ` • ${issuedMedCert.recommendedRestDays} day(s) rest` : ''}
+                    </ThemedText>
+                  </View>
+                  <Button
+                    title="View / print"
+                    icon="print"
+                    variant="success"
+                    size="sm"
+                    onPress={() => {
+                      setPreviewType('MEDCERT');
+                      setPreviewDocModal(true);
+                    }}
+                  />
+                </View>
+              ) : null}
+
+              {issuedReferral ? (
+                <View style={[styles.issuedRow, styles.issuedRowPrimary]}>
+                  <View style={styles.flex}>
+                    <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
+                      Referral {issuedReferral.referralNumber}
+                    </ThemedText>
+                    <ThemedText variant="small" color={theme.colors.textSecondary}>
+                      To {issuedReferral.referredToFacility} ({issuedReferral.referredDepartment}) •{' '}
+                      {issuedReferral.urgency}
+                    </ThemedText>
+                  </View>
+                  <Button
+                    title="View / print"
+                    icon="print"
+                    size="sm"
+                    onPress={() => {
+                      setPreviewType('REFERRAL');
+                      setPreviewDocModal(true);
+                    }}
+                  />
+                </View>
+              ) : null}
+            </Card>
+
+            {/* Signing */}
+            {isSigned ? (
+              <Card style={styles.signedCard}>
+                <View style={styles.row}>
+                  <Icon name="checkCircle" size={theme.sizes.iconLg} color={theme.colors.success} />
+                  <View style={styles.flex}>
+                    <ThemedText variant="h3" color={theme.colors.successText}>
+                      Encounter signed and locked
+                    </ThemedText>
+                    <ThemedText variant="small" color={theme.colors.textSecondary}>
+                      Signed by {signerName}
+                      {doctorPrc ? ` (PRC ${doctorPrc})` : ''}
+                      {signedAt ? ` at ${signedAt}` : ''}.
+                    </ThemedText>
+                  </View>
+                </View>
+                <View style={styles.actionRow}>
+                  {prescriptions.length > 0 ? (
+                    <>
+                      <Button
+                        title="View e-prescription"
+                        icon="file"
+                        loading={loadingSlip}
+                        onPress={handleOpenPrescriptionSlip}
+                      />
+                      <Button
+                        title="Record external dispense"
+                        icon="pill"
+                        variant="outline"
+                        onPress={() => setExternalDispenseModalVisible(true)}
+                      />
+                    </>
+                  ) : null}
+                  <Button
+                    title="Forward to cashier"
+                    icon="billing"
+                    variant="success"
+                    onPress={() =>
+                      navigation.navigate('Billing', {
+                        patientId: selectedPatient.patientId,
+                        patientName: selectedPatient.patientName,
+                      })
+                    }
+                  />
+                </View>
+              </Card>
+            ) : (
+              <Button
+                title="Sign & sync encounter"
+                icon="check"
+                size="lg"
+                loading={isSigning}
+                disabled={isSigning}
+                onPress={handleSignAndSync}
+              />
+            )}
+          </>
+        ) : null}
+
+        {/* Medical certificate modal */}
+        <Modal
+          visible={medCertModalVisible}
+          onClose={() => setMedCertModalVisible(false)}
+          title="Issue medical certificate"
+          subtitle={selectedPatient ? `Patient: ${selectedPatient.patientName}` : undefined}
+          footer={
+            <View style={styles.modalFooter}>
+              <Button title="Cancel" variant="outline" onPress={() => setMedCertModalVisible(false)} />
+              <Button title="Lock & issue certificate" loading={issuingMedCert} onPress={handleIssueMedCert} />
+            </View>
+          }
+        >
+          <View style={styles.stack}>
+            <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+              Fitness assessment
+            </ThemedText>
+            <View style={styles.chipsRow}>
+              {FITNESS_OPTIONS.map((fit) => (
+                <ToggleChip
+                  key={fit.value}
+                  label={fit.label}
+                  showIcon={false}
+                  selected={medCertFitness === fit.value}
+                  onPress={() => setMedCertFitness(fit.value)}
+                />
+              ))}
+            </View>
+          </View>
+          <Input
+            label="Recommended rest days"
+            placeholder="e.g. 3"
+            value={medCertRestDays}
+            onChangeText={setMedCertRestDays}
+            keyboardType="numeric"
+          />
+          <Input
+            label="Certificate purpose"
+            placeholder="e.g. Employment, sick leave"
+            value={medCertPurpose}
+            onChangeText={setMedCertPurpose}
+          />
+          <Input
+            label="Physician remarks / advice"
+            placeholder="e.g. Advised hydration and follow-up if fever persists"
+            value={medCertRemarks}
+            onChangeText={setMedCertRemarks}
+          />
+        </Modal>
+
+        {/* Referral letter modal */}
+        <Modal
+          visible={referralModalVisible}
+          onClose={() => setReferralModalVisible(false)}
+          title="Issue referral letter"
+          subtitle={selectedPatient ? `Patient: ${selectedPatient.patientName}` : undefined}
+          footer={
+            <View style={styles.modalFooter}>
+              <Button title="Cancel" variant="outline" onPress={() => setReferralModalVisible(false)} />
+              <Button title="Issue & seal referral" loading={issuingReferral} onPress={handleIssueReferral} />
+            </View>
+          }
+        >
+          <Input
+            label="Receiving facility"
+            required
+            placeholder="Hospital or clinic name"
+            value={refFacility}
+            onChangeText={setRefFacility}
+          />
+          <Input
+            label="Department / specialty"
+            required
+            placeholder="e.g. Cardiology, Surgery, Pulmonology"
+            value={refDepartment}
+            onChangeText={setRefDepartment}
+          />
+          <View style={styles.stack}>
+            <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+              Urgency
+            </ThemedText>
+            <View style={styles.chipsRow}>
+              {REFERRAL_URGENCIES.map((urg) => (
+                <ToggleChip
+                  key={urg}
+                  label={urg}
+                  showIcon={false}
+                  selected={refUrgency === urg}
+                  onPress={() => setRefUrgency(urg)}
+                />
+              ))}
+            </View>
+          </View>
+          <Input
+            label="Reason for referral"
+            required
+            placeholder="e.g. Specialist workup for chest pain"
+            value={refReason}
+            onChangeText={setRefReason}
+          />
+          <Input
+            label="Clinical summary"
+            placeholder="Summary of examination, diagnostics and initial medications (defaults to the subjective notes)"
+            value={refSummary}
+            onChangeText={setRefSummary}
+            multiline
+          />
+        </Modal>
+
+        {/* Document print preview modal */}
+        <Modal
+          visible={previewDocModal}
+          onClose={() => setPreviewDocModal(false)}
+          title={previewType === 'MEDCERT' ? 'Medical certificate' : 'Referral letter'}
+          maxWidth={640}
+          footer={
+            <View style={styles.modalFooter}>
+              {previewType === 'MEDCERT' && issuedMedCert ? (
+                <Button
+                  title="Download official PDF"
+                  icon="download"
+                  variant="success"
+                  onPress={() =>
+                    downloadPdf(
+                      clinicService.getMedicalCertificatePdfUrl(issuedMedCert.id),
+                      'Could not open the medical certificate PDF. Please check your connection and try again.',
+                    )
+                  }
+                />
+              ) : null}
+              {previewType === 'REFERRAL' && issuedReferral ? (
+                <Button
+                  title="Download official PDF"
+                  icon="download"
+                  variant="success"
+                  onPress={() =>
+                    downloadPdf(
+                      clinicService.getReferralLetterPdfUrl(issuedReferral.id),
+                      'Could not open the referral letter PDF. Please check your connection and try again.',
+                    )
+                  }
+                />
+              ) : null}
+              <Button title="Close preview" onPress={() => setPreviewDocModal(false)} />
+            </View>
+          }
+        >
+          <View style={styles.paper}>
+            {/* Facility letterhead */}
+            <View style={styles.paperHeader}>
+              <ThemedText variant="h3" style={styles.center}>
+                {facilityHeader}
+              </ThemedText>
+              {letterhead.subHeader ? (
+                <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.center}>
+                  {letterhead.subHeader}
+                </ThemedText>
+              ) : null}
+              {letterhead.address ? (
+                <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.center}>
+                  {letterhead.address}
+                </ThemedText>
+              ) : null}
+              {letterhead.contact ? (
+                <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.center}>
+                  {letterhead.contact}
+                </ThemedText>
+              ) : null}
+              {accreditationNumber ? (
+                <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.center}>
+                  Accreditation No. {accreditationNumber}
+                </ThemedText>
+              ) : null}
+              <ThemedText variant="bodyBold" color={theme.colors.primaryDark} style={styles.paperTitle}>
+                {previewType === 'MEDCERT' ? 'Medical certificate' : 'Referral letter'}
+              </ThemedText>
+              <ThemedText variant="caption" color={theme.colors.textMuted}>
+                Document No. {previewType === 'MEDCERT' ? issuedMedCert?.certificateNumber : issuedReferral?.referralNumber}
+              </ThemedText>
+            </View>
+
+            {previewType === 'MEDCERT' && issuedMedCert ? (
+              <View style={styles.stack}>
+                <ThemedText variant="body">To whom it may concern:</ThemedText>
+                <ThemedText variant="body" color={theme.colors.textSecondary}>
+                  This certifies that <ThemedText variant="bodyBold">{issuedMedCert.patientName}</ThemedText> was
+                  clinically evaluated on {issuedMedCert.issueDate} with the following diagnosis:
+                </ThemedText>
+                <View style={styles.paperBox}>
+                  <ThemedText variant="bodyBold">Diagnosis: {issuedMedCert.diagnosis}</ThemedText>
+                  {issuedMedCert.clinicalFindings ? (
+                    <ThemedText variant="small" color={theme.colors.textSecondary}>
+                      Findings: {issuedMedCert.clinicalFindings}
+                    </ThemedText>
+                  ) : null}
+                </View>
+                <ThemedText variant="body" color={theme.colors.textSecondary}>
+                  Fitness status:{' '}
+                  <ThemedText variant="bodyBold" color={theme.colors.successText}>
+                    {humanize(issuedMedCert.fitnessStatus)}
+                  </ThemedText>
+                </ThemedText>
+                {issuedMedCert.recommendedRestDays ? (
+                  <ThemedText variant="body" color={theme.colors.textSecondary}>
+                    Recommended rest:{' '}
+                    <ThemedText variant="bodyBold">{issuedMedCert.recommendedRestDays} day(s)</ThemedText>
+                  </ThemedText>
+                ) : null}
+                {issuedMedCert.remarks || issuedMedCert.purpose ? (
+                  <ThemedText variant="small" color={theme.colors.textMuted}>
+                    {[
+                      issuedMedCert.remarks ? `Remarks: ${issuedMedCert.remarks}` : null,
+                      issuedMedCert.purpose ? `Purpose: ${issuedMedCert.purpose}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' • ')}
                   </ThemedText>
                 ) : null}
               </View>
-            )}
+            ) : null}
 
-            {/* Clinic Mapped Formulary Quick-Picks */}
-            {clinicCatalog.filter((s) => s.category.toLowerCase() === 'medicine' && s.isActive).length > 0 && (
-              <View style={[styles.gamotShelfCard, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <ThemedText style={{ fontSize: 13 }}>🏥</ThemedText>
-                  <ThemedText style={[styles.gamotShelfTitle, { color: '#166534' }]}>Clinic Fee Schedule & Formulary:</ThemedText>
-                </View>
-                <View style={styles.gamotChipsRow}>
-                  {clinicCatalog
-                    .filter((s) => s.category.toLowerCase() === 'medicine' && s.isActive)
-                    .map((item) => {
-                      const isSelected = newRxGeneric.toLowerCase() === item.name.toLowerCase() || (item.philHealthCode && newRxDrugCode === item.philHealthCode);
-                      return (
-                        <Pressable
-                          key={item.id}
-                          style={[
-                            styles.gamotChip,
-                            { backgroundColor: '#FFFFFF', borderColor: '#86EFAC' },
-                            isSelected && { backgroundColor: '#059669', borderColor: '#059669' },
-                          ]}
-                          onPress={() => handleSelectCatalogMedicine(item)}
-                        >
-                          <ThemedText
-                            style={[
-                              styles.gamotChipText,
-                              { color: '#166534' },
-                              isSelected && { color: '#FFFFFF', fontWeight: '700' },
-                            ]}
-                          >
-                            + {item.name} (₱{item.standardPrice.toFixed(0)})
-                          </ThemedText>
-                        </Pressable>
-                      );
-                    })}
+            {previewType === 'REFERRAL' && issuedReferral ? (
+              <View style={styles.stack}>
+                <ThemedText variant="body" color={theme.colors.textSecondary}>
+                  To: <ThemedText variant="bodyBold">{issuedReferral.referredToFacility}</ThemedText> (
+                  {issuedReferral.referredDepartment})
+                </ThemedText>
+                <ThemedText variant="body" color={theme.colors.textSecondary}>
+                  Patient: <ThemedText variant="bodyBold">{issuedReferral.patientName}</ThemedText> • Urgency:{' '}
+                  <ThemedText variant="bodyBold" color={theme.colors.emergencyText}>
+                    {issuedReferral.urgency}
+                  </ThemedText>
+                </ThemedText>
+                <View style={styles.paperBox}>
+                  <ThemedText variant="bodyBold">Reason: {issuedReferral.reasonForReferral}</ThemedText>
+                  <ThemedText variant="small" color={theme.colors.textSecondary}>
+                    Clinical summary: {issuedReferral.clinicalSummary}
+                  </ThemedText>
+                  <ThemedText variant="small">Impression: {issuedReferral.provisionalDiagnosis}</ThemedText>
                 </View>
               </View>
-            )}
+            ) : null}
 
-            <TextInput
-              style={styles.rxInput}
-              placeholder="Generic Name (e.g. Paracetamol, Amoxicillin)"
-              placeholderTextColor="#9CA3AF"
-              value={newRxGeneric}
-              onChangeText={setNewRxGeneric}
-            />
-            <View style={styles.rowBetween}>
-              <TextInput
-                style={[styles.rxInput, { flex: 1, marginRight: 8 }]}
-                placeholder="Dosage (e.g. 500mg)"
-                placeholderTextColor="#9CA3AF"
-                value={newRxDosage}
-                onChangeText={setNewRxDosage}
-              />
-              <TextInput
-                style={[styles.rxInput, { width: 90 }]}
-                placeholder="Qty (e.g. 30)"
-                placeholderTextColor="#9CA3AF"
-                keyboardType="numeric"
-                value={newRxQuantity}
-                onChangeText={setNewRxQuantity}
-              />
-            </View>
-            <TextInput
-              style={styles.rxInput}
-              placeholder="Directions / Sig (e.g. 1 tab TID after meals for 7 days)"
-              placeholderTextColor="#9CA3AF"
-              value={newRxSig}
-              onChangeText={setNewRxSig}
-            />
-
-            {/* PDEA S2 Toggle */}
-            <Pressable
-              style={[styles.dangerousToggle, newRxDangerous && styles.dangerousToggleActive]}
-              onPress={() => setNewRxDangerous(!newRxDangerous)}
-            >
-              <ThemedText style={[styles.dangerousToggleText, newRxDangerous && styles.dangerousToggleTextActive]}>
-                {newRxDangerous ? '⚠️ Dangerous Drug (PDEA S2 Regulated) - ACTIVE' : 'Mark as Dangerous Drug (Requires S2)'}
-              </ThemedText>
-            </Pressable>
-
-            <View style={styles.rxFormActions}>
-              <Pressable style={styles.cancelBtn} onPress={() => setShowAddRx(false)}>
-                <ThemedText style={styles.cancelBtnText}>Cancel</ThemedText>
-              </Pressable>
-              <Pressable style={styles.confirmRxBtn} onPress={handleAddPrescription}>
-                <ThemedText style={styles.confirmRxBtnText}>Add Prescription</ThemedText>
-              </Pressable>
-            </View>
-          </View>
-        )}
-
-        {/* Prescriptions List */}
-        <View style={styles.rxList}>
-          {prescriptions.map((rx) => (
-            <View key={rx.id} style={styles.rxCard}>
-              <View style={{ flex: 1 }}>
-                <ThemedText style={styles.rxGeneric}>
-                  {rx.genericName} <ThemedText style={styles.rxDosage}>{rx.dosage}</ThemedText>
+            {/* Physician signature block */}
+            <View style={styles.signature}>
+              <ThemedText variant="bodyBold">{docSignature.name}</ThemedText>
+              {docSignature.prc ? (
+                <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                  PRC Lic. No. {docSignature.prc}
                 </ThemedText>
-                <ThemedText style={styles.rxSig}>Sig: {rx.sig}</ThemedText>
-                <ThemedText style={styles.rxQty}>Dispense: #{rx.quantity} {rx.form}s</ThemedText>
-                {rx.philHealthDrugCode && (
-                  <View style={styles.gamotPrescriptionBadge}>
-                    <ThemedText style={styles.gamotPrescriptionBadgeText}>
-                      ✓ PhilHealth GAMOT UPSC: {rx.philHealthDrugCode}
-                    </ThemedText>
-                  </View>
-                )}
-                {rx.isDangerousDrug && (
-                  <View style={styles.s2Badge}>
-                    <ThemedText style={styles.s2BadgeText}>⚠️ PDEA S2 DANGEROUS DRUG</ThemedText>
-                  </View>
-                )}
-              </View>
-              {!isSigned && (
-                <Pressable onPress={() => handleRemovePrescription(rx.id)} style={styles.removeTag}>
-                  <ThemedText style={styles.removeTagText}>✕</ThemedText>
-                </Pressable>
-              )}
-            </View>
-          ))}
-        </View>
-
-        {/* Clinical Decision Support (CDS) Safety Engine */}
-        {prescriptions.length > 0 && (
-          <View style={styles.cdsContainer}>
-            <View style={styles.rowBetween}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <ThemedText style={{ fontSize: 16 }}>🛡️</ThemedText>
-                <ThemedText style={styles.cdsTitle}>Clinical Decision Support (CDS) Safety</ThemedText>
-              </View>
-              {evaluatingCds ? (
-                <ActivityIndicator size="small" color="#0284C7" />
-              ) : (
-                <Pressable onPress={() => runCdsScreening(prescriptions)}>
-                  <ThemedText style={{ fontSize: 11, color: '#0284C7', fontWeight: '600' }}>Re-screen</ThemedText>
-                </Pressable>
-              )}
-            </View>
-
-            {cdsAlerts.length === 0 && !evaluatingCds ? (
-              <View style={styles.cdsPassedBox}>
-                <ThemedText style={styles.cdsPassedText}>
-                  ✓ All CDS Checks Passed: No drug-allergy conflicts, harmful drug-drug interactions, or organ dosing warnings detected.
+              ) : null}
+              {docSignature.ptr ? (
+                <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                  PTR No. {docSignature.ptr}
                 </ThemedText>
-              </View>
-            ) : (
-              <View style={{ gap: 8, marginTop: 4 }}>
-                {cdsAlerts.map((alert) => {
-                  const isCrit = alert.severity === 'Critical';
-                  const isMajor = alert.severity === 'Major';
-                  const alertKey = alert.ruleId || alert.alertId || `cds-${Math.random()}`;
-                  const category = alert.category || alert.type;
-                  const message = alert.message || alert.title;
-                  const recommendation = alert.clinicalRecommendation || alert.recommendation;
-
-                  return (
-                    <View
-                      key={alertKey}
-                      style={[
-                        styles.cdsAlertCard,
-                        isCrit ? styles.cdsAlertCardCritical : isMajor ? styles.cdsAlertCardMajor : styles.cdsAlertCardModerate,
-                      ]}
-                    >
-                      <View style={styles.rowBetween}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
-                          <View
-                            style={[
-                              styles.cdsSeverityBadge,
-                              isCrit ? styles.cdsSeverityCritical : isMajor ? styles.cdsSeverityMajor : styles.cdsSeverityModerate,
-                            ]}
-                          >
-                            <ThemedText style={styles.cdsSeverityBadgeText}>
-                              {alert.severity.toUpperCase()}
-                            </ThemedText>
-                          </View>
-                          <ThemedText style={styles.cdsCategoryText}>{category}</ThemedText>
-                        </View>
-                        <ThemedText style={styles.cdsDrugText}>{alert.offendingDrug}</ThemedText>
-                      </View>
-
-                      <ThemedText style={styles.cdsAlertMessage}>{message}</ThemedText>
-                      {recommendation && (
-                        <ThemedText style={styles.cdsAlertRecommendation}>
-                          💡 Recommendation: {recommendation}
-                        </ThemedText>
-                      )}
-                    </View>
-                  );
-                })}
-
-                {/* Critical Override Block */}
-                {hasCriticalCdsAlert && (
-                  <View style={styles.cdsOverrideBox}>
-                    <ThemedText style={styles.cdsOverrideHeading}>
-                      ⚠️ Clinical Override Required to Prescribe
-                    </ThemedText>
-                    <ThemedText style={styles.cdsOverrideSub}>
-                      A severe contraindication was flagged. In accordance with clinical governance, please specify justification:
-                    </ThemedText>
-
-                    <TextInput
-                      style={styles.cdsOverrideInput}
-                      placeholder="Enter clinical rationale (e.g. Desensitization protocol, alternative unavailable, monitored in ICU)..."
-                      placeholderTextColor="#9CA3AF"
-                      value={cdsOverrideReason}
-                      onChangeText={setCdsOverrideReason}
-                      multiline
-                      editable={!isSigned}
-                    />
-
-                    <Pressable
-                      style={styles.overrideCheckRow}
-                      onPress={() => !isSigned && setOverrideConfirmed(!overrideConfirmed)}
-                    >
-                      <View style={[styles.overrideCheckbox, overrideConfirmed && styles.overrideCheckboxActive]}>
-                        {overrideConfirmed && <ThemedText style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>✓</ThemedText>}
-                      </View>
-                      <ThemedText style={styles.overrideCheckLabel}>
-                        I certify that clinical benefit outweighs the severe risk and have counseled the patient.
-                      </ThemedText>
-                    </Pressable>
-                  </View>
-                )}
-              </View>
-            )}
-          </View>
-        )}
-      </View>
-
-      {/* Doctor Legal Credentials */}
-      <View style={styles.credentialsCard}>
-        <ThemedText style={styles.credTitle}>Attending Physician Credentials</ThemedText>
-        <View style={styles.credRow}>
-          <View style={styles.credField}>
-            <ThemedText style={styles.credLabel}>PRC License #</ThemedText>
-            <TextInput
-              style={styles.credInput}
-              value={doctorPrc}
-              onChangeText={setDoctorPrc}
-              editable={!isSigned}
-            />
-          </View>
-          <View style={styles.credField}>
-            <ThemedText style={styles.credLabel}>PTR #</ThemedText>
-            <TextInput
-              style={styles.credInput}
-              value={doctorPtr}
-              onChangeText={setDoctorPtr}
-              editable={!isSigned}
-            />
-          </View>
-          <View style={styles.credField}>
-            <ThemedText style={styles.credLabel}>PDEA S2 License #</ThemedText>
-            <TextInput
-              style={styles.credInput}
-              value={doctorS2}
-              onChangeText={setDoctorS2}
-              editable={!isSigned}
-            />
-          </View>
-        </View>
-      </View>
-
-      {/* Clinical Documents & Certificates Issuance */}
-      <View style={styles.card}>
-        <ThemedText style={styles.sectionHeaderTitle}>Official Clinical Document Issuance</ThemedText>
-        <ThemedText style={{ fontSize: 12, color: '#6B7280' }}>
-          Issue certified medical certificates and specialist referral letters with your PRC & PTR credentials.
-        </ThemedText>
-
-        <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
-          <Pressable
-            style={[styles.docActionBtn, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}
-            onPress={() => setMedCertModalVisible(true)}
-          >
-            <ThemedText style={{ fontSize: 12, fontWeight: '700', color: '#166534' }}>
-              📜 Issue Medical Certificate
-            </ThemedText>
-          </Pressable>
-
-          <Pressable
-            style={[styles.docActionBtn, { backgroundColor: '#F0F9FF', borderColor: '#BAE6FD' }]}
-            onPress={() => setReferralModalVisible(true)}
-          >
-            <ThemedText style={{ fontSize: 12, fontWeight: '700', color: '#0369A1' }}>
-              🏥 Issue Referral Letter
-            </ThemedText>
-          </Pressable>
-        </View>
-
-        {/* Issued Badges */}
-        {issuedMedCert && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F0FDF4', padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#86EFAC' }}>
-            <View>
-              <ThemedText style={{ fontSize: 12, fontWeight: '700', color: '#166534' }}>
-                ✓ Med Cert: {issuedMedCert.certificateNumber}
-              </ThemedText>
-              <ThemedText style={{ fontSize: 11, color: '#4B5563' }}>
-                Status: {issuedMedCert.fitnessStatus} ({issuedMedCert.recommendedRestDays ?? 0} days rest)
-              </ThemedText>
+              ) : null}
+              {docSignature.signed ? (
+                <ThemedText variant="captionBold" color={theme.colors.successText}>
+                  Digitally signed and sealed
+                </ThemedText>
+              ) : null}
             </View>
-            <Pressable
-              style={{ backgroundColor: '#15803D', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 }}
-              onPress={() => { setPreviewType('MEDCERT'); setPreviewDocModal(true); }}
-            >
-              <ThemedText style={{ fontSize: 11, fontWeight: '700', color: '#FFFFFF' }}>View Print</ThemedText>
-            </Pressable>
+            {letterhead.footer ? (
+              <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.center}>
+                {letterhead.footer}
+              </ThemedText>
+            ) : null}
           </View>
-        )}
+        </Modal>
 
-        {issuedReferral && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F0F9FF', padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#7DD3FC' }}>
-            <View>
-              <ThemedText style={{ fontSize: 12, fontWeight: '700', color: '#0369A1' }}>
-                ✓ Referral: {issuedReferral.referralNumber}
-              </ThemedText>
-              <ThemedText style={{ fontSize: 11, color: '#4B5563' }}>
-                To: {issuedReferral.referredToFacility} ({issuedReferral.referredDepartment}) • {issuedReferral.urgency}
-              </ThemedText>
+        {/* Electronic prescription slip modal */}
+        <PrescriptionSlipModal
+          visible={prescriptionSlipModalVisible}
+          onClose={() => setPrescriptionSlipModalVisible(false)}
+          slip={prescriptionSlip}
+          onOpenExternalDispense={() => {
+            if (!signedConsultationId) {
+              notify.info('Sign the encounter before recording an external dispense.');
+              return;
+            }
+            setPrescriptionSlipModalVisible(false);
+            setExternalDispenseModalVisible(true);
+          }}
+        />
+
+        {/* Record external dispense modal */}
+        <RecordExternalDispenseModal
+          visible={externalDispenseModalVisible && Boolean(signedConsultationId)}
+          onClose={() => setExternalDispenseModalVisible(false)}
+          consultationId={signedConsultationId ?? ''}
+          prescriptionNumber={prescriptionSlip?.prescriptionNumber}
+          onSuccess={(updated) => {
+            setPrescriptionSlip(updated);
+            setBanner({
+              text: `External dispensing by ${updated.dispensedPharmacyName} recorded successfully.`,
+              isError: false,
+            });
+          }}
+        />
+
+        {/* Critical value readback modal */}
+        <Modal
+          visible={panicModalVisible}
+          onClose={() => setPanicModalVisible(false)}
+          title="Critical value readback"
+          subtitle="Confirms receipt of life-threatening laboratory findings"
+          maxWidth={520}
+          footer={
+            <View style={styles.modalFooter}>
+              <Button title="Cancel" variant="outline" onPress={() => setPanicModalVisible(false)} />
+              <Button
+                title="Sign & confirm readback"
+                variant="danger"
+                loading={isAcknowledgingPanic}
+                onPress={handleAcknowledgePanic}
+              />
             </View>
-            <Pressable
-              style={{ backgroundColor: '#0284C7', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 }}
-              onPress={() => { setPreviewType('REFERRAL'); setPreviewDocModal(true); }}
-            >
-              <ThemedText style={{ fontSize: 11, fontWeight: '700', color: '#FFFFFF' }}>View Print</ThemedText>
-            </Pressable>
-          </View>
-        )}
-      </View>
-
-      {/* Signing Action */}
-      {isSigned ? (
-        <View style={styles.signedBanner}>
-          <ThemedText style={styles.signedTitle}>✓ Encounter Locked & Signed</ThemedText>
-          <ThemedText style={styles.signedSub}>
-            Cryptographically sealed by Dr. Cruz ({doctorPrc}) at {signedAt}.
-          </ThemedText>
-          <ThemedText style={[styles.signedSub, { color: '#0369A1', fontWeight: '600', marginTop: 4 }]}>
-            📡 Prescriptions broadcasted to ClinicEz Partner Pharmacy via AMQPS (Port 5671) over RabbitMQ.
-          </ThemedText>
-
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
-            {prescriptions.length > 0 && (
-              <>
-                <Pressable
-                  style={{
-                    backgroundColor: '#0284C7',
-                    paddingVertical: 10,
-                    paddingHorizontal: 14,
-                    borderRadius: 8,
-                    flex: 1,
-                    minWidth: 160,
-                    alignItems: 'center',
-                  }}
-                  onPress={handleOpenPrescriptionSlip}
-                >
-                  <ThemedText style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '700' }}>
-                    📄 View E-Prescription Slip
-                  </ThemedText>
-                </Pressable>
-
-                <Pressable
-                  style={{
-                    backgroundColor: '#0D9488',
-                    paddingVertical: 10,
-                    paddingHorizontal: 14,
-                    borderRadius: 8,
-                    flex: 1,
-                    minWidth: 160,
-                    alignItems: 'center',
-                  }}
-                  onPress={() => setExternalDispenseModalVisible(true)}
-                >
-                  <ThemedText style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '700' }}>
-                    🏥 Log External Dispense (Path B)
-                  </ThemedText>
-                </Pressable>
-              </>
-            )}
-
-            <Pressable
-              style={{
-                backgroundColor: '#15803D',
-                paddingVertical: 10,
-                paddingHorizontal: 14,
-                borderRadius: 8,
-                flex: 1,
-                minWidth: 160,
-                alignItems: 'center',
-              }}
-              onPress={() =>
-                navigation.navigate('Billing', {
-                  patientId: selectedPatient.patientId,
-                  patientName: selectedPatient.patientName,
-                })
-              }
-            >
-              <ThemedText style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '700' }}>
-                💵 Forward to Cashier Station →
-              </ThemedText>
-            </Pressable>
-          </View>
-        </View>
-      ) : (
-        <Pressable
-          style={[styles.saveButton, isSigning && styles.saveButtonDisabled]}
-          onPress={handleSignAndSync}
-          disabled={isSigning}
+          }
         >
-          {isSigning ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <ThemedText style={styles.saveButtonText}>Sign & Sync Encounter</ThemedText>
-          )}
-        </Pressable>
-      )}
-
-      {/* Medical Certificate Modal */}
-      <Modal visible={medCertModalVisible} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <ThemedText style={styles.modalTitle}>Issue Medical Certificate</ThemedText>
-              <Pressable onPress={() => setMedCertModalVisible(false)}>
-                <ThemedText style={styles.modalCloseText}>✕</ThemedText>
-              </Pressable>
-            </View>
-
-            <View style={{ gap: 10 }}>
-              <ThemedText style={{ fontSize: 12, color: '#4B5563' }}>
-                Patient: <ThemedText style={{ fontWeight: '700' }}>{selectedPatient?.patientName}</ThemedText>
-              </ThemedText>
-
-              <View>
-                <ThemedText style={styles.modalLabel}>Fitness Assessment</ThemedText>
-                <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-                  {['FitToWork', 'UnfitToWork', 'FitToSchool', 'LightDuty'].map((fit) => (
-                    <Pressable
-                      key={fit}
-                      style={[
-                        { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB' },
-                        medCertFitness === fit && { backgroundColor: '#0284C7', borderColor: '#0284C7' },
-                      ]}
-                      onPress={() => setMedCertFitness(fit)}
-                    >
-                      <ThemedText style={[{ fontSize: 12, color: '#374151' }, medCertFitness === fit && { color: '#FFFFFF', fontWeight: '700' }]}>
-                        {fit}
-                      </ThemedText>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-
-              <View>
-                <ThemedText style={styles.modalLabel}>Recommended Rest Days</ThemedText>
-                <TextInput
-                  style={styles.modalInput}
-                  placeholder="3"
-                  value={medCertRestDays}
-                  onChangeText={setMedCertRestDays}
-                  keyboardType="numeric"
-                />
-              </View>
-
-              <View>
-                <ThemedText style={styles.modalLabel}>Certificate Purpose</ThemedText>
-                <TextInput
-                  style={styles.modalInput}
-                  placeholder="Employment / Sick Leave"
-                  value={medCertPurpose}
-                  onChangeText={setMedCertPurpose}
-                />
-              </View>
-
-              <View>
-                <ThemedText style={styles.modalLabel}>Physician Remarks / Advice</ThemedText>
-                <TextInput
-                  style={styles.modalInput}
-                  placeholder="e.g. Advised hydration and follow-up if fever persists."
-                  value={medCertRemarks}
-                  onChangeText={setMedCertRemarks}
-                />
-              </View>
-
-              <Pressable
-                style={[styles.modalSubmitBtn, issuingMedCert && { opacity: 0.6 }]}
-                onPress={handleIssueMedCert}
-                disabled={issuingMedCert}
-              >
-                {issuingMedCert ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <ThemedText style={styles.modalSubmitText}>Lock & Issue Certificate</ThemedText>
-                )}
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Referral Letter Modal */}
-      <Modal visible={referralModalVisible} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <ThemedText style={styles.modalTitle}>Issue Clinical Referral Letter</ThemedText>
-              <Pressable onPress={() => setReferralModalVisible(false)}>
-                <ThemedText style={styles.modalCloseText}>✕</ThemedText>
-              </Pressable>
-            </View>
-
-            <View style={{ gap: 10 }}>
-              <View>
-                <ThemedText style={styles.modalLabel}>Receiving Facility *</ThemedText>
-                <TextInput
-                  style={styles.modalInput}
-                  placeholder="e.g. Provincial General Hospital"
-                  value={refFacility}
-                  onChangeText={setRefFacility}
-                />
-              </View>
-
-              <View>
-                <ThemedText style={styles.modalLabel}>Department / Specialty *</ThemedText>
-                <TextInput
-                  style={styles.modalInput}
-                  placeholder="Cardiology, Surgery, Pulmonary, ER"
-                  value={refDepartment}
-                  onChangeText={setRefDepartment}
-                />
-              </View>
-
-              <View>
-                <ThemedText style={styles.modalLabel}>Urgency</ThemedText>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  {['Routine', 'Urgent', 'Emergency'].map((urg) => (
-                    <Pressable
-                      key={urg}
-                      style={[
-                        { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB' },
-                        refUrgency === urg && { backgroundColor: urg === 'Emergency' ? '#DC2626' : urg === 'Urgent' ? '#D97706' : '#0284C7', borderColor: 'transparent' },
-                      ]}
-                      onPress={() => setRefUrgency(urg)}
-                    >
-                      <ThemedText style={[{ fontSize: 12, color: '#374151' }, refUrgency === urg && { color: '#FFFFFF', fontWeight: '700' }]}>
-                        {urg}
-                      </ThemedText>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-
-              <View>
-                <ThemedText style={styles.modalLabel}>Reason for Referral</ThemedText>
-                <TextInput
-                  style={styles.modalInput}
-                  placeholder="e.g. Expert cardiology workup for chest pain"
-                  value={refReason}
-                  onChangeText={setRefReason}
-                />
-              </View>
-
-              <View>
-                <ThemedText style={styles.modalLabel}>Clinical Summary</ThemedText>
-                <TextInput
-                  style={[styles.modalInput, { minHeight: 50 }]}
-                  placeholder="Summary of examination, diagnostics, and initial medications..."
-                  value={refSummary}
-                  onChangeText={setRefSummary}
-                  multiline
-                />
-              </View>
-
-              <Pressable
-                style={[styles.modalSubmitBtn, issuingReferral && { opacity: 0.6 }]}
-                onPress={handleIssueReferral}
-                disabled={issuingReferral}
-              >
-                {issuingReferral ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <ThemedText style={styles.modalSubmitText}>Issue & Seal Referral Letter</ThemedText>
-                )}
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Formatted Document Print Preview Modal */}
-      <Modal visible={previewDocModal} animationType="fade" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: '#FFFFFF', borderWidth: 2, borderColor: '#1F2937' }]}>
-            <View style={styles.modalHeader}>
-              <ThemedText style={styles.modalTitle}>
-                {previewType === 'MEDCERT' ? 'Official Medical Certificate' : 'Clinical Referral Letter'}
-              </ThemedText>
-              <Pressable onPress={() => setPreviewDocModal(false)}>
-                <ThemedText style={styles.modalCloseText}>✕</ThemedText>
-              </Pressable>
-            </View>
-
-            <ScrollView style={{ maxHeight: 450 }} contentContainerStyle={{ gap: 12, padding: 8 }}>
-              {/* Official Header */}
-              <View style={{ alignItems: 'center', borderBottomWidth: 2, borderBottomColor: '#1F2937', paddingBottom: 10 }}>
-                <ThemedText style={{ fontSize: 16, fontWeight: '800', color: '#111827' }}>
-                  ST. JUDE FAMILY CLINIC & PRIMARY CARE
-                </ThemedText>
-                <ThemedText style={{ fontSize: 11, color: '#4B5563' }}>
-                  124 Rizal Avenue, San Pedro, Laguna • PHIC-KONSULTA-09214
-                </ThemedText>
-                <ThemedText style={{ fontSize: 13, fontWeight: '800', color: '#0369A1', marginTop: 6, textTransform: 'uppercase', letterSpacing: 1.5 }}>
-                  {previewType === 'MEDCERT' ? 'MEDICAL CERTIFICATE' : 'REFERRAL LETTER'}
-                </ThemedText>
-                <ThemedText style={{ fontSize: 11, color: '#6B7280' }}>
-                  Document #: {previewType === 'MEDCERT' ? issuedMedCert?.certificateNumber : issuedReferral?.referralNumber}
-                </ThemedText>
-              </View>
-
-              {previewType === 'MEDCERT' && issuedMedCert ? (
-                <View style={{ gap: 8 }}>
-                  <ThemedText style={{ fontSize: 13, color: '#1F2937' }}>
-                    TO WHOM IT MAY CONCERN:
-                  </ThemedText>
-                  <ThemedText style={{ fontSize: 13, color: '#374151', lineHeight: 20 }}>
-                    This certifies that <ThemedText style={{ fontWeight: '700' }}>{issuedMedCert.patientName}</ThemedText> was clinically evaluated on {issuedMedCert.issueDate} with the following diagnosis:
-                  </ThemedText>
-                  <View style={{ backgroundColor: '#F9FAFB', padding: 8, borderRadius: 6, borderWidth: 1, borderColor: '#E5E7EB' }}>
-                    <ThemedText style={{ fontSize: 13, fontWeight: '700', color: '#111827' }}>
-                      Diagnosis: {issuedMedCert.diagnosis}
-                    </ThemedText>
-                    <ThemedText style={{ fontSize: 12, color: '#4B5563', marginTop: 2 }}>
-                      Findings: {issuedMedCert.clinicalFindings ?? 'Consistent with physical exam.'}
-                    </ThemedText>
-                  </View>
-                  <ThemedText style={{ fontSize: 13, color: '#374151' }}>
-                    Fitness Status: <ThemedText style={{ fontWeight: '700', color: '#15803D' }}>{issuedMedCert.fitnessStatus}</ThemedText>
-                  </ThemedText>
-                  <ThemedText style={{ fontSize: 13, color: '#374151' }}>
-                    Recommended Rest: <ThemedText style={{ fontWeight: '700' }}>{issuedMedCert.recommendedRestDays ?? 0} days</ThemedText>
-                  </ThemedText>
-                  <ThemedText style={{ fontSize: 12, color: '#6B7280', fontStyle: 'italic' }}>
-                    Remarks: {issuedMedCert.remarks ?? 'None'} • Purpose: {issuedMedCert.purpose}
-                  </ThemedText>
-                </View>
-              ) : null}
-
-              {previewType === 'REFERRAL' && issuedReferral ? (
-                <View style={{ gap: 8 }}>
-                  <ThemedText style={{ fontSize: 13, color: '#374151' }}>
-                    To: <ThemedText style={{ fontWeight: '700' }}>{issuedReferral.referredToFacility}</ThemedText> ({issuedReferral.referredDepartment})
-                  </ThemedText>
-                  <ThemedText style={{ fontSize: 13, color: '#374151' }}>
-                    Patient: <ThemedText style={{ fontWeight: '700' }}>{issuedReferral.patientName}</ThemedText> • Urgency: <ThemedText style={{ fontWeight: '700', color: '#DC2626' }}>{issuedReferral.urgency}</ThemedText>
-                  </ThemedText>
-                  <View style={{ backgroundColor: '#F9FAFB', padding: 8, borderRadius: 6, borderWidth: 1, borderColor: '#E5E7EB' }}>
-                    <ThemedText style={{ fontSize: 13, fontWeight: '700', color: '#111827' }}>
-                      Reason: {issuedReferral.reasonForReferral}
-                    </ThemedText>
-                    <ThemedText style={{ fontSize: 12, color: '#4B5563', marginTop: 4 }}>
-                      Clinical Summary: {issuedReferral.clinicalSummary}
-                    </ThemedText>
-                    <ThemedText style={{ fontSize: 12, color: '#1F2937', marginTop: 4 }}>
-                      Impression: {issuedReferral.provisionalDiagnosis}
-                    </ThemedText>
-                  </View>
-                </View>
-              ) : null}
-
-              {/* Physician Signature Stamp */}
-              <View style={{ marginTop: 14, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#E5E7EB', alignItems: 'flex-end' }}>
-                <ThemedText style={{ fontSize: 13, fontWeight: '700', color: '#111827' }}>
-                  {previewType === 'MEDCERT' ? issuedMedCert?.doctorName : issuedReferral?.referringDoctorName}
-                </ThemedText>
-                <ThemedText style={{ fontSize: 11, color: '#4B5563' }}>
-                  PRC Lic. No.: {previewType === 'MEDCERT' ? issuedMedCert?.prcLicenseNumber : doctorPrc}
-                </ThemedText>
-                <ThemedText style={{ fontSize: 11, color: '#4B5563' }}>
-                  PTR No.: {doctorPtr} • PDEA S2: {doctorS2}
-                </ThemedText>
-                <ThemedText style={{ fontSize: 10, color: '#16A34A', fontWeight: '700', marginTop: 2 }}>
-                  ✓ Digitally Certified & Sealed
-                </ThemedText>
-              </View>
-            </ScrollView>
-
-            <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
-              {previewType === 'MEDCERT' && issuedMedCert && (
-                <Pressable
-                  style={{ flex: 1, backgroundColor: '#15803D', paddingVertical: 10, borderRadius: 8, alignItems: 'center' }}
-                  onPress={async () => {
-                    const url = clinicService.getMedicalCertificatePdfUrl(issuedMedCert.id);
-                    try {
-                      await Linking.openURL(url);
-                    } catch {
-                      Alert.alert('Download Error', 'Could not open medical certificate PDF. Please check connection and try again.');
-                    }
-                  }}
-                >
-                  <ThemedText style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 13 }}>📄 Download Official PDF</ThemedText>
-                </Pressable>
-              )}
-              {previewType === 'REFERRAL' && issuedReferral && (
-                <Pressable
-                  style={{ flex: 1, backgroundColor: '#15803D', paddingVertical: 10, borderRadius: 8, alignItems: 'center' }}
-                  onPress={async () => {
-                    const url = clinicService.getReferralLetterPdfUrl(issuedReferral.id);
-                    try {
-                      await Linking.openURL(url);
-                    } catch {
-                      Alert.alert('Download Error', 'Could not open referral letter PDF. Please check connection and try again.');
-                    }
-                  }}
-                >
-                  <ThemedText style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 13 }}>📄 Download Official PDF</ThemedText>
-                </Pressable>
-              )}
-              <Pressable
-                style={{ flex: 1, backgroundColor: '#0284C7', paddingVertical: 10, borderRadius: 8, alignItems: 'center' }}
-                onPress={() => setPreviewDocModal(false)}
-              >
-                <ThemedText style={{ color: '#FFFFFF', fontWeight: '700', fontSize: 13 }}>Done / Close Preview</ThemedText>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Electronic Prescription Slip Modal (Dual-Path) */}
-      <PrescriptionSlipModal
-        visible={prescriptionSlipModalVisible}
-        onClose={() => setPrescriptionSlipModalVisible(false)}
-        slip={prescriptionSlip}
-        onOpenExternalDispense={() => {
-          setPrescriptionSlipModalVisible(false);
-          setExternalDispenseModalVisible(true);
-        }}
-      />
-
-      {/* Record External Dispense Modal (Path B) */}
-      <RecordExternalDispenseModal
-        visible={externalDispenseModalVisible}
-        onClose={() => setExternalDispenseModalVisible(false)}
-        consultationId={signedConsultationId || 'draft-encounter'}
-        prescriptionNumber={prescriptionSlip?.prescriptionNumber}
-        onSuccess={(updated) => {
-          setPrescriptionSlip(updated);
-          setBanner({
-            text: `✓ External dispensing by ${updated.dispensedPharmacyName} recorded successfully!`,
-            isError: false,
-          });
-        }}
-      />
-
-      {/* Statutory Telephone Readback Acknowledgment Modal */}
-      <Modal visible={panicModalVisible} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxWidth: 520 }]}>
-            <View style={styles.modalHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <ThemedText style={{ fontSize: 18 }}>🚨</ThemedText>
-                <ThemedText style={styles.modalTitle}>Critical Value Readback Acknowledgment</ThemedText>
-              </View>
-              <Pressable onPress={() => setPanicModalVisible(false)}>
-                <ThemedText style={styles.modalCloseText}>✕</ThemedText>
-              </Pressable>
-            </View>
-
-            <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={{ gap: 12 }}>
-              <View style={styles.panicModalInfoBox}>
-                <ThemedText style={{ fontSize: 13, fontWeight: '700', color: '#991B1B' }}>
-                  Statutory DOH / Clinical Laboratory Safety Standard
-                </ThemedText>
-                <ThemedText style={{ fontSize: 12, color: '#7F1D1D', marginTop: 2 }}>
-                  Immediate physician verbal readback confirms receipt of life-threatening diagnostic findings.
-                </ThemedText>
-              </View>
-
-              {selectedPanicOrder && (() => {
-                const testName = selectedPanicOrder.testName || selectedPanicOrder.items?.[0]?.testName || 'Diagnostic Panel';
-                const specimenType = selectedPanicOrder.specimenType || 'Venous Blood';
-                const findings = selectedPanicOrder.criticalFindings || selectedPanicOrder.criticalFindingsJson;
+          {selectedPanicOrder
+            ? (() => {
+                const testName =
+                  selectedPanicOrder.testName || selectedPanicOrder.items?.[0]?.testName || 'Diagnostic panel';
+                const findings = formatCriticalFindings(selectedPanicOrder);
                 return (
-                  <View style={{ backgroundColor: '#F8FAFC', padding: 10, borderRadius: 8, gap: 4 }}>
-                    <ThemedText style={{ fontSize: 12, color: '#64748B' }}>
-                      Patient: <ThemedText style={{ fontWeight: '700', color: '#1E293B' }}>{selectedPatient?.patientName}</ThemedText> (ID: {selectedPatient?.patientId})
+                  <View style={styles.paperBox}>
+                    <ThemedText variant="small" color={theme.colors.textMuted}>
+                      Patient:{' '}
+                      <ThemedText variant="smallBold">{selectedPatient?.patientName}</ThemedText>
                     </ThemedText>
-                    <ThemedText style={{ fontSize: 12, color: '#64748B' }}>
-                      Test: <ThemedText style={{ fontWeight: '700', color: '#1E293B' }}>{testName}</ThemedText> • Specimen: {specimenType}
+                    <ThemedText variant="small" color={theme.colors.textMuted}>
+                      Test: <ThemedText variant="smallBold">{testName}</ThemedText>
+                      {selectedPanicOrder.specimenType ? ` • Specimen: ${selectedPanicOrder.specimenType}` : ''}
                     </ThemedText>
-                    <View style={{ backgroundColor: '#FEE2E2', padding: 8, borderRadius: 6, marginTop: 4 }}>
-                      <ThemedText style={{ fontSize: 13, fontWeight: '700', color: '#B91C1C' }}>
-                        {findings || 'CRITICAL THRESHOLD VIOLATION'}
+                    <View style={styles.findingsBox}>
+                      <ThemedText variant="bodyBold" color={theme.colors.emergencyText}>
+                        {findings || 'Critical value flagged by the laboratory'}
                       </ThemedText>
                     </View>
                   </View>
                 );
-              })()}
-
-              <View>
-                <ThemedText style={styles.modalLabel}>Attending Physician *</ThemedText>
-                <TextInput
-                  style={styles.modalInput}
-                  value={attendingDoctorName}
-                  editable={false}
-                  placeholder="Doctor Name, MD"
-                />
-              </View>
-
-              <View>
-                <ThemedText style={styles.modalLabel}>PRC License # *</ThemedText>
-                <TextInput
-                  style={styles.modalInput}
-                  value={doctorPrc}
-                  onChangeText={setDoctorPrc}
-                  placeholder="PRC License"
-                />
-              </View>
-
-              <View>
-                <ThemedText style={styles.modalLabel}>Readback Notes / Immediate Clinical Actions *</ThemedText>
-                <TextInput
-                  style={[styles.modalInput, { minHeight: 70 }]}
-                  multiline
-                  value={panicAckNotes}
-                  onChangeText={setPanicAckNotes}
-                  placeholder="e.g. Verbal telephone readback confirmed with laboratory. Ordered IV calcium gluconate, nebulized salbutamol, and repeat serum K in 2 hours."
-                />
-              </View>
-            </ScrollView>
-
-            <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
-              <Pressable
-                style={[styles.modalCancelBtn, { flex: 1 }]}
-                onPress={() => setPanicModalVisible(false)}
-              >
-                <ThemedText style={styles.modalCancelText}>Cancel</ThemedText>
-              </Pressable>
-              <Pressable
-                style={[styles.panicAckSubmitBtn, isAcknowledgingPanic && { opacity: 0.6 }]}
-                onPress={handleAcknowledgePanic}
-                disabled={isAcknowledgingPanic}
-              >
-                {isAcknowledgingPanic ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <ThemedText style={styles.panicAckSubmitText}>✓ Sign & Confirm Readback</ThemedText>
-                )}
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    </ScrollView>
-  </ResponsiveLayout>
-);
+              })()
+            : null}
+          <Input label="Attending physician" required value={signerName} editable={false} placeholder="Choose 'Working as'" />
+          <Input
+            label="PRC license #"
+            required
+            value={doctorPrc}
+            onChangeText={setDoctorPrc}
+            placeholder="PRC license"
+          />
+          <Input
+            label="Readback notes and immediate clinical actions"
+            required
+            multiline
+            value={panicAckNotes}
+            onChangeText={setPanicAckNotes}
+            placeholder="e.g. Verbal readback confirmed with the laboratory. Repeat serum potassium ordered."
+          />
+        </Modal>
+      </ScrollView>
+    </ResponsiveLayout>
+  );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: theme.colors.background,
   },
   content: {
-    padding: 20,
-    gap: 16,
+    padding: theme.spacing.xl,
+    gap: theme.spacing.lg,
+    width: '100%',
+    maxWidth: theme.sizes.contentMaxWidth,
+    alignSelf: 'center',
   },
-  header: {
-    gap: 4,
+  flex: {
+    flex: 1,
   },
-  subtitle: {
-    fontSize: 13,
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-    color: '#4B5563',
-    fontWeight: '600',
+  center: {
+    textAlign: 'center',
   },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#111827',
+  pressed: {
+    opacity: 0.85,
   },
-  selectorContainer: {
-    gap: 8,
+  disabled: {
+    opacity: 0.6,
   },
-  sectionHeading: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#374151',
-  },
-  subHint: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: -2,
-    marginBottom: 4,
-  },
-  patientRow: {
-    gap: 8,
-  },
-  patientPill: {
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 20,
+    gap: theme.spacing.sm,
   },
-  patientPillActive: {
-    backgroundColor: '#0284C7',
-    borderColor: '#0284C7',
-  },
-  pillBadge: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#0284C7',
-  },
-  pillBadgeActive: {
-    color: '#E0F2FE',
-  },
-  pillName: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#374151',
-  },
-  pillNameActive: {
-    color: '#FFFFFF',
-  },
-  patientCard: {
-    backgroundColor: '#EEF2FF',
-    borderRadius: 14,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#C7D2FE',
-    gap: 12,
+  rowWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
   },
   rowBetween: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: theme.spacing.md,
   },
-  patientName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1E1B4B',
-  },
-  patientMeta: {
-    fontSize: 12,
-    color: '#4338CA',
-    marginTop: 2,
-  },
-  priorityTag: {
-    backgroundColor: '#E0E7FF',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  priorityUrgent: {
-    backgroundColor: '#FEE2E2',
-  },
-  priorityTagText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#3730A3',
-  },
-  vitalsBox: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    padding: 12,
-    gap: 8,
-  },
-  vitalsTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#4F46E5',
-  },
-  vitalsGrid: {
+  actionRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: theme.spacing.sm,
   },
-  vitalItem: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    minWidth: 60,
-    alignItems: 'center',
-  },
-  vitalLabel: {
-    fontSize: 10,
-    color: '#64748B',
-    fontWeight: '600',
-  },
-  vitalValue: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  vitalsPending: {
-    padding: 8,
-    alignItems: 'center',
-  },
-  vitalsPendingMsg: {
-    fontSize: 12,
-    color: '#6B7280',
-    fontStyle: 'italic',
-  },
-  bannerCard: {
-    backgroundColor: '#F0FDF4',
-    borderColor: '#86EFAC',
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 12,
-  },
-  bannerCardError: {
-    backgroundColor: '#FEF2F2',
-    borderColor: '#FCA5A5',
-  },
-  bannerText: {
-    fontSize: 13,
-    color: '#166534',
-    fontWeight: '600',
-  },
-  bannerTextError: {
-    color: '#991B1B',
-  },
-  section: {
-    gap: 8,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#374151',
-  },
-  subHeading: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1F2937',
-  },
-  input: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: '#111827',
-  },
-  textArea: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: '#111827',
-    minHeight: 70,
-    textAlignVertical: 'top',
-  },
-  diagnosesList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  diagBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#E0F2FE',
-    borderWidth: 1,
-    borderColor: '#BAE6FD',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  diagCode: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#0369A1',
-  },
-  diagDesc: {
-    fontSize: 12,
-    color: '#075985',
-    maxWidth: 180,
-  },
-  primaryTag: {
-    fontSize: 9,
-    fontWeight: '800',
-    backgroundColor: '#0284C7',
-    color: '#FFFFFF',
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 4,
-  },
-  removeTag: {
-    paddingLeft: 4,
-  },
-  removeTagText: {
-    fontSize: 12,
-    color: '#64748B',
-    fontWeight: '700',
-  },
-  icdSearchWrapper: {
-    position: 'relative',
-    zIndex: 10,
-  },
-  icdSearchInput: {
-    backgroundColor: '#F3F4F6',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 13,
-    color: '#111827',
-  },
-  icdDropdown: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    marginTop: 4,
-    maxHeight: 180,
-    padding: 4,
-    gap: 2,
-  },
-  icdItem: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    borderRadius: 4,
-  },
-  icdItemCode: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#0284C7',
-    width: 60,
-  },
-  icdItemDesc: {
-    fontSize: 12,
-    color: '#374151',
-    flex: 1,
-  },
-  icdCloseBtn: {
-    paddingVertical: 6,
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-  },
-  icdCloseText: {
-    fontSize: 11,
-    color: '#6B7280',
-    fontWeight: '600',
+  stack: {
+    gap: theme.spacing.sm,
   },
   chipsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: theme.spacing.sm,
   },
   chip: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 16,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  chipActive: {
-    backgroundColor: '#0284C7',
-    borderColor: '#0284C7',
-  },
-  chipActiveProcedure: {
-    backgroundColor: '#7C3AED',
-    borderColor: '#7C3AED',
-  },
-  chipText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#4B5563',
-  },
-  chipTextActive: {
-    color: '#FFFFFF',
-  },
-  addRxBtn: {
-    backgroundColor: '#EFF6FF',
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  addRxBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#1D4ED8',
-  },
-  rxFormCard: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-    borderRadius: 10,
-    padding: 12,
-    gap: 8,
-  },
-  rxFormTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#1E40AF',
-  },
-  rxInput: {
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    fontSize: 13,
-    color: '#111827',
-  },
-  dangerousToggle: {
-    backgroundColor: '#F3F4F6',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 6,
-    paddingVertical: 8,
-    alignItems: 'center',
-  },
-  dangerousToggleActive: {
-    backgroundColor: '#FEF2F2',
-    borderColor: '#F87171',
-  },
-  dangerousToggleText: {
-    fontSize: 12,
-    color: '#4B5563',
-    fontWeight: '600',
-  },
-  dangerousToggleTextActive: {
-    color: '#DC2626',
-    fontWeight: '700',
-  },
-  rxFormActions: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 8,
-    marginTop: 4,
-  },
-  cancelBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  cancelBtnText: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  confirmRxBtn: {
-    backgroundColor: '#0284C7',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  confirmRxBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  rxList: {
-    gap: 8,
-  },
-  rxCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    padding: 12,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-  },
-  rxGeneric: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  rxDosage: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#0284C7',
-  },
-  rxSig: {
-    fontSize: 12,
-    color: '#4B5563',
-    marginTop: 2,
-  },
-  rxQty: {
-    fontSize: 11,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  s2Badge: {
-    backgroundColor: '#FEF2F2',
-    borderColor: '#FECACA',
-    borderWidth: 1,
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    marginTop: 4,
-    alignSelf: 'flex-start',
-  },
-  s2BadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#DC2626',
-  },
-  credentialsCard: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    padding: 14,
-    gap: 10,
-  },
-  credTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#374151',
-  },
-  credRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  credField: {
-    flex: 1,
-    gap: 4,
-  },
-  credLabel: {
-    fontSize: 11,
-    color: '#6B7280',
-  },
-  credInput: {
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  saveButton: {
-    backgroundColor: '#0284C7',
-    borderRadius: 12,
-    paddingVertical: 14,
     alignItems: 'center',
-    marginTop: 4,
+    gap: theme.spacing.xs,
+    minHeight: theme.sizes.controlSm,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.md,
   },
-  saveButtonDisabled: {
-    opacity: 0.6,
-  },
-  saveButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 15,
-  },
-  signedBanner: {
-    backgroundColor: '#F0FDF4',
-    borderWidth: 1,
-    borderColor: '#86EFAC',
-    borderRadius: 12,
-    padding: 16,
+  checkRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: theme.spacing.sm,
   },
-  signedTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#15803D',
-  },
-  signedSub: {
-    fontSize: 12,
-    color: '#166534',
-    textAlign: 'center',
-  },
-  docActionBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-    borderWidth: 1,
+  checkBox: {
+    width: theme.sizes.iconMd,
+    height: theme.sizes.iconMd,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderDark,
+    borderRadius: theme.radii.xs,
+    backgroundColor: theme.colors.surface,
   },
-  modalLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#4B5563',
-    marginBottom: 4,
+  checkBoxChecked: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
   },
-  modalInput: {
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    fontSize: 13,
-    color: '#111827',
+  queueSection: {
+    gap: theme.spacing.sm,
   },
-  modalSubmitBtn: {
-    backgroundColor: '#0284C7',
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginTop: 8,
+  patientRow: {
+    gap: theme.spacing.sm,
   },
-  modalSubmitText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
+  vitalsBox: {
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderLight,
+    borderRadius: theme.radii.md,
   },
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    padding: 16,
-    gap: 10,
+  vitalItem: {
+    minWidth: 72,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.md,
   },
-  sectionHeaderTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-    gap: 14,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-    paddingBottom: 10,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  modalCloseText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#9CA3AF',
-  },
-
-  // STAT Panic Alert Styles
   panicBanner: {
-    backgroundColor: '#FEF2F2',
-    borderWidth: 2,
-    borderColor: '#EF4444',
-    borderRadius: 12,
-    padding: 14,
-    gap: 10,
+    gap: theme.spacing.md,
+    padding: theme.spacing.lg,
+    backgroundColor: theme.colors.emergencySubtle,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.emergencyBorder,
+    borderRadius: theme.radii.lg,
   },
   panicBannerAcknowledged: {
-    backgroundColor: '#F0FDF4',
-    borderColor: '#22C55E',
+    backgroundColor: theme.colors.successBg,
+    borderColor: theme.colors.successBorder,
   },
-  panicHeaderRow: {
+  bannerCard: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 8,
+    gap: theme.spacing.sm,
+    padding: theme.spacing.lg,
+    backgroundColor: theme.colors.successBg,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.successBorder,
+    borderRadius: theme.radii.lg,
   },
-  panicTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#991B1B',
-    letterSpacing: 0.5,
+  bannerCardError: {
+    backgroundColor: theme.colors.emergencySubtle,
+    borderColor: theme.colors.emergencyBorder,
   },
-  panicSubtitle: {
-    fontSize: 11,
-    color: '#7F1D1D',
-    marginTop: 2,
+  textArea: {
+    minHeight: theme.sizes.controlLg + theme.sizes.controlLg,
+    textAlignVertical: 'top',
   },
-  panicBadgeContainer: {
-    backgroundColor: '#DC2626',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  panicBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  panicDetailsCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: '#FECACA',
-    gap: 4,
-  },
-  panicFindings: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#B91C1C',
-  },
-  panicAckInfo: {
-    fontSize: 11,
-    color: '#15803D',
-    fontWeight: '600',
-  },
-  panicUrgentPrompt: {
-    fontSize: 11,
-    color: '#991B1B',
-    fontStyle: 'italic',
-  },
-  panicActionsRow: {
+  diagBadge: {
     flexDirection: 'row',
-    gap: 8,
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+    backgroundColor: theme.colors.primaryLight,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primaryBorder,
+    borderRadius: theme.radii.md,
+  },
+  diagDesc: {
+    maxWidth: 240,
+  },
+  icdDropdown: {
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.md,
+    overflow: 'hidden',
+  },
+  icdNotice: {
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  icdItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderBottomWidth: theme.sizes.borderWidth,
+    borderBottomColor: theme.colors.borderLight,
+  },
+  icdItemCode: {
+    minWidth: 64,
+  },
+  icdFooter: {
+    alignItems: 'flex-end',
+    padding: theme.spacing.xs,
+    backgroundColor: theme.colors.surfaceMuted,
+  },
+  labCard: {
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.md,
+  },
+  labCardCritical: {
+    backgroundColor: theme.colors.emergencySubtle,
+    borderColor: theme.colors.emergencyBorder,
+  },
+  findingsBox: {
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.emergencyBg,
+    borderRadius: theme.radii.sm,
+  },
+  rxForm: {
+    gap: theme.spacing.md,
+    padding: theme.spacing.lg,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.md,
+  },
+  fieldRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.md,
+  },
+  fieldGrow: {
+    flex: 1,
+    minWidth: 160,
+  },
+  fieldNarrow: {
+    width: 120,
+  },
+  rxCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: theme.spacing.md,
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.md,
+  },
+  cdsPassed: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.successBg,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.successBorder,
+    borderRadius: theme.radii.md,
+  },
+  cdsAlert: {
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.md,
+  },
+  overrideBox: {
+    gap: theme.spacing.sm,
+    padding: theme.spacing.lg,
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.emergencyBorder,
+    borderRadius: theme.radii.md,
+  },
+  issuedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
+    padding: theme.spacing.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.md,
+  },
+  issuedRowSuccess: {
+    backgroundColor: theme.colors.successBg,
+    borderColor: theme.colors.successBorder,
+  },
+  issuedRowPrimary: {
+    backgroundColor: theme.colors.primarySubtle,
+    borderColor: theme.colors.primaryBorder,
+  },
+  signedCard: {
+    backgroundColor: theme.colors.successBg,
+    borderColor: theme.colors.successBorder,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'flex-end',
+    gap: theme.spacing.sm,
   },
-  panicAckButton: {
-    backgroundColor: '#DC2626',
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 6,
+  paper: {
+    gap: theme.spacing.lg,
+    padding: theme.spacing.lg,
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderDark,
+    borderRadius: theme.radii.md,
   },
-  panicAckButtonText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  panicPdfButton: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-  },
-  panicPdfButtonText: {
-    color: '#374151',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-
-  // Lab Results Styles
-  labResultCard: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    padding: 12,
-    gap: 8,
-  },
-  labResultCardPanic: {
-    borderColor: '#F87171',
-    backgroundColor: '#FEF2F2',
-  },
-  labResultName: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  labResultMeta: {
-    fontSize: 11,
-    color: '#64748B',
-    marginTop: 2,
-  },
-  labStatusBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  labStatusFinal: {
-    backgroundColor: '#DCFCE7',
-  },
-  labStatusPending: {
-    backgroundColor: '#FEF3C7',
-  },
-  labStatusText: {
-    fontSize: 9,
-    fontWeight: '700',
-  },
-  labStatusFinalText: {
-    color: '#15803D',
-  },
-  labStatusPendingText: {
-    color: '#B45309',
-  },
-  panicPill: {
-    backgroundColor: '#FEE2E2',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: '#F87171',
-  },
-  panicPillText: {
-    color: '#B91C1C',
-    fontSize: 9,
-    fontWeight: '800',
-  },
-  labPdfBtn: {
-    backgroundColor: '#F0F9FF',
-    borderWidth: 1,
-    borderColor: '#BAE6FD',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  labPdfBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#0284C7',
-  },
-  labFindingsBox: {
-    backgroundColor: '#FFFFFF',
-    padding: 8,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  labFindingsText: {
-    fontSize: 12,
-    color: '#334155',
-  },
-  unackNoticeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  paperHeader: {
     alignItems: 'center',
-    backgroundColor: '#FEE2E2',
-    padding: 6,
-    borderRadius: 6,
-  },
-  unackNoticeText: {
-    fontSize: 11,
-    color: '#991B1B',
-    fontWeight: '600',
-    flex: 1,
-  },
-  unackActionLink: {
-    fontSize: 11,
-    color: '#DC2626',
-    fontWeight: '800',
-    marginLeft: 6,
-  },
-
-  // CDS Styles
-  cdsContainer: {
-    backgroundColor: '#F0FDF4',
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
-    borderRadius: 12,
-    padding: 12,
-    gap: 8,
-    marginTop: 4,
-  },
-  cdsTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#166534',
-  },
-  cdsPassedBox: {
-    backgroundColor: '#DCFCE7',
-    padding: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#86EFAC',
-  },
-  cdsPassedText: {
-    fontSize: 12,
-    color: '#15803D',
-    fontWeight: '600',
-  },
-  cdsAlertCard: {
-    borderRadius: 8,
-    padding: 10,
-    borderWidth: 1,
-    gap: 6,
-  },
-  cdsAlertCardCritical: {
-    backgroundColor: '#FEF2F2',
-    borderColor: '#F87171',
-  },
-  cdsAlertCardMajor: {
-    backgroundColor: '#FFFBEB',
-    borderColor: '#FCD34D',
-  },
-  cdsAlertCardModerate: {
-    backgroundColor: '#EFF6FF',
-    borderColor: '#93C5FD',
-  },
-  cdsSeverityBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  cdsSeverityCritical: {
-    backgroundColor: '#DC2626',
-  },
-  cdsSeverityMajor: {
-    backgroundColor: '#D97706',
-  },
-  cdsSeverityModerate: {
-    backgroundColor: '#2563EB',
-  },
-  cdsSeverityBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 9,
-    fontWeight: '800',
-  },
-  cdsCategoryText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#374151',
-  },
-  cdsDrugText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#4B5563',
-  },
-  cdsAlertMessage: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  cdsAlertRecommendation: {
-    fontSize: 11,
-    color: '#4B5563',
-    lineHeight: 16,
-  },
-  cdsOverrideBox: {
-    backgroundColor: '#FEF2F2',
-    borderWidth: 1,
-    borderColor: '#FCA5A5',
-    borderRadius: 8,
-    padding: 10,
-    gap: 6,
-    marginTop: 4,
-  },
-  cdsOverrideHeading: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#991B1B',
-  },
-  cdsOverrideSub: {
-    fontSize: 11,
-    color: '#7F1D1D',
-  },
-  cdsOverrideInput: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#FCA5A5',
-    borderRadius: 6,
-    padding: 8,
-    fontSize: 12,
-    color: '#1F2937',
-    minHeight: 50,
-  },
-  overrideCheckRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 4,
-  },
-  overrideCheckbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    borderColor: '#DC2626',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-  },
-  overrideCheckboxActive: {
-    backgroundColor: '#DC2626',
-  },
-  overrideCheckLabel: {
-    fontSize: 11,
-    color: '#7F1D1D',
-    fontWeight: '600',
-    flex: 1,
-  },
-
-  // Panic Modal Additional Styles
-  panicModalInfoBox: {
-    backgroundColor: '#FEE2E2',
-    borderWidth: 1,
-    borderColor: '#FECACA',
-    borderRadius: 8,
-    padding: 10,
-  },
-  panicAckSubmitBtn: {
-    flex: 2,
-    backgroundColor: '#DC2626',
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  panicAckSubmitText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  modalCancelBtn: {
-    backgroundColor: '#F3F4F6',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  modalCancelText: {
-    color: '#374151',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-
-  // PhilHealth Yakap Header & Claim Readiness Styles
-  yakapHeaderCard: {
-    backgroundColor: '#F0F9FF',
-    borderWidth: 1.5,
-    borderColor: '#0284C7',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 16,
-  },
-  yakapHeaderCardInactive: {
-    backgroundColor: '#F9FAFB',
-    borderColor: '#E5E7EB',
-  },
-  yakapCheckbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: '#9CA3AF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-  },
-  yakapCheckboxActive: {
-    borderColor: '#0284C7',
-    backgroundColor: '#0284C7',
-  },
-  yakapCheckMark: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  yakapTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  trancheBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  trancheBadgeActive: {
-    backgroundColor: '#E0F2FE',
-  },
-  trancheBadgeInactive: {
-    backgroundColor: '#F3F4F6',
-  },
-  trancheBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  trancheBadgeTextActive: {
-    color: '#0284C7',
-  },
-  trancheBadgeTextInactive: {
-    color: '#6B7280',
-  },
-  yakapSubtitle: {
-    fontSize: 12,
-    color: '#475569',
-    marginTop: 2,
-  },
-  claimReadinessContainer: {
-    justifyContent: 'center',
-  },
-  readinessPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  readinessPillSuccess: {
-    backgroundColor: '#DCFCE7',
-    borderWidth: 1,
-    borderColor: '#86EFAC',
-  },
-  readinessPillPending: {
-    backgroundColor: '#FEF3C7',
-    borderWidth: 1,
-    borderColor: '#FDE68A',
-  },
-  readinessPillText: {
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  readinessPillTextSuccess: {
-    color: '#15803D',
-  },
-  readinessPillTextPending: {
-    color: '#B45309',
-  },
-
-  // Statutory Symptom Selector Styles
-  statutoryTag: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#0284C7',
-    backgroundColor: '#E0F2FE',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  statutorySelectorCard: {
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 10,
-  },
-  statutoryInstruction: {
-    fontSize: 12,
-    color: '#475569',
-    marginBottom: 8,
-    lineHeight: 16,
-  },
-  symptomChipsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  symptomChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    gap: 6,
-  },
-  symptomChipActive: {
-    backgroundColor: '#0284C7',
-    borderColor: '#0284C7',
-  },
-  symptomChipCode: {
-    fontSize: 10,
-    fontFamily: 'monospace',
-    fontWeight: '800',
-    color: '#0284C7',
-    backgroundColor: '#E0F2FE',
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 4,
-  },
-  symptomChipCodeActive: {
-    color: '#0284C7',
-    backgroundColor: '#FFFFFF',
-  },
-  symptomChipText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#334155',
-  },
-  symptomChipTextActive: {
-    color: '#FFFFFF',
-  },
-  statutorySubField: {
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-  },
-  subFieldLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#475569',
-    marginBottom: 4,
-  },
-  statutorySubInput: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#94A3B8',
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    fontSize: 12,
-    color: '#0F172A',
-  },
-
-  // Chronic Disease Quick Picks
-  chronicQuickPicksRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 8,
-  },
-  quickPickLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#64748B',
-  },
-  chronicChip: {
-    backgroundColor: '#EFF6FF',
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  chronicChipText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#1D4ED8',
-  },
-
-  // GAMOT Formulary Shelf Styles
-  gamotShelfCard: {
-    backgroundColor: '#F0FDFA',
-    borderWidth: 1,
-    borderColor: '#99F6E4',
-    borderRadius: 10,
-    padding: 10,
-    marginBottom: 10,
-  },
-  gamotShelfTitle: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#0F766E',
-    marginBottom: 6,
-    textTransform: 'uppercase',
-  },
-  gamotChipsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 6,
-  },
-  gamotChip: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#5EEAD4',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  gamotChipActive: {
-    backgroundColor: '#0D9488',
-    borderColor: '#0D9488',
-  },
-  gamotChipText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#0F766E',
-  },
-  gamotChipTextActive: {
-    color: '#FFFFFF',
-  },
-  gamotBoundTag: {
-    fontSize: 11,
-    color: '#0D9488',
-    fontWeight: '600',
-  },
-  gamotPrescriptionBadge: {
-    backgroundColor: '#F0FDFA',
-    borderWidth: 1,
-    borderColor: '#99F6E4',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    alignSelf: 'flex-start',
-    marginTop: 4,
-  },
-  gamotPrescriptionBadgeText: {
-    fontSize: 10,
-    fontFamily: 'monospace',
-    fontWeight: '800',
-    color: '#0D9488',
-  },
-  yakapDiagnosticCode: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#0284C7',
+    gap: theme.spacing.xs,
+    paddingBottom: theme.spacing.md,
+    borderBottomWidth: theme.sizes.borderWidth,
+    borderBottomColor: theme.colors.borderDark,
+  },
+  paperTitle: {
+    marginTop: theme.spacing.sm,
+  },
+  paperBox: {
+    gap: theme.spacing.xs,
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.sm,
+  },
+  signature: {
+    alignItems: 'flex-end',
+    gap: theme.spacing.xs,
+    paddingTop: theme.spacing.md,
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.border,
   },
 });

@@ -1,4 +1,8 @@
 import { ClinicPatient, RegisterPatientPayload, ClinicRecordAttachmentRecord, clinicService } from './clinicService';
+import { resolveTenantContext } from '@shared/safe';
+
+/** Used only when neither the payload nor the caller supplies who queued the item. */
+const NEUTRAL_ACTOR_NAME = 'Front desk';
 
 export interface PendingPatientRegistration {
   id: string;
@@ -56,6 +60,15 @@ class OfflineSyncService {
       return window.localStorage;
     }
     return null;
+  }
+
+  /** Active tenant/clinic, resolved at call time so a workspace switch is always honoured. */
+  private getActiveIds(): { tenantId: string; clinicId: string } {
+    const ctx = resolveTenantContext();
+    return {
+      tenantId: ctx.tenantSlug ?? '',
+      clinicId: ctx.clinicId ?? '',
+    };
   }
 
   private loadFromStorage() {
@@ -122,10 +135,12 @@ class OfflineSyncService {
     const year = new Date().getFullYear();
     const patientCode = `PAT-OFFLINE-${year}-${this.localSeq}`;
 
+    const { tenantId, clinicId } = this.getActiveIds();
+
     const localPatient: ClinicPatient = {
       id: tempId,
-      tenantId: 'tenant-local-campus',
-      clinicId: 'clinic-local-campus',
+      tenantId,
+      clinicId,
       patientCode,
       firstName: payload.firstName,
       lastName: payload.lastName,
@@ -183,13 +198,15 @@ class OfflineSyncService {
     documentDate: string;
     notes?: string;
     uploadedByStaffName?: string;
-  }): Promise<ClinicRecordAttachmentRecord> {
+  }, actorName?: string): Promise<ClinicRecordAttachmentRecord> {
     const tempId = `local-att-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const { tenantId, clinicId } = this.getActiveIds();
+    const actor = payload.uploadedByStaffName || actorName || NEUTRAL_ACTOR_NAME;
 
     const localAttachment: ClinicRecordAttachmentRecord = {
       id: tempId,
-      tenantId: 'tenant-local-campus',
-      clinicId: 'clinic-local-campus',
+      tenantId,
+      clinicId,
       patientId: payload.patientId,
       consultationId: payload.consultationId,
       recordType: payload.recordType,
@@ -200,10 +217,10 @@ class OfflineSyncService {
       storageUri: payload.storageUri,
       documentDate: payload.documentDate,
       notes: payload.notes,
-      uploadedByStaffName: payload.uploadedByStaffName || 'Campus LAN Nurse',
+      uploadedByStaffName: actor,
       verificationStatus: 'Verified',
       verifiedAt: new Date().toISOString(),
-      verifiedByStaffName: payload.uploadedByStaffName || 'Campus LAN Nurse',
+      verifiedByStaffName: actor,
       createdAt: new Date().toISOString(),
     };
 

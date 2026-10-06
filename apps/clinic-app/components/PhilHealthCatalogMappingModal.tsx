@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Modal, Pressable, TextInput, Alert } from 'react-native';
-import ThemedText from './ui/ThemedText';
+import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { theme } from '@constants/theme';
+import { Modal, Input, Button, Badge, Icon, EmptyState, ThemedText } from '@ui';
+import { Alert } from '@utils/feedback';
 
 export interface CatalogMappingResult {
   code: string;
@@ -144,364 +146,196 @@ export default function PhilHealthCatalogMappingModal({
     );
   });
 
+
   return (
-    <Modal visible={visible} transparent animationType="slide">
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContainer}>
-          {/* Header */}
-          <View style={styles.headerBar}>
-            <View>
-              <View style={styles.titleRow}>
-                <ThemedText style={styles.titleText}>Map to PhilHealth Statutory Catalog</ThemedText>
-                <ThemedText style={styles.badgeText}>Yakap / Konsulta Compliant</ThemedText>
-              </View>
-              <ThemedText style={styles.subText}>
-                Tenant Option: <ThemedText style={{ fontWeight: '800', color: '#111827' }}>{itemName}</ThemedText> •{' '}
-                {itemType === 'Medicine' ? 'GAMOT Formulary (lib_medicine)' : '13 Yakap Diagnostics (lib_diagnostic)'}
-              </ThemedText>
-            </View>
-            <Pressable onPress={onClose} style={styles.closeBtn}>
-              <ThemedText style={styles.closeBtnText}>✕</ThemedText>
-            </Pressable>
-          </View>
-
-          {/* Search Bar */}
-          <View style={styles.searchSection}>
-            <ThemedText style={styles.sectionLabel}>Search Official PhilHealth Catalog</ThemedText>
-            <TextInput
-              style={styles.searchInput}
-              placeholder={itemType === 'Medicine' ? 'Search molecule, dosage, or UPSC...' : 'Search diagnostic test...'}
-              placeholderTextColor="#9CA3AF"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-          </View>
-
-          {/* Selected Preview Box */}
-          <View style={[styles.previewBox, isNonFormulary && styles.previewBoxNonFormulary]}>
-            <View style={styles.previewHeader}>
-              <ThemedText style={styles.previewTitle}>
-                {isNonFormulary ? '⚠️ NON-FORMULARY OUT-OF-POCKET' : '✓ BOUND PHILHEALTH STATUTORY CODE'}
-              </ThemedText>
-              <ThemedText style={styles.previewCodeBadge}>{selectedCode || 'UNBOUND'}</ThemedText>
-            </View>
-            <ThemedText style={styles.previewDesc}>
-              {selectedDesc || 'No PhilHealth statutory equivalent selected yet. Choose an option below.'}
-            </ThemedText>
-            {selectedCode && (
-              <ThemedText style={styles.xmlSnippet}>
-                {itemType === 'Medicine'
-                  ? `<MEDICINE pDrugCode="${selectedCode}" pGenericName="${initialGenericName || itemName}" />`
-                  : `<DIAGNOSTIC pDiagnosticCode="${selectedCode}" />`}
-              </ThemedText>
-            )}
-          </View>
-
-          {/* Options List */}
-          <ThemedText style={[styles.sectionLabel, { marginTop: 12 }]}>
-            Available PhilHealth Catalog Matches ({filteredList.length})
-          </ThemedText>
-          <ScrollView style={styles.optionsScroll}>
-            {filteredList.map((item) => {
-              const isSelected = selectedCode === item.code && !isNonFormulary;
-              return (
-                <Pressable
-                  key={item.code}
-                  style={[styles.optionCard, isSelected && styles.optionCardActive]}
-                  onPress={() => handleSelectOption(item)}
-                >
-                  <View style={{ flex: 1 }}>
-                    <ThemedText style={[styles.optionName, isSelected && styles.optionNameActive]}>
-                      {item.name}
-                    </ThemedText>
-                    <ThemedText style={styles.optionCode}>{item.code}</ThemedText>
-                  </View>
-                  <View style={styles.catBadge}>
-                    <ThemedText style={styles.catBadgeText}>{item.category}</ThemedText>
-                  </View>
-                </Pressable>
-              );
-            })}
-
-            {/* Non-Formulary Fallback Option */}
-            <Pressable
-              style={[styles.nonFormularyCard, isNonFormulary && styles.nonFormularyCardActive]}
-              onPress={handleSelectNonFormulary}
-            >
-              <View style={{ flex: 1 }}>
-                <ThemedText style={styles.nonFormularyTitle}>
-                  Mark as Non-Formulary / Category P (Private / Out of Pocket)
-                </ThemedText>
-                <ThemedText style={styles.nonFormularySubtitle}>
-                  Item will remain active for clinic private sales, but flagged as out-of-pocket for Yakap packages.
-                </ThemedText>
-              </View>
-              {isNonFormulary && <ThemedText style={styles.checkIcon}>✓</ThemedText>}
-            </Pressable>
-          </ScrollView>
-
-          {/* Action Buttons */}
-          <View style={styles.footerRow}>
-            <Pressable style={styles.cancelBtn} onPress={onClose}>
-              <ThemedText style={styles.cancelBtnText}>Cancel</ThemedText>
-            </Pressable>
-            <Pressable
-              style={[styles.saveBtn, (!selectedCode && !isNonFormulary) && styles.saveBtnDisabled]}
-              onPress={handleConfirm}
-              disabled={!selectedCode && !isNonFormulary}
-            >
-              <ThemedText style={styles.saveBtnText}>✓ Save & Bind Statutory Code</ThemedText>
-            </Pressable>
-          </View>
+    <Modal
+      visible={visible}
+      onClose={onClose}
+      title="Map to PhilHealth catalog"
+      subtitle={`${itemName} · ${itemType === 'Medicine' ? 'GAMOT formulary' : 'Yakap diagnostics'}`}
+      maxWidth={680}
+      maxHeight="90%"
+      footer={
+        <View style={styles.footerRow}>
+          <Button title="Cancel" variant="ghost" onPress={onClose} />
+          <Button
+            title="Save mapping"
+            onPress={handleConfirm}
+            disabled={!selectedCode && !isNonFormulary}
+          />
         </View>
+      }
+    >
+      {/* Search Bar */}
+      <Input
+        label="Search the PhilHealth catalog"
+        leftIcon="search"
+        placeholder={itemType === 'Medicine' ? 'Search by molecule, dosage or code' : 'Search diagnostic test'}
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+      />
+
+      {/* Selected Preview Box */}
+      <View style={[styles.previewBox, isNonFormulary && styles.previewBoxNonFormulary]}>
+        <View style={styles.previewHeader}>
+          <ThemedText variant="captionBold" color={isNonFormulary ? theme.colors.warningText : theme.colors.primaryDark}>
+            {isNonFormulary ? 'Non-formulary, out of pocket' : 'Selected PhilHealth code'}
+          </ThemedText>
+          <ThemedText variant="code" color={theme.colors.primary} style={styles.previewCodeBadge}>
+            {selectedCode || 'Not selected'}
+          </ThemedText>
+        </View>
+        <ThemedText variant="bodyBold">
+          {selectedDesc || 'No PhilHealth equivalent selected yet. Choose an option below.'}
+        </ThemedText>
+        {selectedCode ? (
+          <ThemedText variant="code" color={theme.colors.textSecondary} style={styles.xmlSnippet}>
+            {itemType === 'Medicine'
+              ? `<MEDICINE pDrugCode="${selectedCode}" pGenericName="${initialGenericName || itemName}" />`
+              : `<DIAGNOSTIC pDiagnosticCode="${selectedCode}" />`}
+          </ThemedText>
+        ) : null}
       </View>
+
+      {/* Options List */}
+      <ThemedText variant="smallBold" color={theme.colors.textSecondary}>
+        Matching catalog entries ({filteredList.length})
+      </ThemedText>
+      <ScrollView style={styles.optionsScroll} contentContainerStyle={styles.optionsContent} nestedScrollEnabled>
+        {filteredList.length === 0 ? (
+          <EmptyState
+            icon="search"
+            title="No catalog entries match"
+            description="Try a different search, or mark the item as non-formulary below."
+          />
+        ) : (
+          filteredList.map((item) => {
+            const isSelected = selectedCode === item.code && !isNonFormulary;
+            return (
+              <Pressable
+                key={item.code}
+                style={[styles.optionCard, isSelected && styles.optionCardActive]}
+                onPress={() => handleSelectOption(item)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSelected }}
+              >
+                <View style={styles.optionText}>
+                  <ThemedText variant="bodyBold" color={isSelected ? theme.colors.primaryDark : theme.colors.text}>
+                    {item.name}
+                  </ThemedText>
+                  <ThemedText variant="code" color={theme.colors.textMuted}>
+                    {item.code}
+                  </ThemedText>
+                </View>
+                <Badge label={item.category} variant="neutral" />
+              </Pressable>
+            );
+          })
+        )}
+
+        {/* Non-Formulary Fallback Option */}
+        <Pressable
+          style={[styles.nonFormularyCard, isNonFormulary && styles.nonFormularyCardActive]}
+          onPress={handleSelectNonFormulary}
+          accessibilityRole="button"
+          accessibilityState={{ selected: isNonFormulary }}
+        >
+          <View style={styles.optionText}>
+            <ThemedText variant="smallBold" color={theme.colors.warningText}>
+              Mark as non-formulary (private / out of pocket)
+            </ThemedText>
+            <ThemedText variant="caption" color={theme.colors.warningText}>
+              The item stays active for private clinic sales but is flagged as out of pocket for Yakap packages.
+            </ThemedText>
+          </View>
+          {isNonFormulary && <Icon name="check" size={theme.sizes.iconMd} color={theme.colors.warningText} />}
+        </Pressable>
+      </ScrollView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
-  },
-  modalContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    width: '100%',
-    maxWidth: 680,
-    maxHeight: '90%',
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    elevation: 8,
-  },
-  headerBar: {
+  footerRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-    paddingBottom: 16,
-    marginBottom: 16,
-  },
-  titleRow: {
-    flexDirection: 'row',
+    justifyContent: 'flex-end',
     alignItems: 'center',
-    gap: 8,
-  },
-  titleText: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#111827',
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#0284C7',
-    backgroundColor: '#E0F2FE',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  subText: {
-    fontSize: 13,
-    color: '#6B7280',
-    marginTop: 4,
-  },
-  closeBtn: {
-    padding: 8,
-  },
-  closeBtnText: {
-    fontSize: 18,
-    color: '#9CA3AF',
-    fontWeight: '700',
-  },
-  searchSection: {
-    marginBottom: 12,
-  },
-  sectionLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#374151',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 6,
-  },
-  searchInput: {
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: '#111827',
+    gap: theme.spacing.sm,
   },
   previewBox: {
-    backgroundColor: '#F0F9FF',
-    borderWidth: 1,
-    borderColor: '#BAE6FD',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 10,
+    backgroundColor: theme.colors.primarySubtle,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primaryBorder,
+    borderRadius: theme.radii.lg,
+    padding: theme.spacing.lg,
+    gap: theme.spacing.xs,
   },
   previewBoxNonFormulary: {
-    backgroundColor: '#FEF3C7',
-    borderColor: '#FDE68A',
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
   },
   previewHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
-  },
-  previewTitle: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#0369A1',
-    letterSpacing: 0.5,
+    gap: theme.spacing.sm,
   },
   previewCodeBadge: {
-    fontSize: 11,
-    fontFamily: 'monospace',
-    fontWeight: '800',
-    color: '#0284C7',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 8,
+    backgroundColor: theme.colors.surface,
+    paddingHorizontal: theme.spacing.sm,
     paddingVertical: 2,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#BAE6FD',
-  },
-  previewDesc: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#1E293B',
+    borderRadius: theme.radii.sm,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primaryBorder,
+    overflow: 'hidden',
   },
   xmlSnippet: {
-    fontSize: 11,
-    fontFamily: 'monospace',
-    color: '#475569',
-    marginTop: 6,
-    backgroundColor: '#E2E8F0',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    marginTop: theme.spacing.xs,
+    backgroundColor: theme.colors.surfaceHighlight,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radii.sm,
+    overflow: 'hidden',
   },
   optionsScroll: {
     maxHeight: 280,
+  },
+  optionsContent: {
+    gap: theme.spacing.sm,
   },
   optionCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 10,
-    backgroundColor: '#FFFFFF',
-    marginBottom: 8,
+    gap: theme.spacing.md,
+    padding: theme.spacing.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.surface,
   },
   optionCardActive: {
-    borderColor: '#0284C7',
-    backgroundColor: '#F0F9FF',
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primarySubtle,
   },
-  optionName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1F2937',
-  },
-  optionNameActive: {
-    color: '#0369A1',
-  },
-  optionCode: {
-    fontSize: 11,
-    fontFamily: 'monospace',
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  catBadge: {
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  catBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#4B5563',
+  optionText: {
+    flex: 1,
+    gap: 2,
   },
   nonFormularyCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 12,
-    borderWidth: 1,
+    gap: theme.spacing.md,
+    padding: theme.spacing.md,
+    borderWidth: theme.sizes.borderWidth,
     borderStyle: 'dashed',
-    borderColor: '#D97706',
-    borderRadius: 10,
-    backgroundColor: '#FFFBEB',
-    marginTop: 8,
-    marginBottom: 8,
+    borderColor: theme.colors.warning,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.warningBg,
   },
   nonFormularyCardActive: {
-    borderColor: '#B45309',
-    backgroundColor: '#FEF3C7',
-  },
-  nonFormularyTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#92400E',
-  },
-  nonFormularySubtitle: {
-    fontSize: 11,
-    color: '#B45309',
-    marginTop: 2,
-  },
-  checkIcon: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#B45309',
-  },
-  footerRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 12,
-    marginTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-    paddingTop: 16,
-  },
-  cancelBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
-  },
-  cancelBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#4B5563',
-  },
-  saveBtn: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: '#0284C7',
-  },
-  saveBtnDisabled: {
-    backgroundColor: '#9CA3AF',
-  },
-  saveBtnText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#FFFFFF',
+    borderStyle: 'solid',
+    borderColor: theme.colors.warningText,
   },
 });

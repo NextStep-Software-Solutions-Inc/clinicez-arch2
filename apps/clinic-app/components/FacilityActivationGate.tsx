@@ -1,15 +1,18 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import {
   View,
-  Text,
-  TextInput,
-  Pressable,
   ActivityIndicator,
   StyleSheet,
   ScrollView,
   Modal,
   Platform,
 } from 'react-native';
+import { theme } from '@constants/theme';
+import ThemedText from '@ui/ThemedText';
+import Button from '@ui/Button';
+import Input from '@ui/Input';
+import Badge, { BadgeVariant } from '@ui/Badge';
+import Icon from '@ui/Icon';
 import { clinicService, FacilityLicenseStatus } from '../services/clinicService';
 import {
   resolveTenantContext,
@@ -101,7 +104,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
   const handleSelectWorkspace = () => {
     const trimmed = workspaceInput.trim().toLowerCase();
     if (!trimmed || !isValidTenantSlug(trimmed)) {
-      setError('Please enter a valid workspace slug (e.g. metro-health, st-jude).');
+      setError('Please enter a valid workspace slug (e.g. metro-health).');
       return;
     }
     setActiveTenantContext(trimmed);
@@ -189,15 +192,17 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
   if (isLoading) {
     return (
       <View style={styles.centerContainer}>
-        <View style={styles.splashCard}>
-          <Text style={styles.splashIcon}>🏥</Text>
-          <Text style={styles.splashTitle}>ClinicEz Console</Text>
-          <Text style={styles.splashSubtitle}>
+        <View style={[styles.card, styles.loadingCard]}>
+          <BrandMark />
+          <ThemedText variant="h2" style={styles.centerText}>
+            ClinicEz
+          </ThemedText>
+          <ThemedText variant="body" color={theme.colors.textSecondary} style={styles.centerText}>
             {activeTenant
-              ? `Verifying license & integrity for workspace "${activeTenant}"...`
-              : 'Loading clinic workspace...'}
-          </Text>
-          <ActivityIndicator size="large" color="#0284C7" style={{ marginTop: 20 }} />
+              ? `Checking the license for workspace "${activeTenant}"...`
+              : 'Loading your workspace...'}
+          </ThemedText>
+          <ActivityIndicator size="large" color={theme.colors.primary} style={styles.spinner} />
         </View>
       </View>
     );
@@ -207,42 +212,34 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
   if (!activeTenant) {
     return (
       <FacilityLicenseContext.Provider value={contextValue}>
-        <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.centerContainer}>
-          <View style={styles.activationCard}>
-            <View style={[styles.badgePill, { backgroundColor: '#E0F2FE' }]}>
-              <Text style={[styles.badgeText, { color: '#0284C7' }]}>Multi-Tenant Console</Text>
+        <ScrollView
+          style={styles.scrollContainer}
+          contentContainerStyle={styles.centerContainer}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.card}>
+            <BrandMark />
+
+            <View style={styles.headerGroup}>
+              <ThemedText variant="h1">Choose your workspace</ThemedText>
+              <ThemedText variant="body" color={theme.colors.textSecondary}>
+                Enter your workspace name to sign in, or open ClinicEz from the Portal.
+              </ThemedText>
             </View>
 
-            <Text style={styles.cardHeaderTitle}>Select Clinic Workspace</Text>
-            <Text style={styles.cardHeaderDesc}>
-              Enter your clinic workspace slug to load your facility, or launch directly from the ClinicEz Portal.
-            </Text>
+            {error && <ErrorNotice message={error} />}
 
-            {error && (
-              <View style={styles.errorBanner}>
-                <Text style={styles.errorBannerText}>{error}</Text>
-              </View>
-            )}
+            <Input
+              label="Workspace name"
+              value={workspaceInput}
+              onChangeText={setWorkspaceInput}
+              placeholder="e.g. metro-health"
+              autoCapitalize="none"
+              autoCorrect={false}
+              helperText="You can find this in your Portal address, for example metro-health."
+            />
 
-            <View style={styles.formGroup}>
-              <Text style={styles.inputLabel}>Workspace Slug</Text>
-              <TextInput
-                style={styles.singleLineInput}
-                value={workspaceInput}
-                onChangeText={setWorkspaceInput}
-                placeholder="e.g. metro-health, st-jude"
-                placeholderTextColor="#9CA3AF"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              <Text style={styles.inputHint}>
-                The identifier from your portal URL or workspace slug (e.g. your-workspace).
-              </Text>
-            </View>
-
-            <Pressable style={styles.primaryBtn} onPress={handleSelectWorkspace}>
-              <Text style={styles.primaryBtnText}>Continue to Facility →</Text>
-            </Pressable>
+            <Button title="Continue" size="lg" onPress={handleSelectWorkspace} />
           </View>
         </ScrollView>
       </FacilityLicenseContext.Provider>
@@ -270,32 +267,36 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
 
     return (
       <FacilityLicenseContext.Provider value={contextValue}>
-        <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.centerContainer}>
-          <View style={styles.activationCard}>
-            <View style={[styles.badgePill, { backgroundColor: '#FEE2E2' }]}>
-              <Text style={[styles.badgeText, { color: '#DC2626' }]}>Workspace Not Found (404)</Text>
+        <ScrollView
+          style={styles.scrollContainer}
+          contentContainerStyle={styles.centerContainer}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.card}>
+            <BrandMark />
+            <Badge label="Workspace not found" variant="emergency" icon="alertCircle" />
+
+            <View style={styles.headerGroup}>
+              <ThemedText variant="h1">Workspace not found</ThemedText>
+              <ThemedText variant="body" color={theme.colors.textSecondary}>
+                We couldn't find a workspace named{' '}
+                <ThemedText variant="bodyBold">"{activeTenant}"</ThemedText>. Check the name and try
+                again, or ask your administrator to confirm it is registered in ClinicEz.
+              </ThemedText>
             </View>
 
-            <Text style={styles.cardHeaderTitle}>Workspace Not Found</Text>
-            <Text style={styles.cardHeaderDesc}>
-              The clinic workspace{' '}
-              <Text style={{ fontWeight: '700', color: '#111827' }}>"{activeTenant}"</Text> could not be found or has not been registered in ClinicEz.
-            </Text>
-
-            <View style={{ marginTop: 16, gap: 12 }}>
-              <Pressable style={styles.primaryBtn} onPress={handleSwitchWorkspace}>
-                <Text style={styles.primaryBtnText}>← Choose Another Workspace</Text>
-              </Pressable>
+            <View style={styles.actions}>
+              <Button title="Choose another workspace" size="lg" onPress={handleSwitchWorkspace} />
 
               {Platform.OS === 'web' && typeof window !== 'undefined' && (
-                <Pressable
-                  style={[styles.primaryBtn, { backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB' }]}
+                <Button
+                  title="Open ClinicEz Portal"
+                  variant="secondary"
+                  size="lg"
                   onPress={() => {
                     window.location.href = portalUrl;
                   }}
-                >
-                  <Text style={[styles.primaryBtnText, { color: '#374151' }]}>Open ClinicEz Portal ↗</Text>
-                </Pressable>
+                />
               )}
             </View>
           </View>
@@ -315,101 +316,93 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
     const isTampered = license?.status === 'Tampered' || license?.isTampered;
     const isExpired = license?.status === 'Expired';
 
-    let bannerTitle = 'Facility Activation Required';
+    let bannerTitle = 'Activate this facility';
     let bannerSubtitle =
-      'This clinic facility instance requires an authentic, cryptographically signed license key generated from the ClinicEz Portal.';
-    let badgeColor = '#0284C7';
-    let badgeBg = '#E0F2FE';
+      'This facility needs a license key before it can be used. Copy the key from your workspace in the ClinicEz Portal and paste it below.';
+    let badgeLabel = 'Activation required';
+    let badgeVariant: BadgeVariant = 'primary';
 
     if (isTampered) {
-      bannerTitle = 'Security Violation: Tampered License';
+      bannerTitle = 'License could not be verified';
       bannerSubtitle =
-        'Cryptographic ECDSA signature verification failed. Local database records or signed limits have been altered without authorization.';
-      badgeColor = '#DC2626';
-      badgeBg = '#FEE2E2';
+        "This facility's license failed its security check, which means its records may have been changed without permission. Apply a new license key from the Portal or contact support.";
+      badgeLabel = 'License tampered';
+      badgeVariant = 'emergency';
     } else if (isExpired) {
-      bannerTitle = 'Facility License Expired';
+      bannerTitle = 'Facility license expired';
       bannerSubtitle =
-        'Your facility operating license has passed its expiration date. Please apply a renewed license key from your Portal workspace.';
-      badgeColor = '#D97706';
-      badgeBg = '#FEF3C7';
+        'This facility\'s license has passed its expiry date. Paste a renewed license key from your Portal workspace to keep using ClinicEz.';
+      badgeLabel = 'License expired';
+      badgeVariant = 'warning';
     }
 
     return (
       <FacilityLicenseContext.Provider value={contextValue}>
-        <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.centerContainer}>
-          <View style={styles.activationCard}>
-            {/* Top Workspace Indicator Pill */}
-            <View style={styles.workspaceRow}>
-              <View style={[styles.badgePill, { backgroundColor: badgeBg }]}>
-                <Text style={[styles.badgeText, { color: badgeColor }]}>
-                  {license?.status ?? 'Activation Required'}
-                </Text>
-              </View>
-              <Pressable onPress={handleSwitchWorkspace} style={styles.switchWorkspaceBtn}>
-                <Text style={styles.switchWorkspaceBtnText}>Change Workspace</Text>
-              </Pressable>
-            </View>
-
-            <View style={styles.workspaceNotice}>
-              <Text style={styles.workspaceNoticeLabel}>Workspace: </Text>
-              <Text style={styles.workspaceNoticeSlug}>{activeTenant}</Text>
-            </View>
-
-            <Text style={styles.cardHeaderTitle}>{bannerTitle}</Text>
-            <Text style={styles.cardHeaderDesc}>{bannerSubtitle}</Text>
-
-            {license?.errorMessage && (
-              <View style={styles.errorBanner}>
-                <Text style={styles.errorBannerText}>{license.errorMessage}</Text>
-              </View>
-            )}
-
-            {error && (
-              <View style={styles.errorBanner}>
-                <Text style={styles.errorBannerText}>{error}</Text>
-              </View>
-            )}
-
-            {submitError && (
-              <View style={styles.errorBanner}>
-                <Text style={styles.errorBannerText}>{submitError}</Text>
-              </View>
-            )}
-
-            <View style={styles.formGroup}>
-              <Text style={styles.inputLabel}>Cryptographic License Token</Text>
-              <TextInput
-                style={styles.tokenInput}
-                multiline
-                numberOfLines={4}
-                value={tokenInput}
-                onChangeText={setTokenInput}
-                placeholder="Paste the [payload].[signature] token copied from the Portal here..."
-                placeholderTextColor="#9CA3AF"
-                autoCapitalize="none"
-                autoCorrect={false}
+        <ScrollView
+          style={styles.scrollContainer}
+          contentContainerStyle={styles.centerContainer}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.card}>
+            <View style={styles.topRow}>
+              <BrandMark />
+              <Button
+                title="Change workspace"
+                variant="ghost"
+                size="sm"
+                icon="arrowLeft"
+                onPress={handleSwitchWorkspace}
               />
-              <Text style={styles.inputHint}>
-                Tokens are cryptographically signed with ECDSA P-256 and bind your Facility ID, Tier, and Staff Quota.
-              </Text>
             </View>
 
-            <Pressable
-              style={[styles.primaryBtn, submitting && { opacity: 0.6 }]}
-              onPress={handleApplyLicense}
-              disabled={submitting}
-            >
-              {submitting ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.primaryBtnText}>Verify & Activate Facility</Text>
-              )}
-            </Pressable>
+            <View style={styles.headerGroup}>
+              <View style={styles.badgeRow}>
+                <Badge label={badgeLabel} variant={badgeVariant} />
+                <View style={styles.workspaceChip}>
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    Workspace
+                  </ThemedText>
+                  <ThemedText variant="code">{activeTenant}</ThemedText>
+                </View>
+              </View>
+              <ThemedText variant="h1">{bannerTitle}</ThemedText>
+              <ThemedText variant="body" color={theme.colors.textSecondary}>
+                {bannerSubtitle}
+              </ThemedText>
+            </View>
 
-            <Pressable style={styles.secondaryBtn} onPress={fetchStatus} disabled={submitting}>
-              <Text style={styles.secondaryBtnText}>↻ Re-check Status</Text>
-            </Pressable>
+            {license?.errorMessage && <ErrorNotice message={license.errorMessage} />}
+            {error && <ErrorNotice message={error} />}
+            {submitError && <ErrorNotice message={submitError} />}
+
+            <Input
+              label="License key"
+              multiline
+              numberOfLines={4}
+              value={tokenInput}
+              onChangeText={setTokenInput}
+              placeholder="Paste the license key copied from the Portal here..."
+              autoCapitalize="none"
+              autoCorrect={false}
+              inputStyle={styles.tokenInput}
+              helperText="The key is signed for your facility and sets your plan and staff limit."
+            />
+
+            <View style={styles.actions}>
+              <Button
+                title="Activate facility"
+                size="lg"
+                loading={submitting}
+                onPress={handleApplyLicense}
+              />
+              <Button
+                title="Check again"
+                variant="ghost"
+                size="lg"
+                onPress={fetchStatus}
+                disabled={submitting}
+              />
+            </View>
           </View>
         </ScrollView>
       </FacilityLicenseContext.Provider>
@@ -428,52 +421,43 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
         onRequestClose={() => setModalVisible(false)}
       >
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Update Facility License</Text>
-            <Text style={styles.modalSubtitle}>
-              Workspace: <Text style={{ fontWeight: '700' }}>{activeTenant}</Text> • Current Plan:{' '}
-              <Text style={{ fontWeight: '700' }}>{license.planTier}</Text> • Max Staff:{' '}
-              <Text style={{ fontWeight: '700' }}>{license.limits?.maxStaff ?? 5}</Text>
-            </Text>
-
-            {submitError && (
-              <View style={styles.errorBanner}>
-                <Text style={styles.errorBannerText}>{submitError}</Text>
+          <View style={[styles.card, styles.modalCard]}>
+            <View style={styles.headerGroup}>
+              <ThemedText variant="h2">Update facility license</ThemedText>
+              <View style={styles.summaryRow}>
+                <ThemedText variant="small" color={theme.colors.textSecondary}>
+                  Workspace: <ThemedText variant="smallBold">{activeTenant}</ThemedText>
+                </ThemedText>
+                <ThemedText variant="small" color={theme.colors.textSecondary}>
+                  Current plan: <ThemedText variant="smallBold">{license.planTier}</ThemedText>
+                </ThemedText>
+                <ThemedText variant="small" color={theme.colors.textSecondary}>
+                  Max staff: <ThemedText variant="smallBold">{license.limits?.maxStaff ?? 5}</ThemedText>
+                </ThemedText>
               </View>
-            )}
+            </View>
 
-            <TextInput
-              style={styles.modalTokenInput}
+            {submitError && <ErrorNotice message={submitError} />}
+
+            <Input
               multiline
               numberOfLines={4}
               value={tokenInput}
               onChangeText={setTokenInput}
-              placeholder="Paste updated license token from Portal..."
-              placeholderTextColor="#9CA3AF"
+              placeholder="Paste the updated license key from the Portal..."
               autoCapitalize="none"
               autoCorrect={false}
+              inputStyle={styles.tokenInput}
             />
 
             <View style={styles.modalActions}>
-              <Pressable
-                style={styles.cancelBtn}
+              <Button
+                title="Cancel"
+                variant="secondary"
                 onPress={() => setModalVisible(false)}
                 disabled={submitting}
-              >
-                <Text style={styles.cancelBtnText}>Cancel</Text>
-              </Pressable>
-
-              <Pressable
-                style={[styles.modalApplyBtn, submitting && { opacity: 0.6 }]}
-                onPress={handleApplyLicense}
-                disabled={submitting}
-              >
-                {submitting ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
-                ) : (
-                  <Text style={styles.primaryBtnText}>Verify & Apply</Text>
-                )}
-              </Pressable>
+              />
+              <Button title="Apply license" loading={submitting} onPress={handleApplyLicense} />
             </View>
           </View>
         </View>
@@ -482,243 +466,134 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
   );
 }
 
+/** Small brand mark: clinic icon in a primary-colored rounded tile. */
+function BrandMark() {
+  return (
+    <View style={styles.brandTile}>
+      <Icon name="clinic" size={theme.sizes.iconLg} color={theme.colors.onPrimary} />
+    </View>
+  );
+}
+
+/** Inline error message in the shared emergency colors. */
+function ErrorNotice({ message }: { message: string }) {
+  return (
+    <View style={styles.errorBanner}>
+      <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
+      <ThemedText variant="small" color={theme.colors.emergencyText} style={styles.errorText}>
+        {message}
+      </ThemedText>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   scrollContainer: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: theme.colors.background,
   },
   centerContainer: {
     flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
-    backgroundColor: '#F3F4F6',
+    padding: theme.spacing['2xl'],
+    backgroundColor: theme.colors.background,
   },
-  splashCard: {
-    backgroundColor: '#FFFFFF',
-    padding: 36,
-    borderRadius: 20,
+  card: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.xl,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    padding: theme.spacing['3xl'],
+    maxWidth: 480,
+    width: '100%',
+    gap: theme.spacing.xl,
+    ...theme.shadows.lg,
+  },
+  loadingCard: {
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 16,
+    gap: theme.spacing.md,
     maxWidth: 400,
-    width: '100%',
   },
-  splashIcon: {
-    fontSize: 48,
-    marginBottom: 12,
-  },
-  splashTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  splashSubtitle: {
-    fontSize: 14,
-    color: '#64748B',
-    textAlign: 'center',
-    marginTop: 8,
-  },
-  activationCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 32,
+  modalCard: {
     maxWidth: 520,
-    width: '100%',
-    shadowColor: '#0F172A',
-    shadowOpacity: 0.08,
-    shadowOffset: { width: 0, height: 6 },
-    shadowRadius: 20,
-    gap: 16,
+    padding: theme.spacing['2xl'],
+    gap: theme.spacing.lg,
   },
-  workspaceRow: {
+  centerText: {
+    textAlign: 'center',
+  },
+  spinner: {
+    marginTop: theme.spacing.sm,
+  },
+  brandTile: {
+    width: theme.sizes.controlLg,
+    height: theme.sizes.controlLg,
+    borderRadius: theme.radii.lg,
+    backgroundColor: theme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  switchWorkspaceBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
+  headerGroup: {
+    gap: theme.spacing.sm,
   },
-  switchWorkspaceBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#0284C7',
-  },
-  workspaceNotice: {
+  badgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
   },
-  workspaceNoticeLabel: {
-    fontSize: 12,
-    color: '#64748B',
-    fontWeight: '500',
+  workspaceChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderRadius: theme.radii.sm,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs / 2,
   },
-  workspaceNoticeSlug: {
-    fontSize: 13,
-    color: '#0F172A',
-    fontWeight: '700',
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  actions: {
+    gap: theme.spacing.sm,
   },
-  badgePill: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 20,
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  },
-  cardHeaderTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  cardHeaderDesc: {
-    fontSize: 14,
-    color: '#475569',
-    lineHeight: 21,
-  },
-  formGroup: {
-    gap: 8,
-    marginTop: 8,
-  },
-  inputLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  singleLineInput: {
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1.5,
-    borderColor: '#CBD5E1',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
-    color: '#0F172A',
+  summaryRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    columnGap: theme.spacing.lg,
+    rowGap: theme.spacing.xs,
   },
   tokenInput: {
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1.5,
-    borderColor: '#CBD5E1',
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 13,
-    color: '#0F172A',
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    minHeight: 110,
+    ...theme.typography.code,
+    minHeight: theme.sizes.controlLg * 2,
     textAlignVertical: 'top',
   },
-  inputHint: {
-    fontSize: 12,
-    color: '#64748B',
-    lineHeight: 17,
-  },
-  primaryBtn: {
-    backgroundColor: '#0284C7',
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-  },
-  primaryBtnText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 15,
-  },
-  secondaryBtn: {
-    paddingVertical: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryBtnText: {
-    color: '#0284C7',
-    fontWeight: '600',
-    fontSize: 14,
-  },
   errorBanner: {
-    backgroundColor: '#FEE2E2',
-    borderColor: '#F87171',
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.emergencyBg,
+    borderColor: theme.colors.emergencyBorder,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
   },
-  errorBannerText: {
-    color: '#991B1B',
-    fontSize: 13,
-    fontWeight: '600',
+  errorText: {
+    flex: 1,
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    backgroundColor: theme.colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 24,
-    maxWidth: 500,
-    width: '100%',
-    gap: 14,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  modalSubtitle: {
-    fontSize: 13,
-    color: '#475569',
-  },
-  modalTokenInput: {
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1.5,
-    borderColor: '#CBD5E1',
-    borderRadius: 12,
-    padding: 12,
-    fontSize: 12,
-    color: '#0F172A',
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    minHeight: 100,
-    textAlignVertical: 'top',
+    padding: theme.spacing.xl,
   },
   modalActions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    gap: 12,
-    marginTop: 8,
-  },
-  cancelBtn: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-  },
-  cancelBtnText: {
-    color: '#475569',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  modalApplyBtn: {
-    backgroundColor: '#0284C7',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 8,
+    gap: theme.spacing.md,
   },
 });
