@@ -28,6 +28,7 @@ services:
       - RabbitMq__Host=${RABBITMQ_HOST}
       - RabbitMq__Username=${RABBITMQ_USERNAME}
       - RabbitMq__Password=${RABBITMQ_PASSWORD}
+      - Console__BaseDomain=${CONSOLE_BASE_DOMAIN:-dev.clinicez.net}
     restart: unless-stopped
 
 networks:

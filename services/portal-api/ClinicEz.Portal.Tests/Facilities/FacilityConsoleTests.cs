@@ -49,7 +49,39 @@ public class FacilityConsoleTests : IDisposable
     }
 
     [Fact]
-    public async Task GetFacilities_InDevelopment_ResolvesLocalhostPort()
+    public async Task GetFacilities_InDevelopment_ResolvesTenantSubdomainDevConsoleUrl()
+    {
+        var facility = new Facility
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            Name = "Downtown Family Clinic",
+            FacilityType = FacilityType.Clinic,
+            Status = FacilityStatus.Active,
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.Facilities.Add(facility);
+        await _context.SaveChangesAsync();
+
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                { "ASPNETCORE_ENVIRONMENT", "Development" }
+            })
+            .Build();
+
+        var handler = new GetFacilitiesQueryHandler(_context, config);
+        var result = await handler.Handle(new GetFacilitiesQuery(TenantSlug), CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Single(result);
+        var dto = result[0];
+        Assert.Equal("downtown-family-clinic", dto.Slug);
+        Assert.Equal($"https://{TenantSlug}.clinic.dev.clinicez.net?facilityId={facility.Id}", dto.ConsoleUrl);
+    }
+
+    [Fact]
+    public async Task GetFacilities_WhenForceLocal_ResolvesLocalhostPort()
     {
         var facility = new Facility
         {
@@ -67,6 +99,7 @@ public class FacilityConsoleTests : IDisposable
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 { "ASPNETCORE_ENVIRONMENT", "Development" },
+                { "Console:ForceLocal", "true" },
                 { "Console:DevPorts:Clinic", "8081" }
             })
             .Build();
@@ -111,7 +144,7 @@ public class FacilityConsoleTests : IDisposable
         Assert.Single(result);
         var dto = result[0];
         Assert.Equal("metro-st-jude-diagnostic-lab", dto.Slug);
-        Assert.Equal($"https://lab.clinicez.net?tenant={TenantSlug}&facilityId={facility.Id}", dto.ConsoleUrl);
+        Assert.Equal($"https://{TenantSlug}.lab.clinicez.net?facilityId={facility.Id}", dto.ConsoleUrl);
     }
 
     [Fact]

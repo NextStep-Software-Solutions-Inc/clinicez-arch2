@@ -122,12 +122,10 @@ public class GetFacilitiesQueryHandler(
             return null;
         }
 
-        var baseDomain = configuration["Console:BaseDomain"] ?? "clinicez.net";
-        var isDev = string.Equals(configuration["ASPNETCORE_ENVIRONMENT"], "Development", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(configuration["Environment"], "Development", StringComparison.OrdinalIgnoreCase) ||
-                    (bool.TryParse(configuration["Console:ForceLocal"], out var forceLocal) && forceLocal);
+        var forceLocal = (bool.TryParse(configuration["Console:ForceLocal"], out var fl) && fl) ||
+                         (bool.TryParse(configuration["Console:UseLocalhost"], out var ul) && ul);
 
-        if (isDev)
+        if (forceLocal)
         {
             var devPort = facilityType switch
             {
@@ -141,6 +139,16 @@ public class GetFacilitiesQueryHandler(
             return $"http://localhost:{devPort}?tenant={tenantSlug}&facilityId={facilityId}";
         }
 
+        var isDev = string.Equals(configuration["ASPNETCORE_ENVIRONMENT"], "Development", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(configuration["Environment"], "Development", StringComparison.OrdinalIgnoreCase);
+
+        var defaultBaseDomain = isDev ? "dev.clinicez.net" : "clinicez.net";
+        var configuredBaseDomain = configuration["Console:BaseDomain"];
+
+        var baseDomain = string.IsNullOrWhiteSpace(configuredBaseDomain)
+            ? defaultBaseDomain
+            : (isDev && string.Equals(configuredBaseDomain, "clinicez.net", StringComparison.OrdinalIgnoreCase) ? defaultBaseDomain : configuredBaseDomain);
+
         var subdomain = facilityType switch
         {
             FacilityType.Clinic => configuration["Console:Subdomains:Clinic"] ?? "clinic",
@@ -150,7 +158,13 @@ public class GetFacilitiesQueryHandler(
             _ => "clinic"
         };
 
-        return $"https://{subdomain}.{baseDomain}?tenant={tenantSlug}&facilityId={facilityId}";
+        var cleanTenant = tenantSlug?.Trim().ToLowerInvariant();
+        if (string.IsNullOrEmpty(cleanTenant))
+        {
+            return $"https://{subdomain}.{baseDomain}?facilityId={facilityId}";
+        }
+
+        return $"https://{cleanTenant}.{subdomain}.{baseDomain}?facilityId={facilityId}";
     }
 
     public static string GenerateFacilitySlug(string name)

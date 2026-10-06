@@ -114,8 +114,10 @@ export default function WorkspaceOverviewClient({ tenantSlug }: { tenantSlug: st
             const port = DASHBOARD_PORTS[facility.facilityType] || 8081;
             window.open(`http://localhost:${port}?tenant=${tenantSlug}&facilityId=${facility.id}`, "_blank");
         } else {
+            const isDev = window.location.hostname.includes("dev.clinicez.net");
+            const baseDomain = isDev ? "dev.clinicez.net" : "clinicez.net";
             const sub = APP_SUBDOMAINS[facility.facilityType] || "clinic";
-            window.open(`https://${sub}.clinicez.net?tenant=${tenantSlug}&facilityId=${facility.id}`, "_blank");
+            window.open(`https://${tenantSlug}.${sub}.${baseDomain}?facilityId=${facility.id}`, "_blank");
         }
     };
 
