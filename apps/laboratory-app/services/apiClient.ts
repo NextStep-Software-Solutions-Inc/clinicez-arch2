@@ -1,7 +1,40 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { safeAwait, ApiResponse, ApiError } from '@shared/safe';
 
-const BASE_URL = (process.env.EXPO_PUBLIC_LAB_API_URL ?? 'http://localhost:5245').replace(/\/+$/, '');
+const resolveDefaultLabBaseUrl = (fallbackPort: number = 5245): string => {
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    const hostname = window.location.hostname.toLowerCase();
+    const protocol = window.location.protocol || 'http:';
+
+    if (
+      hostname === 'localhost' ||
+      hostname.endsWith('.localhost') ||
+      hostname.endsWith('.lvh.me') ||
+      /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)
+    ) {
+      return `${protocol}//${hostname}:${fallbackPort}`;
+    }
+
+    // Subdomain-based cloud or enterprise deployment (e.g. <facility>.lab.<baseDomain>)
+    const match = hostname.match(/^[a-z0-9-]+\.lab\.(.+)$/);
+    if (match) {
+      return `https://laboratory-api.${match[1]}`;
+    }
+
+    if (hostname.endsWith('.dev.clinicez.net')) {
+      return 'https://laboratory-api.dev.clinicez.net';
+    }
+
+    if (hostname.endsWith('.clinicez.net')) {
+      return 'https://laboratory-api.clinicez.net';
+    }
+
+    return `${protocol}//${hostname}`;
+  }
+  return `http://localhost:${fallbackPort}`;
+};
+
+const BASE_URL = (process.env.EXPO_PUBLIC_LAB_API_URL ?? resolveDefaultLabBaseUrl(5245)).replace(/\/+$/, '');
 const API_PREFIX = '/api/v1';
 
 export class LaboratoryApiClient {
