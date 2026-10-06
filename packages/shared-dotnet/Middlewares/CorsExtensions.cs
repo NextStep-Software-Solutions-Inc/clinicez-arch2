@@ -53,30 +53,7 @@ public static class CorsExtensions
 
                         var host = uri.Host;
 
-                        // Allow clinicez.net and any subdomain (*.clinicez.net, *.dev.clinicez.net)
-                        if (host.Equals("clinicez.net", StringComparison.OrdinalIgnoreCase) ||
-                            host.EndsWith(".clinicez.net", StringComparison.OrdinalIgnoreCase))
-                        {
-                            return true;
-                        }
-
-                        // Allow nextstep-software.com and any subdomain (*.nextstep-software.com, *.dev.nextstep-software.com)
-                        if (host.Equals("nextstep-software.com", StringComparison.OrdinalIgnoreCase) ||
-                            host.EndsWith(".nextstep-software.com", StringComparison.OrdinalIgnoreCase))
-                        {
-                            return true;
-                        }
-
-                        // Allow Vercel preview environments
-                        if (host.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase))
-                        {
-                            return true;
-                        }
-
-                        // Allow localhost and local virtual hosts
-                        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
-                            host.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase) ||
-                            host.EndsWith(".lvh.me", StringComparison.OrdinalIgnoreCase))
+                        if (IsHostAllowed(host, configuration))
                         {
                             return true;
                         }
@@ -111,14 +88,7 @@ public static class CorsExtensions
 
                             var host = uri.Host;
 
-                            if (host.Equals("clinicez.net", StringComparison.OrdinalIgnoreCase) ||
-                                host.EndsWith(".clinicez.net", StringComparison.OrdinalIgnoreCase) ||
-                                host.Equals("nextstep-software.com", StringComparison.OrdinalIgnoreCase) ||
-                                host.EndsWith(".nextstep-software.com", StringComparison.OrdinalIgnoreCase) ||
-                                host.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase) ||
-                                host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
-                                host.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase) ||
-                                host.EndsWith(".lvh.me", StringComparison.OrdinalIgnoreCase))
+                            if (IsHostAllowed(host, configuration))
                             {
                                 return true;
                             }
@@ -133,6 +103,46 @@ public static class CorsExtensions
         });
 
         return services;
+    }
+
+    private static bool IsHostAllowed(string host, IConfiguration configuration)
+    {
+        var baseDomain = configuration["Console:BaseDomain"] ?? configuration["CONSOLE_BASE_DOMAIN"];
+        if (!string.IsNullOrWhiteSpace(baseDomain))
+        {
+            var cleanBase = baseDomain.Trim().TrimStart('.');
+            if (host.Equals(cleanBase, StringComparison.OrdinalIgnoreCase) ||
+                host.EndsWith("." + cleanBase, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        var allowedDomains = configuration.GetSection("Cors:AllowedDomains").Get<string[]>() ?? [];
+        foreach (var domain in allowedDomains)
+        {
+            if (string.IsNullOrWhiteSpace(domain)) continue;
+            var cleanDomain = domain.Trim().TrimStart('.');
+            if (host.Equals(cleanDomain, StringComparison.OrdinalIgnoreCase) ||
+                host.EndsWith("." + cleanDomain, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        if (host.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+            host.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase) ||
+            host.EndsWith(".lvh.me", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     private static bool IsOriginMatched(string[] extraOrigins, string origin)

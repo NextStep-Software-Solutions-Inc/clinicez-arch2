@@ -48,7 +48,7 @@ export default async function NotFoundWorkspacePage({
 
         {slug && (
           <div className="mt-4 p-3 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 font-mono">
-            Host: {slug}.dev.clinicez.net
+            Workspace: {slug}
           </div>
         )}
 

@@ -66,7 +66,8 @@ public class FacilityConsoleTests : IDisposable
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                { "ASPNETCORE_ENVIRONMENT", "Development" }
+                { "ASPNETCORE_ENVIRONMENT", "Development" },
+                { "Console:BaseDomain", "custom-dev.example.net" }
             })
             .Build();
 
@@ -77,7 +78,7 @@ public class FacilityConsoleTests : IDisposable
         Assert.Single(result);
         var dto = result[0];
         Assert.Equal("downtown-family-clinic", dto.Slug);
-        Assert.Equal($"https://{dto.Slug}.clinic.dev.clinicez.net", dto.ConsoleUrl);
+        Assert.Equal($"https://{dto.Slug}.clinic.custom-dev.example.net", dto.ConsoleUrl);
     }
 
     [Fact]
@@ -111,7 +112,7 @@ public class FacilityConsoleTests : IDisposable
         Assert.Single(result);
         var dto = result[0];
         Assert.Equal("downtown-family-clinic", dto.Slug);
-        Assert.Equal($"http://localhost:8081?tenant={TenantSlug}&facilityId={facility.Id}", dto.ConsoleUrl);
+        Assert.Equal($"http://localhost:8081?tenant={TenantSlug}", dto.ConsoleUrl);
     }
 
     [Fact]
@@ -133,7 +134,7 @@ public class FacilityConsoleTests : IDisposable
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 { "ASPNETCORE_ENVIRONMENT", "Production" },
-                { "Console:BaseDomain", "clinicez.net" }
+                { "Console:BaseDomain", "enterprise-group.org" }
             })
             .Build();
 
@@ -144,7 +145,32 @@ public class FacilityConsoleTests : IDisposable
         Assert.Single(result);
         var dto = result[0];
         Assert.Equal("metro-st-jude-diagnostic-lab", dto.Slug);
-        Assert.Equal($"https://{dto.Slug}.lab.clinicez.net", dto.ConsoleUrl);
+        Assert.Equal($"https://{dto.Slug}.lab.enterprise-group.org", dto.ConsoleUrl);
+    }
+
+    [Fact]
+    public async Task GetFacilities_WhenNoBaseDomainConfigured_ReturnsNullConsoleUrl()
+    {
+        var facility = new Facility
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            Name = "Downtown Family Clinic",
+            FacilityType = FacilityType.Clinic,
+            Status = FacilityStatus.Active,
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.Facilities.Add(facility);
+        await _context.SaveChangesAsync();
+
+        var config = new ConfigurationBuilder().Build();
+
+        var handler = new GetFacilitiesQueryHandler(_context, config);
+        var result = await handler.Handle(new GetFacilitiesQuery(TenantSlug), CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Single(result);
+        Assert.Null(result[0].ConsoleUrl);
     }
 
     [Fact]

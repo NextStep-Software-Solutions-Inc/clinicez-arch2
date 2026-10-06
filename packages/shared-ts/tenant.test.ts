@@ -68,6 +68,9 @@ describe('extractTenantFromHostname', () => {
     expect(extractTenantFromHostname('facility1.clinic.staging.clinicez.net')).toBe('facility1');
     expect(extractTenantFromHostname('st-luke.clinic.hospital.ph')).toBe('st-luke');
     expect(extractTenantFromHostname('acme-lab.lab.myenterprise.com')).toBe('acme-lab');
+    expect(extractTenantFromHostname('central-rx.pharmacy.healthnetwork.org')).toBe('central-rx');
+    expect(extractTenantFromHostname('headquarters.org.healthnetwork.org')).toBe('headquarters');
+    expect(extractTenantFromHostname('clinic-branch-a.clinic.custom-domain.io:8081')).toBe('clinic-branch-a');
   });
 
   it('extracts tenant from portal dev wildcard (*.dev.clinicez.net)', () => {

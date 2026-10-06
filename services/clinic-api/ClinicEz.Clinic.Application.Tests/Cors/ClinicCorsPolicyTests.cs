@@ -51,7 +51,13 @@ public class ClinicCorsPolicyTests
     public void ProductionPolicy_AllowsTrustedOrigins(string origin)
     {
         var services = new ServiceCollection();
-        var configuration = new ConfigurationBuilder().Build();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                { "Console:BaseDomain", "clinicez.net" },
+                { "Cors:AllowedDomains:0", "nextstep-software.com" }
+            })
+            .Build();
 
         var env = Substitute.For<IWebHostEnvironment>();
         env.EnvironmentName.Returns("Production");
@@ -76,7 +82,13 @@ public class ClinicCorsPolicyTests
     public void ProductionPolicy_RejectsUntrustedOrigins(string origin)
     {
         var services = new ServiceCollection();
-        var configuration = new ConfigurationBuilder().Build();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                { "Console:BaseDomain", "clinicez.net" },
+                { "Cors:AllowedDomains:0", "nextstep-software.com" }
+            })
+            .Build();
 
         var env = Substitute.For<IWebHostEnvironment>();
         env.EnvironmentName.Returns("Production");

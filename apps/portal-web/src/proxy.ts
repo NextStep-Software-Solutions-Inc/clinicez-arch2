@@ -42,23 +42,26 @@ export default clerkMiddleware(async (auth, req) => {
     const url = req.nextUrl.clone();
     const pathname = url.pathname;
 
-    // Detect single-level tenant subdomain strictly:
-    // e.g. "tenant1.dev.clinicez.net" -> "tenant1"
-    // e.g. "tenant1.clinicez.net" -> "tenant1"
+    // Detect tenant/facility subdomain dynamically across any base domain:
+    // e.g. "tenant1.dev.domain.com" -> "tenant1"
+    // e.g. "tenant1.domain.com" -> "tenant1"
     // e.g. "tenant1.localhost:3000" -> "tenant1"
     let subdomain: string | null = null;
     const cleanHost = hostname.split(':')[0].trim();
 
-    const devMatch = cleanHost.match(/^([a-z0-9-]+)\.dev\.clinicez\.net$/);
-    const prodMatch = cleanHost.match(/^([a-z0-9-]+)\.clinicez\.net$/);
+    const serviceMatch = cleanHost.match(/^([a-z0-9-]+)\.(?:clinic|lab|pharmacy|org)\.(.+)$/);
     const localMatch = cleanHost.match(/^([a-z0-9-]+)\.(?:localhost|lvh\.me)$/);
+    const devMatch = cleanHost.match(/^([a-z0-9-]+)\.dev\.(.+)$/);
+    const directMatch = cleanHost.match(/^([a-z0-9-]+)\.([a-z0-9-]+\.[a-z0-9-.]+)$/);
 
-    if (devMatch) {
-        subdomain = devMatch[1];
-    } else if (prodMatch) {
-        subdomain = prodMatch[1];
+    if (serviceMatch) {
+        subdomain = serviceMatch[1];
     } else if (localMatch) {
         subdomain = localMatch[1];
+    } else if (devMatch) {
+        subdomain = devMatch[1];
+    } else if (directMatch) {
+        subdomain = directMatch[1];
     }
 
     if (subdomain && !RESERVED_SUBDOMAINS.has(subdomain) && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(subdomain)) {

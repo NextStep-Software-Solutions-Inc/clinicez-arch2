@@ -6,11 +6,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useUser, useAuth } from "@clerk/nextjs";
 import { tenantService } from "@/services/tenant.service";
+import { getConsoleBaseDomain } from "@/utils/domain";
 
 export function TenantRegistrationClient() {
   const router = useRouter();
   const { isLoaded, isSignedIn, user } = useUser();
   const { getToken } = useAuth();
+
+  const baseDomain = getConsoleBaseDomain() || (typeof window !== "undefined" ? window.location.host : "");
+  const domainPrefix = baseDomain ? `${baseDomain}/` : "/";
 
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
@@ -234,7 +238,7 @@ export function TenantRegistrationClient() {
                     <div className="flex items-center rounded-xl border border-input bg-background overflow-hidden focus-within:ring-2 focus-within:ring-primary">
                       <span className="flex items-center gap-1.5 pl-3 pr-2 text-xs sm:text-sm font-medium text-muted-foreground bg-muted/30 h-11 border-r border-input/60 select-none shrink-0">
                         <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <span>clinicez.net/</span>
+                        <span>{domainPrefix}</span>
                       </span>
                       <input
                         type="text"
@@ -421,7 +425,7 @@ export function TenantRegistrationClient() {
                         <div className="flex items-center rounded-xl border border-input bg-background overflow-hidden focus-within:ring-2 focus-within:ring-primary">
                           <span className="flex items-center gap-1.5 pl-3 pr-2 text-xs sm:text-sm font-medium text-muted-foreground bg-muted/30 h-11 border-r border-input/60 select-none shrink-0">
                             <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
-                            <span>clinicez.net/</span>
+                            <span>{domainPrefix}</span>
                           </span>
                           <input
                             type="text"
@@ -493,7 +497,7 @@ export function TenantRegistrationClient() {
                     <p className="text-sm text-muted-foreground mb-6">
                       Your workplace <strong className="text-foreground">{formData.name}</strong> will be created at{" "}
                       <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">
-                        clinicez.net/{formData.tenantSlug}
+                        {domainPrefix}{formData.tenantSlug}
                       </code>
                       .
                     </p>

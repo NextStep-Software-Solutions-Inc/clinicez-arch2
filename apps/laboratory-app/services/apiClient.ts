@@ -15,18 +15,10 @@ const resolveDefaultLabBaseUrl = (fallbackPort: number = 5245): string => {
       return `${protocol}//${hostname}:${fallbackPort}`;
     }
 
-    // Subdomain-based cloud or enterprise deployment (e.g. <facility>.lab.<baseDomain>)
-    const match = hostname.match(/^[a-z0-9-]+\.lab\.(.+)$/);
+    // Subdomain-based cloud or enterprise deployment (e.g. <facility>.lab.<baseDomain> or lab.<baseDomain>)
+    const match = hostname.match(/^(?:[a-z0-9-]+\.)?lab\.(.+)$/);
     if (match) {
       return `https://laboratory-api.${match[1]}`;
-    }
-
-    if (hostname.endsWith('.dev.clinicez.net')) {
-      return 'https://laboratory-api.dev.clinicez.net';
-    }
-
-    if (hostname.endsWith('.clinicez.net')) {
-      return 'https://laboratory-api.clinicez.net';
     }
 
     return `${protocol}//${hostname}`;

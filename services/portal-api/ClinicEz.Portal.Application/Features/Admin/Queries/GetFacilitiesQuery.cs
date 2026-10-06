@@ -138,17 +138,16 @@ public class GetFacilitiesQueryHandler(
             };
 
             var devTenant = !string.IsNullOrWhiteSpace(tenantSlug) ? tenantSlug : facilitySlug;
-            return $"http://localhost:{devPort}?tenant={devTenant}&facilityId={facilityId}";
+            return $"http://localhost:{devPort}?tenant={devTenant}";
         }
 
-        var isDev = string.Equals(configuration["ASPNETCORE_ENVIRONMENT"], "Development", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(configuration["Environment"], "Development", StringComparison.OrdinalIgnoreCase);
+        var baseDomain = configuration["Console:BaseDomain"] ?? configuration["CONSOLE_BASE_DOMAIN"];
+        if (string.IsNullOrWhiteSpace(baseDomain))
+        {
+            return null;
+        }
 
-        var configuredBaseDomain = configuration["Console:BaseDomain"] ?? configuration["CONSOLE_BASE_DOMAIN"];
-
-        var baseDomain = !string.IsNullOrWhiteSpace(configuredBaseDomain)
-            ? configuredBaseDomain
-            : (isDev ? "dev.clinicez.net" : "clinicez.net");
+        var cleanBaseDomain = baseDomain.Trim().TrimStart('.');
 
         var subdomain = facilityType switch
         {
@@ -162,10 +161,10 @@ public class GetFacilitiesQueryHandler(
         var cleanSlug = facilitySlug?.Trim().ToLowerInvariant();
         if (string.IsNullOrEmpty(cleanSlug))
         {
-            return $"https://{subdomain}.{baseDomain}";
+            return $"https://{subdomain}.{cleanBaseDomain}";
         }
 
-        return $"https://{cleanSlug}.{subdomain}.{baseDomain}";
+        return $"https://{cleanSlug}.{subdomain}.{cleanBaseDomain}";
     }
 
     public static string GenerateFacilitySlug(string name)

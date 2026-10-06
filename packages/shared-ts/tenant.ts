@@ -13,6 +13,7 @@ export const RESERVED_SUBDOMAINS = new Set([
   'clinic',
   'lab',
   'pharmacy',
+  'org',
   'dev',
   'portal',
   'localhost',
@@ -24,27 +25,6 @@ export const RESERVED_SUBDOMAINS = new Set([
 ]);
 
 export const ROOT_HOSTNAMES = new Set([
-  'clinicez.net',
-  'www.clinicez.net',
-  'dev.clinicez.net',
-  'clinic.clinicez.net',
-  'clinic.dev.clinicez.net',
-  'clinic.localhost',
-  'lab.clinicez.net',
-  'lab.dev.clinicez.net',
-  'lab.localhost',
-  'pharmacy.clinicez.net',
-  'pharmacy.dev.clinicez.net',
-  'pharmacy.localhost',
-  'portal.clinicez.net',
-  'portal.dev.clinicez.net',
-  'portal.localhost',
-  'admin.clinicez.net',
-  'admin.dev.clinicez.net',
-  'admin.localhost',
-  'api.clinicez.net',
-  'api.dev.clinicez.net',
-  'api.localhost',
   'localhost',
   '127.0.0.1',
   '::1',
@@ -66,13 +46,39 @@ export function isRootHostname(hostname: string): boolean {
     return true;
   }
 
-  // IPv4 or IPv6 address (direct on-premise IP access)
+  // IPv4 or IPv6 address (direct access)
   if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(cleanHost) || cleanHost.includes(':')) {
     return true;
   }
 
+  const parts = cleanHost.split('.');
+
+  // Single label (like "localhost" or local network machine name)
+  if (parts.length <= 1) {
+    return true;
+  }
+
+  // Common two-part ccTLDs like .co.uk, .com.ph, .org.uk
+  const isTwoPartTld =
+    parts.length >= 3 &&
+    ['co', 'com', 'org', 'net', 'edu', 'gov', 'mil', 'ac'].includes(parts[parts.length - 2]) &&
+    parts[parts.length - 1].length === 2;
+
+  // Root apex domain (e.g. "domain.com" or "domain.co.uk", but not "<tenant>.localhost")
+  if (parts[parts.length - 1] !== 'localhost') {
+    if (parts.length === 2 || (isTwoPartTld && parts.length === 3)) {
+      return true;
+    }
+  }
+
+  // Service root where the first label is a reserved keyword:
+  // e.g. clinic.dev.example.com, clinic.localhost, lab.example.com, portal.example.com, www.example.com, dev.example.com
+  if (RESERVED_SUBDOMAINS.has(parts[0])) {
+    return true;
+  }
+
   // Service roots on local or internal network (e.g. clinic.local, clinic.lan)
-  if (/^(?:clinic|lab|pharmacy|portal|dev|admin|api)\.(?:local|internal|lan)$/.test(cleanHost)) {
+  if (/^(?:clinic|lab|pharmacy|org|portal|dev|admin|api)\.(?:local|internal|lan)$/.test(cleanHost)) {
     return true;
   }
 
@@ -93,14 +99,8 @@ export function isValidTenantSlug(slug: string | null | undefined): slug is stri
 
 /**
  * Extracts the tenant slug from the active browser window hostname.
- * Supports:
- * - <tenant>.clinic.dev.clinicez.net  -> "<tenant>"
- * - <tenant>.clinic.clinicez.net      -> "<tenant>"
- * - <tenant>.clinic.localhost         -> "<tenant>"
- * - <tenant>.dev.clinicez.net         -> "<tenant>"
- * - <tenant>.clinicez.net             -> "<tenant>"
- * - <tenant>.localhost                -> "<tenant>"
- * Returns null for all root domains (clinic.dev.clinicez.net, clinic.clinicez.net, etc.)
+ * Works dynamically across any domain (custom enterprise, dev, staging, prod, localhost).
+ * Returns null for all root domains.
  */
 export function extractTenantFromHostname(hostname: string): string | null {
   if (!hostname) return null;
@@ -116,21 +116,21 @@ export function extractTenantFromHostname(hostname: string): string | null {
 
   // 1. Nested service on any base domain (e.g. <slug>.(clinic|lab|pharmacy|org).<baseDomain>)
   const serviceMatch = cleanHost.match(/^([a-z0-9-]+)\.(?:clinic|lab|pharmacy|org)\.(.+)$/);
-  // 2. Portal tenant on dev wildcard (e.g. <tenant>.dev.clinicez.net)
-  const devPortalMatch = cleanHost.match(/^([a-z0-9-]+)\.dev\.clinicez\.net$/);
-  // 3. Portal tenant on prod wildcard (e.g. <tenant>.clinicez.net)
-  const prodPortalMatch = cleanHost.match(/^([a-z0-9-]+)\.clinicez\.net$/);
-  // 4. Portal tenant on localhost or virtual host (e.g. <tenant>.localhost)
+  // 2. Portal tenant on localhost or virtual host (e.g. <tenant>.localhost or <tenant>.lvh.me)
   const localPortalMatch = cleanHost.match(/^([a-z0-9-]+)\.(?:localhost|lvh\.me)$/);
+  // 3. Portal tenant on dev wildcard (e.g. <tenant>.dev.<baseDomain>)
+  const devPortalMatch = cleanHost.match(/^([a-z0-9-]+)\.dev\.(.+)$/);
+  // 4. Portal tenant directly on any base domain: <tenant>.<domain>.<tld>
+  const directTenantMatch = cleanHost.match(/^([a-z0-9-]+)\.([a-z0-9-]+\.[a-z0-9-.]+)$/);
 
   if (serviceMatch) {
     candidate = serviceMatch[1];
-  } else if (devPortalMatch) {
-    candidate = devPortalMatch[1];
-  } else if (prodPortalMatch) {
-    candidate = prodPortalMatch[1];
   } else if (localPortalMatch) {
     candidate = localPortalMatch[1];
+  } else if (devPortalMatch) {
+    candidate = devPortalMatch[1];
+  } else if (directTenantMatch) {
+    candidate = directTenantMatch[1];
   }
 
   if (candidate && isValidTenantSlug(candidate)) {

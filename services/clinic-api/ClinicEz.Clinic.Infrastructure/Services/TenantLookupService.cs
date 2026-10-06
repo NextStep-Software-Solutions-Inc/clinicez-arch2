@@ -67,7 +67,7 @@ public class TenantLookupService : ITenantLookupService
             var portalBase = _configuration["Services:PortalApiUrl"] ??
                              _configuration["PortalSettings:PortalApiUrl"] ??
                              Environment.GetEnvironmentVariable("PORTAL_API_URL") ??
-                             "https://clinicez-portal.api.dev.nextstep-software.com";
+                             "http://localhost:5200";
 
             portalBase = portalBase.TrimEnd('/');
             var lookupSlug = isGuid ? identifier : clean;

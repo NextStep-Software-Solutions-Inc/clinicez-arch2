@@ -16,7 +16,8 @@ public class CorsPolicyTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                { "Cors:AllowedOrigins:0", "https://clinicez-portal-pro.vercel.app" }
+                { "Cors:AllowedOrigins:0", "https://clinicez-portal-pro.vercel.app" },
+                { "Console:BaseDomain", "clinicez.net" }
             })
             .Build();
 

@@ -40,18 +40,29 @@ public static class DependencyInjection
 
                         var host = uri.Host;
 
-                        // Allow clinicez.net and any subdomain (*.clinicez.net, e.g. v2.clinicez.net)
-                        if (host.Equals("clinicez.net", StringComparison.OrdinalIgnoreCase) ||
-                            host.EndsWith(".clinicez.net", StringComparison.OrdinalIgnoreCase))
+                        // Allow configured base domain and its subdomains
+                        var baseDomain = configuration?["Console:BaseDomain"] ?? configuration?["CONSOLE_BASE_DOMAIN"];
+                        if (!string.IsNullOrWhiteSpace(baseDomain))
                         {
-                            return true;
+                            var cleanBaseDomain = baseDomain.Trim().TrimStart('.');
+                            if (host.Equals(cleanBaseDomain, StringComparison.OrdinalIgnoreCase) ||
+                                host.EndsWith("." + cleanBaseDomain, StringComparison.OrdinalIgnoreCase))
+                            {
+                                return true;
+                            }
                         }
 
-                        // Allow nextstep-software.com and any subdomain (*.nextstep-software.com, e.g. dev.nextstep-software.com)
-                        if (host.Equals("nextstep-software.com", StringComparison.OrdinalIgnoreCase) ||
-                            host.EndsWith(".nextstep-software.com", StringComparison.OrdinalIgnoreCase))
+                        // Allow explicitly configured allowed domains and their subdomains
+                        var allowedDomains = configuration?.GetSection("Cors:AllowedDomains").Get<string[]>() ?? [];
+                        foreach (var domain in allowedDomains)
                         {
-                            return true;
+                            if (string.IsNullOrWhiteSpace(domain)) continue;
+                            var cleanDomain = domain.Trim().TrimStart('.');
+                            if (host.Equals(cleanDomain, StringComparison.OrdinalIgnoreCase) ||
+                                host.EndsWith("." + cleanDomain, StringComparison.OrdinalIgnoreCase))
+                            {
+                                return true;
+                            }
                         }
 
                         // Allow Vercel preview environments
@@ -60,8 +71,28 @@ public static class DependencyInjection
                             return true;
                         }
 
-                        // Allow any explicitly configured origins
-                        return extraOrigins.Any(o => string.Equals(o, origin, StringComparison.OrdinalIgnoreCase));
+                        // Allow localhost and local virtual hosts
+                        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+                            host.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase) ||
+                            host.EndsWith(".lvh.me", StringComparison.OrdinalIgnoreCase))
+                        {
+                            return true;
+                        }
+
+                        // Allow any explicitly configured origins (with wildcard support)
+                        return extraOrigins.Any(o =>
+                        {
+                            if (string.Equals(o, origin, StringComparison.OrdinalIgnoreCase))
+                                return true;
+
+                            if (o.Contains('*'))
+                            {
+                                var pattern = "^" + System.Text.RegularExpressions.Regex.Escape(o).Replace("\\*", ".*") + "$";
+                                return System.Text.RegularExpressions.Regex.IsMatch(origin, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                            }
+
+                            return false;
+                        });
                     })
                     .AllowAnyHeader()
                     .AllowAnyMethod()

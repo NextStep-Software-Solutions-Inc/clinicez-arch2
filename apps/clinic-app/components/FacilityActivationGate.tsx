@@ -236,7 +236,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
                 autoCorrect={false}
               />
               <Text style={styles.inputHint}>
-                The identifier from your portal URL or subdomain (e.g. dev.clinicez.net/[slug]/dashboard).
+                The identifier from your portal URL or workspace slug (e.g. your-workspace).
               </Text>
             </View>
 
@@ -251,10 +251,21 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
 
   // 3. Workspace Not Found (404) Screen
   if (isNotFound) {
-    const portalUrl =
-      Platform.OS === 'web' && typeof window !== 'undefined' && window.location.hostname.includes('dev.clinicez.net')
-        ? 'https://dev.clinicez.net'
-        : 'https://clinicez.net';
+    const resolvePortalUrl = () => {
+      if (process.env.EXPO_PUBLIC_PORTAL_URL) {
+        return process.env.EXPO_PUBLIC_PORTAL_URL;
+      }
+      if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.hostname) {
+        const host = window.location.hostname;
+        const match = host.match(/^[a-z0-9-]+\.(?:clinic|lab|pharmacy|org)\.(.+)$/);
+        if (match) {
+          return `https://portal.${match[1]}`;
+        }
+        return window.location.origin;
+      }
+      return '/';
+    };
+    const portalUrl = resolvePortalUrl();
 
     return (
       <FacilityLicenseContext.Provider value={contextValue}>

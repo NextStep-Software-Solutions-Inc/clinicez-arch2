@@ -15,18 +15,10 @@ const resolveDefaultPharmacyBaseUrl = (fallbackPort: number = 5245): string => {
       return `${protocol}//${hostname}:${fallbackPort}`;
     }
 
-    // Subdomain-based cloud or enterprise deployment (e.g. <facility>.pharmacy.<baseDomain>)
-    const match = hostname.match(/^[a-z0-9-]+\.pharmacy\.(.+)$/);
+    // Subdomain-based cloud or enterprise deployment (e.g. <facility>.pharmacy.<baseDomain> or pharmacy.<baseDomain>)
+    const match = hostname.match(/^(?:[a-z0-9-]+\.)?pharmacy\.(.+)$/);
     if (match) {
       return `https://pharmacy-api.${match[1]}`;
-    }
-
-    if (hostname.endsWith('.dev.clinicez.net')) {
-      return 'https://pharmacy-api.dev.clinicez.net';
-    }
-
-    if (hostname.endsWith('.clinicez.net')) {
-      return 'https://pharmacy-api.clinicez.net';
     }
 
     return `${protocol}//${hostname}`;

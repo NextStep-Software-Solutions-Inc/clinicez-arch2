@@ -110,15 +110,19 @@ export default function WorkspaceOverviewClient({ tenantSlug }: { tenantSlug: st
         }
 
         if (typeof window === "undefined") return;
-        const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-        if (isLocal) {
-            const port = DASHBOARD_PORTS[facility.facilityType] || 8081;
-            window.open(`http://localhost:${port}?tenant=${tenantSlug}&facilityId=${facility.id}`, "_blank");
-        } else {
-            const baseDomain = getConsoleBaseDomain();
+
+        const baseDomain = getConsoleBaseDomain();
+        if (baseDomain) {
             const sub = APP_SUBDOMAINS[facility.facilityType] || "clinic";
             const targetSlug = facility.slug || tenantSlug;
             window.open(`https://${targetSlug}.${sub}.${baseDomain}`, "_blank");
+            return;
+        }
+
+        const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+        if (isLocal) {
+            const port = DASHBOARD_PORTS[facility.facilityType] || 8081;
+            window.open(`http://localhost:${port}?tenant=${tenantSlug}`, "_blank");
         }
     };
 
