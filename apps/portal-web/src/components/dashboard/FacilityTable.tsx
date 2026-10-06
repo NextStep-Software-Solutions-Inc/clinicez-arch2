@@ -132,7 +132,7 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
             const baseDomain = isDev ? "dev.clinicez.net" : "clinicez.net";
             const sub = APP_SUBDOMAINS[facility.facilityType] || "clinic";
             const targetSlug = facility.slug || tenantSlug;
-            window.open(`https://${targetSlug}.${sub}.${baseDomain}?facilityId=${facility.id}`, "_blank");
+            window.open(`https://${targetSlug}.${sub}.${baseDomain}`, "_blank");
         }
     };
 

@@ -117,7 +117,8 @@ export default function WorkspaceOverviewClient({ tenantSlug }: { tenantSlug: st
             const isDev = window.location.hostname.includes("dev.clinicez.net");
             const baseDomain = isDev ? "dev.clinicez.net" : "clinicez.net";
             const sub = APP_SUBDOMAINS[facility.facilityType] || "clinic";
-            window.open(`https://${tenantSlug}.${sub}.${baseDomain}?facilityId=${facility.id}`, "_blank");
+            const targetSlug = facility.slug || tenantSlug;
+            window.open(`https://${targetSlug}.${sub}.${baseDomain}`, "_blank");
         }
     };
 

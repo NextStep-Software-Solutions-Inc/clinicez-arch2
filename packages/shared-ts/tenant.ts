@@ -115,11 +115,11 @@ export function extractTenantFromHostname(hostname: string): string | null {
   let candidate: string | null = null;
 
   // 1. Nested service on dev wildcard (e.g. <tenant>.clinic.dev.clinicez.net)
-  const devServiceMatch = cleanHost.match(/^([a-z0-9-]+)\.(?:clinic|lab|pharmacy)\.dev\.clinicez\.net$/);
+  const devServiceMatch = cleanHost.match(/^([a-z0-9-]+)\.(?:clinic|lab|pharmacy|org)\.dev\.clinicez\.net$/);
   // 2. Nested service on prod wildcard (e.g. <tenant>.clinic.clinicez.net)
-  const prodServiceMatch = cleanHost.match(/^([a-z0-9-]+)\.(?:clinic|lab|pharmacy)\.clinicez\.net$/);
+  const prodServiceMatch = cleanHost.match(/^([a-z0-9-]+)\.(?:clinic|lab|pharmacy|org)\.clinicez\.net$/);
   // 3. Nested service on localhost or virtual host (e.g. <tenant>.clinic.localhost)
-  const localServiceMatch = cleanHost.match(/^([a-z0-9-]+)\.(?:clinic|lab|pharmacy)\.(?:localhost|lvh\.me)$/);
+  const localServiceMatch = cleanHost.match(/^([a-z0-9-]+)\.(?:clinic|lab|pharmacy|org)\.(?:localhost|lvh\.me)$/);
   // 4. Portal on dev wildcard (e.g. <tenant>.dev.clinicez.net)
   const devPortalMatch = cleanHost.match(/^([a-z0-9-]+)\.dev\.clinicez\.net$/);
   // 5. Portal on prod wildcard (e.g. <tenant>.clinicez.net)

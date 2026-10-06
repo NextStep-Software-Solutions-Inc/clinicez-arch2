@@ -77,7 +77,7 @@ public class FacilityConsoleTests : IDisposable
         Assert.Single(result);
         var dto = result[0];
         Assert.Equal("downtown-family-clinic", dto.Slug);
-        Assert.Equal($"https://{dto.Slug}.clinic.dev.clinicez.net?facilityId={facility.Id}", dto.ConsoleUrl);
+        Assert.Equal($"https://{dto.Slug}.clinic.dev.clinicez.net", dto.ConsoleUrl);
     }
 
     [Fact]
@@ -144,7 +144,7 @@ public class FacilityConsoleTests : IDisposable
         Assert.Single(result);
         var dto = result[0];
         Assert.Equal("metro-st-jude-diagnostic-lab", dto.Slug);
-        Assert.Equal($"https://{dto.Slug}.lab.clinicez.net?facilityId={facility.Id}", dto.ConsoleUrl);
+        Assert.Equal($"https://{dto.Slug}.lab.clinicez.net", dto.ConsoleUrl);
     }
 
     [Fact]

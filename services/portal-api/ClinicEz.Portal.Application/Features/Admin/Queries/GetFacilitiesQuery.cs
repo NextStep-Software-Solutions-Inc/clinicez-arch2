@@ -163,10 +163,10 @@ public class GetFacilitiesQueryHandler(
         var cleanSlug = facilitySlug?.Trim().ToLowerInvariant();
         if (string.IsNullOrEmpty(cleanSlug))
         {
-            return $"https://{subdomain}.{baseDomain}?facilityId={facilityId}";
+            return $"https://{subdomain}.{baseDomain}";
         }
 
-        return $"https://{cleanSlug}.{subdomain}.{baseDomain}?facilityId={facilityId}";
+        return $"https://{cleanSlug}.{subdomain}.{baseDomain}";
     }
 
     public static string GenerateFacilitySlug(string name)
