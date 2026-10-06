@@ -1,12 +1,18 @@
 import React from 'react';
-import { View, StyleSheet, Pressable, ViewStyle } from 'react-native';
+import { View, StyleSheet, ViewStyle } from 'react-native';
 import ThemedText from '../ui/ThemedText';
-import Badge from '../ui/Badge';
+import Icon from '../ui/Icon';
+import StaffPicker from './StaffPicker';
 import { theme } from '../../constants/theme';
+import { useClinic } from '../../context/ClinicContext';
+import { useBreakpoint } from '../../utils/useBreakpoint';
 
 export interface ClinicHeaderBarProps {
+  /** Page title. This is the single source of the page heading - screens must not repeat it in the body. */
   title?: string;
+  /** Defaults to the active facility name. */
   subtitle?: string;
+  /** Page-level actions (e.g. "New patient"). */
   rightAction?: React.ReactNode;
   style?: ViewStyle;
 }
@@ -17,6 +23,9 @@ export default function ClinicHeaderBar({
   rightAction,
   style,
 }: ClinicHeaderBarProps) {
+  const { facilityName } = useClinic();
+  const { isCompact } = useBreakpoint();
+
   const currentDate = new Date().toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
@@ -24,65 +33,37 @@ export default function ClinicHeaderBar({
     year: 'numeric',
   });
 
+  const resolvedSubtitle = subtitle ?? facilityName;
+
   return (
     <View style={[styles.container, style]}>
       <View style={styles.leftSection}>
-        {title ? (
-          <View>
-            <ThemedText variant="h2" style={styles.title}>
-              {title}
+        <View style={styles.titleBlock}>
+          <ThemedText variant={isCompact ? 'title' : 'h2'} numberOfLines={1}>
+            {title || facilityName || 'ClinicEz'}
+          </ThemedText>
+          {resolvedSubtitle && title ? (
+            <ThemedText variant="small" color={theme.colors.textMuted} numberOfLines={1}>
+              {resolvedSubtitle}
             </ThemedText>
-            {subtitle ? (
-              <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.subtitle}>
-                {subtitle}
-              </ThemedText>
-            ) : null}
-          </View>
-        ) : (
-          <View style={styles.clinicBranding}>
-            <View style={styles.logoBadge}>
-              <ThemedText style={styles.logoIcon}>🏥</ThemedText>
-            </View>
-            <View>
-              <ThemedText variant="bodyBold" style={styles.clinicName}>
-                St. Jude Family Clinic & Primary Care
-              </ThemedText>
-              <ThemedText variant="caption" color={theme.colors.textMuted}>
-                Laguna Primary Care Network • Facility #04-102
-              </ThemedText>
-            </View>
-          </View>
-        )}
+          ) : null}
+        </View>
       </View>
 
       <View style={styles.rightSection}>
-        <View style={styles.statusPill}>
-          <Badge label="🟢 Live Queue Active" variant="success" size="sm" />
-        </View>
-
-        <View style={styles.dateBadge}>
-          <ThemedText variant="caption" color={theme.colors.textSecondary}>
-            📅 {currentDate}
-          </ThemedText>
-        </View>
-
-        {rightAction ? (
-          rightAction
-        ) : (
-          <View style={styles.userBadge}>
-            <View style={styles.avatar}>
-              <ThemedText style={styles.avatarText}>MC</ThemedText>
-            </View>
-            <View style={styles.userInfo}>
-              <ThemedText variant="captionBold" style={styles.userName}>
-                Dr. Cruz, MD
-              </ThemedText>
-              <ThemedText variant="caption" color={theme.colors.textMuted}>
-                Attending
-              </ThemedText>
-            </View>
+        {isCompact ? null : (
+          <View style={styles.dateBadge}>
+            <Icon name="calendar" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+            <ThemedText variant="small" color={theme.colors.textSecondary}>
+              {currentDate}
+            </ThemedText>
           </View>
         )}
+
+        {rightAction ?? null}
+
+        {/* On workstation widths the picker lives in the sidebar footer. */}
+        {isCompact ? <StaffPicker compact /> : null}
       </View>
     </View>
   );
@@ -91,91 +72,37 @@ export default function ClinicHeaderBar({
 const styles = StyleSheet.create({
   container: {
     backgroundColor: theme.colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.borderLight,
-    paddingHorizontal: theme.spacing.lg,
+    borderBottomWidth: theme.sizes.borderWidth,
+    borderBottomColor: theme.colors.border,
+    paddingHorizontal: theme.spacing['2xl'],
     paddingVertical: theme.spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    minHeight: 64,
-    ...theme.shadows.sm,
+    gap: theme.spacing.lg,
+    minHeight: theme.sizes.headerHeight,
   },
   leftSection: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
+    minWidth: 0,
   },
-  title: {
-    color: theme.colors.text,
-  },
-  subtitle: {
-    marginTop: 2,
-  },
-  clinicBranding: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-  },
-  logoBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: theme.radii.md,
-    backgroundColor: theme.colors.primarySubtle,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoIcon: {
-    fontSize: 20,
-  },
-  clinicName: {
-    color: theme.colors.text,
+  titleBlock: {
+    minWidth: 0,
   },
   rightSection: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.md,
   },
-  statusPill: {
-    display: 'flex',
-  },
   dateBadge: {
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-    backgroundColor: theme.colors.surfaceSubtle,
-    borderRadius: theme.radii.full,
-    borderWidth: 1,
-    borderColor: theme.colors.borderLight,
-  },
-  userBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 4,
-    backgroundColor: theme.colors.surfaceSubtle,
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs + 2,
+    backgroundColor: theme.colors.surfaceMuted,
     borderRadius: theme.radii.full,
-    borderWidth: 1,
-    borderColor: theme.colors.borderLight,
-  },
-  avatar: {
-    width: 28,
-    height: 28,
-    borderRadius: theme.radii.full,
-    backgroundColor: theme.colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  userInfo: {
-    display: 'flex',
-  },
-  userName: {
-    color: theme.colors.text,
-    fontSize: 12,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
   },
 });

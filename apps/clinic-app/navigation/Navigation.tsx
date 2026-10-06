@@ -1,9 +1,11 @@
 import React from 'react';
-import { Dimensions } from 'react-native';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { createStaticNavigation, type StaticParamList } from '@react-navigation/native';
-import ThemedText from '../components/ui/ThemedText';
+import { ColorValue } from 'react-native';
+import { BottomTabBar, createBottomTabNavigator, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import { createStaticNavigation, DefaultTheme, type StaticParamList } from '@react-navigation/native';
+import Icon, { IconName } from '../components/ui/Icon';
+import { applyFontFamily } from '../constants/fonts';
 import { theme } from '../constants/theme';
+import { useBreakpoint } from '../utils/useBreakpoint';
 import DashboardScreen from './screens/Dashboard.screen';
 import PatientsScreen from './screens/Patients.screen';
 import ConsultationsScreen from './screens/Consultations.screen';
@@ -12,26 +14,35 @@ import BillingScreen from './screens/Billing.screen';
 import YakapScreen from './screens/Yakap.screen';
 import SettingsScreen from './screens/Settings.screen';
 
+/**
+ * Bottom tab bar for phones only. Workstation widths use the sidebar instead.
+ * Implemented as a custom `tabBar` so it reacts to window resizes (a `screenOptions`
+ * callback only runs on navigation and cannot subscribe to dimensions).
+ */
+function ResponsiveTabBar(props: BottomTabBarProps) {
+  const { isWorkstation } = useBreakpoint();
+  if (isWorkstation) return null;
+  return <BottomTabBar {...props} />;
+}
+
+const tabIcon = (name: IconName) => ({ color }: { focused: boolean; color: ColorValue; size: number }) => (
+  <Icon name={name} size={theme.sizes.iconMd} color={typeof color === 'string' ? color : theme.colors.textMuted} />
+);
+
 const Tab = createBottomTabNavigator({
-  screenOptions: () => {
-    const isDesktop = Dimensions.get('window').width >= theme.breakpoints.tablet;
-    return {
-      headerShown: false,
-      tabBarActiveTintColor: theme.colors.primary,
-      tabBarInactiveTintColor: theme.colors.textMuted,
-      tabBarStyle: {
-        display: isDesktop ? 'none' : 'flex',
-        backgroundColor: theme.colors.surface,
-        borderTopColor: theme.colors.borderLight,
-        height: 60,
-        paddingBottom: 8,
-        paddingTop: 6,
-      },
-      tabBarLabelStyle: {
-        fontSize: 11,
-        fontWeight: '600',
-      },
-    };
+  tabBar: (props: BottomTabBarProps) => <ResponsiveTabBar {...props} />,
+  screenOptions: {
+    headerShown: false,
+    tabBarActiveTintColor: theme.colors.primary,
+    tabBarInactiveTintColor: theme.colors.textMuted,
+    tabBarStyle: {
+      backgroundColor: theme.colors.surface,
+      borderTopColor: theme.colors.border,
+    },
+    tabBarLabelStyle: applyFontFamily({
+      fontSize: theme.fontSizes.xs,
+      fontWeight: '600',
+    }),
   },
   screens: {
     Dashboard: {
@@ -42,7 +53,7 @@ const Tab = createBottomTabNavigator({
       },
       options: {
         title: 'Dashboard',
-        tabBarIcon: () => <ThemedText style={{ fontSize: 20 }}>📊</ThemedText>,
+        tabBarIcon: tabIcon('dashboard'),
       },
     },
     Patients: {
@@ -50,7 +61,7 @@ const Tab = createBottomTabNavigator({
       linking: 'patients',
       options: {
         title: 'Patients',
-        tabBarIcon: () => <ThemedText style={{ fontSize: 20 }}>👥</ThemedText>,
+        tabBarIcon: tabIcon('patients'),
       },
     },
     Consultations: {
@@ -58,7 +69,7 @@ const Tab = createBottomTabNavigator({
       linking: 'consultations',
       options: {
         title: 'Consultations',
-        tabBarIcon: () => <ThemedText style={{ fontSize: 20 }}>🩺</ThemedText>,
+        tabBarIcon: tabIcon('consultations'),
       },
     },
     Appointments: {
@@ -66,7 +77,7 @@ const Tab = createBottomTabNavigator({
       linking: 'appointments',
       options: {
         title: 'Appointments',
-        tabBarIcon: () => <ThemedText style={{ fontSize: 20 }}>📅</ThemedText>,
+        tabBarIcon: tabIcon('appointments'),
       },
     },
     Billing: {
@@ -74,15 +85,15 @@ const Tab = createBottomTabNavigator({
       linking: 'billing',
       options: {
         title: 'Billing',
-        tabBarIcon: () => <ThemedText style={{ fontSize: 20 }}>💳</ThemedText>,
+        tabBarIcon: tabIcon('billing'),
       },
     },
     Yakap: {
       screen: YakapScreen,
       linking: 'yakap',
       options: {
-        title: 'PhilHealth Desk',
-        tabBarIcon: () => <ThemedText style={{ fontSize: 20 }}>🛡️</ThemedText>,
+        title: 'PhilHealth Yakap',
+        tabBarIcon: tabIcon('yakap'),
       },
     },
     Settings: {
@@ -90,7 +101,7 @@ const Tab = createBottomTabNavigator({
       linking: 'settings',
       options: {
         title: 'Settings',
-        tabBarIcon: () => <ThemedText style={{ fontSize: 20 }}>⚙️</ThemedText>,
+        tabBarIcon: tabIcon('settings'),
       },
     },
   },
@@ -112,6 +123,19 @@ export const linkingOptions = {
     typeof window !== 'undefined' ? window.location.origin : '',
     '/',
   ],
+};
+
+/** Navigation container theme so React Navigation chrome matches the ClinicEz tokens. */
+export const navigationTheme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    primary: theme.colors.primary,
+    background: theme.colors.background,
+    card: theme.colors.surface,
+    text: theme.colors.text,
+    border: theme.colors.border,
+  },
 };
 
 export const Navigation = createStaticNavigation(Tab);

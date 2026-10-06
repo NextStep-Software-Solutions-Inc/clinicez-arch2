@@ -16,5 +16,6 @@
       "@context/*": ["context/*"],
       "@screens/*": ["navigation/screens/*"]
     }
-  }
+  },
+  "exclude": ["node_modules", "dist", ".expo", "scripts"]
 }

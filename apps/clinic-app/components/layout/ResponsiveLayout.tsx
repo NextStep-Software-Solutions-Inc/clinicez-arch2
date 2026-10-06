@@ -1,10 +1,11 @@
 import React from 'react';
-import { View, StyleSheet, useWindowDimensions, ViewStyle } from 'react-native';
+import { View, StyleSheet, ViewStyle } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import WorkstationSidebar from './WorkstationSidebar';
 import ClinicHeaderBar from './ClinicHeaderBar';
 import { theme } from '../../constants/theme';
 import { useWorkstationShortcuts } from '../../utils/workstationShortcuts';
+import { useBreakpoint } from '../../utils/useBreakpoint';
 
 export interface ResponsiveLayoutProps {
   children: React.ReactNode;
@@ -23,11 +24,10 @@ export default function ResponsiveLayout({
   hideHeader = false,
   style,
 }: ResponsiveLayoutProps) {
-  const { width } = useWindowDimensions();
+  const { isWorkstation: isDesktop } = useBreakpoint();
   const navigation = useNavigation<any>();
   const route = useRoute();
 
-  const isDesktop = width >= theme.breakpoints.tablet;
   const currentRouteName = route?.name ?? 'Dashboard';
 
   const handleNavigate = (targetRoute: string) => {
@@ -62,7 +62,7 @@ export default function ResponsiveLayout({
       <WorkstationSidebar
         currentRoute={currentRouteName}
         onNavigate={handleNavigate}
-        width={250}
+        width={theme.sizes.sidebarWidth}
       />
       <View style={[styles.mainColumn, style]}>
         {!hideHeader && (

@@ -3,8 +3,10 @@ import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Navigation, linkingOptions } from './navigation/Navigation';
+import { Navigation, linkingOptions, navigationTheme } from './navigation/Navigation';
 import { FacilityActivationGate } from './components/FacilityActivationGate';
+import { ClinicProvider } from './context/ClinicContext';
+import { StaffProvider } from './context/StaffContext';
 import { FeedbackHost } from './components/ui';
 import { fontAssets, setCustomFontsAvailable } from './constants/fonts';
 import { theme } from './constants/theme';
@@ -28,9 +30,13 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <StatusBar style="auto" />
+      <StatusBar style="dark" />
       <FacilityActivationGate>
-        <Navigation linking={linkingOptions} />
+        <ClinicProvider>
+          <StaffProvider>
+            <Navigation linking={linkingOptions} theme={navigationTheme} />
+          </StaffProvider>
+        </ClinicProvider>
       </FacilityActivationGate>
       <FeedbackHost />
     </SafeAreaProvider>
