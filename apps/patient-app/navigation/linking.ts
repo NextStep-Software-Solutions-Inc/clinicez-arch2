@@ -9,7 +9,7 @@ export const linking: LinkingOptions<RootParamList> = {
       Onboarding: {
         screens: {
           Welcome: 'welcome',
-          Onboard: 'intro',
+          Onboard: 'onboard',
         },
       },
       Auth: {
