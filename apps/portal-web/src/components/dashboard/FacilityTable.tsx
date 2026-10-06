@@ -20,6 +20,7 @@ import {
 } from "@tabler/icons-react";
 import { toast } from "sonner";
 import FacilitySettingsHub, { FacilityData } from "./FacilitySettingsHub";
+import { getConsoleBaseDomain } from "@/utils/domain";
 
 type Facility = FacilityData;
 
@@ -42,8 +43,14 @@ const APP_SUBDOMAINS: Record<string, string> = {
 };
 
 function getFacilityDomain(fac: Facility, tenantSlug: string) {
-    const isDev = typeof window !== "undefined" && window.location.hostname.includes("dev.clinicez.net");
-    const baseDomain = isDev ? "dev.clinicez.net" : "clinicez.net";
+    if (fac.consoleUrl) {
+        try {
+            return new URL(fac.consoleUrl).host;
+        } catch {
+            // fallback
+        }
+    }
+    const baseDomain = getConsoleBaseDomain();
     const sub = APP_SUBDOMAINS[fac.facilityType] || "clinic";
     const targetSlug = fac.slug || tenantSlug;
     return `${targetSlug}.${sub}.${baseDomain}`;
@@ -128,8 +135,7 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
             const port = DASHBOARD_PORTS[facility.facilityType] || 8081;
             window.open(`http://localhost:${port}?tenant=${tenantSlug}&facilityId=${facility.id}`, "_blank");
         } else {
-            const isDev = typeof window !== "undefined" && window.location.hostname.includes("dev.clinicez.net");
-            const baseDomain = isDev ? "dev.clinicez.net" : "clinicez.net";
+            const baseDomain = getConsoleBaseDomain();
             const sub = APP_SUBDOMAINS[facility.facilityType] || "clinic";
             const targetSlug = facility.slug || tenantSlug;
             window.open(`https://${targetSlug}.${sub}.${baseDomain}`, "_blank");
@@ -566,7 +572,7 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                             <div className="rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 p-2.5 flex items-center gap-2">
                                 <span className="text-[11px] text-slate-400 font-semibold">Live Preview:</span>
                                 <span className="font-mono text-xs text-primary font-bold truncate">
-                                    {`https://${editSlug.trim() || "slug"}.${APP_SUBDOMAINS[editingFacility?.facilityType || facilityType] || "clinic"}.${typeof window !== "undefined" && window.location.hostname.includes("dev.clinicez.net") ? "dev.clinicez.net" : "clinicez.net"}`}
+                                    {`https://${editSlug.trim() || "slug"}.${APP_SUBDOMAINS[editingFacility?.facilityType || facilityType] || "clinic"}.${getConsoleBaseDomain()}`}
                                 </span>
                             </div>
                         </div>

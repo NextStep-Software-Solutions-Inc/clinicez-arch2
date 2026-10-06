@@ -64,6 +64,12 @@ describe('extractTenantFromHostname', () => {
     expect(extractTenantFromHostname('st-jude.pharmacy.clinicez.net')).toBe('st-jude');
   });
 
+  it('extracts tenant/facility slug from arbitrary custom or staging base domains', () => {
+    expect(extractTenantFromHostname('facility1.clinic.staging.clinicez.net')).toBe('facility1');
+    expect(extractTenantFromHostname('st-luke.clinic.hospital.ph')).toBe('st-luke');
+    expect(extractTenantFromHostname('acme-lab.lab.myenterprise.com')).toBe('acme-lab');
+  });
+
   it('extracts tenant from portal dev wildcard (*.dev.clinicez.net)', () => {
     expect(extractTenantFromHostname('tenant1.dev.clinicez.net')).toBe('tenant1');
     expect(extractTenantFromHostname('notfound.dev.clinicez.net')).toBe('notfound');

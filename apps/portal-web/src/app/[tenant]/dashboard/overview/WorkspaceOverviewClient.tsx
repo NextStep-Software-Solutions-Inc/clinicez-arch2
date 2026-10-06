@@ -26,6 +26,7 @@ import {
     IconPill,
     IconBuildingSkyscraper
 } from "@tabler/icons-react";
+import { getConsoleBaseDomain } from "@/utils/domain";
 
 interface Facility {
     id: string;
@@ -114,8 +115,7 @@ export default function WorkspaceOverviewClient({ tenantSlug }: { tenantSlug: st
             const port = DASHBOARD_PORTS[facility.facilityType] || 8081;
             window.open(`http://localhost:${port}?tenant=${tenantSlug}&facilityId=${facility.id}`, "_blank");
         } else {
-            const isDev = window.location.hostname.includes("dev.clinicez.net");
-            const baseDomain = isDev ? "dev.clinicez.net" : "clinicez.net";
+            const baseDomain = getConsoleBaseDomain();
             const sub = APP_SUBDOMAINS[facility.facilityType] || "clinic";
             const targetSlug = facility.slug || tenantSlug;
             window.open(`https://${targetSlug}.${sub}.${baseDomain}`, "_blank");

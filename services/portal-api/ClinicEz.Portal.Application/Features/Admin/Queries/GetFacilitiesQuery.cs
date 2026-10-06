@@ -144,12 +144,11 @@ public class GetFacilitiesQueryHandler(
         var isDev = string.Equals(configuration["ASPNETCORE_ENVIRONMENT"], "Development", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(configuration["Environment"], "Development", StringComparison.OrdinalIgnoreCase);
 
-        var defaultBaseDomain = isDev ? "dev.clinicez.net" : "clinicez.net";
-        var configuredBaseDomain = configuration["Console:BaseDomain"];
+        var configuredBaseDomain = configuration["Console:BaseDomain"] ?? configuration["CONSOLE_BASE_DOMAIN"];
 
-        var baseDomain = string.IsNullOrWhiteSpace(configuredBaseDomain)
-            ? defaultBaseDomain
-            : (isDev && string.Equals(configuredBaseDomain, "clinicez.net", StringComparison.OrdinalIgnoreCase) ? defaultBaseDomain : configuredBaseDomain);
+        var baseDomain = !string.IsNullOrWhiteSpace(configuredBaseDomain)
+            ? configuredBaseDomain
+            : (isDev ? "dev.clinicez.net" : "clinicez.net");
 
         var subdomain = facilityType switch
         {

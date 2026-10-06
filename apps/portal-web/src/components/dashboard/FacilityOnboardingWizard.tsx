@@ -32,6 +32,7 @@ import {
   IconMail,
   IconInfoCircle,
 } from "@tabler/icons-react";
+import { getConsoleBaseDomain } from "@/utils/domain";
 
 const APP_SUBDOMAINS: Record<string, string> = {
   Clinic: "clinic",
@@ -83,8 +84,7 @@ export default function FacilityOnboardingWizard({
       .replace(/^-+|-+$/g, "");
   };
 
-  const isDev = typeof window !== "undefined" && window.location.hostname.includes("dev.clinicez.net");
-  const baseDomain = isDev ? "dev.clinicez.net" : "clinicez.net";
+  const baseDomain = getConsoleBaseDomain();
   const sub = APP_SUBDOMAINS[normalizedFacilityType] || "clinic";
 
   // Step 2: Regulatory & Statutory Profile

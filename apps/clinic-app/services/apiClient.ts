@@ -16,6 +16,12 @@ const resolveDefaultBaseUrl = (fallbackPort: number = 5245): string => {
       return `${protocol}//${hostname}:${fallbackPort}`;
     }
 
+    // Subdomain-based cloud or enterprise deployment (e.g. <facility>.clinic.<baseDomain>)
+    const match = hostname.match(/^[a-z0-9-]+\.clinic\.(.+)$/);
+    if (match) {
+      return `https://clinic-api.${match[1]}`;
+    }
+
     // Cloud dev domain
     if (hostname.endsWith('.dev.clinicez.net')) {
       return 'https://clinic-api.dev.clinicez.net';

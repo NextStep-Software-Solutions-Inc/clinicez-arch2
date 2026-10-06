@@ -114,12 +114,9 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
     // If on web and on wildcard root domain, navigate to dedicated tenant subdomain
     if (typeof window !== 'undefined' && window.location) {
       const host = window.location.hostname.toLowerCase();
-      if (host === 'clinic.dev.clinicez.net') {
-        window.location.href = `https://${trimmed}.clinic.dev.clinicez.net`;
-        return;
-      }
-      if (host === 'clinic.clinicez.net') {
-        window.location.href = `https://${trimmed}.clinic.clinicez.net`;
+      const matchRoot = host.match(/^clinic\.(.+)$/);
+      if (matchRoot) {
+        window.location.href = `https://${trimmed}.clinic.${matchRoot[1]}`;
         return;
       }
     }
@@ -137,12 +134,9 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
     // If on a tenant subdomain on web, return to root domain
     if (typeof window !== 'undefined' && window.location) {
       const host = window.location.hostname.toLowerCase();
-      if (host.endsWith('.clinic.dev.clinicez.net')) {
-        window.location.href = 'https://clinic.dev.clinicez.net';
-        return;
-      }
-      if (host.endsWith('.clinic.clinicez.net')) {
-        window.location.href = 'https://clinic.clinicez.net';
+      const matchTenant = host.match(/^[a-z0-9-]+\.clinic\.(.+)$/);
+      if (matchTenant) {
+        window.location.href = `https://clinic.${matchTenant[1]}`;
         return;
       }
     }
