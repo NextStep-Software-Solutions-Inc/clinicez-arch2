@@ -4,10 +4,9 @@
   "buildCommand": "bun run build:web",
   "outputDirectory": "dist",
   "installCommand": "bun install",
-  "cleanUrls": true,
   "rewrites": [
     {
-      "source": "/((?!.*\\.(?:js|css|wasm|png|jpg|jpeg|gif|svg|ico|json|txt|map)$).*)",
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ],
