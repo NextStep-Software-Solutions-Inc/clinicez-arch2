@@ -51,8 +51,7 @@ jobs:
           push: false
           load: true
           tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          no-cache: true
 
       - name: Save Docker image to tar.gz
         run: |
