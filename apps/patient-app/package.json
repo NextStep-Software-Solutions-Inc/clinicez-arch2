@@ -68,6 +68,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "build:web": "expo export -p web && node -e \"const fs = require('fs'); if(fs.existsSync('public')) fs.cpSync('public', 'dist', {recursive: true});\"",
+    "build:patient-web": "bun run build:web",
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio",
     "typecheck": "tsc --noEmit"
