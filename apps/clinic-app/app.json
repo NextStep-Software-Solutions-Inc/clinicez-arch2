@@ -13,7 +13,11 @@
     },
     "web": {
       "bundler": "metro",
-      "output": "single"
+      "output": "single",
+      "name": "ClinicEz Clinical Workstation",
+      "shortName": "ClinicEz",
+      "backgroundColor": "#F8FAFC",
+      "themeColor": "#0284C7"
     }
   }
 }

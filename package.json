@@ -13,6 +13,7 @@
     "typecheck:pharmacy": "bun --filter @clinicez/pharmacy-app typecheck",
     "typecheck:all": "bun run typecheck:patient && bun run typecheck:clinic && bun run typecheck:lab && bun run typecheck:pharmacy",
     "build:portal": "bun --filter @clinicez/portal-web build",
-    "build:patient-web": "bun --filter @clinicez/patient-app build:web"
+    "build:patient-web": "bun --filter @clinicez/patient-app build:web",
+    "build:clinic-web": "bun --filter @clinicez/clinic-app build:web"
   }
 }

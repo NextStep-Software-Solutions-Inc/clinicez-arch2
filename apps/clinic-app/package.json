@@ -6,6 +6,7 @@
     "react-dom": "19.2.3"
   },
   "dependencies": {
+    "@expo/metro-runtime": "~56.0.21",
     "@react-navigation/bottom-tabs": "^8.0.0-alpha.33",
     "@react-navigation/core": "8.0.0-alpha.26",
     "@react-navigation/native": "^8.0.0-alpha.28",
@@ -17,11 +18,13 @@
     "react-dom": "19.2.3",
     "react-native": "0.85.3",
     "react-native-safe-area-context": "~5.7.0",
-    "react-native-screens": "4.25.2"
+    "react-native-screens": "4.25.2",
+    "react-native-web": "~0.21.3"
   },
   "devDependencies": {
     "@types/node": "^22.20.2",
     "@types/react": "~19.2.3",
+    "@types/react-dom": "~19.2.3",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -29,6 +32,9 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "build:web": "expo export -p web && node -e \"const fs = require('fs'); if(fs.existsSync('public')) fs.cpSync('public', 'dist', {recursive: true});\"",
+    "build:clinic-web": "bun run build:web",
+    "build": "bun run build:web",
     "typecheck": "tsc --noEmit"
   },
   "private": true

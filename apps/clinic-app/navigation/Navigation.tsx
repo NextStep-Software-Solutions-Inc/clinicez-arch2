@@ -36,6 +36,7 @@ const Tab = createBottomTabNavigator({
   screens: {
     Dashboard: {
       screen: DashboardScreen,
+      linking: 'dashboard',
       options: {
         title: 'Dashboard',
         tabBarIcon: () => <ThemedText style={{ fontSize: 20 }}>📊</ThemedText>,
@@ -43,6 +44,7 @@ const Tab = createBottomTabNavigator({
     },
     Patients: {
       screen: PatientsScreen,
+      linking: 'patients',
       options: {
         title: 'Patients',
         tabBarIcon: () => <ThemedText style={{ fontSize: 20 }}>👥</ThemedText>,
@@ -50,6 +52,7 @@ const Tab = createBottomTabNavigator({
     },
     Consultations: {
       screen: ConsultationsScreen,
+      linking: 'consultations',
       options: {
         title: 'Consultations',
         tabBarIcon: () => <ThemedText style={{ fontSize: 20 }}>🩺</ThemedText>,
@@ -57,6 +60,7 @@ const Tab = createBottomTabNavigator({
     },
     Appointments: {
       screen: AppointmentsScreen,
+      linking: 'appointments',
       options: {
         title: 'Appointments',
         tabBarIcon: () => <ThemedText style={{ fontSize: 20 }}>📅</ThemedText>,
@@ -64,6 +68,7 @@ const Tab = createBottomTabNavigator({
     },
     Billing: {
       screen: BillingScreen,
+      linking: 'billing',
       options: {
         title: 'Billing',
         tabBarIcon: () => <ThemedText style={{ fontSize: 20 }}>💳</ThemedText>,
@@ -71,6 +76,7 @@ const Tab = createBottomTabNavigator({
     },
     Yakap: {
       screen: YakapScreen,
+      linking: 'yakap',
       options: {
         title: 'PhilHealth Desk',
         tabBarIcon: () => <ThemedText style={{ fontSize: 20 }}>🛡️</ThemedText>,
@@ -78,6 +84,7 @@ const Tab = createBottomTabNavigator({
     },
     Settings: {
       screen: SettingsScreen,
+      linking: 'settings',
       options: {
         title: 'Settings',
         tabBarIcon: () => <ThemedText style={{ fontSize: 20 }}>⚙️</ThemedText>,
@@ -93,5 +100,13 @@ declare global {
     interface RootParamList extends RootTabParamList {}
   }
 }
+
+export const linkingOptions = {
+  enabled: 'auto' as const,
+  prefixes: [
+    'clinicez://',
+    typeof window !== 'undefined' ? `${window.location.origin}/` : '/',
+  ],
+};
 
 export const Navigation = createStaticNavigation(Tab);

@@ -1,8 +1,22 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { safeAwait, ApiResponse, ApiError } from '@shared/safe';
 
-export const CLINIC_BASE_URL = (process.env.EXPO_PUBLIC_CLINIC_API_URL ?? 'http://localhost:5245').replace(/\/+$/, '');
-export const PHARMACY_BASE_URL = (process.env.EXPO_PUBLIC_PHARMACY_API_URL ?? 'http://localhost:5245').replace(/\/+$/, '');
+const resolveDefaultBaseUrl = (fallbackPort: number = 5245): string => {
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    const protocol = window.location.protocol || 'http:';
+    return `${protocol}//${window.location.hostname}:${fallbackPort}`;
+  }
+  return `http://localhost:${fallbackPort}`;
+};
+
+export const CLINIC_BASE_URL = (
+  process.env.EXPO_PUBLIC_CLINIC_API_URL ?? resolveDefaultBaseUrl(5245)
+).replace(/\/+$/, '');
+
+export const PHARMACY_BASE_URL = (
+  process.env.EXPO_PUBLIC_PHARMACY_API_URL ?? CLINIC_BASE_URL
+).replace(/\/+$/, '');
+
 export const API_PREFIX = '/api/v1';
 
 export class ClinicApiClient {

@@ -21,6 +21,7 @@ import {
   ClinicServiceItem,
   PatientQueueItem,
 } from '../../services/clinicService';
+import { printReceiptDialog } from '../../utils/printHelper';
 
 interface LineItemForm {
   id: string;
@@ -363,21 +364,50 @@ export default function BillingScreen() {
             Amount Paid: ₱{lastReceipt.netAmount.toFixed(2)} • Change Returned: ₱{lastReceipt.change.toFixed(2)}
           </ThemedText>
           <ThemedText style={styles.receiptBiller}>Billed by Cashier Station • St. Jude Family Clinic</ThemedText>
-          <Pressable
-            style={{
-              backgroundColor: '#1E293B',
-              paddingVertical: 8,
-              paddingHorizontal: 12,
-              borderRadius: 6,
-              marginTop: 8,
-              alignItems: 'center',
-            }}
-            onPress={() => navigation.navigate('Dashboard')}
-          >
-            <ThemedText style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>
-              📊 Return to Dashboard & Remittance →
-            </ThemedText>
-          </Pressable>
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+            <Pressable
+              style={{
+                flex: 1,
+                backgroundColor: '#0284C7',
+                paddingVertical: 8,
+                paddingHorizontal: 12,
+                borderRadius: 6,
+                alignItems: 'center',
+              }}
+              onPress={() => {
+                const receiptDetails = [
+                  `OFFICIAL RECEIPT: OR #${lastReceipt.orNumber}`,
+                  `DATE: ${new Date().toLocaleString('en-PH')}`,
+                  `FACILITY: St. Jude Family Clinic & Primary Care`,
+                  `CASHIER: Active Station`,
+                  `----------------------------------------`,
+                  `NET AMOUNT PAID: ₱${lastReceipt.netAmount.toFixed(2)}`,
+                  `CHANGE RETURNED: ₱${lastReceipt.change.toFixed(2)}`,
+                  `STATUS: Settled & Validated`,
+                ].join('\n');
+                printReceiptDialog(`Official Receipt #${lastReceipt.orNumber}`, receiptDetails);
+              }}
+            >
+              <ThemedText style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>
+                🖨️ Print Official Receipt
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              style={{
+                flex: 1,
+                backgroundColor: '#1E293B',
+                paddingVertical: 8,
+                paddingHorizontal: 12,
+                borderRadius: 6,
+                alignItems: 'center',
+              }}
+              onPress={() => navigation.navigate('Dashboard')}
+            >
+              <ThemedText style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>
+                📊 Dashboard →
+              </ThemedText>
+            </Pressable>
+          </View>
         </View>
       )}
 

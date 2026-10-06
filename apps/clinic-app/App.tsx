@@ -1,7 +1,7 @@
 import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Navigation } from './navigation/Navigation';
+import { Navigation, linkingOptions } from './navigation/Navigation';
 import { FacilityActivationGate } from './components/FacilityActivationGate';
 
 export default function App() {
@@ -9,7 +9,7 @@ export default function App() {
     <SafeAreaProvider>
       <StatusBar style="auto" />
       <FacilityActivationGate>
-        <Navigation />
+        <Navigation linking={linkingOptions} />
       </FacilityActivationGate>
     </SafeAreaProvider>
   );

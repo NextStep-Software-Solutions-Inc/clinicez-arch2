@@ -4,6 +4,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import WorkstationSidebar from './WorkstationSidebar';
 import ClinicHeaderBar from './ClinicHeaderBar';
 import { theme } from '../../constants/theme';
+import { useWorkstationShortcuts } from '../../utils/workstationShortcuts';
 
 export interface ResponsiveLayoutProps {
   children: React.ReactNode;
@@ -34,6 +35,10 @@ export default function ResponsiveLayout({
       navigation.navigate(targetRoute);
     }
   };
+
+  useWorkstationShortcuts({
+    onNavigate: handleNavigate,
+  });
 
   if (!isDesktop) {
     // Mobile View: Plain container (bottom tab bar is rendered by React Navigation)

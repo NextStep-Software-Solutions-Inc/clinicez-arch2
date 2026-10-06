@@ -33,6 +33,8 @@ Thumbs.db
 # Build results
 /build/
 /out/
+dist/
+web-build/
 
 # Test results
 TestResults/

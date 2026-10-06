@@ -1,7 +1,8 @@
 import React from 'react';
-import { View, StyleSheet, ScrollView, Modal, Pressable, Alert, Linking } from 'react-native';
+import { View, StyleSheet, ScrollView, Modal, Pressable, Alert } from 'react-native';
 import ThemedText from './ui/ThemedText';
 import { PrescriptionSlipData, clinicService } from '../services/clinicService';
+import { openPrintableUrl } from '../utils/printHelper';
 
 interface PrescriptionSlipModalProps {
   visible: boolean;
@@ -267,7 +268,10 @@ export default function PrescriptionSlipModal({
                   const url = slip.consultationId
                     ? clinicService.getPrescriptionSlipPdfUrl(slip.consultationId)
                     : clinicService.getPrescriptionSlipPdfByNumberUrl(slip.prescriptionNumber);
-                  await Linking.openURL(url);
+                  const opened = await openPrintableUrl(url);
+                  if (!opened) {
+                    Alert.alert('Notice', 'Unable to automatically open the PDF. Please check your browser popup blocker.');
+                  }
                 } catch {
                   Alert.alert('Download Error', 'Could not open official prescription PDF. Please check connection and try again.');
                 }
