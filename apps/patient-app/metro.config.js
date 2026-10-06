@@ -4,6 +4,7 @@ const { getDefaultConfig } = require('expo/metro-config');
 const config = getDefaultConfig(__dirname);
 
 config.resolver.sourceExts.push('sql');
+config.resolver.assetExts.push('wasm');
 
 // Exclude Android build/Gradle dirs from Metro's FallbackWatcher (Windows ENOENT fix).
 // On Windows without Watchman, FallbackWatcher walks ALL dirs under the project root.

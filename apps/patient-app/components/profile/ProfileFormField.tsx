@@ -1,5 +1,6 @@
 import { View, TextInput, StyleSheet, TextInputProps, Pressable, Platform } from 'react-native';
-import { useTheme, SFSymbol, MaterialSymbol } from '@react-navigation/native';
+import { useTheme } from '@react-navigation/native';
+import { AppIcon } from '@ui/Icon';
 import ThemedText from '@ui/ThemedText';
 import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 
@@ -78,12 +79,7 @@ export default function ProfileFormField({
           >
             {value || (rest.placeholder ?? '')}
           </ThemedText>
-          {
-            Platform.select({
-              ios: <SFSymbol name="chevron.up.chevron.down" size={13} color={colors.text} />,
-              android: <MaterialSymbol name="unfold_more" size={18} color={colors.text} />,
-            })
-          }
+          <AppIcon android="unfold_more" ios="chevron.up.chevron.down" size={16} color={colors.text} />
         </Pressable>
       ) : (
         inputEl

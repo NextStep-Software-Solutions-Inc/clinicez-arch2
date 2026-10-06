@@ -3,7 +3,7 @@ import * as Crypto from 'expo-crypto';
 import * as FileSystemLegacy from 'expo-file-system/legacy';
 import * as FileSystem from 'expo-file-system';
 import { Directory, File, Paths, UploadType } from 'expo-file-system';
-import * as SecureStore from 'expo-secure-store';
+import { storage } from '@utils/storage';
 import NetInfo from '@react-native-community/netinfo';
 import { Buffer } from 'buffer';
 import { mutate } from 'swr';
@@ -753,7 +753,7 @@ export async function importFiles(input: ImportFilesInput) {
     const timestamp = now();
     const encodedKey = await key.encoded('base64');
 
-    await SecureStore.setItemAsync(keyName(input.patientId, id), encodedKey);
+    await storage.setItemAsync(keyName(input.patientId, id), encodedKey);
     await db.insert(filesMetadata).values({
       id,
       patientId: input.patientId,
@@ -837,13 +837,13 @@ export async function preparePreviewFile(
   // We need to determine the AES key to decrypt the file.
   // First, check if we have it natively stored in SecureStore (for files we uploaded)
   let key: Crypto.AESEncryptionKey;
-  const encodedKey = await SecureStore.getItemAsync(keyName(patientId, fileId));
+  const encodedKey = await storage.getItemAsync(keyName(patientId, fileId));
 
   if (encodedKey) {
     key = await Crypto.AESEncryptionKey.import(encodedKey, 'base64');
   } else if (file.serverWrappedKeyJson) {
     // If not, it was synced from another device. We need to unwrap the key using our MAK.
-    const makEncoded = await SecureStore.getItemAsync(`${'patient_mak_key'}_${patientId}`);
+    const makEncoded = await storage.getItemAsync(`${'patient_mak_key'}_${patientId}`);
     if (!makEncoded) throw new Error('Master Access Key (MAK) missing. Please restart the app or setup your File Recovery Key.');
 
     const mak = await Crypto.AESEncryptionKey.import(makEncoded, 'base64');
@@ -857,7 +857,7 @@ export async function preparePreviewFile(
     key = await Crypto.AESEncryptionKey.import(fileKeyEncoded, 'base64');
 
     // Cache it locally so we don't have to unwrap it next time
-    await SecureStore.setItemAsync(keyName(patientId, fileId), fileKeyEncoded);
+    await storage.setItemAsync(keyName(patientId, fileId), fileKeyEncoded);
   } else {
     throw new Error('The local file key is missing. Sync restore is required.');
   }
@@ -1151,9 +1151,9 @@ export async function syncPendingFiles(
       mutate((key: any) => Array.isArray(key) && key[0] === 'files-browser');
       const encryptedFile = new File(file.localEncryptedPath);
       let wrappedKeyJson = '';
-      const fileKeyEncoded = await SecureStore.getItemAsync(keyName(patientId, file.id));
+      const fileKeyEncoded = await storage.getItemAsync(keyName(patientId, file.id));
       if (fileKeyEncoded) {
-        const makEncoded = await SecureStore.getItemAsync(`${'patient_mak_key'}_${patientId}`);
+        const makEncoded = await storage.getItemAsync(`${'patient_mak_key'}_${patientId}`);
         if (makEncoded) {
           const mak = await Crypto.AESEncryptionKey.import(makEncoded, 'base64');
           const sealed = await Crypto.aesEncryptAsync(fileKeyEncoded, mak);

@@ -7,7 +7,7 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import { useTheme } from '@react-navigation/native';
-import { SFSymbol, MaterialSymbol } from '@react-navigation/native';
+import { AppIcon } from '@ui/Icon';
 import ThemedText from '@ui/ThemedText';
 
 const ACTION_W = 130; // total width of the revealed action panel
@@ -77,10 +77,7 @@ export default function ProfileListItemCard({
           onPress={handleEdit}
           style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.6 }]}
         >
-          {Platform.select({
-            ios: <SFSymbol name="pencil" size={15} color={colors.primary} />,
-            android: <MaterialSymbol name="edit" size={17} color={colors.primary} />,
-          })}
+          <AppIcon android="edit" ios="pencil" size={16} color={colors.primary} />
           <ThemedText style={[styles.actionText, { color: colors.primary }]}>Edit</ThemedText>
         </Pressable>
         <View style={[styles.actionDivider, { backgroundColor: colors.border }]} />
@@ -88,10 +85,7 @@ export default function ProfileListItemCard({
           onPress={handleDelete}
           style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.6 }]}
         >
-          {Platform.select({
-            ios: <SFSymbol name="trash" size={15} color="#EF4444" />,
-            android: <MaterialSymbol name="delete" size={17} color="#EF4444" />,
-          })}
+          <AppIcon android="delete" ios="trash" size={16} color="#EF4444" />
           <ThemedText style={[styles.actionText, { color: '#EF4444' }]}>Delete</ThemedText>
         </Pressable>
       </View>

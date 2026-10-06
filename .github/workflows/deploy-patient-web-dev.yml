@@ -1,0 +1,87 @@
+name: Deploy Patient Web (Dev / Preview)
+
+on:
+  push:
+    branches:
+      - development
+    paths:
+      - 'apps/patient-app/**'
+      - 'packages/shared-ts/**'
+      - '.github/workflows/deploy-patient-web-dev.yml'
+  pull_request:
+    branches:
+      - development
+    paths:
+      - 'apps/patient-app/**'
+      - 'packages/shared-ts/**'
+      - '.github/workflows/deploy-patient-web-dev.yml'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual development deployment'
+        required: false
+        default: 'Manual development deployment'
+        type: string
+
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_PATIENT_WEB }}
+
+jobs:
+  test-and-typecheck:
+    name: Type Check & Verify Patient Web
+    runs-on: ubuntu-latest
+    environment: Development
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Type check patient app
+        run: bun run typecheck:patient
+
+  deploy:
+    name: Build & Deploy to Vercel (Preview)
+    runs-on: ubuntu-latest
+    needs: test-and-typecheck
+    environment: Development
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel Environment Information
+        working-directory: apps/patient-app
+        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build Project Artifacts
+        working-directory: apps/patient-app
+        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy Prebuilt Artifacts to Vercel
+        working-directory: apps/patient-app
+        run: vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }}

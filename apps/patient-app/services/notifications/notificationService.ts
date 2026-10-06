@@ -1,5 +1,5 @@
 import * as ExpoNotifications from 'expo-notifications';
-import * as SecureStore from 'expo-secure-store';
+import { storage } from '@utils/storage';
 import { Platform } from 'react-native';
 import { randomUUID } from 'expo-crypto';
 import { db } from '@db/index';
@@ -15,6 +15,10 @@ export async function registerForPushNotifications(patientId: string): Promise<{
   token: string | null;
   status: ExpoNotifications.PermissionStatus;
 }> {
+  if (Platform.OS === 'web') {
+    return { token: null, status: ExpoNotifications.PermissionStatus.UNDETERMINED };
+  }
+
   const { status: existingStatus } = await ExpoNotifications.getPermissionsAsync();
   let finalStatus = existingStatus;
 
@@ -32,7 +36,7 @@ export async function registerForPushNotifications(patientId: string): Promise<{
   try {
     const tokenData = await ExpoNotifications.getExpoPushTokenAsync();
     token = tokenData.data;
-    await SecureStore.setItemAsync(PUSH_TOKEN_KEY, token);
+    await storage.setItemAsync(PUSH_TOKEN_KEY, token);
   } catch (_) {
     // Silently fail in Expo Go or simulator builds
   }
@@ -62,7 +66,7 @@ export async function registerForPushNotifications(patientId: string): Promise<{
 }
 
 export async function getStoredPushToken(): Promise<string | null> {
-  return SecureStore.getItemAsync(PUSH_TOKEN_KEY);
+  return storage.getItemAsync(PUSH_TOKEN_KEY);
 }
 
 // ─── Notification Listeners ────────────────────────────────────────────────────
@@ -81,6 +85,10 @@ export function setupNotificationListeners(
   onNotification: (payload: NotificationPayload) => void,
   onNotificationResponse: (response: ExpoNotifications.NotificationResponse) => void,
 ): () => void {
+  if (Platform.OS === 'web') {
+    return () => {};
+  }
+
   const receivedSub = ExpoNotifications.addNotificationReceivedListener(async (notification) => {
     const raw = notification.request.content;
     const payload: NotificationPayload = {
@@ -463,6 +471,17 @@ export async function scheduleLocalNotification(
   data: Record<string, unknown> = {},
   trigger: ExpoNotifications.NotificationTriggerInput = { type: ExpoNotifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 1 },
 ): Promise<string> {
+  if (Platform.OS === 'web') {
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification(title, { body });
+      } catch {
+        // Ignored in browsers without Notification support
+      }
+    }
+    return `web-notification-${Date.now()}`;
+  }
+
   return ExpoNotifications.scheduleNotificationAsync({
     content: {
       title,

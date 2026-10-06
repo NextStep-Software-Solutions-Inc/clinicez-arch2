@@ -1,7 +1,8 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { View, Pressable, StyleSheet, ColorValue, Platform, TouchableOpacity, DeviceEventEmitter } from 'react-native';
 import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
-import { useTheme, Theme, MaterialSymbolProps, SFSymbolProps, MaterialSymbol, SFSymbol } from '@react-navigation/native';
+import { useTheme, Theme } from '@react-navigation/native';
+import { AppIcon } from '@ui/Icon';
 import ThemedText from '@ui/ThemedText';
 import ThemedView from '@ui/ThemedView';
 import { CircularProgress } from '../ui/CircularProgress';
@@ -29,7 +30,7 @@ const getActionColors = (isDark: boolean): Record<ActionType, { bg: string; fg: 
   },
 });
 
-type TMeta = { color: string; android: MaterialSymbolProps['name']; ios: SFSymbolProps['name'] };
+type TMeta = { color: string; android: string; ios: string };
 
 const TYPE_META: Record<string, TMeta> = {
   'file-type-xray': { color: '#3B82F6', android: 'health_and_safety', ios: 'waveform.path.ecg' },
@@ -50,15 +51,12 @@ function fileMeta(item: FileBrowserFile): TMeta {
 export function Icon({
   android, ios, color, size = 20,
 }: {
-  android: MaterialSymbolProps['name'];
-  ios: SFSymbolProps['name'];
+  android?: string;
+  ios?: string;
   color: ColorValue;
   size?: number;
 }) {
-  return Platform.select({
-    android: <MaterialSymbol name={android} size={size} color={color} />,
-    ios: <SFSymbol name={ios} size={size - 3} color={color} />,
-  });
+  return <AppIcon android={android} ios={ios} size={size} color={color} />;
 }
 
 function StatusDot({ status }: { status: string }) {

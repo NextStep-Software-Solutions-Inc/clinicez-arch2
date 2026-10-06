@@ -50,3 +50,6 @@ jobs:
 
       - name: Build portal web
         run: bun run build:portal
+
+      - name: Build patient web
+        run: bun run build:patient-web

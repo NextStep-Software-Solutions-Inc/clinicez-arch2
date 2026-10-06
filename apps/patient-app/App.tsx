@@ -1,6 +1,8 @@
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { Navigation, navigationRef } from './navigation/Navigation';
+import { linking } from './navigation/linking';
+import WebShell from 'components/ui/WebShell';
 import { useOTAUpdate } from 'hooks/useOTAUpdate';
 import { DefaultTheme, DarkTheme, MaterialDarkTheme, MaterialLightTheme, Theme, ThemeProvider } from "@react-navigation/native";
 import { ColorValue, Platform, StyleSheet, useColorScheme, View } from 'react-native';
@@ -35,47 +37,49 @@ import { scheduleLocalNotification } from 'services/notifications/notificationSe
 // without needing this task.
 const BACKGROUND_NOTIFICATION_TASK = 'BACKGROUND_NOTIFICATION_TASK';
 
-TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async ({ data, error }) => {
-  if (error) {
-    console.error('[BackgroundNotification] Task error:', error);
-    return;
-  }
-  
-  const payload = data as any;
-  const raw = payload.notification?.request?.content;
-  if (!raw) return;
-  
-  const rawData = raw.data as Record<string, any>;
-  
-  // If a silent push contains title/body inside the data payload (significant change),
-  // we wake up and display it as a local follow-up notification.
-  if (rawData?.title && rawData?.body) {
-    await scheduleLocalNotification(
-      rawData.title,
-      rawData.body,
-      rawData,
-      null // Trigger immediately
-    );
-  }
-});
+if (Platform.OS !== 'web') {
+  TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async ({ data, error }) => {
+    if (error) {
+      console.error('[BackgroundNotification] Task error:', error);
+      return;
+    }
+    
+    const payload = data as any;
+    const raw = payload.notification?.request?.content;
+    if (!raw) return;
+    
+    const rawData = raw.data as Record<string, any>;
+    
+    // If a silent push contains title/body inside the data payload (significant change),
+    // we wake up and display it as a local follow-up notification.
+    if (rawData?.title && rawData?.body) {
+      await scheduleLocalNotification(
+        rawData.title,
+        rawData.body,
+        rawData,
+        null // Trigger immediately
+      );
+    }
+  });
 
-// Show banners, sounds, and badges while app is in foreground
-ExpoNotifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+  // Show banners, sounds, and badges while app is in foreground
+  ExpoNotifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
+  });
 
-// Register the background task so expo-notifications knows to wake it.
-// Must be called before the app renders (module level).
-ExpoNotifications.registerTaskAsync(BACKGROUND_NOTIFICATION_TASK).catch(
-  // Swallow the error — on Expo Go / simulators this will throw because
-  // background tasks are not supported; it is safe to ignore.
-  () => { },
-);
+  // Register the background task so expo-notifications knows to wake it.
+  // Must be called before the app renders (module level).
+  ExpoNotifications.registerTaskAsync(BACKGROUND_NOTIFICATION_TASK).catch(
+    // Swallow the error — on Expo Go / simulators this will throw because
+    // background tasks are not supported; it is safe to ignore.
+    () => { },
+  );
+}
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY!;
 
@@ -124,8 +128,10 @@ function AppWithTheme() {
           <BottomSheetModalProvider>
             <ThemeProvider value={selectedTheme}>
               <OfflineAlertProvider>
-                <Navigation ref={navigationRef} theme={selectedTheme} />
-                <LockOverlay backgroundColor={selectedTheme.colors.background} />
+                <WebShell>
+                  <Navigation ref={navigationRef} theme={selectedTheme} linking={linking} />
+                  <LockOverlay backgroundColor={selectedTheme.colors.background} />
+                </WebShell>
                 <CustomAlertModal
                   visible={showUserNotFoundAlert}
                   title="Account Not Found"
@@ -150,7 +156,11 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache} __experimental_resourceCache={resourceCache}>
+        <ClerkProvider
+          publishableKey={publishableKey}
+          tokenCache={Platform.OS !== 'web' ? tokenCache : undefined}
+          __experimental_resourceCache={Platform.OS !== 'web' ? resourceCache : undefined}
+        >
           <AppearanceProvider>
             <OnboardingProvider>
               <AuthProvider>

@@ -11,7 +11,7 @@ import {
 import { useRef, useEffect } from 'react';
 import { useTheme } from '@react-navigation/native';
 import ThemedText from '@ui/ThemedText';
-import { SFSymbol, MaterialSymbol } from '@react-navigation/native';
+import { AppIcon } from '@ui/Icon';
 
 export interface SelectOption {
   label: string;
@@ -102,11 +102,9 @@ export default function ProfileSelectModal({
                   >
                     {item.label}
                   </ThemedText>
-                  {isSelected &&
-                    Platform.select({
-                      ios: <SFSymbol name="checkmark" size={14} color={colors.card} />,
-                      android: <MaterialSymbol name="check" size={16} color={colors.card} />,
-                    })}
+                  {isSelected && (
+                    <AppIcon android="check" ios="checkmark" size={16} color={colors.card} />
+                  )}
                 </Pressable>
               );
             }}

@@ -9,7 +9,8 @@ module.exports = function(api) {
           root: ['./'],
           alias: {
             '@ui': './components/ui',
-            '@db': './db'
+            '@db': './db',
+            '@utils': './utils'
           }
         }
       ],

@@ -1,6 +1,6 @@
 import { View, Pressable, StyleSheet, Switch, ActivityIndicator, Platform, ColorValue } from 'react-native';
 import { useTheme } from '@react-navigation/native';
-import { MaterialSymbol, SFSymbol } from '@react-navigation/native';
+import { AppIcon } from './Icon';
 import ThemedText from './ThemedText';
 
 // ── SettingsRow ───────────────────────────────────────────────────────────────
@@ -42,10 +42,7 @@ export function SettingsRow({
     <View style={[styles.row, { borderBottomColor: colors.border, opacity: disabled ? 0.5 : 1 }]}>
       {icon && (
         <View style={[styles.iconContainer, { backgroundColor: iconColor ?? colors.primary }]}>
-          {Platform.select({
-            android: <MaterialSymbol name={icon.android as any} size={18} color="#fff" />,
-            ios: <SFSymbol name={icon.ios as any} size={14} color="#fff" />,
-          })}
+          <AppIcon android={icon.android} ios={icon.ios} size={16} color="#fff" />
         </View>
       )}
       <View style={[styles.labelContainer, !icon && styles.labelNoIcon]}>

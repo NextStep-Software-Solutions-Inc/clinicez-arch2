@@ -1,8 +1,9 @@
 import { createContext, useCallback, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { useAuth as useClerkAuth, useClerk } from '@clerk/expo';
-import * as SecureStore from 'expo-secure-store';
+import { storage as SecureStore } from '../utils/storage';
 import * as LocalAuthentication from 'expo-local-authentication';
+import { Platform } from 'react-native';
 import { getPatientByClerkId } from '../services/api/patientApi';
 import { upsertPatientSummary } from '../db/hydrate';
 import CustomAlertModal from '../components/ui/CustomAlertModal';
@@ -231,6 +232,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const authenticateWithBiometrics = async (): Promise<'success' | 'fallback' | 'error'> => {
+    if (Platform.OS === 'web') {
+      return 'fallback';
+    }
     try {
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: 'Unlock Clinic EZ',

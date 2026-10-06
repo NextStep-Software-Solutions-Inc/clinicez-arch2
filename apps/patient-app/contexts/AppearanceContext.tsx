@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import * as SecureStore from 'expo-secure-store';
+import { storage as SecureStore } from '../utils/storage';
 
 const THEME_PREFERENCE_KEY = 'theme_preference';
 

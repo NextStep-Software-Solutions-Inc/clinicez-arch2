@@ -1,5 +1,5 @@
 import { ScrollView, Alert } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
+import { storage as SecureStore } from '../../../utils/storage';
 import { useState, useEffect } from 'react';
 import { useOnboarding } from 'contexts/OnboardingContext';
 import { SettingsRow, SettingsSection } from '@ui/SettingsItem';

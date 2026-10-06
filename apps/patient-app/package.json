@@ -8,6 +8,7 @@
   "dependencies": {
     "@callstack/liquid-glass": "^0.8.0",
     "@clerk/expo": "^3.3.0",
+    "@expo/metro-runtime": "~56.0.21",
     "@gorhom/bottom-sheet": "^5.2.2",
     "@react-native-community/netinfo": "^12.0.1",
     "@react-navigation/bottom-tabs": "^8.0.0-alpha.33",
@@ -34,6 +35,7 @@
     "expo-status-bar": "~56.0.4",
     "expo-task-manager": "~56.0.18",
     "expo-updates": "~56.0.17",
+    "lucide-react-native": "^1.52.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-hook-form": "^7.77.0",
@@ -44,14 +46,19 @@
     "react-native-reanimated": "^4.4.1",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "4.25.2",
+    "react-native-svg": "15.15.4",
+    "react-native-web": "^0.21.2",
     "react-native-worklets": "^0.9.1",
+    "sql.js": "^1.14.2",
     "swr": "^2.4.1"
   },
   "devDependencies": {
     "@types/node": "^22.20.2",
     "@types/react": "~19.2.3",
+    "@types/sql.js": "^1.4.11",
     "babel-plugin-inline-import": "^3.0.0",
     "babel-plugin-module-resolver": "^5.0.0",
+    "babel-preset-expo": "~56.0.8",
     "drizzle-kit": "^0.31.10",
     "typescript": "~6.0.3"
   },
@@ -60,6 +67,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "build:web": "expo export -p web && node -e \"const fs = require('fs'); if(fs.existsSync('public')) fs.cpSync('public', 'dist', {recursive: true});\"",
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio",
     "typecheck": "tsc --noEmit"

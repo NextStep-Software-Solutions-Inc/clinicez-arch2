@@ -1,6 +1,6 @@
 import { Buffer } from 'buffer';
 import * as Crypto from 'expo-crypto';
-import * as SecureStore from 'expo-secure-store';
+import { storage } from '@utils/storage';
 import { db } from '@db/index';
 import { fileUploadConfig } from '@db/schema/fileUploadConfig';
 import { eq } from 'drizzle-orm';
@@ -59,7 +59,7 @@ export async function initializeMakAndFrkIfNeeded(
   let config = await getFileConfig(patientId, getToken);
   
   // Do we have the MAK locally and backend has it?
-  const localMak = await SecureStore.getItemAsync(getMakSecureKey(patientId));
+  const localMak = await storage.getItemAsync(getMakSecureKey(patientId));
   if (localMak && config.encryptedMAK) {
     return { status: 'ready' as const }; // we are good!
   }
@@ -97,8 +97,8 @@ export async function initializeMakAndFrkIfNeeded(
   }
   
   // Save locally
-  await SecureStore.setItemAsync(getMakSecureKey(patientId), makEncoded);
-  await SecureStore.setItemAsync(getFrkSecureKey(patientId), newFrk);
+  await storage.setItemAsync(getMakSecureKey(patientId), makEncoded);
+  await storage.setItemAsync(getFrkSecureKey(patientId), newFrk);
 
   // Update local DB to reflect the new encryptedMAK
   await db
@@ -122,8 +122,8 @@ export async function unlockMakWithFrk(patientId: string, frk: string, encrypted
     const makEncoded = await Crypto.aesDecryptAsync(sealed, frkKey, { output: 'base64' });
     
     // Success, save locally
-    await SecureStore.setItemAsync(getMakSecureKey(patientId), makEncoded);
-    await SecureStore.setItemAsync(getFrkSecureKey(patientId), frk);
+    await storage.setItemAsync(getMakSecureKey(patientId), makEncoded);
+    await storage.setItemAsync(getFrkSecureKey(patientId), frk);
     return true;
   } catch (error) {
     console.error('Failed to unlock MAK', error);
@@ -133,7 +133,7 @@ export async function unlockMakWithFrk(patientId: string, frk: string, encrypted
 
 // Regenerate FRK (assumes MAK is already available locally)
 export async function regenerateFrk(patientId: string, getToken: () => Promise<string | null>): Promise<string> {
-  const localMak = await SecureStore.getItemAsync(getMakSecureKey(patientId));
+  const localMak = await storage.getItemAsync(getMakSecureKey(patientId));
   if (!localMak) {
     throw new Error('Cannot regenerate FRK: No Master Access Key found on this device.');
   }
@@ -157,7 +157,7 @@ export async function regenerateFrk(patientId: string, getToken: () => Promise<s
   }
   
   // Save new FRK locally
-  await SecureStore.setItemAsync(getFrkSecureKey(patientId), newFrk);
+  await storage.setItemAsync(getFrkSecureKey(patientId), newFrk);
 
   // Update local DB
   await db

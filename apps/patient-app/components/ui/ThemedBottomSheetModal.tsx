@@ -31,4 +31,6 @@ const ThemedBottomSheetModal = forwardRef<BottomSheetModal, BottomSheetModalProp
 
 ThemedBottomSheetModal.displayName = 'ThemedBottomSheetModal';
 
+export type WebBottomSheetModalRef = BottomSheetModal;
+
 export default ThemedBottomSheetModal;

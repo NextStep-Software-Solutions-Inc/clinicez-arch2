@@ -1,6 +1,6 @@
 import { useNavigation, useTheme } from "@react-navigation/core";
-import { MaterialSymbol, SFSymbol } from "@react-navigation/native";
-import { View, Pressable, Platform, StyleSheet } from "react-native";
+import { AppIcon } from "@ui/Icon";
+import { View, Pressable, StyleSheet } from "react-native";
 import { useNotificationContext } from "contexts/NotificationContext";
 import ThemedText from "@ui/ThemedText";
 
@@ -16,10 +16,7 @@ export default function BottomTabsHeaderRight() {
                 onPressIn={() => navigation.navigate("Main", { screen: "NotificationScreen" })}
                 style={styles.iconBtn}
             >
-                {Platform.select({
-                    android: <MaterialSymbol name="notifications" size={28} color={colors.text} />,
-                    ios: <SFSymbol name="bell.fill" size={28} color={colors.text} />
-                })}
+                <AppIcon android="notifications" ios="bell.fill" size={24} color={colors.text} />
                 {/* Note: Kept your 32 > 0 condition, assuming it's for testing */}
                 {unreadCount > 0 && (
                     <View style={styles.badge}>
@@ -34,10 +31,7 @@ export default function BottomTabsHeaderRight() {
                 onPressIn={() => navigation.navigate("Main", { screen: "SettingsScreen" })}
                 style={styles.iconBtn} // 2. Applied the same style here for alignment
             >
-                {Platform.select({
-                    android: <MaterialSymbol name="settings" size={28} color={colors.text} />,
-                    ios: <SFSymbol name="gear" size={28} color={colors.text} />
-                })}
+                <AppIcon android="settings" ios="gear" size={24} color={colors.text} />
             </Pressable>
         </View>
     );
