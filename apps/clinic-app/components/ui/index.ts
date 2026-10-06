@@ -11,4 +11,5 @@ export { default as EmptyState, EmptyStateProps } from './EmptyState';
 export { default as ErrorState, ErrorStateProps } from './ErrorState';
 export { Skeleton, SkeletonList, SkeletonStat, SkeletonProps } from './Skeleton';
 export { default as Modal, ModalProps } from './Modal';
+export { default as SegmentedControl, SegmentedControlProps, SegmentedOption } from './SegmentedControl';
 export { default as FeedbackHost } from './FeedbackHost';

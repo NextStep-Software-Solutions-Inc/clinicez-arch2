@@ -6,13 +6,17 @@ import {
   RefreshControl,
   Pressable,
   ActivityIndicator,
-  TextInput,
   Modal,
-  Alert,
   Linking,
 } from 'react-native';
+import { TextInput } from '@ui/Text';
+import { Alert } from '@utils/feedback';
 import { useNavigation } from '@react-navigation/native';
-import { ThemedText, Badge, Button, Input, Card } from '@ui';
+import { ThemedText, Badge, Button, Input, Card, Icon, EmptyState, ErrorState, SkeletonList } from '@ui';
+import SegmentedControl from '@ui/SegmentedControl';
+import { useClinic } from '@context/ClinicContext';
+import { useStaff } from '@context/StaffContext';
+import { notify } from '@utils/feedback';
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
 import PrescriptionSlipModal from '../../components/PrescriptionSlipModal';
@@ -32,177 +36,23 @@ import {
 } from '../../services/clinicService';
 import { offlineSyncService } from '../../services/offlineSyncService';
 
-const SAMPLE_PATIENTS: ClinicPatient[] = [
-  {
-    id: 'pat-101',
-    tenantId: 'tenant-default',
-    clinicId: 'clinic-default',
-    patientCode: 'PAT-2026-00001',
-    firstName: 'Maria',
-    lastName: 'Santos',
-    middleName: 'Delos',
-    fullName: 'Santos, Maria D.',
-    dateOfBirth: '1958-03-12',
-    age: 68,
-    gender: 'Female',
-    civilStatus: 'Widowed',
-    contactNumber: '0917-123-4567',
-    email: 'maria.santos@email.ph',
-    addressLine: 'Block 4 Lot 12, Rose St.',
-    barangay: 'Poblacion',
-    city: 'San Pedro',
-    province: 'Laguna',
-    emergencyContactName: 'Juan Santos',
-    emergencyContactPhone: '0918-765-4321',
-    emergencyContactRelationship: 'Son',
-    philHealthNumber: '12-050412345-6',
-    seniorCitizenId: 'SC-SP-2018-0912',
-    pwdId: undefined,
-    bloodType: 'O+',
-    allergies: 'Penicillin, Aspirin',
-    chronicConditions: 'Hypertension, Dyslipidemia',
-    alerts: 'High fall risk; Bilateral knee osteoarthritis',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'pat-102',
-    tenantId: 'tenant-default',
-    clinicId: 'clinic-default',
-    patientCode: 'PAT-2026-00002',
-    firstName: 'Juan',
-    lastName: 'Dela Cruz',
-    middleName: 'Bautista',
-    fullName: 'Dela Cruz, Juan B.',
-    dateOfBirth: '1984-07-22',
-    age: 42,
-    gender: 'Male',
-    civilStatus: 'Married',
-    contactNumber: '0919-888-7766',
-    email: 'juan.delacruz@work.com',
-    addressLine: '77 Kalayaan Ave',
-    barangay: 'San Vicente',
-    city: 'Biñan',
-    province: 'Laguna',
-    emergencyContactName: 'Clara Dela Cruz',
-    emergencyContactPhone: '0919-888-7767',
-    emergencyContactRelationship: 'Spouse',
-    philHealthNumber: '03-025412399-1',
-    seniorCitizenId: undefined,
-    pwdId: undefined,
-    bloodType: 'A+',
-    allergies: 'None known',
-    chronicConditions: 'None',
-    alerts: undefined,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'pat-103',
-    tenantId: 'tenant-default',
-    clinicId: 'clinic-default',
-    patientCode: 'PAT-2026-00003',
-    firstName: 'Elena',
-    lastName: 'Ramos',
-    middleName: 'Villanueva',
-    fullName: 'Ramos, Elena V.',
-    dateOfBirth: '1995-11-04',
-    age: 30,
-    gender: 'Female',
-    civilStatus: 'Single',
-    contactNumber: '0922-334-5566',
-    email: 'elena.ramos@cloud.com',
-    addressLine: '12 Emerald Court',
-    barangay: 'Canlalay',
-    city: 'Biñan',
-    province: 'Laguna',
-    emergencyContactName: 'Teresa Ramos',
-    emergencyContactPhone: '0922-334-5567',
-    emergencyContactRelationship: 'Mother',
-    philHealthNumber: '18-091283746-5',
-    seniorCitizenId: undefined,
-    pwdId: 'PWD-BIN-2022-441',
-    bloodType: 'B+',
-    allergies: 'Sulfonamides, NSAIDs',
-    chronicConditions: 'Bronchial Asthma',
-    alerts: 'Asthma exacerbation on cold weather',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'pat-104',
-    tenantId: 'tenant-default',
-    clinicId: 'clinic-default',
-    patientCode: 'PAT-2026-00004',
-    firstName: 'Joshua',
-    lastName: 'Garcia',
-    middleName: 'Mendoza',
-    fullName: 'Garcia, Joshua M.',
-    dateOfBirth: '2005-09-14',
-    age: 20,
-    gender: 'Male',
-    civilStatus: 'Single',
-    contactNumber: '0917-555-0192',
-    email: 'joshua.garcia@univ.edu.ph',
-    addressLine: 'Dorm 3, University Village',
-    barangay: 'San Antonio',
-    city: 'Biñan',
-    province: 'Laguna',
-    emergencyContactName: 'Lourdes Garcia',
-    emergencyContactPhone: '0917-555-0193',
-    emergencyContactRelationship: 'Mother',
-    bloodType: 'O+',
-    allergies: 'None known',
-    chronicConditions: 'None',
-    verificationStatus: 'PendingVerification',
-    customFields: {
-      classification: 'Student',
-      student_id: '2026-10492',
-      college: 'College of Computer Studies',
-      program: 'BS Computer Science',
-      year_level: '1st Year',
-    },
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'pat-105',
-    tenantId: 'tenant-default',
-    clinicId: 'clinic-default',
-    patientCode: 'PAT-2026-00005',
-    firstName: 'Clarissa',
-    lastName: 'Mendoza',
-    middleName: 'Reyes',
-    fullName: 'Mendoza, Clarissa R.',
-    dateOfBirth: '1981-04-18',
-    age: 45,
-    gender: 'Female',
-    civilStatus: 'Married',
-    contactNumber: '0920-777-3321',
-    email: 'cmendoza@univ.edu.ph',
-    addressLine: '45 Faculty Row',
-    barangay: 'San Vicente',
-    city: 'San Pedro',
-    province: 'Laguna',
-    emergencyContactName: 'Eduardo Mendoza',
-    emergencyContactPhone: '0920-777-3322',
-    emergencyContactRelationship: 'Spouse',
-    bloodType: 'B+',
-    allergies: 'None known',
-    chronicConditions: 'Mild Hypertension',
-    verificationStatus: 'Verified',
-    customFields: {
-      classification: 'Employee',
-      employee_id: 'EMP-2019-041',
-      department: 'Department of Mathematics',
-    },
-    createdAt: new Date().toISOString(),
-  },
-];
+const humanizeKey = (key: string) => {
+  const words = key.replace(/_/g, ' ');
+  return words.charAt(0).toUpperCase() + words.slice(1);
+};
+
+type PatientFilter = 'ALL' | 'ALERTS' | 'SENIOR_PWD' | 'STUDENTS' | 'EMPLOYEES';
 
 export default function PatientsScreen() {
   const navigation = useNavigation<any>();
-  const [patients, setPatients] = useState<ClinicPatient[]>(SAMPLE_PATIENTS);
-  const [loading, setLoading] = useState(false);
+  const { letterhead } = useClinic();
+  const { currentName } = useStaff();
+  const [patients, setPatients] = useState<ClinicPatient[] | null>(null);
+  const [patientsError, setPatientsError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterMode, setFilterMode] = useState<'ALL' | 'ALERTS' | 'SENIOR_PWD' | 'STUDENTS' | 'EMPLOYEES'>('ALL');
+  const [filterMode, setFilterMode] = useState<PatientFilter>('ALL');
 
   // Register Modal state
   const [registerVisible, setRegisterVisible] = useState(false);
@@ -211,7 +61,7 @@ export default function PatientsScreen() {
   const [formStudentId, setFormStudentId] = useState('');
   const [formCollege, setFormCollege] = useState('');
   const [formProgram, setFormProgram] = useState('');
-  const [formYearLevel, setFormYearLevel] = useState('1st Year');
+  const [formYearLevel, setFormYearLevel] = useState('');
   const [formEmployeeId, setFormEmployeeId] = useState('');
   const [formDepartment, setFormDepartment] = useState('');
   const [tenantCustomFields, setTenantCustomFields] = useState<ClinicCustomFieldDefinition[]>([]);
@@ -219,19 +69,19 @@ export default function PatientsScreen() {
   const [formFirstName, setFormFirstName] = useState('');
   const [formLastName, setFormLastName] = useState('');
   const [formMiddleName, setFormMiddleName] = useState('');
-  const [formDob, setFormDob] = useState('1990-01-01');
+  const [formDob, setFormDob] = useState('');
   const [formGender, setFormGender] = useState('Male');
   const [formCivilStatus, setFormCivilStatus] = useState('Single');
   const [formPhone, setFormPhone] = useState('');
   const [formEmail, setFormEmail] = useState('');
   const [formAddress, setFormAddress] = useState('');
   const [formBarangay, setFormBarangay] = useState('');
-  const [formCity, setFormCity] = useState('San Pedro');
-  const [formProvince, setFormProvince] = useState('Laguna');
+  const [formCity, setFormCity] = useState('');
+  const [formProvince, setFormProvince] = useState('');
   const [formPhilHealth, setFormPhilHealth] = useState('');
   const [formSeniorId, setFormSeniorId] = useState('');
   const [formPwdId, setFormPwdId] = useState('');
-  const [formBloodType, setFormBloodType] = useState('O+');
+  const [formBloodType, setFormBloodType] = useState('');
   const [formAllergies, setFormAllergies] = useState('');
   const [formChronicConditions, setFormChronicConditions] = useState('');
   const [formAlerts, setFormAlerts] = useState('');
@@ -241,6 +91,7 @@ export default function PatientsScreen() {
   const [selectedPatient, setSelectedPatient] = useState<ClinicPatient | null>(null);
   const [patientChart, setPatientChart] = useState<PatientChart | null>(null);
   const [loadingChart, setLoadingChart] = useState(false);
+  const [chartError, setChartError] = useState<string | null>(null);
 
   // Standalone PhilHealth Profile Modal state
   const [philHealthProfileModalVisible, setPhilHealthProfileModalVisible] = useState(false);
@@ -251,9 +102,9 @@ export default function PatientsScreen() {
   const [slipModalVisible, setSlipModalVisible] = useState(false);
   const [attachModalVisible, setAttachModalVisible] = useState(false);
   const [targetOrderId, setTargetOrderId] = useState<string | null>(null);
-  const [externalLabName, setExternalLabName] = useState('Hi-Precision Diagnostics');
+  const [externalLabName, setExternalLabName] = useState('');
   const [externalFileType, setExternalFileType] = useState<'Photo' | 'PDF'>('PDF');
-  const [externalNotes, setExternalNotes] = useState('Verified external diagnostic report.');
+  const [externalNotes, setExternalNotes] = useState('');
   const [attaching, setAttaching] = useState(false);
 
   // External Physical Attachments & Verification (School Clinic & 80/20) state
@@ -274,15 +125,18 @@ export default function PatientsScreen() {
   const [targetPrescriptionNumber, setTargetPrescriptionNumber] = useState<string | undefined>(undefined);
   const [externalDispenseModalVisible, setExternalDispenseModalVisible] = useState(false);
 
-  // Offline Campus LAN Edge Outbox states
+  // Offline outbox states
   const [offlinePendingCount, setOfflinePendingCount] = useState(offlineSyncService.getPendingCount());
   const [syncingOffline, setSyncingOffline] = useState(false);
 
   const fetchPatients = useCallback(async () => {
     const [data, err] = await clinicService.getPatients(searchTerm || undefined);
-    if (!err && data && data.length > 0) {
-      setPatients(data);
+    if (err) {
+      setPatientsError(err.message || 'Unable to load patients.');
+      return;
     }
+    setPatientsError(null);
+    setPatients(data ?? []);
   }, [searchTerm]);
 
   useEffect(() => {
@@ -307,8 +161,8 @@ export default function PatientsScreen() {
   }, [fetchPatients]);
 
   const handleRegisterPatient = async () => {
-    if (!formFirstName.trim() || !formLastName.trim() || !formPhone.trim()) {
-      alert('First Name, Last Name, and Phone are required.');
+    if (!formFirstName.trim() || !formLastName.trim() || !formPhone.trim() || !formDob.trim()) {
+      Alert.alert('Missing details', 'First name, last name, date of birth and phone number are required.');
       return;
     }
 
@@ -362,15 +216,15 @@ export default function PatientsScreen() {
     setSavingPatient(false);
 
     if (newPat) {
-      setPatients((prev) => [newPat, ...prev]);
-      Alert.alert('Registration Successful', `Patient ${newPat.fullName} registered with code ${newPat.patientCode}.`);
+      setPatients((prev) => [newPat, ...(prev ?? [])]);
+      notify.success(`${newPat.fullName} registered (${newPat.patientCode}).`);
     } else {
-      // Campus LAN Offline Queue fallback
+      // Offline queue fallback
       const offlinePat = await offlineSyncService.enqueuePatient(payload);
-      setPatients((prev) => [offlinePat, ...prev]);
+      setPatients((prev) => [offlinePat, ...(prev ?? [])]);
       Alert.alert(
-        'Saved Locally (Offline Queue)',
-        `Campus edge node cached record for ${offlinePat.fullName} (${offlinePat.patientCode}). It will automatically sync to cloud when connection is active.`
+        'Saved on this device',
+        `${offlinePat.fullName} (${offlinePat.patientCode}) was saved locally because the server could not be reached. It will sync automatically once the connection is back.${err?.message ? `\n\n${err.message}` : ''}`
       );
     }
 
@@ -380,7 +234,7 @@ export default function PatientsScreen() {
     setFormStudentId('');
     setFormCollege('');
     setFormProgram('');
-    setFormYearLevel('1st Year');
+    setFormYearLevel('');
     setFormEmployeeId('');
     setFormDepartment('');
     setFormFirstName('');
@@ -402,21 +256,13 @@ export default function PatientsScreen() {
     setChartVisible(true);
     setLoadingChart(true);
     setLoadingAttachments(true);
-    const [chartData] = await clinicService.getPatientChart(patient.id);
+    setPatientChart(null);
+    const [chartData, chartErr] = await clinicService.getPatientChart(patient.id);
     if (chartData) {
       setPatientChart(chartData);
+      setChartError(null);
     } else {
-      // Fallback sample chart
-      setPatientChart({
-        patientId: patient.id,
-        patientName: patient.fullName,
-        totalVisits: 3,
-        consultations: [],
-        vitalsHistory: [],
-        proceduresHistory: [],
-        labOrdersHistory: [],
-        invoicesHistory: [],
-      });
+      setChartError(chartErr?.message || 'Unable to load the patient chart.');
     }
     setLoadingChart(false);
 
@@ -442,8 +288,12 @@ export default function PatientsScreen() {
   const handleVerifyAttachment = async (attachmentId: string, isApproved: boolean) => {
     setVerifyingAttachmentId(attachmentId);
     const rejectionReason = !isApproved ? 'Document illegible or missing official physician signature/stamp.' : undefined;
-    await clinicService.verifyRecordAttachment(attachmentId, isApproved, rejectionReason);
+    const [, verifyErr] = await clinicService.verifyRecordAttachment(attachmentId, isApproved, rejectionReason);
     setVerifyingAttachmentId(null);
+    if (verifyErr) {
+      notify.error(verifyErr.message || 'Could not update the document.');
+      return;
+    }
 
     setPatientAttachments((prev) =>
       prev.map((att) =>
@@ -453,18 +303,13 @@ export default function PatientsScreen() {
               verificationStatus: isApproved ? 'Verified' : 'Rejected',
               rejectionReason,
               verifiedAt: new Date().toISOString(),
-              verifiedByStaffName: 'Clinic Nurse / Reviewer',
+              verifiedByStaffName: currentName || undefined,
             }
           : att
       )
     );
 
-    Alert.alert(
-      isApproved ? 'Document Verified' : 'Document Rejected',
-      isApproved
-        ? 'The document has been verified and recorded into the official student/patient file.'
-        : 'The document has been marked as Rejected.'
-    );
+    notify.success(isApproved ? 'Document verified.' : 'Document rejected.');
   };
 
   const handleDownloadAttachment = async (attachmentId: string) => {
@@ -472,14 +317,14 @@ export default function PatientsScreen() {
       const url = clinicService.getRecordAttachmentDownloadUrl(attachmentId);
       await Linking.openURL(url);
     } catch (e: any) {
-      Alert.alert('Error', 'Unable to open document: ' + (e.message || 'Network error'));
+      Alert.alert('Unable to open document', e.message || 'Network error');
     }
   };
 
   const handleUploadDocument = async () => {
     if (!selectedPatient) return;
     if (!docTitle.trim()) {
-      Alert.alert('Required', 'Please enter a document title.');
+      Alert.alert('Title required', 'Enter a document title.');
       return;
     }
 
@@ -494,7 +339,7 @@ export default function PatientsScreen() {
       storageUri: `tenants/${selectedPatient.tenantId}/clinics/${selectedPatient.clinicId}/records/${Date.now()}.${docFileType === 'PDF' ? 'pdf' : 'jpg'}.cez`,
       documentDate: new Date().toISOString(),
       notes: docNotes.trim() || undefined,
-      uploadedByStaffName: 'Clinic Staff',
+      uploadedByStaffName: currentName || undefined,
       encryptionAlgorithm: 'AES-256-GCM',
       encryptionKeyId: 'cmk-v1',
     };
@@ -507,51 +352,24 @@ export default function PatientsScreen() {
       setUploadDocModalVisible(false);
       setDocTitle('');
       setDocNotes('');
-      Alert.alert('Success', 'Document attached to patient electronic health record.');
+      notify.success('Document attached to the patient record.');
     } else {
-      const queuedAtt = await offlineSyncService.enqueueAttachment(payload);
+      const queuedAtt = await offlineSyncService.enqueueAttachment(payload, currentName || undefined);
       setPatientAttachments((prev) => [queuedAtt, ...prev]);
       setUploadDocModalVisible(false);
       setDocTitle('');
       setDocNotes('');
-      Alert.alert('Saved Locally (Offline Queue)', 'Document queued on campus edge node. It will upload automatically once online.');
+      Alert.alert('Saved on this device', 'The document is queued and will upload automatically once the connection is back.');
     }
   };
 
   const handleViewSlip = async (orderId: string) => {
-    const [slip] = await clinicService.getLabOrderSlip(orderId);
+    const [slip, slipErr] = await clinicService.getLabOrderSlip(orderId);
     if (slip) {
       setSelectedSlip(slip);
       setSlipModalVisible(true);
     } else {
-      // Offline / dev preview fallback
-      const order = patientChart?.labOrdersHistory?.find(o => o.id === orderId);
-      if (selectedPatient) {
-        setSelectedSlip({
-          orderId: order?.id ?? orderId,
-          orderNumber: order?.orderNumber ?? 'ORD-2026-0001',
-          orderDate: order?.orderDate ?? new Date().toISOString(),
-          clinicName: 'Metro Health Outpatient Clinic',
-          clinicAddress: 'Unit 201 Medical Arts Bldg, San Pedro, Laguna',
-          clinicContact: '(02) 8123-4567 • info@metrohealth.ph',
-          doctorName: order?.orderedByDoctorName ?? 'Dr. Roberto Cruz, MD',
-          doctorPrcLicense: 'PRC-0149281',
-          patientId: selectedPatient.id,
-          patientName: selectedPatient.fullName,
-          patientAge: selectedPatient.age,
-          patientGender: selectedPatient.gender,
-          philHealthNumber: selectedPatient.philHealthNumber,
-          clinicalDiagnosis: order?.clinicalDiagnosis ?? 'Clinical diagnostic workup',
-          items: order?.items?.map(i => ({ testName: i.testName, category: i.category, instructions: i.instructions })) ?? [
-            { testName: 'Complete Blood Count (CBC)', category: 'Hematology', instructions: 'Purple EDTA' },
-            { testName: 'Fasting Blood Sugar (FBS)', category: 'Clinical Chemistry', instructions: '10h fasting' }
-          ],
-          publicUploadToken: order?.publicUploadToken ?? 'lab-token-89123',
-          publicUploadUrl: order?.publicUploadUrl ?? `https://portal.clinicez.ph/api/v1/public/lab-upload/token-demo`,
-          qrPayload: `CLINICEZ:ORDER:${order?.orderNumber ?? 'ORD-2026-0001'}:PAT:${selectedPatient.id}`
-        });
-        setSlipModalVisible(true);
-      }
+      notify.error(slipErr?.message || 'Unable to load the lab requisition slip.');
     }
   };
 
@@ -568,15 +386,15 @@ export default function PatientsScreen() {
       documentType: externalFileType,
       notes: externalNotes,
       documentUrl: 'https://storage.clinicez.ph/external-labs/lab-result.pdf',
-      uploadedBy: 'Clinic Reception'
+      uploadedBy: currentName || undefined
     });
     setAttaching(false);
     setAttachModalVisible(false);
 
     if (err) {
-      Alert.alert('Notice', 'Result document attached to patient electronic health record.');
+      notify.error(err.message || 'Could not attach the laboratory result.');
     } else {
-      Alert.alert('Success', 'External laboratory result attached. Requisition marked as Completed.');
+      notify.success('External laboratory result attached. Requisition marked as completed.');
     }
     if (selectedPatient) {
       handleOpenChart(selectedPatient);
@@ -584,59 +402,12 @@ export default function PatientsScreen() {
   };
 
   const handleViewPrescriptionSlip = async (consultation: ConsultationRecord) => {
-    const [slip] = await clinicService.getPrescriptionSlip(consultation.id);
+    const [slip, slipErr] = await clinicService.getPrescriptionSlip(consultation.id);
     if (slip) {
       setSelectedRxSlip(slip);
       setRxSlipModalVisible(true);
     } else {
-      // Offline fallback / demo preview
-      const fallbackToken = consultation.rxPublicVerificationToken || 'rx-token-preview';
-      const fallbackNumber = consultation.prescriptionNumber || `RX-${new Date().getFullYear()}-00281`;
-      setSelectedRxSlip({
-        consultationId: consultation.id,
-        prescriptionNumber: fallbackNumber,
-        issuedAt: consultation.encounterDate || new Date().toISOString(),
-        clinicName: 'Metro Health Outpatient Clinic',
-        clinicAddress: 'Unit 201 Medical Arts Bldg, San Pedro, Laguna',
-        clinicContact: '(02) 8123-4567 • rx@metrohealth.ph',
-        doctorName: consultation.doctorName || 'Dr. Roberto Cruz, MD',
-        doctorPrcLicense: consultation.doctorPrcLicense || 'PRC-0149281',
-        doctorPtr: consultation.doctorPtr || 'PTR-892104',
-        doctorS2License: consultation.doctorS2License || 'S2-9482014',
-        doctorSpecialization: 'General Outpatient Medicine',
-        patientId: selectedPatient?.id || consultation.patientId,
-        patientName: selectedPatient?.fullName || consultation.patientName,
-        patientAge: selectedPatient?.age || 45,
-        patientGender: selectedPatient?.gender || 'Female',
-        philHealthNumber: selectedPatient?.philHealthNumber,
-        patientAllergies: selectedPatient?.allergies,
-        clinicalDiagnosis: consultation.assessment || 'Hypertension Stage 1',
-        specialInstructions: consultation.plan || 'Take medications daily as prescribed.',
-        items: consultation.prescriptions?.map(p => ({
-          itemId: p.id,
-          genericName: p.genericName,
-          brandName: p.brandName,
-          dosage: p.dosage,
-          form: p.form,
-          sig: p.sig,
-          quantity: p.quantity,
-          durationDays: p.durationDays || 30,
-          refills: p.refills || 0,
-          isDangerousDrug: p.isDangerousDrug,
-          remarks: p.remarks,
-        })) || [],
-        publicVerificationToken: fallbackToken,
-        publicVerificationUrl: `https://portal.clinicez.ph/api/v1/public/rx-verify/${fallbackToken}`,
-        qrPayload: `CLINICEZ:RX:${fallbackNumber}:${fallbackToken}`,
-        dispenseStatus: consultation.rxDispenseStatus || 'Pending',
-        dispensedPharmacyName: consultation.rxDispensedPharmacyName,
-        dispensedPharmacistName: consultation.rxDispensedPharmacistName,
-        dispensedPharmacistPrc: consultation.rxDispensedPharmacistPrc,
-        dispensedReceiptNumber: consultation.rxDispensedReceiptNumber,
-        dispensedAt: consultation.rxDispensedAt,
-        dispenseNotes: consultation.rxDispenseNotes,
-      });
-      setRxSlipModalVisible(true);
+      notify.error(slipErr?.message || 'Unable to load the prescription slip.');
     }
   };
 
@@ -670,16 +441,20 @@ export default function PatientsScreen() {
 
   const handleQueueCheckIn = async (patient: ClinicPatient) => {
     const isUrgent = patient.alerts?.toLowerCase().includes('fall') || patient.alerts?.toLowerCase().includes('chest');
-    await clinicService.checkInPatient({
+    const [, checkInErr] = await clinicService.checkInPatient({
       patientId: patient.id,
       patientName: patient.fullName,
       priority: isUrgent ? 'Urgent' : 'Routine',
-      chiefComplaint: patient.chronicConditions ? `Follow-up: ${patient.chronicConditions}` : 'General Consultation',
+      chiefComplaint: patient.chronicConditions ? `Follow-up: ${patient.chronicConditions}` : 'General consultation',
     });
+    if (checkInErr) {
+      notify.error(checkInErr.message || 'Could not add the patient to the queue.');
+      return;
+    }
     navigation.navigate('Dashboard');
   };
 
-  const filteredPatients = patients.filter((p) => {
+  const filteredPatients = (patients ?? []).filter((p) => {
     if (filterMode === 'ALERTS') {
       return (p.allergies && p.allergies.length > 0) || (p.alerts && p.alerts.length > 0);
     }
@@ -695,17 +470,30 @@ export default function PatientsScreen() {
     return true;
   });
 
+  const handleSyncNow = async () => {
+    setSyncingOffline(true);
+    const report = await offlineSyncService.syncPendingOutbox();
+    setSyncingOffline(false);
+    Alert.alert(
+      'Sync complete',
+      `Synced ${report.syncedPatients} patient(s) and ${report.syncedAttachments} attachment(s).` +
+        (report.failedCount > 0 ? ` (${report.failedCount} remaining)` : '')
+    );
+    fetchPatients();
+  };
+
+  const retryPatients = () => {
+    setLoading(true);
+    fetchPatients().finally(() => setLoading(false));
+  };
+
+  const showSkeleton = loading && !refreshing && patients === null;
+
   return (
     <ResponsiveLayout
-      headerTitle="Patient Registry & EMR"
-      headerSubtitle="Master Patient Index • Demographic & Clinical Records"
+      headerTitle="Patients"
       rightAction={
-        <Button
-          title="+ Register Walk-In"
-          variant="primary"
-          size="sm"
-          onPress={() => setRegisterVisible(true)}
-        />
+        <Button title="Register patient" variant="primary" size="sm" icon="plus" onPress={() => setRegisterVisible(true)} />
       }
     >
       <ScrollView
@@ -713,195 +501,183 @@ export default function PatientsScreen() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.primary]} />}
       >
-      <View style={styles.headerRow}>
-        <View>
-          <ThemedText style={styles.subtitle}>Master Patient Index</ThemedText>
-          <ThemedText style={styles.title}>Patient Registry</ThemedText>
-        </View>
-        <Pressable style={styles.registerBtn} onPress={() => setRegisterVisible(true)}>
-          <ThemedText style={styles.registerBtnText}>+ Register Walk-In</ThemedText>
-        </Pressable>
-      </View>
-
-      {/* Offline Outbox Sync Banner */}
+      {/* Offline outbox sync banner */}
       {offlinePendingCount > 0 && (
         <View style={styles.offlineBanner}>
-          <View style={{ flex: 1 }}>
-            <ThemedText style={styles.offlineBannerTitle}>
-              📶 Campus LAN Offline Queue: {offlinePendingCount} pending item{offlinePendingCount > 1 ? 's' : ''}
+          <Icon name="wifi" size={theme.sizes.iconMd} color={theme.colors.warningText} />
+          <View style={styles.offlineBannerText}>
+            <ThemedText variant="bodyBold" color={theme.colors.warningText}>
+              {offlinePendingCount} item{offlinePendingCount > 1 ? 's' : ''} waiting to sync
             </ThemedText>
-            <ThemedText style={styles.offlineBannerSubtitle}>
-              Walk-in registrations and uploaded attachments saved locally on edge storage.
+            <ThemedText variant="small" color={theme.colors.warningText}>
+              Registrations and documents saved on this device are uploaded once the connection is back.
             </ThemedText>
           </View>
-          <Pressable
-            style={styles.syncNowBtn}
+          <Button
+            title={syncingOffline ? 'Syncing…' : 'Sync now'}
+            variant="outline"
+            size="sm"
+            icon="refresh"
+            loading={syncingOffline}
             disabled={syncingOffline}
-            onPress={async () => {
-              setSyncingOffline(true);
-              const report = await offlineSyncService.syncPendingOutbox();
-              setSyncingOffline(false);
-              Alert.alert(
-                'Sync Complete',
-                `Synced ${report.syncedPatients} patient(s) and ${report.syncedAttachments} attachment(s).` +
-                  (report.failedCount > 0 ? ` (${report.failedCount} remaining)` : '')
-              );
-              fetchPatients();
-            }}
-          >
-            <ThemedText style={styles.syncNowBtnText}>
-              {syncingOffline ? 'Syncing...' : '↻ Sync Now'}
-            </ThemedText>
-          </Pressable>
+            onPress={handleSyncNow}
+          />
         </View>
       )}
 
-      {/* Search Bar */}
-      <View style={styles.searchBar}>
-        <ThemedText style={styles.searchIcon}>🔍</ThemedText>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search by name, patient code, phone, Student ID..."
-          placeholderTextColor="#9CA3AF"
-          value={searchTerm}
-          onChangeText={setSearchTerm}
-          onSubmitEditing={fetchPatients}
-        />
-        {searchTerm ? (
-          <Pressable onPress={() => setSearchTerm('')}>
-            <ThemedText style={{ color: '#9CA3AF', fontSize: 16 }}>✕</ThemedText>
-          </Pressable>
-        ) : null}
-      </View>
+      {/* Search */}
+      <Input
+        value={searchTerm}
+        onChangeText={setSearchTerm}
+        onSubmitEditing={fetchPatients}
+        placeholder="Search by name, patient code, phone or ID number"
+        leftIcon="search"
+        rightIcon={searchTerm ? 'close' : undefined}
+        onRightIconPress={() => setSearchTerm('')}
+        returnKeyType="search"
+        containerStyle={styles.searchInput}
+      />
 
-      {/* Filter Tabs */}
-      <View style={styles.filterRow}>
-        {[
-          { key: 'ALL', label: 'All Patients' },
-          { key: 'STUDENTS', label: '🎓 Students' },
-          { key: 'EMPLOYEES', label: '💼 Employees' },
-          { key: 'ALERTS', label: '⚠️ Alerts & Allergies' },
-          { key: 'SENIOR_PWD', label: '👵 Senior & PWD (RA 9994/10754)' },
-        ].map((tab) => {
-          const isActive = filterMode === tab.key;
-          return (
-            <Pressable
-              key={tab.key}
-              onPress={() => setFilterMode(tab.key as any)}
-              style={[styles.filterTab, isActive && styles.filterTabActive]}
-            >
-              <ThemedText style={[styles.filterTabText, isActive && styles.filterTabTextActive]}>
-                {tab.label}
-              </ThemedText>
-            </Pressable>
-          );
-        })}
-      </View>
+      {/* Filters */}
+      <SegmentedControl<PatientFilter>
+        value={filterMode}
+        onChange={setFilterMode}
+        options={[
+          { value: 'ALL', label: 'All patients' },
+          { value: 'STUDENTS', label: 'Students' },
+          { value: 'EMPLOYEES', label: 'Employees' },
+          { value: 'ALERTS', label: 'Alerts & allergies' },
+          { value: 'SENIOR_PWD', label: 'Senior & PWD' },
+        ]}
+      />
 
-      {loading && !refreshing ? (
-        <ActivityIndicator size="large" color="#0284C7" style={{ padding: 40 }} />
+      {showSkeleton ? (
+        <Card>
+          <View style={styles.skeletonWrap}>
+            <SkeletonList rows={5} rowHeight={theme.sizes.controlLg + theme.spacing.lg} />
+          </View>
+        </Card>
+      ) : patientsError && patients === null ? (
+        <ErrorState title="Unable to load patients" message={patientsError} onRetry={retryPatients} />
+      ) : filteredPatients.length === 0 ? (
+        <Card>
+          <EmptyState
+            icon="patients"
+            title={searchTerm || filterMode !== 'ALL' ? 'No patients match your search' : 'No patients registered yet'}
+            description={
+              searchTerm || filterMode !== 'ALL'
+                ? 'Try a different name, code or filter.'
+                : 'Register the first patient to start building the clinic registry.'
+            }
+            actionTitle={searchTerm || filterMode !== 'ALL' ? undefined : 'Register patient'}
+            onAction={searchTerm || filterMode !== 'ALL' ? undefined : () => setRegisterVisible(true)}
+          />
+        </Card>
       ) : (
         <View style={styles.list}>
-          {filteredPatients.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <ThemedText style={styles.emptyText}>No patients match your search or filter.</ThemedText>
-            </View>
-          ) : (
-            filteredPatients.map((item) => (
-              <View key={item.id} style={styles.card}>
-                <View style={styles.cardHeader}>
-                  <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <ThemedText style={styles.patientName}>{item.fullName}</ThemedText>
-                      <ThemedText style={styles.codeBadge}>{item.patientCode}</ThemedText>
-                      {item.verificationStatus === 'PendingVerification' && (
-                        <ThemedText style={{ fontSize: 10, fontWeight: '700', color: '#D97706', backgroundColor: '#FEF3C7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                          ⏳ Pending Verification
-                        </ThemedText>
-                      )}
-                    </View>
-                    <ThemedText style={styles.demographicsText}>
-                      {item.age} yrs • {item.gender} • {item.civilStatus ?? 'Single'} • 🩸 {item.bloodType ?? 'O+'}
-                    </ThemedText>
-                    {item.customFields?.student_id ? (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginVertical: 3 }}>
-                        <ThemedText style={{ fontSize: 11, fontWeight: '700', color: '#1E40AF', backgroundColor: '#DBEAFE', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                          🎓 ID: {item.customFields.student_id} {item.customFields.program ? `• ${item.customFields.program}` : ''} {item.customFields.year_level ? `(${item.customFields.year_level})` : ''}
-                        </ThemedText>
-                      </View>
-                    ) : item.customFields?.employee_id ? (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginVertical: 3 }}>
-                        <ThemedText style={{ fontSize: 11, fontWeight: '700', color: '#065F46', backgroundColor: '#D1FAE5', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                          💼 EMP: {item.customFields.employee_id} {item.customFields.department ? `• ${item.customFields.department}` : ''}
-                        </ThemedText>
-                      </View>
-                    ) : null}
-                    <ThemedText style={styles.contactText}>
-                      📞 {item.contactNumber} {item.city ? `• ${item.barangay ?? ''}, ${item.city}` : ''}
-                    </ThemedText>
-                  </View>
-                </View>
+          {filteredPatients.map((item) => {
+            const demographics = [
+              item.age !== undefined && item.age !== null ? `${item.age} yrs` : null,
+              item.gender,
+              item.civilStatus,
+              item.bloodType ? `Blood type ${item.bloodType}` : null,
+            ]
+              .filter(Boolean)
+              .join(' • ');
+            const location = item.city ? [item.barangay, item.city].filter(Boolean).join(', ') : '';
+            const hasAllergies = !!item.allergies && item.allergies !== 'None known';
 
-                {/* Healthcare IDs Row */}
-                <View style={styles.idsRow}>
-                  {item.philHealthNumber ? (
-                    <View style={styles.idBadge}>
-                      <ThemedText style={styles.idBadgeText}>PHIC: {item.philHealthNumber}</ThemedText>
+            return (
+              <Card key={item.id} style={styles.patientCard}>
+                <View style={styles.cardBody}>
+                  <View style={styles.cardTitleRow}>
+                    <ThemedText variant="h3" style={styles.patientName}>
+                      {item.fullName}
+                    </ThemedText>
+                    <Badge label={item.patientCode} variant="neutral" />
+                    {item.verificationStatus === 'PendingVerification' && (
+                      <Badge label="Pending verification" variant="warning" icon="hourglass" />
+                    )}
+                  </View>
+
+                  {demographics ? (
+                    <ThemedText variant="body" color={theme.colors.textSecondary}>
+                      {demographics}
+                    </ThemedText>
+                  ) : null}
+
+                  {item.customFields?.student_id ? (
+                    <Badge
+                      label={`Student ID ${item.customFields.student_id}${item.customFields.program ? ` • ${item.customFields.program}` : ''}${item.customFields.year_level ? ` (${item.customFields.year_level})` : ''}`}
+                      variant="info"
+                      style={styles.selfStart}
+                    />
+                  ) : item.customFields?.employee_id ? (
+                    <Badge
+                      label={`Employee ID ${item.customFields.employee_id}${item.customFields.department ? ` • ${item.customFields.department}` : ''}`}
+                      variant="success"
+                      style={styles.selfStart}
+                    />
+                  ) : null}
+
+                  <ThemedText variant="small" color={theme.colors.textMuted}>
+                    {[item.contactNumber, location].filter(Boolean).join(' • ')}
+                  </ThemedText>
+
+                  {item.philHealthNumber || item.seniorCitizenId || item.pwdId ? (
+                    <View style={styles.badgeRow}>
+                      {item.philHealthNumber ? <Badge label={`PhilHealth ${item.philHealthNumber}`} variant="primary" /> : null}
+                      {item.seniorCitizenId ? <Badge label={`Senior ID ${item.seniorCitizenId}`} variant="warning" /> : null}
+                      {item.pwdId ? <Badge label={`PWD ID ${item.pwdId}`} variant="purple" /> : null}
                     </View>
                   ) : null}
-                  {item.seniorCitizenId ? (
-                    <View style={[styles.idBadge, { backgroundColor: '#FEF3C7', borderColor: '#FDE68A' }]}>
-                      <ThemedText style={[styles.idBadgeText, { color: '#B45309' }]}>
-                        👵 Senior ID: {item.seniorCitizenId}
+
+                  {hasAllergies ? (
+                    <View style={[styles.noticeStrip, styles.allergyStrip]}>
+                      <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
+                      <ThemedText variant="small" color={theme.colors.emergencyText} style={styles.noticeText}>
+                        Allergies: {item.allergies}
                       </ThemedText>
                     </View>
                   ) : null}
-                  {item.pwdId ? (
-                    <View style={[styles.idBadge, { backgroundColor: '#EDE9FE', borderColor: '#DDD6FE' }]}>
-                      <ThemedText style={[styles.idBadgeText, { color: '#6D28D9' }]}>
-                        ♿ PWD ID: {item.pwdId}
+
+                  {item.alerts ? (
+                    <View style={[styles.noticeStrip, styles.alertStrip]}>
+                      <Icon name="alert" size={theme.sizes.iconSm} color={theme.colors.warningText} />
+                      <ThemedText variant="small" color={theme.colors.warningText} style={styles.noticeText}>
+                        {item.alerts}
                       </ThemedText>
                     </View>
                   ) : null}
                 </View>
 
-                {/* Clinical Alerts */}
-                {item.allergies && item.allergies !== 'None known' ? (
-                  <View style={styles.allergyBanner}>
-                    <ThemedText style={styles.allergyText}>⚠️ ALLERGIES: {item.allergies}</ThemedText>
-                  </View>
-                ) : null}
-
-                {item.alerts ? (
-                  <View style={styles.alertBanner}>
-                    <ThemedText style={styles.alertText}>🚨 CLINICAL ALERT: {item.alerts}</ThemedText>
-                  </View>
-                ) : null}
-
-                {/* Actions */}
                 <View style={styles.actionRow}>
-                  <Pressable style={styles.chartBtn} onPress={() => handleOpenChart(item)}>
-                    <ThemedText style={styles.chartBtnText}>📋 View Chart</ThemedText>
-                  </Pressable>
-                  <Pressable
-                    style={[styles.chartBtn, { backgroundColor: '#EEF2FF', borderColor: '#C7D2FE' }]}
+                  <Button title="View chart" variant="outline" size="sm" icon="clipboard" onPress={() => handleOpenChart(item)} />
+                  <Button
+                    title="PhilHealth"
+                    variant="outline"
+                    size="sm"
+                    icon="shield"
                     onPress={() => handleOpenPhilHealthProfile(item)}
-                  >
-                    <ThemedText style={[styles.chartBtnText, { color: '#4F46E5' }]}>🏥 PhilHealth Profile</ThemedText>
-                  </Pressable>
-                  <Pressable
-                    style={styles.appointmentBtn}
+                  />
+                  <Button
+                    title="Book appointment"
+                    variant="secondary"
+                    size="sm"
+                    icon="calendar"
                     onPress={() => navigation.navigate('Appointments', { patientId: item.id, patientName: item.fullName })}
-                  >
-                    <ThemedText style={styles.appointmentBtnText}>📅 Book Appt</ThemedText>
-                  </Pressable>
-                  <Pressable style={styles.queueBtn} onPress={() => handleQueueCheckIn(item)}>
-                    <ThemedText style={styles.queueBtnText}>⚡ Check In to Queue</ThemedText>
-                  </Pressable>
+                  />
+                  <Button
+                    title="Add to queue"
+                    variant="primary"
+                    size="sm"
+                    icon="plus"
+                    onPress={() => handleQueueCheckIn(item)}
+                  />
                 </View>
-              </View>
-            ))
-          )}
+              </Card>
+            );
+          })}
         </View>
       )}
 
@@ -912,7 +688,7 @@ export default function PatientsScreen() {
             <View style={styles.modalHeader}>
               <ThemedText style={styles.modalTitle}>Register Walk-In Patient</ThemedText>
               <Pressable onPress={() => setRegisterVisible(false)}>
-                <ThemedText style={styles.modalCloseText}>✕</ThemedText>
+                <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
               </Pressable>
             </View>
 
@@ -928,7 +704,7 @@ export default function PatientsScreen() {
                       onPress={() => setFormClassification(cat)}
                     >
                       <ThemedText style={[styles.categoryPillText, formClassification === cat && styles.categoryPillTextActive]}>
-                        {cat === 'General' ? '👤 General' : cat === 'Student' ? '🎓 Student' : '💼 Employee'}
+                        {cat === 'General' ? 'General' : cat === 'Student' ? 'Student' : 'Employee'}
                       </ThemedText>
                     </Pressable>
                   ))}
@@ -938,14 +714,14 @@ export default function PatientsScreen() {
               {/* Student-specific Institutional Fields */}
               {formClassification === 'Student' && (
                 <View style={styles.institutionalBox}>
-                  <ThemedText style={styles.institutionalBoxTitle}>🎓 School Clinic: Student Details</ThemedText>
+                  <ThemedText style={styles.institutionalBoxTitle}>School Clinic: Student Details</ThemedText>
                   <View style={styles.formRow}>
                     <View style={{ flex: 1 }}>
                       <ThemedText style={styles.inputLabel}>Student ID / LRN *</ThemedText>
                       <TextInput
                         style={styles.textInput}
                         placeholder="e.g. 2026-10492"
-                        placeholderTextColor="#9CA3AF"
+                        placeholderTextColor={theme.colors.textMuted}
                         value={formStudentId}
                         onChangeText={setFormStudentId}
                       />
@@ -955,7 +731,7 @@ export default function PatientsScreen() {
                       <TextInput
                         style={styles.textInput}
                         placeholder="e.g. 1st Year"
-                        placeholderTextColor="#9CA3AF"
+                        placeholderTextColor={theme.colors.textMuted}
                         value={formYearLevel}
                         onChangeText={setFormYearLevel}
                       />
@@ -967,7 +743,7 @@ export default function PatientsScreen() {
                       <TextInput
                         style={styles.textInput}
                         placeholder="e.g. College of Computer Studies"
-                        placeholderTextColor="#9CA3AF"
+                        placeholderTextColor={theme.colors.textMuted}
                         value={formCollege}
                         onChangeText={setFormCollege}
                       />
@@ -977,7 +753,7 @@ export default function PatientsScreen() {
                       <TextInput
                         style={styles.textInput}
                         placeholder="e.g. BS Computer Science"
-                        placeholderTextColor="#9CA3AF"
+                        placeholderTextColor={theme.colors.textMuted}
                         value={formProgram}
                         onChangeText={setFormProgram}
                       />
@@ -989,14 +765,14 @@ export default function PatientsScreen() {
               {/* Employee-specific Institutional Fields */}
               {formClassification === 'Employee' && (
                 <View style={styles.institutionalBox}>
-                  <ThemedText style={styles.institutionalBoxTitle}>💼 School Clinic: Employee Details</ThemedText>
+                  <ThemedText style={styles.institutionalBoxTitle}>School Clinic: Employee Details</ThemedText>
                   <View style={styles.formRow}>
                     <View style={{ flex: 1 }}>
                       <ThemedText style={styles.inputLabel}>Employee ID *</ThemedText>
                       <TextInput
                         style={styles.textInput}
                         placeholder="e.g. EMP-2026-042"
-                        placeholderTextColor="#9CA3AF"
+                        placeholderTextColor={theme.colors.textMuted}
                         value={formEmployeeId}
                         onChangeText={setFormEmployeeId}
                       />
@@ -1006,7 +782,7 @@ export default function PatientsScreen() {
                       <TextInput
                         style={styles.textInput}
                         placeholder="e.g. Registrar / Faculty of Sciences"
-                        placeholderTextColor="#9CA3AF"
+                        placeholderTextColor={theme.colors.textMuted}
                         value={formDepartment}
                         onChangeText={setFormDepartment}
                       />
@@ -1030,7 +806,7 @@ export default function PatientsScreen() {
                     <TextInput
                       style={styles.textInput}
                       placeholder={f.placeholder || `Enter ${f.label}`}
-                      placeholderTextColor="#9CA3AF"
+                      placeholderTextColor={theme.colors.textMuted}
                       value={dynamicFieldValues[f.fieldKey] || ''}
                       onChangeText={(val) => setDynamicFieldValues((prev) => ({ ...prev, [f.fieldKey]: val }))}
                     />
@@ -1043,7 +819,7 @@ export default function PatientsScreen() {
                   <TextInput
                     style={styles.textInput}
                     placeholder="e.g. Maria"
-                    placeholderTextColor="#9CA3AF"
+                    placeholderTextColor={theme.colors.textMuted}
                     value={formFirstName}
                     onChangeText={setFormFirstName}
                   />
@@ -1053,7 +829,7 @@ export default function PatientsScreen() {
                   <TextInput
                     style={styles.textInput}
                     placeholder="e.g. Santos"
-                    placeholderTextColor="#9CA3AF"
+                    placeholderTextColor={theme.colors.textMuted}
                     value={formLastName}
                     onChangeText={setFormLastName}
                   />
@@ -1066,7 +842,7 @@ export default function PatientsScreen() {
                   <TextInput
                     style={styles.textInput}
                     placeholder="e.g. Delos"
-                    placeholderTextColor="#9CA3AF"
+                    placeholderTextColor={theme.colors.textMuted}
                     value={formMiddleName}
                     onChangeText={setFormMiddleName}
                   />
@@ -1076,7 +852,7 @@ export default function PatientsScreen() {
                   <TextInput
                     style={styles.textInput}
                     placeholder="1990-01-01"
-                    placeholderTextColor="#9CA3AF"
+                    placeholderTextColor={theme.colors.textMuted}
                     value={formDob}
                     onChangeText={setFormDob}
                   />
@@ -1089,7 +865,7 @@ export default function PatientsScreen() {
                   <TextInput
                     style={styles.textInput}
                     placeholder="0917-123-4567"
-                    placeholderTextColor="#9CA3AF"
+                    placeholderTextColor={theme.colors.textMuted}
                     value={formPhone}
                     onChangeText={setFormPhone}
                   />
@@ -1099,7 +875,7 @@ export default function PatientsScreen() {
                   <TextInput
                     style={styles.textInput}
                     placeholder="O+, A+, B+, AB+"
-                    placeholderTextColor="#9CA3AF"
+                    placeholderTextColor={theme.colors.textMuted}
                     value={formBloodType}
                     onChangeText={setFormBloodType}
                   />
@@ -1111,7 +887,7 @@ export default function PatientsScreen() {
                 <TextInput
                   style={styles.textInput}
                   placeholder="12-345678901-2"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={theme.colors.textMuted}
                   value={formPhilHealth}
                   onChangeText={setFormPhilHealth}
                 />
@@ -1123,7 +899,7 @@ export default function PatientsScreen() {
                   <TextInput
                     style={styles.textInput}
                     placeholder="SC-SP-2020-001"
-                    placeholderTextColor="#9CA3AF"
+                    placeholderTextColor={theme.colors.textMuted}
                     value={formSeniorId}
                     onChangeText={setFormSeniorId}
                   />
@@ -1133,7 +909,7 @@ export default function PatientsScreen() {
                   <TextInput
                     style={styles.textInput}
                     placeholder="PWD-BIN-2022-001"
-                    placeholderTextColor="#9CA3AF"
+                    placeholderTextColor={theme.colors.textMuted}
                     value={formPwdId}
                     onChangeText={setFormPwdId}
                   />
@@ -1143,9 +919,9 @@ export default function PatientsScreen() {
               <View>
                 <ThemedText style={styles.inputLabel}>Known Allergies (Crucial Alert)</ThemedText>
                 <TextInput
-                  style={[styles.textInput, { borderColor: '#FCA5A5', backgroundColor: '#FFF5F5' }]}
+                  style={[styles.textInput, { borderColor: theme.colors.emergencyBorder, backgroundColor: theme.colors.emergencySubtle }]}
                   placeholder="e.g. Penicillin, Aspirin, Shellfish"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={theme.colors.textMuted}
                   value={formAllergies}
                   onChangeText={setFormAllergies}
                 />
@@ -1156,7 +932,7 @@ export default function PatientsScreen() {
                 <TextInput
                   style={styles.textInput}
                   placeholder="e.g. Hypertension, Diabetes, High fall risk"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={theme.colors.textMuted}
                   value={formChronicConditions}
                   onChangeText={setFormChronicConditions}
                 />
@@ -1168,7 +944,7 @@ export default function PatientsScreen() {
                 disabled={savingPatient}
               >
                 {savingPatient ? (
-                  <ActivityIndicator color="#FFFFFF" />
+                  <ActivityIndicator color={theme.colors.textInverted} />
                 ) : (
                   <ThemedText style={styles.saveBtnText}>Save & Register Patient</ThemedText>
                 )}
@@ -1184,26 +960,33 @@ export default function PatientsScreen() {
           <View style={[styles.modalContent, { maxHeight: '85%' }]}>
             <View style={styles.modalHeader}>
               <View>
-                <ThemedText style={styles.modalTitle}>Longitudinal Medical Chart</ThemedText>
-                <ThemedText style={styles.subtitle}>{selectedPatient?.fullName}</ThemedText>
+                <ThemedText variant="title">Medical chart</ThemedText>
+                <ThemedText variant="small" color={theme.colors.textSecondary}>{selectedPatient?.fullName}</ThemedText>
               </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <View style={styles.chartHeaderActions}>
                 {selectedPatient && (
-                  <Pressable
-                    style={[styles.chartBtn, { backgroundColor: '#EEF2FF', borderColor: '#C7D2FE', paddingVertical: 6, paddingHorizontal: 12 }]}
+                  <Button
+                    title="PhilHealth profile"
+                    variant="outline"
+                    size="sm"
+                    icon="shield"
                     onPress={() => handleOpenPhilHealthProfile(selectedPatient)}
-                  >
-                    <ThemedText style={[styles.chartBtnText, { color: '#4F46E5' }]}>🏥 PhilHealth Profile</ThemedText>
-                  </Pressable>
+                  />
                 )}
                 <Pressable onPress={() => setChartVisible(false)}>
-                  <ThemedText style={styles.modalCloseText}>✕</ThemedText>
+                  <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
                 </Pressable>
               </View>
             </View>
 
             {loadingChart ? (
-              <ActivityIndicator size="large" color="#0284C7" style={{ padding: 40 }} />
+              <SkeletonList rows={5} />
+            ) : chartError && !patientChart ? (
+              <ErrorState
+                title="Unable to load the chart"
+                message={chartError}
+                onRetry={() => selectedPatient && handleOpenChart(selectedPatient)}
+              />
             ) : patientChart ? (
               <ScrollView contentContainerStyle={{ gap: 14 }}>
                 <View style={styles.chartSummaryBar}>
@@ -1229,82 +1012,79 @@ export default function PatientsScreen() {
                 {selectedPatient?.customFields?.classification === 'Student' || selectedPatient?.customFields?.student_id ? (
                   <View style={styles.institutionalBanner}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <ThemedText style={styles.institutionalBannerTitle}>
-                        🎓 Student Institutional Profile (COR / Enrollment)
+                      <ThemedText style={styles.institutionalBannerTitle}>Student Institutional Profile (COR / Enrollment)
                       </ThemedText>
                       <ThemedText style={{
-                        fontSize: 11,
+                        fontSize: theme.fontSizes.xs,
                         fontWeight: '700',
-                        color: selectedPatient.verificationStatus === 'PendingVerification' ? '#B45309' : '#15803D',
-                        backgroundColor: selectedPatient.verificationStatus === 'PendingVerification' ? '#FEF3C7' : '#DCFCE7',
+                        color: selectedPatient.verificationStatus === 'PendingVerification' ? theme.colors.warningText : theme.colors.successText,
+                        backgroundColor: selectedPatient.verificationStatus === 'PendingVerification' ? theme.colors.warningBg : theme.colors.successBg,
                         paddingHorizontal: 8,
                         paddingVertical: 3,
-                        borderRadius: 6,
+                        borderRadius: theme.radii.sm,
                       }}>
-                        {selectedPatient.verificationStatus === 'PendingVerification' ? '⏳ Verification Pending' : '✓ Verified Enrollment'}
+                        {selectedPatient.verificationStatus === 'PendingVerification' ? 'Verification pending' : 'Verified Enrollment'}
                       </ThemedText>
                     </View>
                     <View style={styles.institutionalGrid}>
                       <View style={styles.institutionalItem}>
                         <ThemedText style={styles.institutionalLabel}>Student ID / LRN</ThemedText>
-                        <ThemedText style={styles.institutionalValue}>{selectedPatient.customFields?.student_id || 'Not Assigned'}</ThemedText>
+                        <ThemedText style={styles.institutionalValue}>{selectedPatient.customFields?.student_id || '—'}</ThemedText>
                       </View>
                       <View style={styles.institutionalItem}>
                         <ThemedText style={styles.institutionalLabel}>Year Level</ThemedText>
-                        <ThemedText style={styles.institutionalValue}>{selectedPatient.customFields?.year_level || '1st Year'}</ThemedText>
+                        <ThemedText style={styles.institutionalValue}>{selectedPatient.customFields?.year_level || '—'}</ThemedText>
                       </View>
                       <View style={styles.institutionalItem}>
                         <ThemedText style={styles.institutionalLabel}>College</ThemedText>
-                        <ThemedText style={styles.institutionalValue}>{selectedPatient.customFields?.college || 'General College'}</ThemedText>
+                        <ThemedText style={styles.institutionalValue}>{selectedPatient.customFields?.college || '—'}</ThemedText>
                       </View>
                       <View style={styles.institutionalItem}>
                         <ThemedText style={styles.institutionalLabel}>Degree Program</ThemedText>
-                        <ThemedText style={styles.institutionalValue}>{selectedPatient.customFields?.program || 'Undergraduate'}</ThemedText>
+                        <ThemedText style={styles.institutionalValue}>{selectedPatient.customFields?.program || '—'}</ThemedText>
                       </View>
                       {selectedPatient.customFields &&
                         Object.entries(selectedPatient.customFields)
                           .filter(([k]) => !['classification', 'student_id', 'college', 'program', 'year_level', 'employee_id', 'department'].includes(k))
                           .map(([k, v]) => (
                             <View key={k} style={styles.institutionalItem}>
-                              <ThemedText style={styles.institutionalLabel}>{k.replace(/_/g, ' ').toUpperCase()}</ThemedText>
+                              <ThemedText style={styles.institutionalLabel}>{humanizeKey(k)}</ThemedText>
                               <ThemedText style={styles.institutionalValue}>{String(v)}</ThemedText>
                             </View>
                           ))}
                     </View>
                   </View>
                 ) : selectedPatient?.customFields?.classification === 'Employee' || selectedPatient?.customFields?.employee_id ? (
-                  <View style={[styles.institutionalBanner, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}>
+                  <View style={[styles.institutionalBanner, { backgroundColor: theme.colors.successBg, borderColor: theme.colors.successBorder }]}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <ThemedText style={[styles.institutionalBannerTitle, { color: '#166534' }]}>
-                        💼 Employee Institutional Profile
+                      <ThemedText style={[styles.institutionalBannerTitle, { color: theme.colors.successText }]}>Employee Institutional Profile
                       </ThemedText>
                       <ThemedText style={{
-                        fontSize: 11,
+                        fontSize: theme.fontSizes.xs,
                         fontWeight: '700',
-                        color: '#15803D',
-                        backgroundColor: '#DCFCE7',
+                        color: theme.colors.successText,
+                        backgroundColor: theme.colors.successBg,
                         paddingHorizontal: 8,
                         paddingVertical: 3,
-                        borderRadius: 6,
-                      }}>
-                        ✓ Verified Staff
+                        borderRadius: theme.radii.sm,
+                      }}>Verified Staff
                       </ThemedText>
                     </View>
                     <View style={styles.institutionalGrid}>
                       <View style={styles.institutionalItem}>
                         <ThemedText style={styles.institutionalLabel}>Employee ID</ThemedText>
-                        <ThemedText style={styles.institutionalValue}>{selectedPatient.customFields?.employee_id || 'Not Assigned'}</ThemedText>
+                        <ThemedText style={styles.institutionalValue}>{selectedPatient.customFields?.employee_id || '—'}</ThemedText>
                       </View>
                       <View style={styles.institutionalItem}>
                         <ThemedText style={styles.institutionalLabel}>Department / Unit</ThemedText>
-                        <ThemedText style={styles.institutionalValue}>{selectedPatient.customFields?.department || 'Administration'}</ThemedText>
+                        <ThemedText style={styles.institutionalValue}>{selectedPatient.customFields?.department || '—'}</ThemedText>
                       </View>
                       {selectedPatient.customFields &&
                         Object.entries(selectedPatient.customFields)
                           .filter(([k]) => !['classification', 'student_id', 'college', 'program', 'year_level', 'employee_id', 'department'].includes(k))
                           .map(([k, v]) => (
                             <View key={k} style={styles.institutionalItem}>
-                              <ThemedText style={styles.institutionalLabel}>{k.replace(/_/g, ' ').toUpperCase()}</ThemedText>
+                              <ThemedText style={styles.institutionalLabel}>{humanizeKey(k)}</ThemedText>
                               <ThemedText style={styles.institutionalValue}>{String(v)}</ThemedText>
                             </View>
                           ))}
@@ -1313,8 +1093,11 @@ export default function PatientsScreen() {
                 ) : null}
 
                 {selectedPatient?.allergies && (
-                  <View style={styles.allergyBanner}>
-                    <ThemedText style={styles.allergyText}>⚠️ ALLERGIES: {selectedPatient.allergies}</ThemedText>
+                  <View style={[styles.noticeStrip, styles.allergyStrip]}>
+                    <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
+                    <ThemedText variant="small" color={theme.colors.emergencyText} style={styles.noticeText}>
+                      Allergies: {selectedPatient.allergies}
+                    </ThemedText>
                   </View>
                 )}
 
@@ -1324,42 +1107,41 @@ export default function PatientsScreen() {
                   {patientChart.consultations && patientChart.consultations.length > 0 ? (
                     patientChart.consultations.map((c) => (
                       <View key={c.id} style={styles.historyCard}>
-                        <ThemedText style={{ fontSize: 12, fontWeight: '700', color: '#0284C7' }}>
+                        <ThemedText style={{ fontSize: theme.fontSizes.xs, fontWeight: '700', color: theme.colors.primary }}>
                           Encounter: {new Date(c.encounterDate).toLocaleDateString()} • Dr: {c.doctorName}
                         </ThemedText>
-                        <ThemedText style={{ fontSize: 13, color: '#374151' }}>
+                        <ThemedText style={{ fontSize: theme.fontSizes.sm, color: theme.colors.textSecondary }}>
                           Subjective: {c.subjective ?? 'Follow-up'}
                         </ThemedText>
-                        <ThemedText style={{ fontSize: 13, fontWeight: '600', color: '#111827' }}>
+                        <ThemedText style={{ fontSize: theme.fontSizes.sm, fontWeight: '600', color: theme.colors.text }}>
                           Assessment: {c.assessment ?? 'Clinical examination normal'}
                         </ThemedText>
 
                         {/* Prescriptions & Dual-Path Status */}
                         {((c.prescriptions && c.prescriptions.length > 0) || c.prescriptionNumber) && (
-                          <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#E5E7EB', gap: 6 }}>
+                          <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: theme.colors.border, gap: 6 }}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                              <ThemedText style={{ fontSize: 12, fontWeight: '700', color: '#374151' }}>
-                                💊 Prescriptions ({c.prescriptions?.length ?? 0}):
+                              <ThemedText style={{ fontSize: theme.fontSizes.xs, fontWeight: '700', color: theme.colors.textSecondary }}>Prescriptions ({c.prescriptions?.length ?? 0}):
                               </ThemedText>
                               <ThemedText style={{
-                                fontSize: 10,
+                                fontSize: theme.fontSizes.xs,
                                 fontWeight: '700',
-                                color: c.rxDispenseStatus === 'Dispensed' ? '#166534' : c.rxDispenseStatus === 'DispensedExternally' ? '#92400E' : '#0284C7',
-                                backgroundColor: c.rxDispenseStatus === 'Dispensed' ? '#DCFCE7' : c.rxDispenseStatus === 'DispensedExternally' ? '#FEF3C7' : '#E0F2FE',
+                                color: c.rxDispenseStatus === 'Dispensed' ? theme.colors.successText : c.rxDispenseStatus === 'DispensedExternally' ? theme.colors.warningText : theme.colors.primary,
+                                backgroundColor: c.rxDispenseStatus === 'Dispensed' ? theme.colors.successBg : c.rxDispenseStatus === 'DispensedExternally' ? theme.colors.warningBg : theme.colors.primaryLight,
                                 paddingHorizontal: 6,
                                 paddingVertical: 2,
-                                borderRadius: 4,
+                                borderRadius: theme.radii.xs,
                               }}>
                                 {c.rxDispenseStatus === 'Dispensed'
-                                  ? '✓ Dispensed (Partner)'
+                                  ? 'Dispensed (Partner)'
                                   : c.rxDispenseStatus === 'DispensedExternally'
-                                  ? `✓ Dispensed (${c.rxDispensedPharmacyName || 'External'})`
+                                  ? `Dispensed (${c.rxDispensedPharmacyName || 'External'})`
                                   : '● In Partner Queue'}
                               </ThemedText>
                             </View>
 
                             {c.prescriptions && c.prescriptions.length > 0 && (
-                              <ThemedText style={{ fontSize: 11, color: '#4B5563' }}>
+                              <ThemedText style={{ fontSize: theme.fontSizes.xs, color: theme.colors.textSecondary }}>
                                 {c.prescriptions.map(p => `${p.genericName} ${p.dosage} (Qty: ${p.quantity})`).join(', ')}
                               </ThemedText>
                             )}
@@ -1369,16 +1151,15 @@ export default function PatientsScreen() {
                                 style={styles.viewSlipBtn}
                                 onPress={() => handleViewPrescriptionSlip(c)}
                               >
-                                <ThemedText style={styles.viewSlipBtnText}>📄 View E-Rx Slip</ThemedText>
+                                <ThemedText style={styles.viewSlipBtnText}>View E-Rx Slip</ThemedText>
                               </Pressable>
 
                               {c.rxDispenseStatus !== 'Dispensed' && c.rxDispenseStatus !== 'DispensedExternally' && (
                                 <Pressable
-                                  style={[styles.viewSlipBtn, { backgroundColor: '#F0FDFA', borderColor: '#99F6E4' }]}
+                                  style={[styles.viewSlipBtn, { backgroundColor: theme.colors.primarySubtle, borderColor: theme.colors.primaryBorder }]}
                                   onPress={() => handleOpenExternalDispense(c)}
                                 >
-                                  <ThemedText style={[styles.viewSlipBtnText, { color: '#0D9488' }]}>
-                                    🏥 Log External Dispense
+                                  <ThemedText style={[styles.viewSlipBtnText, { color: theme.colors.primary }]}>Log External Dispense
                                   </ThemedText>
                                 </Pressable>
                               )}
@@ -1388,7 +1169,7 @@ export default function PatientsScreen() {
                       </View>
                     ))
                   ) : (
-                    <ThemedText style={{ color: '#6B7280', fontSize: 13 }}>
+                    <ThemedText style={{ color: theme.colors.textMuted, fontSize: theme.fontSizes.sm }}>
                       Prior visits documented under paper records. New encounters will appear here.
                     </ThemedText>
                   )}
@@ -1399,13 +1180,13 @@ export default function PatientsScreen() {
                   {patientChart.vitalsHistory && patientChart.vitalsHistory.length > 0 ? (
                     patientChart.vitalsHistory.map((v, i) => (
                       <View key={i} style={styles.historyCard}>
-                        <ThemedText style={{ fontSize: 12, fontWeight: '600', color: '#166534' }}>
+                        <ThemedText style={{ fontSize: theme.fontSizes.xs, fontWeight: '600', color: theme.colors.successText }}>
                           BP: {v.systolicBp}/{v.diastolicBp} mmHg • HR: {v.heartRateBpm} bpm • SpO2: {v.oxygenSaturationPercent}%
                         </ThemedText>
                       </View>
                     ))
                   ) : (
-                    <ThemedText style={{ color: '#6B7280', fontSize: 13 }}>No vitals trend recorded yet.</ThemedText>
+                    <ThemedText style={{ color: theme.colors.textMuted, fontSize: theme.fontSizes.sm }}>No vitals trend recorded yet.</ThemedText>
                   )}
                 </View>
 
@@ -1427,12 +1208,12 @@ export default function PatientsScreen() {
                             </View>
                           </View>
 
-                          <ThemedText style={{ fontSize: 12, color: '#6B7280' }}>
-                            Ordered: {new Date(order.orderDate).toLocaleDateString()} • Doctor: {order.orderedByDoctorName ?? 'Dr. Cruz'}
+                          <ThemedText style={{ fontSize: theme.fontSizes.xs, color: theme.colors.textMuted }}>
+                            Ordered: {new Date(order.orderDate).toLocaleDateString()} • Doctor: {order.orderedByDoctorName ?? 'Not recorded'}
                           </ThemedText>
 
                           {order.clinicalDiagnosis && (
-                            <ThemedText style={{ fontSize: 12, fontStyle: 'italic', color: '#4B5563' }}>
+                            <ThemedText style={{ fontSize: theme.fontSizes.xs, fontStyle: 'italic', color: theme.colors.textSecondary }}>
                               Dx: {order.clinicalDiagnosis}
                             </ThemedText>
                           )}
@@ -1440,7 +1221,7 @@ export default function PatientsScreen() {
                           <View style={styles.testChipsRow}>
                             {order.items?.map((item, idx) => (
                               <View key={idx} style={styles.testChip}>
-                                <ThemedText style={styles.testChipText}>🧪 {item.testName}</ThemedText>
+                                <ThemedText style={styles.testChipText}>{item.testName}</ThemedText>
                               </View>
                             ))}
                           </View>
@@ -1448,8 +1229,7 @@ export default function PatientsScreen() {
                           {/* Dual-Path Verification Results */}
                           {order.status === 'CompletedWithExternalReport' && (
                             <View style={styles.externalResultBanner}>
-                              <ThemedText style={styles.externalResultTitle}>
-                                🏷️ External Lab Report ({order.externalLabName || 'Non-ClinicEz Lab'})
+                              <ThemedText style={styles.externalResultTitle}>External Lab Report ({order.externalLabName || 'Non-ClinicEz Lab'})
                               </ThemedText>
                               <ThemedText style={styles.externalResultMeta}>
                                 Ingested via {order.uploadedBy || 'Portal Dropzone'} • Document Verified
@@ -1459,8 +1239,7 @@ export default function PatientsScreen() {
 
                           {order.verifiedByPathologist && (
                             <View style={styles.verifiedPathologistBanner}>
-                              <ThemedText style={styles.verifiedPathologistTitle}>
-                                ✅ Verified by Pathologist: Dr. {order.verifiedByPathologist} ({order.pathologistPrcLicense})
+                              <ThemedText style={styles.verifiedPathologistTitle}>Verified by Pathologist: Dr. {order.verifiedByPathologist} ({order.pathologistPrcLicense})
                               </ThemedText>
                               {order.pathologistImpression && (
                                 <ThemedText style={styles.verifiedPathologistImpression}>
@@ -1476,7 +1255,7 @@ export default function PatientsScreen() {
                               style={styles.viewSlipBtn}
                               onPress={() => handleViewSlip(order.id)}
                             >
-                              <ThemedText style={styles.viewSlipBtnText}>📄 View Lab Slip & QR</ThemedText>
+                              <ThemedText style={styles.viewSlipBtnText}>View Lab Slip & QR</ThemedText>
                             </Pressable>
 
                             {!isCompleted && (
@@ -1484,7 +1263,7 @@ export default function PatientsScreen() {
                                 style={styles.attachResultBtn}
                                 onPress={() => handleOpenAttach(order.id)}
                               >
-                                <ThemedText style={styles.attachResultBtnText}>📎 Attach External Result</ThemedText>
+                                <ThemedText style={styles.attachResultBtnText}>Attach External Result</ThemedText>
                               </Pressable>
                             )}
                           </View>
@@ -1492,7 +1271,7 @@ export default function PatientsScreen() {
                       );
                     })
                   ) : (
-                    <ThemedText style={{ color: '#6B7280', fontSize: 13 }}>
+                    <ThemedText style={{ color: theme.colors.textMuted, fontSize: theme.fontSizes.sm }}>
                       No active or historical laboratory orders recorded for this patient.
                     </ThemedText>
                   )}
@@ -1501,8 +1280,7 @@ export default function PatientsScreen() {
                 {/* Attached Physical Documents & External Records Section */}
                 <View style={styles.chartSection}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <ThemedText style={styles.chartSectionTitle}>
-                      📁 External Records & Physical Attachments ({patientAttachments.length})
+                    <ThemedText style={styles.chartSectionTitle}>External Records & Physical Attachments ({patientAttachments.length})
                     </ThemedText>
                     <Pressable
                       style={styles.addDocBtn}
@@ -1512,12 +1290,12 @@ export default function PatientsScreen() {
                     </Pressable>
                   </View>
 
-                  <ThemedText style={{ fontSize: 12, color: '#6B7280', marginBottom: 8 }}>
+                  <ThemedText style={{ fontSize: theme.fontSizes.xs, color: theme.colors.textMuted, marginBottom: 8 }}>
                     Scanned paper Certificate of Registration (COR), outside Chest X-Ray films, lab sheets, and outside medical clearance certificates.
                   </ThemedText>
 
                   {loadingAttachments ? (
-                    <ActivityIndicator size="small" color="#0284C7" style={{ padding: 12 }} />
+                    <ActivityIndicator size="small" color={theme.colors.primary} style={{ padding: 12 }} />
                   ) : patientAttachments.length > 0 ? (
                     patientAttachments.map((att) => {
                       const isVerified = att.verificationStatus === 'Verified';
@@ -1535,20 +1313,18 @@ export default function PatientsScreen() {
                                 Uploaded: {new Date(att.documentDate || att.createdAt).toLocaleDateString()} • Ingested by: {att.uploadedByStaffName || 'Clinic Staff'}
                               </ThemedText>
                               {att.encryptionAlgorithm ? (
-                                <ThemedText style={[styles.attachmentMeta, { color: '#0D9488', fontWeight: '600' }]}>
-                                  🔐 Encrypted At-Rest ({att.encryptionAlgorithm})
+                                <ThemedText style={[styles.attachmentMeta, { color: theme.colors.primary, fontWeight: '600' }]}>Encrypted At-Rest ({att.encryptionAlgorithm})
                                 </ThemedText>
                               ) : null}
                               {att.notes ? (
-                                <ThemedText style={styles.attachmentNotes}>
-                                  📝 Notes: {att.notes}
+                                <ThemedText style={styles.attachmentNotes}>Notes: {att.notes}
                                 </ThemedText>
                               ) : null}
                               <Pressable
                                 style={styles.viewDocBtn}
                                 onPress={() => handleDownloadAttachment(att.id)}
                               >
-                                <ThemedText style={styles.viewDocBtnText}>📥 View / Decrypt Document</ThemedText>
+                                <ThemedText style={styles.viewDocBtnText}>View / Decrypt Document</ThemedText>
                               </Pressable>
                             </View>
                             <View style={[
@@ -1559,7 +1335,7 @@ export default function PatientsScreen() {
                                 styles.attBadgeText,
                                 isVerified ? styles.attBadgeTextVerified : isRejected ? styles.attBadgeTextRejected : styles.attBadgeTextPending
                               ]}>
-                                {isVerified ? '✓ Verified' : isRejected ? '✕ Rejected' : '⏳ Pending Review'}
+                                {isVerified ? 'Verified' : isRejected ? 'Rejected' : 'Pending review'}
                               </ThemedText>
                             </View>
                           </View>
@@ -1567,16 +1343,14 @@ export default function PatientsScreen() {
                           {/* Verification Meta or Action Buttons */}
                           {isVerified && att.verifiedByStaffName && (
                             <View style={styles.verifiedMetaBox}>
-                              <ThemedText style={styles.verifiedMetaText}>
-                                ✅ Verified by {att.verifiedByStaffName} on {att.verifiedAt ? new Date(att.verifiedAt).toLocaleDateString() : 'today'}
+                              <ThemedText style={styles.verifiedMetaText}>Verified by {att.verifiedByStaffName} on {att.verifiedAt ? new Date(att.verifiedAt).toLocaleDateString() : 'today'}
                               </ThemedText>
                             </View>
                           )}
 
                           {isRejected && (
-                            <View style={[styles.verifiedMetaBox, { backgroundColor: '#FEF2F2', borderColor: '#FECACA' }]}>
-                              <ThemedText style={[styles.verifiedMetaText, { color: '#991B1B' }]}>
-                                ⚠️ Rejection reason: {att.rejectionReason || 'Illegible or unverifiable external document.'}
+                            <View style={[styles.verifiedMetaBox, { backgroundColor: theme.colors.emergencySubtle, borderColor: theme.colors.emergencyBorder }]}>
+                              <ThemedText style={[styles.verifiedMetaText, { color: theme.colors.emergencyText }]}>Rejection reason: {att.rejectionReason || 'Illegible or unverifiable external document.'}
                               </ThemedText>
                             </View>
                           )}
@@ -1588,8 +1362,7 @@ export default function PatientsScreen() {
                                 onPress={() => handleVerifyAttachment(att.id, true)}
                                 disabled={verifyingAttachmentId === att.id}
                               >
-                                <ThemedText style={styles.verifyBtnText}>
-                                  ✓ Verify & Accept Document
+                                <ThemedText style={styles.verifyBtnText}>Verify & Accept Document
                                 </ThemedText>
                               </Pressable>
                               <Pressable
@@ -1597,8 +1370,7 @@ export default function PatientsScreen() {
                                 onPress={() => handleVerifyAttachment(att.id, false)}
                                 disabled={verifyingAttachmentId === att.id}
                               >
-                                <ThemedText style={styles.rejectBtnText}>
-                                  ✕ Reject
+                                <ThemedText style={styles.rejectBtnText}>Reject
                                 </ThemedText>
                               </Pressable>
                             </View>
@@ -1607,9 +1379,7 @@ export default function PatientsScreen() {
                       );
                     })
                   ) : (
-                    <View style={styles.emptyCard}>
-                      <ThemedText style={styles.emptyText}>No external physical documents attached yet.</ThemedText>
-                    </View>
+                    <EmptyState icon="paperclip" title="No documents attached" description="Outside records you attach appear here." />
                   )}
                 </View>
               </ScrollView>
@@ -1666,7 +1436,7 @@ export default function PatientsScreen() {
               <View style={styles.slipQrBox}>
                 <ThemedText style={styles.slipQrTitle}>Universal Patient Choice (Dual-Path)</ThemedText>
                 <ThemedText style={styles.slipQrHelp}>
-                  Present this digital slip to ANY laboratory (ClinicEz partner or non-partner like Hi-Precision, Quest, Hospital Lab).
+                  Present this digital slip to ANY laboratory (whether or not it uses ClinicEz).
                 </ThemedText>
                 <View style={styles.qrPlaceholder}>
                   <ThemedText style={styles.qrCodeText}>[ VERIFIABLE QR CODE ]</ThemedText>
@@ -1681,7 +1451,7 @@ export default function PatientsScreen() {
             <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 12 }}>
               {selectedSlip?.orderId && (
                 <Pressable
-                  style={[styles.closeSlipBtn, { backgroundColor: '#15803D' }]}
+                  style={[styles.closeSlipBtn, { backgroundColor: theme.colors.successText }]}
                   onPress={async () => {
                     const url = clinicService.getLabOrderSlipPdfUrl(selectedSlip.orderId);
                     try {
@@ -1691,7 +1461,7 @@ export default function PatientsScreen() {
                     }
                   }}
                 >
-                  <ThemedText style={styles.closeSlipBtnText}>📄 Download Official Requisition PDF</ThemedText>
+                  <ThemedText style={styles.closeSlipBtnText}>Download Official Requisition PDF</ThemedText>
                 </Pressable>
               )}
               <Pressable
@@ -1711,7 +1481,7 @@ export default function PatientsScreen() {
           <View style={[styles.modalContent, { maxWidth: 480 }]}>
             <ThemedText style={styles.modalTitle}>Attach External Lab Result (Path B)</ThemedText>
             <ThemedText style={styles.modalSub}>
-              Attach test reports from non-ClinicEz diagnostic centers (e.g. Hi-Precision, Quest, St. Luke's) to complete the electronic health record.
+              Attach test reports from outside diagnostic centers to complete the electronic health record.
             </ThemedText>
 
             <View style={{ gap: 12, marginTop: 10 }}>
@@ -1721,7 +1491,7 @@ export default function PatientsScreen() {
                   style={styles.textInput}
                   value={externalLabName}
                   onChangeText={setExternalLabName}
-                  placeholder="e.g. Hi-Precision Diagnostics"
+                  placeholder="Laboratory name"
                 />
               </View>
 
@@ -1741,7 +1511,7 @@ export default function PatientsScreen() {
                         styles.formatChipText,
                         externalFileType === fmt && styles.formatChipTextActive
                       ]}>
-                        {fmt === 'PDF' ? '📄 Official PDF' : '📷 Scanned Photo'}
+                        {fmt === 'PDF' ? 'Official PDF' : 'Scanned Photo'}
                       </ThemedText>
                     </Pressable>
                   ))}
@@ -1774,7 +1544,7 @@ export default function PatientsScreen() {
                 disabled={attaching}
               >
                 {attaching ? (
-                  <ActivityIndicator color="#FFFFFF" />
+                  <ActivityIndicator color={theme.colors.textInverted} />
                 ) : (
                   <ThemedText style={styles.confirmAttachText}>Confirm & Mark Completed</ThemedText>
                 )}
@@ -1811,7 +1581,7 @@ export default function PatientsScreen() {
             <View style={styles.modalHeader}>
               <ThemedText style={styles.modalTitle}>Attach External Physical Document</ThemedText>
               <Pressable onPress={() => setUploadDocModalVisible(false)}>
-                <ThemedText style={styles.modalCloseText}>✕</ThemedText>
+                <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
               </Pressable>
             </View>
             <ThemedText style={styles.modalSub}>
@@ -1823,8 +1593,8 @@ export default function PatientsScreen() {
                 <ThemedText style={styles.inputLabel}>Document Title *</ThemedText>
                 <TextInput
                   style={styles.textInput}
-                  placeholder="e.g. Chest X-Ray (Outside Clinic - St. Jude)"
-                  placeholderTextColor="#9CA3AF"
+                  placeholder="e.g. Chest X-ray (outside clinic)"
+                  placeholderTextColor={theme.colors.textMuted}
                   value={docTitle}
                   onChangeText={setDocTitle}
                 />
@@ -1834,11 +1604,11 @@ export default function PatientsScreen() {
                 <ThemedText style={styles.inputLabel}>Document / Record Classification</ThemedText>
                 <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
                   {[
-                    { key: 'OutsideChestXRay', label: '🩻 Chest X-Ray' },
-                    { key: 'CertificateOfRegistration', label: '📜 Paper COR' },
-                    { key: 'MedicalCertificate', label: '🩺 Outside MedCert' },
-                    { key: 'LabResult', label: '🧪 Lab Sheet' },
-                    { key: 'Other', label: '📄 Other' },
+                    { key: 'OutsideChestXRay', label: 'Chest X-Ray' },
+                    { key: 'CertificateOfRegistration', label: 'Paper COR' },
+                    { key: 'MedicalCertificate', label: 'Outside MedCert' },
+                    { key: 'LabResult', label: 'Lab Sheet' },
+                    { key: 'Other', label: 'Other' },
                   ].map((t) => (
                     <Pressable
                       key={t.key}
@@ -1863,7 +1633,7 @@ export default function PatientsScreen() {
                       onPress={() => setDocFileType(fmt)}
                     >
                       <ThemedText style={[styles.formatChipText, docFileType === fmt && styles.formatChipTextActive]}>
-                        {fmt === 'PDF' ? '📄 Scanned PDF' : '📷 Flatbed / Camera Scan'}
+                        {fmt === 'PDF' ? 'Scanned PDF' : 'Flatbed / Camera Scan'}
                       </ThemedText>
                     </Pressable>
                   ))}
@@ -1876,7 +1646,7 @@ export default function PatientsScreen() {
                   style={[styles.textInput, { height: 60 }]}
                   multiline
                   placeholder="e.g. Clean chest PA film, no active pulmonary disease seen."
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor={theme.colors.textMuted}
                   value={docNotes}
                   onChangeText={setDocNotes}
                 />
@@ -1896,7 +1666,7 @@ export default function PatientsScreen() {
                   disabled={uploadingDoc}
                 >
                   {uploadingDoc ? (
-                    <ActivityIndicator color="#FFFFFF" />
+                    <ActivityIndicator color={theme.colors.textInverted} />
                   ) : (
                     <ThemedText style={styles.confirmAttachText}>Save & Attach to Profile</ThemedText>
                   )}
@@ -1925,257 +1695,135 @@ export default function PatientsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: theme.colors.background,
   },
   content: {
-    padding: 20,
-    gap: 16,
+    padding: theme.spacing.lg,
+    gap: theme.spacing.lg,
+    width: '100%',
+    maxWidth: theme.sizes.contentMaxWidth,
+    alignSelf: 'center',
+    paddingBottom: theme.spacing['4xl'],
   },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  subtitle: {
-    fontSize: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-    color: '#4B5563',
-    fontWeight: '600',
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  registerBtn: {
-    backgroundColor: '#0284C7',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  registerBtnText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 12,
-  },
-  searchBar: {
+  offlineBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 8,
+    flexWrap: 'wrap',
+    gap: theme.spacing.md,
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.lg,
+    padding: theme.spacing.lg,
   },
-  searchIcon: {
-    fontSize: 14,
+  offlineBannerText: {
+    flex: 1,
+    minWidth: 220,
+    gap: theme.spacing.xs,
   },
   searchInput: {
-    flex: 1,
-    fontSize: 14,
-    color: '#111827',
-    padding: 0,
+    width: '100%',
   },
-  filterRow: {
-    flexDirection: 'row',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  filterTab: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 18,
-    backgroundColor: '#F3F4F6',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  filterTabActive: {
-    backgroundColor: '#0284C7',
-    borderColor: '#0284C7',
-  },
-  filterTabText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#4B5563',
-  },
-  filterTabTextActive: {
-    color: '#FFFFFF',
+  skeletonWrap: {
+    padding: theme.spacing.lg,
   },
   list: {
-    gap: 12,
-  },
-  emptyCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    padding: 28,
-    alignItems: 'center',
-  },
-  emptyText: {
-    color: '#6B7280',
-    fontSize: 14,
-  },
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    padding: 16,
-    gap: 10,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  patientName: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  codeBadge: {
-    fontSize: 11,
-    fontWeight: '700',
-    backgroundColor: '#E0F2FE',
-    color: '#0369A1',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  demographicsText: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginTop: 2,
-  },
-  contactText: {
-    fontSize: 12,
-    color: '#4B5563',
-    marginTop: 2,
-  },
-  idsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: theme.spacing.lg,
   },
-  idBadge: {
-    backgroundColor: '#F0FDF4',
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
+  patientCard: {
+    flexGrow: 1,
+    flexBasis: 420,
+    padding: theme.spacing.lg,
+    gap: theme.spacing.md,
   },
-  idBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#166534',
+  cardBody: {
+    gap: theme.spacing.sm,
   },
-  allergyBanner: {
-    backgroundColor: '#FEF2F2',
-    borderColor: '#FCA5A5',
-    borderWidth: 1,
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+  cardTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
   },
-  allergyText: {
-    color: '#991B1B',
-    fontSize: 11,
-    fontWeight: '700',
+  patientName: {
+    flexShrink: 1,
   },
-  alertBanner: {
-    backgroundColor: '#FFFBEB',
-    borderColor: '#FCD34D',
-    borderWidth: 1,
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+  badgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
   },
-  alertText: {
-    color: '#B45309',
-    fontSize: 11,
-    fontWeight: '700',
+  selfStart: {
+    alignSelf: 'flex-start',
+  },
+  noticeStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.md,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+  },
+  chartHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+  },
+  noticeText: {
+    flex: 1,
+  },
+  allergyStrip: {
+    backgroundColor: theme.colors.emergencySubtle,
+    borderColor: theme.colors.emergencyBorder,
+  },
+  alertStrip: {
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
   },
   actionRow: {
     flexDirection: 'row',
-    gap: 8,
-    justifyContent: 'flex-end',
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-    paddingTop: 10,
-    marginTop: 4,
-  },
-  chartBtn: {
-    backgroundColor: '#F3F4F6',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  chartBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#374151',
-  },
-  appointmentBtn: {
-    backgroundColor: '#F0F9FF',
-    borderWidth: 1,
-    borderColor: '#BAE6FD',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  appointmentBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#0284C7',
-  },
-  queueBtn: {
-    backgroundColor: '#DCFCE7',
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  queueBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#15803D',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+    borderTopWidth: theme.sizes.borderWidth,
+    borderTopColor: theme.colors.borderLight,
+    paddingTop: theme.spacing.md,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: theme.colors.overlay,
     justifyContent: 'center',
     padding: 20,
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-    gap: 14,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.xl,
+    padding: theme.spacing.xl,
+    gap: theme.spacing.lg,
+    width: '100%',
+    maxWidth: 720,
+    alignSelf: 'center',
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-    paddingBottom: 10,
+    borderBottomWidth: theme.sizes.borderWidth,
+    borderBottomColor: theme.colors.borderLight,
+    paddingBottom: theme.spacing.md,
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
+    fontSize: theme.fontSizes.xl,
+    fontWeight: '600',
+    color: theme.colors.text,
   },
   modalSub: {
-    fontSize: 12,
-    color: '#6B7280',
+    fontSize: theme.fontSizes.xs,
+    color: theme.colors.textMuted,
     lineHeight: 18,
   },
   rowBetween: {
@@ -2184,48 +1832,50 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalCloseText: {
-    fontSize: 18,
+    fontSize: theme.fontSizes.xl,
     fontWeight: '700',
-    color: '#9CA3AF',
+    color: theme.colors.textMuted,
   },
   formRow: {
     flexDirection: 'row',
     gap: 10,
   },
   inputLabel: {
-    fontSize: 12,
+    fontSize: theme.fontSizes.sm,
     fontWeight: '600',
-    color: '#4B5563',
-    marginBottom: 4,
+    color: theme.colors.textSecondary,
+    marginBottom: theme.spacing.xs,
   },
   textInput: {
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    fontSize: 13,
-    color: '#111827',
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.md,
+    minHeight: theme.sizes.controlMd,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    fontSize: theme.fontSizes.md,
+    color: theme.colors.text,
   },
   saveBtn: {
-    backgroundColor: '#0284C7',
-    borderRadius: 8,
-    paddingVertical: 12,
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radii.md,
+    minHeight: theme.sizes.controlLg,
     alignItems: 'center',
-    marginTop: 8,
+    justifyContent: 'center',
+    marginTop: theme.spacing.sm,
   },
   saveBtnText: {
-    color: '#FFFFFF',
-    fontSize: 14,
+    color: theme.colors.textInverted,
+    fontSize: theme.fontSizes.md,
     fontWeight: '700',
   },
   chartSummaryBar: {
     flexDirection: 'row',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 10,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radii.md,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: theme.colors.border,
     padding: 10,
   },
   chartMetric: {
@@ -2233,62 +1883,59 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   chartMetricVal: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#0284C7',
+    fontSize: theme.fontSizes.xl,
+    fontWeight: '700',
+    color: theme.colors.primary,
   },
   chartMetricLabel: {
-    fontSize: 10,
-    color: '#6B7280',
-    textTransform: 'uppercase',
+    fontSize: theme.fontSizes.xs,
+    color: theme.colors.textMuted,
   },
   chartSection: {
     gap: 6,
   },
   chartSectionTitle: {
-    fontSize: 13,
+    fontSize: theme.fontSizes.sm,
     fontWeight: '700',
-    color: '#4B5563',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    color: theme.colors.textSecondary,
   },
   historyCard: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radii.md,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: theme.colors.border,
     padding: 10,
     gap: 4,
   },
   labCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.md,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: theme.colors.border,
     padding: 12,
     gap: 6,
     marginBottom: 8,
   },
   orderNumberText: {
-    fontSize: 14,
+    fontSize: theme.fontSizes.md,
     fontWeight: '700',
-    color: '#0284C7',
+    color: theme.colors.primary,
   },
   orderStatusBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 6,
+    borderRadius: theme.radii.sm,
   },
   statusBadgePending: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: theme.colors.warningBg,
   },
   statusBadgeCompleted: {
-    backgroundColor: '#DCFCE7',
+    backgroundColor: theme.colors.successBg,
   },
   orderStatusText: {
-    fontSize: 11,
+    fontSize: theme.fontSizes.xs,
     fontWeight: '700',
-    color: '#111827',
+    color: theme.colors.text,
   },
   testChipsRow: {
     flexDirection: 'row',
@@ -2297,53 +1944,53 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   testChip: {
-    backgroundColor: '#F0F9FF',
+    backgroundColor: theme.colors.primarySubtle,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 6,
+    borderRadius: theme.radii.sm,
     borderWidth: 1,
-    borderColor: '#BAE6FD',
+    borderColor: theme.colors.primaryBorder,
   },
   testChipText: {
-    fontSize: 11,
+    fontSize: theme.fontSizes.xs,
     fontWeight: '600',
-    color: '#0369A1',
+    color: theme.colors.primaryDark,
   },
   externalResultBanner: {
-    backgroundColor: '#FDF4FF',
+    backgroundColor: theme.colors.purpleBg,
     padding: 8,
-    borderRadius: 8,
+    borderRadius: theme.radii.md,
     borderWidth: 1,
-    borderColor: '#F0ABFC',
+    borderColor: theme.colors.purpleBorder,
     gap: 2,
     marginTop: 4,
   },
   externalResultTitle: {
-    fontSize: 12,
+    fontSize: theme.fontSizes.xs,
     fontWeight: '700',
-    color: '#86198F',
+    color: theme.colors.purpleText,
   },
   externalResultMeta: {
-    fontSize: 11,
-    color: '#A21CAF',
+    fontSize: theme.fontSizes.xs,
+    color: theme.colors.purple,
   },
   verifiedPathologistBanner: {
-    backgroundColor: '#ECFDF5',
+    backgroundColor: theme.colors.successBg,
     padding: 8,
-    borderRadius: 8,
+    borderRadius: theme.radii.md,
     borderWidth: 1,
-    borderColor: '#6EE7B7',
+    borderColor: theme.colors.successBorder,
     gap: 2,
     marginTop: 4,
   },
   verifiedPathologistTitle: {
-    fontSize: 12,
+    fontSize: theme.fontSizes.xs,
     fontWeight: '700',
-    color: '#065F46',
+    color: theme.colors.successText,
   },
   verifiedPathologistImpression: {
-    fontSize: 11,
-    color: '#047857',
+    fontSize: theme.fontSizes.xs,
+    color: theme.colors.successText,
     fontStyle: 'italic',
   },
   labActionRow: {
@@ -2352,29 +1999,29 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
+    borderTopColor: theme.colors.borderLight,
   },
   viewSlipBtn: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: theme.colors.surfaceSubtle,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 6,
+    borderRadius: theme.radii.sm,
   },
   viewSlipBtnText: {
-    fontSize: 11,
+    fontSize: theme.fontSizes.xs,
     fontWeight: '700',
-    color: '#374151',
+    color: theme.colors.textSecondary,
   },
   attachResultBtn: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: theme.colors.infoBg,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 6,
+    borderRadius: theme.radii.sm,
   },
   attachResultBtnText: {
-    fontSize: 11,
+    fontSize: theme.fontSizes.xs,
     fontWeight: '700',
-    color: '#1D4ED8',
+    color: theme.colors.infoText,
   },
   slipHeader: {
     alignItems: 'center',
@@ -2382,48 +2029,46 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   slipClinicName: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#111827',
+    fontSize: theme.fontSizes.lg,
+    fontWeight: '700',
+    color: theme.colors.text,
   },
   slipClinicMeta: {
-    fontSize: 11,
-    color: '#6B7280',
+    fontSize: theme.fontSizes.xs,
+    color: theme.colors.textMuted,
   },
   slipDivider: {
     height: 1,
-    backgroundColor: '#D1D5DB',
+    backgroundColor: theme.colors.surfaceHighlight,
     width: '100%',
     marginVertical: 6,
   },
   slipTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#0284C7',
-    letterSpacing: 0.8,
+    fontSize: theme.fontSizes.sm,
+    fontWeight: '700',
+    color: theme.colors.primary,
   },
   slipOrderNo: {
-    fontSize: 12,
+    fontSize: theme.fontSizes.xs,
     fontWeight: '700',
-    color: '#374151',
+    color: theme.colors.textSecondary,
   },
   slipSectionBox: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: theme.colors.surfaceMuted,
     padding: 10,
-    borderRadius: 8,
+    borderRadius: theme.radii.md,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: theme.colors.border,
     gap: 3,
   },
   slipSectionHeading: {
-    fontSize: 11,
+    fontSize: theme.fontSizes.xs,
     fontWeight: '700',
-    color: '#4B5563',
-    textTransform: 'uppercase',
+    color: theme.colors.textSecondary,
   },
   slipBodyText: {
-    fontSize: 12,
-    color: '#1F2937',
+    fontSize: theme.fontSizes.xs,
+    color: theme.colors.text,
   },
   slipTestRow: {
     flexDirection: 'row',
@@ -2431,111 +2076,110 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   slipTestName: {
-    fontSize: 12,
+    fontSize: theme.fontSizes.xs,
     fontWeight: '600',
-    color: '#111827',
+    color: theme.colors.text,
   },
   slipTestCat: {
-    fontSize: 11,
-    color: '#6B7280',
+    fontSize: theme.fontSizes.xs,
+    color: theme.colors.textMuted,
   },
   slipQrBox: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: theme.colors.surfaceMuted,
     padding: 12,
-    borderRadius: 10,
+    borderRadius: theme.radii.md,
     borderWidth: 1,
-    borderColor: '#CBD5E1',
+    borderColor: theme.colors.borderDark,
     alignItems: 'center',
     gap: 4,
   },
   slipQrTitle: {
-    fontSize: 12,
+    fontSize: theme.fontSizes.xs,
     fontWeight: '700',
-    color: '#0F172A',
+    color: theme.colors.text,
   },
   slipQrHelp: {
-    fontSize: 11,
-    color: '#475569',
+    fontSize: theme.fontSizes.xs,
+    color: theme.colors.textSecondary,
     textAlign: 'center',
   },
   qrPlaceholder: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.colors.surface,
     borderWidth: 1,
-    borderColor: '#94A3B8',
+    borderColor: theme.colors.borderDark,
     padding: 12,
-    borderRadius: 8,
+    borderRadius: theme.radii.md,
     marginVertical: 6,
     alignItems: 'center',
   },
   qrCodeText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#0284C7',
-    letterSpacing: 1,
+    fontSize: theme.fontSizes.xs,
+    fontWeight: '700',
+    color: theme.colors.primary,
   },
   qrPayloadText: {
-    fontSize: 9,
-    color: '#64748B',
+    fontSize: theme.fontSizes.xs,
+    color: theme.colors.textMuted,
     fontFamily: 'monospace',
     marginTop: 4,
   },
   uploadUrlNotice: {
-    fontSize: 10,
-    color: '#2563EB',
+    fontSize: theme.fontSizes.xs,
+    color: theme.colors.info,
     textAlign: 'center',
   },
   closeSlipBtn: {
-    backgroundColor: '#0284C7',
+    backgroundColor: theme.colors.primary,
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 8,
+    borderRadius: theme.radii.md,
   },
   closeSlipBtnText: {
-    color: '#FFFFFF',
+    color: theme.colors.textInverted,
     fontWeight: '700',
-    fontSize: 12,
+    fontSize: theme.fontSizes.xs,
   },
   formatChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#F3F4F6',
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.surfaceSubtle,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: theme.colors.border,
   },
   formatChipActive: {
-    backgroundColor: '#DBEAFE',
-    borderColor: '#3B82F6',
+    backgroundColor: theme.colors.infoBg,
+    borderColor: theme.colors.info,
   },
   formatChipText: {
-    fontSize: 12,
+    fontSize: theme.fontSizes.xs,
     fontWeight: '600',
-    color: '#4B5563',
+    color: theme.colors.textSecondary,
   },
   formatChipTextActive: {
-    color: '#1D4ED8',
+    color: theme.colors.infoText,
   },
   cancelModalBtn: {
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#F3F4F6',
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.surfaceSubtle,
   },
   cancelModalText: {
-    fontSize: 12,
+    fontSize: theme.fontSizes.xs,
     fontWeight: '600',
-    color: '#4B5563',
+    color: theme.colors.textSecondary,
   },
   confirmAttachBtn: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#0284C7',
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.primary,
   },
   confirmAttachText: {
-    color: '#FFFFFF',
+    color: theme.colors.textInverted,
     fontWeight: '700',
-    fontSize: 12,
+    fontSize: theme.fontSizes.xs,
   },
   categoryRow: {
     flexDirection: 'row',
@@ -2546,49 +2190,49 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: '#F3F4F6',
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.surfaceSubtle,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: theme.colors.border,
     alignItems: 'center',
   },
   categoryPillActive: {
-    backgroundColor: '#0284C7',
-    borderColor: '#0284C7',
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
   },
   categoryPillText: {
-    fontSize: 13,
+    fontSize: theme.fontSizes.sm,
     fontWeight: '600',
-    color: '#4B5563',
+    color: theme.colors.textSecondary,
   },
   categoryPillTextActive: {
-    color: '#FFFFFF',
+    color: theme.colors.textInverted,
   },
   institutionalBox: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: theme.colors.infoBg,
     borderWidth: 1,
-    borderColor: '#BFDBFE',
-    borderRadius: 10,
+    borderColor: theme.colors.infoBorder,
+    borderRadius: theme.radii.md,
     padding: 12,
     gap: 10,
   },
   institutionalBoxTitle: {
-    fontSize: 13,
+    fontSize: theme.fontSizes.sm,
     fontWeight: '700',
-    color: '#1E40AF',
+    color: theme.colors.infoText,
   },
   institutionalBanner: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: theme.colors.infoBg,
     borderWidth: 1,
-    borderColor: '#BFDBFE',
-    borderRadius: 10,
+    borderColor: theme.colors.infoBorder,
+    borderRadius: theme.radii.md,
     padding: 12,
     gap: 8,
   },
   institutionalBannerTitle: {
-    fontSize: 13,
+    fontSize: theme.fontSizes.sm,
     fontWeight: '700',
-    color: '#1E40AF',
+    color: theme.colors.infoText,
   },
   institutionalGrid: {
     flexDirection: 'row',
@@ -2600,93 +2244,93 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   institutionalLabel: {
-    fontSize: 11,
-    color: '#64748B',
+    fontSize: theme.fontSizes.xs,
+    color: theme.colors.textMuted,
     fontWeight: '500',
   },
   institutionalValue: {
-    fontSize: 13,
+    fontSize: theme.fontSizes.sm,
     fontWeight: '700',
-    color: '#0F172A',
+    color: theme.colors.text,
   },
   addDocBtn: {
-    backgroundColor: '#E0F2FE',
+    backgroundColor: theme.colors.primaryLight,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 6,
+    borderRadius: theme.radii.sm,
     borderWidth: 1,
-    borderColor: '#BAE6FD',
+    borderColor: theme.colors.primaryBorder,
   },
   addDocBtnText: {
-    color: '#0284C7',
+    color: theme.colors.primary,
     fontWeight: '700',
-    fontSize: 11,
+    fontSize: theme.fontSizes.xs,
   },
   attachmentCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.colors.surface,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 10,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.md,
     padding: 12,
     gap: 8,
   },
   attachmentTitle: {
-    fontSize: 13,
+    fontSize: theme.fontSizes.sm,
     fontWeight: '700',
-    color: '#111827',
+    color: theme.colors.text,
   },
   attachmentMeta: {
-    fontSize: 11,
-    color: '#6B7280',
+    fontSize: theme.fontSizes.xs,
+    color: theme.colors.textMuted,
     marginTop: 2,
   },
   attachmentNotes: {
-    fontSize: 12,
-    color: '#374151',
+    fontSize: theme.fontSizes.xs,
+    color: theme.colors.textSecondary,
     fontStyle: 'italic',
     marginTop: 4,
   },
   attBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 6,
+    borderRadius: theme.radii.sm,
     borderWidth: 1,
   },
   attBadgeVerified: {
-    backgroundColor: '#DCFCE7',
-    borderColor: '#86EFAC',
+    backgroundColor: theme.colors.successBg,
+    borderColor: theme.colors.successBorder,
   },
   attBadgePending: {
-    backgroundColor: '#FEF3C7',
-    borderColor: '#FDE68A',
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
   },
   attBadgeRejected: {
-    backgroundColor: '#FEE2E2',
-    borderColor: '#FCA5A5',
+    backgroundColor: theme.colors.emergencyBg,
+    borderColor: theme.colors.emergencyBorder,
   },
   attBadgeText: {
-    fontSize: 10,
+    fontSize: theme.fontSizes.xs,
     fontWeight: '700',
   },
   attBadgeTextVerified: {
-    color: '#15803D',
+    color: theme.colors.successText,
   },
   attBadgeTextPending: {
-    color: '#B45309',
+    color: theme.colors.warningText,
   },
   attBadgeTextRejected: {
-    color: '#B91C1C',
+    color: theme.colors.emergencyText,
   },
   verifiedMetaBox: {
-    backgroundColor: '#F0FDF4',
+    backgroundColor: theme.colors.successBg,
     borderWidth: 1,
-    borderColor: '#BBF7D0',
+    borderColor: theme.colors.successBorder,
     padding: 8,
-    borderRadius: 6,
+    borderRadius: theme.radii.sm,
   },
   verifiedMetaText: {
-    fontSize: 11,
-    color: '#166534',
+    fontSize: theme.fontSizes.xs,
+    color: theme.colors.successText,
     fontWeight: '600',
   },
   attActionRow: {
@@ -2695,72 +2339,39 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   verifyBtn: {
-    backgroundColor: '#16A34A',
+    backgroundColor: theme.colors.success,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 6,
+    borderRadius: theme.radii.sm,
   },
   verifyBtnText: {
-    color: '#FFFFFF',
+    color: theme.colors.textInverted,
     fontWeight: '700',
-    fontSize: 11,
+    fontSize: theme.fontSizes.xs,
   },
   rejectBtn: {
-    backgroundColor: '#DC2626',
+    backgroundColor: theme.colors.emergency,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 6,
+    borderRadius: theme.radii.sm,
   },
   rejectBtnText: {
-    color: '#FFFFFF',
+    color: theme.colors.textInverted,
     fontWeight: '700',
-    fontSize: 11,
+    fontSize: theme.fontSizes.xs,
   },
   viewDocBtn: {
-    backgroundColor: '#0284C7',
+    backgroundColor: theme.colors.primary,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 6,
+    borderRadius: theme.radii.sm,
     alignSelf: 'flex-start',
     marginTop: 8,
     marginBottom: 4,
   },
   viewDocBtnText: {
-    color: '#FFFFFF',
+    color: theme.colors.textInverted,
     fontWeight: '700',
-    fontSize: 11,
-  },
-  offlineBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#FEF3C7',
-    borderWidth: 1,
-    borderColor: '#F59E0B',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-    gap: 12,
-  },
-  offlineBannerTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#92400E',
-  },
-  offlineBannerSubtitle: {
-    fontSize: 11,
-    color: '#B45309',
-    marginTop: 2,
-  },
-  syncNowBtn: {
-    backgroundColor: '#D97706',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 6,
-  },
-  syncNowBtnText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 12,
+    fontSize: theme.fontSizes.xs,
   },
 });
