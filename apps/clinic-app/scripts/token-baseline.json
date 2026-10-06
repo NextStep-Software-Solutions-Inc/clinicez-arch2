@@ -1,0 +1,20 @@
+{
+  "components/BulkStudentImportModal.tsx": 86,
+  "components/CsvCatalogImportModal.tsx": 103,
+  "components/FacilityActivationGate.tsx": 92,
+  "components/layout/ClinicHeaderBar.tsx": 7,
+  "components/layout/WorkstationSidebar.tsx": 19,
+  "components/PhilHealthCatalogMappingModal.tsx": 83,
+  "components/PhilHealthProfileModal.tsx": 116,
+  "components/PrescriptionSlipModal.tsx": 168,
+  "components/RecordExternalDispenseModal.tsx": 46,
+  "navigation/Navigation.tsx": 15,
+  "navigation/screens/Appointments.screen.tsx": 97,
+  "navigation/screens/Billing.screen.tsx": 137,
+  "navigation/screens/Consultations.screen.tsx": 659,
+  "navigation/screens/Dashboard.screen.tsx": 333,
+  "navigation/screens/Patients.screen.tsx": 446,
+  "navigation/screens/Settings.screen.tsx": 262,
+  "navigation/screens/Yakap.screen.tsx": 21,
+  "utils/printHelper.web.ts": 3
+}

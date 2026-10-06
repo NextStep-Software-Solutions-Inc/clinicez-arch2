@@ -1,19 +1,9 @@
 import React from 'react';
-import { Text, TextProps, StyleSheet, TextStyle } from 'react-native';
+import { TextProps, StyleSheet, TextStyle } from 'react-native';
+import { Text } from './Text';
 import { theme } from '../../constants/theme';
 
-export type TextVariant =
-  | 'display'
-  | 'h1'
-  | 'h2'
-  | 'h3'
-  | 'bodyLarge'
-  | 'body'
-  | 'bodyBold'
-  | 'caption'
-  | 'captionBold'
-  | 'badge'
-  | 'code';
+export type TextVariant = keyof typeof theme.typography;
 
 export interface ThemedTextProps extends TextProps {
   variant?: TextVariant;

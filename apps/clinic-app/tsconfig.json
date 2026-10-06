@@ -12,6 +12,8 @@
       "@layout": ["components/layout"],
       "@constants/*": ["constants/*"],
       "@services/*": ["services/*"],
+      "@utils/*": ["utils/*"],
+      "@context/*": ["context/*"],
       "@screens/*": ["navigation/screens/*"]
     }
   }

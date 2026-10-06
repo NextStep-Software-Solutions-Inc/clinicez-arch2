@@ -1,12 +1,14 @@
 import React from 'react';
 import { View, StyleSheet, ViewStyle } from 'react-native';
 import ThemedText from './ThemedText';
+import Icon, { IconSlot, resolveIconName } from './Icon';
 import { theme } from '../../constants/theme';
 
 export interface StatCardProps {
   label: string;
   value: string | number;
   subtext?: string;
+  /** IconName (e.g. "patients"). Legacy emoji glyphs are still resolved for old call sites. */
   icon?: string;
   trend?: {
     value: string;
@@ -31,7 +33,11 @@ export default function StatCard({
         <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.label}>
           {label}
         </ThemedText>
-        {icon ? <ThemedText style={styles.icon}>{icon}</ThemedText> : null}
+        {resolveIconName(icon) ? (
+          <View style={styles.iconTile}>
+            <IconSlot value={icon} size={theme.sizes.iconSm} color={theme.colors.primary} />
+          </View>
+        ) : null}
       </View>
 
       <ThemedText
@@ -43,19 +49,23 @@ export default function StatCard({
 
       <View style={styles.bottomRow}>
         {trend ? (
-          <ThemedText
-            variant="captionBold"
-            style={[
-              styles.trendText,
-              { color: trend.isPositive ? theme.colors.success : theme.colors.emergency },
-            ]}
-          >
-            {trend.isPositive ? '↑' : '↓'} {trend.value}{' '}
-          </ThemedText>
+          <View style={styles.trend}>
+            <Icon
+              name={trend.isPositive ? 'arrowUp' : 'arrowDown'}
+              size={theme.fontSizes.xs}
+              color={trend.isPositive ? theme.colors.success : theme.colors.emergency}
+            />
+            <ThemedText
+              variant="captionBold"
+              color={trend.isPositive ? theme.colors.success : theme.colors.emergency}
+            >
+              {trend.value}
+            </ThemedText>
+          </View>
         ) : null}
 
         {subtext ? (
-          <ThemedText variant="caption" color={theme.colors.textLight} numberOfLines={1}>
+          <ThemedText variant="caption" color={theme.colors.textMuted} numberOfLines={1}>
             {subtext}
           </ThemedText>
         ) : null}
@@ -68,24 +78,29 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: theme.colors.surface,
     borderRadius: theme.radii.lg,
-    padding: theme.spacing.md,
-    borderWidth: 1,
+    padding: theme.spacing.lg,
+    borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
-    minWidth: 120,
-    gap: 4,
+    minWidth: 140,
+    gap: theme.spacing.xs,
     ...theme.shadows.sm,
   },
   topRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: theme.spacing.sm,
   },
   label: {
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    flex: 1,
   },
-  icon: {
-    fontSize: 16,
+  iconTile: {
+    width: theme.sizes.controlSm - theme.spacing.xs,
+    height: theme.sizes.controlSm - theme.spacing.xs,
+    borderRadius: theme.radii.sm,
+    backgroundColor: theme.colors.primarySubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   value: {
     color: theme.colors.text,
@@ -94,9 +109,12 @@ const styles = StyleSheet.create({
   bottomRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
   },
-  trendText: {
-    fontSize: 11,
+  trend: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
   },
 });

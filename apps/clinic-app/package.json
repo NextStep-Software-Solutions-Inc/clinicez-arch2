@@ -6,6 +6,8 @@
     "react-dom": "19.2.3"
   },
   "dependencies": {
+    "@expo-google-fonts/geist": "^0.4.2",
+    "@expo-google-fonts/geist-mono": "^0.4.3",
     "@expo/metro-runtime": "~56.0.21",
     "@react-navigation/bottom-tabs": "^8.0.0-alpha.33",
     "@react-navigation/core": "8.0.0-alpha.26",
@@ -13,12 +15,15 @@
     "@shared/safe": "workspace:*",
     "axios": "^1.18.0",
     "expo": "~56.0.8",
+    "expo-font": "~56.0.7",
     "expo-status-bar": "~56.0.4",
+    "lucide-react-native": "^1.52.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.85.3",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "4.25.2",
+    "react-native-svg": "15.15.4",
     "react-native-web": "~0.21.3"
   },
   "devDependencies": {
@@ -35,7 +40,8 @@
     "build:web": "expo export -p web && node -e \"const fs = require('fs'); if(fs.existsSync('public')) fs.cpSync('public', 'dist', {recursive: true}); if(fs.existsSync('vercel.json')) fs.copyFileSync('vercel.json', 'dist/vercel.json');\"",
     "build:clinic-web": "bun run build:web",
     "build": "bun run build:web",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint:tokens": "node scripts/check-tokens.mjs"
   },
   "private": true
 }

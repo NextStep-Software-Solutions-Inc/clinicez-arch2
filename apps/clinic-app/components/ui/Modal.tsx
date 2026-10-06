@@ -1,3 +1,4 @@
+import React from 'react';
 import {
   Modal as RNModal,
   View,
@@ -10,6 +11,7 @@ import {
   DimensionValue,
 } from 'react-native';
 import ThemedText from './ThemedText';
+import Icon from './Icon';
 import { theme } from '../../constants/theme';
 
 export interface ModalProps {
@@ -41,24 +43,30 @@ export default function Modal({
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.overlay}
       >
-        <Pressable style={styles.backdrop} onPress={onClose} />
+        <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close dialog" />
 
         <View style={[styles.dialog, { maxWidth, maxHeight }, contentStyle]}>
           {/* Header */}
           <View style={styles.header}>
-            <View style={{ flex: 1 }}>
-              <ThemedText variant="h3" style={styles.title}>
+            <View style={styles.headerText}>
+              <ThemedText variant="title" style={styles.title}>
                 {title}
               </ThemedText>
               {subtitle ? (
-                <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.subtitle}>
+                <ThemedText variant="small" color={theme.colors.textMuted} style={styles.subtitle}>
                   {subtitle}
                 </ThemedText>
               ) : null}
             </View>
 
-            <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={8}>
-              <ThemedText style={styles.closeText}>✕</ThemedText>
+            <Pressable
+              onPress={onClose}
+              style={({ pressed }) => [styles.closeBtn, pressed && styles.closeBtnPressed]}
+              hitSlop={theme.spacing.sm}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+            >
+              <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textMuted} />
             </Pressable>
           </View>
 
@@ -85,7 +93,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: theme.spacing.md,
+    padding: theme.spacing.lg,
   },
   backdrop: {
     position: 'absolute',
@@ -105,11 +113,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.lg,
-    paddingBottom: theme.spacing.md,
-    borderBottomWidth: 1,
+    gap: theme.spacing.md,
+    paddingHorizontal: theme.spacing['2xl'],
+    paddingTop: theme.spacing.xl,
+    paddingBottom: theme.spacing.lg,
+    borderBottomWidth: theme.sizes.borderWidth,
     borderBottomColor: theme.colors.borderLight,
+  },
+  headerText: {
+    flex: 1,
   },
   title: {
     color: theme.colors.text,
@@ -118,25 +130,24 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   closeBtn: {
-    padding: theme.spacing.xs,
-    borderRadius: theme.radii.sm,
-    backgroundColor: theme.colors.surfaceSubtle,
+    width: theme.sizes.controlMd - theme.spacing.xs,
+    height: theme.sizes.controlMd - theme.spacing.xs,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: theme.radii.md,
   },
-  closeText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: theme.colors.textMuted,
-    lineHeight: 18,
+  closeBtnPressed: {
+    backgroundColor: theme.colors.surfaceSubtle,
   },
   body: {
-    padding: theme.spacing.lg,
-    gap: theme.spacing.md,
+    padding: theme.spacing['2xl'],
+    gap: theme.spacing.lg,
   },
   footer: {
-    borderTopWidth: 1,
+    borderTopWidth: theme.sizes.borderWidth,
     borderTopColor: theme.colors.borderLight,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    backgroundColor: theme.colors.surfaceSubtle,
+    paddingHorizontal: theme.spacing['2xl'],
+    paddingVertical: theme.spacing.lg,
+    backgroundColor: theme.colors.surfaceMuted,
   },
 });

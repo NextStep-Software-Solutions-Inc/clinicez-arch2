@@ -1,180 +1,193 @@
+import {
+  palette,
+  fontSizeScale,
+  spaceScale,
+  radiusScale,
+} from './tokens';
+
+/**
+ * Semantic design tokens - the ONLY thing screens and components should consume.
+ *
+ * Rules:
+ *  - No raw hex, rgba, fontSize or borderRadius outside `constants/` (enforced by
+ *    `bun run lint:tokens`).
+ *  - Pick colors by meaning (`surface`, `textMuted`, `emergencyBg`), never by hue.
+ *  - Type is chosen via `theme.typography.*` / <ThemedText variant>, sizes via
+ *    `theme.fontSizes.*` when a one-off size is unavoidable.
+ */
+
+const colors = {
+  // Brand (Portal-aligned teal)
+  primary: palette.teal[600],
+  primaryHover: palette.teal[700],
+  primaryDark: palette.teal[800],
+  primaryLight: palette.teal[100],
+  primaryLighter: palette.teal[50],
+  primarySubtle: palette.teal[50],
+  primaryBorder: palette.teal[200],
+  onPrimary: palette.slate[0],
+  focusRing: palette.teal[500],
+
+  // Clinical triage urgency
+  emergency: palette.red[600],
+  emergencyBg: palette.red[100],
+  emergencyBorder: palette.red[200],
+  emergencyText: palette.red[800],
+  emergencySubtle: palette.red[50],
+
+  urgent: palette.orange[600],
+  urgentBg: palette.orange[100],
+  urgentBorder: palette.orange[200],
+  urgentText: palette.orange[700],
+
+  routine: palette.teal[600],
+  routineBg: palette.teal[100],
+  routineBorder: palette.teal[200],
+  routineText: palette.teal[700],
+
+  // Status
+  success: palette.green[600],
+  successBg: palette.green[100],
+  successBorder: palette.green[200],
+  successText: palette.green[700],
+
+  warning: palette.amber[600],
+  warningBg: palette.amber[100],
+  warningBorder: palette.amber[200],
+  warningText: palette.amber[700],
+
+  info: palette.blue[600],
+  infoBg: palette.blue[100],
+  infoBorder: palette.blue[200],
+  infoText: palette.blue[700],
+
+  purple: palette.violet[600],
+  purpleBg: palette.violet[100],
+  purpleBorder: palette.violet[200],
+  purpleText: palette.violet[800],
+
+  // Surfaces
+  background: palette.slate[50],
+  surface: palette.slate[0],
+  surfaceMuted: palette.slate[50],
+  surfaceSubtle: palette.slate[100],
+  surfaceHighlight: palette.slate[200],
+  surfaceInverse: palette.slate[900],
+
+  // Borders
+  border: palette.slate[200],
+  borderLight: palette.slate[100],
+  borderDark: palette.slate[300],
+
+  // Text
+  text: palette.slate[900],
+  textSecondary: palette.slate[600],
+  textMuted: palette.slate[500],
+  textLight: palette.slate[400],
+  textInverted: palette.slate[0],
+
+  // Overlays
+  overlay: 'rgba(15, 23, 42, 0.55)',
+  shadow: palette.slate[900],
+  transparent: 'transparent',
+} as const;
+
+/**
+ * Font families. Custom fonts do not honour `fontWeight` on native, so each weight is
+ * its own family. `Text`/`ThemedText`/`TextInput` (components/ui/Text) resolve the right
+ * family from a style's `fontWeight` automatically, so screens keep writing
+ * `fontWeight: '600'` and never reference these names directly.
+ */
+const fonts = {
+  sans: {
+    '400': 'Geist_400Regular',
+    '500': 'Geist_500Medium',
+    '600': 'Geist_600SemiBold',
+    '700': 'Geist_700Bold',
+  },
+  mono: {
+    '400': 'GeistMono_400Regular',
+    '500': 'GeistMono_500Medium',
+    '600': 'GeistMono_600SemiBold',
+    '700': 'GeistMono_700Bold',
+  },
+} as const;
+
+const typography = {
+  display: { fontSize: fontSizeScale['4xl'], fontWeight: '700' as const, lineHeight: 44, letterSpacing: -0.6 },
+  h1: { fontSize: fontSizeScale['3xl'], fontWeight: '700' as const, lineHeight: 36, letterSpacing: -0.4 },
+  h2: { fontSize: fontSizeScale['2xl'], fontWeight: '600' as const, lineHeight: 30, letterSpacing: -0.2 },
+  title: { fontSize: fontSizeScale.xl, fontWeight: '600' as const, lineHeight: 26 },
+  h3: { fontSize: fontSizeScale.lg, fontWeight: '600' as const, lineHeight: 24 },
+  bodyLarge: { fontSize: fontSizeScale.lg, fontWeight: '400' as const, lineHeight: 24 },
+  body: { fontSize: fontSizeScale.md, fontWeight: '400' as const, lineHeight: 20 },
+  bodyBold: { fontSize: fontSizeScale.md, fontWeight: '600' as const, lineHeight: 20 },
+  small: { fontSize: fontSizeScale.sm, fontWeight: '400' as const, lineHeight: 18 },
+  smallBold: { fontSize: fontSizeScale.sm, fontWeight: '600' as const, lineHeight: 18 },
+  caption: { fontSize: fontSizeScale.xs, fontWeight: '400' as const, lineHeight: 16 },
+  captionBold: { fontSize: fontSizeScale.xs, fontWeight: '600' as const, lineHeight: 16 },
+  badge: { fontSize: fontSizeScale.xs, fontWeight: '600' as const, lineHeight: 16, letterSpacing: 0.2 },
+  code: { fontSize: fontSizeScale.xs, fontWeight: '500' as const, lineHeight: 16, fontFamily: fonts.mono['500'] },
+};
+
+const shadowBase = {
+  shadowColor: colors.shadow,
+};
+
+const shadows = {
+  none: {
+    shadowColor: colors.transparent,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
+  },
+  sm: {
+    ...shadowBase,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  md: {
+    ...shadowBase,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  lg: {
+    ...shadowBase,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+};
+
 export const theme = {
-  colors: {
-    // Primary Clinical Sky Palette
-    primary: '#0284C7',
-    primaryHover: '#0369A1',
-    primaryLight: '#E0F2FE',
-    primaryLighter: '#F0F9FF',
-    primarySubtle: '#F0F9FF',
-    primaryDark: '#075985',
+  colors,
+  fonts,
+  fontSizes: fontSizeScale,
+  typography,
+  spacing: spaceScale,
+  radii: radiusScale,
+  shadows,
 
-    // Secondary Indigo Palette
-    secondary: '#4F46E5',
-    secondaryLight: '#EEF2FF',
-    secondaryDark: '#3730A3',
-
-    // Clinical Triage Urgency
-    emergency: '#DC2626',
-    emergencyBg: '#FEE2E2',
-    emergencyBorder: '#FECACA',
-    emergencyText: '#991B1B',
-
-    urgent: '#EA580C',
-    urgentBg: '#FFEDD5',
-    urgentBorder: '#FED7AA',
-    urgentText: '#C2410C',
-
-    routine: '#0284C7',
-    routineBg: '#E0F2FE',
-    routineBorder: '#BAE6FD',
-    routineText: '#0369A1',
-
-    // Status Colors
-    success: '#16A34A',
-    successBg: '#DCFCE7',
-    successBorder: '#BBF7D0',
-    successText: '#15803D',
-
-    warning: '#D97706',
-    warningBg: '#FEF3C7',
-    warningBorder: '#FDE68A',
-    warningText: '#B45309',
-
-    purple: '#7E22CE',
-    purpleBg: '#F3E8FF',
-    purpleBorder: '#E9D5FF',
-    purpleText: '#6B21A8',
-
-    // Neutral Palette (Slate)
-    background: '#F8FAFC',
-    surface: '#FFFFFF',
-    surfaceSubtle: '#F1F5F9',
-    surfaceHighlight: '#E2E8F0',
-
-    border: '#E2E8F0',
-    borderLight: '#F1F5F9',
-    borderDark: '#CBD5E1',
-
-    text: '#0F172A',
-    textSecondary: '#475569',
-    textMuted: '#64748B',
-    textLight: '#94A3B8',
-    textInverted: '#FFFFFF',
-
-    // Modals & Backdrops
-    overlay: 'rgba(15, 23, 42, 0.65)',
-  },
-
-  typography: {
-    display: {
-      fontSize: 32,
-      fontWeight: '800' as const,
-      lineHeight: 40,
-      letterSpacing: -0.5,
-    },
-    h1: {
-      fontSize: 26,
-      fontWeight: '800' as const,
-      lineHeight: 34,
-      letterSpacing: -0.3,
-    },
-    h2: {
-      fontSize: 20,
-      fontWeight: '700' as const,
-      lineHeight: 28,
-    },
-    h3: {
-      fontSize: 16,
-      fontWeight: '700' as const,
-      lineHeight: 24,
-    },
-    bodyLarge: {
-      fontSize: 15,
-      fontWeight: '400' as const,
-      lineHeight: 22,
-    },
-    body: {
-      fontSize: 14,
-      fontWeight: '400' as const,
-      lineHeight: 20,
-    },
-    bodyBold: {
-      fontSize: 14,
-      fontWeight: '600' as const,
-      lineHeight: 20,
-    },
-    caption: {
-      fontSize: 12,
-      fontWeight: '400' as const,
-      lineHeight: 16,
-    },
-    captionBold: {
-      fontSize: 12,
-      fontWeight: '600' as const,
-      lineHeight: 16,
-    },
-    badge: {
-      fontSize: 11,
-      fontWeight: '700' as const,
-      lineHeight: 14,
-    },
-    code: {
-      fontSize: 12,
-      fontWeight: '700' as const,
-      fontFamily: 'monospace',
-    },
-  },
-
-  spacing: {
-    xs: 4,
-    sm: 8,
-    md: 12,
-    lg: 16,
-    xl: 20,
-    '2xl': 24,
-    '3xl': 32,
-    '4xl': 40,
-  },
-
-  radii: {
-    xs: 4,
-    sm: 6,
-    md: 8,
-    lg: 12,
-    xl: 16,
-    '2xl': 20,
-    full: 9999,
-  },
-
-  shadows: {
-    none: {
-      shadowColor: 'transparent',
-      shadowOffset: { width: 0, height: 0 },
-      shadowOpacity: 0,
-      shadowRadius: 0,
-      elevation: 0,
-    },
-    sm: {
-      shadowColor: '#0F172A',
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.05,
-      shadowRadius: 2,
-      elevation: 1,
-    },
-    md: {
-      shadowColor: '#0F172A',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.08,
-      shadowRadius: 6,
-      elevation: 3,
-    },
-    lg: {
-      shadowColor: '#0F172A',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.12,
-      shadowRadius: 12,
-      elevation: 6,
-    },
+  /** Interactive sizing. `touchTarget` is the minimum hit area on touch devices. */
+  sizes: {
+    touchTarget: 44,
+    controlSm: 32,
+    controlMd: 40,
+    controlLg: 48,
+    iconSm: 16,
+    iconMd: 20,
+    iconLg: 24,
+    sidebarWidth: 260,
+    sidebarCollapsedWidth: 72,
+    headerHeight: 64,
+    contentMaxWidth: 1440,
+    borderWidth: 1,
   },
 
   breakpoints: {
@@ -186,3 +199,4 @@ export const theme = {
 };
 
 export type Theme = typeof theme;
+export type ThemeColor = keyof typeof colors;

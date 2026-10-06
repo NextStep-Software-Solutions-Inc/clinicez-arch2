@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, ViewStyle, TextStyle } from 'react-native';
 import ThemedText from './ThemedText';
+import { IconSlot, resolveIconName } from './Icon';
 import { theme } from '../../constants/theme';
 
 export type BadgeVariant =
@@ -9,6 +10,7 @@ export type BadgeVariant =
   | 'emergency'
   | 'success'
   | 'warning'
+  | 'info'
   | 'purple'
   | 'neutral'
   | 'primary'
@@ -20,6 +22,7 @@ export interface BadgeProps {
   size?: 'sm' | 'md';
   style?: ViewStyle;
   textStyle?: TextStyle;
+  /** IconName (e.g. "clock"). Legacy emoji glyphs are still resolved for old call sites. */
   icon?: string;
 }
 
@@ -36,14 +39,10 @@ export default function Badge({
 
   return (
     <View style={[styles.badge, variantStyles.container, sizeStyles.container, style]}>
-      {icon ? (
-        <ThemedText style={[styles.iconText, sizeStyles.text, variantStyles.text]}>
-          {icon}{' '}
-        </ThemedText>
+      {resolveIconName(icon) ? (
+        <IconSlot value={icon} size={sizeStyles.iconSize} color={variantStyles.text.color} />
       ) : null}
-      <ThemedText style={[styles.badgeText, sizeStyles.text, variantStyles.text, textStyle]}>
-        {label}
-      </ThemedText>
+      <ThemedText style={[sizeStyles.text, variantStyles.text, textStyle]}>{label}</ThemedText>
     </View>
   );
 }
@@ -63,7 +62,7 @@ function getVariantStyles(variant: BadgeVariant) {
     case 'routine':
     case 'primary':
       return {
-        container: { backgroundColor: theme.colors.primaryLight, borderColor: theme.colors.routineBorder },
+        container: { backgroundColor: theme.colors.primaryLight, borderColor: theme.colors.primaryBorder },
         text: { color: theme.colors.primaryDark },
       };
     case 'success':
@@ -76,6 +75,11 @@ function getVariantStyles(variant: BadgeVariant) {
         container: { backgroundColor: theme.colors.warningBg, borderColor: theme.colors.warningBorder },
         text: { color: theme.colors.warningText },
       };
+    case 'info':
+      return {
+        container: { backgroundColor: theme.colors.infoBg, borderColor: theme.colors.infoBorder },
+        text: { color: theme.colors.infoText },
+      };
     case 'purple':
       return {
         container: { backgroundColor: theme.colors.purpleBg, borderColor: theme.colors.purpleBorder },
@@ -83,7 +87,7 @@ function getVariantStyles(variant: BadgeVariant) {
       };
     case 'outline':
       return {
-        container: { backgroundColor: 'transparent', borderColor: theme.colors.borderDark },
+        container: { backgroundColor: theme.colors.transparent, borderColor: theme.colors.borderDark },
         text: { color: theme.colors.textSecondary },
       };
     case 'neutral':
@@ -98,13 +102,23 @@ function getVariantStyles(variant: BadgeVariant) {
 function getSizeStyles(size: 'sm' | 'md') {
   if (size === 'sm') {
     return {
-      container: { paddingVertical: 2, paddingHorizontal: 6, borderRadius: theme.radii.xs },
-      text: { fontSize: 10, fontWeight: '700' as const },
+      container: {
+        paddingVertical: 1,
+        paddingHorizontal: theme.spacing.sm - 2,
+        borderRadius: theme.radii.xs,
+      },
+      text: theme.typography.badge,
+      iconSize: theme.fontSizes.xs - 2,
     };
   }
   return {
-    container: { paddingVertical: 4, paddingHorizontal: 8, borderRadius: theme.radii.sm },
-    text: { fontSize: 11, fontWeight: '700' as const },
+    container: {
+      paddingVertical: 2,
+      paddingHorizontal: theme.spacing.sm,
+      borderRadius: theme.radii.sm,
+    },
+    text: theme.typography.badge,
+    iconSize: theme.fontSizes.xs,
   };
 }
 
@@ -113,12 +127,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
-    borderWidth: 1,
-  },
-  iconText: {
-    marginRight: 2,
-  },
-  badgeText: {
-    letterSpacing: 0.2,
+    gap: theme.spacing.xs,
+    borderWidth: theme.sizes.borderWidth,
   },
 });

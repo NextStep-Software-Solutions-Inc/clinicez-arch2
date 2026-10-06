@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, ViewStyle } from 'react-native';
 import ThemedText from './ThemedText';
+import { IconSlot, resolveIconName } from './Icon';
 import { theme } from '../../constants/theme';
 
 export interface CardProps {
@@ -18,6 +19,7 @@ export interface CardHeaderProps {
   title: string;
   subtitle?: string;
   rightAction?: React.ReactNode;
+  /** IconName (e.g. "patients"). Legacy emoji glyphs are still resolved for old call sites. */
   icon?: string;
   style?: ViewStyle;
 }
@@ -26,8 +28,12 @@ export function CardHeader({ title, subtitle, rightAction, icon, style }: CardHe
   return (
     <View style={[styles.header, style]}>
       <View style={styles.titleRow}>
-        {icon ? <ThemedText style={styles.headerIcon}>{icon}</ThemedText> : null}
-        <View style={{ flex: 1 }}>
+        {resolveIconName(icon) ? (
+          <View style={styles.headerIcon}>
+            <IconSlot value={icon} size={theme.sizes.iconMd} color={theme.colors.primary} />
+          </View>
+        ) : null}
+        <View style={styles.titleText}>
           <ThemedText variant="h3" style={styles.title}>
             {title}
           </ThemedText>
@@ -66,27 +72,27 @@ function getCardVariantStyles(variant: 'default' | 'elevated' | 'outlined' | 'su
     case 'elevated':
       return {
         backgroundColor: theme.colors.surface,
-        borderWidth: 1,
+        borderWidth: theme.sizes.borderWidth,
         borderColor: theme.colors.border,
         ...theme.shadows.md,
       };
     case 'subtle':
       return {
-        backgroundColor: theme.colors.surfaceSubtle,
-        borderWidth: 1,
+        backgroundColor: theme.colors.surfaceMuted,
+        borderWidth: theme.sizes.borderWidth,
         borderColor: theme.colors.borderLight,
       };
     case 'outlined':
       return {
-        backgroundColor: 'transparent',
-        borderWidth: 1,
+        backgroundColor: theme.colors.transparent,
+        borderWidth: theme.sizes.borderWidth,
         borderColor: theme.colors.borderDark,
       };
     case 'default':
     default:
       return {
         backgroundColor: theme.colors.surface,
-        borderWidth: 1,
+        borderWidth: theme.sizes.borderWidth,
         borderColor: theme.colors.border,
         ...theme.shadows.sm,
       };
@@ -103,18 +109,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    borderBottomWidth: 1,
+    borderBottomWidth: theme.sizes.borderWidth,
     borderBottomColor: theme.colors.borderLight,
-    paddingBottom: theme.spacing.sm,
+    paddingBottom: theme.spacing.md,
   },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    gap: theme.spacing.sm,
+    gap: theme.spacing.md,
   },
   headerIcon: {
-    fontSize: 18,
+    width: theme.sizes.controlMd - theme.spacing.xs,
+    height: theme.sizes.controlMd - theme.spacing.xs,
+    borderRadius: theme.radii.md,
+    backgroundColor: theme.colors.primarySubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  titleText: {
+    flex: 1,
   },
   title: {
     color: theme.colors.text,
@@ -129,9 +143,9 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
   },
   footer: {
-    borderTopWidth: 1,
+    borderTopWidth: theme.sizes.borderWidth,
     borderTopColor: theme.colors.borderLight,
-    paddingTop: theme.spacing.sm,
+    paddingTop: theme.spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',

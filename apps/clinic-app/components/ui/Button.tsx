@@ -6,8 +6,10 @@ import {
   ViewStyle,
   TextStyle,
   PressableProps,
+  PressableStateCallbackType,
 } from 'react-native';
 import ThemedText from './ThemedText';
+import { IconSlot, resolveIconName } from './Icon';
 import { theme } from '../../constants/theme';
 
 export type ButtonVariant =
@@ -24,6 +26,7 @@ export interface ButtonProps extends Omit<PressableProps, 'style'> {
   title: string;
   variant?: ButtonVariant;
   size?: ButtonSize;
+  /** IconName (e.g. "plus"). Legacy emoji glyphs are still resolved for old call sites. */
   icon?: string;
   rightIcon?: string;
   loading?: boolean;
@@ -31,6 +34,8 @@ export interface ButtonProps extends Omit<PressableProps, 'style'> {
   style?: ViewStyle;
   textStyle?: TextStyle;
 }
+
+type InteractionState = PressableStateCallbackType & { hovered?: boolean };
 
 export default function Button({
   title,
@@ -45,17 +50,23 @@ export default function Button({
   onPress,
   ...rest
 }: ButtonProps) {
-  const variantStyles = getButtonVariantStyles(variant, disabled);
+  const variantStyles = getButtonVariantStyles(variant);
   const sizeStyles = getButtonSizeStyles(size);
+  const showLeftIcon = !loading && !!resolveIconName(icon);
+  const showRightIcon = !loading && !!resolveIconName(rightIcon);
 
   return (
     <Pressable
-      style={({ pressed }) => [
+      accessibilityRole="button"
+      accessibilityState={{ disabled: disabled || loading, busy: loading }}
+      hitSlop={size === 'lg' ? undefined : theme.spacing.xs}
+      style={(state: InteractionState) => [
         styles.buttonBase,
         variantStyles.container,
         sizeStyles.container,
+        state.hovered && !disabled && variantStyles.hover,
         disabled && styles.disabled,
-        pressed && !disabled && styles.pressed,
+        state.pressed && !disabled && styles.pressed,
         style,
       ]}
       disabled={disabled || loading}
@@ -63,75 +74,66 @@ export default function Button({
       {...rest}
     >
       {loading ? (
-        <ActivityIndicator
-          size="small"
-          color={variantStyles.indicatorColor}
-          style={{ marginRight: 6 }}
-        />
-      ) : icon ? (
-        <ThemedText style={[styles.icon, sizeStyles.icon, variantStyles.text]}>
-          {icon}{' '}
-        </ThemedText>
+        <ActivityIndicator size="small" color={variantStyles.indicatorColor} />
+      ) : showLeftIcon ? (
+        <IconSlot value={icon} size={sizeStyles.iconSize} color={variantStyles.text.color} />
       ) : null}
 
-      <ThemedText
-        style={[
-          styles.textBase,
-          sizeStyles.text,
-          variantStyles.text,
-          textStyle,
-        ]}
-      >
+      <ThemedText style={[styles.textBase, sizeStyles.text, variantStyles.text, textStyle]}>
         {title}
       </ThemedText>
 
-      {rightIcon && !loading ? (
-        <ThemedText style={[styles.rightIcon, sizeStyles.icon, variantStyles.text]}>
-          {' '}{rightIcon}
-        </ThemedText>
+      {showRightIcon ? (
+        <IconSlot value={rightIcon} size={sizeStyles.iconSize} color={variantStyles.text.color} />
       ) : null}
     </Pressable>
   );
 }
 
-function getButtonVariantStyles(variant: ButtonVariant, disabled: boolean) {
+function getButtonVariantStyles(variant: ButtonVariant) {
   switch (variant) {
     case 'secondary':
       return {
-        container: { backgroundColor: theme.colors.surfaceSubtle, borderWidth: 1, borderColor: theme.colors.border },
+        container: { backgroundColor: theme.colors.surface, borderColor: theme.colors.borderDark },
+        hover: { backgroundColor: theme.colors.surfaceSubtle },
         text: { color: theme.colors.text },
         indicatorColor: theme.colors.text,
       };
     case 'outline':
       return {
-        container: { backgroundColor: 'transparent', borderWidth: 1, borderColor: theme.colors.primary },
+        container: { backgroundColor: theme.colors.transparent, borderColor: theme.colors.primary },
+        hover: { backgroundColor: theme.colors.primarySubtle },
         text: { color: theme.colors.primary },
         indicatorColor: theme.colors.primary,
       };
     case 'ghost':
       return {
-        container: { backgroundColor: 'transparent', borderWidth: 0 },
+        container: { backgroundColor: theme.colors.transparent, borderColor: theme.colors.transparent },
+        hover: { backgroundColor: theme.colors.primarySubtle },
         text: { color: theme.colors.primary },
         indicatorColor: theme.colors.primary,
       };
     case 'danger':
       return {
-        container: { backgroundColor: theme.colors.emergency },
-        text: { color: '#FFFFFF' },
-        indicatorColor: '#FFFFFF',
+        container: { backgroundColor: theme.colors.emergency, borderColor: theme.colors.emergency },
+        hover: { backgroundColor: theme.colors.emergencyText },
+        text: { color: theme.colors.onPrimary },
+        indicatorColor: theme.colors.onPrimary,
       };
     case 'success':
       return {
-        container: { backgroundColor: theme.colors.success },
-        text: { color: '#FFFFFF' },
-        indicatorColor: '#FFFFFF',
+        container: { backgroundColor: theme.colors.success, borderColor: theme.colors.success },
+        hover: { backgroundColor: theme.colors.successText },
+        text: { color: theme.colors.onPrimary },
+        indicatorColor: theme.colors.onPrimary,
       };
     case 'primary':
     default:
       return {
-        container: { backgroundColor: theme.colors.primary },
-        text: { color: '#FFFFFF' },
-        indicatorColor: '#FFFFFF',
+        container: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
+        hover: { backgroundColor: theme.colors.primaryHover },
+        text: { color: theme.colors.onPrimary },
+        indicatorColor: theme.colors.onPrimary,
       };
   }
 }
@@ -140,22 +142,34 @@ function getButtonSizeStyles(size: ButtonSize) {
   switch (size) {
     case 'sm':
       return {
-        container: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: theme.radii.sm },
-        text: { fontSize: 12, fontWeight: '700' as const },
-        icon: { fontSize: 12 },
+        container: {
+          minHeight: theme.sizes.controlSm,
+          paddingHorizontal: theme.spacing.md,
+          borderRadius: theme.radii.sm,
+        },
+        text: theme.typography.captionBold,
+        iconSize: theme.sizes.iconSm,
       };
     case 'lg':
       return {
-        container: { paddingVertical: 14, paddingHorizontal: 20, borderRadius: theme.radii.lg },
-        text: { fontSize: 16, fontWeight: '700' as const },
-        icon: { fontSize: 16 },
+        container: {
+          minHeight: theme.sizes.controlLg,
+          paddingHorizontal: theme.spacing['2xl'],
+          borderRadius: theme.radii.md,
+        },
+        text: theme.typography.h3,
+        iconSize: theme.sizes.iconMd,
       };
     case 'md':
     default:
       return {
-        container: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: theme.radii.md },
-        text: { fontSize: 14, fontWeight: '700' as const },
-        icon: { fontSize: 14 },
+        container: {
+          minHeight: theme.sizes.controlMd,
+          paddingHorizontal: theme.spacing.lg,
+          borderRadius: theme.radii.md,
+        },
+        text: theme.typography.bodyBold,
+        iconSize: theme.sizes.iconSm,
       };
   }
 }
@@ -165,26 +179,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    gap: theme.spacing.sm,
+    borderWidth: theme.sizes.borderWidth,
   },
   textBase: {
     textAlign: 'center',
-  },
-  icon: {
-    marginRight: 4,
-  },
-  rightIcon: {
-    marginLeft: 4,
   },
   disabled: {
     opacity: 0.5,
   },
   pressed: {
     opacity: 0.85,
-    transform: [{ scale: 0.98 }],
   },
 });

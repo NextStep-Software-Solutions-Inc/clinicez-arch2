@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   View,
-  TextInput,
   StyleSheet,
   TextInputProps,
   ViewStyle,
@@ -9,12 +8,15 @@ import {
   Pressable,
 } from 'react-native';
 import ThemedText from './ThemedText';
+import { TextInput } from './Text';
+import { IconSlot, resolveIconName } from './Icon';
 import { theme } from '../../constants/theme';
 
 export interface InputProps extends TextInputProps {
   label?: string;
   error?: string;
   helperText?: string;
+  /** IconName (e.g. "search"). Legacy emoji glyphs are still resolved for old call sites. */
   leftIcon?: string;
   rightIcon?: string;
   onRightIconPress?: () => void;
@@ -56,7 +58,11 @@ export default function Input({
           rest.multiline ? styles.inputMultiline : null,
         ]}
       >
-        {leftIcon ? <ThemedText style={styles.leftIcon}>{leftIcon}</ThemedText> : null}
+        {resolveIconName(leftIcon) ? (
+          <View style={styles.leftIcon}>
+            <IconSlot value={leftIcon} size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+          </View>
+        ) : null}
 
         <TextInput
           style={[styles.input, inputStyle]}
@@ -72,19 +78,22 @@ export default function Input({
           {...rest}
         />
 
-        {rightIcon ? (
-          <Pressable onPress={onRightIconPress} style={styles.rightIconBtn}>
-            <ThemedText style={styles.rightIcon}>{rightIcon}</ThemedText>
+        {resolveIconName(rightIcon) ? (
+          <Pressable onPress={onRightIconPress} style={styles.rightIconBtn} hitSlop={theme.spacing.sm}>
+            <IconSlot value={rightIcon} size={theme.sizes.iconSm} color={theme.colors.textMuted} />
           </Pressable>
         ) : null}
       </View>
 
       {error ? (
-        <ThemedText variant="caption" color={theme.colors.emergency} style={styles.feedback}>
-          ⚠️ {error}
-        </ThemedText>
+        <View style={styles.feedbackRow}>
+          <IconSlot value="alertCircle" size={theme.fontSizes.xs} color={theme.colors.emergency} />
+          <ThemedText variant="caption" color={theme.colors.emergency}>
+            {error}
+          </ThemedText>
+        </View>
       ) : helperText ? (
-        <ThemedText variant="caption" color={theme.colors.textLight} style={styles.feedback}>
+        <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.feedback}>
           {helperText}
         </ThemedText>
       ) : null}
@@ -94,7 +103,7 @@ export default function Input({
 
 const styles = StyleSheet.create({
   container: {
-    gap: 4,
+    gap: theme.spacing.xs,
   },
   label: {
     marginBottom: 2,
@@ -103,14 +112,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: theme.colors.surface,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderDark,
     borderRadius: theme.radii.md,
     paddingHorizontal: theme.spacing.md,
-    minHeight: 42,
+    minHeight: theme.sizes.controlMd,
   },
   inputMultiline: {
-    minHeight: 80,
+    minHeight: theme.sizes.controlLg + theme.sizes.controlMd,
     alignItems: 'flex-start',
     paddingVertical: theme.spacing.sm,
   },
@@ -120,28 +129,28 @@ const styles = StyleSheet.create({
   },
   inputError: {
     borderColor: theme.colors.emergency,
-    backgroundColor: theme.colors.emergencyBg,
+    backgroundColor: theme.colors.emergencySubtle,
   },
   leftIcon: {
     marginRight: theme.spacing.sm,
-    fontSize: 16,
   },
   rightIconBtn: {
     padding: theme.spacing.xs,
     marginLeft: theme.spacing.sm,
   },
-  rightIcon: {
-    fontSize: 16,
-    color: theme.colors.textMuted,
-  },
   input: {
     flex: 1,
     color: theme.colors.text,
-    fontSize: 14,
-    paddingVertical: 8,
+    fontSize: theme.fontSizes.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  feedbackRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    marginLeft: 2,
   },
   feedback: {
-    marginTop: 2,
     marginLeft: 2,
   },
 });

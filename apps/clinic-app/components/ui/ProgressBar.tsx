@@ -14,7 +14,7 @@ export default function ProgressBar({
   progress,
   color = theme.colors.primary,
   trackColor = theme.colors.surfaceHighlight,
-  height = 8,
+  height = theme.spacing.sm,
   style,
 }: ProgressBarProps) {
   const clampedProgress = Math.max(0, Math.min(100, progress));

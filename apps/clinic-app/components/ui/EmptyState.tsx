@@ -2,9 +2,11 @@ import React from 'react';
 import { View, StyleSheet, ViewStyle } from 'react-native';
 import ThemedText from './ThemedText';
 import Button from './Button';
+import Icon, { IconName, resolveIconName } from './Icon';
 import { theme } from '../../constants/theme';
 
 export interface EmptyStateProps {
+  /** IconName (e.g. "clipboard"). Legacy emoji glyphs are still resolved for old call sites. */
   icon?: string;
   title: string;
   description?: string;
@@ -14,16 +16,19 @@ export interface EmptyStateProps {
 }
 
 export default function EmptyState({
-  icon = '📋',
+  icon = 'clipboard',
   title,
   description,
   actionTitle,
   onAction,
   style,
 }: EmptyStateProps) {
+  const iconName: IconName = resolveIconName(icon) ?? 'clipboard';
   return (
     <View style={[styles.container, style]}>
-      <ThemedText style={styles.icon}>{icon}</ThemedText>
+      <View style={styles.iconTile}>
+        <Icon name={iconName} size={theme.sizes.iconLg} color={theme.colors.primary} />
+      </View>
       <ThemedText variant="h3" style={styles.title}>
         {title}
       </ThemedText>
@@ -49,16 +54,22 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: theme.colors.surface,
     borderRadius: theme.radii.lg,
-    padding: theme.spacing['2xl'],
+    padding: theme.spacing['3xl'],
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
+    borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
+    borderStyle: 'dashed',
     gap: theme.spacing.xs,
   },
-  icon: {
-    fontSize: 36,
-    marginBottom: theme.spacing.xs,
+  iconTile: {
+    width: theme.sizes.controlLg,
+    height: theme.sizes.controlLg,
+    borderRadius: theme.radii.full,
+    backgroundColor: theme.colors.primarySubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: theme.spacing.sm,
   },
   title: {
     textAlign: 'center',
