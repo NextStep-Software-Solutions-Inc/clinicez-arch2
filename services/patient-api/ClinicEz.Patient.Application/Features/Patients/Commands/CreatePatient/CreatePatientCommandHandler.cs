@@ -21,7 +21,7 @@ public sealed class CreatePatientCommandHandler : IRequestHandler<CreatePatientC
     {
         var existing = await _patientRepository.GetByClerkUserIdAsync(request.ClerkUserId, cancellationToken);
         if (existing is not null)
-            throw new ConflictException($"A patient profile for this Clerk user already exists.");
+            return existing.Id;
 
         var patient = new Domain.Entities.Patient
         {

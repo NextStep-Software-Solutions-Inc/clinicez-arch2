@@ -27,6 +27,7 @@ services:
       - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}
       - ConnectionStrings__Redis=${REDIS_CONNECTION_STRING}
       - Clerk__Authority=${CLERK_AUTHORITY}
+      - Clerk__WebhookSecret=${CLERK_WEBHOOK_SECRET}
       - R2__AccountId=${R2_ACCOUNT_ID}
       - R2__BucketName=${R2_BUCKET_NAME}
       - R2__AccessKeyId=${R2_ACCESS_KEY_ID}

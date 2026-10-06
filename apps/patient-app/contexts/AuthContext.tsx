@@ -1,10 +1,10 @@
 import { createContext, useCallback, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
-import { useAuth as useClerkAuth, useClerk } from '@clerk/expo';
+import { useAuth as useClerkAuth, useClerk, useUser } from '@clerk/expo';
 import { storage as SecureStore } from '../utils/storage';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { Platform } from 'react-native';
-import { getPatientByClerkId } from '../services/api/patientApi';
+import { getPatientByClerkId, createPatient } from '../services/api/patientApi';
 import { upsertPatientSummary } from '../db/hydrate';
 import CustomAlertModal from '../components/ui/CustomAlertModal';
 
@@ -44,6 +44,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const { isSignedIn, userId, getToken } = useClerkAuth();
+  const { user } = useUser();
   const { signOut } = useClerk();
   const [hasPIN, setHasPIN] = useState(false);
   const [biometricsEnabled, setBiometricsEnabledState] = useState(false);
@@ -129,7 +130,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             return;
           }
 
-          const patient = await getPatientByClerkId(getTokenRef.current, userId);
+          let patient = await getPatientByClerkId(getTokenRef.current, userId);
+
+          // JIT Auto-Provisioning: If Clerk authenticated user is missing from DB, create profile automatically
+          if (!patient || !patient.id) {
+            try {
+              const userEmail = user?.primaryEmailAddress?.emailAddress;
+              const newPatientId = await createPatient(getTokenRef.current, {
+                clerkUserId: userId,
+                firstName: user?.firstName?.trim() || userEmail || 'User',
+                lastName: user?.lastName?.trim() || '',
+                nationality: 'Filipino',
+              });
+
+              if (newPatientId) {
+                patient = await getPatientByClerkId(getTokenRef.current, userId);
+              }
+            } catch (provisionErr) {
+              console.error('[AuthContext] JIT auto-provisioning failed:', provisionErr);
+            }
+          }
+
           if (patient && patient.id) {
             await SecureStore.setItemAsync(INTERNAL_PATIENT_ID_KEY, patient.id);
             setInternalPatientId(patient.id);
@@ -153,7 +174,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     verifyUser();
-  }, [isSignedIn, userId, retryCount]);
+  }, [isSignedIn, userId, retryCount, user]);
 
   // Lock only after real background time. Native pickers can briefly move the app
   // through inactive/background while the user is still completing an in-app action.

@@ -53,16 +53,19 @@ public sealed class PatientsIntegrationTests : IClassFixture<PatientAppWebApplic
     }
 
     [DockerAvailableFact]
-    public async Task CreatePatient_WhenDuplicateClerkId_Returns409()
+    public async Task CreatePatient_WhenDuplicateClerkId_ReturnsIdempotentSuccess()
     {
         var clerkId = $"clerk_dup_{Guid.NewGuid():N}";
 
         // First creation succeeds
-        await CreateTestPatientAsync(clerkId);
+        var firstId = await CreateTestPatientAsync(clerkId);
 
-        // Second creation with same Clerk ID must conflict
+        // Second creation with same Clerk ID must return existing patient ID (idempotent)
         var response = await _client.PostAsJsonAsync("/api/v1/patients", CreatePatientPayload(clerkId));
-        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var body = await response.Content.ReadFromJsonAsync<ApiResponse<Guid>>();
+        body!.Data.Should().Be(firstId);
     }
 
     [DockerAvailableFact]

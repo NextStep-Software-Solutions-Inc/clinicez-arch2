@@ -44,17 +44,19 @@ public sealed class CreatePatientCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenPatientAlreadyExists_ThrowsConflictException_WithoutSaving()
+    public async Task Handle_WhenPatientAlreadyExists_ReturnsExistingId_WithoutSaving()
     {
         // Arrange
+        var existingId = Guid.NewGuid();
         _repo.GetByClerkUserIdAsync("clerk_test_123", Arg.Any<CancellationToken>())
-            .Returns(new Patient { ClerkUserId = "clerk_test_123" });
+            .Returns(new Patient { Id = existingId, ClerkUserId = "clerk_test_123" });
 
         // Act
-        Func<Task> act = async () => await CreateHandler().Handle(TestCommand(), CancellationToken.None);
+        var resultId = await CreateHandler().Handle(TestCommand(), CancellationToken.None);
 
         // Assert
-        await act.Should().ThrowAsync<ConflictException>();
+        resultId.Should().Be(existingId);
+        await _repo.DidNotReceive().AddAsync(Arg.Any<Patient>(), Arg.Any<CancellationToken>());
         await _uow.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 }
