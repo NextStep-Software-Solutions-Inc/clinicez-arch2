@@ -11,23 +11,33 @@ import {
   Platform,
 } from 'react-native';
 import { clinicService, FacilityLicenseStatus } from '../services/clinicService';
+import {
+  resolveTenantContext,
+  setActiveTenantContext,
+  setActiveClinicId,
+  clearActiveTenantContext,
+} from '@shared/safe';
 
 interface LicenseContextValue {
   license: FacilityLicenseStatus | null;
   isLoading: boolean;
   error: string | null;
+  activeTenant: string | null;
   refreshLicense: () => Promise<void>;
   openActivationModal: () => void;
   closeActivationModal: () => void;
+  switchWorkspace: () => void;
 }
 
 const FacilityLicenseContext = createContext<LicenseContextValue>({
   license: null,
   isLoading: false,
   error: null,
+  activeTenant: null,
   refreshLicense: async () => {},
   openActivationModal: () => {},
   closeActivationModal: () => {},
+  switchWorkspace: () => {},
 });
 
 export const useFacilityLicense = () => useContext(FacilityLicenseContext);
@@ -37,8 +47,10 @@ interface FacilityActivationGateProps {
 }
 
 export function FacilityActivationGate({ children }: FacilityActivationGateProps) {
+  const [activeTenant, setActiveTenant] = useState<string | null>(() => resolveTenantContext().tenantSlug);
+  const [workspaceInput, setWorkspaceInput] = useState('');
   const [license, setLicense] = useState<FacilityLicenseStatus | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tokenInput, setTokenInput] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -46,13 +58,26 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
   const [modalVisible, setModalVisible] = useState(false);
 
   const fetchStatus = useCallback(async () => {
+    const currentTenant = resolveTenantContext().tenantSlug;
+    if (!currentTenant) {
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     try {
       const [res, err] = await clinicService.getLicenseStatus();
       if (err) {
-        setError(err.message || 'Unable to communicate with local clinic service.');
+        if (err.status === 404) {
+          setError(`Workspace "${currentTenant}" was not found or has no active facilities registered.`);
+        } else {
+          setError(err.message || 'Unable to communicate with clinic service.');
+        }
       } else if (res) {
+        if (res.clinicId) {
+          setActiveClinicId(String(res.clinicId), currentTenant);
+        }
         setLicense(res);
       }
     } catch (e: any) {
@@ -63,8 +88,32 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
   }, []);
 
   useEffect(() => {
-    fetchStatus();
-  }, [fetchStatus]);
+    if (activeTenant) {
+      fetchStatus();
+    }
+  }, [activeTenant, fetchStatus]);
+
+  const handleSelectWorkspace = () => {
+    const trimmed = workspaceInput.trim().toLowerCase();
+    if (!trimmed) {
+      setError('Please enter a valid workspace slug.');
+      return;
+    }
+    setActiveTenantContext(trimmed);
+    setActiveTenant(trimmed);
+    setError(null);
+    setSubmitError(null);
+    setLicense(null);
+  };
+
+  const handleSwitchWorkspace = () => {
+    clearActiveTenantContext();
+    setActiveTenant(null);
+    setLicense(null);
+    setError(null);
+    setSubmitError(null);
+    setWorkspaceInput('');
+  };
 
   const handleApplyLicense = async () => {
     const trimmed = tokenInput.trim();
@@ -81,6 +130,9 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
       if (err) {
         setSubmitError(err.message || 'License verification failed.');
       } else if (res) {
+        if (res.clinicId) {
+          setActiveClinicId(String(res.clinicId), activeTenant || undefined);
+        }
         setLicense(res);
         setTokenInput('');
         setModalVisible(false);
@@ -96,12 +148,14 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
     license,
     isLoading,
     error,
+    activeTenant,
     refreshLicense: fetchStatus,
     openActivationModal: () => {
       setSubmitError(null);
       setModalVisible(true);
     },
     closeActivationModal: () => setModalVisible(false),
+    switchWorkspace: handleSwitchWorkspace,
   };
 
   // 1. Initial Loading Screen
@@ -110,15 +164,65 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
       <View style={styles.centerContainer}>
         <View style={styles.splashCard}>
           <Text style={styles.splashIcon}>🏥</Text>
-          <Text style={styles.splashTitle}>ClinicEz Edge</Text>
-          <Text style={styles.splashSubtitle}>Verifying cryptographic facility license & integrity...</Text>
+          <Text style={styles.splashTitle}>ClinicEz Console</Text>
+          <Text style={styles.splashSubtitle}>
+            {activeTenant
+              ? `Verifying license & integrity for workspace "${activeTenant}"...`
+              : 'Loading clinic workspace...'}
+          </Text>
           <ActivityIndicator size="large" color="#0284C7" style={{ marginTop: 20 }} />
         </View>
       </View>
     );
   }
 
-  // 2. Unactivated / Expired / Tampered State -> Show Mandatory Activation Gate
+  // 2. Prompt for Workspace Slug if none could be resolved (bare root access)
+  if (!activeTenant) {
+    return (
+      <FacilityLicenseContext.Provider value={contextValue}>
+        <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.centerContainer}>
+          <View style={styles.activationCard}>
+            <View style={[styles.badgePill, { backgroundColor: '#E0F2FE' }]}>
+              <Text style={[styles.badgeText, { color: '#0284C7' }]}>Multi-Tenant Console</Text>
+            </View>
+
+            <Text style={styles.cardHeaderTitle}>Select Clinic Workspace</Text>
+            <Text style={styles.cardHeaderDesc}>
+              Enter your clinic workspace slug to load your facility, or launch directly from the ClinicEz Portal.
+            </Text>
+
+            {error && (
+              <View style={styles.errorBanner}>
+                <Text style={styles.errorBannerText}>{error}</Text>
+              </View>
+            )}
+
+            <View style={styles.formGroup}>
+              <Text style={styles.inputLabel}>Workspace Slug</Text>
+              <TextInput
+                style={styles.singleLineInput}
+                value={workspaceInput}
+                onChangeText={setWorkspaceInput}
+                placeholder="e.g. metro-health, st-jude"
+                placeholderTextColor="#9CA3AF"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <Text style={styles.inputHint}>
+                The identifier from your portal URL or subdomain (e.g. dev.clinicez.net/[slug]/dashboard).
+              </Text>
+            </View>
+
+            <Pressable style={styles.primaryBtn} onPress={handleSelectWorkspace}>
+              <Text style={styles.primaryBtnText}>Continue to Facility →</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </FacilityLicenseContext.Provider>
+    );
+  }
+
+  // 3. Unactivated / Expired / Tampered State -> Show Mandatory Activation Gate
   const isGateBlocked =
     !license ||
     license.status === 'ActivationRequired' ||
@@ -131,7 +235,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
 
     let bannerTitle = 'Facility Activation Required';
     let bannerSubtitle =
-      'This clinic facility instance requires an authentic, cryptographically signed license key generated from the ClinicEz Portal to operate on-premise.';
+      'This clinic facility instance requires an authentic, cryptographically signed license key generated from the ClinicEz Portal.';
     let badgeColor = '#0284C7';
     let badgeBg = '#E0F2FE';
 
@@ -144,7 +248,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
     } else if (isExpired) {
       bannerTitle = 'Facility License Expired';
       bannerSubtitle =
-        'Your facility operating license has passed its expiration date. Please apply a renewed license key to continue.';
+        'Your facility operating license has passed its expiration date. Please apply a renewed license key from your Portal workspace.';
       badgeColor = '#D97706';
       badgeBg = '#FEF3C7';
     }
@@ -153,10 +257,21 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
       <FacilityLicenseContext.Provider value={contextValue}>
         <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.centerContainer}>
           <View style={styles.activationCard}>
-            <View style={[styles.badgePill, { backgroundColor: badgeBg }]}>
-              <Text style={[styles.badgeText, { color: badgeColor }]}>
-                {license?.status ?? 'Activation Required'}
-              </Text>
+            {/* Top Workspace Indicator Pill */}
+            <View style={styles.workspaceRow}>
+              <View style={[styles.badgePill, { backgroundColor: badgeBg }]}>
+                <Text style={[styles.badgeText, { color: badgeColor }]}>
+                  {license?.status ?? 'Activation Required'}
+                </Text>
+              </View>
+              <Pressable onPress={handleSwitchWorkspace} style={styles.switchWorkspaceBtn}>
+                <Text style={styles.switchWorkspaceBtnText}>Change Workspace</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.workspaceNotice}>
+              <Text style={styles.workspaceNoticeLabel}>Workspace: </Text>
+              <Text style={styles.workspaceNoticeSlug}>{activeTenant}</Text>
             </View>
 
             <Text style={styles.cardHeaderTitle}>{bannerTitle}</Text>
@@ -165,6 +280,12 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
             {license?.errorMessage && (
               <View style={styles.errorBanner}>
                 <Text style={styles.errorBannerText}>{license.errorMessage}</Text>
+              </View>
+            )}
+
+            {error && (
+              <View style={styles.errorBanner}>
+                <Text style={styles.errorBannerText}>{error}</Text>
               </View>
             )}
 
@@ -213,7 +334,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
     );
   }
 
-  // 3. Normal Active App with optional update modal
+  // 4. Normal Active App with optional update modal
   return (
     <FacilityLicenseContext.Provider value={contextValue}>
       {children}
@@ -228,7 +349,8 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Update Facility License</Text>
             <Text style={styles.modalSubtitle}>
-              Current Plan: <Text style={{ fontWeight: '700' }}>{license.planTier}</Text> • Max Staff:{' '}
+              Workspace: <Text style={{ fontWeight: '700' }}>{activeTenant}</Text> • Current Plan:{' '}
+              <Text style={{ fontWeight: '700' }}>{license.planTier}</Text> • Max Staff:{' '}
               <Text style={{ fontWeight: '700' }}>{license.limits?.maxStaff ?? 5}</Text>
             </Text>
 
@@ -329,6 +451,41 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     gap: 16,
   },
+  workspaceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  switchWorkspaceBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  switchWorkspaceBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#0284C7',
+  },
+  workspaceNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  workspaceNoticeLabel: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  workspaceNoticeSlug: {
+    fontSize: 13,
+    color: '#0F172A',
+    fontWeight: '700',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+  },
   badgePill: {
     alignSelf: 'flex-start',
     paddingHorizontal: 12,
@@ -359,6 +516,16 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: '#1E293B',
+  },
+  singleLineInput: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: '#0F172A',
   },
   tokenInput: {
     backgroundColor: '#F8FAFC',

@@ -6,7 +6,7 @@ import { SiteHeader } from "@/components/dashboard/site-header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { tenantService, TenantDto } from "@/services/tenant.service";
-import { redirect } from "next/navigation";
+import { redirect, notFound } from "next/navigation";
 import { safeAwait } from "@shared/safe";
 
 export default async function TenantDashboardLayout({
@@ -43,14 +43,14 @@ export default async function TenantDashboardLayout({
 
     const [token, tokenErr] = await safeAwait(getToken());
     if (tokenErr) {
-        console.error("Failed to fetch tenant for layout", tokenErr);
-        redirect("/tenants/register");
+        console.error("Failed to fetch tenant token for layout", tokenErr);
+        notFound();
     }
 
     const [tenant, tenantErr] = await safeAwait(tenantService.getTenantByOwner(userId, token, routeTenantSlug));
     if (tenantErr || !tenant) {
         console.error("Failed to fetch tenant for layout", tenantErr);
-        redirect("/tenants/register");
+        notFound();
     }
 
     // Protect layout boundary: only authorized workspace owner or active members have access

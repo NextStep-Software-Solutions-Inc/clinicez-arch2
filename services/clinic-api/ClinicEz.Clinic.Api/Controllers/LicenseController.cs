@@ -54,15 +54,40 @@ public sealed class LicenseController : ControllerBase
     [AllowAnonymous] // Facility bootup check does not require prior authentication
     public async Task<ActionResult<ApiResponse<FacilityLicenseStatusDto>>> GetLicenseStatus(CancellationToken ct)
     {
-        var settings = await _settingsRepo.Query(s => s.ClinicId == _clinicContext.ClinicId)
-            .FirstOrDefaultAsync(ct) ?? await _settingsRepo.Query().FirstOrDefaultAsync(ct);
+        var targetTenantId = _clinicContext.TenantId;
+        var targetClinicId = _clinicContext.ClinicId;
+        var dummyDefaultId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
-        var resolvedClinicId = settings?.ClinicId ?? _clinicContext.ClinicId;
+        ClinicSettings? settings = null;
+
+        // 1. If explicit non-dummy ClinicId was requested in headers
+        if (targetClinicId != Guid.Empty && targetClinicId != dummyDefaultId)
+        {
+            settings = await _settingsRepo.IgnoreQueryFilters()
+                .FirstOrDefaultAsync(s => s.ClinicId == targetClinicId && !s.IsDeleted, ct);
+        }
+
+        // 2. If TenantId was provided (subdomain, query param, or header), match settings by TenantId
+        if (settings == null && !string.IsNullOrWhiteSpace(targetTenantId) && targetTenantId != "tenant_default")
+        {
+            settings = await _settingsRepo.IgnoreQueryFilters()
+                .FirstOrDefaultAsync(s => s.TenantId.ToLower() == targetTenantId.ToLower() && !s.IsDeleted, ct);
+        }
+
+        // 3. Fallback to default or first settings row
+        if (settings == null)
+        {
+            settings = await _settingsRepo.Query(s => s.ClinicId == targetClinicId)
+                .FirstOrDefaultAsync(ct) ?? await _settingsRepo.Query().FirstOrDefaultAsync(ct);
+        }
+
+        var resolvedClinicId = settings?.ClinicId ?? targetClinicId;
+        var resolvedTenantId = settings?.TenantId ?? targetTenantId;
 
         var activeStaffCount = await _staffRepo.Query(s => s.ClinicId == resolvedClinicId && s.IsActive)
             .CountAsync(ct);
 
-        var validation = _licenseValidator.Validate(settings?.LicenseToken, resolvedClinicId, _clinicContext.TenantId);
+        var validation = _licenseValidator.Validate(settings?.LicenseToken, resolvedClinicId, resolvedTenantId);
 
         string status;
         if (validation.IsMissing) status = "ActivationRequired";
@@ -99,31 +124,49 @@ public sealed class LicenseController : ControllerBase
             return BadRequest(ApiResponse<FacilityLicenseStatusDto>.Fail("License token is required."));
         }
 
-        var validation = _licenseValidator.Validate(request.LicenseToken.Trim(), _clinicContext.ClinicId, _clinicContext.TenantId);
+        // Validate cryptographic signature without binding expected IDs (Guid.Empty allows token to declare its FacilityId and TenantId)
+        var validation = _licenseValidator.Validate(request.LicenseToken.Trim(), Guid.Empty, null);
         if (!validation.IsValid && !validation.IsExpired)
         {
             return BadRequest(ApiResponse<FacilityLicenseStatusDto>.Fail(validation.ErrorMessage ?? "Invalid or tampered facility license key."));
         }
 
-        var targetClinicId = validation.Payload?.FacilityId != null && validation.Payload.FacilityId != Guid.Empty
-            ? validation.Payload.FacilityId
+        var payload = validation.Payload;
+        var targetClinicId = payload?.FacilityId != null && payload.FacilityId != Guid.Empty
+            ? payload.FacilityId
             : _clinicContext.ClinicId;
+        var targetTenantId = !string.IsNullOrWhiteSpace(payload?.TenantId)
+            ? payload.TenantId
+            : _clinicContext.TenantId;
 
-        var settings = await _settingsRepo.Query(s => s.ClinicId == targetClinicId)
-            .FirstOrDefaultAsync(ct) ?? await _settingsRepo.Query().FirstOrDefaultAsync(ct);
+        // Tenant binding verification: If the request explicitly specified a tenant context (subdomain/header),
+        // ensure the token belongs to that tenant to prevent accidental or unauthorized cross-tenant license reuse.
+        if (!string.IsNullOrWhiteSpace(_clinicContext.TenantId) &&
+            _clinicContext.TenantId != "tenant_default" &&
+            !string.IsNullOrWhiteSpace(payload?.TenantId) &&
+            !string.Equals(_clinicContext.TenantId, payload.TenantId, StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(ApiResponse<FacilityLicenseStatusDto>.Fail(
+                $"License tenant mismatch: This license key was issued for tenant '{payload.TenantId}', but you are activating workspace '{_clinicContext.TenantId}'."));
+        }
+
+        var settings = await _settingsRepo.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(s => s.ClinicId == targetClinicId && !s.IsDeleted, ct)
+            ?? await _settingsRepo.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(s => s.TenantId.ToLower() == targetTenantId.ToLower() && !s.IsDeleted, ct);
 
         if (settings == null)
         {
             settings = new ClinicSettings
             {
                 Id = Guid.NewGuid(),
-                TenantId = _clinicContext.TenantId,
-                ClinicId = _clinicContext.ClinicId,
-                ClinicName = validation.Payload?.FacilityName ?? "Clinic Facility",
+                TenantId = targetTenantId,
+                ClinicId = targetClinicId,
+                ClinicName = payload?.FacilityName ?? "Clinic Facility",
                 LicenseToken = request.LicenseToken.Trim(),
-                PlanTier = validation.Payload?.PlanTier ?? "Community",
-                MaxStaffLimit = validation.Payload?.Limits?.MaxStaff ?? 5,
-                LicenseExpiresAt = validation.Payload?.ExpiresAtUtc,
+                PlanTier = payload?.PlanTier ?? "Community",
+                MaxStaffLimit = payload?.Limits?.MaxStaff ?? 5,
+                LicenseExpiresAt = payload?.ExpiresAtUtc,
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = "LicenseActivation"
             };
@@ -132,28 +175,36 @@ public sealed class LicenseController : ControllerBase
         else
         {
             settings.LicenseToken = request.LicenseToken.Trim();
-            settings.PlanTier = validation.Payload?.PlanTier ?? "Community";
-            settings.MaxStaffLimit = validation.Payload?.Limits?.MaxStaff ?? 5;
-            settings.LicenseExpiresAt = validation.Payload?.ExpiresAtUtc;
+            settings.ClinicId = targetClinicId;
+            settings.TenantId = targetTenantId;
+            if (!string.IsNullOrWhiteSpace(payload?.FacilityName))
+            {
+                settings.ClinicName = payload.FacilityName;
+            }
+            settings.PlanTier = payload?.PlanTier ?? "Community";
+            settings.MaxStaffLimit = payload?.Limits?.MaxStaff ?? 5;
+            settings.LicenseExpiresAt = payload?.ExpiresAtUtc;
         }
 
         await _unitOfWork.SaveChangesAsync(ct);
 
-        var activeStaffCount = await _staffRepo.Query(s => s.ClinicId == _clinicContext.ClinicId && s.IsActive)
+        var activeStaffCount = await _staffRepo.Query(s => s.ClinicId == targetClinicId && s.IsActive)
             .CountAsync(ct);
 
         var status = validation.IsExpired ? "Expired" : "Active";
+        var limits = payload?.Limits ?? PlanTierDefaults.GetLimitsForTier(settings.PlanTier);
+        var features = payload?.EnabledFeatures ?? PlanTierDefaults.GetFeaturesForTier(settings.PlanTier);
 
         var dto = new FacilityLicenseStatusDto(
             status,
-            _clinicContext.ClinicId,
+            targetClinicId,
             settings.ClinicName,
-            validation.Payload?.PlanTier ?? settings.PlanTier,
-            validation.Payload?.Limits ?? PlanTierDefaults.GetLimitsForTier(settings.PlanTier),
+            payload?.PlanTier ?? settings.PlanTier,
+            limits,
             activeStaffCount,
-            validation.Payload?.EnabledFeatures ?? PlanTierDefaults.GetFeaturesForTier(settings.PlanTier),
-            validation.Payload?.ExpiresAtUtc,
-            false,
+            features,
+            payload?.ExpiresAtUtc ?? settings.LicenseExpiresAt,
+            validation.IsTampered,
             validation.ErrorMessage);
 
         return Ok(ApiResponse<FacilityLicenseStatusDto>.Success(dto, "Facility license successfully applied and verified."));

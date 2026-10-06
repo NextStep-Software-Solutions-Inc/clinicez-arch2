@@ -1,5 +1,5 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
-import { safeAwait, ApiResponse, ApiError } from '@shared/safe';
+import { safeAwait, ApiResponse, ApiError, resolveTenantContext } from '@shared/safe';
 
 const resolveDefaultBaseUrl = (fallbackPort: number = 5245): string => {
   if (typeof window !== 'undefined' && window.location?.hostname) {
@@ -29,6 +29,18 @@ export class ClinicApiClient {
       headers: {
         'Content-Type': 'application/json',
       },
+    });
+
+    // Dynamically inject active tenant and clinic ID headers on every outgoing request
+    this.client.interceptors.request.use((config) => {
+      const context = resolveTenantContext();
+      if (context.tenantSlug) {
+        config.headers['X-Tenant-Id'] = context.tenantSlug;
+      }
+      if (context.clinicId) {
+        config.headers['X-Clinic-Id'] = context.clinicId;
+      }
+      return config;
     });
   }
 
