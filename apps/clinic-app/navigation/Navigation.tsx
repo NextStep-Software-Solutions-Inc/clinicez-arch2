@@ -36,7 +36,10 @@ const Tab = createBottomTabNavigator({
   screens: {
     Dashboard: {
       screen: DashboardScreen,
-      linking: 'dashboard',
+      linking: {
+        path: 'dashboard',
+        alias: [''],
+      },
       options: {
         title: 'Dashboard',
         tabBarIcon: () => <ThemedText style={{ fontSize: 20 }}>📊</ThemedText>,
@@ -106,6 +109,8 @@ export const linkingOptions = {
   prefixes: [
     'clinicez://',
     typeof window !== 'undefined' ? `${window.location.origin}/` : '/',
+    typeof window !== 'undefined' ? window.location.origin : '',
+    '/',
   ],
 };
 

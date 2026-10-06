@@ -32,7 +32,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "build:web": "expo export -p web && node -e \"const fs = require('fs'); if(fs.existsSync('public')) fs.cpSync('public', 'dist', {recursive: true});\"",
+    "build:web": "expo export -p web && node -e \"const fs = require('fs'); if(fs.existsSync('public')) fs.cpSync('public', 'dist', {recursive: true}); if(fs.existsSync('vercel.json')) fs.copyFileSync('vercel.json', 'dist/vercel.json');\"",
     "build:clinic-web": "bun run build:web",
     "build": "bun run build:web",
     "typecheck": "tsc --noEmit"
