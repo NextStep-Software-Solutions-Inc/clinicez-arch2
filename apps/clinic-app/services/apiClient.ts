@@ -3,8 +3,30 @@ import { safeAwait, ApiResponse, ApiError, resolveTenantContext } from '@shared/
 
 const resolveDefaultBaseUrl = (fallbackPort: number = 5245): string => {
   if (typeof window !== 'undefined' && window.location?.hostname) {
+    const hostname = window.location.hostname.toLowerCase();
     const protocol = window.location.protocol || 'http:';
-    return `${protocol}//${window.location.hostname}:${fallbackPort}`;
+
+    // Local development or direct IP access uses explicit dev port
+    if (
+      hostname === 'localhost' ||
+      hostname.endsWith('.localhost') ||
+      hostname.endsWith('.lvh.me') ||
+      /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)
+    ) {
+      return `${protocol}//${hostname}:${fallbackPort}`;
+    }
+
+    // Cloud dev domain
+    if (hostname.endsWith('.dev.clinicez.net')) {
+      return 'https://clinic-api.dev.clinicez.net';
+    }
+
+    // Cloud production domain
+    if (hostname.endsWith('.clinicez.net')) {
+      return 'https://clinic-api.clinicez.net';
+    }
+
+    return `${protocol}//${hostname}`;
   }
   return `http://localhost:${fallbackPort}`;
 };

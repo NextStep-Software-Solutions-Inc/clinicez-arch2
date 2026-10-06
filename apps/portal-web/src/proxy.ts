@@ -42,21 +42,26 @@ export default clerkMiddleware(async (auth, req) => {
     const url = req.nextUrl.clone();
     const pathname = url.pathname;
 
-    // Detect subdomain:
+    // Detect single-level tenant subdomain strictly:
     // e.g. "tenant1.dev.clinicez.net" -> "tenant1"
     // e.g. "tenant1.clinicez.net" -> "tenant1"
     // e.g. "tenant1.localhost:3000" -> "tenant1"
     let subdomain: string | null = null;
+    const cleanHost = hostname.split(':')[0].trim();
 
-    if (hostname.endsWith('.dev.clinicez.net')) {
-        subdomain = hostname.replace('.dev.clinicez.net', '').split(':')[0];
-    } else if (hostname.endsWith('.clinicez.net') && !hostname.endsWith('.dev.clinicez.net')) {
-        subdomain = hostname.replace('.clinicez.net', '').split(':')[0];
-    } else if (hostname.includes('.localhost')) {
-        subdomain = hostname.split('.localhost')[0];
+    const devMatch = cleanHost.match(/^([a-z0-9-]+)\.dev\.clinicez\.net$/);
+    const prodMatch = cleanHost.match(/^([a-z0-9-]+)\.clinicez\.net$/);
+    const localMatch = cleanHost.match(/^([a-z0-9-]+)\.(?:localhost|lvh\.me)$/);
+
+    if (devMatch) {
+        subdomain = devMatch[1];
+    } else if (prodMatch) {
+        subdomain = prodMatch[1];
+    } else if (localMatch) {
+        subdomain = localMatch[1];
     }
 
-    if (subdomain && !RESERVED_SUBDOMAINS.has(subdomain)) {
+    if (subdomain && !RESERVED_SUBDOMAINS.has(subdomain) && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(subdomain)) {
         // Skip API routes or static files if any slipped through matcher
         if (pathname.startsWith('/api') || pathname.startsWith('/_next') || pathname === '/notfound') {
             return NextResponse.next();

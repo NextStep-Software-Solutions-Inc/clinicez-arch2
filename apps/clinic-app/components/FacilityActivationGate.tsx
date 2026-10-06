@@ -16,6 +16,8 @@ import {
   setActiveTenantContext,
   setActiveClinicId,
   clearActiveTenantContext,
+  isValidTenantSlug,
+  getStoredTenantSlug,
 } from '@shared/safe';
 
 interface LicenseContextValue {
@@ -48,7 +50,7 @@ interface FacilityActivationGateProps {
 
 export function FacilityActivationGate({ children }: FacilityActivationGateProps) {
   const [activeTenant, setActiveTenant] = useState<string | null>(() => resolveTenantContext().tenantSlug);
-  const [workspaceInput, setWorkspaceInput] = useState('');
+  const [workspaceInput, setWorkspaceInput] = useState(() => getStoredTenantSlug() || '');
   const [license, setLicense] = useState<FacilityLicenseStatus | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,8 +60,8 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
   const [modalVisible, setModalVisible] = useState(false);
 
   const fetchStatus = useCallback(async () => {
-    const currentTenant = resolveTenantContext().tenantSlug;
-    if (!currentTenant) {
+    const currentTenant = activeTenant || resolveTenantContext().tenantSlug;
+    if (!currentTenant || !isValidTenantSlug(currentTenant)) {
       setIsLoading(false);
       return;
     }
@@ -85,7 +87,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [activeTenant]);
 
   useEffect(() => {
     if (activeTenant) {
@@ -95,8 +97,8 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
 
   const handleSelectWorkspace = () => {
     const trimmed = workspaceInput.trim().toLowerCase();
-    if (!trimmed) {
-      setError('Please enter a valid workspace slug.');
+    if (!trimmed || !isValidTenantSlug(trimmed)) {
+      setError('Please enter a valid workspace slug (e.g. metro-health, st-jude).');
       return;
     }
     setActiveTenantContext(trimmed);
@@ -104,6 +106,19 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
     setError(null);
     setSubmitError(null);
     setLicense(null);
+
+    // If on web and on wildcard root domain, navigate to dedicated tenant subdomain
+    if (typeof window !== 'undefined' && window.location) {
+      const host = window.location.hostname.toLowerCase();
+      if (host === 'clinic.dev.clinicez.net') {
+        window.location.href = `https://${trimmed}.clinic.dev.clinicez.net`;
+        return;
+      }
+      if (host === 'clinic.clinicez.net') {
+        window.location.href = `https://${trimmed}.clinic.clinicez.net`;
+        return;
+      }
+    }
   };
 
   const handleSwitchWorkspace = () => {
@@ -113,6 +128,19 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
     setError(null);
     setSubmitError(null);
     setWorkspaceInput('');
+
+    // If on a tenant subdomain on web, return to root domain
+    if (typeof window !== 'undefined' && window.location) {
+      const host = window.location.hostname.toLowerCase();
+      if (host.endsWith('.clinic.dev.clinicez.net')) {
+        window.location.href = 'https://clinic.dev.clinicez.net';
+        return;
+      }
+      if (host.endsWith('.clinic.clinicez.net')) {
+        window.location.href = 'https://clinic.clinicez.net';
+        return;
+      }
+    }
   };
 
   const handleApplyLicense = async () => {
