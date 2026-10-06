@@ -6,7 +6,6 @@ on:
       - '**'
       - '!main'
       - '!development'
-      - '!develop'
 
 jobs:
   update:
