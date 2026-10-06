@@ -15,18 +15,16 @@ const resolveDefaultPharmacyBaseUrl = (fallbackPort: number = 5245): string => {
       return `${protocol}//${hostname}:${fallbackPort}`;
     }
 
-    // Subdomain-based cloud or enterprise deployment (e.g. <facility>.pharmacy.<baseDomain> or pharmacy.<baseDomain>)
-    const match = hostname.match(/^(?:[a-z0-9-]+\.)?pharmacy\.(.+)$/);
-    if (match) {
-      return `https://pharmacy-api.${match[1]}`;
-    }
-
+    // Default to same-origin for ingress reverse-proxy routing
     return `${protocol}//${hostname}`;
   }
   return `http://localhost:${fallbackPort}`;
 };
 
-const BASE_URL = (process.env.EXPO_PUBLIC_PHARMACY_API_URL ?? resolveDefaultPharmacyBaseUrl(5245)).replace(/\/+$/, '');
+const BASE_URL = (
+  process.env.EXPO_PUBLIC_PHARMACY_API_URL ??
+  resolveDefaultPharmacyBaseUrl(5245)
+).replace(/\/+$/, '');
 const API_PREFIX = '/api/v1';
 
 export class PharmacyApiClient {

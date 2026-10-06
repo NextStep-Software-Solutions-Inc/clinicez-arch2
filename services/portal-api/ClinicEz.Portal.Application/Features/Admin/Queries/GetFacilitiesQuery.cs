@@ -123,25 +123,7 @@ public class GetFacilitiesQueryHandler(
             return null;
         }
 
-        var forceLocal = (bool.TryParse(configuration["Console:ForceLocal"], out var fl) && fl) ||
-                         (bool.TryParse(configuration["Console:UseLocalhost"], out var ul) && ul);
-
-        if (forceLocal)
-        {
-            var devPort = facilityType switch
-            {
-                FacilityType.Clinic => configuration["Console:DevPorts:Clinic"] ?? "8081",
-                FacilityType.Laboratory => configuration["Console:DevPorts:Laboratory"] ?? "8082",
-                FacilityType.Pharmacy => configuration["Console:DevPorts:Pharmacy"] ?? "8083",
-                FacilityType.Organization => configuration["Console:DevPorts:Organization"] ?? "8084",
-                _ => "8081"
-            };
-
-            var devTenant = !string.IsNullOrWhiteSpace(tenantSlug) ? tenantSlug : facilitySlug;
-            return $"http://localhost:{devPort}?tenant={devTenant}";
-        }
-
-        var baseDomain = configuration["Console:BaseDomain"] ?? configuration["CONSOLE_BASE_DOMAIN"];
+        var baseDomain = configuration["Facility:BaseDomain"];
         if (string.IsNullOrWhiteSpace(baseDomain))
         {
             return null;
@@ -151,10 +133,10 @@ public class GetFacilitiesQueryHandler(
 
         var subdomain = facilityType switch
         {
-            FacilityType.Clinic => configuration["Console:Subdomains:Clinic"] ?? "clinic",
-            FacilityType.Laboratory => configuration["Console:Subdomains:Laboratory"] ?? "lab",
-            FacilityType.Pharmacy => configuration["Console:Subdomains:Pharmacy"] ?? "pharmacy",
-            FacilityType.Organization => configuration["Console:Subdomains:Organization"] ?? "org",
+            FacilityType.Clinic => configuration["Facility:Subdomains:Clinic"] ?? "clinic",
+            FacilityType.Laboratory => configuration["Facility:Subdomains:Laboratory"] ?? "lab",
+            FacilityType.Pharmacy => configuration["Facility:Subdomains:Pharmacy"] ?? "pharmacy",
+            FacilityType.Organization => configuration["Facility:Subdomains:Organization"] ?? "org",
             _ => "clinic"
         };
 

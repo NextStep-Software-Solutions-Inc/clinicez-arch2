@@ -284,7 +284,8 @@ public class FacilityEndpoints : IEndpoint
             HttpContext httpContext,
             IApplicationDbContext context,
             MassTransit.IPublishEndpoint publishEndpoint,
-            IFacilityLicenseSigner licenseSigner) =>
+            IFacilityLicenseSigner licenseSigner,
+            IConfiguration configuration) =>
         {
             var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(clerkUserId)) return Results.Unauthorized();
@@ -330,6 +331,11 @@ public class FacilityEndpoints : IEndpoint
             facility.Status = ClinicEz.Portal.Domain.Entities.FacilityStatus.Active;
             facility.UpdatedAt = DateTime.UtcNow;
 
+            var slug = !string.IsNullOrWhiteSpace(facility.Slug)
+                ? facility.Slug
+                : GetFacilitiesQueryHandler.GenerateFacilitySlug(facility.Name);
+            var consoleUrl = GetFacilitiesQueryHandler.ResolveConsoleUrl(configuration, facility.FacilityType, facility.Status, facility.Id, slug, tenant.TenantSlug);
+
             await publishEndpoint.Publish(new FacilityCreatedEvent
             {
                 TenantId = tenant.Id.ToString(),
@@ -337,10 +343,12 @@ public class FacilityEndpoints : IEndpoint
                 FacilityType = facility.FacilityType,
                 ResourceId = facility.Id,
                 Name = facility.Name,
+                Slug = slug,
                 LicenseToken = licenseToken,
                 Limits = limits,
                 PlanTier = planTier,
-                LicenseExpiresAt = expiresAt
+                LicenseExpiresAt = expiresAt,
+                ConsoleUrl = consoleUrl
             });
 
             await context.SaveChangesAsync(default);

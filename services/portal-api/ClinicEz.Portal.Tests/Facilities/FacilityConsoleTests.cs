@@ -67,7 +67,7 @@ public class FacilityConsoleTests : IDisposable
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 { "ASPNETCORE_ENVIRONMENT", "Development" },
-                { "Console:BaseDomain", "custom-dev.example.net" }
+                { "Facility:BaseDomain", "custom-dev.example.net" }
             })
             .Build();
 
@@ -81,39 +81,7 @@ public class FacilityConsoleTests : IDisposable
         Assert.Equal($"https://{dto.Slug}.clinic.custom-dev.example.net", dto.ConsoleUrl);
     }
 
-    [Fact]
-    public async Task GetFacilities_WhenForceLocal_ResolvesLocalhostPort()
-    {
-        var facility = new Facility
-        {
-            Id = Guid.NewGuid(),
-            TenantId = _tenantId,
-            Name = "Downtown Family Clinic",
-            FacilityType = FacilityType.Clinic,
-            Status = FacilityStatus.Active,
-            CreatedAt = DateTime.UtcNow
-        };
-        _context.Facilities.Add(facility);
-        await _context.SaveChangesAsync();
 
-        var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                { "ASPNETCORE_ENVIRONMENT", "Development" },
-                { "Console:ForceLocal", "true" },
-                { "Console:DevPorts:Clinic", "8081" }
-            })
-            .Build();
-
-        var handler = new GetFacilitiesQueryHandler(_context, config);
-        var result = await handler.Handle(new GetFacilitiesQuery(TenantSlug), CancellationToken.None);
-
-        Assert.NotNull(result);
-        Assert.Single(result);
-        var dto = result[0];
-        Assert.Equal("downtown-family-clinic", dto.Slug);
-        Assert.Equal($"http://localhost:8081?tenant={TenantSlug}", dto.ConsoleUrl);
-    }
 
     [Fact]
     public async Task GetFacilities_InProduction_ResolvesAppSubdomainConsoleUrl()
@@ -134,7 +102,7 @@ public class FacilityConsoleTests : IDisposable
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 { "ASPNETCORE_ENVIRONMENT", "Production" },
-                { "Console:BaseDomain", "enterprise-group.org" }
+                { "Facility:BaseDomain", "enterprise-group.org" }
             })
             .Build();
 
@@ -192,7 +160,7 @@ public class FacilityConsoleTests : IDisposable
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 { "ASPNETCORE_ENVIRONMENT", "Production" },
-                { "Console:BaseDomain", "clinicez.net" }
+                { "Facility:BaseDomain", "clinicez.net" }
             })
             .Build();
 
@@ -202,6 +170,34 @@ public class FacilityConsoleTests : IDisposable
         Assert.NotNull(result);
         var dto = result.First(f => f.Id == facility.Id);
         Assert.Null(dto.ConsoleUrl);
+    }
+
+    [Fact]
+    public async Task CreateFacilityCommand_PublishesConsoleUrl()
+    {
+        var mockPublish = new Mock<IPublishEndpoint>();
+        var mockGuard = new Mock<ITenantFeatureGuard>();
+        var licenseSigner = new ClinicEz.Shared.Licensing.FacilityLicenseSigner();
+
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                { "Facility:BaseDomain", "customdomain.net" },
+                { "Facility:Subdomains:Clinic", "clinic" }
+            })
+            .Build();
+
+        var handler = new CreateFacilityCommandHandler(_context, mockPublish.Object, mockGuard.Object, licenseSigner, config);
+        var command = new CreateFacilityCommand(_tenantId.ToString(), FacilityType.Clinic, "Metro Urgent Care", Slug: "metro-urgent");
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        Assert.True(result);
+        mockPublish.Verify(p => p.Publish(
+            It.Is<FacilityCreatedEvent>(e =>
+                e.Slug == "metro-urgent" &&
+                e.ConsoleUrl == "https://metro-urgent.clinic.customdomain.net"),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

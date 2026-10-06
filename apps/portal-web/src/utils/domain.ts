@@ -32,3 +32,5 @@ export function getConsoleBaseDomain(): string {
   return "";
 }
 
+export const getFacilityBaseDomain = getConsoleBaseDomain;
+

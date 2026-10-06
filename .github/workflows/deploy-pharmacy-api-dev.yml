@@ -86,8 +86,9 @@ jobs:
         RABBITMQ_PASSWORD: ${{ secrets.RABBITMQ_PASSWORD }}
         IMAGE_NAME: ${{ env.IMAGE_NAME }}
         IMAGE_TAG: ${{ env.IMAGE_TAG }}
+        BASE_DOMAIN: ${{ secrets.BASE_DOMAIN || 'dev.clinicez.net' }}
       run: |
-        for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING RABBITMQ_HOST RABBITMQ_USERNAME RABBITMQ_PASSWORD IMAGE_NAME IMAGE_TAG; do
+        for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING RABBITMQ_HOST RABBITMQ_USERNAME RABBITMQ_PASSWORD IMAGE_NAME IMAGE_TAG BASE_DOMAIN; do
           echo "$var=$(printenv $var)" >> services/pharmacy-api/.env
         done
 

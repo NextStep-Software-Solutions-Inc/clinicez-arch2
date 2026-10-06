@@ -107,7 +107,7 @@ public static class CorsExtensions
 
     private static bool IsHostAllowed(string host, IConfiguration configuration)
     {
-        var baseDomain = configuration["Console:BaseDomain"] ?? configuration["CONSOLE_BASE_DOMAIN"];
+        var baseDomain = configuration["Facility:BaseDomain"];
         if (!string.IsNullOrWhiteSpace(baseDomain))
         {
             var cleanBase = baseDomain.Trim().TrimStart('.');

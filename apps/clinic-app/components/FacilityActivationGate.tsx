@@ -259,7 +259,8 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
         const host = window.location.hostname;
         const match = host.match(/^[a-z0-9-]+\.(?:clinic|lab|pharmacy|org)\.(.+)$/);
         if (match) {
-          return `https://portal.${match[1]}`;
+          // Navigate to the root base domain (e.g. https://dev.clinicez.net or https://company.com) without hardcoded 'portal.'
+          return `https://${match[1]}`;
         }
         return window.location.origin;
       }

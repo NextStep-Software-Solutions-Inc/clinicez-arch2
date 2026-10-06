@@ -16,19 +16,15 @@ const resolveDefaultBaseUrl = (fallbackPort: number = 5245): string => {
       return `${protocol}//${hostname}:${fallbackPort}`;
     }
 
-    // Subdomain-based cloud or enterprise deployment (e.g. <facility>.clinic.<baseDomain> or clinic.<baseDomain>)
-    const match = hostname.match(/^(?:[a-z0-9-]+\.)?clinic\.(.+)$/);
-    if (match) {
-      return `https://clinic-api.${match[1]}`;
-    }
-
+    // Default to same-origin for ingress reverse-proxy routing
     return `${protocol}//${hostname}`;
   }
   return `http://localhost:${fallbackPort}`;
 };
 
 export const CLINIC_BASE_URL = (
-  process.env.EXPO_PUBLIC_CLINIC_API_URL ?? resolveDefaultBaseUrl(5245)
+  process.env.EXPO_PUBLIC_CLINIC_API_URL ??
+  resolveDefaultBaseUrl(5245)
 ).replace(/\/+$/, '');
 
 export const PHARMACY_BASE_URL = (

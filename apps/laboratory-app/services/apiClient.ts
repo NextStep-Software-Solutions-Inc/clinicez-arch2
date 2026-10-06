@@ -15,18 +15,16 @@ const resolveDefaultLabBaseUrl = (fallbackPort: number = 5245): string => {
       return `${protocol}//${hostname}:${fallbackPort}`;
     }
 
-    // Subdomain-based cloud or enterprise deployment (e.g. <facility>.lab.<baseDomain> or lab.<baseDomain>)
-    const match = hostname.match(/^(?:[a-z0-9-]+\.)?lab\.(.+)$/);
-    if (match) {
-      return `https://laboratory-api.${match[1]}`;
-    }
-
+    // Default to same-origin for ingress reverse-proxy routing
     return `${protocol}//${hostname}`;
   }
   return `http://localhost:${fallbackPort}`;
 };
 
-const BASE_URL = (process.env.EXPO_PUBLIC_LAB_API_URL ?? resolveDefaultLabBaseUrl(5245)).replace(/\/+$/, '');
+const BASE_URL = (
+  process.env.EXPO_PUBLIC_LAB_API_URL ??
+  resolveDefaultLabBaseUrl(5245)
+).replace(/\/+$/, '');
 const API_PREFIX = '/api/v1';
 
 export class LaboratoryApiClient {

@@ -9,6 +9,8 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using ClinicEz.Shared.Licensing;
+using Microsoft.Extensions.Configuration;
+using ClinicEz.Portal.Application.Features.Admin.Queries;
 
 namespace ClinicEz.Portal.Application.Features.Admin.Commands;
 
@@ -38,9 +40,19 @@ public class CreateFacilityCommandHandler(
     IApplicationDbContext context,
     IPublishEndpoint publishEndpoint,
     ITenantFeatureGuard tenantFeatureGuard,
-    IFacilityLicenseSigner licenseSigner
+    IFacilityLicenseSigner licenseSigner,
+    IConfiguration configuration
 ) : IRequestHandler<CreateFacilityCommand, bool>
 {
+    public CreateFacilityCommandHandler(
+        IApplicationDbContext context,
+        IPublishEndpoint publishEndpoint,
+        ITenantFeatureGuard tenantFeatureGuard,
+        IFacilityLicenseSigner licenseSigner)
+        : this(context, publishEndpoint, tenantFeatureGuard, licenseSigner, new ConfigurationBuilder().Build())
+    {
+    }
+
     public async Task<bool> Handle(CreateFacilityCommand request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(request.TenantId) || string.IsNullOrEmpty(request.Name)) return false;
@@ -144,6 +156,8 @@ public class CreateFacilityCommandHandler(
         // Increment telemetry counts
         tenant.FacilitiesCount += 1;
 
+        var consoleUrl = GetFacilitiesQueryHandler.ResolveConsoleUrl(configuration, request.FacilityType, FacilityStatus.Active, resourceId, candidateSlug, tenant.TenantSlug);
+
         // Publish the event using MassTransit (which automatically registers in the Outbox transaction)
         await publishEndpoint.Publish(new FacilityCreatedEvent
         {
@@ -156,7 +170,8 @@ public class CreateFacilityCommandHandler(
             LicenseToken = licenseToken,
             Limits = limits,
             PlanTier = planTier,
-            LicenseExpiresAt = licenseExpiresAt
+            LicenseExpiresAt = licenseExpiresAt,
+            ConsoleUrl = consoleUrl
         }, cancellationToken);
 
         await context.SaveChangesAsync(cancellationToken);

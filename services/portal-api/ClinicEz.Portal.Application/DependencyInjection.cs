@@ -41,7 +41,8 @@ public static class DependencyInjection
                         var host = uri.Host;
 
                         // Allow configured base domain and its subdomains
-                        var baseDomain = configuration?["Console:BaseDomain"] ?? configuration?["CONSOLE_BASE_DOMAIN"];
+                        var baseDomain = configuration?["Facility:BaseDomain"];
+
                         if (!string.IsNullOrWhiteSpace(baseDomain))
                         {
                             var cleanBaseDomain = baseDomain.Trim().TrimStart('.');

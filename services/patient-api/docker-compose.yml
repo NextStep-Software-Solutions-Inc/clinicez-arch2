@@ -37,6 +37,11 @@ services:
       - Hangfire__DashboardPassword=${HANGFIRE_DASHBOARD_PASSWORD:-changeme}
       - Firebase__ServiceAccountJson=${FIREBASE_SERVICE_ACCOUNT_JSON}
       - Encryption__Enabled=false
+      - RabbitMq__Host=${RABBITMQ_HOST:-rabbitmq}
+      - RabbitMq__Username=${RABBITMQ_USERNAME:-rabbitmq}
+      - RabbitMq__Password=${RABBITMQ_PASSWORD}
+      - Services__ClinicApiUrl=${SERVICES_CLINIC_API_URL:-http://localhost:5245}
+      - Facility__BaseDomain=${BASE_DOMAIN:-dev.clinicez.net}
     restart: unless-stopped
 
 networks:

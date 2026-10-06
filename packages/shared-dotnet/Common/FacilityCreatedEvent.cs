@@ -19,4 +19,6 @@ public record FacilityCreatedEvent
     public FacilityLimits? Limits { get; init; }
     public string? PlanTier { get; init; }
     public DateTime? LicenseExpiresAt { get; init; }
+
+    public string? ConsoleUrl { get; init; }
 }

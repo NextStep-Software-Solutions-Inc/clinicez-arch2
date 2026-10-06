@@ -54,7 +54,7 @@ public class ClinicCorsPolicyTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                { "Console:BaseDomain", "clinicez.net" },
+                { "Facility:BaseDomain", "clinicez.net" },
                 { "Cors:AllowedDomains:0", "nextstep-software.com" }
             })
             .Build();
@@ -85,7 +85,7 @@ public class ClinicCorsPolicyTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                { "Console:BaseDomain", "clinicez.net" },
+                { "Facility:BaseDomain", "clinicez.net" },
                 { "Cors:AllowedDomains:0", "nextstep-software.com" }
             })
             .Build();
