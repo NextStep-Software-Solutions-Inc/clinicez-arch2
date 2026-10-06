@@ -5,6 +5,7 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useUser } from '@clerk/expo';
 import ThemedText from '@ui/ThemedText';
 import { useAuth } from 'contexts/AuthContext';
+import { useNotificationContext } from 'contexts/NotificationContext';
 import { AppIcon } from './Icon';
 
 const TAB_ICONS: Record<string, string> = {
@@ -19,6 +20,7 @@ export default function WebNavBar({ state, descriptors, navigation }: BottomTabB
   const { width } = useWindowDimensions();
   const { user } = useUser();
   const { logout } = useAuth();
+  const { unreadCount } = useNotificationContext();
 
   // Desktop (large screens) vs Small-to-Medium screens (mobile & tablet)
   const isDesktop = width >= 1024;
@@ -195,8 +197,33 @@ export default function WebNavBar({ state, descriptors, navigation }: BottomTabB
           })}
         </View>
 
-        {/* Right Section: User & Sign Out */}
+        {/* Right Section: Notifications, Settings, User & Sign Out */}
         <View style={styles.userSection}>
+          <Pressable
+            onPress={() => navigation.navigate('Main', { screen: 'NotificationScreen' })}
+            style={({ pressed }) => [styles.headerIconBtn, pressed && { opacity: 0.7 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Notifications"
+          >
+            <AppIcon android="notifications" ios="bell.fill" size={20} color={isDark ? '#CBD5E1' : '#475569'} />
+            {unreadCount > 0 && (
+              <View style={styles.headerBadge}>
+                <ThemedText style={styles.headerBadgeText}>
+                  {unreadCount > 9 ? '9+' : String(unreadCount)}
+                </ThemedText>
+              </View>
+            )}
+          </Pressable>
+
+          <Pressable
+            onPress={() => navigation.navigate('Main', { screen: 'SettingsScreen' })}
+            style={({ pressed }) => [styles.headerIconBtn, pressed && { opacity: 0.7 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Settings"
+          >
+            <AppIcon android="settings" ios="gear" size={20} color={isDark ? '#CBD5E1' : '#475569'} />
+          </Pressable>
+
           <View style={styles.userInfo}>
             <View style={styles.userAvatar}>
               <ThemedText style={styles.userAvatarText}>
@@ -307,7 +334,32 @@ const styles = StyleSheet.create({
   userSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 14,
+  },
+  headerIconBtn: {
+    position: 'relative',
+    padding: 6,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  headerBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '800',
+    lineHeight: 12,
   },
   userInfo: {
     flexDirection: 'row',

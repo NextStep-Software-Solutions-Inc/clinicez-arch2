@@ -15,6 +15,7 @@ import { prescriptions } from '@db/schema/prescriptions';
 import { patientGovernmentIds } from '@db/schema/patientGovernmentIds';
 import { patientNcdQuestionnaire } from '@db/schema/patientNcdQuestionnaire';
 import { eq } from 'drizzle-orm';
+import { useNotificationContext } from 'contexts/NotificationContext';
 import { AppIcon } from '../../components/ui/Icon';
 
 function MetricCard({ metric }: { metric: HealthMetric }) {
@@ -110,6 +111,7 @@ export default function HomeScreenWeb() {
   const { user } = useUser();
   const patientId = usePatientId();
   const { width } = useWindowDimensions();
+  const { unreadCount } = useNotificationContext();
 
   const [dashboard, setDashboard] = useState<HomeDashboard | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -187,6 +189,52 @@ export default function HomeScreenWeb() {
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.container}>
+        {/* Mobile / Tablet Top Bar (Only visible on small-to-medium screens where desktop navbar is hidden) */}
+        {!isDesktop && (
+          <View style={styles.mobileTopBar}>
+            <View style={styles.mobileBrand}>
+              <View style={styles.mobileLogoBadge}>
+                <ThemedText style={styles.mobileLogoText}>CLINIC EZ</ThemedText>
+              </View>
+              <ThemedText style={[styles.mobilePortalTag, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                Patient Portal
+              </ThemedText>
+            </View>
+
+            <View style={styles.mobileHeaderIcons}>
+              <Pressable
+                onPress={() => navigation.navigate('Main', { screen: 'NotificationScreen' })}
+                style={styles.mobileHeaderIconBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Notifications"
+              >
+                <AppIcon
+                  android="notifications"
+                  ios="bell.fill"
+                  size={22}
+                  color={colors.text}
+                />
+                {unreadCount > 0 && (
+                  <View style={styles.mobileBadge}>
+                    <ThemedText style={styles.mobileBadgeText}>
+                      {unreadCount > 9 ? '9+' : String(unreadCount)}
+                    </ThemedText>
+                  </View>
+                )}
+              </Pressable>
+
+              <Pressable
+                onPress={() => navigation.navigate('Main', { screen: 'SettingsScreen' })}
+                style={styles.mobileHeaderIconBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Settings"
+              >
+                <AppIcon android="settings" ios="gear" size={22} color={colors.text} />
+              </Pressable>
+            </View>
+          </View>
+        )}
+
         {/* Hero Banner */}
         <LinearGradient
           colors={isDark ? ['#1E3A8A', '#1E40AF', '#172554'] : ['#3B82F6', '#2563EB', '#1D4ED8']}
@@ -569,6 +617,62 @@ const styles = StyleSheet.create({
     width: '100%',
     marginHorizontal: 'auto',
     gap: 24,
+  },
+  mobileTopBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+    marginBottom: -8,
+  },
+  mobileBrand: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  mobileLogoBadge: {
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  mobileLogoText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 12,
+    letterSpacing: 1,
+  },
+  mobilePortalTag: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  mobileHeaderIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  mobileHeaderIconBtn: {
+    position: 'relative',
+    padding: 6,
+    borderRadius: 8,
+  },
+  mobileBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  mobileBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '800',
+    lineHeight: 12,
   },
   heroCard: {
     borderRadius: 20,
