@@ -3,6 +3,7 @@ name: Development OTA Update
 on:
   push:
     branches:
+      - 'development'
       - 'develop'
 
 jobs:
