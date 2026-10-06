@@ -47,6 +47,19 @@ public static class DependencyInjection
                             return true;
                         }
 
+                        // Allow nextstep-software.com and any subdomain (*.nextstep-software.com, e.g. dev.nextstep-software.com)
+                        if (host.Equals("nextstep-software.com", StringComparison.OrdinalIgnoreCase) ||
+                            host.EndsWith(".nextstep-software.com", StringComparison.OrdinalIgnoreCase))
+                        {
+                            return true;
+                        }
+
+                        // Allow Vercel preview environments
+                        if (host.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase))
+                        {
+                            return true;
+                        }
+
                         // Allow any explicitly configured origins
                         return extraOrigins.Any(o => string.Equals(o, origin, StringComparison.OrdinalIgnoreCase));
                     })

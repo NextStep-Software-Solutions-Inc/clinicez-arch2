@@ -2,6 +2,7 @@ using Scalar.AspNetCore;
 using ClinicEz.Clinic.Api;
 using ClinicEz.Clinic.Application;
 using ClinicEz.Clinic.Infrastructure;
+using ClinicEz.Shared.Middlewares;
 using Hangfire;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,7 +15,8 @@ builder.Configuration.AddUserSecrets(typeof(Program).Assembly, true);
 builder.Services
     .AddApiServices()
     .AddApplicationServices()
-    .AddInfrastructureServices(builder.Configuration, builder.Environment);
+    .AddInfrastructureServices(builder.Configuration, builder.Environment)
+    .AddClinicEzCors(builder.Configuration, builder.Environment);
 
 var app = builder.Build();
 
@@ -27,6 +29,7 @@ if (app.Environment.IsDevelopment())
 
 // 4. Add middleware
 app.UseHttpsRedirection();
+app.UseCors();
 app.UseExceptionHandler(); // Use our global exception handler
 app.UseHangfireDashboard(); // Add Hangfire Dashboard endpoint
 
