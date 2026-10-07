@@ -7,6 +7,7 @@ on:
     paths:
       - 'apps/patient-app/**'
       - 'packages/shared-ts/**'
+      - 'packages/design-tokens/**'
       - '.github/workflows/deploy-patient-web-prod.yml'
   release:
     types: [published]

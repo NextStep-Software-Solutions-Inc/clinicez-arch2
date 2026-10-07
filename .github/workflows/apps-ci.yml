@@ -8,6 +8,7 @@ on:
     paths:
       - 'apps/**'
       - 'packages/shared-ts/**'
+      - 'packages/design-tokens/**'
       - 'package.json'
       - 'bun.lock'
       - '.github/workflows/apps-ci.yml'
@@ -18,6 +19,7 @@ on:
     paths:
       - 'apps/**'
       - 'packages/shared-ts/**'
+      - 'packages/design-tokens/**'
       - 'package.json'
       - 'bun.lock'
       - '.github/workflows/apps-ci.yml'
