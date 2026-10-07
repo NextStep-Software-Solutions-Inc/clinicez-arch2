@@ -1,0 +1,74 @@
+# Manual trigger for EAS native builds of the Clinic app (iOS / Android phones and tablets).
+# Needs the EXPO_TOKEN secret and, once, eas init for the project (its id is supplied as the EAS_PROJECT_ID secret).
+
+name: Clinic App EAS Build (Manual Fallback)
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: 'EAS build profile'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - development
+          - preview
+          - staging
+          - production
+      platform:
+        description: 'Target platform'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - android
+          - ios
+
+defaults:
+  run:
+    working-directory: apps/clinic-app
+
+env:
+  EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+  EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID_CLINIC_APP }}
+
+jobs:
+  eas-build:
+    name: EAS Build (${{ inputs.profile }} / ${{ inputs.platform }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Verify before building
+        run: |
+          bun run typecheck
+          bun run lint:tokens
+          bun run lint:hosts
+          bun run test
+
+      - name: Setup EAS CLI
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build with EAS
+        run: |
+          eas build \
+            --profile ${{ inputs.profile }} \
+            --platform ${{ inputs.platform }} \
+            --non-interactive

@@ -47,6 +47,12 @@ jobs:
       - name: Type check all apps
         run: bun run typecheck:all
 
+      - name: Test clinic app
+        run: bun run test:clinic
+
+      - name: Clinic app token and host/catalog gates
+        run: bun run lint:clinic
+
       - name: Lint portal web
         run: bun run lint:portal
 
@@ -55,3 +61,6 @@ jobs:
 
       - name: Build patient web
         run: bun run build:patient-web
+
+      - name: Build clinic web
+        run: bun run build:clinic-web

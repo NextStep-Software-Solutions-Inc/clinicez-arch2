@@ -54,6 +54,8 @@
     "build": "bun run build:web",
     "typecheck": "tsc --noEmit",
     "lint:tokens": "node scripts/check-tokens.mjs",
+    "lint:hosts": "node scripts/check-no-external-hosts.mjs",
+    "assets": "python scripts/generate-assets.py",
     "test": "bun test tests"
   },
   "private": true
