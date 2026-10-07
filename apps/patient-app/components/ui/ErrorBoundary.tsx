@@ -1,4 +1,4 @@
-﻿import React, { ErrorInfo } from 'react';
+import React, { ErrorInfo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import ThemedText from './ThemedText';
 import ThemedView from './ThemedView';
@@ -34,7 +34,7 @@ function ErrorFallback({ error, onReset }: { error: Error | null; onReset: () =>
         >
           {error?.message || 'An unexpected error occurred.'}
         </ThemedText>
-        <Button label="Try Again" onPress={onReset} variant="primary" />
+        <Button label="Try Again" onPress={onReset} variant="primary" style={styles.button} />
       </View>
     </ThemedView>
   );
@@ -83,5 +83,8 @@ const styles = StyleSheet.create({
   message: {
     textAlign: 'center',
     lineHeight: 22,
+  },
+  button: {
+    alignSelf: 'center',
   },
 });

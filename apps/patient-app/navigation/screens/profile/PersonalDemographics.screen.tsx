@@ -111,10 +111,12 @@ export default function PersonalDemographicsScreen() {
       try {
         const row = await db.query.patients.findFirst({ where: eq(patients.id, patientId) });
         if (row && isMounted) {
+          const localFirst = (!row.firstName || row.firstName === 'Unknown') ? (user?.firstName || '') : row.firstName;
+          const localLast = (!row.lastName || row.lastName === 'Unknown') ? (user?.lastName || '') : row.lastName;
           reset({
-            firstName: row.firstName ?? '',
+            firstName: localFirst,
             middleName: row.middleName ?? '',
-            lastName: row.lastName ?? '',
+            lastName: localLast,
             suffix: row.suffix ?? '',
             sex: (row.sex as any) ?? '',
             dob: row.dob ?? '',
@@ -156,10 +158,12 @@ export default function PersonalDemographicsScreen() {
 
           // Update form if user has not started modifying it
           if (!isDirtyRef.current) {
+            const validFirst = (!serverData.firstName || serverData.firstName === 'Unknown') ? (user?.firstName || '') : serverData.firstName;
+            const validLast = (!serverData.lastName || serverData.lastName === 'Unknown') ? (user?.lastName || '') : serverData.lastName;
             reset({
-              firstName: serverData.firstName ?? '',
+              firstName: validFirst,
               middleName: serverData.middleName ?? '',
-              lastName: serverData.lastName ?? '',
+              lastName: validLast,
               suffix: serverData.suffix ?? '',
               sex: (serverData.sex as any) ?? '',
               dob: serverData.dateOfBirth ?? '',
@@ -244,6 +248,12 @@ export default function PersonalDemographicsScreen() {
 
       // 4. Directly update backend API
       try {
+        let serverDemo: PatientSummary | null = null;
+        try {
+          const profile = await getPatientProfile(getToken, patientId);
+          serverDemo = profile?.demographics ?? null;
+        } catch {}
+
         const existing = await db.query.patients.findFirst({
           where: eq(patients.id, patientId),
         });
@@ -263,12 +273,32 @@ export default function PersonalDemographicsScreen() {
           religion: payload.religion,
           primaryLanguage: payload.primaryLanguage,
           educationLevel: payload.educationLevel,
-          mobile: existing?.mobile ?? null,
-          altPhone: existing?.altPhone ?? null,
-          email: existing?.email ?? user?.primaryEmailAddress?.emailAddress ?? null,
-          messengerHandle: existing?.messengerHandle ?? null,
-          consentToShareInfo: existing?.consentToShareInfo ?? false,
+          mobile: existing?.mobile || serverDemo?.mobile || null,
+          altPhone: existing?.altPhone || serverDemo?.altPhone || null,
+          email: existing?.email || serverDemo?.email || user?.primaryEmailAddress?.emailAddress || null,
+          messengerHandle: existing?.messengerHandle || serverDemo?.messengerHandle || null,
+          consentToShareInfo: existing?.consentToShareInfo ?? serverDemo?.consentToShareInfo ?? false,
         });
+
+        if (serverDemo) {
+          await upsertPatientSummary({
+            ...serverDemo,
+            firstName: payload.firstName,
+            middleName: payload.middleName,
+            lastName: payload.lastName,
+            suffix: payload.suffix,
+            sex: payload.sex,
+            dateOfBirth: payload.dob,
+            placeOfBirth: payload.placeOfBirth,
+            civilStatus: payload.civilStatus,
+            bloodType: payload.bloodType,
+            nationality: payload.nationality,
+            ethnicity: payload.ethnicity,
+            religion: payload.religion,
+            primaryLanguage: payload.primaryLanguage,
+            educationLevel: payload.educationLevel,
+          }, user?.id);
+        }
 
         reset(data);
         dialog.alert('Saved', 'Your personal demographics have been updated successfully.', [

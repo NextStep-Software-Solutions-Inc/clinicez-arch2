@@ -15,8 +15,9 @@ import { usePatientId } from 'hooks/usePatientId';
 import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
-import { getPatientProfile, updatePatientDemographics } from 'services/api/patientApi';
+import { getPatientProfile, updatePatientDemographics, type PatientSummary } from 'services/api/patientApi';
 import { flushAndSyncProfile } from 'services/api/syncService';
+import { upsertPatientSummary } from '@db/hydrate';
 
 type FormValues = {
   mobile: string;
@@ -64,13 +65,16 @@ export default function ContactInfoScreen() {
       try {
         if (patientId) {
           const profile = await getPatientProfile(getToken, patientId);
-          if (profile?.demographics && isMounted && !isDirtyRef.current) {
-            reset({
-              mobile: profile.demographics.mobile ?? '',
-              altPhone: profile.demographics.altPhone ?? '',
-              email: profile.demographics.email || accountEmail,
-              messengerHandle: profile.demographics.messengerHandle ?? '',
-            });
+          if (profile?.demographics && isMounted) {
+            await upsertPatientSummary(profile.demographics, userId);
+            if (!isDirtyRef.current) {
+              reset({
+                mobile: profile.demographics.mobile ?? '',
+                altPhone: profile.demographics.altPhone ?? '',
+                email: profile.demographics.email || accountEmail,
+                messengerHandle: profile.demographics.messengerHandle ?? '',
+              });
+            }
           }
         }
       } catch (fetchErr) {
@@ -83,12 +87,34 @@ export default function ContactInfoScreen() {
     return () => {
       isMounted = false;
     };
-  }, [patientId, getToken, reset, accountEmail]);
+  }, [patientId, getToken, reset, accountEmail, userId]);
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
     try {
+      let serverDemo: PatientSummary | null = null;
+      try {
+        const profile = await getPatientProfile(getToken, patientId);
+        serverDemo = profile?.demographics ?? null;
+      } catch (e) {
+        console.warn('[ContactInfo] Could not fetch server profile before save:', e);
+      }
+
       const existing = await db.query.patients.findFirst({ where: eq(patients.id, patientId) });
+
+      // Resolve valid name: never fallback to 'Unknown'
+      const firstName = (
+        (existing?.firstName && existing.firstName !== 'Unknown' ? existing.firstName : null) ||
+        (serverDemo?.firstName && serverDemo.firstName !== 'Unknown' ? serverDemo.firstName : null) ||
+        user?.firstName ||
+        'Clinic'
+      );
+      const lastName = (
+        (existing?.lastName && existing.lastName !== 'Unknown' ? existing.lastName : null) ||
+        (serverDemo?.lastName && serverDemo.lastName !== 'Unknown' ? serverDemo.lastName : null) ||
+        user?.lastName ||
+        'User'
+      );
 
       const payload = {
         mobile: data.mobile.trim() || null,
@@ -101,14 +127,19 @@ export default function ContactInfoScreen() {
       if (existing) {
         await db
           .update(patients)
-          .set({ ...payload, updatedAt: now })
+          .set({
+            ...payload,
+            firstName,
+            lastName,
+            updatedAt: now,
+          })
           .where(eq(patients.id, patientId));
       } else {
         await db.insert(patients).values({
           id: patientId,
           clerkUserId: userId || patientId,
-          firstName: 'Unknown',
-          lastName: 'Unknown',
+          firstName,
+          lastName,
           ...payload,
           createdAt: now,
           updatedAt: now,
@@ -121,25 +152,25 @@ export default function ContactInfoScreen() {
       // Directly update backend API
       try {
         await updatePatientDemographics(getToken, patientId, {
-          firstName: existing?.firstName ?? 'Unknown',
-          middleName: existing?.middleName ?? null,
-          lastName: existing?.lastName ?? 'Unknown',
-          suffix: existing?.suffix ?? null,
-          sex: existing?.sex ?? null,
-          dateOfBirth: existing?.dob ?? null,
-          placeOfBirth: existing?.placeOfBirth ?? null,
-          civilStatus: existing?.civilStatus ?? null,
-          bloodType: existing?.bloodType ?? null,
-          nationality: existing?.nationality ?? 'Filipino',
-          ethnicity: existing?.ethnicity ?? null,
-          religion: existing?.religion ?? null,
-          primaryLanguage: existing?.primaryLanguage ?? null,
-          educationLevel: existing?.educationLevel ?? null,
+          firstName,
+          middleName: existing?.middleName ?? serverDemo?.middleName ?? null,
+          lastName,
+          suffix: existing?.suffix ?? serverDemo?.suffix ?? null,
+          sex: existing?.sex ?? serverDemo?.sex ?? null,
+          dateOfBirth: existing?.dob ?? serverDemo?.dateOfBirth ?? null,
+          placeOfBirth: existing?.placeOfBirth ?? serverDemo?.placeOfBirth ?? null,
+          civilStatus: existing?.civilStatus ?? serverDemo?.civilStatus ?? null,
+          bloodType: existing?.bloodType ?? serverDemo?.bloodType ?? null,
+          nationality: existing?.nationality ?? serverDemo?.nationality ?? 'Filipino',
+          ethnicity: existing?.ethnicity ?? serverDemo?.ethnicity ?? null,
+          religion: existing?.religion ?? serverDemo?.religion ?? null,
+          primaryLanguage: existing?.primaryLanguage ?? serverDemo?.primaryLanguage ?? null,
+          educationLevel: existing?.educationLevel ?? serverDemo?.educationLevel ?? null,
           mobile: payload.mobile,
           altPhone: payload.altPhone,
           email: payload.email,
           messengerHandle: payload.messengerHandle,
-          consentToShareInfo: existing?.consentToShareInfo ?? false,
+          consentToShareInfo: existing?.consentToShareInfo ?? serverDemo?.consentToShareInfo ?? false,
         });
 
         // Push any remaining sync queue items
