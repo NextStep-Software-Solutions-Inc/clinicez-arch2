@@ -241,7 +241,7 @@ public class YakapClinicalMapperTests
         // Assert
         doc.Soaps.Should().HaveCount(1);
         var soap = doc.Soaps[0];
-        soap.SignsSymptoms.Should().Be("1"); // Cough mapped to "1"
+        soap.SignsSymptoms.Should().Be("09"); // COUGH in lib_signs_symptoms
         soap.IcdCodes.Should().Contain("I10");
         soap.IcdCodes.Should().Contain("J20.9");
         soap.PhysicalExam.Systolic.Should().Be("145");

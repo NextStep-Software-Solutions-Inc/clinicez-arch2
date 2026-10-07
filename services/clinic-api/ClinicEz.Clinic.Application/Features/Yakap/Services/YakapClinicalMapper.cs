@@ -235,7 +235,7 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
                     CoPay: "0.00",
                     TransDate: firstEncounter.EncounterDate.ToString("yyyy-MM-dd"),
                     IllnessHistory: "First tranche baseline profiling",
-                    SignsSymptoms: "X",
+                    SignsSymptoms: _resolver.OtherSignsSymptomsCode(),
                     OtherComplaint: "First tranche baseline profiling",
                     PainSite: string.Empty,
                     PhysicalExam: pePertinent,
@@ -243,7 +243,7 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
                     PhysicalExamSpecifics: new YakapPhysicalExamSpecificDto(string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty),
                     IcdCodes: ["Z00.0"],
                     Diagnostics: [],
-                    Managements: [new YakapManagementDto("6", "General counseling")],
+                    Managements: [BuildManagement(null)],
                     AdviceRemarks: "Follow-up as scheduled",
                     ReportStatus: "U",
                     DeficiencyRemarks: string.Empty));
@@ -296,19 +296,17 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
 
                     var signs = !string.IsNullOrWhiteSpace(encounter.PhilHealthSignSympCode)
                         ? encounter.PhilHealthSignSympCode
-                        : MapSignsAndSymptoms(encounter.Subjective);
+                        : _resolver.ResolveSignsSymptomsCode(encounter.Subjective);
 
                     var otherComplaint = !string.IsNullOrWhiteSpace(encounter.PhilHealthOtherComplaint)
                         ? encounter.PhilHealthOtherComplaint
-                        : (signs == "OT" || signs == "X") ? encounter.Subjective ?? string.Empty : string.Empty;
+                        : signs == _resolver.OtherSignsSymptomsCode() ? encounter.Subjective ?? string.Empty : string.Empty;
 
                     var painSite = !string.IsNullOrWhiteSpace(encounter.PhilHealthPainSite)
                         ? encounter.PhilHealthPainSite
                         : string.Empty;
 
-                    var advice = !string.IsNullOrWhiteSpace(encounter.Plan)
-                        ? encounter.Plan
-                        : "Follow-up as needed";
+                    var advice = encounter.Plan;
 
                     var encSoapTransNo = !string.IsNullOrWhiteSpace(encounter.PhilHealthSoapTransNo)
                         ? encounter.PhilHealthSoapTransNo
@@ -342,8 +340,8 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
                         PhysicalExamSpecifics: new YakapPhysicalExamSpecificDto(string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty),
                         IcdCodes: icdCodes,
                         Diagnostics: encDiagnostics,
-                        Managements: [new YakapManagementDto("6", advice)],
-                        AdviceRemarks: advice,
+                        Managements: [BuildManagement(advice)],
+                        AdviceRemarks: advice ?? string.Empty,
                         ReportStatus: "U",
                         DeficiencyRemarks: string.Empty));
 
@@ -608,7 +606,7 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
         return new YakapSocialHistoryDto("N", string.Empty, "N", string.Empty, "N", "N");
     }
 
-    private static List<YakapImmunizationDto> MapImmunizations(PhilHealthPatientProfileDto? customProfile)
+    private List<YakapImmunizationDto> MapImmunizations(PhilHealthPatientProfileDto? customProfile)
     {
         var list = new List<YakapImmunizationDto>();
 
@@ -630,7 +628,7 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
         // Code 999 is standard PhilHealth code for "None / Not Given" without assuming age group.
         if (list.Count == 0)
         {
-            list.Add(new YakapImmunizationDto(ChildImmcode: "", YoungwImmcode: "", PregwImmcode: "", ElderlyImmcode: "", OtherImm: "999"));
+            list.Add(new YakapImmunizationDto(ChildImmcode: "", YoungwImmcode: "", PregwImmcode: "", ElderlyImmcode: "", OtherImm: _resolver.NoImmunizationCode()));
         }
 
         return list;
@@ -776,24 +774,19 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
         return new YakapPhysicalExamSpecificDto(string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty);
     }
 
-    private static string MapSignsAndSymptoms(string? subjective)
+    /// <summary>
+    /// The SOAP management entry, coded from lib_management: "Not applicable" when no advice was documented, otherwise
+    /// "Others" carrying the clinician's own advice text.
+    /// </summary>
+    private YakapManagementDto BuildManagement(string? advice)
     {
-        if (string.IsNullOrWhiteSpace(subjective)) return "OT";
-        var s = subjective.ToLowerInvariant();
-
-        if (s.Contains("cough")) return "1";
-        if (s.Contains("fever")) return "2";
-        if (s.Contains("headache")) return "3";
-        if (s.Contains("diarrhea")) return "4";
-        if (s.Contains("vomit")) return "5";
-        if (s.Contains("abdom") || s.Contains("stomach")) return "6";
-        if (s.Contains("breath") || s.Contains("dyspnea")) return "7";
-        if (s.Contains("chest")) return "8";
-        if (s.Contains("rash")) return "9";
-
-        return "OT";
+        var hasAdvice = !string.IsNullOrWhiteSpace(advice);
+        var code = _resolver.ResolveManagementCode(hasAdvice);
+        var description = hasAdvice
+            ? advice!.Trim()
+            : _catalog.Find(PhilHealthCatalogResolver.ManagementLibrary, code)?.Description ?? string.Empty;
+        return new YakapManagementDto(code, description);
     }
-
     private static YakapNcdAnswersDto MapNcdFromPatientCustomFields(ClinicPatient patient)
     {
         if (patient.CustomFields == null || patient.CustomFields.Count == 0)

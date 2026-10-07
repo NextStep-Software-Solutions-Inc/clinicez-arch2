@@ -14,6 +14,9 @@ public sealed record PhilHealthCatalogRecord(
 /// </summary>
 public interface IPhilHealthCatalogLookup
 {
+    /// <summary>Every entry of the library (including inactive ones), in import order; empty if it is not loaded.</summary>
+    IReadOnlyList<PhilHealthCatalogRecord> List(string library);
+
     /// <summary>The entry with this code (first term for libraries that list several per code), or <c>null</c>.</summary>
     PhilHealthCatalogRecord? Find(string library, string code);
 

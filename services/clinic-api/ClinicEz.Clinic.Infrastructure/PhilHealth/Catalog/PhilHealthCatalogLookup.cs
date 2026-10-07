@@ -47,6 +47,9 @@ public sealed class PhilHealthCatalogLookup : IPhilHealthCatalogLookup, IPhilHea
 
     public void Invalidate(string library) => _snapshots.TryRemove(library, out _);
 
+    public IReadOnlyList<PhilHealthCatalogRecord> List(string library) => Get(library).Records;
+
+
     public PhilHealthCatalogRecord? Find(string library, string code) =>
         string.IsNullOrWhiteSpace(code) ? null : Get(library).ByCode.GetValueOrDefault(code.Trim());
 

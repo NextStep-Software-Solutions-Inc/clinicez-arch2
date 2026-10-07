@@ -267,4 +267,54 @@ public sealed class PhilHealthCatalogResolver
 
         return OtherDiagnosticCode();
     }
+
+    public const string SignsSymptomsLibrary = "lib_signs_symptoms";
+    public const string ManagementLibrary = "lib_management";
+    public const string ChildImmunizationLibrary = "lib_immchild";
+
+    /// <summary>The library's "Others" code for signs and symptoms.</summary>
+    public string OtherSignsSymptomsCode() => _catalog.FindByDescription(SignsSymptomsLibrary, "Others")?.Code ?? string.Empty;
+
+    /// <summary>
+    /// The sign/symptom whose official term appears in the free-text complaint (longest term wins so that
+    /// "chest pain" is not read as plain "pain"), otherwise the library's "Others".
+    /// </summary>
+    public string ResolveSignsSymptomsCode(string? complaintText)
+    {
+        if (string.IsNullOrWhiteSpace(complaintText)) return OtherSignsSymptomsCode();
+
+        var text = complaintText.ToLowerInvariant();
+        string? bestCode = null;
+        var bestLength = 0;
+
+        foreach (var record in _catalog.List(SignsSymptomsLibrary))
+        {
+            if (!record.IsActive || record.Description.Equals("Others", StringComparison.OrdinalIgnoreCase)) continue;
+
+            // "VOMITING/NAUSEA" and "ABDOMINAL CRAMP/PAIN" list alternative terms separated by '/'.
+            foreach (var term in record.Description.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                var needle = term.ToLowerInvariant();
+                if (needle.Length < 4 || needle.Length <= bestLength || !text.Contains(needle)) continue;
+                bestCode = record.Code;
+                bestLength = needle.Length;
+            }
+        }
+
+        return bestCode ?? OtherSignsSymptomsCode();
+    }
+
+    /// <summary>
+    /// Management entry for the SOAP: <c>Not applicable</c> when nothing is documented, otherwise the library's
+    /// <c>Others</c> (the clinician's own advice is carried as its description).
+    /// </summary>
+    public string ResolveManagementCode(bool hasAdvice)
+    {
+        var entry = _catalog.FindByDescription(ManagementLibrary, hasAdvice ? "Others" : "Not applicable");
+        return entry?.Code ?? string.Empty;
+    }
+
+    /// <summary>The "None" immunization code (shared by all immunization libraries).</summary>
+    public string NoImmunizationCode() => _catalog.FindByDescription(ChildImmunizationLibrary, "None")?.Code ?? string.Empty;
 }
+
