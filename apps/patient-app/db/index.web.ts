@@ -131,6 +131,48 @@ let rawSqlDatabase: Database | null = null;
 let initializedDrizzleDb: ReturnType<typeof drizzle> | null = null;
 let initPromise: Promise<ReturnType<typeof drizzle>> | null = null;
 
+function ensureRequiredColumns(rawDb: Database): boolean {
+  let anyModified = false;
+  const tableColumns: Record<string, Array<{ name: string; type: string; defaultValue?: string }>> = {
+    patient_government_ids: [
+      { name: 'sponsor_pin', type: 'text' },
+      { name: 'sponsor_last_name', type: 'text' },
+      { name: 'sponsor_first_name', type: 'text' },
+      { name: 'sponsor_middle_name', type: 'text' },
+      { name: 'sponsor_suffix', type: 'text' },
+      { name: 'sponsor_dob', type: 'text' },
+      { name: 'sponsor_relationship', type: 'text' },
+    ],
+    prescriptions: [
+      { name: 'is_philhealth_gamot', type: 'integer', defaultValue: '0' },
+      { name: 'philhealth_drug_code', type: 'text' },
+      { name: 'unique_prescription_security_code', type: 'text' },
+      { name: 'gamot_coverage_amount', type: 'real' },
+    ],
+  };
+
+  for (const [table, cols] of Object.entries(tableColumns)) {
+    try {
+      const res = rawDb.exec(`PRAGMA table_info(${table})`);
+      if (res && res.length > 0 && res[0].values) {
+        const existingCols = new Set(res[0].values.map((row) => String(row[1]).toLowerCase()));
+        for (const col of cols) {
+          if (!existingCols.has(col.name.toLowerCase())) {
+            const defClause = col.defaultValue !== undefined ? ` DEFAULT ${col.defaultValue}` : '';
+            rawDb.run(`ALTER TABLE \`${table}\` ADD \`${col.name}\` ${col.type}${defClause};`);
+            console.log(`[WebDB] Added missing column ${table}.${col.name}`);
+            anyModified = true;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(`[WebDB] Column safety check error on ${table}:`, err);
+    }
+  }
+
+  return anyModified;
+}
+
 export async function initWebDatabase(): Promise<ReturnType<typeof drizzle>> {
   if (initializedDrizzleDb) return initializedDrizzleDb;
   if (initPromise) return initPromise;
@@ -164,33 +206,73 @@ export async function initWebDatabase(): Promise<ReturnType<typeof drizzle>> {
       isNewDb = true;
     }
 
-    if (isNewDb) {
-      console.log('[WebDB] Initializing new SQLite schema from migrations...');
-      const journal = migrations.journal;
-      const migrationFiles = migrations.migrations as Record<string, string>;
+    // Ensure migrations table exists
+    try {
+      rawSqlDatabase.run(
+        'CREATE TABLE IF NOT EXISTS "__drizzle_migrations" (id SERIAL PRIMARY KEY, hash text NOT NULL, created_at numeric);'
+      );
+    } catch (err) {
+      console.warn('[WebDB] Failed to ensure __drizzle_migrations table:', err);
+    }
 
-      for (const entry of journal.entries) {
-        const key = `m${entry.idx.toString().padStart(4, '0')}`;
-        const query = migrationFiles[key];
-        if (query) {
-          const statements = query.split('--> statement-breakpoint');
-          for (const stmt of statements) {
-            const trimmed = stmt.trim();
-            if (trimmed) {
-              try {
-                rawSqlDatabase.run(trimmed);
-              } catch (sqlErr) {
-                // Ignore idempotent errors such as table/index already exists
-                const msg = String(sqlErr).toLowerCase();
-                if (!msg.includes('already exists')) {
-                  console.warn(`[WebDB] Migration query warning on: ${trimmed.slice(0, 50)}...`, sqlErr);
-                }
+    // Read applied migrations
+    const appliedTimestamps = new Set<number>();
+    try {
+      const records = rawSqlDatabase.exec('SELECT created_at FROM "__drizzle_migrations"');
+      if (records.length > 0 && records[0].values) {
+        for (const row of records[0].values) {
+          if (row[0] !== null && row[0] !== undefined) {
+            appliedTimestamps.add(Number(row[0]));
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[WebDB] Failed to read __drizzle_migrations:', err);
+    }
+
+    let migrationsApplied = false;
+    const journal = migrations.journal;
+    const migrationFiles = migrations.migrations as Record<string, string>;
+
+    for (const entry of journal.entries) {
+      if (appliedTimestamps.has(entry.when)) {
+        continue;
+      }
+      const key = `m${entry.idx.toString().padStart(4, '0')}`;
+      const query = migrationFiles[key];
+      if (query) {
+        const statements = query.split('--> statement-breakpoint');
+        for (const stmt of statements) {
+          const trimmed = stmt.trim();
+          if (trimmed) {
+            try {
+              rawSqlDatabase.run(trimmed);
+            } catch (sqlErr) {
+              const msg = String(sqlErr).toLowerCase();
+              if (!msg.includes('already exists') && !msg.includes('duplicate column')) {
+                console.warn(`[WebDB] Migration query warning on: ${trimmed.slice(0, 50)}...`, sqlErr);
               }
             }
           }
         }
+        try {
+          rawSqlDatabase.run('INSERT INTO "__drizzle_migrations" ("hash", "created_at") VALUES (?, ?)', [
+            '',
+            entry.when,
+          ]);
+        } catch {
+          // Ignore insertion error
+        }
+        migrationsApplied = true;
       }
-      // Save initial snapshot
+    }
+
+    const columnsPatched = ensureRequiredColumns(rawSqlDatabase);
+
+    if (isNewDb || migrationsApplied || columnsPatched) {
+      console.log(
+        `[WebDB] Schema updated (isNewDb=${isNewDb}, migrationsApplied=${migrationsApplied}, columnsPatched=${columnsPatched}), saving snapshot...`
+      );
       await persistDatabaseSnapshot();
     }
 
