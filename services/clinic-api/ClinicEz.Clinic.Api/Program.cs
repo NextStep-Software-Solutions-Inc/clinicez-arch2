@@ -61,6 +61,7 @@ app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<ClinicScopeMiddleware>();
+app.UseMiddleware<ClinicEz.Clinic.Infrastructure.Idempotency.IdempotencyMiddleware>();
 app.UseHangfireDashboard(); // Add Hangfire Dashboard endpoint
 
 // 5. Tell the app to use controllers

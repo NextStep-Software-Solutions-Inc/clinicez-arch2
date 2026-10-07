@@ -55,6 +55,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<TenantLookupRecord> Tenants { get; set; } = null!;
     public DbSet<PhilHealthCatalogItem> PhilHealthCatalogItems { get; set; } = null!;
     public DbSet<PhilHealthCatalogImportLog> PhilHealthCatalogImportLogs { get; set; } = null!;
+    public DbSet<IdempotencyRecord> IdempotencyRecords { get; set; } = null!;
     public DbSet<FacilityLookupRecord> Facilities { get; set; } = null!;
 
     public Guid CurrentClinicId => _clinicContext?.ClinicId ?? Guid.Empty;
@@ -541,6 +542,20 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.ContentHash).HasMaxLength(64);
             entity.Property(e => e.Message).HasMaxLength(500);
             entity.HasIndex(e => new { e.Library, e.CreatedAt });
+        });
+
+        modelBuilder.Entity<IdempotencyRecord>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Scope).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Key).IsRequired().HasMaxLength(128);
+            entity.Property(e => e.Method).IsRequired().HasMaxLength(10);
+            entity.Property(e => e.Path).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.RequestHash).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.ContentType).HasMaxLength(200);
+            entity.Property(e => e.ResponseBody).HasColumnType("text");
+            entity.HasIndex(e => new { e.Scope, e.Key }).IsUnique();
+            entity.HasIndex(e => e.CreatedAt);
         });
 
         // MassTransit outbox

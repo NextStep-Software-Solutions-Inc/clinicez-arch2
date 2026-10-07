@@ -66,6 +66,7 @@ public static class DependencyInjection
         services.AddSingleton<ClinicEz.Clinic.Application.Common.Interfaces.IPhilHealthCatalogLookup>(sp => sp.GetRequiredService<ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.PhilHealthCatalogLookup>());
         services.AddSingleton<ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.IPhilHealthCatalogCache>(sp => sp.GetRequiredService<ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.PhilHealthCatalogLookup>());
         services.AddHostedService<ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.PhilHealthCatalogSeedHostedService>();
+        services.AddHostedService<ClinicEz.Clinic.Infrastructure.Idempotency.IdempotencyCleanupHostedService>();
 
         // Outbound patient webhook notifier
         services.AddHttpClient<IPatientWebhookNotifier, PatientWebhookNotifier>();
