@@ -20,14 +20,8 @@ services:
     expose:
       - "8080"
     networks:
-      data-network:
-        aliases:
-          - patient-api
-          - clinicez-patient-api
-      npm-default:
-        aliases:
-          - patient-api
-          - clinicez-patient-api
+      - data-network
+      - npm-default
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
       - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}

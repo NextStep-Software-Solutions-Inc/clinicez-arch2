@@ -16,14 +16,8 @@ services:
     expose:
       - "8080"
     networks:
-      data-network:
-        aliases:
-          - philhealth-proxy
-          - clinicez-philhealth-proxy
-      npm-default:
-        aliases:
-          - philhealth-proxy
-          - clinicez-philhealth-proxy
+      - data-network
+      - npm-default
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
       - PortalApi__BaseUrl=${PORTAL_API_BASE_URL:-http://portal-api:8080}

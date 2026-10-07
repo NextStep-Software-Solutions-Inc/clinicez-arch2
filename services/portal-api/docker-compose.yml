@@ -16,14 +16,8 @@ services:
     expose:
       - "8080"
     networks:
-      data-network:
-        aliases:
-          - portal-api
-          - clinicez-portal-api
-      npm-default:
-        aliases:
-          - portal-api
-          - clinicez-portal-api
+      - data-network
+      - npm-default
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Production}
       - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}
