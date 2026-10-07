@@ -26,26 +26,18 @@ services:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
       - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}
       - ConnectionStrings__Redis=${REDIS_CONNECTION_STRING}
-      - Clerk__Authority=${CLERK_AUTHORITY}
       - Clerk__WebhookSecret=${CLERK_WEBHOOK_SECRET}
       - R2__AccountId=${R2_ACCOUNT_ID}
       - R2__BucketName=${R2_BUCKET_NAME}
       - R2__AccessKeyId=${R2_ACCESS_KEY_ID}
       - R2__SecretAccessKey=${R2_SECRET_ACCESS_KEY}
       - R2__PublicUrl=${R2_PUBLIC_URL}
-      - Hangfire__DashboardUsername=${HANGFIRE_DASHBOARD_USERNAME:-admin}
       - Hangfire__DashboardPassword=${HANGFIRE_DASHBOARD_PASSWORD:-changeme}
       - Firebase__ServiceAccountJson=${FIREBASE_SERVICE_ACCOUNT_JSON}
-      - Encryption__Enabled=false
       - RabbitMq__Host=${RABBITMQ_HOST:-rabbitmq}
-      - RabbitMq__Username=${RABBITMQ_USERNAME:-rabbitmq}
+      - RabbitMq__Username=${RABBITMQ_USERNAME:-rabbit_admin_node}
       - RabbitMq__Password=${RABBITMQ_PASSWORD}
-      - Services__ClinicApiUrl=${SERVICES_CLINIC_API_URL:-http://clinic-api:8080}
       - Facility__BaseDomain=${BASE_DOMAIN:?BASE_DOMAIN must be set}
-      - Cors__AllowedDomains=${CORS_ALLOWED_DOMAINS:-}
-      - Cors__AllowedOrigins=${CORS_ALLOWED_ORIGINS:-}
-      - Facility__Subdomains__Clinic=${FACILITY_SUBDOMAIN_CLINIC:-clinic}
-      - Facility__Subdomains__Organization=${FACILITY_SUBDOMAIN_ORGANIZATION:-org}
     restart: unless-stopped
 
 networks:

@@ -31,7 +31,12 @@ builder.Services
     .AddJwtBearer(options =>
     {
         // These values MUST be correctly configured in appsettings.json
-        options.Authority = builder.Configuration["Clerk:Authority"];
+        var authority = builder.Configuration["Clerk:Authority"];
+        if (string.IsNullOrWhiteSpace(authority) && env.IsDevelopment())
+        {
+            authority = "https://amazing-mosquito-75.clerk.accounts.dev";
+        }
+        options.Authority = authority;
 
         // This parameter block configures how the token is validated
         options.TokenValidationParameters = new TokenValidationParameters

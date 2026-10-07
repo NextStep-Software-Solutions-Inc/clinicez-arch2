@@ -80,11 +80,10 @@ jobs:
     - name: Create .env file
       env:
         ASPNETCORE_ENVIRONMENT: ${{ env.ENVIRONMENT }}
-        PORTAL_API_BASE_URL: ${{ vars.PORTAL_API_BASE_URL || 'http://portal-api:8080' }}
         IMAGE_NAME: ${{ env.IMAGE_NAME }}
         IMAGE_TAG: ${{ env.IMAGE_TAG }}
       run: |
-        for var in ASPNETCORE_ENVIRONMENT PORTAL_API_BASE_URL IMAGE_NAME IMAGE_TAG; do
+        for var in ASPNETCORE_ENVIRONMENT IMAGE_NAME IMAGE_TAG; do
           echo "$var=$(printenv $var)" >> services/philhealth-proxy/.env
         done
 

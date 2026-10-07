@@ -21,12 +21,10 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
       - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}
-      - RabbitMq__Host=${RABBITMQ_HOST}
-      - RabbitMq__Username=${RABBITMQ_USERNAME}
+      - RabbitMq__Host=${RABBITMQ_HOST:-rabbitmq}
+      - RabbitMq__Username=${RABBITMQ_USERNAME:-rabbit_admin_node}
       - RabbitMq__Password=${RABBITMQ_PASSWORD}
       - Facility__BaseDomain=${BASE_DOMAIN:?BASE_DOMAIN must be set}
-      - Cors__AllowedDomains=${CORS_ALLOWED_DOMAINS:-}
-      - Cors__AllowedOrigins=${CORS_ALLOWED_ORIGINS:-}
     restart: unless-stopped
 
 networks:
