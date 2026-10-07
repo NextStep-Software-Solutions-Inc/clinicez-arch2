@@ -11,6 +11,7 @@ import { ClinicProvider } from './context/ClinicContext';
 import { StaffProvider } from './context/StaffContext';
 import { FeedbackHost } from './components/ui';
 import { OfflineSyncRunner } from './components/OfflineSyncRunner';
+import ErrorBoundary from './components/ErrorBoundary';
 import { fontAssets, setCustomFontsAvailable } from './constants/fonts';
 import { theme } from './constants/theme';
 
@@ -34,18 +35,20 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />
-      <ConnectionGate>
-        <FacilityActivationGate>
-          <AuthGate>
-            <ClinicProvider>
-              <StaffProvider>
-                <OfflineSyncRunner />
-                <Navigation linking={linkingOptions} theme={navigationTheme} />
-              </StaffProvider>
-            </ClinicProvider>
-          </AuthGate>
-        </FacilityActivationGate>
-      </ConnectionGate>
+      <ErrorBoundary>
+        <ConnectionGate>
+          <FacilityActivationGate>
+            <AuthGate>
+              <ClinicProvider>
+                <StaffProvider>
+                  <OfflineSyncRunner />
+                  <Navigation linking={linkingOptions} theme={navigationTheme} />
+                </StaffProvider>
+              </ClinicProvider>
+            </AuthGate>
+          </FacilityActivationGate>
+        </ConnectionGate>
+      </ErrorBoundary>
       <FeedbackHost />
     </SafeAreaProvider>
   );
