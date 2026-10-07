@@ -86,6 +86,11 @@ public class TenantLookupService : ITenantLookupService
                              "http://portal-api:8080";
 
             portalBase = portalBase.TrimEnd('/');
+            if (portalBase.EndsWith("/api/v1", StringComparison.OrdinalIgnoreCase))
+            {
+                portalBase = portalBase[..^7].TrimEnd('/');
+            }
+
             var lookupSlug = isGuid ? identifier : clean;
             var response = await _httpClient.GetAsync($"{portalBase}/api/v1/tenants/lookup/{Uri.EscapeDataString(lookupSlug)}", ct);
 

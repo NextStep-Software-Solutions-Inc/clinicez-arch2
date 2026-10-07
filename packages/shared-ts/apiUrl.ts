@@ -89,3 +89,55 @@ export function resolveServiceApiUrl(options: ResolveServiceApiUrlOptions = {}):
   // Default to same-origin for ingress reverse-proxy routing
   return `${protocol}//${hostname}`;
 }
+
+/**
+ * Normalizes an API base URL so that it ends with the given API prefix (defaults to `/api/v1`).
+ * Safely strips trailing slashes and any existing duplicate or single `/api/v1` suffix before appending it once.
+ * If url is empty or whitespace, returns empty string.
+ */
+export function ensureApiPrefix(url?: string | null, prefix: string = '/api/v1'): string {
+  if (!url || !url.trim()) return '';
+  const trimmed = url.trim().replace(/\/+$/, '');
+  const cleanPrefix = prefix.startsWith('/') ? prefix : `/${prefix}`;
+  const escaped = cleanPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const stripped = trimmed.replace(new RegExp(`(?:${escaped})+$`, 'i'), '').replace(/\/+$/, '');
+  return `${stripped}${cleanPrefix}`;
+}
+
+/**
+ * Normalizes an API base URL by stripping the given API prefix and trailing slashes.
+ * Useful when constructing paths that already begin with `/api/v1` or for reverse-proxy rewrite targets.
+ */
+export function stripApiPrefix(url?: string | null, prefix: string = '/api/v1'): string {
+  if (!url || !url.trim()) return '';
+  const trimmed = url.trim().replace(/\/+$/, '');
+  const cleanPrefix = prefix.startsWith('/') ? prefix : `/${prefix}`;
+  const escaped = cleanPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return trimmed.replace(new RegExp(`(?:${escaped})+$`, 'i'), '').replace(/\/+$/, '');
+}
+
+
+/**
+ * Joins a base URL with an endpoint path, preventing any `/api/v1/api/v1` duplication.
+ */
+export function joinApiUrl(
+  baseUrl: string | null | undefined,
+  path: string,
+  defaultPrefix: string = '/api/v1'
+): string {
+  const base = (baseUrl || '').trim().replace(/\/+$/, '');
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  if (!base) return cleanPath;
+
+  const prefix = defaultPrefix.startsWith('/') ? defaultPrefix : `/${defaultPrefix}`;
+  const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pathHasPrefix = new RegExp(`^${escaped}(?:/|$)`, 'i').test(cleanPath);
+
+  const cleanBase = stripApiPrefix(base, prefix);
+
+  if (pathHasPrefix) {
+    return `${cleanBase}${cleanPath}`;
+  }
+  return `${cleanBase}${prefix}${cleanPath}`;
+}
+

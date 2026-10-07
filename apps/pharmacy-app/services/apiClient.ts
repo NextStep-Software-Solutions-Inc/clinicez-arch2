@@ -1,5 +1,5 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
-import { safeAwait, ApiResponse, ApiError } from '@shared/safe';
+import { safeAwait, ApiResponse, ApiError, ensureApiPrefix } from '@shared/safe';
 
 const resolveDefaultPharmacyBaseUrl = (fallbackPort: number = 5245): string => {
   if (typeof window !== 'undefined' && window.location?.hostname) {
@@ -32,7 +32,7 @@ export class PharmacyApiClient {
 
   constructor() {
     this.client = axios.create({
-      baseURL: `${BASE_URL}${API_PREFIX}`,
+      baseURL: ensureApiPrefix(BASE_URL),
       timeout: 15000,
       headers: {
         'Content-Type': 'application/json',

@@ -1,5 +1,6 @@
 import { Metadata } from "next";
 import { absoluteUrl } from "@/config/site";
+import { joinApiUrl } from "@shared/safe";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -11,7 +12,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   
   try {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/v1";
-    const res = await fetch(`${apiUrl}/blogs/${slug}`, { next: { revalidate: 60 } });
+    const res = await fetch(joinApiUrl(apiUrl, `/blogs/${slug}`), { next: { revalidate: 60 } });
     if (!res.ok) throw new Error("Article not found");
     const blog = await res.json();
     

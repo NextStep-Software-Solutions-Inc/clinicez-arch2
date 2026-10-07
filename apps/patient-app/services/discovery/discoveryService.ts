@@ -1,5 +1,6 @@
 import { and, count, desc, eq, inArray, not } from 'drizzle-orm';
 import NetInfo from '@react-native-community/netinfo';
+import { joinApiUrl } from '@shared/safe';
 import { db } from '@db/index';
 import { bookingDrafts } from '@db/schema/bookingDrafts';
 import { clinicMemberships } from '@db/schema/clinicMemberships';
@@ -1487,7 +1488,7 @@ export async function uploadSharedFileToClinic(
 ): Promise<boolean> {
     try {
         const rawBaseUrl = clinicBaseUrl || process.env.EXPO_PUBLIC_CLINIC_API_URL || 'http://localhost:5245';
-        const targetUrl = `${rawBaseUrl.replace(/\/+$/, '')}/api/v1/records/intake/patient-shared-file`;
+        const targetUrl = joinApiUrl(rawBaseUrl, '/records/intake/patient-shared-file');
         const formData = new FormData();
         formData.append('PatientId', patientId);
         formData.append('FileId', fileId);

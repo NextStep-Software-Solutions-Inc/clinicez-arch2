@@ -1,5 +1,5 @@
 import { clinicApiClient, pharmacyApiClient, CLINIC_BASE_URL, API_PREFIX } from './apiClient';
-import { SyncStatus } from '@shared/safe';
+import { SyncStatus, joinApiUrl } from '@shared/safe';
 
 export type QueuePriority = 'Routine' | 'Urgent' | 'Emergency';
 export type QueueStatus = 'Waiting' | 'Triaged' | 'InConsultation' | 'Completed' | 'Cancelled' | 'NoShow';
@@ -952,11 +952,11 @@ export const clinicService = {
   },
 
   getPrescriptionSlipPdfUrl(consultationId: string) {
-    return `${CLINIC_BASE_URL}/api/v1/prescriptions/${consultationId}/slip-pdf`;
+    return joinApiUrl(CLINIC_BASE_URL, `/prescriptions/${consultationId}/slip-pdf`);
   },
 
   getPrescriptionSlipPdfByNumberUrl(prescriptionNumber: string) {
-    return `${CLINIC_BASE_URL}/api/v1/prescriptions/by-number/${encodeURIComponent(prescriptionNumber)}/slip-pdf`;
+    return joinApiUrl(CLINIC_BASE_URL, `/prescriptions/by-number/${encodeURIComponent(prescriptionNumber)}/slip-pdf`);
   },
 
   // ICD-10 Search
@@ -1112,11 +1112,11 @@ export const clinicService = {
   },
 
   getLabReportPdfUrl(orderId: string) {
-    return `${CLINIC_BASE_URL}/api/v1/lab-orders/${orderId}/report-pdf`;
+    return joinApiUrl(CLINIC_BASE_URL, `/lab-orders/${orderId}/report-pdf`);
   },
 
   getLabOrderSlipPdfUrl(orderId: string) {
-    return `${CLINIC_BASE_URL}/api/v1/lab-orders/${orderId}/slip-pdf`;
+    return joinApiUrl(CLINIC_BASE_URL, `/lab-orders/${orderId}/slip-pdf`);
   },
 
   // Clinical Decision Support (CDS) Safety Engine
@@ -1291,7 +1291,7 @@ export const clinicService = {
   },
 
   getMedicalCertificatePdfUrl(id: string) {
-    return `${CLINIC_BASE_URL}/api/v1/documents/medical-certificates/${id}/pdf`;
+    return joinApiUrl(CLINIC_BASE_URL, `/documents/medical-certificates/${id}/pdf`);
   },
 
   async issueReferralLetter(payload: {
@@ -1322,7 +1322,7 @@ export const clinicService = {
   },
 
   getReferralLetterPdfUrl(id: string) {
-    return `${CLINIC_BASE_URL}/api/v1/documents/referrals/${id}/pdf`;
+    return joinApiUrl(CLINIC_BASE_URL, `/documents/referrals/${id}/pdf`);
   },
 
   async verifyDocument(securityDigestOrNumber: string) {
@@ -1360,7 +1360,7 @@ export const clinicService = {
   },
 
   getRecordAttachmentDownloadUrl(attachmentId: string) {
-    return `${CLINIC_BASE_URL}${API_PREFIX}/records/attachments/${attachmentId}/download`;
+    return joinApiUrl(CLINIC_BASE_URL, `/records/attachments/${attachmentId}/download`);
   },
 
   async uploadRecordAttachmentFile(formData: FormData) {

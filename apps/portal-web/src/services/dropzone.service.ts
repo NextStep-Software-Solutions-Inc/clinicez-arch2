@@ -1,7 +1,8 @@
 import axios from "axios";
+import { stripApiPrefix } from "@shared/safe";
 
 // Public endpoints do not require Clerk authentication
-const API_BASE = typeof window !== "undefined" ? "" : (process.env.NEXT_PUBLIC_CLINIC_API_URL || "http://localhost:5245");
+const API_BASE = typeof window !== "undefined" ? "" : stripApiPrefix(process.env.NEXT_PUBLIC_CLINIC_API_URL || "http://localhost:5245");
 
 export interface PublicLabUploadInfo {
   orderNumber: string;

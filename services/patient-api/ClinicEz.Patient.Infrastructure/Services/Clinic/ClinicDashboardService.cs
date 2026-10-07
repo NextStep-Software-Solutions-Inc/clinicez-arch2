@@ -95,7 +95,12 @@ public sealed class ClinicDashboardService : IClinicDashboardService
         try
         {
             var client = _httpClientFactory.CreateClient("ClinicDashboard");
-            var url = $"{clinicBaseUrl.TrimEnd('/')}/api/v1/sync/ping";
+            var cleanBase = clinicBaseUrl.TrimEnd('/');
+            if (cleanBase.EndsWith("/api/v1", StringComparison.OrdinalIgnoreCase))
+            {
+                cleanBase = cleanBase[..^7].TrimEnd('/');
+            }
+            var url = $"{cleanBase}/api/v1/sync/ping";
             var response = await client.PostAsync(url, null, cancellationToken);
             return response.IsSuccessStatusCode;
         }

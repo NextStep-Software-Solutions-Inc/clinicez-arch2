@@ -1,6 +1,6 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
-import { buildServiceHostRegex, getServiceSubdomains } from '@shared/safe/tenant';
+import { buildServiceHostRegex, getServiceSubdomains, joinApiUrl } from '@shared/safe';
 import { APP_SUBDOMAINS } from '@/config/site';
 
 const isProtectedRoute = createRouteMatcher([
@@ -33,7 +33,8 @@ async function checkSlugExists(slug: string, apiBaseUrl: string): Promise<boolea
 
     try {
         const cleanBase = apiBaseUrl.replace(/\/+$/, '');
-        const res = await fetch(`${cleanBase}/api/v1/tenants/lookup/${encodeURIComponent(slug)}`, {
+        const lookupUrl = joinApiUrl(cleanBase, `/tenants/lookup/${encodeURIComponent(slug)}`);
+        const res = await fetch(lookupUrl, {
             headers: { 'Content-Type': 'application/json' },
             cache: 'no-store'
         });

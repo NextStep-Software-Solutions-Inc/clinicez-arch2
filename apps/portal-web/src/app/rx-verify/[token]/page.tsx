@@ -1,4 +1,5 @@
 import React from 'react';
+import { joinApiUrl } from '@shared/safe';
 import RxVerifyClient, { RxVerificationData } from './RxVerifyClient';
 
 interface PageProps {
@@ -20,7 +21,7 @@ export default async function RxVerifyPage({ params }: PageProps) {
 
   try {
     const apiUrl = process.env.NEXT_PUBLIC_CLINIC_API_URL || 'http://localhost:5001';
-    const response = await fetch(`${apiUrl}/api/v1/public/rx-verify/${token}`, {
+    const response = await fetch(joinApiUrl(apiUrl, `/public/rx-verify/${token}`), {
       cache: 'no-store',
     });
 

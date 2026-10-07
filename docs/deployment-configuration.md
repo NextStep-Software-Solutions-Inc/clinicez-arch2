@@ -4,6 +4,9 @@ No company domain, service subdomain or shared-infrastructure hostname is hardco
 Everything below is supplied by **GitHub Actions secrets / variables** (APIs) or **Vercel environment variables** (UIs).
 Use neutral values such as `example.com` in docs and tests.
 
+> [!TIP]
+> All API URL variables (`EXPO_PUBLIC_*_API_URL`, `NEXT_PUBLIC_*_API_URL`, `SERVICES_*_API_URL`, `PORTAL_API_BASE_URL`) can be configured either with or without the `/api/v1` path suffix (e.g. `https://clinic-api.example.com` or `https://clinic-api.example.com/api/v1`). The clients and services automatically normalize paths to prevent `/api/v1/api/v1` duplication.
+
 ## 1. GitHub Actions (APIs)
 
 Set each value as a repository / environment **secret or variable** (Settings → Secrets and variables → Actions).

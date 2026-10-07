@@ -19,13 +19,18 @@ public static class DependencyInjection
         services.AddMemoryCache();
 
         // Resilient HTTP Client connecting to Portal API for branch accreditation credentials
-        var portalBaseUrl = configuration["PortalApi:BaseUrl"]
+        var portalBaseUrl = (configuration["PortalApi:BaseUrl"]
             ?? configuration["PORTAL_API_BASE_URL"]
-            ?? "http://localhost:5000";
+            ?? "http://localhost:5000").TrimEnd('/');
+
+        if (portalBaseUrl.EndsWith("/api/v1", StringComparison.OrdinalIgnoreCase))
+        {
+            portalBaseUrl = portalBaseUrl[..^7].TrimEnd('/');
+        }
 
         services.AddHttpClient<ITenantRepository, PortalTenantClient>(client =>
         {
-            client.BaseAddress = new Uri(portalBaseUrl);
+            client.BaseAddress = new Uri(portalBaseUrl + "/");
             client.Timeout = TimeSpan.FromSeconds(10);
         })
         .AddStandardResilienceHandler();

@@ -1,4 +1,5 @@
 import React from 'react';
+import { joinApiUrl } from '@shared/safe';
 import LabUploadClient, { LabRequisitionData } from './LabUploadClient';
 
 interface PageProps {
@@ -20,7 +21,7 @@ export default async function LabUploadPage({ params }: PageProps) {
 
   try {
     const apiUrl = process.env.NEXT_PUBLIC_CLINIC_API_URL || 'http://localhost:5001';
-    const response = await fetch(`${apiUrl}/api/v1/public/lab-upload/${token}`, {
+    const response = await fetch(joinApiUrl(apiUrl, `/public/lab-upload/${token}`), {
       cache: 'no-store',
     });
 

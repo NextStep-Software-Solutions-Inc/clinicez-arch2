@@ -1,4 +1,5 @@
 import React from 'react';
+import { joinApiUrl } from '@shared/safe';
 import VerifyClient, { DocumentVerificationData } from './VerifyClient';
 
 interface PageProps {
@@ -20,7 +21,7 @@ export default async function DocumentVerifyPage({ params }: PageProps) {
 
   try {
     const apiUrl = process.env.NEXT_PUBLIC_CLINIC_API_URL || 'http://localhost:5245';
-    const response = await fetch(`${apiUrl}/api/v1/documents/verify/${encodeURIComponent(token)}`, {
+    const response = await fetch(joinApiUrl(apiUrl, `/documents/verify/${encodeURIComponent(token)}`), {
       cache: 'no-store',
     });
 

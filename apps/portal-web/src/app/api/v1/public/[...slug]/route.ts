@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { joinApiUrl } from "@shared/safe";
 
 const CLINIC_API_URL = (process.env.NEXT_PUBLIC_CLINIC_API_URL || process.env.CLINIC_API_URL || "http://localhost:5245").replace(/\/+$/, "");
 
@@ -9,7 +10,7 @@ export async function GET(
   const resolved = await params;
   const subPath = resolved.slug.join("/");
   const search = request.nextUrl.search;
-  const targetUrl = `${CLINIC_API_URL}/api/v1/public/${subPath}${search}`;
+  const targetUrl = joinApiUrl(CLINIC_API_URL, `/public/${subPath}${search}`);
 
   try {
     const res = await fetch(targetUrl, {
@@ -36,7 +37,7 @@ export async function POST(
 ) {
   const resolved = await params;
   const subPath = resolved.slug.join("/");
-  const targetUrl = `${CLINIC_API_URL}/api/v1/public/${subPath}`;
+  const targetUrl = joinApiUrl(CLINIC_API_URL, `/public/${subPath}`);
   const contentType = request.headers.get("content-type") || "";
 
   try {

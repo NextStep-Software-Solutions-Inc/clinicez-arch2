@@ -15,10 +15,11 @@
  */
 
 import axios, { type AxiosError, type AxiosRequestConfig } from 'axios';
+import { ensureApiPrefix } from '@shared/safe';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-const BASE_URL = (process.env.EXPO_PUBLIC_API_URL ?? '').replace(/\/+$/, '');
+const BASE_URL = ensureApiPrefix(process.env.EXPO_PUBLIC_API_URL ?? '');
 const API_PREFIX = '/api/v1';
 
 /** A single structured error from the backend. */
@@ -82,7 +83,7 @@ export class ApiError extends Error {
 // ── Axios instance ────────────────────────────────────────────────────────────
 
 const axiosInstance = axios.create({
-    baseURL: `${BASE_URL}${API_PREFIX}`,
+    baseURL: BASE_URL,
     headers: { Accept: 'application/json' },
     timeout: 30_000,
 });

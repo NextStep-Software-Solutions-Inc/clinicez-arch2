@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { DEFAULT_API_URL_TEMPLATE, resolveServiceApiUrl } from './apiUrl';
+import { DEFAULT_API_URL_TEMPLATE, resolveServiceApiUrl, ensureApiPrefix, stripApiPrefix, joinApiUrl } from './apiUrl';
 
 describe('resolveServiceApiUrl', () => {
   it('uses the explicit dev port on localhost, virtual hosts and direct IPs', () => {
@@ -57,3 +57,61 @@ describe('resolveServiceApiUrl', () => {
     expect(resolveServiceApiUrl({ hostname: 'app.acmehealth.com', protocol: 'https:' })).toBe('https://app.acmehealth.com');
   });
 });
+
+describe('ensureApiPrefix', () => {
+  it('appends /api/v1 when missing', () => {
+    expect(ensureApiPrefix('https://clinic-api.example.com')).toBe('https://clinic-api.example.com/api/v1');
+    expect(ensureApiPrefix('https://clinic-api.example.com/')).toBe('https://clinic-api.example.com/api/v1');
+    expect(ensureApiPrefix('http://localhost:5245')).toBe('http://localhost:5245/api/v1');
+  });
+
+  it('keeps /api/v1 without duplicating when already present', () => {
+    expect(ensureApiPrefix('https://clinic-api.example.com/api/v1')).toBe('https://clinic-api.example.com/api/v1');
+    expect(ensureApiPrefix('https://clinic-api.example.com/api/v1/')).toBe('https://clinic-api.example.com/api/v1');
+    expect(ensureApiPrefix('https://clinic-api.example.com/api/v1/api/v1')).toBe('https://clinic-api.example.com/api/v1');
+  });
+
+  it('returns empty string for null/empty', () => {
+    expect(ensureApiPrefix('')).toBe('');
+    expect(ensureApiPrefix(null)).toBe('');
+    expect(ensureApiPrefix('   ')).toBe('');
+  });
+});
+
+describe('stripApiPrefix', () => {
+  it('strips /api/v1 and trailing slashes', () => {
+    expect(stripApiPrefix('https://clinic-api.example.com/api/v1')).toBe('https://clinic-api.example.com');
+    expect(stripApiPrefix('https://clinic-api.example.com/api/v1/')).toBe('https://clinic-api.example.com');
+    expect(stripApiPrefix('https://clinic-api.example.com/')).toBe('https://clinic-api.example.com');
+    expect(stripApiPrefix('https://clinic-api.example.com')).toBe('https://clinic-api.example.com');
+  });
+
+  it('returns empty string for null/empty', () => {
+    expect(stripApiPrefix('')).toBe('');
+    expect(stripApiPrefix(null)).toBe('');
+  });
+});
+
+describe('joinApiUrl', () => {
+  it('never double-appends /api/v1 whether base or path already includes it', () => {
+    expect(joinApiUrl('https://clinic-api.example.com/api/v1', '/api/v1/public/rx-verify/123')).toBe(
+      'https://clinic-api.example.com/api/v1/public/rx-verify/123',
+    );
+    expect(joinApiUrl('https://clinic-api.example.com', '/api/v1/public/rx-verify/123')).toBe(
+      'https://clinic-api.example.com/api/v1/public/rx-verify/123',
+    );
+    expect(joinApiUrl('https://clinic-api.example.com/api/v1', '/public/rx-verify/123')).toBe(
+      'https://clinic-api.example.com/api/v1/public/rx-verify/123',
+    );
+    expect(joinApiUrl('https://clinic-api.example.com', '/public/rx-verify/123')).toBe(
+      'https://clinic-api.example.com/api/v1/public/rx-verify/123',
+    );
+    expect(joinApiUrl('http://localhost:5245/', 'prescriptions/1/slip-pdf')).toBe(
+      'http://localhost:5245/api/v1/prescriptions/1/slip-pdf',
+    );
+    expect(joinApiUrl('http://localhost:5245/api/v1/', '/prescriptions/1/slip-pdf')).toBe(
+      'http://localhost:5245/api/v1/prescriptions/1/slip-pdf',
+    );
+  });
+});
+

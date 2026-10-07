@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { joinApiUrl } from '@shared/safe';
 import {
   FileCheck,
   UploadCloud,
@@ -92,7 +93,7 @@ export default function LabUploadClient({ token, initialData }: LabUploadClientP
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_CLINIC_API_URL || 'http://localhost:5001';
-      await fetch(`${apiUrl}/api/v1/public/lab-upload/${token}/upload`, {
+      await fetch(joinApiUrl(apiUrl, `/public/lab-upload/${token}/upload`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

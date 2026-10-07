@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { joinApiUrl } from "@shared/safe";
 
 const CLINIC_API_URL = (
   process.env.NEXT_PUBLIC_CLINIC_API_URL ||
@@ -9,7 +10,7 @@ const CLINIC_API_URL = (
 export async function POST(request: NextRequest) {
   try {
     const payload = await request.json();
-    const targetUrl = `${CLINIC_API_URL}/api/v1/patients/public/student-intake`;
+    const targetUrl = joinApiUrl(CLINIC_API_URL, "/patients/public/student-intake");
 
     try {
       const res = await fetch(targetUrl, {

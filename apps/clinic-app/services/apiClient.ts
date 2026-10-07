@@ -1,5 +1,5 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
-import { safeAwait, ApiResponse, ApiError, resolveTenantContext, resolveServiceApiUrl } from '@shared/safe';
+import { safeAwait, ApiResponse, ApiError, resolveTenantContext, resolveServiceApiUrl, ensureApiPrefix } from '@shared/safe';
 
 const resolveDefaultBaseUrl = (fallbackPort: number = 5245): string => {
   const hasBrowserLocation = typeof window !== 'undefined' && !!window.location?.hostname;
@@ -31,7 +31,7 @@ export class ClinicApiClient {
 
   constructor(baseUrl: string = CLINIC_BASE_URL) {
     this.client = axios.create({
-      baseURL: `${baseUrl}${API_PREFIX}`,
+      baseURL: ensureApiPrefix(baseUrl),
       timeout: 15000,
       headers: {
         'Content-Type': 'application/json',
