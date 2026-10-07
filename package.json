@@ -10,6 +10,7 @@
     "typecheck:patient": "bun --filter @clinicez/patient-app typecheck",
     "lint:patient-tokens": "bun --filter @clinicez/patient-app lint:tokens",
     "test:tokens": "bun --cwd packages/design-tokens test",
+    "test:patient": "bun --filter @clinicez/patient-app test",
     "typecheck:clinic": "bun --filter @clinicez/clinic-app typecheck",
     "typecheck:lab": "bun --filter @clinicez/laboratory-app typecheck",
     "typecheck:pharmacy": "bun --filter @clinicez/pharmacy-app typecheck",

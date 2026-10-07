@@ -44,6 +44,7 @@ const SKIP_DIRS = new Set([
   'drizzle',
   'android',
   'ios',
+  'tests',
 ]);
 const files = [];
 (function walk(dir) {
