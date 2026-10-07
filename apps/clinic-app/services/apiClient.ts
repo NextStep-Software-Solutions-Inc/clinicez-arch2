@@ -7,7 +7,7 @@ import {
   ensureApiPrefix,
   joinApiUrl,
 } from '@shared/safe';
-import { getApiBaseUrl, getPharmacyBaseUrl } from './runtimeConfig';
+import { getApiBaseUrl } from './runtimeConfig';
 import { ensureFreshToken, getAccessToken, refreshSession } from './authSession';
 
 export const API_PREFIX = '/api/v1';
@@ -118,9 +118,3 @@ export class ClinicApiClient {
 }
 
 export const clinicApiClient = new ClinicApiClient({ baseUrl: getApiBaseUrl, authenticated: true });
-
-/**
- * PhilHealth GAMOT calls go to the pharmacy facility, which has its own user store and tokens. A clinic staff token is
- * never valid there, so no clinic credentials are attached.
- */
-export const pharmacyApiClient = new ClinicApiClient({ baseUrl: getPharmacyBaseUrl, authenticated: false });

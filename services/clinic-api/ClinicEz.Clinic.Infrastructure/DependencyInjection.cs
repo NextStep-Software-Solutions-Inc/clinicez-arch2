@@ -73,6 +73,7 @@ public static class DependencyInjection
 
         // Outbound PhilHealth Yakap integration client
         services.AddHttpClient<IPhilHealthProxyClient, PhilHealthProxyClient>();
+        services.AddHttpClient<IPharmacyGamotGateway, PharmacyGamotGateway>();
         services.AddScoped<ClinicEz.Clinic.Application.Features.Yakap.Services.IPhilHealthSequenceGenerator, PhilHealthSequenceGenerator>();
 
         // Outbound interoperability publisher

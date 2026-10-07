@@ -1,5 +1,5 @@
 import type { AxiosRequestConfig } from 'axios';
-import { clinicApiClient, pharmacyApiClient, clinicApiUrl } from './apiClient';
+import { clinicApiClient, clinicApiUrl } from './apiClient';
 import { SyncStatus } from '@shared/safe';
 
 export type QueuePriority = 'Routine' | 'Urgent' | 'Emergency';
@@ -1505,10 +1505,10 @@ export const clinicService = {
   },
 
 
-  // PhilHealth GAMOT & UPSC
+  // PhilHealth GAMOT & UPSC. Reached through the clinic server, which talks to the pharmacy with its own service key.
   async getGamotLedger(pin: string, year?: string) {
     const qs = year ? `?year=${encodeURIComponent(year)}` : '';
-    return pharmacyApiClient.get<GamotBeneficiaryLedger>(`/gamot/ledger/${encodeURIComponent(pin)}${qs}`);
+    return clinicApiClient.get<GamotBeneficiaryLedger>(`/yakap/gamot/ledger/${encodeURIComponent(pin)}${qs}`);
   },
 
   async getGamotFormulary(search?: string, category?: string) {
@@ -1516,23 +1516,23 @@ export const clinicService = {
     if (search) params.append('search', search);
     if (category) params.append('category', category);
     const qs = params.toString();
-    return pharmacyApiClient.get<GamotFormularyItem[]>(`/gamot/formulary${qs ? `?${qs}` : ''}`);
+    return clinicApiClient.get<GamotFormularyItem[]>(`/yakap/gamot/formulary${qs ? `?${qs}` : ''}`);
   },
 
   async generateUpsc(payload: GenerateUpscPayload) {
-    return pharmacyApiClient.post<UpscGenerateResult>('/gamot/upsc/generate', payload);
+    return clinicApiClient.post<UpscGenerateResult>('/yakap/gamot/upsc/generate', payload);
   },
 
   async validateUpsc(payload: ValidateUpscPayload) {
-    return pharmacyApiClient.post<UpscVerifyResult>('/gamot/upsc/validate', payload);
+    return clinicApiClient.post<UpscVerifyResult>('/yakap/gamot/upsc/validate', payload);
   },
 
   async dispenseGamot(payload: DispenseGamotPayload) {
-    return pharmacyApiClient.post<any>('/gamot/dispense', payload);
+    return clinicApiClient.post<any>('/yakap/gamot/dispense', payload);
   },
 
   async reverseGamotTransaction(id: string, payload: ReverseGamotPayload) {
-    return pharmacyApiClient.post<GamotLedgerTransaction>(`/gamot/transactions/${id}/reverse`, payload);
+    return clinicApiClient.post<GamotLedgerTransaction>(`/yakap/gamot/transactions/${id}/reverse`, payload);
   }
 };
 

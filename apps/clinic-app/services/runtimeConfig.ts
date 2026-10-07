@@ -17,12 +17,11 @@ const DEFAULT_OFFLINE_GRACE_HOURS = 12;
 
 export interface RuntimeConfig {
   apiUrl: string | null;
-  pharmacyApiUrl: string | null;
   workspaceRequired: boolean | null;
   offlineGraceHours: number | null;
 }
 
-let runtime: RuntimeConfig = { apiUrl: null, pharmacyApiUrl: null, workspaceRequired: null, offlineGraceHours: null };
+let runtime: RuntimeConfig = { apiUrl: null, workspaceRequired: null, offlineGraceHours: null };
 
 const isNative = Platform.OS !== 'web';
 
@@ -53,7 +52,6 @@ export async function loadRuntimeConfig(): Promise<RuntimeConfig> {
       const json = (await response.json()) as Record<string, unknown>;
       runtime = {
         apiUrl: 'apiUrl' in json ? resolveRuntimeApiUrl(json.apiUrl, pageOrigin()) : null,
-        pharmacyApiUrl: 'pharmacyApiUrl' in json ? resolveRuntimeApiUrl(json.pharmacyApiUrl, pageOrigin()) : null,
         workspaceRequired: typeof json.workspaceRequired === 'boolean' ? json.workspaceRequired : null,
         offlineGraceHours: toHours(json.offlineGraceHours),
       };
@@ -104,10 +102,6 @@ export function getApiBaseUrl(): string | null {
   return runtime.apiUrl ?? envApiUrl() ?? derivedWebApiUrl();
 }
 
-export function getPharmacyBaseUrl(): string | null {
-  if (!isNative && runtime.pharmacyApiUrl) return runtime.pharmacyApiUrl;
-  return normalizeServerUrl(process.env.EXPO_PUBLIC_PHARMACY_API_URL) ?? getApiBaseUrl();
-}
 
 export function isServerConfigured(): boolean {
   return getApiBaseUrl() !== null;
