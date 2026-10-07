@@ -1,52 +1,55 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Linking, ScrollView, StyleSheet, View } from 'react-native';
-import { useTheme } from '@react-navigation/native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Linking, ScrollView, StyleSheet, View, Pressable } from 'react-native';
+import { useAppTheme } from '../../../contexts/ThemeContext';
 import { SettingsRow, SettingsSection } from '@ui/SettingsItem';
 import ThemedText from '@ui/ThemedText';
-import { useNotificationContext } from 'contexts/NotificationContext';
-import { usePatientId } from 'hooks/usePatientId';
+import { useNotificationContext } from '../../../contexts/NotificationContext';
+import { usePatientId } from '../../../hooks/usePatientId';
 import {
   NOTIFICATION_CATEGORIES,
   getPreferences,
   setPreference,
   type NotificationPreference,
-} from 'services/notifications/notificationPreferencesService';
+} from '../../../services/notifications/notificationPreferencesService';
 import {
   clearAllNotifications,
   scheduleLocalNotification,
   seedMockNotifications,
-} from 'services/notifications/notificationService';
+} from '../../../services/notifications/notificationService';
 import type { NotificationCategory } from '@db/schema/notifications';
 import { dialog } from '@utils/dialog';
 
 // ─── Permission Banner ─────────────────────────────────────────────────────────
 
 function PermissionWarningBanner({ onPress }: { onPress: () => void }) {
-  const { colors } = useTheme();
+  const { colors, spacing, radii } = useAppTheme();
   return (
     <View
       style={[
         styles.permissionWarning,
-        { backgroundColor: '#EF444415', borderColor: '#EF444455' },
+        {
+          backgroundColor: colors.emergencyBg,
+          borderColor: colors.emergencyBorder,
+          borderRadius: radii.lg,
+          padding: spacing.lg,
+          marginBottom: spacing.lg,
+        },
       ]}
     >
-      <View style={{ flex: 1 }}>
-        <ThemedText style={[styles.warningTitle, { color: colors.text }]}>
+      <View style={{ flex: 1, gap: spacing.xs }}>
+        <ThemedText variant="bodyBold" color="emergencyText">
           Notifications Disabled
         </ThemedText>
-        <ThemedText style={[styles.warningSub, { color: colors.text }]}>
+        <ThemedText variant="small" color="textSecondary">
           Push notifications are turned off for this app. Tap below to enable them
           in system settings.
         </ThemedText>
       </View>
-      <View>
-        <ThemedText
-          onPress={onPress}
-          style={{ color: '#EF4444', fontSize: 13, fontWeight: '600', marginTop: 8 }}
-        >
+      <Pressable onPress={onPress} style={{ marginTop: spacing.sm }}>
+        <ThemedText variant="smallBold" color="emergency">
           Open Settings →
         </ThemedText>
-      </View>
+      </Pressable>
     </View>
   );
 }
@@ -54,6 +57,7 @@ function PermissionWarningBanner({ onPress }: { onPress: () => void }) {
 // ─── Screen ────────────────────────────────────────────────────────────────────
 
 export default function NotificationsSettingsScreen() {
+  const { colors, spacing } = useAppTheme();
   const patientId = usePatientId();
   const { permissionStatus, requestPermissions, refreshNotifications } =
     useNotificationContext();
@@ -122,7 +126,7 @@ export default function NotificationsSettingsScreen() {
   const handleSendTestNotification = async () => {
     await scheduleLocalNotification(
       'Test Notification',
-      'This is a test notification from Clinic EZ. 🎉',
+      'This is a test notification from Clinic EZ.',
       { type: 'system', category: 'system' },
     );
   };
@@ -143,7 +147,7 @@ export default function NotificationsSettingsScreen() {
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={styles.container}
+      contentContainerStyle={[styles.container, { padding: spacing.lg }]}
     >
       {/* Permission warning — only shown when denied */}
       {permissionStatus === 'denied' && (
@@ -167,7 +171,7 @@ export default function NotificationsSettingsScreen() {
               title={cat.label}
               subtitle={cat.description}
               icon={{ android: cat.iconAndroid, ios: cat.iconIos }}
-              iconColor={cat.color}
+              iconColor={colors.primary}
               right={{
                 type: 'switch',
                 value: pref.pushEnabled && !disabled,
@@ -193,7 +197,7 @@ export default function NotificationsSettingsScreen() {
               title={cat.label}
               subtitle={cat.description}
               icon={{ android: cat.iconAndroid, ios: cat.iconIos }}
-              iconColor={cat.color}
+              iconColor={colors.primary}
               right={{
                 type: 'switch',
                 value: pref.inAppEnabled,
@@ -212,7 +216,7 @@ export default function NotificationsSettingsScreen() {
           title="Clear All Notifications"
           subtitle="Remove all notifications from your feed"
           icon={{ android: 'delete_sweep', ios: 'trash.fill' }}
-          iconColor="#EF4444"
+          iconColor={colors.emergency}
           right={{ type: 'none' }}
           onPress={handleClearAll}
           destructive
@@ -223,7 +227,7 @@ export default function NotificationsSettingsScreen() {
               title="Send Test Notification"
               subtitle="Schedules a local notification immediately"
               icon={{ android: 'science', ios: 'flask.fill' }}
-              iconColor="#8B5CF6"
+              iconColor={colors.purple}
               right={{ type: 'none' }}
               onPress={handleSendTestNotification}
             />
@@ -231,7 +235,7 @@ export default function NotificationsSettingsScreen() {
               title="Seed Mock Notifications"
               subtitle="Inserts 13 realistic mock notifications across all categories"
               icon={{ android: 'dataset', ios: 'tray.full.fill' }}
-              iconColor="#0EA5E9"
+              iconColor={colors.info}
               right={{ type: 'none' }}
               onPress={async () => {
                 await seedMockNotifications(patientId);
@@ -246,24 +250,8 @@ export default function NotificationsSettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 16,
-    gap: 0,
-  },
+  container: {},
   permissionWarning: {
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 16,
-    marginBottom: 16,
-  },
-  warningTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  warningSub: {
-    fontSize: 13,
-    opacity: 0.7,
-    lineHeight: 18,
-    marginTop: 3,
+    borderWidth: 1,
   },
 });

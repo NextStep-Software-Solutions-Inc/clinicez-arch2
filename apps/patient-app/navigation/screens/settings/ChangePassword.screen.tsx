@@ -1,10 +1,13 @@
-import { useState } from 'react';
-import { ScrollView, View, TextInput, Pressable, StyleSheet, ActivityIndicator, Platform } from 'react-native';
-import { useNavigation, useTheme } from '@react-navigation/native';
+import React, { useState } from 'react';
+import { ScrollView, View, TextInput, Pressable, StyleSheet } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { useUser } from '@clerk/expo';
 import { useForm, Controller } from 'react-hook-form';
-import { MaterialSymbol, SFSymbol } from '@react-navigation/native';
+import { useAppTheme } from '../../../contexts/ThemeContext';
 import ThemedText from '@ui/ThemedText';
+import Button from '@ui/Button';
+import Card from '@ui/Card';
+import { AppIcon } from '@ui/Icon';
 import { dialog } from '@utils/dialog';
 
 interface FormValues {
@@ -25,23 +28,39 @@ interface PasswordFieldProps {
   onSubmitEditing?: () => void;
 }
 
-function PasswordField({ label, value, onChangeText, error, placeholder, returnKeyType, onSubmitEditing }: PasswordFieldProps) {
-  const { colors } = useTheme();
+function PasswordField({
+  label,
+  value,
+  onChangeText,
+  error,
+  placeholder,
+  returnKeyType,
+  onSubmitEditing,
+}: PasswordFieldProps) {
+  const { colors, spacing, sizes, typography } = useAppTheme();
   const [visible, setVisible] = useState(false);
 
   return (
-    <View style={fieldStyles.wrapper}>
-      <ThemedText style={[fieldStyles.label, { color: colors.text, opacity: 0.65 }]}>
+    <View style={[styles.fieldWrapper, { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.xs }]}>
+      <ThemedText variant="captionBold" color="textMuted">
         {label}
       </ThemedText>
-      <View style={fieldStyles.inputRow}>
+      <View style={[styles.inputRow, { gap: spacing.sm }]}>
         <TextInput
-          style={[fieldStyles.input, { color: colors.text as string }]}
+          style={[
+            styles.input,
+            typography.bodyLarge,
+            {
+              color: colors.text,
+              paddingVertical: spacing.xs,
+              outlineStyle: 'none',
+            } as object,
+          ]}
           value={value}
           onChangeText={onChangeText}
           secureTextEntry={!visible}
           placeholder={placeholder}
-          placeholderTextColor={(colors.text as string) + '55'}
+          placeholderTextColor={colors.textLight}
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType={returnKeyType ?? 'done'}
@@ -52,63 +71,27 @@ function PasswordField({ label, value, onChangeText, error, placeholder, returnK
           hitSlop={8}
           accessibilityLabel={visible ? 'Hide password' : 'Show password'}
         >
-          {Platform.select({
-            android: (
-              <MaterialSymbol
-                name={(visible ? 'visibility_off' : 'visibility') as any}
-                size={20}
-                color={(colors.text as string) + '80'}
-              />
-            ),
-            ios: (
-              <SFSymbol
-                name={(visible ? 'eye.slash.fill' : 'eye.fill') as any}
-                size={16}
-                color={(colors.text as string) + '80'}
-              />
-            ),
-          })}
+          <AppIcon
+            name={visible ? 'eyeOff' : 'eye'}
+            size={sizes.iconMd}
+            color="textMuted"
+          />
         </Pressable>
       </View>
-      {error ? <ThemedText style={fieldStyles.error}>{error}</ThemedText> : null}
+      {error ? (
+        <ThemedText variant="small" color="emergencyText">
+          {error}
+        </ThemedText>
+      ) : null}
     </View>
   );
 }
 
-const fieldStyles = StyleSheet.create({
-  wrapper: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 6,
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  input: {
-    flex: 1,
-    fontSize: 16,
-    paddingVertical: 4,
-  },
-  error: {
-    fontSize: 12,
-    color: '#EF4444',
-    marginTop: 2,
-  },
-});
-
 // ── ChangePasswordScreen ──────────────────────────────────────────────────────
 
 export default function ChangePasswordScreen() {
-  const navigation = useNavigation();
-  const { colors } = useTheme();
+  const navigation = useNavigation<any>();
+  const { colors, spacing, radii, sizes } = useAppTheme();
   const { user } = useUser();
 
   const {
@@ -141,20 +124,29 @@ export default function ChangePasswordScreen() {
     }
   };
 
-  const divider = <View style={[styles.divider, { backgroundColor: colors.border }]} />;
+  const divider = <View style={[styles.divider, { backgroundColor: colors.border, marginLeft: spacing.lg }]} />;
 
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled"
-      contentContainerStyle={styles.container}
+      contentContainerStyle={[
+        styles.container,
+        {
+          padding: spacing.lg,
+          gap: spacing.lg,
+          maxWidth: sizes.formMaxWidth,
+          alignSelf: 'center',
+          width: '100%',
+        },
+      ]}
     >
-      <ThemedText style={[styles.hint, { color: colors.text, opacity: 0.6 }]}>
+      <ThemedText variant="body" color="textSecondary">
         Your new password must be at least 8 characters long.
       </ThemedText>
 
       {/* Fields card */}
-      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <Card padding="none" elevation="sm" style={styles.card}>
         <Controller
           control={control}
           name="currentPassword"
@@ -213,67 +205,36 @@ export default function ChangePasswordScreen() {
             />
           )}
         />
-      </View>
+      </Card>
 
       {/* Submit button */}
-      <Pressable
-        onPress={handleSubmit(onSubmit)}
+      <Button
+        label="Change Password"
+        variant="primary"
+        size="lg"
+        fullWidth
+        loading={isSubmitting}
         disabled={isSubmitting}
-        style={({ pressed }) => [
-          styles.button,
-          { backgroundColor: colors.primary },
-          pressed && styles.buttonPressed,
-          isSubmitting && styles.buttonDisabled,
-        ]}
-        accessibilityRole="button"
-        accessibilityLabel="Change password"
-        accessibilityState={{ disabled: isSubmitting }}
-      >
-        {isSubmitting ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <ThemedText style={styles.buttonText}>Change Password</ThemedText>
-        )}
-      </Pressable>
+        onPress={handleSubmit(onSubmit)}
+      />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 16,
-    gap: 16,
-  },
-  hint: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 4,
-  },
+  container: {},
   card: {
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
   },
   divider: {
-    height: StyleSheet.hairlineWidth,
-    marginLeft: 16,
+    height: 1,
   },
-  button: {
-    height: 52,
-    borderRadius: 12,
-    justifyContent: 'center',
+  fieldWrapper: {},
+  inputRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
   },
-  buttonPressed: {
-    opacity: 0.85,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+  input: {
+    flex: 1,
   },
 });

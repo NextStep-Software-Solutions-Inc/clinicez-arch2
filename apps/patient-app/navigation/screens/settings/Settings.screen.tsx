@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import * as Updates from 'expo-updates';
-import { useAuth } from 'contexts/AuthContext';
-import { useAppearance } from 'contexts/AppearanceContext';
+import { useAppTheme } from '../../../contexts/ThemeContext';
+import { useAuth } from '../../../contexts/AuthContext';
+import { useAppearance } from '../../../contexts/AppearanceContext';
 import { SettingsRow, SettingsSection } from '@ui/SettingsItem';
 import PinModal from '@ui/PinModal';
-import ProfileCard from 'components/ProfileCard';
+import ProfileCard from '../../../components/ProfileCard';
 import { dialog } from '@utils/dialog';
 
 const THEME_LABELS: Record<string, string> = {
@@ -16,18 +17,19 @@ const THEME_LABELS: Record<string, string> = {
 };
 
 export default function SettingsScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
+  const { colors, spacing } = useAppTheme();
   const { logout, hasPIN } = useAuth();
   const { themePreference } = useAppearance();
   const [changePwdPinVisible, setChangePwdPinVisible] = useState(false);
 
-  // OTA updates
+  // OTA updates (native only)
   const { isChecking, isDownloading, isUpdateAvailable, isUpdatePending } = Updates.useUpdates();
 
   const handleCheckForUpdates = async () => {
     try {
       await Updates.checkForUpdateAsync();
-    } catch (e) {
+    } catch {
       dialog.alert('Update Check Failed', 'Unable to check for updates. Please try again later.');
     }
   };
@@ -36,7 +38,7 @@ export default function SettingsScreen() {
     try {
       await Updates.fetchUpdateAsync();
       await Updates.reloadAsync();
-    } catch (e) {
+    } catch {
       dialog.alert('Update Failed', 'Unable to download the update. Please try again later.');
     }
   };
@@ -65,7 +67,7 @@ export default function SettingsScreen() {
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={styles.container}
+      contentContainerStyle={[styles.container, { padding: spacing.lg }]}
     >
       <ProfileCard />
 
@@ -74,7 +76,7 @@ export default function SettingsScreen() {
         <SettingsRow
           title="Sign Out"
           icon={{ android: 'logout', ios: 'rectangle.portrait.and.arrow.right' }}
-          iconColor="#EF4444"
+          iconColor={colors.emergency}
           right={{ type: 'none' }}
           onPress={handleLogout}
           destructive
@@ -87,7 +89,7 @@ export default function SettingsScreen() {
           title="Security"
           subtitle={hasPIN ? 'PIN & biometrics' : 'No PIN set'}
           icon={{ android: 'security', ios: 'lock.shield.fill' }}
-          iconColor="#10B981"
+          iconColor={colors.success}
           right={{ type: 'chevron' }}
           onPress={() => navigation.navigate('Main', { screen: 'SecuritySettingsScreen' })}
         />
@@ -95,7 +97,7 @@ export default function SettingsScreen() {
           <SettingsRow
             title="Change PIN"
             icon={{ android: 'password', ios: 'key.fill' }}
-            iconColor="#8B5CF6"
+            iconColor={colors.purple}
             right={{ type: 'chevron' }}
             onPress={() => navigation.navigate('Main', { screen: 'ChangePINScreen' })}
           />
@@ -103,7 +105,7 @@ export default function SettingsScreen() {
         <SettingsRow
           title="Change Password"
           icon={{ android: 'manage_accounts', ios: 'lock.rotation' }}
-          iconColor="#F97316"
+          iconColor={colors.urgent}
           right={{ type: 'chevron' }}
           onPress={handleChangePasswordPress}
         />
@@ -115,7 +117,7 @@ export default function SettingsScreen() {
           title="Theme"
           subtitle={THEME_LABELS[themePreference]}
           icon={{ android: 'palette', ios: 'paintpalette.fill' }}
-          iconColor="#F59E0B"
+          iconColor={colors.warning}
           right={{ type: 'chevron' }}
           onPress={() => navigation.navigate('Main', { screen: 'AppearanceSettingsScreen' })}
         />
@@ -127,7 +129,7 @@ export default function SettingsScreen() {
           title="Notifications"
           subtitle="Coming soon"
           icon={{ android: 'notifications', ios: 'bell.fill' }}
-          iconColor="#3B82F6"
+          iconColor={colors.primary}
           right={{ type: 'chevron' }}
           onPress={() => navigation.navigate('Main', { screen: 'NotificationsSettingsScreen' })}
         />
@@ -140,7 +142,7 @@ export default function SettingsScreen() {
             title="Check for Updates"
             subtitle={isUpdateAvailable ? 'Update available' : 'Up to date'}
             icon={{ android: 'system_update', ios: 'arrow.down.circle.fill' }}
-            iconColor="#3B82F6"
+            iconColor={colors.primary}
             right={isChecking ? { type: 'loading' } : { type: 'none' }}
             disabled={isChecking || isDownloading}
             onPress={handleCheckForUpdates}
@@ -150,7 +152,7 @@ export default function SettingsScreen() {
               title="Install Update"
               subtitle="Tap to download and restart"
               icon={{ android: 'download', ios: 'arrow.down.app.fill' }}
-              iconColor="#10B981"
+              iconColor={colors.success}
               right={isDownloading ? { type: 'loading' } : { type: 'none' }}
               disabled={isDownloading}
               onPress={handleInstallUpdate}
@@ -161,7 +163,7 @@ export default function SettingsScreen() {
               title="Restart to Apply"
               subtitle="An update has been downloaded"
               icon={{ android: 'restart_alt', ios: 'arrow.clockwise.circle.fill' }}
-              iconColor="#F59E0B"
+              iconColor={colors.warning}
               right={{ type: 'none' }}
               onPress={() => Updates.reloadAsync()}
             />
@@ -174,7 +176,7 @@ export default function SettingsScreen() {
         <SettingsRow
           title="About Clinic EZ"
           icon={{ android: 'info', ios: 'info.circle.fill' }}
-          iconColor="#6B7280"
+          iconColor={colors.textMuted}
           right={{ type: 'chevron' }}
           onPress={() => navigation.navigate('Main', { screen: 'AboutSettingsScreen' })}
         />
@@ -186,7 +188,7 @@ export default function SettingsScreen() {
           <SettingsRow
             title="Developer Tools"
             icon={{ android: 'code', ios: 'hammer.fill' }}
-            iconColor="#EC4899"
+            iconColor={colors.purple}
             right={{ type: 'chevron' }}
             onPress={() => navigation.navigate('Main', { screen: 'DebugSettingsScreen' })}
           />
@@ -208,7 +210,5 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 16,
-  },
+  container: {},
 });

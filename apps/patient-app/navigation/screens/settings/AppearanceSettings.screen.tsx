@@ -1,5 +1,7 @@
+import React from 'react';
 import { ScrollView } from 'react-native';
-import { useAppearance, ThemePreference } from 'contexts/AppearanceContext';
+import { useAppearance, ThemePreference } from '../../../contexts/AppearanceContext';
+import { useAppTheme } from '../../../contexts/ThemeContext';
 import { SettingsRow, SettingsSection } from '@ui/SettingsItem';
 
 const THEME_OPTIONS: Array<{ label: string; value: ThemePreference; subtitle: string }> = [
@@ -10,11 +12,17 @@ const THEME_OPTIONS: Array<{ label: string; value: ThemePreference; subtitle: st
 
 export default function AppearanceSettingsScreen() {
   const { themePreference, setThemePreference } = useAppearance();
+  const { spacing, sizes } = useAppTheme();
 
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ padding: 16, gap: 0 }}
+      contentContainerStyle={{
+        padding: spacing.lg,
+        maxWidth: sizes.formMaxWidth,
+        alignSelf: 'center',
+        width: '100%',
+      }}
     >
       <SettingsSection
         title="Theme"
@@ -27,7 +35,7 @@ export default function AppearanceSettingsScreen() {
             subtitle={option.subtitle}
             right={
               themePreference === option.value
-                ? { type: 'value', label: '✓' }
+                ? { type: 'value', label: 'Active' }
                 : { type: 'none' }
             }
             onPress={() => setThemePreference(option.value)}

@@ -1,48 +1,54 @@
-import { View, ActivityIndicator, StyleSheet, Pressable } from 'react-native';
-import { useTheme } from '@react-navigation/native';
-import { useAuth } from 'contexts/AuthContext';
+import React from 'react';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { useAppTheme } from '../../contexts/ThemeContext';
+import { useAuth } from '../../contexts/AuthContext';
 import ThemedText from '@ui/ThemedText';
+import Button from '@ui/Button';
+import { AppIcon } from '@ui/Icon';
 
 export default function LoadingScreen() {
-  const { colors } = useTheme();
+  const { colors, spacing, sizes } = useAppTheme();
   const { verificationError, retryVerification, logout } = useAuth();
 
   if (verificationError) {
     return (
-      <View style={[styles.page, { backgroundColor: colors.background, padding: 24 }]}>
-        <View style={styles.errorCard}>
-          <ThemedText style={styles.errorIcon}>⚠️</ThemedText>
-          <ThemedText style={styles.errorTitle}>Connection Failed</ThemedText>
-          <ThemedText style={[styles.errorMessage, { color: colors.text }]}>
+      <View style={[styles.page, { backgroundColor: colors.background, padding: spacing['2xl'] }]}>
+        <View style={[styles.errorCard, { maxWidth: sizes.dialogWidth }]}>
+          <AppIcon name="warning" size={sizes.iconXl * 1.5} color="warning" />
+          <ThemedText variant="h2" style={{ textAlign: 'center', marginTop: spacing.md, marginBottom: spacing.sm }}>
+            Connection Failed
+          </ThemedText>
+          <ThemedText
+            variant="body"
+            color="textSecondary"
+            style={{ textAlign: 'center', marginBottom: spacing.md }}
+          >
             We were unable to verify your user profile. Please check your internet connection and try again.
           </ThemedText>
           {verificationError.message ? (
-            <ThemedText style={[styles.technicalError, { color: colors.text }]}>
+            <ThemedText
+              variant="small"
+              color="textMuted"
+              style={{ textAlign: 'center', marginBottom: spacing['2xl'] }}
+            >
               Detail: {verificationError.message}
             </ThemedText>
           ) : null}
 
-          <Pressable
+          <Button
+            label="Retry Connection"
+            variant="primary"
+            fullWidth
             onPress={retryVerification}
-            style={({ pressed }) => [
-              styles.primaryButton,
-              { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 },
-            ]}
-          >
-            <ThemedText style={styles.primaryButtonText}>Retry Connection</ThemedText>
-          </Pressable>
+            style={{ marginBottom: spacing.md }}
+          />
 
-          <Pressable
+          <Button
+            label="Sign Out"
+            variant="outline"
+            fullWidth
             onPress={logout}
-            style={({ pressed }) => [
-              styles.secondaryButton,
-              { borderColor: colors.border, opacity: pressed ? 0.8 : 1 },
-            ]}
-          >
-            <ThemedText style={[styles.secondaryButtonText, { color: colors.text }]}>
-              Sign Out
-            </ThemedText>
-          </Pressable>
+          />
         </View>
       </View>
     );
@@ -63,56 +69,7 @@ const styles = StyleSheet.create({
   },
   errorCard: {
     width: '100%',
-    maxWidth: 320,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  errorIcon: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
-  errorTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  errorMessage: {
-    fontSize: 15,
-    textAlign: 'center',
-    lineHeight: 22,
-    opacity: 0.8,
-    marginBottom: 16,
-  },
-  technicalError: {
-    fontSize: 12,
-    textAlign: 'center',
-    opacity: 0.5,
-    marginBottom: 24,
-  },
-  primaryButton: {
-    width: '100%',
-    height: 48,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  primaryButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  secondaryButton: {
-    width: '100%',
-    height: 48,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  secondaryButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
   },
 });

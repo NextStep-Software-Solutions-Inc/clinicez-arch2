@@ -6,7 +6,7 @@ import AuthStack from './AuthStack';
 import SetupPINStack from './SetupPINStack';
 import MainStack from './MainStack';
 import { useIsAppLoading } from '../../hooks/useNavState';
-import { useAuth } from 'contexts/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 /**
  * On Web, unauthenticated visitors can always access both Onboarding (Welcome & Onboard)
