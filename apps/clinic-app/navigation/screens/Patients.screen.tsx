@@ -7,7 +7,6 @@ import {
   Pressable,
   ActivityIndicator,
   Modal,
-  Linking,
 } from 'react-native';
 import { TextInput } from '@ui/Text';
 import { Alert } from '@utils/feedback';
@@ -16,6 +15,7 @@ import { ThemedText, Badge, Button, Input, Card, Icon, EmptyState, ErrorState, S
 import SegmentedControl from '@ui/SegmentedControl';
 import { useClinic } from '@context/ClinicContext';
 import { useStaff } from '@context/StaffContext';
+import { openDocument } from '../../services/documentOpener';
 import { notify } from '@utils/feedback';
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
@@ -35,6 +35,7 @@ import {
   ClinicCustomFieldDefinition,
 } from '../../services/clinicService';
 import { offlineSyncService } from '../../services/offlineSyncService';
+import { shouldQueueOffline } from '../../services/outboxPolicy';
 
 const humanizeKey = (key: string) => {
   const words = key.replace(/_/g, ' ');
@@ -127,6 +128,7 @@ export default function PatientsScreen() {
 
   // Offline outbox states
   const [offlinePendingCount, setOfflinePendingCount] = useState(offlineSyncService.getPendingCount());
+  const [offlineFailedCount, setOfflineFailedCount] = useState(offlineSyncService.getFailedCount());
   const [syncingOffline, setSyncingOffline] = useState(false);
 
   const fetchPatients = useCallback(async () => {
@@ -150,6 +152,7 @@ export default function PatientsScreen() {
 
     const unsub = offlineSyncService.subscribe(() => {
       setOfflinePendingCount(offlineSyncService.getPendingCount());
+      setOfflineFailedCount(offlineSyncService.getFailedCount());
     });
     return unsub;
   }, [fetchPatients]);
@@ -218,14 +221,18 @@ export default function PatientsScreen() {
     if (newPat) {
       setPatients((prev) => [newPat, ...(prev ?? [])]);
       notify.success(`${newPat.fullName} registered (${newPat.patientCode}).`);
-    } else {
-      // Offline queue fallback
+    } else if (shouldQueueOffline(err?.status ?? 0)) {
+      // Server unreachable: keep the registration on this device and sync it when the connection is back.
       const offlinePat = await offlineSyncService.enqueuePatient(payload);
       setPatients((prev) => [offlinePat, ...(prev ?? [])]);
       Alert.alert(
         'Saved on this device',
-        `${offlinePat.fullName} (${offlinePat.patientCode}) was saved locally because the server could not be reached. It will sync automatically once the connection is back.${err?.message ? `\n\n${err.message}` : ''}`
+        `${offlinePat.fullName} was saved locally because the server could not be reached. It will sync automatically once the connection is back.${err?.message ? `\n\n${err.message}` : ''}`
       );
+    } else {
+      // The server answered and refused: the user has to fix the form, so keep it open.
+      Alert.alert('Could not register patient', err?.message || 'The server rejected this registration.');
+      return;
     }
 
     setRegisterVisible(false);
@@ -315,7 +322,7 @@ export default function PatientsScreen() {
   const handleDownloadAttachment = async (attachmentId: string) => {
     try {
       const url = clinicService.getRecordAttachmentDownloadUrl(attachmentId);
-      await Linking.openURL(url);
+      if (!(await openDocument(url))) throw new Error('Could not open the document');
     } catch (e: any) {
       Alert.alert('Unable to open document', e.message || 'Network error');
     }
@@ -353,6 +360,8 @@ export default function PatientsScreen() {
       setDocTitle('');
       setDocNotes('');
       notify.success('Document attached to the patient record.');
+    } else if (!shouldQueueOffline(err?.status ?? 0)) {
+      notify.error(err?.message || 'The server rejected this document.');
     } else {
       const queuedAtt = await offlineSyncService.enqueueAttachment(payload, currentName || undefined);
       setPatientAttachments((prev) => [queuedAtt, ...prev]);
@@ -472,12 +481,15 @@ export default function PatientsScreen() {
 
   const handleSyncNow = async () => {
     setSyncingOffline(true);
-    const report = await offlineSyncService.syncPendingOutbox();
+    const report = await offlineSyncService.syncPendingOutbox({ force: true });
     setSyncingOffline(false);
+    const synced = report.syncedPatients + report.syncedAttachments;
+    const remaining = report.failedCount > 0 ? ` ${report.failedCount} still waiting.` : '';
+    const rejected = report.deadCount > 0 ? ` ${report.deadCount} need attention.` : '';
     Alert.alert(
-      'Sync complete',
-      `Synced ${report.syncedPatients} patient(s) and ${report.syncedAttachments} attachment(s).` +
-        (report.failedCount > 0 ? ` (${report.failedCount} remaining)` : '')
+      synced > 0 ? 'Sync complete' : 'Nothing synced',
+      `Synced ${report.syncedPatients} patient(s) and ${report.syncedAttachments} attachment(s).${remaining}${rejected}` +
+        (report.errors.length > 0 ? `\n\n${report.errors.slice(0, 3).join('\n')}` : '')
     );
     fetchPatients();
   };
@@ -522,6 +534,22 @@ export default function PatientsScreen() {
             disabled={syncingOffline}
             onPress={handleSyncNow}
           />
+        </View>
+      )}
+
+      {offlineFailedCount > 0 && (
+        <View style={styles.offlineFailedBanner}>
+          <Icon name="alert" size={theme.sizes.iconMd} color={theme.colors.emergencyText} />
+          <View style={styles.offlineBannerText}>
+            <ThemedText variant="bodyBold" color={theme.colors.emergencyText}>
+              {offlineFailedCount} saved item{offlineFailedCount > 1 ? 's' : ''} could not be synced
+            </ThemedText>
+            <ThemedText variant="small" color={theme.colors.emergencyText}>
+              The server rejected them. Retry after fixing the cause, or discard them.
+            </ThemedText>
+          </View>
+          <Button title="Retry" variant="outline" size="sm" icon="refresh" onPress={() => offlineSyncService.retryFailed()} />
+          <Button title="Discard" variant="outline" size="sm" onPress={() => offlineSyncService.discardFailed()} />
         </View>
       )}
 
@@ -1455,7 +1483,7 @@ export default function PatientsScreen() {
                   onPress={async () => {
                     const url = clinicService.getLabOrderSlipPdfUrl(selectedSlip.orderId);
                     try {
-                      await Linking.openURL(url);
+                      if (!(await openDocument(url))) throw new Error('Could not open the document');
                     } catch {
                       Alert.alert('Download Error', 'Could not open requisition slip PDF. Please check connection and try again.');
                     }
@@ -1720,6 +1748,17 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 220,
     gap: theme.spacing.xs,
+  },
+  offlineFailedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: theme.spacing.md,
+    backgroundColor: theme.colors.emergencyBg,
+    borderColor: theme.colors.emergencyBorder,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.lg,
+    padding: theme.spacing.lg,
   },
   searchInput: {
     width: '100%',

@@ -25,7 +25,15 @@ services:
       - RabbitMq__Username=${RABBITMQ_USERNAME:-rabbit_admin_node}
       - RabbitMq__Password=${RABBITMQ_PASSWORD}
       - Facility__BaseDomain=${BASE_DOMAIN:?BASE_DOMAIN must be set}
+      - Internal__ApiKey=${INTERNAL_API_KEY:-}
+      - Jwt__SigningKey=${LAB_JWT_SIGNING_KEY:-}
+      - Jwt__KeyDirectory=/app/keys
+    volumes:
+      - laboratory-api-keys:/app/keys
     restart: unless-stopped
+
+volumes:
+  laboratory-api-keys:
 
 networks:
   data-network:

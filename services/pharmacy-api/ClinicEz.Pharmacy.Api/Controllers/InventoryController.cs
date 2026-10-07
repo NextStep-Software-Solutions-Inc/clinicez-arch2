@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Pharmacy.Api.Authorization;
 using ClinicEz.Pharmacy.Application.Features.Inventory.Commands;
 using ClinicEz.Pharmacy.Application.Features.Inventory.DTOs;
 using ClinicEz.Pharmacy.Application.Features.Inventory.Queries;
+using ClinicEz.Pharmacy.Domain.Constants;
 using ClinicEz.Shared.Common;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -23,6 +25,7 @@ public sealed class InventoryController : ControllerBase
     }
 
     [HttpGet]
+    [HasPermission(PharmacyPermissions.InventoryRead)]
     public async Task<ActionResult<ApiResponse<List<PharmacyInventoryItemDto>>>> GetInventory(
         [FromQuery] string? search,
         [FromQuery] bool? lowStockOnly,
@@ -33,6 +36,7 @@ public sealed class InventoryController : ControllerBase
     }
 
     [HttpPost("batches")]
+    [HasPermission(PharmacyPermissions.InventoryReceive)]
     public async Task<ActionResult<ApiResponse<PharmacyInventoryItemDto>>> AddBatch(
         [FromBody] AddInventoryBatchApiRequest request,
         CancellationToken ct = default)
@@ -49,6 +53,7 @@ public sealed class InventoryController : ControllerBase
     }
 
     [HttpPost("seed")]
+    [HasPermission(PharmacyPermissions.InventoryManage)]
     public async Task<ActionResult<ApiResponse<int>>> SeedInventory(CancellationToken ct = default)
     {
         var count = await _sender.Send(new SeedInitialInventoryCommand(), ct);

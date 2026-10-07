@@ -5,7 +5,9 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Api.Authorization;
+using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
+using ClinicEz.Clinic.Application.Features.Yakap.Services;
 using ClinicEz.Clinic.Domain.Constants;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
@@ -23,13 +25,16 @@ public sealed class YakapPatientProfileController : ControllerBase
     private readonly IRepository<TriageVitals> _vitalsRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
+    private readonly PhilHealthCatalogResolver _catalogResolver;
 
     public YakapPatientProfileController(
         IRepository<ClinicPatient> patientRepo,
         IRepository<TriageVitals> vitalsRepo,
         IUnitOfWork unitOfWork,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IPhilHealthCatalogLookup catalog)
     {
+        _catalogResolver = new PhilHealthCatalogResolver(catalog);
         _patientRepo = patientRepo;
         _vitalsRepo = vitalsRepo;
         _unitOfWork = unitOfWork;
@@ -101,19 +106,8 @@ public sealed class YakapPatientProfileController : ControllerBase
         bool isPediatric = ageYears < 18;
         bool isSenior = ageYears >= 60;
 
-        var defaultMedHistories = new List<PhilHealthConditionEntryDto>();
-        if (!string.IsNullOrWhiteSpace(patient.ChronicConditions))
-        {
-            var condLower = patient.ChronicConditions.ToLowerInvariant();
-            if (condLower.Contains("hypertens"))
-                defaultMedHistories.Add(new PhilHealthConditionEntryDto("011", "Essential Hypertension"));
-            if (condLower.Contains("diabet"))
-                defaultMedHistories.Add(new PhilHealthConditionEntryDto("006", "Diabetes Mellitus"));
-            if (condLower.Contains("asthma"))
-                defaultMedHistories.Add(new PhilHealthConditionEntryDto("002", "Asthma"));
-            if (condLower.Contains("allerg"))
-                defaultMedHistories.Add(new PhilHealthConditionEntryDto("001", "Allergy"));
-        }
+        // Pre-fill from the patient's recorded conditions using the PhilHealth Catalog (clinician reviews before saving).
+        var defaultMedHistories = _catalogResolver.ResolveKnownConditions(patient.ChronicConditions);
 
         var isDependentDefault = isPediatric;
         var defaultProfile = new PhilHealthPatientProfileDto
@@ -164,14 +158,14 @@ public sealed class YakapPatientProfileController : ControllerBase
             WaistCm = null,
             HipCm = null,
             LengthCm = latestVitals?.HeightCm?.ToString("F0"),
-            SkinId = "1",
-            HeentId = "1",
-            ChestId = "1",
-            HeartId = "1",
-            AbdomenId = "1",
-            NeuroId = "1",
-            RectalId = "1",
-            GuId = "1",
+            SkinId = _catalogResolver.EssentiallyNormalCode("lib_skin_extremities"),
+            HeentId = _catalogResolver.EssentiallyNormalCode("lib_heent"),
+            ChestId = _catalogResolver.EssentiallyNormalCode("lib_chest"),
+            HeartId = _catalogResolver.EssentiallyNormalCode("lib_heart"),
+            AbdomenId = _catalogResolver.EssentiallyNormalCode("lib_abdomen"),
+            NeuroId = _catalogResolver.EssentiallyNormalCode("lib_neuro"),
+            RectalId = _catalogResolver.EssentiallyNormalCode("lib_digital_rectal"),
+            GuId = _catalogResolver.EssentiallyNormalCode("lib_genitourinary"),
             GenSurveyId = "1",
             NcdAnswers = new YakapNcdAnswersDto(),
             LastUpdatedAt = null,

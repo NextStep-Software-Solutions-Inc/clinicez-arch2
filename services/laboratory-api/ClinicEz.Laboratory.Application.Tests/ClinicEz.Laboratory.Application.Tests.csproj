@@ -11,6 +11,7 @@
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="FluentAssertions" Version="8.10.0" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.9" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.9" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="NSubstitute" Version="5.3.0" />
@@ -23,6 +24,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\ClinicEz.Laboratory.Api\ClinicEz.Laboratory.Api.csproj" />
     <ProjectReference Include="..\ClinicEz.Laboratory.Application\ClinicEz.Laboratory.Application.csproj" />
     <ProjectReference Include="..\ClinicEz.Laboratory.Domain\ClinicEz.Laboratory.Domain.csproj" />
     <ProjectReference Include="..\ClinicEz.Laboratory.Infrastructure\ClinicEz.Laboratory.Infrastructure.csproj" />

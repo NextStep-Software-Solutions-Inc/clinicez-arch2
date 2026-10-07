@@ -438,6 +438,78 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
                     b.ToTable("InventoryItems", "pharmacy_dashboard");
                 });
 
+            modelBuilder.Entity("ClinicEz.Pharmacy.Domain.Entities.PharmacyRefreshToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DeviceLabel")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("FamilyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("PharmacyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ReplacedByTokenId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("StaffMemberId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FamilyId");
+
+                    b.HasIndex("StaffMemberId");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.ToTable("RefreshTokens", "pharmacy_dashboard");
+                });
+
             modelBuilder.Entity("ClinicEz.Pharmacy.Domain.Entities.PharmacySettings", b =>
                 {
                     b.Property<Guid>("Id")
@@ -523,6 +595,9 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
                     b.Property<string>("Email")
                         .HasColumnType("text");
 
+                    b.Property<int>("FailedLoginCount")
+                        .HasColumnType("integer");
+
                     b.Property<string>("FirstName")
                         .IsRequired()
                         .HasColumnType("text");
@@ -533,12 +608,25 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<DateTime?>("LastLoginAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("LastName")
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("LockoutEnd")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("MiddleName")
                         .HasColumnType("text");
+
+                    b.Property<bool>("MustChangePassword")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PasswordHash")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<Guid>("PharmacyId")
                         .HasColumnType("uuid");
@@ -562,6 +650,9 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
                     b.Property<string>("Title")
                         .HasColumnType("text");
 
+                    b.Property<int>("TokenVersion")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -569,6 +660,8 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("PharmacyId", "Email");
 
                     b.ToTable("PharmacyStaffMembers", "pharmacy_dashboard");
                 });
@@ -1068,6 +1161,17 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("InventoryItem");
+                });
+
+            modelBuilder.Entity("ClinicEz.Pharmacy.Domain.Entities.PharmacyRefreshToken", b =>
+                {
+                    b.HasOne("ClinicEz.Pharmacy.Domain.Entities.PharmacyStaffMember", "StaffMember")
+                        .WithMany()
+                        .HasForeignKey("StaffMemberId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("StaffMember");
                 });
 
             modelBuilder.Entity("ClinicEz.Pharmacy.Domain.Entities.PrescriptionOrderItem", b =>

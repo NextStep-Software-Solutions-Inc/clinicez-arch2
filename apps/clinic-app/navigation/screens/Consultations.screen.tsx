@@ -5,7 +5,6 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
-  Linking,
 } from 'react-native';
 import { Alert, notify } from '@utils/feedback';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -27,8 +26,11 @@ import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
 import PrescriptionSlipModal from '../../components/PrescriptionSlipModal';
 import RecordExternalDispenseModal from '../../components/RecordExternalDispenseModal';
+import { usePhilHealthCatalog, usePhilHealthCatalogSearch } from '@utils/usePhilHealthCatalog';
+import type { PhilHealthCatalogItem } from '@services/philHealthCatalogService';
 import { useClinic } from '../../context/ClinicContext';
 import { useStaff, formatStaffName } from '../../context/StaffContext';
+import { openDocument } from '../../services/documentOpener';
 import {
   clinicService,
   PatientQueueItem,
@@ -69,63 +71,10 @@ export interface StatutorySymptom {
   description: string;
 }
 
-// PhilHealth statutory sign/symptom library (reference data, not patient data).
-const STATUTORY_SYMPTOMS: StatutorySymptom[] = [
-  { code: '14', name: 'Headache', description: 'Headache / Cephalalgia' },
-  { code: '7', name: 'Cough', description: 'Cough / Productive or Dry' },
-  { code: '13', name: 'Fever', description: 'Fever / Pyrexia' },
-  { code: '5', name: 'Chest pain', description: 'Chest pain / Angina / Discomfort' },
-  { code: '2', name: 'Abdominal pain', description: 'Abdominal pain / Epigastric / Cramps' },
-  { code: '10', name: 'Dyspnea', description: 'Dyspnea / Shortness of breath' },
-  { code: '9', name: 'Dizziness', description: 'Dizziness / Vertigo / Lightheadedness' },
-  { code: '37', name: 'Hypertension signs', description: 'Hypertension-related signs / High BP' },
-  { code: '38', name: 'Pain', description: 'Pain (Requires pain site)' },
-  { code: 'X', name: 'Other complaint', description: 'Other complaint (Requires specific description)' },
-];
+const titleCase = (value: string) => value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
 
-// PhilHealth Yakap GAMOT core formulary (reference data, not patient data).
-const YAKAP_GAMOT_QUICK_PICKS = [
-  { genericName: 'Amlodipine Besylate', dosage: '5mg', form: 'Tablet', sig: '1 tab once daily in the morning', drugCode: 'AMLOD0000000005TAB00000000100', label: 'Amlodipine 5mg' },
-  { genericName: 'Losartan Potassium', dosage: '50mg', form: 'Tablet', sig: '1 tab once daily', drugCode: 'LOSAR0000000050TAB00000000100', label: 'Losartan 50mg' },
-  { genericName: 'Metformin HCl', dosage: '500mg', form: 'Tablet', sig: '1 tab twice daily with meals', drugCode: 'METFO0000000500TAB00000000100', label: 'Metformin 500mg' },
-  { genericName: 'Co-Amoxiclav', dosage: '625mg', form: 'Tablet', sig: '1 tab every 12 hours for 7 days', drugCode: 'COAMO0000000625TAB00000000100', label: 'Co-Amox 625mg' },
-  { genericName: 'Salbutamol MDI', dosage: '100mcg/dose', form: 'Inhaler', sig: '1-2 puffs every 4-6 hours as needed for wheezing', drugCode: 'SALBU0000000100INH00000000001', label: 'Salbutamol MDI' },
-  { genericName: 'Paracetamol', dosage: '500mg', form: 'Tablet', sig: '1 tab every 4-6 hours as needed for fever/pain', drugCode: 'PARAC0000000500TAB00000000100', label: 'Paracetamol 500mg' },
-];
-
-const YAKAP_LAB_CODE_MAP: Record<string, string> = {
-  'Complete Blood Count (CBC) with Platelet': '01',
-  'Routine Urinalysis': '02',
-  'Fasting Blood Sugar (FBS)': '05',
-  'Random Blood Sugar (RBS) Rapid Test': '06',
-  'Lipid Profile (Chol, Trig, HDL, LDL)': '08',
-  'Serum Creatinine & eGFR': '09',
-  'Chest X-Ray PA View': '11',
-  '12-Lead ECG with Interpretation': '12',
-};
-
-// Common ICD-10 suggestions shown before the user searches (reference data).
-const COMMON_ICD10: Icd10Code[] = [
-  { code: 'I10', description: 'Essential (primary) hypertension, Stage 1', category: 'Circulatory' },
-  { code: 'E11.9', description: 'Type 2 diabetes mellitus without complications', category: 'Endocrine' },
-  { code: 'J00', description: 'Acute nasopharyngitis [common cold]', category: 'Respiratory' },
-  { code: 'J45.909', description: 'Unspecified asthma, uncomplicated', category: 'Respiratory' },
-  { code: 'K21.9', description: 'Gastro-esophageal reflux disease without esophagitis', category: 'Digestive' },
-  { code: 'M54.5', description: 'Low back pain, unspecified', category: 'Musculoskeletal' },
-  { code: 'A09', description: 'Infectious gastroenteritis and colitis, unspecified', category: 'Infectious' },
-];
-
-const COMMON_LAB_TESTS = [
-  'Complete Blood Count (CBC) with Platelet',
-  'Fasting Blood Sugar (FBS)',
-  'Lipid Profile (Chol, Trig, HDL, LDL)',
-  'Routine Urinalysis',
-  'Serum Creatinine & eGFR',
-  '12-Lead ECG with Interpretation',
-  'Chest X-Ray PA View',
-  'Random Blood Sugar (RBS) Rapid Test',
-];
-
+/** The PhilHealth library names its "pain" and "others" entries by description; their codes come from the catalog. */
+const isCatalogTerm = (item: StatutorySymptom, term: string) => item.name.toLowerCase() === term;
 const FITNESS_OPTIONS = [
   { value: 'FitToWork', label: 'Fit to work' },
   { value: 'UnfitToWork', label: 'Unfit to work' },
@@ -298,7 +247,7 @@ export default function ConsultationsScreen() {
 
   // ICD-10 Search & Selection
   const [icdQuery, setIcdQuery] = useState('');
-  const [icdResults, setIcdResults] = useState<Icd10Code[]>(COMMON_ICD10);
+  const [icdResults, setIcdResults] = useState<Icd10Code[]>([]);
   const [icdNotice, setIcdNotice] = useState<string | null>(null);
   const [selectedDiagnoses, setSelectedDiagnoses] = useState<LocalDiagnosis[]>([]);
   const [showIcdDropdown, setShowIcdDropdown] = useState(false);
@@ -326,6 +275,22 @@ export default function ConsultationsScreen() {
   const [symptomOtherDesc, setSymptomOtherDesc] = useState<string>('');
   const [symptomPainSite, setSymptomPainSite] = useState<string>('');
 
+  // PhilHealth signs and symptoms come from the catalog (cached on the device), never from literals.
+  const symptomLibrary = usePhilHealthCatalog('lib_signs_symptoms', isYakapEligible);
+  const symptoms: StatutorySymptom[] = useMemo(
+    () =>
+      symptomLibrary.items.map((item) => ({
+        code: item.code,
+        name: titleCase(item.description),
+        description: item.description,
+      })),
+    [symptomLibrary.items],
+  );
+  const painSymptomCode = symptoms.find((s) => isCatalogTerm(s, 'pain'))?.code;
+  const otherSymptomCode = symptoms.find((s) => isCatalogTerm(s, 'others'))?.code;
+  const painSymptomSelected = Boolean(painSymptomCode && selectedSymptomCodes.includes(painSymptomCode));
+  const otherSymptomSelected = Boolean(otherSymptomCode && selectedSymptomCodes.includes(otherSymptomCode));
+
   // Sign & Sync Status
   const [isSigning, setIsSigning] = useState(false);
   const [isSigned, setIsSigned] = useState(false);
@@ -351,26 +316,15 @@ export default function ConsultationsScreen() {
     setSelectedSymptomCodes(updated);
   };
 
-  const handleQuickAddDiagnosis = (code: string, desc: string) => {
-    if (isSigned) return;
-    if (!selectedDiagnoses.some((d) => d.icd10Code === code)) {
-      const isFirst = selectedDiagnoses.length === 0;
-      setSelectedDiagnoses((prev) => [...prev, { icd10Code: code, description: desc, isPrimary: isFirst }]);
-      if (!assessment.toLowerCase().includes(desc.toLowerCase())) {
-        const separator = assessment.trim() ? '; ' : '';
-        setAssessment((prev) => `${prev.trim()}${separator}${desc}`);
-      }
-    }
-  };
+  // PhilHealth medicine lookup for a new medication order (thousands of rows, searched on the server).
+  const [rxCatalogQuery, setRxCatalogQuery] = useState('');
+  const rxCatalogSearch = usePhilHealthCatalogSearch('lib_medicine', isYakapEligible && showAddRx ? rxCatalogQuery : '', { take: 15 });
 
-  const handleSelectGamotQuickPick = (item: (typeof YAKAP_GAMOT_QUICK_PICKS)[0]) => {
-    setNewRxGeneric(item.genericName);
-    setNewRxDosage(item.dosage);
-    setNewRxForm(item.form);
-    setNewRxSig(item.sig);
-    setNewRxDrugCode(item.drugCode);
+  const handleSelectPhilHealthMedicine = (item: PhilHealthCatalogItem) => {
+    setNewRxGeneric(item.description);
+    setNewRxDrugCode(item.code);
+    setRxCatalogQuery('');
   };
-
   // Tenant Mapped Services & Formulary Catalog (fee schedule)
   const [clinicCatalog, setClinicCatalog] = useState<ClinicServiceItem[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
@@ -396,7 +350,7 @@ export default function ConsultationsScreen() {
   const catalogByCategory = (...categories: string[]) =>
     activeCatalog.filter((s) => categories.includes(s.category.toLowerCase()));
   const medicineCatalog = catalogByCategory('medicine');
-  const extraDiagnosticCatalog = catalogByCategory('diagnostic').filter((s) => !COMMON_LAB_TESTS.includes(s.name));
+  const diagnosticCatalog = catalogByCategory('diagnostic');
   const procedureCatalog = catalogByCategory('procedure', 'nursingservice');
   const consultationFee = catalogByCategory('consultation')[0];
 
@@ -729,7 +683,7 @@ export default function ConsultationsScreen() {
     setPrescriptionSlip(null);
     setShowAddRx(false);
     setIcdQuery('');
-    setIcdResults(COMMON_ICD10);
+    setIcdResults([]);
     setIcdNotice(null);
     setShowIcdDropdown(false);
     setVitals(null);
@@ -970,7 +924,9 @@ export default function ConsultationsScreen() {
     const orderId = typeof orderOrId === 'string' ? orderOrId : orderOrId.id;
     const found = typeof orderOrId === 'string' ? labOrders.find((o) => o.id === orderOrId) : orderOrId;
     const url = clinicService.getLabReportPdfUrl(orderId);
-    Linking.openURL(url).catch(() => {
+    openDocument(url).then((opened) => {
+      if (!opened) throw new Error('Could not open the document');
+    }).catch(() => {
       Alert.alert(
         'Could not open the PDF report',
         [
@@ -989,18 +945,15 @@ export default function ConsultationsScreen() {
     setIcdQuery(q);
     setIcdNotice(null);
     if (!q.trim()) {
-      setIcdResults(COMMON_ICD10);
+      setIcdResults([]);
       return;
     }
     const [data, err] = await clinicService.searchIcd10(q);
     if (!err && data) {
       setIcdResults(data);
     } else {
-      const needle = q.toLowerCase();
-      setIcdResults(
-        COMMON_ICD10.filter((i) => i.code.toLowerCase().includes(needle) || i.description.toLowerCase().includes(needle)),
-      );
-      setIcdNotice('ICD-10 search is unavailable right now. Showing common codes only.');
+      setIcdResults([]);
+      setIcdNotice('The PhilHealth ICD-10 catalog is unreachable, so diagnoses cannot be searched right now.');
     }
   };
 
@@ -1113,8 +1066,8 @@ export default function ConsultationsScreen() {
         plan,
         isYakapEligible,
         philHealthSignSympCode: selectedSymptomCodes.join(','),
-        philHealthOtherComplaint: selectedSymptomCodes.includes('X') ? symptomOtherDesc || subjective : undefined,
-        philHealthPainSite: selectedSymptomCodes.includes('38') ? symptomPainSite : undefined,
+        philHealthOtherComplaint: otherSymptomSelected ? symptomOtherDesc || subjective : undefined,
+        philHealthPainSite: painSymptomSelected ? symptomPainSite : undefined,
         diagnoses: selectedDiagnoses.map((d) => ({
           icd10Code: d.icd10Code,
           description: d.description,
@@ -1176,7 +1129,7 @@ export default function ConsultationsScreen() {
         clinicalDiagnosis: assessment,
         items: orderedLabs.map((l) => ({
           testName: l,
-          category: l.includes('ECG') || l.includes('X-Ray') ? 'Diagnostic' : 'Clinical Laboratory',
+          category: diagnosticCatalog.find((d) => d.name === l)?.category ?? 'Diagnostic',
         })),
       });
       if (labErr) followUpIssues.push('laboratory requisition');
@@ -1318,7 +1271,7 @@ export default function ConsultationsScreen() {
 
   const downloadPdf = async (url: string, failureMessage: string) => {
     try {
-      await Linking.openURL(url);
+      if (!(await openDocument(url))) throw new Error('Could not open the document');
     } catch {
       Alert.alert('Download error', failureMessage);
     }
@@ -1680,8 +1633,13 @@ export default function ConsultationsScreen() {
                   <ThemedText variant="small" color={theme.colors.textMuted}>
                     Select the PhilHealth complaint(s) for this visit. Each selection is added to the narrative below.
                   </ThemedText>
+                  {symptomLibrary.loading && symptoms.length === 0 ? (
+                    <SkeletonList rows={1} rowHeight={theme.sizes.controlMd} />
+                  ) : symptomLibrary.error && symptoms.length === 0 ? (
+                    <ErrorState compact title="Unable to load PhilHealth complaints" message={symptomLibrary.error.message} onRetry={symptomLibrary.reload} />
+                  ) : null}
                   <View style={styles.chipsRow}>
-                    {STATUTORY_SYMPTOMS.map((symp) => (
+                    {symptoms.map((symp) => (
                       <ToggleChip
                         key={symp.code}
                         label={symp.name}
@@ -1692,7 +1650,7 @@ export default function ConsultationsScreen() {
                       />
                     ))}
                   </View>
-                  {selectedSymptomCodes.includes('38') ? (
+                  {painSymptomSelected ? (
                     <Input
                       label="Pain site (required by PhilHealth)"
                       placeholder="e.g. Epigastric area, right shoulder, lumbar spine"
@@ -1701,7 +1659,7 @@ export default function ConsultationsScreen() {
                       editable={!isSigned}
                     />
                   ) : null}
-                  {selectedSymptomCodes.includes('X') ? (
+                  {otherSymptomSelected ? (
                     <Input
                       label="Other complaint (required by PhilHealth)"
                       placeholder="Describe the complaint"
@@ -1744,36 +1702,6 @@ export default function ConsultationsScreen() {
                 subtitle="Clinical impression and ICD-10 diagnoses"
                 rightAction={isYakapEligible ? <Badge label="ICD-10 linked to PhilHealth" variant="info" /> : undefined}
               />
-
-              {isYakapEligible && !isSigned ? (
-                <View style={styles.stack}>
-                  <ThemedText variant="small" color={theme.colors.textMuted}>
-                    Common Yakap diagnoses
-                  </ThemedText>
-                  <View style={styles.chipsRow}>
-                    <ToggleChip
-                      label="I10 (HPN)"
-                      selected={selectedDiagnoses.some((d) => d.icd10Code === 'I10')}
-                      onPress={() => handleQuickAddDiagnosis('I10', 'Essential (primary) hypertension')}
-                    />
-                    <ToggleChip
-                      label="E11.9 (DM)"
-                      selected={selectedDiagnoses.some((d) => d.icd10Code === 'E11.9')}
-                      onPress={() => handleQuickAddDiagnosis('E11.9', 'Type 2 diabetes mellitus')}
-                    />
-                    <ToggleChip
-                      label="J45.9 (Asthma)"
-                      selected={selectedDiagnoses.some((d) => d.icd10Code === 'J45.909')}
-                      onPress={() => handleQuickAddDiagnosis('J45.909', 'Bronchial asthma')}
-                    />
-                    <ToggleChip
-                      label="J00 (URTI)"
-                      selected={selectedDiagnoses.some((d) => d.icd10Code === 'J00')}
-                      onPress={() => handleQuickAddDiagnosis('J00', 'Acute nasopharyngitis [common cold]')}
-                    />
-                  </View>
-                </View>
-              ) : null}
 
               <Input
                 placeholder="Primary impression"
@@ -1828,7 +1756,7 @@ export default function ConsultationsScreen() {
                       ) : null}
                       {icdResults.length === 0 ? (
                         <ThemedText variant="small" color={theme.colors.textMuted} style={styles.icdNotice}>
-                          No matching codes.
+                          {icdQuery.trim() ? 'No matching codes in the PhilHealth ICD-10 catalog.' : 'Type a code or a diagnosis to search the PhilHealth ICD-10 catalog.'}
                         </ThemedText>
                       ) : (
                         icdResults.map((item) => (
@@ -1863,38 +1791,29 @@ export default function ConsultationsScreen() {
                 icon="lab"
                 subtitle="Selected tests create a requisition for the laboratory when the encounter is signed"
               />
-              <View style={styles.chipsRow}>
-                {COMMON_LAB_TESTS.map((lab) => {
-                  const yakapCode = YAKAP_LAB_CODE_MAP[lab];
-                  return (
-                    <ToggleChip
-                      key={lab}
-                      label={lab}
-                      meta={isYakapEligible && yakapCode ? `Yakap ${yakapCode}` : undefined}
-                      selected={orderedLabs.includes(lab)}
-                      disabled={isSigned}
-                      onPress={() => handleToggleLab(lab)}
-                    />
-                  );
-                })}
-                {extraDiagnosticCatalog.map((diag) => {
-                  const yakapCode = diag.philHealthCode || YAKAP_LAB_CODE_MAP[diag.name];
-                  return (
+              {catalogLoading && diagnosticCatalog.length === 0 ? (
+                <SkeletonList rows={1} rowHeight={theme.sizes.controlMd} />
+              ) : diagnosticCatalog.length === 0 ? (
+                <ThemedText variant="small" color={theme.colors.textMuted}>
+                  No diagnostic tests are set up in the clinic fee schedule yet.
+                </ThemedText>
+              ) : (
+                <View style={styles.chipsRow}>
+                  {diagnosticCatalog.map((diag) => (
                     <ToggleChip
                       key={diag.id}
                       tone="success"
                       label={`${diag.name} (₱${diag.standardPrice.toFixed(0)})`}
-                      meta={isYakapEligible && yakapCode ? `Yakap ${yakapCode}` : undefined}
+                      meta={isYakapEligible && diag.philHealthCode ? `Yakap ${diag.philHealthCode}` : undefined}
                       selected={orderedLabs.includes(diag.name)}
                       disabled={isSigned}
                       onPress={() => handleToggleLab(diag.name)}
                     />
-                  );
-                })}
-              </View>
-              {catalogError ? (
+                  ))}
+                </View>
+              )}              {catalogError ? (
                 <ThemedText variant="caption" color={theme.colors.textMuted}>
-                  Clinic-specific tests could not be loaded: {catalogError}
+                  The clinic's tests could not be loaded: {catalogError}
                 </ThemedText>
               ) : null}
             </Card>
@@ -1982,19 +1901,29 @@ export default function ConsultationsScreen() {
 
                   {isYakapEligible ? (
                     <View style={styles.stack}>
-                      <ThemedText variant="small" color={theme.colors.textMuted}>
-                        Yakap GAMOT core formulary
-                      </ThemedText>
-                      <View style={styles.chipsRow}>
-                        {YAKAP_GAMOT_QUICK_PICKS.map((item) => (
-                          <ToggleChip
-                            key={item.drugCode}
-                            label={item.label}
-                            selected={newRxDrugCode === item.drugCode}
-                            onPress={() => handleSelectGamotQuickPick(item)}
-                          />
-                        ))}
-                      </View>
+                      <Input
+                        leftIcon="search"
+                        label="PhilHealth medicine"
+                        placeholder="Search the PhilHealth medicine catalog (e.g. amlodipine)"
+                        value={rxCatalogQuery}
+                        onChangeText={setRxCatalogQuery}
+                      />
+                      {rxCatalogSearch.error ? (
+                        <ThemedText variant="caption" color={theme.colors.warningText}>
+                          The PhilHealth catalog is unreachable. You can still type the medicine below.
+                        </ThemedText>
+                      ) : null}
+                      {rxCatalogSearch.results.length > 0 ? (
+                        <View style={styles.icdDropdown}>
+                          {rxCatalogSearch.results.map((item) => (
+                            <Pressable key={item.code} style={styles.icdItem} onPress={() => handleSelectPhilHealthMedicine(item)}>
+                              <ThemedText variant="small" style={styles.flex}>
+                                {item.description}
+                              </ThemedText>
+                            </Pressable>
+                          ))}
+                        </View>
+                      ) : null}
                       {newRxDrugCode ? (
                         <ThemedText variant="caption" color={theme.colors.textMuted}>
                           PhilHealth drug code: <ThemedText variant="code">{newRxDrugCode}</ThemedText>
@@ -2002,7 +1931,6 @@ export default function ConsultationsScreen() {
                       ) : null}
                     </View>
                   ) : null}
-
                   {medicineCatalog.length > 0 ? (
                     <View style={styles.stack}>
                       <ThemedText variant="small" color={theme.colors.textMuted}>

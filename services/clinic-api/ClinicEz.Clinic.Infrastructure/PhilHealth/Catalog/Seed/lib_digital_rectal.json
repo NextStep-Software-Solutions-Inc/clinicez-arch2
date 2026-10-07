@@ -1,0 +1,13 @@
+{
+ "library": "lib_digital_rectal",
+ "kitVersion": "1.1",
+ "items": [
+  {"code":"1","description":"Essentially normal","isActive":true},
+  {"code":"2","description":"Enlarge Prospate","isActive":true},
+  {"code":"3","description":"Mass","isActive":true},
+  {"code":"4","description":"Hemorrhoids","isActive":true},
+  {"code":"5","description":"Pus","isActive":true},
+  {"code":"0","description":"Not Applicable","isActive":true},
+  {"code":"99","description":"Others","isActive":true}
+ ]
+}

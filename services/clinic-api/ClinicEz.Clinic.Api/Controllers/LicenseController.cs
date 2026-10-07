@@ -118,8 +118,13 @@ public sealed class LicenseController : ControllerBase
 
             if (settings == null)
             {
-                settings = await _settingsRepo.Query(s => s.ClinicId == targetClinicId)
-                    .FirstOrDefaultAsync(ct) ?? await _settingsRepo.Query().FirstOrDefaultAsync(ct);
+                // Single-clinic / on-prem install with no workspace hint: only resolve when exactly one clinic is activated.
+                // (Never return an arbitrary clinic's license on a multi-clinic server.)
+                var candidates = await _settingsRepo.IgnoreQueryFilters()
+                    .Where(s => !s.IsDeleted)
+                    .Take(2)
+                    .ToListAsync(ct);
+                settings = candidates.Count == 1 ? candidates[0] : null;
             }
         }
 

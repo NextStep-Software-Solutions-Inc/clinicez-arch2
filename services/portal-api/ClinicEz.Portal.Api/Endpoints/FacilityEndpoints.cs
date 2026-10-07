@@ -320,7 +320,8 @@ public class FacilityEndpoints : IEndpoint
                 Limits = limits,
                 EnabledFeatures = features,
                 IssuedAtUtc = DateTime.UtcNow,
-                ExpiresAtUtc = expiresAt
+                ExpiresAtUtc = expiresAt,
+                OwnerEmail = string.IsNullOrWhiteSpace(facility.ContactEmail) ? null : facility.ContactEmail.Trim()
             };
 
             var licenseToken = licenseSigner.SignLicense(payload);
@@ -409,7 +410,8 @@ public class FacilityEndpoints : IEndpoint
                     Limits = limits,
                     EnabledFeatures = features,
                     IssuedAtUtc = DateTime.UtcNow,
-                    ExpiresAtUtc = expiresAt
+                    ExpiresAtUtc = expiresAt,
+                    OwnerEmail = string.IsNullOrWhiteSpace(facility.ContactEmail) ? null : facility.ContactEmail.Trim()
                 };
 
                 facility.LicenseToken = licenseSigner.SignLicense(payload);

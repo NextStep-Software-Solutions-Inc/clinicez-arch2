@@ -1,0 +1,16 @@
+{
+ "library": "lib_heart",
+ "kitVersion": "1.1",
+ "items": [
+  {"code":"1","description":"Adynamic precordium","isActive":false},
+  {"code":"2","description":"Normal rate regular rhythm","isActive":false},
+  {"code":"3","description":"Heaves/trills","isActive":true},
+  {"code":"4","description":"Murmurs","isActive":true},
+  {"code":"5","description":"Essentially normal","isActive":true},
+  {"code":"6","description":"Displaced apex beat","isActive":true},
+  {"code":"7","description":"Irregular rhythm","isActive":true},
+  {"code":"8","description":"Muffled heart sounds","isActive":true},
+  {"code":"9","description":"Pericardial bulge","isActive":true},
+  {"code":"99","description":"Others","isActive":true}
+ ]
+}

@@ -24,10 +24,6 @@ public interface IPhilHealthProxyClient
         string pin,
         CancellationToken ct = default);
 
-    Task<ApiResponse<IReadOnlyList<YakapCatalogItemDto>>> GetCatalogAsync(
-        string catalogType,
-        CancellationToken ct = default);
-
     Task<ApiResponse<SoapSimulationReportDto>> RunSoapSimulationAsync(
         RunSoapSimulationProxyRequest request,
         CancellationToken ct = default);

@@ -1,4 +1,6 @@
 using System;
+using ClinicEz.Laboratory.Api.Authorization;
+using ClinicEz.Laboratory.Domain.Constants;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Laboratory.Application.Common.Interfaces;
@@ -23,6 +25,7 @@ public sealed class AnalyzersController : ControllerBase
     }
 
     [HttpPost("feed")]
+    [HasPermission(LabPermissions.AnalyzersFeed)]
     public async Task<ActionResult<ApiResponse<IngestAnalyzerFeedResultDto>>> IngestFeed(
         [FromBody] IngestFeedRequest request,
         CancellationToken ct = default)
@@ -38,6 +41,7 @@ public sealed class AnalyzersController : ControllerBase
     }
 
     [HttpPost("simulate")]
+    [HasPermission(LabPermissions.AnalyzersFeed)]
     public ActionResult<ApiResponse<SimulateAnalyzerResponse>> SimulatePayload(
         [FromBody] SimulateAnalyzerRequest request)
     {

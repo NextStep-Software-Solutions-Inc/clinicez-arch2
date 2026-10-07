@@ -24,6 +24,16 @@ public record FacilityLicensePayload
     [JsonPropertyName("facilityType")]
     public string FacilityType { get; init; } = string.Empty; // "Clinic", "Laboratory", "Pharmacy"
 
+    /// <summary>
+    /// Facility owner email (signed). Lets an offline/LAN install bootstrap its first administrator
+    /// from the license key alone, without the FacilityCreated event or any cloud call.
+    /// </summary>
+    [JsonPropertyName("ownerEmail")]
+    public string? OwnerEmail { get; init; }
+
+    [JsonPropertyName("ownerName")]
+    public string? OwnerName { get; init; }
+
     [JsonPropertyName("planTier")]
     public string PlanTier { get; init; } = "Community"; // "Community", "Standard", "Enterprise"
 

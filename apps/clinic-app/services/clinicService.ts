@@ -1,5 +1,6 @@
-import { clinicApiClient, pharmacyApiClient, CLINIC_BASE_URL, API_PREFIX } from './apiClient';
-import { SyncStatus, joinApiUrl } from '@shared/safe';
+import type { AxiosRequestConfig } from 'axios';
+import { clinicApiClient, clinicApiUrl } from './apiClient';
+import { SyncStatus } from '@shared/safe';
 
 export type QueuePriority = 'Routine' | 'Urgent' | 'Emergency';
 export type QueueStatus = 'Waiting' | 'Triaged' | 'InConsultation' | 'Completed' | 'Cancelled' | 'NoShow';
@@ -208,7 +209,6 @@ export interface AppointmentItem {
 export interface Icd10Code {
   code: string;
   description: string;
-  category: string;
 }
 
 export interface ClinicServiceItem {
@@ -947,16 +947,21 @@ export const clinicService = {
     return clinicApiClient.get<PrescriptionSlipData>(`/prescriptions/${consultationId}/slip`);
   },
 
+  /** Drugstores this clinic has recorded external dispenses with, most used first. */
+  async getRecentExternalPharmacies() {
+    return clinicApiClient.get<string[]>('/prescriptions/external-pharmacies');
+  },
+
   async recordExternalDispense(consultationId: string, payload: RecordExternalDispensePayload) {
     return clinicApiClient.post<PrescriptionSlipData>(`/prescriptions/${consultationId}/record-external-dispense`, payload);
   },
 
   getPrescriptionSlipPdfUrl(consultationId: string) {
-    return joinApiUrl(CLINIC_BASE_URL, `/prescriptions/${consultationId}/slip-pdf`);
+    return clinicApiUrl(`/prescriptions/${consultationId}/slip-pdf`);
   },
 
   getPrescriptionSlipPdfByNumberUrl(prescriptionNumber: string) {
-    return joinApiUrl(CLINIC_BASE_URL, `/prescriptions/by-number/${encodeURIComponent(prescriptionNumber)}/slip-pdf`);
+    return clinicApiUrl(`/prescriptions/by-number/${encodeURIComponent(prescriptionNumber)}/slip-pdf`);
   },
 
   // ICD-10 Search
@@ -1112,11 +1117,11 @@ export const clinicService = {
   },
 
   getLabReportPdfUrl(orderId: string) {
-    return joinApiUrl(CLINIC_BASE_URL, `/lab-orders/${orderId}/report-pdf`);
+    return clinicApiUrl(`/lab-orders/${orderId}/report-pdf`);
   },
 
   getLabOrderSlipPdfUrl(orderId: string) {
-    return joinApiUrl(CLINIC_BASE_URL, `/lab-orders/${orderId}/slip-pdf`);
+    return clinicApiUrl(`/lab-orders/${orderId}/slip-pdf`);
   },
 
   // Clinical Decision Support (CDS) Safety Engine
@@ -1193,6 +1198,16 @@ export const clinicService = {
     return clinicApiClient.delete(`/staff/${id}`);
   },
 
+  /** Sets a temporary password; the staff member must change it at next sign-in. Requires `staff:manage`. */
+  async setStaffTemporaryPassword(id: string, temporaryPassword: string) {
+    return clinicApiClient.post(`/staff/${id}/credentials`, { temporaryPassword });
+  },
+
+  /** Signs the staff member out of every device. Requires `staff:manage`. */
+  async revokeStaffSessions(id: string) {
+    return clinicApiClient.post(`/staff/${id}/revoke-sessions`, {});
+  },
+
   async getLicenseStatus() {
     return clinicApiClient.get<FacilityLicenseStatus>('/clinic/license');
   },
@@ -1220,8 +1235,8 @@ export const clinicService = {
     return clinicApiClient.get<ClinicPatient>(`/patients/${id}`);
   },
 
-  async registerPatient(payload: RegisterPatientPayload) {
-    return clinicApiClient.post<ClinicPatient>('/patients', payload);
+  async registerPatient(payload: RegisterPatientPayload, config?: AxiosRequestConfig) {
+    return clinicApiClient.post<ClinicPatient>('/patients', payload, config);
   },
 
   async bulkRegisterPatients(patients: RegisterPatientPayload[]) {
@@ -1291,7 +1306,7 @@ export const clinicService = {
   },
 
   getMedicalCertificatePdfUrl(id: string) {
-    return joinApiUrl(CLINIC_BASE_URL, `/documents/medical-certificates/${id}/pdf`);
+    return clinicApiUrl(`/documents/medical-certificates/${id}/pdf`);
   },
 
   async issueReferralLetter(payload: {
@@ -1322,7 +1337,7 @@ export const clinicService = {
   },
 
   getReferralLetterPdfUrl(id: string) {
-    return joinApiUrl(CLINIC_BASE_URL, `/documents/referrals/${id}/pdf`);
+    return clinicApiUrl(`/documents/referrals/${id}/pdf`);
   },
 
   async verifyDocument(securityDigestOrNumber: string) {
@@ -1343,8 +1358,8 @@ export const clinicService = {
     notes?: string;
     uploadedByStaffId?: string;
     uploadedByStaffName?: string;
-  }) {
-    return clinicApiClient.post<ClinicRecordAttachmentRecord>('/records/attachments', payload);
+  }, config?: AxiosRequestConfig) {
+    return clinicApiClient.post<ClinicRecordAttachmentRecord>('/records/attachments', payload, config);
   },
 
   async getPatientRecordAttachments(patientId: string, recordType?: string) {
@@ -1360,7 +1375,7 @@ export const clinicService = {
   },
 
   getRecordAttachmentDownloadUrl(attachmentId: string) {
-    return joinApiUrl(CLINIC_BASE_URL, `/records/attachments/${attachmentId}/download`);
+    return clinicApiUrl(`/records/attachments/${attachmentId}/download`);
   },
 
   async uploadRecordAttachmentFile(formData: FormData) {
@@ -1450,10 +1465,6 @@ export const clinicService = {
     return clinicApiClient.post<YakapMasterlistAssignment[]>('/yakap/masterlist/extract', payload);
   },
 
-  async getPhilHealthCatalog(catalogType: string) {
-    return clinicApiClient.get<PhilHealthCatalogItem[]>(`/yakap/catalogs/${encodeURIComponent(catalogType)}`);
-  },
-
   // PhilHealth SOAP Sandbox & Simulation
   async runSoapSimulation(payload?: { accreditationNumber?: string; cipherKey?: string }) {
     return clinicApiClient.post<SoapSimulationReport>('/yakap/simulation/run-e2e', payload || {});
@@ -1494,10 +1505,10 @@ export const clinicService = {
   },
 
 
-  // PhilHealth GAMOT & UPSC
+  // PhilHealth GAMOT & UPSC. Reached through the clinic server, which talks to the pharmacy with its own service key.
   async getGamotLedger(pin: string, year?: string) {
     const qs = year ? `?year=${encodeURIComponent(year)}` : '';
-    return pharmacyApiClient.get<GamotBeneficiaryLedger>(`/gamot/ledger/${encodeURIComponent(pin)}${qs}`);
+    return clinicApiClient.get<GamotBeneficiaryLedger>(`/yakap/gamot/ledger/${encodeURIComponent(pin)}${qs}`);
   },
 
   async getGamotFormulary(search?: string, category?: string) {
@@ -1505,23 +1516,23 @@ export const clinicService = {
     if (search) params.append('search', search);
     if (category) params.append('category', category);
     const qs = params.toString();
-    return pharmacyApiClient.get<GamotFormularyItem[]>(`/gamot/formulary${qs ? `?${qs}` : ''}`);
+    return clinicApiClient.get<GamotFormularyItem[]>(`/yakap/gamot/formulary${qs ? `?${qs}` : ''}`);
   },
 
   async generateUpsc(payload: GenerateUpscPayload) {
-    return pharmacyApiClient.post<UpscGenerateResult>('/gamot/upsc/generate', payload);
+    return clinicApiClient.post<UpscGenerateResult>('/yakap/gamot/upsc/generate', payload);
   },
 
   async validateUpsc(payload: ValidateUpscPayload) {
-    return pharmacyApiClient.post<UpscVerifyResult>('/gamot/upsc/validate', payload);
+    return clinicApiClient.post<UpscVerifyResult>('/yakap/gamot/upsc/validate', payload);
   },
 
   async dispenseGamot(payload: DispenseGamotPayload) {
-    return pharmacyApiClient.post<any>('/gamot/dispense', payload);
+    return clinicApiClient.post<any>('/yakap/gamot/dispense', payload);
   },
 
   async reverseGamotTransaction(id: string, payload: ReverseGamotPayload) {
-    return pharmacyApiClient.post<GamotLedgerTransaction>(`/gamot/transactions/${id}/reverse`, payload);
+    return clinicApiClient.post<GamotLedgerTransaction>(`/yakap/gamot/transactions/${id}/reverse`, payload);
   }
 };
 
@@ -1736,12 +1747,6 @@ export interface YakapMasterlistAssignment {
   packageType: string;
   registrationDate: string;
   effectivityYear: string;
-}
-
-export interface PhilHealthCatalogItem {
-  code: string;
-  description: string;
-  category?: string;
 }
 
 export interface PhilHealthConditionEntry {

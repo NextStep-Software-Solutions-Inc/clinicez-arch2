@@ -1,0 +1,25 @@
+{
+ "library": "lib_heent",
+ "kitVersion": "1.1",
+ "items": [
+  {"code":"1","description":"Anicteric sclerae","isActive":false},
+  {"code":"10","description":"Exudates","isActive":false},
+  {"code":"11","description":"Essentially Normal","isActive":true},
+  {"code":"12","description":"Abnormal pupillary reaction","isActive":true},
+  {"code":"13","description":"Cervical lympadenopathy","isActive":true},
+  {"code":"14","description":"Dry mucous membrane","isActive":true},
+  {"code":"15","description":"Icteric sclerae","isActive":true},
+  {"code":"16","description":"Pale conjunctivae","isActive":true},
+  {"code":"17","description":"Sunken eyeballs","isActive":true},
+  {"code":"18","description":"Sunken fontanelle","isActive":true},
+  {"code":"2","description":"Intact tympanic mebrane","isActive":false},
+  {"code":"3","description":"Pupils brisky reactive to light","isActive":false},
+  {"code":"4","description":"Tonsillopharyngeal congestion","isActive":false},
+  {"code":"5","description":"Hypertropic tonsils","isActive":false},
+  {"code":"6","description":"Alar flaring","isActive":false},
+  {"code":"7","description":"Nasal discharge","isActive":false},
+  {"code":"8","description":"Aural discharge","isActive":false},
+  {"code":"9","description":"Palpable mass","isActive":false},
+  {"code":"99","description":"Others","isActive":true}
+ ]
+}

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
 import {
   buildServiceHostRegex,
   extractTenantFromHostname,
@@ -8,6 +8,11 @@ import {
   parseServiceSubdomains,
   RESERVED_SUBDOMAINS,
   ROOT_HOSTNAMES,
+  resolveTenantContext,
+  setActiveClinicId,
+  setActiveTenantContext,
+  setTenantStorage,
+  getStoredTenantSlug,
 } from './tenant';
 
 describe('isRootHostname', () => {
@@ -155,5 +160,53 @@ describe('configurable service subdomains', () => {
     expect(match?.[1]).toBe('facility1');
     expect(match?.[2]).toBe('medical');
     expect(match?.[3]).toBe('acmehealth.com');
+  });
+});
+
+describe('native-safe workspace storage (no window.location, no localStorage)', () => {
+  const globals = globalThis as unknown as { window?: unknown };
+  const originalWindow = globals.window;
+
+  afterEach(() => {
+    setTenantStorage(null);
+    globals.window = originalWindow;
+  });
+
+  function memoryStorage() {
+    const map = new Map<string, string>();
+    return {
+      getItem: (k: string) => map.get(k) ?? null,
+      setItem: (k: string, v: string) => void map.set(k, v),
+      removeItem: (k: string) => void map.delete(k),
+    };
+  }
+
+  it('does not throw on React Native where window exists but window.location does not', () => {
+    globals.window = {};
+    setTenantStorage(memoryStorage());
+
+    expect(() => resolveTenantContext()).not.toThrow();
+    expect(resolveTenantContext()).toMatchObject({ tenantSlug: null, source: 'none' });
+  });
+
+  it('remembers and restores the workspace through the registered storage', () => {
+    globals.window = {};
+    setTenantStorage(memoryStorage());
+
+    setActiveTenantContext('metro-health');
+    setActiveClinicId('11111111-aaaa-aaaa-aaaa-111111111111', 'metro-health');
+
+    expect(getStoredTenantSlug()).toBe('metro-health');
+    expect(resolveTenantContext()).toMatchObject({
+      tenantSlug: 'metro-health',
+      clinicId: '11111111-aaaa-aaaa-aaaa-111111111111',
+      source: 'storage',
+    });
+  });
+
+  it('returns no workspace when nothing is registered and there is no browser', () => {
+    globals.window = undefined;
+    setTenantStorage(null);
+    expect(resolveTenantContext()).toEqual({ tenantSlug: null, clinicId: null, source: 'none', isRoot: false });
   });
 });

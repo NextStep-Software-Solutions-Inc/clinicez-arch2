@@ -1,0 +1,27 @@
+{
+ "library": "lib_diagnostic",
+ "kitVersion": "1.1",
+ "items": [
+  {"code":"1","description":"Complete Blood Count","isActive":true},
+  {"code":"10","description":"Blood Typing","isActive":false},
+  {"code":"11","description":"Peak Expiratory Flow Meter Testing","isActive":false},
+  {"code":"12","description":"Blood Glucose Monitoring","isActive":false},
+  {"code":"13","description":"Paps Smear","isActive":true},
+  {"code":"14","description":"Oral Glucose Tolerance Test","isActive":true},
+  {"code":"2","description":"Urinalysis","isActive":true},
+  {"code":"3","description":"Fecalysis","isActive":true},
+  {"code":"4","description":"Chest X-Ray","isActive":true},
+  {"code":"5","description":"Sputum Microscopy","isActive":true},
+  {"code":"6","description":"Lipid Profile","isActive":true},
+  {"code":"7","description":"Fasting Blood Sugar","isActive":true},
+  {"code":"8","description":"Creatinine","isActive":true},
+  {"code":"9","description":"Electrocardiogram (ECG)","isActive":true},
+  {"code":"0","description":"Not Applicable","isActive":true},
+  {"code":"15","description":"Fecal Occult Blood","isActive":true},
+  {"code":"16","description":"Platelet","isActive":false},
+  {"code":"17","description":"PPD Test (Tuberculosis)","isActive":true},
+  {"code":"18","description":"HbA1c","isActive":true},
+  {"code":"19","description":"Random Blood Sugar","isActive":true},
+  {"code":"99","description":"Others","isActive":true}
+ ]
+}

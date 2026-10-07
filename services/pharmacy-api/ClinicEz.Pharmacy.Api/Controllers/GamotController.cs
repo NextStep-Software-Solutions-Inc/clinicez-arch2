@@ -2,11 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Pharmacy.Api.Authorization;
 using ClinicEz.Pharmacy.Application.Features.Gamot.Commands;
 using ClinicEz.Pharmacy.Application.Features.Gamot.DTOs;
 using ClinicEz.Pharmacy.Application.Features.Gamot.Queries;
 using ClinicEz.Pharmacy.Application.Features.Prescriptions.Commands;
 using ClinicEz.Pharmacy.Application.Features.Prescriptions.DTOs;
+using ClinicEz.Pharmacy.Domain.Constants;
 using ClinicEz.Shared.Common;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -29,6 +31,7 @@ public sealed class GamotController : ControllerBase
     /// Default allocation is PHP 20,000.00 per benefit year per PhilHealth expanded GAMOT outpatient benefit policy.
     /// </summary>
     [HttpGet("ledger/{pin}")]
+    [HasPermission(PharmacyPermissions.GamotRead)]
     public async Task<ActionResult<ApiResponse<GamotBeneficiaryLedgerDto>>> GetLedgerByPin(
         [FromRoute] string pin,
         [FromQuery] string? year,
@@ -42,6 +45,7 @@ public sealed class GamotController : ControllerBase
     /// Searches and retrieves medications from the PhilHealth GAMOT formulary catalog.
     /// </summary>
     [HttpGet("formulary")]
+    [HasPermission(PharmacyPermissions.GamotRead)]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<GamotFormularyDto>>>> GetFormulary(
         [FromQuery] string? search,
         [FromQuery] string? category,
@@ -55,6 +59,7 @@ public sealed class GamotController : ControllerBase
     /// Generates a PhilHealth Unique Prescription Security Code (UPSC) for a prescription item.
     /// </summary>
     [HttpPost("upsc/generate")]
+    [HasPermission(PharmacyPermissions.GamotGenerate)]
     public async Task<ActionResult<ApiResponse<UpscGenerateResultDto>>> GenerateUpsc(
         [FromBody] GenerateUpscApiRequest request,
         CancellationToken ct = default)
@@ -72,6 +77,7 @@ public sealed class GamotController : ControllerBase
     /// Verifies the authenticity, checksum, and one-time use status of a PhilHealth UPSC.
     /// </summary>
     [HttpPost("upsc/validate")]
+    [HasPermission(PharmacyPermissions.GamotValidate)]
     public async Task<ActionResult<ApiResponse<UpscVerifyResultDto>>> ValidateUpsc(
         [FromBody] ValidateUpscApiRequest request,
         CancellationToken ct = default)
@@ -94,6 +100,7 @@ public sealed class GamotController : ControllerBase
     /// Dispenses a PhilHealth GAMOT covered prescription order with FEFO inventory deduction and ledger debit.
     /// </summary>
     [HttpPost("dispense")]
+    [HasPermission(PharmacyPermissions.GamotDispense)]
     public async Task<ActionResult<ApiResponse<PrescriptionOrderDto>>> DispenseGamot(
         [FromBody] DispenseGamotApiRequest request,
         CancellationToken ct = default)
@@ -115,6 +122,7 @@ public sealed class GamotController : ControllerBase
     /// Reverses a PhilHealth GAMOT transaction and restores the beneficiary's benefit balance.
     /// </summary>
     [HttpPost("transactions/{id:guid}/reverse")]
+    [HasPermission(PharmacyPermissions.GamotReverse)]
     public async Task<ActionResult<ApiResponse<GamotLedgerTransactionDto>>> ReverseTransaction(
         [FromRoute] Guid id,
         [FromBody] ReverseGamotTransactionApiRequest request,

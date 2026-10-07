@@ -1,4 +1,6 @@
 using System;
+using ClinicEz.Laboratory.Api.Authorization;
+using ClinicEz.Laboratory.Domain.Constants;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -23,6 +25,7 @@ public sealed class ResultsController : ControllerBase
     }
 
     [HttpGet("catalog")]
+    [HasPermission(LabPermissions.ResultsRead)]
     public async Task<ActionResult<ApiResponse<List<AnalyteCatalogItemDto>>>> GetCatalog(CancellationToken ct = default)
     {
         var result = await _sender.Send(new GetAnalyteCatalogQuery(), ct);
@@ -30,6 +33,7 @@ public sealed class ResultsController : ControllerBase
     }
 
     [HttpPost("{requisitionId:guid}")]
+    [HasPermission(LabPermissions.ResultsWrite)]
     public async Task<ActionResult<ApiResponse<LabRequisitionDto>>> RecordResults(
         [FromRoute] Guid requisitionId,
         [FromBody] RecordResultsRequest request,

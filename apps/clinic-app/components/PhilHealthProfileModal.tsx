@@ -3,6 +3,8 @@ import { View, StyleSheet, Pressable } from 'react-native';
 import { theme } from '@constants/theme';
 import { Modal, Input, Button, Badge, Icon, ErrorState, SkeletonList, ThemedText } from '@ui';
 import { Alert } from '@utils/feedback';
+import { usePhilHealthCatalog } from '@utils/usePhilHealthCatalog';
+import type { PhilHealthLibraryName } from '@services/philHealthCatalogService';
 import {
   clinicService,
   PhilHealthPatientProfile,
@@ -112,49 +114,183 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-const CONDITIONS = [
-  { code: '011', desc: 'Hypertension' },
-  { code: '006', desc: 'Diabetes Mellitus' },
-  { code: '002', desc: 'Bronchial Asthma' },
-  { code: '001', desc: 'Allergies' },
-  { code: '007', desc: 'COPD / Emphysema' },
-  { code: '004', desc: 'Stroke / CVD' },
-  { code: '005', desc: 'Coronary Artery Disease' },
-  { code: '003', desc: 'Cancer / Malignancy' },
-  { code: '010', desc: 'Dyslipidemia' },
-  { code: '015', desc: 'Tuberculosis' },
+/** UI field on the profile -> the PhilHealth library that defines the allowed findings for that organ system. */
+const ORGAN_SYSTEMS: { key: string; label: string; library: PhilHealthLibraryName }[] = [
+  { key: 'skinId', label: 'Skin / extremities', library: 'lib_skin_extremities' },
+  { key: 'heentId', label: 'HEENT', library: 'lib_heent' },
+  { key: 'chestId', label: 'Chest / lungs', library: 'lib_chest' },
+  { key: 'heartId', label: 'Heart', library: 'lib_heart' },
+  { key: 'abdomenId', label: 'Abdomen', library: 'lib_abdomen' },
+  { key: 'neuroId', label: 'Neurological', library: 'lib_neuro' },
+  { key: 'guId', label: 'Genitourinary', library: 'lib_genitourinary' },
+  { key: 'rectalId', label: 'Rectal', library: 'lib_digital_rectal' },
 ];
 
-const FAMILY_CONDITIONS = [
-  { code: '011', desc: 'Hypertension' },
-  { code: '006', desc: 'Diabetes Mellitus' },
-  { code: '003', desc: 'Cancer' },
-  { code: '004', desc: 'Stroke' },
-  { code: '005', desc: 'Heart Disease' },
-  { code: '002', desc: 'Asthma' },
-];
+/** Shows a catalog library's load state in the same place its choices would appear. */
+function CatalogStatus({ loading, error, onRetry }: { loading: boolean; error: { message: string } | null; onRetry: () => void }) {
+  if (loading) return <SkeletonList rows={1} />;
+  if (error) return <ErrorState compact title="PhilHealth catalog unavailable" message={error.message} onRetry={onRetry} />;
+  return null;
+}
 
-const ORGAN_SYSTEMS = [
-  { key: 'skinId', label: 'Skin' },
-  { key: 'heentId', label: 'HEENT' },
-  { key: 'chestId', label: 'Chest / Lungs' },
-  { key: 'heartId', label: 'Heart' },
-  { key: 'abdomenId', label: 'Abdomen' },
-  { key: 'neuroId', label: 'Neurological' },
-  { key: 'guId', label: 'Genitourinary' },
-  { key: 'rectalId', label: 'Rectal' },
-];
+/** One organ system: choose the finding from the library (single choice, as the PhilHealth form requires). */
+function OrganSystemRow({
+  label,
+  library,
+  value,
+  onChange,
+}: {
+  label: string;
+  library: PhilHealthLibraryName;
+  value?: string;
+  onChange: (code: string) => void;
+}) {
+  const { items, loading, error, reload } = usePhilHealthCatalog(library);
+  return (
+    <View style={styles.organRow}>
+      <ThemedText variant="bodyBold" color={theme.colors.textSecondary}>
+        {label}
+      </ThemedText>
+      <CatalogStatus loading={loading} error={error} onRetry={reload} />
+      <View style={styles.conditionsWrap}>
+        {items.map((item) => (
+          <Chip
+            key={item.code}
+            label={item.description}
+            tone={/normal/i.test(item.description) ? 'success' : 'warning'}
+            active={value === item.code}
+            onPress={() => onChange(item.code)}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
 
-const NCD_QUESTIONS = [
-  { id: 'ncd_qid1', q: 'Q1: Does the patient have high blood pressure / hypertension?' },
-  { id: 'ncd_qid2', q: 'Q2: Does the patient have diabetes mellitus?' },
-  { id: 'ncd_qid3', q: 'Q3: Any family history of premature cardiovascular disease?' },
-  { id: 'ncd_qid4', q: 'Q4: Does the patient currently smoke tobacco products?' },
-  { id: 'ncd_qid6', q: 'Q6: Engages in at least 150 minutes of physical activity weekly?' },
-  { id: 'ncd_qid7', q: 'Q7: Consumes fruits and vegetables daily?' },
-  { id: 'ncd_qid8', q: 'Q8: Frequently adds high-sodium condiments or salty snacks?' },
-];
+/** Multi-select chips over lib_mdiseases (personal and family history use the same disease list). */
+function DiseaseChips({
+  idPrefix,
+  isSelected,
+  onToggle,
+}: {
+  idPrefix: string;
+  isSelected: (code: string) => boolean;
+  onToggle: (code: string, description: string) => void;
+}) {
+  const { items, loading, error, reload } = usePhilHealthCatalog('lib_mdiseases');
+  // "None" is recorded by leaving the list empty; the transmittal adds the catalog's own "None" entry.
+  const diseases = items.filter((item) => item.description.toLowerCase() !== 'none');
+  return (
+    <>
+      <CatalogStatus loading={loading} error={error} onRetry={reload} />
+      <View style={styles.conditionsWrap}>
+        {diseases.map((item) => (
+          <Chip
+            key={`${idPrefix}-${item.code}`}
+            label={item.description}
+            marker
+            tone="success"
+            active={isSelected(item.code)}
+            onPress={() => onToggle(item.code, item.description)}
+          />
+        ))}
+      </View>
+    </>
+  );
+}
 
+function ImmunizationChips({
+  title,
+  library,
+  selected,
+  onToggle,
+}: {
+  title: string;
+  library: PhilHealthLibraryName;
+  selected: string[];
+  onToggle: (code: string) => void;
+}) {
+  const { items, loading, error, reload } = usePhilHealthCatalog(library);
+  const vaccines = items.filter((item) => item.description.toLowerCase() !== 'none');
+  return (
+    <View style={styles.subSection}>
+      <ThemedText variant="bodyBold" color={theme.colors.textSecondary} style={styles.subHeading}>
+        {title}
+      </ThemedText>
+      <CatalogStatus loading={loading} error={error} onRetry={reload} />
+      <View style={styles.conditionsWrap}>
+        {vaccines.map((item) => (
+          <Chip
+            key={item.code}
+            label={item.description}
+            marker
+            tone="success"
+            active={selected.includes(item.code)}
+            onPress={() => onToggle(item.code)}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+/** PhilHealth answer sets: Q5 also allows "not applicable", Q17 is the A-E risk level, the rest are yes/no. */
+const NCD_RISK_LEVELS = ['A', 'B', 'C', 'D', 'E'];
+const ncdAnswerOptions = (code: string): { value: string; label: string }[] => {
+  if (code === 'Q17') return NCD_RISK_LEVELS.map((level) => ({ value: level, label: level }));
+  if (code === 'Q5') {
+    return [
+      { value: 'Y', label: 'Yes' },
+      { value: 'N', label: 'No' },
+      { value: 'X', label: 'Not applicable' },
+    ];
+  }
+  return [
+    { value: 'Y', label: 'Yes' },
+    { value: 'N', label: 'No' },
+  ];
+};
+
+/** Official PhilPEN questionnaire (lib_ncdq Q1-Q24), asked exactly as PhilHealth words it. */
+function NcdQuestionnaire({
+  answers,
+  onAnswer,
+}: {
+  answers: Record<string, string>;
+  onAnswer: (key: string, value: string) => void;
+}) {
+  const { items, loading, error, reload } = usePhilHealthCatalog('lib_ncdq');
+  const questions = items
+    .filter((item) => /^Q\d+$/.test(item.code))
+    .sort((a, b) => Number(a.code.slice(1)) - Number(b.code.slice(1)));
+  return (
+    <>
+      <CatalogStatus loading={loading} error={error} onRetry={reload} />
+      {questions.map((item) => {
+        const key = `ncd_qid${item.code.slice(1)}`;
+        const current = answers[key];
+        return (
+          <View key={item.code} style={styles.ncdRow}>
+            <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.ncdText}>
+              {`${item.code}: ${item.description}`}
+            </ThemedText>
+            <View style={styles.chipRow}>
+              {ncdAnswerOptions(item.code).map((option) => (
+                <Chip
+                  key={option.value}
+                  label={option.label}
+                  tone={option.value === 'Y' ? 'warning' : option.value === 'N' ? 'success' : 'primary'}
+                  active={current === option.value}
+                  onPress={() => onAnswer(key, option.value)}
+                />
+              ))}
+            </View>
+          </View>
+        );
+      })}
+    </>
+  );
+}
 export default function PhilHealthProfileModal({
   visible,
   onClose,
@@ -271,31 +407,6 @@ export default function PhilHealthProfileModal({
     const updated = exists ? currentList.filter((c) => c !== code) : [...currentList, code];
     setProfile({ ...profile, [key]: updated });
   };
-
-  const renderImmunizations = (
-    title: string,
-    category: 'child' | 'youngWoman' | 'elderly',
-    codes: string[],
-    selected: string[]
-  ) => (
-    <View style={styles.subSection}>
-      <ThemedText variant="bodyBold" color={theme.colors.textSecondary} style={styles.subHeading}>
-        {title}
-      </ThemedText>
-      <View style={styles.conditionsWrap}>
-        {codes.map((v) => (
-          <Chip
-            key={v}
-            label={v}
-            marker
-            tone="success"
-            active={selected.includes(v)}
-            onPress={() => toggleImmunization(category, v)}
-          />
-        ))}
-      </View>
-    </View>
-  );
 
   const renderBody = () => {
     if (loading) {
@@ -543,31 +654,15 @@ export default function PhilHealthProfileModal({
 
             <SectionTitle spaced>Organ systems examination</SectionTitle>
             <View style={styles.organsGrid}>
-              {ORGAN_SYSTEMS.map((item) => {
-                const isNorm = (profile as any)[item.key] === '1';
-                return (
-                  <View key={item.key} style={styles.organRow}>
-                    <ThemedText variant="bodyBold" color={theme.colors.textSecondary}>
-                      {item.label}
-                    </ThemedText>
-                    <View style={styles.chipRow}>
-                      <Chip
-                        label="Normal"
-                        tone="success"
-                        active={isNorm}
-                        onPress={() => setProfile({ ...profile, [item.key]: '1' })}
-                      />
-                      <Chip
-                        label="Findings"
-                        tone="warning"
-                        active={!isNorm}
-                        onPress={() => setProfile({ ...profile, [item.key]: '2' })}
-                      />
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
+              {ORGAN_SYSTEMS.map((item) => (
+                <OrganSystemRow
+                  key={item.key}
+                  label={item.label}
+                  library={item.library}
+                  value={(profile as any)[item.key]}
+                  onChange={(code) => setProfile({ ...profile, [item.key]: code })}
+                />
+              ))}            </View>
           </View>
         )}
 
@@ -576,34 +671,18 @@ export default function PhilHealthProfileModal({
           <View>
             <SectionTitle>Past medical history (personal)</SectionTitle>
             <Helper>Select documented non-communicable and chronic diseases for the patient.</Helper>
-            <View style={styles.conditionsWrap}>
-              {CONDITIONS.map((c) => (
-                <Chip
-                  key={c.code}
-                  label={c.desc}
-                  marker
-                  tone="success"
-                  active={profile.medicalHistories.some((m) => m.code === c.code)}
-                  onPress={() => toggleCondition(c.code, c.desc)}
-                />
-              ))}
-            </View>
-
+            <DiseaseChips
+              idPrefix="med"
+              isSelected={(code) => profile.medicalHistories.some((m) => m.code === code)}
+              onToggle={toggleCondition}
+            />
             <SectionTitle spaced>Family medical history</SectionTitle>
             <Helper>Hereditary and familial risk factors.</Helper>
-            <View style={styles.conditionsWrap}>
-              {FAMILY_CONDITIONS.map((c) => (
-                <Chip
-                  key={`fam-${c.code}`}
-                  label={c.desc}
-                  marker
-                  tone="success"
-                  active={profile.familyHistories.some((m) => m.code === c.code)}
-                  onPress={() => toggleFamilyCondition(c.code, c.desc)}
-                />
-              ))}
-            </View>
-          </View>
+            <DiseaseChips
+              idPrefix="fam"
+              isSelected={(code) => profile.familyHistories.some((m) => m.code === code)}
+              onToggle={toggleFamilyCondition}
+            />          </View>
         )}
 
         {/* TAB 3: Social and vaccines */}
@@ -639,25 +718,32 @@ export default function PhilHealthProfileModal({
             )}
 
             <SectionTitle spaced>Immunizations (vaccines)</SectionTitle>
-            {isPediatric &&
-              renderImmunizations(
-                'Child vaccines (EPI)',
-                'child',
-                ['BCG', 'DPT', 'OPV', 'MEASLES', 'HEPB', 'HIB', 'ROTA', 'PCV'],
-                profile.childImmunizations
-              )}
+            {isPediatric && (
+              <ImmunizationChips
+                title="Child vaccines (EPI)"
+                library="lib_immchild"
+                selected={profile.childImmunizations}
+                onToggle={(code) => toggleImmunization('child', code)}
+              />
+            )}
 
-            {isFemale &&
-              age >= 10 &&
-              age <= 49 &&
-              renderImmunizations(
-                'Young woman vaccines (HPV / Rubella)',
-                'youngWoman',
-                ['HPV', 'RUBELLA'],
-                profile.youngWomanImmunizations
-              )}
+            {isFemale && age >= 10 && age <= 49 && (
+              <ImmunizationChips
+                title="Young woman vaccines"
+                library="lib_immyoungw"
+                selected={profile.youngWomanImmunizations}
+                onToggle={(code) => toggleImmunization('youngWoman', code)}
+              />
+            )}
 
-            {isSenior && renderImmunizations('Senior citizen vaccines', 'elderly', ['FLU', 'PNEUM'], profile.elderlyImmunizations)}
+            {isSenior && (
+              <ImmunizationChips
+                title="Senior citizen vaccines"
+                library="lib_immelderly"
+                selected={profile.elderlyImmunizations}
+                onToggle={(code) => toggleImmunization('elderly', code)}
+              />
+            )}
           </View>
         )}
 
@@ -869,41 +955,10 @@ export default function PhilHealthProfileModal({
             <SectionTitle>PhilPEN non-communicable disease risk assessment</SectionTitle>
             <Helper>PhilHealth standard 24 questions for cardiovascular and metabolic risk profiling.</Helper>
 
-            {NCD_QUESTIONS.map((item) => {
-              const ans = profile.ncdAnswers[item.id] || 'N';
-              return (
-                <View key={item.id} style={styles.ncdRow}>
-                  <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.ncdText}>
-                    {item.q}
-                  </ThemedText>
-                  <View style={styles.chipRow}>
-                    <Chip
-                      label="No"
-                      tone="success"
-                      active={ans === 'N'}
-                      onPress={() =>
-                        setProfile({
-                          ...profile,
-                          ncdAnswers: { ...profile.ncdAnswers, [item.id]: 'N' },
-                        })
-                      }
-                    />
-                    <Chip
-                      label="Yes"
-                      tone="warning"
-                      active={ans === 'Y'}
-                      onPress={() =>
-                        setProfile({
-                          ...profile,
-                          ncdAnswers: { ...profile.ncdAnswers, [item.id]: 'Y' },
-                        })
-                      }
-                    />
-                  </View>
-                </View>
-              );
-            })}
-          </View>
+            <NcdQuestionnaire
+              answers={profile.ncdAnswers}
+              onAnswer={(key, value) => setProfile({ ...profile, ncdAnswers: { ...profile.ncdAnswers, [key]: value } })}
+            />          </View>
         )}
       </>
     );

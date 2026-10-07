@@ -17,5 +17,5 @@
       "@screens/*": ["navigation/screens/*"]
     }
   },
-  "exclude": ["node_modules", "dist", ".expo", "scripts"]
+  "exclude": ["node_modules", "dist", ".expo", "scripts", "tests"]
 }

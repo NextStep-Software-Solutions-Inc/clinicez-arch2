@@ -44,6 +44,14 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddSingleton<ClinicEz.Shared.Licensing.IFacilityLicenseValidator, ClinicEz.Shared.Licensing.FacilityLicenseValidator>();
 
+        // Facility-local authentication (no external identity provider; works offline/LAN)
+        services.AddMemoryCache();
+        services.AddHttpContextAccessor();
+        services.AddSingleton<ClinicEz.Pharmacy.Infrastructure.Auth.IStaffAccessCache, ClinicEz.Pharmacy.Infrastructure.Auth.StaffAccessCache>();
+        services.AddScoped<ClinicEz.Pharmacy.Infrastructure.Auth.IWorkspaceResolver, ClinicEz.Pharmacy.Infrastructure.Auth.WorkspaceResolver>();
+        services.AddScoped<ClinicEz.Pharmacy.Infrastructure.Auth.IPharmacyAuthService, ClinicEz.Pharmacy.Infrastructure.Auth.PharmacyAuthService>();
+        services.AddScoped<ClinicEz.Pharmacy.Domain.Interfaces.IPharmacyContext, ClinicEz.Pharmacy.Infrastructure.Context.PharmacyContext>();
+
         // Register publishers
         services.AddScoped<IPrescriptionDispensedPublisher, PrescriptionDispensedPublisher>();
 

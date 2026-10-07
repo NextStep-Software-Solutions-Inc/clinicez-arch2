@@ -1,4 +1,6 @@
 using System;
+using ClinicEz.Laboratory.Api.Authorization;
+using ClinicEz.Laboratory.Domain.Constants;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -23,6 +25,7 @@ public sealed class RequisitionsController : ControllerBase
     }
 
     [HttpGet]
+    [HasPermission(LabPermissions.RequisitionsRead)]
     public async Task<ActionResult<ApiResponse<List<LabRequisitionDto>>>> GetWorklist(
         [FromQuery] string? status,
         [FromQuery] string? searchTerm,
@@ -36,6 +39,7 @@ public sealed class RequisitionsController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [HasPermission(LabPermissions.RequisitionsRead)]
     public async Task<ActionResult<ApiResponse<LabRequisitionDto>>> GetById(
         [FromRoute] Guid id,
         CancellationToken ct = default)
@@ -48,6 +52,7 @@ public sealed class RequisitionsController : ControllerBase
     }
 
     [HttpGet("by-accession/{accessionNumber}")]
+    [HasPermission(LabPermissions.RequisitionsRead)]
     public async Task<ActionResult<ApiResponse<LabRequisitionDto>>> GetByAccession(
         [FromRoute] string accessionNumber,
         CancellationToken ct = default)
@@ -60,6 +65,7 @@ public sealed class RequisitionsController : ControllerBase
     }
 
     [HttpPost("{id:guid}/accession")]
+    [HasPermission(LabPermissions.SpecimensAccession)]
     public async Task<ActionResult<ApiResponse<LabRequisitionDto>>> AccessionSpecimen(
         [FromRoute] Guid id,
         [FromBody] AccessionSpecimenRequest request,
@@ -71,6 +77,7 @@ public sealed class RequisitionsController : ControllerBase
     }
 
     [HttpGet("{id:guid}/stickers")]
+    [HasPermission(LabPermissions.SpecimensAccession)]
     public async Task<ActionResult<ApiResponse<List<PrintableTubeStickerDto>>>> GetTubeStickers(
         [FromRoute] Guid id,
         CancellationToken ct = default)
@@ -80,6 +87,7 @@ public sealed class RequisitionsController : ControllerBase
     }
 
     [HttpPost("{id:guid}/specimens/{specimenId:guid}/reject")]
+    [HasPermission(LabPermissions.SpecimensManage)]
     public async Task<ActionResult<ApiResponse<LabRequisitionDto>>> RejectSpecimen(
         [FromRoute] Guid id,
         [FromRoute] Guid specimenId,
@@ -92,6 +100,7 @@ public sealed class RequisitionsController : ControllerBase
     }
 
     [HttpPost("{id:guid}/specimens/{specimenId:guid}/store")]
+    [HasPermission(LabPermissions.SpecimensManage)]
     public async Task<ActionResult<ApiResponse<LabRequisitionDto>>> StoreSpecimen(
         [FromRoute] Guid id,
         [FromRoute] Guid specimenId,
@@ -104,6 +113,7 @@ public sealed class RequisitionsController : ControllerBase
     }
 
     [HttpGet("racks")]
+    [HasPermission(LabPermissions.SpecimensManage)]
     public async Task<ActionResult<ApiResponse<List<RackInventoryItemDto>>>> GetRackInventory(
         [FromQuery] string? rackId,
         CancellationToken ct = default)

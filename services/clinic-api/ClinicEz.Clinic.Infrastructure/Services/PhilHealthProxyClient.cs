@@ -145,23 +145,6 @@ public sealed class PhilHealthProxyClient : IPhilHealthProxyClient
         }
     }
 
-    public async Task<ApiResponse<IReadOnlyList<YakapCatalogItemDto>>> GetCatalogAsync(
-        string catalogType,
-        CancellationToken ct = default)
-    {
-        try
-        {
-            var url = $"{_baseUrl}/api/yakap/catalogs/{Uri.EscapeDataString(catalogType)}";
-            using var req = CreateRequest(HttpMethod.Get, url);
-            return await SendAsync<IReadOnlyList<YakapCatalogItemDto>>(req, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "[PhilHealthProxy] Error calling GetCatalogAsync");
-            return ApiResponse<IReadOnlyList<YakapCatalogItemDto>>.Fail(ex.Message);
-        }
-    }
-
     public async Task<ApiResponse<SoapSimulationReportDto>> RunSoapSimulationAsync(
         RunSoapSimulationProxyRequest request,
         CancellationToken ct = default)

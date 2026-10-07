@@ -14,6 +14,8 @@ import Input from '@ui/Input';
 import Badge, { BadgeVariant } from '@ui/Badge';
 import Icon from '@ui/Icon';
 import { clinicService, FacilityLicenseStatus } from '../services/clinicService';
+import { getOfflineGraceHours, isWorkspaceRequired } from '../services/runtimeConfig';
+import { getDeviceItem, setDeviceItem } from '../utils/deviceStorage';
 import {
   resolveTenantContext,
   setActiveTenantContext,
@@ -28,11 +30,38 @@ import {
 // Subdomain this app is served from (e.g. <workspace>.<service>.<baseDomain>); configurable per deployment.
 const SERVICE_SUBDOMAIN = (process.env.EXPO_PUBLIC_SERVICE_SUBDOMAIN || 'clinic').trim().toLowerCase();
 
-/** Builds `<protocol>//<host>[:port]` keeping the current scheme and port. */
+/** Builds `<protocol>//<host>[:port]` keeping the current scheme and port (web only). */
 const buildHostUrl = (host: string): string => {
   const { protocol, port } = window.location;
   return `${protocol}//${host}${port ? `:${port}` : ''}`;
 };
+
+const LICENSE_CACHE_KEY = 'clinicez.license.cache';
+
+interface CachedLicense {
+  license: FacilityLicenseStatus;
+  cachedAt: number;
+}
+
+/** Remembers the last verified Active license so a device that is offline can keep working within the grace window. */
+function cacheLicense(license: FacilityLicenseStatus) {
+  if (license.status !== 'Active') return;
+  const entry: CachedLicense = { license, cachedAt: Date.now() };
+  setDeviceItem(LICENSE_CACHE_KEY, JSON.stringify(entry));
+}
+
+function readCachedLicense(): FacilityLicenseStatus | null {
+  try {
+    const raw = getDeviceItem(LICENSE_CACHE_KEY);
+    if (!raw) return null;
+    const entry = JSON.parse(raw) as CachedLicense;
+    const graceMs = getOfflineGraceHours() * 60 * 60 * 1000;
+    if (!entry?.license || entry.license.status !== 'Active' || Date.now() - entry.cachedAt > graceMs) return null;
+    return entry.license;
+  } catch {
+    return null;
+  }
+}
 
 interface LicenseContextValue {
   license: FacilityLicenseStatus | null;
@@ -63,10 +92,11 @@ interface FacilityActivationGateProps {
 }
 
 export function FacilityActivationGate({ children }: FacilityActivationGateProps) {
+  const workspaceRequired = isWorkspaceRequired();
   const [activeTenant, setActiveTenant] = useState<string | null>(() => resolveTenantContext().tenantSlug);
   const [workspaceInput, setWorkspaceInput] = useState(() => getStoredTenantSlug() || '');
   const [license, setLicense] = useState<FacilityLicenseStatus | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(() => !workspaceRequired || !!resolveTenantContext().tenantSlug);
   const [isNotFound, setIsNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tokenInput, setTokenInput] = useState('');
@@ -76,7 +106,8 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
 
   const fetchStatus = useCallback(async () => {
     const currentTenant = activeTenant || resolveTenantContext().tenantSlug;
-    if (!currentTenant || !isValidTenantSlug(currentTenant)) {
+    // Cloud hosts need a workspace; an on-prem server or a native device pointed at a clinic server does not.
+    if (workspaceRequired && (!currentTenant || !isValidTenantSlug(currentTenant))) {
       setIsLoading(false);
       return;
     }
@@ -90,13 +121,17 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
         if (err.status === 404) {
           setIsNotFound(true);
           setError(`Workspace "${currentTenant}" was not found or has no active facilities registered.`);
+        } else if (err.status === 0 && readCachedLicense()) {
+          // Server unreachable: continue on the last verified license until the offline grace window ends.
+          setLicense(readCachedLicense());
         } else {
           setError(err.message || 'Unable to communicate with clinic service.');
         }
       } else if (res) {
         if (res.clinicId) {
-          setActiveClinicId(String(res.clinicId), currentTenant);
+          setActiveClinicId(String(res.clinicId), currentTenant ?? undefined);
         }
+        cacheLicense(res);
         setLicense(res);
       }
     } catch (e: any) {
@@ -104,13 +139,13 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
     } finally {
       setIsLoading(false);
     }
-  }, [activeTenant]);
+  }, [activeTenant, workspaceRequired]);
 
   useEffect(() => {
-    if (activeTenant) {
+    if (activeTenant || !workspaceRequired) {
       fetchStatus();
     }
-  }, [activeTenant, fetchStatus]);
+  }, [activeTenant, workspaceRequired, fetchStatus]);
 
   const handleSelectWorkspace = () => {
     const trimmed = workspaceInput.trim().toLowerCase();
@@ -174,6 +209,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
         if (res.clinicId) {
           setActiveClinicId(String(res.clinicId), activeTenant || undefined);
         }
+        cacheLicense(res);
         setLicense(res);
         setTokenInput('');
         setModalVisible(false);
@@ -220,7 +256,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
   }
 
   // 2. Prompt for Workspace Slug if none could be resolved (bare root access)
-  if (!activeTenant) {
+  if (workspaceRequired && !activeTenant) {
     return (
       <FacilityLicenseContext.Provider value={contextValue}>
         <ScrollView
@@ -357,24 +393,28 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
           <View style={styles.card}>
             <View style={styles.topRow}>
               <BrandMark />
-              <Button
-                title="Change workspace"
-                variant="ghost"
-                size="sm"
-                icon="arrowLeft"
-                onPress={handleSwitchWorkspace}
-              />
+              {workspaceRequired ? (
+                <Button
+                  title="Change workspace"
+                  variant="ghost"
+                  size="sm"
+                  icon="arrowLeft"
+                  onPress={handleSwitchWorkspace}
+                />
+              ) : null}
             </View>
 
             <View style={styles.headerGroup}>
               <View style={styles.badgeRow}>
                 <Badge label={badgeLabel} variant={badgeVariant} />
-                <View style={styles.workspaceChip}>
-                  <ThemedText variant="caption" color={theme.colors.textMuted}>
-                    Workspace
-                  </ThemedText>
-                  <ThemedText variant="code">{activeTenant}</ThemedText>
-                </View>
+                {activeTenant ? (
+                  <View style={styles.workspaceChip}>
+                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                      Workspace
+                    </ThemedText>
+                    <ThemedText variant="code">{activeTenant}</ThemedText>
+                  </View>
+                ) : null}
               </View>
               <ThemedText variant="h1">{bannerTitle}</ThemedText>
               <ThemedText variant="body" color={theme.colors.textSecondary}>
@@ -436,9 +476,11 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
             <View style={styles.headerGroup}>
               <ThemedText variant="h2">Update facility license</ThemedText>
               <View style={styles.summaryRow}>
-                <ThemedText variant="small" color={theme.colors.textSecondary}>
-                  Workspace: <ThemedText variant="smallBold">{activeTenant}</ThemedText>
-                </ThemedText>
+                {activeTenant ? (
+                  <ThemedText variant="small" color={theme.colors.textSecondary}>
+                    Workspace: <ThemedText variant="smallBold">{activeTenant}</ThemedText>
+                  </ThemedText>
+                ) : null}
                 <ThemedText variant="small" color={theme.colors.textSecondary}>
                   Current plan: <ThemedText variant="smallBold">{license.planTier}</ThemedText>
                 </ThemedText>

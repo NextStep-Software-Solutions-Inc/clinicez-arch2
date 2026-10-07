@@ -1,10 +1,13 @@
 using System;
+using ClinicEz.Laboratory.Api.Authorization;
+using ClinicEz.Laboratory.Domain.Constants;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Laboratory.Application.Features.QualityControl.Commands;
 using ClinicEz.Laboratory.Application.Features.QualityControl.Queries;
 using ClinicEz.Laboratory.Application.Features.Requisitions.DTOs;
+using ClinicEz.Laboratory.Domain.Interfaces;
 using ClinicEz.Shared.Common;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -16,13 +19,16 @@ namespace ClinicEz.Laboratory.Api.Controllers;
 public sealed class QualityControlController : ControllerBase
 {
     private readonly ISender _sender;
+    private readonly ILabContext _context;
 
-    public QualityControlController(ISender sender)
+    public QualityControlController(ISender sender, ILabContext context)
     {
         _sender = sender;
+        _context = context;
     }
 
     [HttpGet("lots")]
+    [HasPermission(LabPermissions.QcRead)]
     public async Task<ActionResult<ApiResponse<List<QcLotDto>>>> GetLots(
         [FromQuery] string? analyteCode,
         [FromQuery] bool? activeOnly = true,
@@ -33,12 +39,16 @@ public sealed class QualityControlController : ControllerBase
     }
 
     [HttpPost("lots")]
+    [HasPermission(LabPermissions.QcWrite)]
     public async Task<ActionResult<ApiResponse<QcLotDto>>> CreateLot(
         [FromBody] CreateLotRequest request,
         CancellationToken ct = default)
     {
+        // Tenant comes from the validated session; any tenant in the request body is ignored.
+        if (_context.TenantId is not { Length: > 0 } tenantId) return Forbid();
+
         var command = new CreateQcLotCommand(
-            TenantId: request.TenantId ?? "default",
+            TenantId: tenantId,
             LotNumber: request.LotNumber,
             ControlName: request.ControlName,
             Level: request.Level,
@@ -56,6 +66,7 @@ public sealed class QualityControlController : ControllerBase
     }
 
     [HttpPost("runs")]
+    [HasPermission(LabPermissions.QcWrite)]
     public async Task<ActionResult<ApiResponse<QcRunDto>>> RecordRun(
         [FromBody] RecordRunRequest request,
         CancellationToken ct = default)
@@ -74,6 +85,7 @@ public sealed class QualityControlController : ControllerBase
     }
 
     [HttpGet("chart")]
+    [HasPermission(LabPermissions.QcRead)]
     public async Task<ActionResult<ApiResponse<LeveyJenningsChartDto>>> GetChart(
         [FromQuery] Guid? lotId,
         [FromQuery] string? analyteCode,

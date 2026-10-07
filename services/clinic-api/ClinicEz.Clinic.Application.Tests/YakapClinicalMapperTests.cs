@@ -11,7 +11,7 @@ namespace ClinicEz.Clinic.Application.Tests;
 
 public class YakapClinicalMapperTests
 {
-    private readonly YakapClinicalMapper _mapper = new();
+    private readonly YakapClinicalMapper _mapper = new(ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.PhilHealthCatalogLookup.FromBundledSeed());
 
     [Theory]
     [InlineData("1990-05-15", "2026-10-03", "36 YR(S), 4 MO(S), 18 DAY(S)")]
@@ -241,7 +241,7 @@ public class YakapClinicalMapperTests
         // Assert
         doc.Soaps.Should().HaveCount(1);
         var soap = doc.Soaps[0];
-        soap.SignsSymptoms.Should().Be("1"); // Cough mapped to "1"
+        soap.SignsSymptoms.Should().Be("09"); // COUGH in lib_signs_symptoms
         soap.IcdCodes.Should().Contain("I10");
         soap.IcdCodes.Should().Contain("J20.9");
         soap.PhysicalExam.Systolic.Should().Be("145");

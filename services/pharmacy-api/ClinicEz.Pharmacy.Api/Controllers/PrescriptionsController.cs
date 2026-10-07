@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Pharmacy.Api.Authorization;
 using ClinicEz.Pharmacy.Application.Features.Prescriptions.Commands;
 using ClinicEz.Pharmacy.Application.Features.Prescriptions.DTOs;
 using ClinicEz.Pharmacy.Application.Features.Prescriptions.Queries;
+using ClinicEz.Pharmacy.Domain.Constants;
 using ClinicEz.Pharmacy.Domain.Enums;
 using ClinicEz.Shared.Common;
 using MediatR;
@@ -24,6 +26,7 @@ public sealed class PrescriptionsController : ControllerBase
     }
 
     [HttpGet]
+    [HasPermission(PharmacyPermissions.PrescriptionsRead)]
     public async Task<ActionResult<ApiResponse<List<PrescriptionOrderDto>>>> GetQueue(
         [FromQuery] PrescriptionStatus? status,
         [FromQuery] string? search,
@@ -35,6 +38,7 @@ public sealed class PrescriptionsController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [HasPermission(PharmacyPermissions.PrescriptionsRead)]
     public async Task<ActionResult<ApiResponse<PrescriptionOrderDto>>> GetById(
         [FromRoute] Guid id,
         CancellationToken ct = default)
@@ -44,6 +48,7 @@ public sealed class PrescriptionsController : ControllerBase
     }
 
     [HttpPost("{id:guid}/dispense")]
+    [HasPermission(PharmacyPermissions.PrescriptionsDispense)]
     public async Task<ActionResult<ApiResponse<PrescriptionOrderDto>>> Dispense(
         [FromRoute] Guid id,
         [FromBody] DispensePrescriptionApiRequest request,

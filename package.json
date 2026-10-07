@@ -12,6 +12,8 @@
     "test:tokens": "bun --cwd packages/design-tokens test",
     "test:patient": "bun --filter @clinicez/patient-app test",
     "typecheck:clinic": "bun --filter @clinicez/clinic-app typecheck",
+    "test:clinic": "bun --filter @clinicez/clinic-app test",
+    "lint:clinic": "bun --filter @clinicez/clinic-app lint:tokens && bun --filter @clinicez/clinic-app lint:hosts",
     "typecheck:lab": "bun --filter @clinicez/laboratory-app typecheck",
     "typecheck:pharmacy": "bun --filter @clinicez/pharmacy-app typecheck",
     "typecheck:all": "bun run typecheck:patient && bun run typecheck:clinic && bun run typecheck:lab && bun run typecheck:pharmacy",

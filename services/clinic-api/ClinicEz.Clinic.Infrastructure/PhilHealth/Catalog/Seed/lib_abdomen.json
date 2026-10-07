@@ -1,0 +1,20 @@
+{
+ "library": "lib_abdomen",
+ "kitVersion": "1.1",
+ "items": [
+  {"code":"1","description":"Flat","isActive":false},
+  {"code":"10","description":"Hyperactive bowel sounds","isActive":true},
+  {"code":"11","description":"Palpable mass(es)","isActive":true},
+  {"code":"12","description":"Tympanitic/dull abdomen","isActive":true},
+  {"code":"13","description":"Uterine contraction","isActive":true},
+  {"code":"2","description":"Flabby","isActive":false},
+  {"code":"3","description":"Globullar","isActive":false},
+  {"code":"4","description":"Muscle guarding","isActive":false},
+  {"code":"5","description":"Tenderness","isActive":false},
+  {"code":"6","description":"Palpable mass","isActive":false},
+  {"code":"7","description":"Essentially normal","isActive":true},
+  {"code":"8","description":"Abdominal rigidity","isActive":true},
+  {"code":"9","description":"Abdominal tenderness","isActive":true},
+  {"code":"99","description":"Others","isActive":true}
+ ]
+}

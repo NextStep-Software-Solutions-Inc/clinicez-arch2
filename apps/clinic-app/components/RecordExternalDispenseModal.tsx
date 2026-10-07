@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { theme } from '@constants/theme';
 import { Modal, Input, Button, ThemedText } from '@ui';
@@ -13,15 +13,6 @@ interface RecordExternalDispenseModalProps {
   onSuccess: (updatedSlip: PrescriptionSlipData) => void;
 }
 
-const COMMON_PHARMACIES = [
-  'Mercury Drug',
-  'Watsons',
-  'Rose Pharmacy',
-  'Southstar Drug',
-  'The Generics Pharmacy (TGP)',
-  'Generika Drugstore',
-];
-
 export default function RecordExternalDispenseModal({
   visible,
   onClose,
@@ -30,7 +21,8 @@ export default function RecordExternalDispenseModal({
   onSuccess,
 }: RecordExternalDispenseModalProps) {
   const [pharmacyName, setPharmacyName] = useState('');
-  const [customPharmacy, setCustomPharmacy] = useState('');
+  // Drugstores this clinic has already used (learned from its own records; there is no built-in list).
+  const [recentPharmacies, setRecentPharmacies] = useState<string[]>([]);
   const [branchLocation, setBranchLocation] = useState('');
   const [receiptNumber, setReceiptNumber] = useState('');
   const [pharmacistName, setPharmacistName] = useState('');
@@ -38,7 +30,18 @@ export default function RecordExternalDispenseModal({
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const selectedPharmacy = pharmacyName === 'Other' ? customPharmacy : pharmacyName;
+  const selectedPharmacy = pharmacyName;
+
+  useEffect(() => {
+    if (!visible) return undefined;
+    let cancelled = false;
+    clinicService.getRecentExternalPharmacies().then(([names]) => {
+      if (!cancelled) setRecentPharmacies(names ?? []);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [visible]);
 
   const handleSubmit = async () => {
     if (!selectedPharmacy.trim()) {
@@ -111,22 +114,16 @@ export default function RecordExternalDispenseModal({
       }
     >
       <View style={styles.fieldGroup}>
-        <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
-          Drugstore chain
-          <ThemedText color={theme.colors.emergency}> *</ThemedText>
-        </ThemedText>
-        <View style={styles.chipRow}>
-          {COMMON_PHARMACIES.map((p) => renderChip(p, p))}
-          {renderChip('Other', 'Other', 'Other drugstore')}
-        </View>
-        {pharmacyName === 'Other' && (
-          <Input
-            placeholder="Pharmacy name (e.g. a local community drugstore)"
-            value={customPharmacy}
-            onChangeText={setCustomPharmacy}
-          />
-        )}
-      </View>
+        <Input
+          label="Drugstore"
+          required
+          placeholder="Name of the drugstore that dispensed the medicine"
+          value={pharmacyName}
+          onChangeText={setPharmacyName}
+        />
+        {recentPharmacies.length > 0 ? (
+          <View style={styles.chipRow}>{recentPharmacies.map((p) => renderChip(p, p))}</View>
+        ) : null}      </View>
 
       <Input
         label="Branch location"

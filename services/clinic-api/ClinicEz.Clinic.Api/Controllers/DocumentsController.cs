@@ -97,6 +97,7 @@ public sealed class DocumentsController : ControllerBase
     }
 
     [HttpGet("verify/{securityDigestOrNumber}")]
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     public async Task<ActionResult<ApiResponse<DocumentVerificationResultDto>>> VerifyDocument(
         [FromRoute] string securityDigestOrNumber,
         CancellationToken ct)

@@ -1,0 +1,26 @@
+{
+ "library": "lib_mdiseases",
+ "kitVersion": "1.1",
+ "items": [
+  {"code":"001","description":"Allergy","isActive":true},
+  {"code":"002","description":"Asthma","isActive":true},
+  {"code":"003","description":"Cancer","isActive":true},
+  {"code":"004","description":"Cerebrovascular Disease","isActive":true},
+  {"code":"005","description":"Coronary Artery Disease","isActive":true},
+  {"code":"006","description":"Diabetes Mellitus","isActive":true},
+  {"code":"007","description":"Emphysema","isActive":true},
+  {"code":"008","description":"Epilepsy/Seizure Disorder","isActive":true},
+  {"code":"009","description":"Hepatitis","isActive":true},
+  {"code":"010","description":"Hyperlipidemia","isActive":true},
+  {"code":"011","description":"Hypertension","isActive":true},
+  {"code":"012","description":"Peptic Ulcer","isActive":true},
+  {"code":"013","description":"Pneumonia","isActive":true},
+  {"code":"014","description":"Thyroid Disease","isActive":true},
+  {"code":"015","description":"Pulmonary Tuberculosis","isActive":true},
+  {"code":"016","description":"Extrapulmonary Tuberculosis","isActive":true},
+  {"code":"017","description":"Urinary Tract Infection","isActive":true},
+  {"code":"018","description":"Mental Illness","isActive":true},
+  {"code":"998","description":"Others","isActive":true},
+  {"code":"999","description":"None","isActive":true}
+ ]
+}
