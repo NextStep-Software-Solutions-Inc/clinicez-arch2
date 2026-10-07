@@ -84,6 +84,9 @@ public sealed class ClinicScopeMiddleware
         var endpoint = context.GetEndpoint();
         if (endpoint?.Metadata.GetMetadata<Microsoft.AspNetCore.Authorization.IAllowAnonymous>() is null) return false;
         var path = context.Request.Path;
-        return path.StartsWithSegments("/api/v1") && !path.StartsWithSegments("/api/v1/auth");
+        // Auth and license endpoints resolve their own workspace (and must keep working offline without a portal lookup).
+        return path.StartsWithSegments("/api/v1")
+               && !path.StartsWithSegments("/api/v1/auth")
+               && !path.StartsWithSegments("/api/v1/clinic/license");
     }
 }
