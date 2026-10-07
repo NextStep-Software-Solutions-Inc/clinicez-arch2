@@ -1,4 +1,4 @@
-import React, { forwardRef, useState } from 'react';
+﻿import React, { forwardRef, useState } from 'react';
 import {
   FlatList,
   Pressable,
@@ -6,10 +6,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useTheme } from '@react-navigation/native';
 import ThemedText from '@ui/ThemedText';
+import { AppIcon } from '@ui/Icon';
 import type { SelectOption } from './ProfileSelectModal';
 import ThemedBottomSheetModal, { type WebBottomSheetModalRef } from '@ui/ThemedBottomSheetModal';
+import { useAppTheme } from '../../contexts/ThemeContext';
 
 export interface ProfileBottomSheetSelectProps {
   title: string;
@@ -22,13 +23,14 @@ export type ProfileBottomSheetSelectRef = WebBottomSheetModalRef;
 
 const ProfileBottomSheetSelect = forwardRef<WebBottomSheetModalRef, ProfileBottomSheetSelectProps>(
   ({ title, options, selected, onSelect }, ref) => {
-    const { colors } = useTheme();
+    const { colors, radii, sizes, spacing } = useAppTheme();
     const [query, setQuery] = useState('');
 
     const filtered = query.trim()
-      ? options.filter((o) =>
-          o.label.toLowerCase().includes(query.toLowerCase()) ||
-          o.value.toLowerCase().includes(query.toLowerCase())
+      ? options.filter(
+          (o) =>
+            o.label.toLowerCase().includes(query.toLowerCase()) ||
+            o.value.toLowerCase().includes(query.toLowerCase())
         )
       : options;
 
@@ -42,18 +44,25 @@ const ProfileBottomSheetSelect = forwardRef<WebBottomSheetModalRef, ProfileBotto
     return (
       <ThemedBottomSheetModal ref={ref}>
         <View style={styles.header}>
-          <ThemedText style={[styles.title, { color: colors.text }]}>{title}</ThemedText>
+          <ThemedText variant="h2">{title}</ThemedText>
         </View>
 
-        <View style={[styles.searchContainer, { borderColor: colors.border }]}>
+        <View style={[styles.searchContainer, { borderColor: colors.borderLight }]}>
           <TextInput
             placeholder="Search…"
-            placeholderTextColor={String(colors.text) + '80'}
+            placeholderTextColor={colors.textMuted}
             value={query}
             onChangeText={setQuery}
             style={[
               styles.searchInput,
-              { color: colors.text, backgroundColor: colors.background, borderColor: colors.border },
+              {
+                color: colors.text,
+                backgroundColor: colors.background,
+                borderColor: colors.border,
+                borderRadius: radii.sm,
+                paddingHorizontal: spacing.md,
+                paddingVertical: spacing.sm,
+              },
             ]}
           />
         </View>
@@ -66,24 +75,22 @@ const ProfileBottomSheetSelect = forwardRef<WebBottomSheetModalRef, ProfileBotto
             return (
               <Pressable
                 onPress={() => handleSelect(item.value)}
-                style={({ pressed }) => [
+                style={({ pressed, hovered }: any) => [
                   styles.option,
-                  { borderBottomColor: colors.border },
+                  { borderBottomColor: colors.borderLight },
+                  hovered && { backgroundColor: colors.surfaceSubtle },
                   pressed && { opacity: 0.6 },
-                  isSelected && { backgroundColor: String(colors.primary) + '18' },
+                  isSelected && { backgroundColor: colors.primarySubtle },
                 ]}
               >
                 <ThemedText
-                  style={[
-                    styles.optionText,
-                    { color: isSelected ? colors.primary : colors.text },
-                    isSelected && { fontWeight: '600' },
-                  ]}
+                  variant={isSelected ? 'bodyBold' : 'body'}
+                  style={{ color: isSelected ? colors.primary : colors.text }}
                 >
                   {item.label}
                 </ThemedText>
                 {isSelected && (
-                  <ThemedText style={{ color: colors.primary, fontSize: 16 }}>✓</ThemedText>
+                  <AppIcon name="check" size={sizes.iconSm} color="primary" />
                 )}
               </Pressable>
             );
@@ -105,10 +112,6 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 12,
   },
-  title: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
   searchContainer: {
     paddingHorizontal: 16,
     paddingBottom: 10,
@@ -116,10 +119,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 15,
+    minHeight: 40,
   },
   list: {
     maxHeight: 400,
@@ -134,9 +134,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  optionText: {
-    fontSize: 15,
   },
 });
 

@@ -1,4 +1,4 @@
-import React, { forwardRef, useImperativeHandle, useState } from 'react';
+﻿import React, { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -7,7 +7,8 @@ import {
   type ViewStyle,
   type StyleProp,
 } from 'react-native';
-import { useTheme } from '@react-navigation/native';
+import { useAppTheme } from '../../contexts/ThemeContext';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
 
 export interface WebBottomSheetModalRef {
   present: () => void;
@@ -35,7 +36,8 @@ export interface ThemedBottomSheetModalProps {
 
 const ThemedBottomSheetModal = forwardRef<WebBottomSheetModalRef, ThemedBottomSheetModalProps>(
   (props, ref) => {
-    const { colors } = useTheme();
+    const { colors, radii, sizes, shadows } = useAppTheme();
+    const { isCompact } = useBreakpoint();
     const [visible, setVisible] = useState(false);
 
     const handleDismiss = () => {
@@ -54,6 +56,19 @@ const ThemedBottomSheetModal = forwardRef<WebBottomSheetModalRef, ThemedBottomSh
       forceClose: handleDismiss,
     }));
 
+    // Esc closes on web
+    useEffect(() => {
+      if (!visible || typeof window === 'undefined') return;
+      const onKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          handleDismiss();
+        }
+      };
+      window.addEventListener('keydown', onKeyDown);
+      return () => window.removeEventListener('keydown', onKeyDown);
+    }, [visible]);
+
     if (!visible) return null;
 
     return (
@@ -63,8 +78,14 @@ const ThemedBottomSheetModal = forwardRef<WebBottomSheetModalRef, ThemedBottomSh
         animationType="fade"
         onRequestClose={handleDismiss}
       >
-        <View style={styles.overlay}>
-          {/* Dimmed backdrop */}
+        <View
+          style={[
+            styles.overlay,
+            { backgroundColor: colors.overlay },
+            isCompact ? styles.overlaySheet : styles.overlayDialog,
+          ]}
+        >
+          {/* Backdrop dismiss */}
           <Pressable
             style={styles.backdrop}
             onPress={handleDismiss}
@@ -72,28 +93,48 @@ const ThemedBottomSheetModal = forwardRef<WebBottomSheetModalRef, ThemedBottomSh
             accessibilityLabel="Close modal"
           />
 
-          {/* Modal Card / Bottom Sheet Container */}
+          {/* Modal Container: sheet on compact (<768), centered dialog on desktop (>=768) */}
           <View
+            accessibilityRole="alert"
             style={[
-              styles.sheetContainer,
-              { backgroundColor: colors.card, borderColor: colors.border },
+              styles.baseContainer,
+              shadows.lg,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+              },
+              isCompact
+                ? [
+                    styles.sheetContainer,
+                    {
+                      borderTopLeftRadius: radii.xl,
+                      borderTopRightRadius: radii.xl,
+                    },
+                  ]
+                : [
+                    styles.dialogContainer,
+                    {
+                      width: sizes.dialogWidth,
+                      borderRadius: radii.xl,
+                    },
+                  ],
               props.backgroundStyle,
             ]}
           >
-            {/* Grab handle indicator */}
-            <View style={styles.handleContainer}>
-              <View
-                style={[
-                  styles.handleIndicator,
-                  { backgroundColor: colors.border },
-                  props.handleIndicatorStyle,
-                ]}
-              />
-            </View>
+            {/* Grab handle indicator only on mobile bottom sheet */}
+            {isCompact && (
+              <View style={styles.handleContainer}>
+                <View
+                  style={[
+                    styles.handleIndicator,
+                    { backgroundColor: colors.borderDark, borderRadius: radii.full },
+                    props.handleIndicatorStyle,
+                  ]}
+                />
+              </View>
+            )}
 
-            <View style={styles.contentContainer}>
-              {props.children}
-            </View>
+            <View style={styles.contentContainer}>{props.children}</View>
           </View>
         </View>
       </Modal>
@@ -106,10 +147,16 @@ ThemedBottomSheetModal.displayName = 'ThemedBottomSheetModal';
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    zIndex: 9999,
+  },
+  overlaySheet: {
     justifyContent: 'flex-end',
     alignItems: 'center',
-    zIndex: 9999,
+  },
+  overlayDialog: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
   },
   backdrop: {
     position: 'absolute',
@@ -118,20 +165,18 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
   },
+  baseContainer: {
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    maxHeight: '90%',
+  },
   sheetContainer: {
     width: '100%',
-    maxWidth: 560,
-    maxHeight: '90%',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    borderWidth: StyleSheet.hairlineWidth,
+    maxWidth: '100%',
     borderBottomWidth: 0,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 20,
+  },
+  dialogContainer: {
+    maxWidth: '92%',
   },
   handleContainer: {
     width: '100%',
@@ -141,7 +186,6 @@ const styles = StyleSheet.create({
   handleIndicator: {
     width: 40,
     height: 4,
-    borderRadius: 2,
   },
   contentContainer: {
     flexShrink: 1,

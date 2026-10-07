@@ -133,7 +133,7 @@ function AppWithTheme() {
                   title="Account Not Found"
                   message={`The user profile for Clerk ID: "${userId || ''}" was not found in our database. Please contact support or register your account.`}
                   buttonText="Sign Out"
-                  icon="❌"
+                  iconName="alert"
                   onClose={async () => {
                     setShowUserNotFoundAlert(false);
                     await logout();

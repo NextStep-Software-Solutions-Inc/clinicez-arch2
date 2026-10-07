@@ -1,26 +1,31 @@
-import { useNavigation, useTheme } from "@react-navigation/core";
-import { AppIcon } from "@ui/Icon";
+﻿import React from 'react';
+import { useNavigation } from "@react-navigation/core";
+import { AppIcon } from "./ui/Icon";
 import { View, Pressable, StyleSheet } from "react-native";
 import { useNotificationContext } from "contexts/NotificationContext";
-import ThemedText from "@ui/ThemedText";
+import ThemedText from "./ui/ThemedText";
+import { useAppTheme } from "../contexts/ThemeContext";
 
 export default function BottomTabsHeaderRight() {
-    const navigation = useNavigation();
-    const { colors } = useTheme();
+    const navigation = useNavigation<any>();
+    const { colors, radii, sizes } = useAppTheme();
     const { unreadCount } = useNotificationContext();
 
     return (
-        // 1. Cleaned up the wrapper view and added alignItems to keep buttons centered
-        <View style={{ flexDirection: 'row', gap: 4, marginRight: 16, alignItems: 'center' }}>
+        <View style={styles.container}>
             <Pressable
-                onPressIn={() => navigation.navigate("Main", { screen: "NotificationScreen" })}
-                style={styles.iconBtn}
+                onPress={() => navigation.navigate("Main", { screen: "NotificationScreen" })}
+                style={({ pressed, hovered }: any) => [
+                    styles.iconBtn,
+                    (pressed || hovered) && { opacity: 0.7 },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Notifications"
             >
-                <AppIcon android="notifications" ios="bell.fill" size={24} color={colors.text} />
-                {/* Note: Kept your 32 > 0 condition, assuming it's for testing */}
+                <AppIcon name="notifications" size={sizes.iconLg} color="text" />
                 {unreadCount > 0 && (
-                    <View style={styles.badge}>
-                        <ThemedText style={styles.badgeText}>
+                    <View style={[styles.badge, { backgroundColor: colors.emergency, borderRadius: radii.full }]}>
+                        <ThemedText variant="badge" style={[styles.badgeText, { color: colors.textInverted }]}>
                             {unreadCount > 9 ? '9+' : String(unreadCount)}
                         </ThemedText>
                     </View>
@@ -28,37 +33,43 @@ export default function BottomTabsHeaderRight() {
             </Pressable>
 
             <Pressable
-                onPressIn={() => navigation.navigate("Main", { screen: "SettingsScreen" })}
-                style={styles.iconBtn} // 2. Applied the same style here for alignment
+                onPress={() => navigation.navigate("Main", { screen: "SettingsScreen" })}
+                style={({ pressed, hovered }: any) => [
+                    styles.iconBtn,
+                    (pressed || hovered) && { opacity: 0.7 },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Settings"
             >
-                <AppIcon android="settings" ios="gear" size={24} color={colors.text} />
+                <AppIcon name="settings" size={sizes.iconLg} color="text" />
             </Pressable>
         </View>
     );
-};
+}
 
 const styles = StyleSheet.create({
+    container: {
+        flexDirection: 'row',
+        gap: 4,
+        marginRight: 16,
+        alignItems: 'center',
+    },
     iconBtn: {
         position: 'relative',
-        padding: 6, // 3. Expanded the bounding box to give the badge room
+        padding: 6,
     },
     badge: {
         position: 'absolute',
-        top: 2,   // 4. Adjusted to positive coordinates inside the padded area
-        right: 1, // 4. Adjusted to positive coordinates inside the padded area
+        top: 2,
+        right: 1,
         minWidth: 16,
         height: 16,
-        borderRadius: 8,
-        backgroundColor: '#EF4444',
         alignItems: 'center',
         justifyContent: 'center',
         paddingHorizontal: 3,
-        zIndex: 10, // Ensures it draws above the icon
+        zIndex: 10,
     },
     badgeText: {
-        color: '#fff',
-        fontSize: 9,
-        fontWeight: '800',
         lineHeight: 12,
     },
 });

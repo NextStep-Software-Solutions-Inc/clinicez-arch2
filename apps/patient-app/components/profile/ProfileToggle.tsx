@@ -1,6 +1,7 @@
+﻿import React from 'react';
 import { View, Switch, Pressable, StyleSheet } from 'react-native';
-import { useTheme } from '@react-navigation/native';
 import ThemedText from '@ui/ThemedText';
+import { useAppTheme } from '../../contexts/ThemeContext';
 
 interface ProfileToggleProps {
   label: string;
@@ -15,19 +16,32 @@ export default function ProfileToggle({
   onValueChange,
   description,
 }: ProfileToggleProps) {
-  const { colors } = useTheme();
+  const { colors, radii } = useAppTheme();
 
   return (
     <Pressable
       onPress={() => onValueChange(!value)}
-      style={[styles.row, { borderColor: colors.border, backgroundColor: colors.card }]}
+      style={({ pressed, hovered }: any) => [
+        styles.row,
+        {
+          borderColor: colors.border,
+          backgroundColor: colors.surface,
+          borderRadius: radii.md,
+        },
+        hovered && { backgroundColor: colors.surfaceSubtle },
+        pressed && { opacity: 0.8 },
+      ]}
       accessibilityRole="switch"
       accessibilityState={{ checked: value }}
     >
       <View style={styles.labelContainer}>
-        <ThemedText style={[styles.label, { color: colors.text }]}>{label}</ThemedText>
+        <ThemedText variant="body" style={{ color: colors.text }}>
+          {label}
+        </ThemedText>
         {description && (
-          <ThemedText style={[styles.description, { color: colors.text }]}>{description}</ThemedText>
+          <ThemedText variant="small" color="textSecondary" style={styles.description}>
+            {description}
+          </ThemedText>
         )}
       </View>
       <Switch
@@ -46,12 +60,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 14,
     paddingVertical: 13,
-    borderRadius: 10,
     borderWidth: StyleSheet.hairlineWidth,
     marginBottom: 14,
     minHeight: 52,
   },
-  labelContainer: { flex: 1, marginRight: 12 },
-  label: { fontSize: 15 },
-  description: { fontSize: 12, marginTop: 2, opacity: 0.55 },
+  labelContainer: {
+    flex: 1,
+    marginRight: 12,
+  },
+  description: {
+    marginTop: 2,
+    opacity: 0.75,
+  },
 });

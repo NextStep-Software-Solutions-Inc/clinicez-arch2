@@ -1,6 +1,6 @@
-import { forwardRef, useCallback, useState } from 'react';
+﻿import React, { forwardRef, useCallback, useState } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
-import  {
+import {
   BottomSheetBackdrop,
   BottomSheetFlatList,
   BottomSheetTextInput,
@@ -8,10 +8,11 @@ import  {
   type BottomSheetBackdropProps,
   type BottomSheetModal,
 } from '@gorhom/bottom-sheet';
-import { useTheme } from '@react-navigation/native';
 import ThemedText from '@ui/ThemedText';
+import { AppIcon } from '@ui/Icon';
 import type { SelectOption } from './ProfileSelectModal';
 import ThemedBottomSheetModal from '@ui/ThemedBottomSheetModal';
+import { useAppTheme } from '../../contexts/ThemeContext';
 
 interface ProfileBottomSheetSelectProps {
   title: string;
@@ -24,7 +25,7 @@ export type ProfileBottomSheetSelectRef = BottomSheetModal;
 
 const ProfileBottomSheetSelect = forwardRef<BottomSheetModal, ProfileBottomSheetSelectProps>(
   ({ title, options, selected, onSelect }, ref) => {
-    const { colors } = useTheme();
+    const { colors, radii, sizes, spacing } = useAppTheme();
     const [query, setQuery] = useState('');
     const snapPoints = ['50%', '85%'];
 
@@ -52,17 +53,24 @@ const ProfileBottomSheetSelect = forwardRef<BottomSheetModal, ProfileBottomSheet
         backdropComponent={renderBackdrop}
       >
         <BottomSheetView style={styles.header}>
-          <ThemedText style={[styles.title, { color: colors.text }]}>{title}</ThemedText>
+          <ThemedText variant="h2">{title}</ThemedText>
         </BottomSheetView>
-        <BottomSheetView style={[styles.searchContainer, { borderColor: colors.border }]}>
+        <BottomSheetView style={[styles.searchContainer, { borderColor: colors.borderLight }]}>
           <BottomSheetTextInput
             placeholder="Search…"
-            placeholderTextColor={colors.text}
+            placeholderTextColor={colors.textMuted}
             value={query}
             onChangeText={setQuery}
             style={[
               styles.searchInput,
-              { color: colors.text, backgroundColor: colors.background, borderColor: colors.border },
+              {
+                color: colors.text,
+                backgroundColor: colors.background,
+                borderColor: colors.border,
+                borderRadius: radii.sm,
+                paddingHorizontal: spacing.md,
+                paddingVertical: spacing.sm,
+              },
             ]}
           />
         </BottomSheetView>
@@ -76,22 +84,19 @@ const ProfileBottomSheetSelect = forwardRef<BottomSheetModal, ProfileBottomSheet
                 onPress={() => handleSelect(item.value)}
                 style={({ pressed }) => [
                   styles.option,
-                  { borderBottomColor: colors.border },
+                  { borderBottomColor: colors.borderLight },
                   pressed && { opacity: 0.6 },
-                  isSelected && { backgroundColor: colors.primary },
+                  isSelected && { backgroundColor: colors.primarySubtle },
                 ]}
               >
                 <ThemedText
-                  style={[
-                    styles.optionText,
-                    { color: isSelected ? colors.primary : colors.text },
-                    isSelected && { fontWeight: '600' },
-                  ]}
+                  variant={isSelected ? 'bodyBold' : 'body'}
+                  style={{ color: isSelected ? colors.primary : colors.text }}
                 >
                   {item.label}
                 </ThemedText>
                 {isSelected && (
-                  <ThemedText style={{ color: colors.primary, fontSize: 16 }}>✓</ThemedText>
+                  <AppIcon name="check" size={sizes.iconSm} color="primary" />
                 )}
               </Pressable>
             );
@@ -106,17 +111,11 @@ const ProfileBottomSheetSelect = forwardRef<BottomSheetModal, ProfileBottomSheet
 
 ProfileBottomSheetSelect.displayName = 'ProfileBottomSheetSelect';
 
-export default ProfileBottomSheetSelect;
-
 const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 20,
-    paddingBottom: 8,
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: '700',
-    textAlign: 'center',
+    paddingTop: 8,
+    paddingBottom: 12,
   },
   searchContainer: {
     paddingHorizontal: 16,
@@ -124,24 +123,20 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   searchInput: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    fontSize: 15,
+    borderWidth: 1,
+    minHeight: 40,
+  },
+  listContent: {
+    paddingBottom: 24,
   },
   option: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
     paddingVertical: 14,
+    paddingHorizontal: 20,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  optionText: {
-    fontSize: 15,
-  },
-  listContent: {
-    paddingBottom: 40,
-  },
 });
+
+export default ProfileBottomSheetSelect;

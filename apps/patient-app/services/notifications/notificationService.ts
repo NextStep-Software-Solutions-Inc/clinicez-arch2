@@ -1,3 +1,4 @@
+﻿// token-guard:ignore-file (native Android notification channel light colours)
 import * as ExpoNotifications from 'expo-notifications';
 import { storage } from '@utils/storage';
 import { Platform } from 'react-native';

@@ -1,14 +1,14 @@
-import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
 import { View, Image, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
-import { useTheme } from '@react-navigation/native';
 import { useUser } from '@clerk/expo';
 import * as ImagePicker from 'expo-image-picker';
 import ThemedText from './ui/ThemedText';
 import { AppIcon } from './ui/Icon';
 import { dialog } from '@utils/dialog';
+import { useAppTheme } from '../contexts/ThemeContext';
 
-export default function ProfileCard() {
-  const { colors } = useTheme();
+export default function ProfileCardWeb() {
+  const { colors, radii, shadows } = useAppTheme();
   const { user } = useUser();
 
   // Locally cached URI — shown immediately before Clerk image loads
@@ -103,37 +103,53 @@ export default function ProfileCard() {
   }, [user]);
 
   return (
-    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+    <View
+      style={[
+        styles.card,
+        shadows.sm,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          borderRadius: radii.lg,
+        },
+      ]}
+    >
       {/* Avatar with camera overlay */}
       <Pressable
         onPress={handlePickImage}
         accessibilityLabel="Change profile photo"
         accessibilityRole="button"
-        style={styles.avatarWrapper}
+        style={({ pressed, hovered }: any) => [
+          styles.avatarWrapper,
+          hovered && { opacity: 0.85 },
+          pressed && { opacity: 0.7 },
+        ]}
       >
-        <View style={styles.avatarContainer}>
+        <View style={[styles.avatarContainer, { borderRadius: radii.full }]}>
           {avatarSource ? (
             <Image
               source={require('../assets/fallback_profile.jpg')}
-              style={[styles.avatar, { backgroundColor: colors.border }]}
+              style={[styles.avatar, { backgroundColor: colors.border, borderRadius: radii.full }]}
               resizeMode="cover"
             />
           ) : (
-            <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
-              <ThemedText style={styles.initials}>{initials}</ThemedText>
+            <View style={[styles.avatar, { backgroundColor: colors.primary, borderRadius: radii.full }]}>
+              <ThemedText variant="h2" style={{ color: colors.onPrimary }}>
+                {initials}
+              </ThemedText>
             </View>
           )}
           {avatarSource && !imageError && (
             <Image
               source={{ uri: avatarSource }}
-              style={[styles.avatar, { position: 'absolute', top: 0, left: 0 }]}
+              style={[styles.avatar, { position: 'absolute', top: 0, left: 0, borderRadius: radii.full }]}
               onLoadStart={() => setImageLoading(true)}
               onLoadEnd={() => setImageLoading(false)}
               onError={() => setImageError(true)}
             />
           )}
           {imageLoading && (
-            <View style={[StyleSheet.absoluteFill, styles.avatarLoader]}>
+            <View style={[StyleSheet.absoluteFill, styles.avatarLoader, { backgroundColor: colors.overlay }]}>
               <ActivityIndicator size="small" color={colors.primary} />
             </View>
           )}
@@ -143,24 +159,33 @@ export default function ProfileCard() {
         <View
           style={[
             styles.cameraBadge,
-            { backgroundColor: colors.card, borderColor: colors.border },
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              borderRadius: radii.full,
+            },
           ]}
         >
           {uploading ? (
             <ActivityIndicator size="small" color={colors.primary} style={styles.badgeSpinner} />
           ) : (
-            <AppIcon name="camera" size={12} color={colors.text as string} />
+            <AppIcon name="camera" size={12} color="text" />
           )}
         </View>
       </Pressable>
 
       {/* Info */}
       <View style={styles.info}>
-        <ThemedText style={styles.name} numberOfLines={1}>
+        <ThemedText variant="title" numberOfLines={1}>
           {displayName}
         </ThemedText>
         {email ? (
-          <ThemedText style={[styles.email, { color: colors.text, opacity: 0.65 }]} numberOfLines={1}>
+          <ThemedText
+            variant="body"
+            color="textSecondary"
+            numberOfLines={1}
+            style={styles.email}
+          >
             {email}
           </ThemedText>
         ) : null}
@@ -174,7 +199,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
-    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
     marginBottom: 28,
     gap: 14,
@@ -186,26 +210,18 @@ const styles = StyleSheet.create({
   avatarContainer: {
     width: 58,
     height: 58,
-    borderRadius: 29,
     overflow: 'hidden',
     position: 'relative',
   },
   avatarLoader: {
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.4)',
   },
   avatar: {
     width: 58,
     height: 58,
-    borderRadius: 29,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  initials: {
-    color: '#fff',
-    fontSize: 20,
-    fontWeight: '700',
   },
   cameraBadge: {
     position: 'absolute',
@@ -213,7 +229,6 @@ const styles = StyleSheet.create({
     right: 0,
     width: 22,
     height: 22,
-    borderRadius: 11,
     borderWidth: 1.5,
     justifyContent: 'center',
     alignItems: 'center',
@@ -224,12 +239,7 @@ const styles = StyleSheet.create({
   info: {
     flex: 1,
   },
-  name: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
   email: {
-    fontSize: 14,
     marginTop: 2,
   },
 });

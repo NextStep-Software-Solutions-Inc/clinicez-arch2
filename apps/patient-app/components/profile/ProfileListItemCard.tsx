@@ -1,4 +1,5 @@
-import { View, Pressable, StyleSheet, Platform } from 'react-native';
+﻿import React from 'react';
+import { View, Pressable, StyleSheet } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
@@ -6,10 +7,10 @@ import Animated, {
   withSpring,
   runOnJS,
 } from 'react-native-reanimated';
-import { useTheme } from '@react-navigation/native';
 import { AppIcon } from '@ui/Icon';
 import ThemedText from '@ui/ThemedText';
 import { dialog } from '@utils/dialog';
+import { useAppTheme } from '../../contexts/ThemeContext';
 
 const ACTION_W = 130; // total width of the revealed action panel
 
@@ -30,12 +31,16 @@ export default function ProfileListItemCard({
   onDelete,
   deleteMessage = 'Are you sure you want to delete this entry?',
 }: ProfileListItemCardProps) {
-  const { colors } = useTheme();
+  const { colors, radii, sizes } = useAppTheme();
   const translateX = useSharedValue(0);
   const startX = useSharedValue(0);
 
-  const close = () => { translateX.value = withSpring(0, { damping: 20 }); };
-  const open = () => { translateX.value = withSpring(-ACTION_W, { damping: 20 }); };
+  const close = () => {
+    translateX.value = withSpring(0, { damping: 20 });
+  };
+  const open = () => {
+    translateX.value = withSpring(-ACTION_W, { damping: 20 });
+  };
 
   const pan = Gesture.Pan()
     .activeOffsetX([-8, 8])
@@ -71,45 +76,80 @@ export default function ProfileListItemCard({
   };
 
   return (
-    <View style={[styles.wrapper, { borderRadius: 12 }]}>
+    <View style={[styles.wrapper, { borderRadius: radii.md }]}>
       {/* Action panel — hidden behind the card, revealed on swipe-left */}
-      <View style={[styles.actionsPanel, { backgroundColor: colors.card }]}>
+      <View style={[styles.actionsPanel, { backgroundColor: colors.surface }]}>
         <Pressable
           onPress={handleEdit}
-          style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.6 }]}
+          style={({ pressed, hovered }: any) => [
+            styles.actionBtn,
+            hovered && { backgroundColor: colors.primarySubtle },
+            pressed && { opacity: 0.6 },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Edit"
         >
-          <AppIcon android="edit" ios="pencil" size={16} color={colors.primary} />
-          <ThemedText style={[styles.actionText, { color: colors.primary }]}>Edit</ThemedText>
+          <AppIcon name="edit" size={sizes.iconSm} color="primary" />
+          <ThemedText variant="captionBold" color="primary">
+            Edit
+          </ThemedText>
         </Pressable>
-        <View style={[styles.actionDivider, { backgroundColor: colors.border }]} />
+        <View style={[styles.actionDivider, { backgroundColor: colors.borderLight }]}>
+        </View>
         <Pressable
           onPress={handleDelete}
-          style={({ pressed }) => [styles.actionBtn, pressed && { opacity: 0.6 }]}
+          style={({ pressed, hovered }: any) => [
+            styles.actionBtn,
+            hovered && { backgroundColor: colors.emergencyBg },
+            pressed && { opacity: 0.6 },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Delete"
         >
-          <AppIcon android="delete" ios="trash" size={16} color="#EF4444" />
-          <ThemedText style={[styles.actionText, { color: '#EF4444' }]}>Delete</ThemedText>
+          <AppIcon name="trash" size={sizes.iconSm} color="emergency" />
+          <ThemedText variant="captionBold" color="emergency">
+            Delete
+          </ThemedText>
         </Pressable>
       </View>
 
       {/* Card face — slides left to reveal action panel */}
       <GestureDetector gesture={pan}>
         <Animated.View
-          style={[styles.card, cardStyle, { backgroundColor: colors.card, borderColor: colors.border }]}
+          style={[
+            styles.card,
+            cardStyle,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              borderRadius: radii.md,
+            },
+          ]}
         >
           <View style={styles.content}>
             <View style={styles.text}>
-              <ThemedText style={[styles.title, { color: colors.text }]} numberOfLines={1}>
+              <ThemedText variant="bodyBold" numberOfLines={1}>
                 {title}
               </ThemedText>
               {subtitle ? (
-                <ThemedText style={[styles.subtitle, { color: colors.text }]} numberOfLines={1}>
+                <ThemedText variant="small" color="textSecondary" numberOfLines={1} style={styles.subtitle}>
                   {subtitle}
                 </ThemedText>
               ) : null}
             </View>
             {badge && (
-              <View style={[styles.badge, { backgroundColor: String(colors.primary) + '22' }]}>
-                <ThemedText style={[styles.badgeText, { color: colors.primary }]}>{badge}</ThemedText>
+              <View
+                style={[
+                  styles.badge,
+                  {
+                    backgroundColor: colors.primarySubtle,
+                    borderRadius: radii.xs,
+                  },
+                ]}
+              >
+                <ThemedText variant="badge" color="primary">
+                  {badge}
+                </ThemedText>
               </View>
             )}
           </View>
@@ -125,7 +165,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   card: {
-    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
   },
   content: {
@@ -135,11 +174,16 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
     gap: 10,
   },
-  text: { flex: 1 },
-  title: { fontSize: 15, fontWeight: '500' },
-  subtitle: { fontSize: 12, marginTop: 2, opacity: 0.6 },
-  badge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-  badgeText: { fontSize: 11, fontWeight: '600' },
+  text: {
+    flex: 1,
+  },
+  subtitle: {
+    marginTop: 2,
+  },
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
   actionsPanel: {
     position: 'absolute',
     left: 0,
@@ -156,9 +200,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 4,
   },
-  actionText: {
-    fontSize: 11,
-    fontWeight: '600',
+  actionDivider: {
+    width: StyleSheet.hairlineWidth,
   },
-  actionDivider: { width: StyleSheet.hairlineWidth },
 });

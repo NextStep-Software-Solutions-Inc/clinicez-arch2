@@ -1,9 +1,13 @@
-import { View, Pressable, StyleSheet, Text } from 'react-native';
-import { useTheme } from '@react-navigation/native';
+﻿import React, { useEffect } from 'react';
+import { View, Pressable, StyleSheet, Platform } from 'react-native';
+import { useAppTheme } from '../../contexts/ThemeContext';
+import ThemedText from './ThemedText';
+import { AppIcon } from './Icon';
 
 interface NumericKeypadProps {
   onPress: (digit: string) => void;
   onDelete: () => void;
+  onEnter?: () => void;
 }
 
 const ROWS = [
@@ -13,8 +17,27 @@ const ROWS = [
   ['', '0', 'del'],
 ] as const;
 
-export default function NumericKeypad({ onPress, onDelete }: NumericKeypadProps) {
-  const { colors } = useTheme();
+export default function NumericKeypad({ onPress, onDelete, onEnter }: NumericKeypadProps) {
+  const { colors, radii, shadows, sizes } = useAppTheme();
+
+  // Web hardware keyboard support
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key >= '0' && e.key <= '9') {
+        e.preventDefault();
+        onPress(e.key);
+      } else if (e.key === 'Backspace') {
+        e.preventDefault();
+        onDelete();
+      } else if (e.key === 'Enter' && onEnter) {
+        e.preventDefault();
+        onEnter();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onPress, onDelete, onEnter]);
 
   return (
     <View style={styles.container}>
@@ -28,18 +51,28 @@ export default function NumericKeypad({ onPress, onDelete }: NumericKeypadProps)
             return (
               <Pressable
                 key={keyIndex}
-                style={({ pressed }) => [
+                style={({ pressed, hovered }: any) => [
                   styles.key,
-                  styles.keyButton,
-                  { backgroundColor: colors.card },
+                  shadows.sm,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.borderLight,
+                    borderRadius: radii.full,
+                  },
                   pressed && styles.keyPressed,
+                  hovered && { backgroundColor: colors.surfaceSubtle },
                 ]}
                 onPress={() => (isDelete ? onDelete() : onPress(key))}
+                accessibilityRole="button"
                 accessibilityLabel={isDelete ? 'Delete' : key}
               >
-                <Text style={[styles.keyText, { color: colors.text }]}>
-                  {isDelete ? '⌫' : key}
-                </Text>
+                {isDelete ? (
+                  <AppIcon name="back" size={sizes.iconLg} color="text" />
+                ) : (
+                  <ThemedText variant="title" style={styles.keyText}>
+                    {key}
+                  </ThemedText>
+                )}
               </Pressable>
             );
           })}
@@ -63,22 +96,14 @@ const styles = StyleSheet.create({
   key: {
     width: 80,
     height: 80,
-    borderRadius: 40,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  keyButton: {
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    borderWidth: 1,
   },
   keyPressed: {
     opacity: 0.6,
   },
   keyText: {
-    fontSize: 24,
     fontWeight: '400',
   },
 });

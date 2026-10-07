@@ -1,5 +1,6 @@
 import { createNativeStackNavigator, createNativeStackScreen } from '@react-navigation/native-stack';
 import { isLiquidGlassSupported } from '@callstack/liquid-glass';
+import { radiusScale } from '@clinicez/design-tokens';
 
 import MainBottomTabs from './MainBottomTabs';
 
@@ -114,7 +115,7 @@ const MainStack = createNativeStackNavigator({
         presentation: 'formSheet',
         sheetAllowedDetents: [0.55, 0.85],
         sheetGrabberVisible: true,
-        sheetCornerRadius: 20,
+        sheetCornerRadius: radiusScale.xl,
         headerShown: true,
       },
     }),
@@ -147,7 +148,7 @@ const MainStack = createNativeStackNavigator({
         presentation: 'formSheet',
         sheetAllowedDetents: [0.92],
         sheetGrabberVisible: true,
-        sheetCornerRadius: 20,
+        sheetCornerRadius: radiusScale.xl,
         headerShown: true,
       },
     }),
@@ -170,7 +171,7 @@ const MainStack = createNativeStackNavigator({
         presentation: 'formSheet',
         sheetAllowedDetents: [0.88],
         sheetGrabberVisible: true,
-        sheetCornerRadius: 20,
+        sheetCornerRadius: radiusScale.xl,
         headerShown: true,
       },
     }),
@@ -181,7 +182,7 @@ const MainStack = createNativeStackNavigator({
         presentation: 'formSheet',
         sheetAllowedDetents: [0.75, 1.0],
         sheetGrabberVisible: true,
-        sheetCornerRadius: 20,
+        sheetCornerRadius: radiusScale.xl,
         headerShown: true,
       },
     }),

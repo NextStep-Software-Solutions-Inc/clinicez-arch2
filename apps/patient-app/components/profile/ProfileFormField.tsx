@@ -1,8 +1,9 @@
+﻿import React from 'react';
 import { View, TextInput, StyleSheet, TextInputProps, Pressable, Platform } from 'react-native';
-import { useTheme } from '@react-navigation/native';
 import { AppIcon } from '@ui/Icon';
 import ThemedText from '@ui/ThemedText';
 import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { useAppTheme } from '../../contexts/ThemeContext';
 
 interface ProfileFormFieldProps extends Omit<TextInputProps, 'value' | 'onChangeText'> {
   label: string;
@@ -30,7 +31,7 @@ export default function ProfileFormField({
   multiline = false,
   ...rest
 }: ProfileFormFieldProps) {
-  const { colors } = useTheme();
+  const { colors, radii, sizes } = useAppTheme();
 
   const isDisabled = !editable && !picker;
   const isPickerField = picker || (!editable && !!rest.onPressIn);
@@ -46,41 +47,50 @@ export default function ProfileFormField({
       multiline={multiline}
       style={[
         styles.input,
-        multiline && styles.multiline,
-        isDisabled && styles.disabled,
-        isPickerField && styles.pickerInput,
         {
+          borderRadius: radii.md,
           borderColor: colors.border,
-          backgroundColor: isDisabled ? colors.background : colors.card,
+          backgroundColor: isDisabled ? colors.background : colors.surface,
           color: colors.text,
         },
+        multiline && styles.multiline,
+        isDisabled && styles.disabled,
       ]}
-      placeholderTextColor={colors.text}
+      placeholderTextColor={colors.textMuted}
       {...rest}
     />
   );
 
   return (
     <View style={styles.container}>
-      <ThemedText style={[styles.label, { color: colors.text }]}>
+      <ThemedText variant="smallBold" style={[styles.label, { color: colors.text }]}>
         {label}
-        {required && <ThemedText style={styles.required}> *</ThemedText>}
+        {required && <ThemedText variant="smallBold" color="emergency"> *</ThemedText>}
       </ThemedText>
       {isPickerField ? (
         <Pressable
           onPress={rest.onPressIn as any}
-          style={[
+          style={({ pressed, hovered }: any) => [
             styles.pickerWrapper,
-            { borderColor: colors.border, backgroundColor: colors.card },
+            {
+              borderColor: colors.border,
+              backgroundColor: colors.surface,
+              borderRadius: radii.md,
+            },
+            hovered && { backgroundColor: colors.surfaceSubtle },
+            pressed && { opacity: 0.7 },
           ]}
+          accessibilityRole="button"
+          accessibilityLabel={label}
         >
           <ThemedText
-            style={[styles.pickerText, { color: value ? colors.text : colors.text, opacity: value ? 1 : 0.6 }]}
+            variant="body"
+            style={{ color: colors.text, opacity: value ? 1 : 0.6, flex: 1 }}
             numberOfLines={1}
           >
             {value || (rest.placeholder ?? '')}
           </ThemedText>
-          <AppIcon android="unfold_more" ios="chevron.up.chevron.down" size={16} color={colors.text} />
+          <AppIcon name="chevronDown" size={sizes.iconSm} color="textMuted" />
         </Pressable>
       ) : (
         inputEl
@@ -94,20 +104,13 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   label: {
-    fontSize: 12,
-    fontWeight: '500',
     marginBottom: 5,
     opacity: 0.65,
   },
-  required: {
-    color: '#EF4444',
-  },
   input: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 11,
-    fontSize: 15,
     minHeight: 44,
   },
   multiline: {
@@ -118,12 +121,8 @@ const styles = StyleSheet.create({
   disabled: {
     opacity: 0.45,
   },
-  pickerInput: {
-    // kept for fallback only; Pressable wrapper is used instead
-  },
   pickerWrapper: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 11,
     minHeight: 44,
@@ -131,9 +130,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
-  },
-  pickerText: {
-    fontSize: 15,
-    flex: 1,
   },
 });

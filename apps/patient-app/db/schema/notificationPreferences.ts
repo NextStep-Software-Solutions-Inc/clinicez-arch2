@@ -1,3 +1,4 @@
+﻿// token-guard:ignore-file (native notification preferences category metadata colours)
 import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import type { NotificationCategory } from './notifications';
 

@@ -1,43 +1,64 @@
-import { StyleSheet } from 'react-native';
+﻿import React from 'react';
+import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import ThemedView from './ThemedView';
+import { useAppTheme } from '../../contexts/ThemeContext';
 
 interface SkeletonProps {
   width?: number | string;
   height?: number;
   radius?: number;
+  style?: StyleProp<ViewStyle>;
 }
 
-export function Skeleton({ width = '100%', height = 16, radius = 12 }: SkeletonProps) {
-  return <ThemedView style={[styles.base, { width: width as any, height, borderRadius: radius }]} />;
+export function Skeleton({ width = '100%', height = 16, radius, style }: SkeletonProps) {
+  const { colors, radii } = useAppTheme();
+  return (
+    <ThemedView
+      style={[
+        {
+          width: width as any,
+          height,
+          borderRadius: radius ?? radii.md,
+          backgroundColor: colors.skeletonBase,
+        },
+        style,
+      ]}
+    />
+  );
 }
 
 export function SkeletonCard() {
+  const { colors, radii, spacing } = useAppTheme();
   return (
-    <ThemedView style={styles.card}>
+    <ThemedView
+      style={[
+        styles.card,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          borderRadius: radii.lg,
+          padding: spacing.lg,
+          gap: spacing.md,
+        },
+      ]}
+    >
       <Skeleton height={18} width="62%" />
       <Skeleton height={12} width="86%" />
       <Skeleton height={12} width="72%" />
-      <ThemedView style={styles.row}>
-        <Skeleton height={36} width="48%" radius={10} />
-        <Skeleton height={36} width="48%" radius={10} />
+      <ThemedView style={[styles.row, { gap: spacing.md }]}>
+        <Skeleton height={36} width="48%" radius={radii.md} />
+        <Skeleton height={36} width="48%" radius={radii.md} />
       </ThemedView>
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  base: {
-    backgroundColor: 'rgba(148, 163, 184, 0.22)',
-  },
   card: {
-    padding: 16,
-    borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
-    gap: 10,
   },
   row: {
     flexDirection: 'row',
-    gap: 10,
     marginTop: 4,
   },
 });
