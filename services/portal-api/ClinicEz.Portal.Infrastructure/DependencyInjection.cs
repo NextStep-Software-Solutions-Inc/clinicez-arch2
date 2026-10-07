@@ -85,9 +85,11 @@ public static class DependencyInjection
             .UsePostgreSqlStorage(c => c.UseNpgsqlConnection(connectionString)));
 
         services.AddHangfireServer();
+        services.AddScoped<IFacilityProvisioningReconciliationJob, FacilityProvisioningReconciliationJob>();
 
         services.AddMassTransit(x =>
         {
+            x.SetEndpointNameFormatter(new KebabCaseEndpointNameFormatter("portal", false));
             x.AddConsumer<FacilityProvisionedEventConsumer>();
 
             x.AddEntityFrameworkOutbox<ApplicationDbContext>(o =>

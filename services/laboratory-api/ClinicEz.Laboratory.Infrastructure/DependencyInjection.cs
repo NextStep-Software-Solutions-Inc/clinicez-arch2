@@ -61,6 +61,7 @@ public static class DependencyInjection
 
 		services.AddMassTransit(x =>
 		{
+			x.SetEndpointNameFormatter(new KebabCaseEndpointNameFormatter("laboratory", false));
 			x.AddConsumer<FacilityCreatedConsumer>();
 			x.AddConsumer<LabRequisitionIssuedConsumer>();
 			x.AddEntityFrameworkOutbox<ApplicationDbContext>(o =>

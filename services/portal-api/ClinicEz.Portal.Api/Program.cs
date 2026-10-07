@@ -190,6 +190,13 @@ app.UseHttpsRedirection();
 app.UseExceptionHandler(); // Use our global exception handler
 app.UseHangfireDashboard(); // Add Hangfire Dashboard endpoint
 
+// Recurring background reconciliation job for pending/stuck facilities
+RecurringJob.AddOrUpdate<ClinicEz.Portal.Infrastructure.Services.IFacilityProvisioningReconciliationJob>(
+    "facility-provisioning-reconciliation",
+    job => job.ReconcileStuckFacilitiesAsync(CancellationToken.None),
+    "*/2 * * * *"
+);
+
 // Support root /api/internal requests from internal microservices (e.g. philhealth-proxy)
 app.Use(async (context, next) =>
 {

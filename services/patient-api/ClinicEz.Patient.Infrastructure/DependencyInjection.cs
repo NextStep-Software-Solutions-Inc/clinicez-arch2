@@ -87,6 +87,7 @@ public static class DependencyInjection
         // ── MassTransit — RabbitMQ & EF Core Outbox ───────────────────────────
         services.AddMassTransit(x =>
         {
+            x.SetEndpointNameFormatter(new KebabCaseEndpointNameFormatter("patient", false));
             x.AddConsumer<FacilityCreatedConsumer>();
             x.AddConsumer<ClinicRecordVerifiedConsumer>();
             x.AddEntityFrameworkOutbox<ApplicationDbContext>(o =>

@@ -77,6 +77,7 @@ public static class DependencyInjection
 
         services.AddMassTransit(x =>
         {
+            x.SetEndpointNameFormatter(new KebabCaseEndpointNameFormatter("clinic", false));
             x.AddConsumer<FacilityCreatedConsumer>();
             x.AddConsumer<AppointmentBookedConsumer>();
             x.AddConsumer<DiagnosticReportFinalizedConsumer>();
