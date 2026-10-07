@@ -4,11 +4,8 @@ import { theme } from '@constants/theme';
 import { Modal, Input, Button, Badge, ThemedText } from '@ui';
 import { Alert } from '@utils/feedback';
 import { clinicService, BulkImportServiceItem, BulkImportResult } from '../services/clinicService';
-import PhilHealthCatalogMappingModal, {
-  CatalogMappingResult,
-  CORE_GAMOT_FORMULARY,
-  STATUTORY_YAKAP_DIAGNOSTICS,
-} from './PhilHealthCatalogMappingModal';
+import { philHealthCatalogService } from '../services/philHealthCatalogService';
+import PhilHealthCatalogMappingModal, { CatalogMappingResult } from './PhilHealthCatalogMappingModal';
 
 interface CsvCatalogImportModalProps {
   visible: boolean;
@@ -32,6 +29,7 @@ export default function CsvCatalogImportModal({
   const [parsedRows, setParsedRows] = useState<ParsedImportRow[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [step, setStep] = useState<'input' | 'preview'>('input');
+  const [isVerifying, setIsVerifying] = useState(false);
 
   // PhilHealth Catalog Mapping Modal Sub-Dialog State
   const [activeMappingRowId, setActiveMappingRowId] = useState<string | null>(null);
@@ -42,59 +40,42 @@ export default function CsvCatalogImportModal({
     setCsvRawText((current) => (current.trim() ? current : `${CSV_HEADERS}\n`));
   };
 
-  const autoMatchPhilHealth = (name: string, category: string, explicitCode?: string): {
-    code?: string;
-    desc?: string;
-    isFormulary: boolean;
-    status: 'Mapped' | 'NeedsMapping' | 'NonFormulary' | 'N/A';
-  } => {
-    const isMed = category.toLowerCase() === 'medicine';
-    const isDiag = category.toLowerCase() === 'diagnostic';
-
-    if (!isMed && !isDiag) {
-      return { isFormulary: false, status: 'N/A' };
-    }
-
-    // If explicit PhilHealth code was given in CSV
-    if (explicitCode && explicitCode.trim()) {
-      const codeTrimmed = explicitCode.trim();
-      const list = isMed ? CORE_GAMOT_FORMULARY : STATUTORY_YAKAP_DIAGNOSTICS;
-      const matchedItem = list.find((x) => x.code === codeTrimmed);
-      return {
-        code: codeTrimmed,
-        desc: matchedItem?.name || name,
-        isFormulary: true,
-        status: 'Mapped',
-      };
-    }
-
-    // Auto-heuristic search
-    const lowerName = name.toLowerCase();
-    const list = isMed ? CORE_GAMOT_FORMULARY : STATUTORY_YAKAP_DIAGNOSTICS;
-    const match = list.find((item) => {
-      const itemLower = item.name.toLowerCase();
-      // Look for significant keyword overlap
-      const keywords = itemLower.split(/[\s,()/-]+/).filter((w) => w.length > 3);
-      const matchesKeyword = keywords.some((kw) => lowerName.includes(kw));
-      return itemLower.includes(lowerName) || lowerName.includes(itemLower) || matchesKeyword;
-    });
-
-    if (match) {
-      return {
-        code: match.code,
-        desc: match.name,
-        isFormulary: true,
-        status: 'Mapped',
-      };
-    }
-
-    return {
-      isFormulary: false,
-      status: 'NeedsMapping',
-    };
+  /**
+   * Medicines and diagnostics must carry a PhilHealth Catalog code. A code typed into the CSV is verified against the
+   * catalog; anything else is left for the staff member to map explicitly (no guessing from keywords).
+   */
+  const clinicalKind = (category: string): 'medicine' | 'diagnostic' | null => {
+    const lower = category.toLowerCase();
+    if (lower === 'medicine') return 'medicine';
+    if (lower === 'diagnostic') return 'diagnostic';
+    return null;
   };
 
-  const parseCsv = () => {
+  const verifyCatalogCodes = async (
+    wanted: { kind: 'medicine' | 'diagnostic'; code: string }[],
+  ): Promise<Map<string, string>> => {
+    const verified = new Map<string, string>();
+    const unique = [...new Map(wanted.map((w) => [`${w.kind}:${w.code}`, w])).values()];
+
+    const [diagnostics] = unique.some((w) => w.kind === 'diagnostic')
+      ? await philHealthCatalogService.getLibrary('lib_diagnostic')
+      : [null];
+
+    await Promise.all(
+      unique.map(async ({ kind, code }) => {
+        if (kind === 'diagnostic') {
+          const hit = diagnostics?.find((d) => d.isActive && d.code === code);
+          if (hit) verified.set(`${kind}:${code}`, hit.description);
+          return;
+        }
+        const [hits] = await philHealthCatalogService.search('lib_medicine', code, 5);
+        const hit = hits?.find((m) => m.code === code);
+        if (hit) verified.set(`${kind}:${code}`, hit.description);
+      }),
+    );
+    return verified;
+  };
+  const parseCsv = async () => {
     if (!csvRawText.trim()) {
       Alert.alert('Empty Input', 'Please paste or enter CSV data before continuing.');
       return;
@@ -125,6 +106,7 @@ export default function CsvCatalogImportModal({
     }
 
     const rows: ParsedImportRow[] = [];
+    const toVerify: { rowIndex: number; kind: 'medicine' | 'diagnostic'; code: string }[] = [];
 
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i];
@@ -139,7 +121,9 @@ export default function CsvCatalogImportModal({
       const rawDesc = descIdx !== -1 ? cols[descIdx] : '';
       const explicitPhilHealthCode = philHealthCodeIdx !== -1 ? cols[philHealthCodeIdx] : undefined;
 
-      const mapping = autoMatchPhilHealth(rawName, rawCat, explicitPhilHealthCode);
+      const kind = clinicalKind(rawCat);
+      const explicitCode = explicitPhilHealthCode?.trim();
+      if (kind && explicitCode) toVerify.push({ rowIndex: rows.length, kind, code: explicitCode });
 
       rows.push({
         id: `row-${i}-${Date.now()}`,
@@ -148,16 +132,33 @@ export default function CsvCatalogImportModal({
         category: rawCat,
         standardPrice: rawPrice,
         description: rawDesc,
-        philHealthCode: mapping.code,
-        philHealthDescription: mapping.desc,
-        isPhilHealthFormulary: mapping.isFormulary,
-        mappingStatus: mapping.status,
+        philHealthCode: undefined,
+        philHealthDescription: undefined,
+        isPhilHealthFormulary: false,
+        mappingStatus: kind ? 'NeedsMapping' : 'N/A',
       });
     }
 
     if (rows.length === 0) {
       Alert.alert('No Rows Parsed', 'Could not parse any valid service records from the input.');
       return;
+    }
+
+    if (toVerify.length > 0) {
+      setIsVerifying(true);
+      const verified = await verifyCatalogCodes(toVerify);
+      setIsVerifying(false);
+      for (const item of toVerify) {
+        const description = verified.get(`:`);
+        if (!description) continue;
+        rows[item.rowIndex] = {
+          ...rows[item.rowIndex],
+          philHealthCode: item.code,
+          philHealthDescription: description,
+          isPhilHealthFormulary: true,
+          mappingStatus: 'Mapped',
+        };
+      }
     }
 
     setParsedRows(rows);
@@ -225,7 +226,7 @@ export default function CsvCatalogImportModal({
       if (data) {
         Alert.alert(
           'Import Completed',
-          `Successfully processed ${data.totalProcessed} items!\n\nâ€¢ Created: ${data.totalCreated}\nâ€¢ Updated: ${data.totalUpdated}\nâ€¢ Yakap Formularies: ${data.totalMappedToPhilHealth}\nâ€¢ Non-Formulary: ${data.totalNonFormulary}`
+          `Successfully processed ${data.totalProcessed} items!\n\n- Created: ${data.totalCreated}\n- Updated: ${data.totalUpdated}\n- Yakap Formularies: ${data.totalMappedToPhilHealth}\n- Non-Formulary: ${data.totalNonFormulary}`
         );
         onImportSuccess(data);
         onClose();
@@ -249,7 +250,7 @@ export default function CsvCatalogImportModal({
     step === 'input' ? (
       <View style={styles.footerRow}>
         <Button title="Cancel" variant="ghost" onPress={onClose} />
-        <Button title="Parse and match PhilHealth catalog" onPress={parseCsv} disabled={!csvRawText.trim()} />
+        <Button title="Parse and check PhilHealth codes" onPress={parseCsv} loading={isVerifying} disabled={!csvRawText.trim() || isVerifying} />
       </View>
     ) : (
       <View style={styles.footerRow}>

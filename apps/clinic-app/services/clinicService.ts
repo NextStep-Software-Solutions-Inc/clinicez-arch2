@@ -1,3 +1,4 @@
+import type { AxiosRequestConfig } from 'axios';
 import { clinicApiClient, pharmacyApiClient, clinicApiUrl } from './apiClient';
 import { SyncStatus } from '@shared/safe';
 
@@ -208,7 +209,6 @@ export interface AppointmentItem {
 export interface Icd10Code {
   code: string;
   description: string;
-  category: string;
 }
 
 export interface ClinicServiceItem {
@@ -947,6 +947,11 @@ export const clinicService = {
     return clinicApiClient.get<PrescriptionSlipData>(`/prescriptions/${consultationId}/slip`);
   },
 
+  /** Drugstores this clinic has recorded external dispenses with, most used first. */
+  async getRecentExternalPharmacies() {
+    return clinicApiClient.get<string[]>('/prescriptions/external-pharmacies');
+  },
+
   async recordExternalDispense(consultationId: string, payload: RecordExternalDispensePayload) {
     return clinicApiClient.post<PrescriptionSlipData>(`/prescriptions/${consultationId}/record-external-dispense`, payload);
   },
@@ -1230,8 +1235,8 @@ export const clinicService = {
     return clinicApiClient.get<ClinicPatient>(`/patients/${id}`);
   },
 
-  async registerPatient(payload: RegisterPatientPayload) {
-    return clinicApiClient.post<ClinicPatient>('/patients', payload);
+  async registerPatient(payload: RegisterPatientPayload, config?: AxiosRequestConfig) {
+    return clinicApiClient.post<ClinicPatient>('/patients', payload, config);
   },
 
   async bulkRegisterPatients(patients: RegisterPatientPayload[]) {
@@ -1353,8 +1358,8 @@ export const clinicService = {
     notes?: string;
     uploadedByStaffId?: string;
     uploadedByStaffName?: string;
-  }) {
-    return clinicApiClient.post<ClinicRecordAttachmentRecord>('/records/attachments', payload);
+  }, config?: AxiosRequestConfig) {
+    return clinicApiClient.post<ClinicRecordAttachmentRecord>('/records/attachments', payload, config);
   },
 
   async getPatientRecordAttachments(patientId: string, recordType?: string) {
@@ -1458,10 +1463,6 @@ export const clinicService = {
 
   async extractYakapMasterlist(payload: { hciAccreditationNumber: string; cipherKey: string }) {
     return clinicApiClient.post<YakapMasterlistAssignment[]>('/yakap/masterlist/extract', payload);
-  },
-
-  async getPhilHealthCatalog(catalogType: string) {
-    return clinicApiClient.get<PhilHealthCatalogItem[]>(`/yakap/catalogs/${encodeURIComponent(catalogType)}`);
   },
 
   // PhilHealth SOAP Sandbox & Simulation
@@ -1746,12 +1747,6 @@ export interface YakapMasterlistAssignment {
   packageType: string;
   registrationDate: string;
   effectivityYear: string;
-}
-
-export interface PhilHealthCatalogItem {
-  code: string;
-  description: string;
-  category?: string;
 }
 
 export interface PhilHealthConditionEntry {

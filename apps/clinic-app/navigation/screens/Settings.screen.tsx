@@ -27,6 +27,7 @@ import { usePermission } from '../../context/AuthContext';
 import { PERMISSIONS } from '../../constants/permissions';
 import StaffAccessModal from '../../components/settings/StaffAccessModal';
 import SecuritySection from '../../components/settings/SecuritySection';
+import PhilHealthCatalogSection from '../../components/settings/PhilHealthCatalogSection';
 import {
   clinicService,
   DailyEodReport,
@@ -851,6 +852,8 @@ export default function SettingsScreen() {
         </Card>
 
         <SecuritySection />
+
+        <PhilHealthCatalogSection />
 
         {/* Patient custom fields */}
         <Card>

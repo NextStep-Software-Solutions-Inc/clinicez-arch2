@@ -10,6 +10,7 @@ import { AuthGate } from './components/auth/AuthGate';
 import { ClinicProvider } from './context/ClinicContext';
 import { StaffProvider } from './context/StaffContext';
 import { FeedbackHost } from './components/ui';
+import { OfflineSyncRunner } from './components/OfflineSyncRunner';
 import { fontAssets, setCustomFontsAvailable } from './constants/fonts';
 import { theme } from './constants/theme';
 
@@ -38,6 +39,7 @@ export default function App() {
           <AuthGate>
             <ClinicProvider>
               <StaffProvider>
+                <OfflineSyncRunner />
                 <Navigation linking={linkingOptions} theme={navigationTheme} />
               </StaffProvider>
             </ClinicProvider>
