@@ -72,8 +72,14 @@ builder.Services
                 return Task.CompletedTask;
             }
         };
-    });
 builder.Services.AddAuthorization();
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 // 1. Add services from our other layers
 builder.Services
@@ -172,10 +178,11 @@ if (isDevelopment)
 }
 
 // 4. Add middleware
+app.UseForwardedHeaders();
+app.UseCors(isDevelopment ? "development" : "production");
 app.UseHttpsRedirection();
 app.UseExceptionHandler(); // Use our global exception handler
 app.UseHangfireDashboard(); // Add Hangfire Dashboard endpoint
-app.UseCors(isDevelopment ? "development" : "production");
 
 // Support root /api/internal requests from internal microservices (e.g. philhealth-proxy)
 app.Use(async (context, next) =>

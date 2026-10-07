@@ -20,22 +20,27 @@ public static class DependencyInjection
 
         services.AddCors(options =>
         {
-            options.AddPolicy("development", policy =>
+            Action<Microsoft.AspNetCore.Cors.Infrastructure.CorsPolicyBuilder> devConfig = policy =>
             {
                 policy
                     .SetIsOriginAllowed(_ => true)
                     .AllowAnyHeader()
                     .AllowAnyMethod()
                     .AllowCredentials();
-            });
+            };
 
-            options.AddPolicy("production", policy =>
+            Action<Microsoft.AspNetCore.Cors.Infrastructure.CorsPolicyBuilder> prodConfig = policy =>
             {
                 var extraOrigins = configuration?.GetStringList("Cors:AllowedOrigins") ?? [];
 
                 policy
                     .SetIsOriginAllowed(origin =>
                     {
+                        if (configuration?.GetValue<bool>("Cors:AllowAnyOrigin") == true)
+                        {
+                            return true;
+                        }
+
                         if (string.IsNullOrWhiteSpace(origin)) return false;
                         if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri)) return false;
 
@@ -99,7 +104,13 @@ public static class DependencyInjection
                     .AllowAnyHeader()
                     .AllowAnyMethod()
                     .AllowCredentials();
-            });
+            };
+
+            options.AddPolicy("development", devConfig);
+            options.AddPolicy("Development", devConfig);
+            options.AddPolicy("production", prodConfig);
+            options.AddPolicy("Production", prodConfig);
+            options.AddDefaultPolicy(prodConfig);
         });
         return services;
     }
