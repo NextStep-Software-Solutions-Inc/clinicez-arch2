@@ -101,7 +101,7 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
   const value = useMemo<NotificationContextValue>(
     () => ({
       unreadCount,
-      permissionStatus: 'undetermined',
+      permissionStatus: 'granted',
       pushToken: null,
       refreshNotifications: () => void refresh(),
       requestPermissions: async () => false,

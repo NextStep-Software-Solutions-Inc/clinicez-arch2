@@ -1,22 +1,29 @@
 import React, { useCallback, useRef, useState, useMemo } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
-import { useFocusEffect, useNavigation, useTheme } from '@react-navigation/native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useAuth as useClerkAuth } from '@clerk/expo';
 import { useNetInfo } from '@react-native-community/netinfo';
 import { format, isToday, isFuture, isPast, parseISO } from 'date-fns';
 import { and, eq, desc } from 'drizzle-orm';
-import ThemedText from '@ui/ThemedText';
-import EmptyState from '@ui/EmptyState';
-import { SkeletonCard } from '@ui/Skeleton';
-import AppointmentCard from 'components/appointments/AppointmentCard';
-import OfflineBanner from 'components/appointments/OfflineBanner';
-import { usePatientId } from 'hooks/usePatientId';
-import { db } from '@db/index';
-import { bookingDrafts } from '@db/schema/bookingDrafts';
-import { clinics as clinicsTable } from '@db/schema/clinics';
+import ThemedText from '../../components/ui/ThemedText';
+import EmptyState from '../../components/ui/EmptyState';
+import { SkeletonCard } from '../../components/ui/Skeleton';
+import Card from '../../components/ui/Card';
+import Badge from '../../components/ui/Badge';
+import Button from '../../components/ui/Button';
+import { AppIcon } from '../../components/ui/Icon';
+import { SectionHeader } from '../../components/ui/Primitives';
+import OfflineBanner from '../../components/appointments/OfflineBanner';
+import { useAppTheme } from '../../contexts/ThemeContext';
+import { useBreakpoint } from '../../hooks/useBreakpoint';
+import { usePatientId } from '../../hooks/usePatientId';
+import { useNotificationContext } from '../../contexts/NotificationContext';
+import { db } from '../../db/index';
+import { bookingDrafts } from '../../db/schema/bookingDrafts';
+import { clinics as clinicsTable } from '../../db/schema/clinics';
 import { fetchAppointments, getCachedAppointmentsWithLocalBookings } from '../../services/appointments/appointmentsService';
 import type { AppointmentItem } from '../../services/appointments/types';
-import { dialog } from '@utils/dialog';
+import { dialog } from '../../utils/dialog';
 
 interface DraftSummary {
   id: string;
@@ -26,6 +33,8 @@ interface DraftSummary {
   preferredDate: string | null;
   updatedAt: Date;
 }
+
+type TabKey = 'upcoming' | 'past' | 'cancelled' | 'drafts';
 
 function isUpcoming(item: AppointmentItem): boolean {
   try {
@@ -49,31 +58,34 @@ function isActiveTodayItem(item: AppointmentItem): boolean {
 function isPastItem(item: AppointmentItem): boolean {
   try {
     const d = parseISO(item.scheduledAt);
-    const terminal = item.status === 'canceled' || item.status === 'completed' || item.status === 'no_show';
-    return terminal || (!isToday(d) && isPast(d));
+    const terminal = item.status === 'completed' || item.status === 'no_show';
+    return terminal || (!isToday(d) && isPast(d) && item.status !== 'canceled');
   } catch {
     return false;
   }
 }
 
+function isCancelledItem(item: AppointmentItem): boolean {
+  return item.status === 'canceled';
+}
+
 export default function AppointmentsScreenWeb() {
-  const { colors, dark: isDark } = useTheme();
+  const { colors, spacing, radii, sizes, shadows } = useAppTheme();
   const navigation = useNavigation<any>();
   const patientId = usePatientId();
   const { getToken } = useClerkAuth();
   const netInfo = useNetInfo();
-  const { width } = useWindowDimensions();
-
-  const isDesktop = width >= 1024;
-  const isTablet = width >= 640 && width < 1024;
+  const { isDesktop, isCompact } = useBreakpoint();
+  const { unreadCount } = useNotificationContext();
 
   const [appointments, setAppointments] = useState<AppointmentItem[]>([]);
   const [drafts, setDrafts] = useState<DraftSummary[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isFromCache, setIsFromCache] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedTab, setSelectedTab] = useState<'upcoming' | 'past' | 'drafts'>('upcoming');
+  const [selectedTab, setSelectedTab] = useState<TabKey>('upcoming');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
 
   const dbRef = useRef(db);
   const getTokenRef = useRef(getToken);
@@ -153,10 +165,16 @@ export default function AppointmentsScreenWeb() {
 
   const upcomingItems = useMemo(() => appointments.filter(isUpcoming), [appointments]);
   const pastItems = useMemo(() => appointments.filter(isPastItem), [appointments]);
+  const cancelledItems = useMemo(() => appointments.filter(isCancelledItem), [appointments]);
   const activeTodayItem = useMemo(() => upcomingItems.find(isActiveTodayItem) ?? null, [upcomingItems]);
 
-  const handleCardPress = (item: AppointmentItem) =>
-    navigation.navigate('Main', { screen: 'AppointmentDetailScreen', params: { appointmentId: item.id } });
+  const handleCardPress = (item: AppointmentItem) => {
+    if (isDesktop) {
+      setSelectedAppointmentId(item.id);
+    } else {
+      navigation.navigate('Main', { screen: 'AppointmentDetailScreen', params: { appointmentId: item.id } });
+    }
+  };
 
   const handleReschedule = (item: AppointmentItem) =>
     navigation.navigate('Main', {
@@ -194,378 +212,539 @@ export default function AppointmentsScreenWeb() {
     ]);
   };
 
-  // Filter items by search query
   const query = searchQuery.trim().toLowerCase();
 
-  const filteredUpcoming = useMemo(() => {
-    return upcomingItems.filter((item) => {
-      if (!query) return true;
-      return (
+  const filterList = (list: AppointmentItem[]) => {
+    if (!query) return list;
+    return list.filter(
+      (item) =>
         item.clinic.name.toLowerCase().includes(query) ||
         (item.provider?.name?.toLowerCase().includes(query) ?? false) ||
         (item.chiefComplaint?.toLowerCase().includes(query) ?? false) ||
         (item.subject?.toLowerCase().includes(query) ?? false)
-      );
-    });
-  }, [upcomingItems, query]);
+    );
+  };
 
-  const filteredPast = useMemo(() => {
-    return pastItems.filter((item) => {
-      if (!query) return true;
-      return (
-        item.clinic.name.toLowerCase().includes(query) ||
-        (item.provider?.name?.toLowerCase().includes(query) ?? false) ||
-        (item.chiefComplaint?.toLowerCase().includes(query) ?? false) ||
-        (item.subject?.toLowerCase().includes(query) ?? false)
-      );
-    });
-  }, [pastItems, query]);
-
+  const filteredUpcoming = useMemo(() => filterList(upcomingItems), [upcomingItems, query]);
+  const filteredPast = useMemo(() => filterList(pastItems), [pastItems, query]);
+  const filteredCancelled = useMemo(() => filterList(cancelledItems), [cancelledItems, query]);
   const filteredDrafts = useMemo(() => {
-    return drafts.filter((draft) => {
-      if (!query) return true;
-      return (
-        (draft.clinicName?.toLowerCase().includes(query) ?? false) ||
-        (draft.reason?.toLowerCase().includes(query) ?? false)
-      );
-    });
+    if (!query) return drafts;
+    return drafts.filter(
+      (d) =>
+        (d.clinicName?.toLowerCase().includes(query) ?? false) ||
+        (d.reason?.toLowerCase().includes(query) ?? false)
+    );
   }, [drafts, query]);
+
+  const displayedList =
+    selectedTab === 'upcoming'
+      ? filteredUpcoming
+      : selectedTab === 'past'
+      ? filteredPast
+      : selectedTab === 'cancelled'
+      ? filteredCancelled
+      : [];
+
+  const selectedAppointment = useMemo(() => {
+    if (!selectedAppointmentId) return displayedList[0] ?? null;
+    return appointments.find((a) => a.id === selectedAppointmentId) ?? displayedList[0] ?? null;
+  }, [selectedAppointmentId, displayedList, appointments]);
+
+  const tabs: Array<{ key: TabKey; label: string; count: number }> = [
+    { key: 'upcoming', label: 'Upcoming', count: upcomingItems.length },
+    { key: 'past', label: 'Past Visits', count: pastItems.length },
+    { key: 'cancelled', label: 'Cancelled', count: cancelledItems.length },
+    { key: 'drafts', label: 'Drafts', count: drafts.length },
+  ];
 
   return (
     <ScrollView
       style={[styles.root, { backgroundColor: colors.background }]}
-      contentContainerStyle={[styles.scrollContent, { paddingBottom: isDesktop ? 32 : 96 }]}
+      contentContainerStyle={[
+        styles.scrollContent,
+        {
+          padding: isCompact ? spacing.md : spacing['2xl'],
+          gap: spacing['2xl'],
+          paddingBottom: spacing['4xl'],
+        },
+      ]}
       showsVerticalScrollIndicator={false}
     >
-      <View style={styles.container}>
-        {/* Offline Banner */}
-        <OfflineBanner isFromCache={isFromCache} />
+      <OfflineBanner isFromCache={isFromCache} />
 
-        {/* Page Header */}
-        <View style={styles.headerRow}>
-          <View style={styles.headerLeft}>
-            <View style={styles.badgeRow}>
-              <View style={styles.pageBadge}>
-                <ThemedText style={styles.pageBadgeText}>CARE SCHEDULE</ThemedText>
-              </View>
-              {activeTodayItem && (
-                <View style={styles.todayPill}>
-                  <ThemedText style={styles.todayPillText}>● Visit Today</ThemedText>
-                </View>
-              )}
-            </View>
-            <ThemedText style={[styles.pageTitle, { color: colors.text }]}>
-              Appointments & Visits
-            </ThemedText>
-            <ThemedText style={[styles.pageSubtitle, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-              Track your scheduled consultations, review past care history, and resume booking drafts.
-            </ThemedText>
+      {/* Page Header Row */}
+      <View style={styles.headerRow}>
+        <View style={styles.headerLeft}>
+          <View style={styles.badgeRow}>
+            <Badge label="CARE SCHEDULE" tone="primary" size="sm" />
+            {activeTodayItem && <Badge label="Visit Today" tone="success" size="sm" />}
           </View>
-
-          <View style={styles.headerActions}>
-            <Pressable
-              onPress={loadAppointments}
-              disabled={isRefreshing}
-              style={({ pressed }) => [
-                styles.refreshBtn,
-                { borderColor: isDark ? '#334155' : '#CBD5E1' },
-                pressed && { opacity: 0.7 },
-              ]}
-            >
-              {isRefreshing ? (
-                <ActivityIndicator size="small" color="#3B82F6" />
-              ) : (
-                <ThemedText style={styles.refreshBtnText}>🔄 Refresh</ThemedText>
-              )}
-            </Pressable>
-
-            <Pressable
-              onPress={handleBookNew}
-              style={({ pressed }) => [styles.bookNewBtn, pressed && { opacity: 0.85 }]}
-            >
-              <ThemedText style={styles.bookNewBtnText}>➕ Book Appointment</ThemedText>
-            </Pressable>
-          </View>
+          <ThemedText variant="display">Appointments & Visits</ThemedText>
+          <ThemedText variant="bodyLarge" color="textSecondary">
+            Track your scheduled consultations, review past care history, and resume booking drafts.
+          </ThemedText>
         </View>
 
-        {/* Active Today Banner */}
-        {activeTodayItem && selectedTab === 'upcoming' && (
-          <View
-            style={[
-              styles.todayBanner,
-              {
-                backgroundColor: isDark ? '#1E293B' : '#EFF6FF',
-                borderColor: '#3B82F6',
-              },
-            ]}
-          >
-            <View style={styles.todayBannerHeader}>
-              <View style={styles.todayBadge}>
-                <ThemedText style={styles.todayBadgeText}>TODAY'S APPOINTMENT</ThemedText>
-              </View>
-              <ThemedText style={[styles.todayTime, { color: '#3B82F6' }]}>
-                {format(parseISO(activeTodayItem.scheduledAt), 'h:mm a')}
-              </ThemedText>
-            </View>
-            <ThemedText style={[styles.todayClinic, { color: colors.text }]}>
-              {activeTodayItem.clinic.name}
-            </ThemedText>
-            {activeTodayItem.provider && (
-              <ThemedText style={[styles.todayDoctor, { color: isDark ? '#CBD5E1' : '#475569' }]}>
-                👨‍⚕️ {activeTodayItem.provider.name}
-              </ThemedText>
-            )}
-            <View style={styles.todayActions}>
+        <View style={[styles.headerActions, { gap: spacing.md }]}>
+          {isCompact && (
+            <View style={styles.compactShortcuts}>
               <Pressable
-                onPress={() => handleCardPress(activeTodayItem)}
-                style={styles.todayPrimaryBtn}
-              >
-                <ThemedText style={styles.todayPrimaryBtnText}>View Details & QR</ThemedText>
-              </Pressable>
-              <Pressable
-                onPress={() => handleReschedule(activeTodayItem)}
-                style={[
-                  styles.todaySecondaryBtn,
-                  { borderColor: isDark ? '#475569' : '#CBD5E1' },
+                onPress={() => navigation.navigate('Main', { screen: 'NotificationScreen' })}
+                accessibilityRole="button"
+                accessibilityLabel="Notifications"
+                style={(state: any) => [
+                  styles.iconButton,
+                  {
+                    backgroundColor: state.hovered ? colors.surfaceSubtle : colors.transparent,
+                    borderColor: colors.border,
+                    borderRadius: radii.md,
+                  },
                 ]}
               >
-                <ThemedText style={[styles.todaySecondaryBtnText, { color: colors.text }]}>
-                  Reschedule
+                <AppIcon
+                  name={unreadCount > 0 ? 'notificationsActive' : 'notifications'}
+                  size={sizes.iconMd}
+                  color="text"
+                />
+              </Pressable>
+              <Pressable
+                onPress={() => navigation.navigate('Main', { screen: 'SettingsScreen' })}
+                accessibilityRole="button"
+                accessibilityLabel="Settings"
+                style={(state: any) => [
+                  styles.iconButton,
+                  {
+                    backgroundColor: state.hovered ? colors.surfaceSubtle : colors.transparent,
+                    borderColor: colors.border,
+                    borderRadius: radii.md,
+                  },
+                ]}
+              >
+                <AppIcon name="settings" size={sizes.iconMd} color="text" />
+              </Pressable>
+            </View>
+          )}
+          <Button
+            label="Refresh"
+            variant="outline"
+            size="md"
+            icon="refresh"
+            loading={isRefreshing}
+            onPress={loadAppointments}
+          />
+          <Button
+            label="Book Appointment"
+            variant="primary"
+            size="md"
+            icon="plus"
+            onPress={handleBookNew}
+          />
+        </View>
+      </View>
+
+      {/* Active Today Banner */}
+      {activeTodayItem && selectedTab === 'upcoming' && (
+        <Card
+          padding="lg"
+          style={{
+            borderColor: colors.primary,
+            borderWidth: 2,
+            backgroundColor: colors.primarySubtle,
+            gap: spacing.md,
+          }}
+        >
+          <View style={styles.todayBannerHeader}>
+            <Badge label="TODAY'S APPOINTMENT" tone="primary" size="sm" />
+            <ThemedText variant="h3" color="primary">
+              {format(parseISO(activeTodayItem.scheduledAt), 'h:mm a')}
+            </ThemedText>
+          </View>
+          <ThemedText variant="h2">{activeTodayItem.clinic.name}</ThemedText>
+          {activeTodayItem.provider && (
+            <View style={styles.metaRow}>
+              <AppIcon name="user" size={sizes.iconSm} color="textSecondary" />
+              <ThemedText variant="body" color="textSecondary">
+                {activeTodayItem.provider.name}
+              </ThemedText>
+            </View>
+          )}
+          <View style={[styles.todayActions, { gap: spacing.md }]}>
+            <Button
+              label="View Details & QR"
+              variant="primary"
+              size="sm"
+              onPress={() => handleCardPress(activeTodayItem)}
+            />
+            <Button
+              label="Reschedule"
+              variant="outline"
+              size="sm"
+              onPress={() => handleReschedule(activeTodayItem)}
+            />
+          </View>
+        </Card>
+      )}
+
+      {/* Controls Row: Segmented tabs & search */}
+      <View style={[styles.controlsRow, { gap: spacing.md }]}>
+        <View style={[styles.tabsContainer, { gap: spacing.sm }]}>
+          {tabs.map((tab) => {
+            const isActive = selectedTab === tab.key;
+            return (
+              <Pressable
+                key={tab.key}
+                onPress={() => setSelectedTab(tab.key)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: isActive }}
+                style={(state: any) => [
+                  styles.tabItem,
+                  {
+                    backgroundColor: isActive
+                      ? colors.primary
+                      : state.hovered
+                      ? colors.surfaceSubtle
+                      : colors.surface,
+                    borderColor: isActive ? colors.primary : colors.border,
+                    borderRadius: radii.full,
+                    paddingHorizontal: spacing.md,
+                    paddingVertical: spacing.sm,
+                  },
+                ]}
+              >
+                <ThemedText
+                  variant="smallBold"
+                  color={isActive ? 'onPrimary' : 'textSecondary'}
+                >
+                  {tab.label} ({tab.count})
                 </ThemedText>
               </Pressable>
-            </View>
-          </View>
-        )}
-
-        {/* Tabs & Search Controls */}
-        <View style={styles.controlsRow}>
-          <View style={styles.tabsContainer}>
-            <Pressable
-              onPress={() => setSelectedTab('upcoming')}
-              style={({ pressed }) => [
-                styles.tabItem,
-                selectedTab === 'upcoming' && styles.tabItemActive,
-                { borderColor: isDark ? '#334155' : '#E2E8F0' },
-                pressed && { opacity: 0.8 },
-              ]}
-            >
-              <ThemedText
-                style={[
-                  styles.tabText,
-                  selectedTab === 'upcoming'
-                    ? styles.tabTextActive
-                    : { color: isDark ? '#94A3B8' : '#64748B' },
-                ]}
-              >
-                Upcoming ({upcomingItems.length})
-              </ThemedText>
-            </Pressable>
-
-            <Pressable
-              onPress={() => setSelectedTab('past')}
-              style={({ pressed }) => [
-                styles.tabItem,
-                selectedTab === 'past' && styles.tabItemActive,
-                { borderColor: isDark ? '#334155' : '#E2E8F0' },
-                pressed && { opacity: 0.8 },
-              ]}
-            >
-              <ThemedText
-                style={[
-                  styles.tabText,
-                  selectedTab === 'past'
-                    ? styles.tabTextActive
-                    : { color: isDark ? '#94A3B8' : '#64748B' },
-                ]}
-              >
-                Past Visits ({pastItems.length})
-              </ThemedText>
-            </Pressable>
-
-            <Pressable
-              onPress={() => setSelectedTab('drafts')}
-              style={({ pressed }) => [
-                styles.tabItem,
-                selectedTab === 'drafts' && styles.tabItemActive,
-                { borderColor: isDark ? '#334155' : '#E2E8F0' },
-                pressed && { opacity: 0.8 },
-              ]}
-            >
-              <ThemedText
-                style={[
-                  styles.tabText,
-                  selectedTab === 'drafts'
-                    ? styles.tabTextActive
-                    : { color: isDark ? '#94A3B8' : '#64748B' },
-                ]}
-              >
-                Drafts ({drafts.length})
-              </ThemedText>
-            </Pressable>
-          </View>
-
-          <View style={[styles.searchBox, { borderColor: isDark ? '#334155' : '#CBD5E1' }]}>
-            <ThemedText style={{ fontSize: 16 }}>🔍</ThemedText>
-            <TextInput
-              style={[styles.searchInput, { color: colors.text }]}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholder="Search by clinic, doctor, or reason..."
-              placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
-            />
-            {searchQuery.length > 0 && (
-              <Pressable onPress={() => setSearchQuery('')}>
-                <ThemedText style={{ color: '#94A3B8', fontWeight: '700' }}>✕</ThemedText>
-              </Pressable>
-            )}
-          </View>
+            );
+          })}
         </View>
 
-        {/* Content Section */}
-        {isLoading ? (
-          <View style={styles.grid}>
-            <SkeletonCard />
-            <SkeletonCard />
-            <SkeletonCard />
-          </View>
-        ) : selectedTab === 'drafts' ? (
-          filteredDrafts.length > 0 ? (
-            <View style={[styles.grid, isDesktop ? styles.grid2Col : styles.grid1Col]}>
-              {filteredDrafts.map((draft) => (
-                <View
-                  key={draft.id}
-                  style={[
-                    styles.draftCardWeb,
-                    {
-                      backgroundColor: isDark ? '#1E293B' : '#FFFBEB',
-                      borderColor: '#F59E0B',
-                    },
-                  ]}
-                >
-                  <View style={styles.draftCardHeader}>
-                    <ThemedText style={[styles.draftClinicTitle, { color: colors.text }]}>
-                      {draft.clinicName ?? 'Unnamed Clinic'}
-                    </ThemedText>
-                    <View style={styles.draftBadge}>
-                      <ThemedText style={styles.draftBadgeText}>DRAFT</ThemedText>
-                    </View>
-                  </View>
-                  {draft.reason && (
-                    <ThemedText
-                      style={[styles.draftReasonText, { color: isDark ? '#CBD5E1' : '#64748B' }]}
-                      numberOfLines={2}
-                    >
-                      {draft.reason.replace(/^\[\[service:[^\]]+\]\]\n?/, '')}
-                    </ThemedText>
-                  )}
-                  <ThemedText
-                    style={[styles.draftMetaDate, { color: isDark ? '#94A3B8' : '#94A3B8' }]}
-                  >
-                    Last updated {format(draft.updatedAt, 'MMM d, yyyy • h:mm a')}
+        <View
+          style={[
+            styles.searchBox,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              borderRadius: radii.md,
+              paddingHorizontal: spacing.md,
+              paddingVertical: spacing.sm,
+            },
+          ]}
+        >
+          <AppIcon name="search" size={sizes.iconSm} color="textMuted" />
+          <TextInput
+            style={[styles.searchInput, { color: colors.text }]}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Search by clinic, doctor, or reason..."
+            placeholderTextColor={colors.textMuted}
+            accessibilityLabel="Search appointments"
+          />
+          {searchQuery.length > 0 && (
+            <Pressable onPress={() => setSearchQuery('')} accessibilityRole="button">
+              <AppIcon name="close" size={sizes.iconSm} color="textMuted" />
+            </Pressable>
+          )}
+        </View>
+      </View>
+
+      {/* Main Content Area */}
+      {isLoading ? (
+        <View style={[styles.grid, { gap: spacing.lg }]}>
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+        </View>
+      ) : selectedTab === 'drafts' ? (
+        filteredDrafts.length > 0 ? (
+          <View style={[styles.grid, { gap: spacing.lg }]}>
+            {filteredDrafts.map((draft) => (
+              <Card
+                key={draft.id}
+                padding="lg"
+                style={{
+                  width: '100%',
+                  borderColor: colors.warningBorder,
+                  backgroundColor: colors.warningBg,
+                  gap: spacing.md,
+                }}
+              >
+                <View style={styles.draftCardHeader}>
+                  <ThemedText variant="h3" style={styles.flex}>
+                    {draft.clinicName ?? 'Unnamed Clinic'}
                   </ThemedText>
-                  <View style={styles.draftActionRow}>
-                    <Pressable
-                      onPress={() =>
-                        navigation.navigate('Main', {
-                          screen: 'BookingDraftScreen',
-                          params: { clinicId: draft.clinicId },
-                        })
-                      }
-                      style={styles.draftContinueButton}
-                    >
-                      <ThemedText style={styles.draftContinueButtonText}>
-                        Continue Booking →
-                      </ThemedText>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => handleDiscardDraft(draft.id)}
-                      style={[
-                        styles.draftDiscardButton,
-                        { borderColor: isDark ? '#334155' : '#CBD5E1' },
-                      ]}
-                    >
-                      <ThemedText style={styles.draftDiscardButtonText}>Discard</ThemedText>
-                    </Pressable>
-                  </View>
+                  <Badge label="DRAFT" tone="warning" size="sm" />
                 </View>
-              ))}
-            </View>
-          ) : (
-            <EmptyState
-              title="No booking drafts"
-              message="You don't have any pending drafts. Choose a clinic to start booking an appointment."
-              actionLabel="Find a Clinic"
-              onActionPress={() => navigation.navigate('Main', { screen: 'ExploreClinicsScreen' })}
-            />
-          )
-        ) : selectedTab === 'upcoming' ? (
-          filteredUpcoming.length > 0 ? (
-            <View style={[styles.grid, isDesktop ? styles.grid2Col : styles.grid1Col]}>
-              {filteredUpcoming.map((item) => (
-                <View key={item.id} style={styles.cardCol}>
-                  <AppointmentCard
-                    item={item}
-                    onPress={() => handleCardPress(item)}
-                    onReschedule={() => handleReschedule(item)}
-                    onCancel={() => handleCancel(item)}
+                {draft.reason && (
+                  <ThemedText variant="body" color="textSecondary" numberOfLines={2}>
+                    {draft.reason.replace(/^\[\[service:[^\]]+\]\]\n?/, '')}
+                  </ThemedText>
+                )}
+                <ThemedText variant="caption" color="textMuted">
+                  Last updated {format(draft.updatedAt, 'MMM d, yyyy • h:mm a')}
+                </ThemedText>
+                <View style={[styles.draftActionRow, { gap: spacing.md }]}>
+                  <Button
+                    label="Continue Booking"
+                    variant="primary"
+                    size="sm"
+                    iconRight="forward"
+                    onPress={() =>
+                      navigation.navigate('Main', {
+                        screen: 'BookingDraftScreen',
+                        params: { clinicId: draft.clinicId },
+                      })
+                    }
+                  />
+                  <Button
+                    label="Discard"
+                    variant="outline"
+                    size="sm"
+                    onPress={() => handleDiscardDraft(draft.id)}
                   />
                 </View>
-              ))}
-            </View>
-          ) : (
-            <EmptyState
-              title={query ? 'No matching appointments' : 'No upcoming appointments'}
-              message={
-                query
-                  ? 'No scheduled visits matched your search term.'
-                  : "You don't have any upcoming consultations scheduled."
-              }
-              actionLabel={query ? undefined : 'Book an Appointment'}
-              onActionPress={query ? undefined : handleBookNew}
-            />
-          )
-        ) : filteredPast.length > 0 ? (
-          <View style={[styles.grid, isDesktop ? styles.grid2Col : styles.grid1Col]}>
-            {filteredPast.map((item) => (
-              <View key={item.id} style={styles.cardCol}>
-                <AppointmentCard
-                  item={item}
-                  onPress={() => handleCardPress(item)}
-                  onReschedule={() => handleReschedule(item)}
-                  onCancel={() => handleCancel(item)}
-                />
-              </View>
+              </Card>
             ))}
           </View>
         ) : (
           <EmptyState
-            title={query ? 'No matching visits' : 'No past visits'}
-            message={
-              query
-                ? 'No past appointments matched your search query.'
-                : 'Your previous clinic visits and consultations will appear here.'
-            }
+            title="No booking drafts"
+            message="You don't have any pending drafts. Choose a clinic to start booking an appointment."
+            actionLabel="Find a Clinic"
+            onActionPress={() => navigation.navigate('Main', { screen: 'ExploreClinicsScreen' })}
           />
-        )}
-      </View>
+        )
+      ) : displayedList.length > 0 ? (
+        <View
+          style={[
+            styles.layoutContainer,
+            isDesktop ? styles.layoutDesktop : styles.layoutMobile,
+            { gap: spacing['2xl'] },
+          ]}
+        >
+          {/* List Column */}
+          <View style={[isDesktop ? styles.listColDesktop : styles.fullCol, { gap: spacing.md }]}>
+            {displayedList.map((item) => {
+              const isSelected = isDesktop && selectedAppointment?.id === item.id;
+              const badgeTone =
+                item.status === 'confirmed'
+                  ? 'success'
+                  : item.status === 'canceled'
+                  ? 'danger'
+                  : item.status === 'completed'
+                  ? 'neutral'
+                  : 'warning';
+
+              return (
+                <Pressable
+                  key={item.id}
+                  onPress={() => handleCardPress(item)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${item.clinic.name}, ${item.status}`}
+                  style={(state: any) => [
+                    styles.hoverRow,
+                    {
+                      backgroundColor: isSelected
+                        ? colors.primarySubtle
+                        : state.hovered
+                        ? colors.surfaceSubtle
+                        : colors.card,
+                      borderColor: isSelected
+                        ? colors.primary
+                        : state.hovered
+                        ? colors.primaryBorder
+                        : colors.border,
+                      borderRadius: radii.lg,
+                      padding: spacing.lg,
+                      borderWidth: isSelected ? 2 : 1,
+                    },
+                    shadows.sm,
+                  ]}
+                >
+                  <View style={styles.cardHeaderRow}>
+                    <ThemedText variant="h3" style={styles.flex}>
+                      {item.clinic.name}
+                    </ThemedText>
+                    <Badge label={item.status.toUpperCase()} tone={badgeTone} size="sm" />
+                  </View>
+                  <View style={[styles.metaItemsRow, { gap: spacing.lg }]}>
+                    <View style={styles.metaRow}>
+                      <AppIcon name="calendar" size={16} color="primary" />
+                      <ThemedText variant="bodyBold">
+                        {format(parseISO(item.scheduledAt), 'EEE, MMM d, yyyy')}
+                      </ThemedText>
+                    </View>
+                    <View style={styles.metaRow}>
+                      <AppIcon name="clock" size={16} color="textMuted" />
+                      <ThemedText variant="body" color="textSecondary">
+                        {format(parseISO(item.scheduledAt), 'h:mm a')}
+                      </ThemedText>
+                    </View>
+                  </View>
+                  {item.provider && (
+                    <View style={styles.metaRow}>
+                      <AppIcon name="user" size={16} color="textMuted" />
+                      <ThemedText variant="small" color="textSecondary">
+                        {item.provider.name}
+                        {item.provider.specialty ? ` • ${item.provider.specialty}` : ''}
+                      </ThemedText>
+                    </View>
+                  )}
+                  {item.chiefComplaint && (
+                    <ThemedText variant="small" color="textMuted" numberOfLines={1}>
+                      {item.chiefComplaint}
+                    </ThemedText>
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {/* Desktop Side Detail Summary Column */}
+          {isDesktop && (
+            <View style={styles.sideDetailCol}>
+              {selectedAppointment ? (
+                <Card padding="lg" style={styles.stickySideCard}>
+                  <SectionHeader title="Appointment Preview" />
+                  <ThemedText variant="h2">{selectedAppointment.clinic.name}</ThemedText>
+                  <ThemedText variant="body" color="textSecondary">
+                    {selectedAppointment.clinic.address}
+                  </ThemedText>
+
+                  <View
+                    style={[
+                      styles.previewMetaBox,
+                      {
+                        backgroundColor: colors.surfaceSubtle,
+                        borderRadius: radii.md,
+                        padding: spacing.md,
+                        gap: spacing.sm,
+                      },
+                    ]}
+                  >
+                    <View style={styles.previewMetaRow}>
+                      <ThemedText variant="small" color="textMuted">
+                        Date & Time:
+                      </ThemedText>
+                      <ThemedText variant="smallBold">
+                        {format(parseISO(selectedAppointment.scheduledAt), 'MMM d, yyyy • h:mm a')}
+                      </ThemedText>
+                    </View>
+                    <View style={styles.previewMetaRow}>
+                      <ThemedText variant="small" color="textMuted">
+                        Service:
+                      </ThemedText>
+                      <ThemedText variant="smallBold">
+                        {selectedAppointment.serviceType}
+                      </ThemedText>
+                    </View>
+                    <View style={styles.previewMetaRow}>
+                      <ThemedText variant="small" color="textMuted">
+                        Status:
+                      </ThemedText>
+                      <Badge
+                        label={selectedAppointment.status.toUpperCase()}
+                        tone={selectedAppointment.status === 'confirmed' ? 'success' : 'warning'}
+                        size="sm"
+                      />
+                    </View>
+                    {selectedAppointment.provider && (
+                      <View style={styles.previewMetaRow}>
+                        <ThemedText variant="small" color="textMuted">
+                          Provider:
+                        </ThemedText>
+                        <ThemedText variant="smallBold">
+                          {selectedAppointment.provider.name}
+                        </ThemedText>
+                      </View>
+                    )}
+                  </View>
+
+                  {selectedAppointment.chiefComplaint && (
+                    <View style={{ gap: spacing.xs }}>
+                      <ThemedText variant="captionBold" color="textMuted">
+                        CHIEF COMPLAINT
+                      </ThemedText>
+                      <ThemedText variant="body" color="text">
+                        {selectedAppointment.chiefComplaint}
+                      </ThemedText>
+                    </View>
+                  )}
+
+                  <View style={[styles.sideDetailActions, { gap: spacing.md, marginTop: spacing.md }]}>
+                    <Button
+                      label="View Full Details"
+                      variant="primary"
+                      size="md"
+                      fullWidth
+                      onPress={() =>
+                        navigation.navigate('Main', {
+                          screen: 'AppointmentDetailScreen',
+                          params: { appointmentId: selectedAppointment.id },
+                        })
+                      }
+                    />
+                    {selectedAppointment.status !== 'canceled' &&
+                      selectedAppointment.status !== 'completed' && (
+                        <View style={[styles.sideDetailBtnRow, { gap: spacing.md }]}>
+                          <Button
+                            label="Reschedule"
+                            variant="outline"
+                            size="md"
+                            style={styles.flex}
+                            onPress={() => handleReschedule(selectedAppointment)}
+                          />
+                          <Button
+                            label="Cancel"
+                            variant="danger"
+                            size="md"
+                            style={styles.flex}
+                            onPress={() => handleCancel(selectedAppointment)}
+                          />
+                        </View>
+                      )}
+                  </View>
+                </Card>
+              ) : (
+                <Card padding="lg" style={styles.stickySideCard}>
+                  <ThemedText variant="body" color="textMuted">
+                    Select an appointment to preview details.
+                  </ThemedText>
+                </Card>
+              )}
+            </View>
+          )}
+        </View>
+      ) : (
+        <EmptyState
+          title={query ? 'No matching appointments' : `No ${selectedTab} visits`}
+          message={
+            query
+              ? 'No appointments matched your search query.'
+              : `You don't have any ${selectedTab} visits recorded.`
+          }
+          actionLabel={selectedTab === 'upcoming' && !query ? 'Book an Appointment' : undefined}
+          onActionPress={selectedTab === 'upcoming' && !query ? handleBookNew : undefined}
+        />
+      )}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
   root: {
     flex: 1,
     width: '100%',
   },
   scrollContent: {
-    paddingVertical: 24,
-    paddingHorizontal: 20,
-  },
-  container: {
-    maxWidth: 1280,
     width: '100%',
-    marginHorizontal: 'auto',
-    gap: 24,
   },
   headerRow: {
     flexDirection: 'row',
@@ -583,251 +762,119 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  pageBadge: {
-    backgroundColor: 'rgba(59, 130, 246, 0.12)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  pageBadgeText: {
-    color: '#3B82F6',
-    fontWeight: '800',
-    fontSize: 11,
-    letterSpacing: 0.8,
-  },
-  todayPill: {
-    backgroundColor: 'rgba(16, 185, 129, 0.12)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  todayPillText: {
-    color: '#10B981',
-    fontWeight: '700',
-    fontSize: 11,
-  },
-  pageTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-  },
-  pageSubtitle: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    flexWrap: 'wrap',
   },
-  refreshBtn: {
+  compactShortcuts: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  iconButton: {
     borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
-  refreshBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#3B82F6',
-  },
-  bookNewBtn: {
-    backgroundColor: '#3B82F6',
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    shadowColor: '#3B82F6',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  bookNewBtnText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  todayBanner: {
-    borderRadius: 16,
-    borderWidth: 1.5,
-    padding: 20,
-    gap: 10,
+    padding: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   todayBannerHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  todayBadge: {
-    backgroundColor: '#3B82F6',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  todayBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  todayTime: {
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  todayClinic: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  todayDoctor: {
-    fontSize: 14,
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   todayActions: {
     flexDirection: 'row',
-    gap: 10,
-    marginTop: 6,
-  },
-  todayPrimaryBtn: {
-    backgroundColor: '#3B82F6',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  todayPrimaryBtnText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  todaySecondaryBtn: {
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  todaySecondaryBtnText: {
-    fontWeight: '600',
-    fontSize: 13,
   },
   controlsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     flexWrap: 'wrap',
-    gap: 14,
   },
   tabsContainer: {
     flexDirection: 'row',
-    gap: 8,
     flexWrap: 'wrap',
   },
   tabItem: {
     borderWidth: 1,
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-  },
-  tabItemActive: {
-    backgroundColor: '#3B82F6',
-    borderColor: '#3B82F6',
-  },
-  tabText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  tabTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '700',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
     minWidth: 280,
   },
   searchInput: {
     flex: 1,
-    fontSize: 13,
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 16,
-  },
-  grid2Col: {
-    justifyContent: 'space-between',
-  },
-  grid1Col: {
-    flexDirection: 'column',
-  },
-  cardCol: {
-    flexBasis: '48.5%',
-    flexGrow: 1,
-    minWidth: 320,
-  },
-  draftCardWeb: {
-    flexBasis: '48.5%',
-    flexGrow: 1,
-    minWidth: 320,
-    borderWidth: 1.5,
-    borderRadius: 14,
-    padding: 18,
-    gap: 10,
   },
   draftCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  draftClinicTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    flex: 1,
-  },
-  draftBadge: {
-    backgroundColor: 'rgba(245, 158, 11, 0.2)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  draftBadgeText: {
-    color: '#D97706',
-    fontWeight: '800',
-    fontSize: 11,
-  },
-  draftReasonText: {
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  draftMetaDate: {
-    fontSize: 11,
-  },
   draftActionRow: {
     flexDirection: 'row',
-    gap: 10,
-    marginTop: 6,
+    alignItems: 'center',
   },
-  draftContinueButton: {
-    backgroundColor: '#F59E0B',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
+  layoutContainer: {
+    width: '100%',
   },
-  draftContinueButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 12,
+  layoutDesktop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
   },
-  draftDiscardButton: {
+  layoutMobile: {
+    flexDirection: 'column',
+  },
+  listColDesktop: {
+    flex: 60,
+  },
+  sideDetailCol: {
+    flex: 40,
+  },
+  stickySideCard: {
+    gap: 12,
+  },
+  fullCol: {
+    width: '100%',
+  },
+  hoverRow: {
+    gap: 8,
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  metaItemsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  previewMetaBox: {
     borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    borderColor: 'transparent',
   },
-  draftDiscardButtonText: {
-    color: '#EF4444',
-    fontWeight: '600',
-    fontSize: 12,
+  previewMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  sideDetailActions: {},
+  sideDetailBtnRow: {
+    flexDirection: 'row',
   },
 });
