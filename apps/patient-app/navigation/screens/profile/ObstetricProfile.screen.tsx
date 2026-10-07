@@ -399,7 +399,7 @@ export default function ObstetricProfileScreen() {
         <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title="Pregnancy" />
           <Controller control={pregForm.control} name="outcome" render={({ field }) => (
-            <ProfileFormField label="Outcome" value={OUTCOME_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setOutcomeModal(true)} placeholder="Select outcome" />
+            <ProfileFormField label="Outcome" value={OUTCOME_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setOutcomeModal(true)} placeholder="Select outcome" picker />
           )} />
           <Controller control={pregForm.control} name="year" render={({ field }) => (
             <ProfileFormField label="Year" value={field.value} onChangeText={field.onChange} keyboardType="numeric" placeholder="YYYY" />
@@ -408,19 +408,13 @@ export default function ObstetricProfileScreen() {
             <ProfileFormField label="Gestational Age (weeks)" value={field.value} onChangeText={field.onChange} keyboardType="numeric" />
           )} />
           <Controller control={pregForm.control} name="deliveryMode" render={({ field }) => (
-            <ProfileFormField label="Delivery Mode" value={DELIVERY_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setDeliveryModal(true)} placeholder="Select mode" />
+            <ProfileFormField label="Delivery Mode" value={DELIVERY_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setDeliveryModal(true)} placeholder="Select mode" picker />
           )} />
           <Controller control={pregForm.control} name="complications" render={({ field }) => (
             <ProfileFormField label="Complications" value={field.value} onChangeText={field.onChange} multiline placeholder="None, or describe" />
           )} />
         </BottomSheetScrollView>
         <ProfileSaveBar onSave={onSavePreg} saving={savingPreg} isDirty={pregForm.formState.isDirty} label="Save Pregnancy" />
-        <Controller control={pregForm.control} name="outcome" render={({ field }) => (
-          <ProfileSelectModal visible={outcomeModal} title="Pregnancy Outcome" options={OUTCOME_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setOutcomeModal(false)} />
-        )} />
-        <Controller control={pregForm.control} name="deliveryMode" render={({ field }) => (
-          <ProfileSelectModal visible={deliveryModal} title="Delivery Mode" options={DELIVERY_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setDeliveryModal(false)} />
-        )} />
       </ThemedBottomSheetModal>
 
       {/* Contraceptive Sheet */}
@@ -428,7 +422,7 @@ export default function ObstetricProfileScreen() {
         <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title="Contraceptive Method" />
           <Controller control={contraForm.control} name="method" render={({ field }) => (
-            <ProfileFormField label="Method" value={CONTRA_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setContraModal(true)} placeholder="Select method" />
+            <ProfileFormField label="Method" value={CONTRA_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setContraModal(true)} placeholder="Select method" picker />
           )} />
           <Controller control={contraForm.control} name="isCurrent" render={({ field }) => (
             <ProfileToggle label="Currently Using" value={field.value} onValueChange={field.onChange} />
@@ -441,10 +435,17 @@ export default function ObstetricProfileScreen() {
           )} />
         </BottomSheetScrollView>
         <ProfileSaveBar onSave={onSaveContra} saving={savingContra} isDirty={contraForm.formState.isDirty} label="Save Method" />
-        <Controller control={contraForm.control} name="method" render={({ field }) => (
-          <ProfileSelectModal visible={contraModal} title="Contraceptive Method" options={CONTRA_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setContraModal(false)} />
-        )} />
       </ThemedBottomSheetModal>
+
+      <Controller control={pregForm.control} name="outcome" render={({ field }) => (
+        <ProfileSelectModal visible={outcomeModal} title="Pregnancy Outcome" options={OUTCOME_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setOutcomeModal(false)} />
+      )} />
+      <Controller control={pregForm.control} name="deliveryMode" render={({ field }) => (
+        <ProfileSelectModal visible={deliveryModal} title="Delivery Mode" options={DELIVERY_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setDeliveryModal(false)} />
+      )} />
+      <Controller control={contraForm.control} name="method" render={({ field }) => (
+        <ProfileSelectModal visible={contraModal} title="Contraceptive Method" options={CONTRA_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setContraModal(false)} />
+      )} />
     </BottomSheetModalProvider>
   );
 }

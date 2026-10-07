@@ -174,6 +174,7 @@ export default function AddressesScreen() {
               value={TYPE_OPTIONS.find(o => o.value === field.value)?.label || ''}
               onPressIn={() => setTypeModal(true)}
               placeholder="Select type"
+              picker
             />
           )} />
           <Controller control={control} name="houseNo" render={({ field }) => (
@@ -199,12 +200,12 @@ export default function AddressesScreen() {
           )} />
         </BottomSheetScrollView>
         <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} label="Save Address" />
-
-        <Controller control={control} name="type" render={({ field }) => (
-          <ProfileSelectModal visible={typeModal} title="Address Type" options={TYPE_OPTIONS}
-            selected={field.value} onSelect={field.onChange} onClose={() => setTypeModal(false)} />
-        )} />
       </ThemedBottomSheetModal>
+
+      <Controller control={control} name="type" render={({ field }) => (
+        <ProfileSelectModal visible={typeModal} title="Address Type" options={TYPE_OPTIONS}
+          selected={field.value} onSelect={field.onChange} onClose={() => setTypeModal(false)} />
+      )} />
     </BottomSheetModalProvider>
   );
 }

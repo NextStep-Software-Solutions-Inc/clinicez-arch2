@@ -116,7 +116,7 @@ export default function MentalHealthScreen() {
           )} />
           <ProfileSectionHeader title="Psychotherapy" />
           <Controller control={control} name="psychotherapyStatus" render={({ field }) => (
-            <ProfileFormField label="Psychotherapy Status" value={PSYCHOTHERAPY_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setTherapyModal(true)} placeholder="Select status" />
+            <ProfileFormField label="Psychotherapy Status" value={PSYCHOTHERAPY_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setTherapyModal(true)} placeholder="Select status" picker />
           )} />
         </ScrollView>
         <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} />

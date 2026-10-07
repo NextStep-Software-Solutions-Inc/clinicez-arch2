@@ -112,7 +112,7 @@ export default function DentalVisionScreen() {
             <ProfileFormField label="Eye Doctor / Ophthalmologist" value={field.value} onChangeText={field.onChange} placeholder="Optional" />
           )} />
           <Controller control={control} name="correctiveLenses" render={({ field }) => (
-            <ProfileFormField label="Corrective Lenses" value={LENSES_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setLensesModal(true)} placeholder="Select option" />
+            <ProfileFormField label="Corrective Lenses" value={LENSES_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setLensesModal(true)} placeholder="Select option" picker />
           )} />
         </ScrollView>
         <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} />

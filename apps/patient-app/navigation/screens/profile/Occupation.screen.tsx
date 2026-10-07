@@ -110,7 +110,7 @@ export default function OccupationScreen() {
             <ProfileFormField label="Industry / Sector" value={field.value} onChangeText={field.onChange} placeholder="e.g. Healthcare, IT, Education" />
           )} />
           <Controller control={control} name="workEnvironment" render={({ field }) => (
-            <ProfileFormField label="Work Environment" value={WORK_ENV_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setEnvModal(true)} placeholder="Select environment" />
+            <ProfileFormField label="Work Environment" value={WORK_ENV_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setEnvModal(true)} placeholder="Select environment" picker />
           )} />
           <Controller control={control} name="yearsInOccupation" render={({ field }) => (
             <ProfileFormField label="Years in Current Occupation" value={field.value} onChangeText={field.onChange} keyboardType="numeric" placeholder="Optional" />

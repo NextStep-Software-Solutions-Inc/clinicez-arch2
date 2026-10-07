@@ -153,7 +153,7 @@ export default function SocialHistoryScreen() {
         <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { padding: spacing.md }]} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title="Tobacco Use" />
         <Controller control={control} name="tobaccoStatus" render={({ field }) => (
-          <ProfileFormField label="Tobacco Status" value={TOBACCO_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setModal('tobacco')} placeholder="Select status" />
+          <ProfileFormField label="Tobacco Status" value={TOBACCO_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setModal('tobacco')} placeholder="Select status" picker />
         )} />
         {tobaccoStatus === 'Current' && (
           <Controller control={control} name="cigsPerDay" render={({ field }) => (
@@ -173,7 +173,7 @@ export default function SocialHistoryScreen() {
 
         <ProfileSectionHeader title="Alcohol Use" />
         <Controller control={control} name="alcoholUseLevel" render={({ field }) => (
-          <ProfileFormField label="Alcohol Use Level" value={ALCOHOL_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setModal('alcohol')} placeholder="Select level" />
+          <ProfileFormField label="Alcohol Use Level" value={ALCOHOL_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setModal('alcohol')} placeholder="Select level" picker />
         )} />
         {alcoholUseLevel !== 'None' && alcoholUseLevel !== '' && (
           <>
@@ -209,7 +209,7 @@ export default function SocialHistoryScreen() {
 
         <ProfileSectionHeader title="Physical Activity" />
         <Controller control={control} name="activityLevel" render={({ field }) => (
-          <ProfileFormField label="Activity Level" value={ACTIVITY_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setModal('activity')} placeholder="Select level" />
+          <ProfileFormField label="Activity Level" value={ACTIVITY_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setModal('activity')} placeholder="Select level" picker />
         )} />
         <Controller control={control} name="exerciseType" render={({ field }) => (
           <ProfileFormField label="Exercise Type" value={field.value} onChangeText={field.onChange} placeholder="e.g. Walking, Swimming, Gym" />
@@ -231,7 +231,7 @@ export default function SocialHistoryScreen() {
           <ProfileFormField label="Average Sleep Hours" value={field.value} onChangeText={field.onChange} keyboardType="decimal-pad" placeholder="e.g. 7.5" />
         )} />
         <Controller control={control} name="sleepQuality" render={({ field }) => (
-          <ProfileFormField label="Sleep Quality" value={SLEEP_QUALITY_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setModal('sleep')} placeholder="Select quality" />
+          <ProfileFormField label="Sleep Quality" value={SLEEP_QUALITY_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setModal('sleep')} placeholder="Select quality" picker />
         )} />
         <Controller control={control} name="waterIntake" render={({ field }) => (
           <ProfileFormField label="Daily Water Intake" value={field.value} onChangeText={field.onChange} placeholder="e.g. 8 glasses" />

@@ -9,6 +9,8 @@ import ProfileFormField from 'components/profile/ProfileFormField';
 import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
 import ProfileSaveBar from 'components/profile/ProfileSaveBar';
 import Screen from 'components/layout/Screen';
+import { useUser } from '@clerk/expo';
+import ThemedText from '@ui/ThemedText';
 import { usePatientId } from 'hooks/usePatientId';
 import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
@@ -25,13 +27,15 @@ type FormValues = {
 
 export default function ContactInfoScreen() {
   const patientId = usePatientId();
+  const { user } = useUser();
   const { userId, getToken } = useAuth();
+  const accountEmail = user?.primaryEmailAddress?.emailAddress ?? '';
   const navigation = useNavigation();
   const { spacing } = useAppTheme();
   const [saving, setSaving] = useState(false);
 
   const { control, handleSubmit, reset, formState: { isDirty } } = useForm<FormValues>({
-    defaultValues: { mobile: '', altPhone: '', email: '', messengerHandle: '' },
+    defaultValues: { mobile: '', altPhone: '', email: accountEmail, messengerHandle: '' },
   });
 
   const isDirtyRef = useRef(isDirty);
@@ -48,7 +52,7 @@ export default function ContactInfoScreen() {
           reset({
             mobile: row.mobile ?? '',
             altPhone: row.altPhone ?? '',
-            email: row.email ?? '',
+            email: row.email || accountEmail,
             messengerHandle: row.messengerHandle ?? '',
           });
         }
@@ -64,7 +68,7 @@ export default function ContactInfoScreen() {
             reset({
               mobile: profile.demographics.mobile ?? '',
               altPhone: profile.demographics.altPhone ?? '',
-              email: profile.demographics.email ?? '',
+              email: profile.demographics.email || accountEmail,
               messengerHandle: profile.demographics.messengerHandle ?? '',
             });
           }
@@ -79,7 +83,7 @@ export default function ContactInfoScreen() {
     return () => {
       isMounted = false;
     };
-  }, [patientId, getToken, reset]);
+  }, [patientId, getToken, reset, accountEmail]);
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
@@ -89,7 +93,7 @@ export default function ContactInfoScreen() {
       const payload = {
         mobile: data.mobile.trim() || null,
         altPhone: data.altPhone.trim() || null,
-        email: data.email.trim() || null,
+        email: (data.email.trim() || accountEmail) || null,
         messengerHandle: data.messengerHandle.trim() || null,
       };
 
@@ -180,8 +184,21 @@ export default function ContactInfoScreen() {
 
           <ProfileSectionHeader title="Online / Messaging" />
           <Controller control={control} name="email" render={({ field }) => (
-            <ProfileFormField label="Email Address" value={field.value} onChangeText={field.onChange} keyboardType="email-address" autoCapitalize="none" placeholder="you@example.com" />
+            <ProfileFormField
+              label="Email Address"
+              value={field.value || accountEmail}
+              editable={false}
+              autoCapitalize="none"
+              placeholder="you@example.com"
+            />
           )} />
+          <ThemedText
+            variant="caption"
+            color="textMuted"
+            style={{ marginTop: -spacing.xs, marginBottom: spacing.md }}
+          >
+            Email address is tied to your account login and cannot be edited here.
+          </ThemedText>
           <Controller control={control} name="messengerHandle" render={({ field }) => (
             <ProfileFormField label="Messenger / Viber Handle" value={field.value} onChangeText={field.onChange} placeholder="Optional" />
           )} />

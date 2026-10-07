@@ -1,11 +1,12 @@
-﻿import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   Modal,
   View,
   Pressable,
   StyleSheet,
   Animated,
-  FlatList,
+  ScrollView,
+  Platform,
 } from 'react-native';
 import ThemedText from '@ui/ThemedText';
 import { AppIcon } from '@ui/Icon';
@@ -33,23 +34,54 @@ export default function ProfileSelectModal({
   onSelect,
   onClose,
 }: ProfileSelectModalProps) {
-  const { colors, radii, sizes } = useAppTheme();
-  const scale = new Animated.Value(0.88);
-  const opacity = new Animated.Value(0);
+  const { colors, radii, sizes, shadows } = useAppTheme();
+  const scale = useRef(new Animated.Value(visible ? 1 : 0.88)).current;
+  const opacity = useRef(new Animated.Value(visible ? 1 : 0)).current;
 
   useEffect(() => {
     if (visible) {
       Animated.parallel([
-        Animated.spring(scale, { toValue: 1, useNativeDriver: true, damping: 18, stiffness: 220 }),
-        Animated.timing(opacity, { toValue: 1, duration: 160, useNativeDriver: true }),
+        Animated.spring(scale, {
+          toValue: 1,
+          useNativeDriver: Platform.OS !== 'web',
+          damping: 20,
+          stiffness: 240,
+        }),
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 150,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
       ]).start();
     } else {
       Animated.parallel([
-        Animated.spring(scale, { toValue: 0.88, useNativeDriver: true, damping: 18, stiffness: 220 }),
-        Animated.timing(opacity, { toValue: 0, duration: 130, useNativeDriver: true }),
+        Animated.spring(scale, {
+          toValue: 0.88,
+          useNativeDriver: Platform.OS !== 'web',
+          damping: 20,
+          stiffness: 240,
+        }),
+        Animated.timing(opacity, {
+          toValue: 0,
+          duration: 120,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
       ]).start();
     }
-  }, [visible]);
+  }, [visible, opacity, scale]);
+
+  // Esc key closes on web
+  useEffect(() => {
+    if (!visible || Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [visible, onClose]);
 
   const handleSelect = (value: string) => {
     onSelect(value);
@@ -64,10 +96,17 @@ export default function ProfileSelectModal({
       statusBarTranslucent
       onRequestClose={onClose}
     >
-      <Pressable style={[styles.backdrop, { backgroundColor: colors.overlay }]} onPress={onClose}>
+      <View style={[styles.root, { backgroundColor: colors.overlay }]}>
+        <Pressable
+          style={styles.backdrop}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Close select dialog"
+        />
         <Animated.View
           style={[
             styles.sheet,
+            shadows.lg,
             {
               backgroundColor: colors.surface,
               borderColor: colors.border,
@@ -81,14 +120,17 @@ export default function ProfileSelectModal({
             {title}
           </ThemedText>
           <View style={[styles.divider, { backgroundColor: colors.borderLight }]} />
-          <FlatList
-            data={options}
-            keyExtractor={(item) => item.value}
-            style={styles.list}
-            renderItem={({ item }) => {
+          <ScrollView
+            style={styles.scrollList}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={true}
+            keyboardShouldPersistTaps="handled"
+          >
+            {options.map((item) => {
               const isSelected = item.value === selected;
               return (
                 <Pressable
+                  key={item.value}
                   onPress={() => handleSelect(item.value)}
                   style={({ pressed, hovered }: any) => [
                     styles.option,
@@ -97,10 +139,12 @@ export default function ProfileSelectModal({
                     pressed && { opacity: 0.6 },
                     isSelected && { backgroundColor: colors.primarySubtle },
                   ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={item.label}
                 >
                   <ThemedText
                     variant={isSelected ? 'bodyBold' : 'body'}
-                    style={{ color: isSelected ? colors.primary : colors.text }}
+                    style={{ color: isSelected ? colors.primary : colors.text, flex: 1 }}
                   >
                     {item.label}
                   </ThemedText>
@@ -109,8 +153,8 @@ export default function ProfileSelectModal({
                   )}
                 </Pressable>
               );
-            }}
-          />
+            })}
+          </ScrollView>
           <View style={[styles.divider, { backgroundColor: colors.borderLight }]} />
           <Pressable
             onPress={onClose}
@@ -119,41 +163,59 @@ export default function ProfileSelectModal({
               hovered && { backgroundColor: colors.surfaceSubtle },
               pressed && { opacity: 0.6 },
             ]}
+            accessibilityRole="button"
+            accessibilityLabel="Cancel"
           >
-            <ThemedText variant="body" style={{ color: colors.text }}>
+            <ThemedText variant="bodyBold" color="textMuted">
               Cancel
             </ThemedText>
           </Pressable>
         </Animated.View>
-      </Pressable>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
+  root: {
+    position: (Platform.OS === 'web' ? 'fixed' : 'absolute') as any,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 100000,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 28,
+    padding: 24,
+  },
+  backdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   sheet: {
     width: '100%',
     maxWidth: 380,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
-    maxHeight: 480,
+    maxHeight: 520,
+    zIndex: 100001,
   },
   title: {
     textAlign: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingVertical: 16,
   },
   divider: {
     height: StyleSheet.hairlineWidth,
   },
-  list: {
+  scrollList: {
     maxHeight: 340,
+  },
+  scrollContent: {
+    flexGrow: 0,
   },
   option: {
     flexDirection: 'row',
@@ -162,9 +224,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 8,
   },
   cancelBtn: {
-    paddingVertical: 15,
+    paddingVertical: 14,
     alignItems: 'center',
   },
 });

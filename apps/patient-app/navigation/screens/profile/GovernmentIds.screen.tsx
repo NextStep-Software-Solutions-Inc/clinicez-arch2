@@ -311,6 +311,7 @@ export default function GovernmentIdsScreen() {
               value={PHILHEALTH_CATEGORY_OPTIONS.find(o => o.value === field.value)?.label || ''}
               onPressIn={() => setModal('philhealth')}
               placeholder="Select category"
+              picker
             />
           )} />
 
@@ -338,6 +339,7 @@ export default function GovernmentIdsScreen() {
                   value={SPONSOR_RELATIONSHIP_OPTIONS.find(o => o.value === field.value)?.label || ''}
                   onPressIn={() => setModal('sponsorRel')}
                   placeholder="Select relationship"
+                  picker
                 />
               )} />
 
@@ -427,6 +429,7 @@ export default function GovernmentIdsScreen() {
                   value={DISABILITY_TYPE_OPTIONS.find(o => o.value === field.value)?.label || ''}
                   onPressIn={() => setModal('disability')}
                   placeholder="Select type"
+                  picker
                 />
               )} />
             </ProfileFormGrid>
@@ -447,6 +450,7 @@ export default function GovernmentIdsScreen() {
               value={HMO_PLAN_TYPE_OPTIONS.find(o => o.value === field.value)?.label || ''}
               onPressIn={() => setModal('hmoPlan')}
               placeholder="Select plan type"
+              picker
             />
           )} />
           <ProfileFormGrid>

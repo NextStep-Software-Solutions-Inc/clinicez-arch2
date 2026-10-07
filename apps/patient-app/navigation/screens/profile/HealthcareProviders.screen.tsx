@@ -148,7 +148,7 @@ export default function HealthcareProvidersScreen() {
         <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title="Healthcare Provider" />
           <Controller control={control} name="providerType" render={({ field }) => (
-            <ProfileFormField label="Provider Type" value={typeLabel(field.value)} onPressIn={() => setTypeModal(true)} />
+            <ProfileFormField label="Provider Type" value={typeLabel(field.value)} onPressIn={() => setTypeModal(true)} picker />
           )} />
           <Controller control={control} name="name" render={({ field }) => (
             <ProfileFormField label="Doctor's Name" value={field.value} onChangeText={field.onChange} required placeholder="e.g. Dr. Maria Santos" />
@@ -164,12 +164,12 @@ export default function HealthcareProvidersScreen() {
           )} />
         </BottomSheetScrollView>
         <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} label="Save Provider" />
-
-        <Controller control={control} name="providerType" render={({ field }) => (
-          <ProfileSelectModal visible={typeModal} title="Provider Type" options={PROVIDER_TYPE_OPTIONS}
-            selected={field.value} onSelect={field.onChange} onClose={() => setTypeModal(false)} />
-        )} />
       </ThemedBottomSheetModal>
+
+      <Controller control={control} name="providerType" render={({ field }) => (
+        <ProfileSelectModal visible={typeModal} title="Provider Type" options={PROVIDER_TYPE_OPTIONS}
+          selected={field.value} onSelect={field.onChange} onClose={() => setTypeModal(false)} />
+      )} />
     </BottomSheetModalProvider>
   );
 }

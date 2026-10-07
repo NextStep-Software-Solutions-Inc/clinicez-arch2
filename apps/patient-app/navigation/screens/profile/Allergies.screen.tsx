@@ -154,7 +154,7 @@ export default function AllergiesScreen() {
             <ProfileFormField label="Reaction Type" value={field.value} onChangeText={field.onChange} placeholder="e.g. Rash, Anaphylaxis" />
           )} />
           <Controller control={control} name="severity" render={({ field }) => (
-            <ProfileFormField label="Severity" value={SEVERITY_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setSeverityModal(true)} placeholder="Select severity" />
+            <ProfileFormField label="Severity" value={SEVERITY_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setSeverityModal(true)} placeholder="Select severity" picker />
           )} />
           <Controller control={control} name="management" render={({ field }) => (
             <ProfileFormField label="Management / Notes" value={field.value} onChangeText={field.onChange} multiline placeholder="e.g. Carry EpiPen" />
@@ -164,10 +164,11 @@ export default function AllergiesScreen() {
           )} />
         </BottomSheetScrollView>
         <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} label="Save Allergy" />
-        <Controller control={control} name="severity" render={({ field }) => (
-          <ProfileSelectModal visible={severityModal} title="Severity" options={SEVERITY_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setSeverityModal(false)} />
-        )} />
       </ThemedBottomSheetModal>
+
+      <Controller control={control} name="severity" render={({ field }) => (
+        <ProfileSelectModal visible={severityModal} title="Severity" options={SEVERITY_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setSeverityModal(false)} />
+      )} />
     </BottomSheetModalProvider>
   );
 }

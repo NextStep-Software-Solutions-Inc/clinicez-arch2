@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { View, TextInput, StyleSheet, TextInputProps, Pressable, Platform } from 'react-native';
 import { AppIcon } from '@ui/Icon';
 import ThemedText from '@ui/ThemedText';
@@ -34,7 +34,11 @@ export default function ProfileFormField({
   const { colors, radii, sizes } = useAppTheme();
 
   const isDisabled = !editable && !picker;
-  const isPickerField = picker || (!editable && !!rest.onPressIn);
+  const isPickerField = picker || Boolean(rest.onPressIn || (rest as any).onPress);
+  const handlePress = () => {
+    if (rest.onPressIn) (rest.onPressIn as any)();
+    if ((rest as any).onPress) (rest as any).onPress();
+  };
 
   // Web sheets are plain modals (no gorhom context), so BottomSheetTextInput would throw there.
   const InputComponent = useBottomSheetInput && Platform.OS !== 'web' ? BottomSheetTextInput : TextInput;
@@ -69,7 +73,7 @@ export default function ProfileFormField({
       </ThemedText>
       {isPickerField ? (
         <Pressable
-          onPress={rest.onPressIn as any}
+          onPress={handlePress}
           style={({ pressed, hovered }: any) => [
             styles.pickerWrapper,
             {

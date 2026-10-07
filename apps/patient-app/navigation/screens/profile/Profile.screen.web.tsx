@@ -677,7 +677,12 @@ export default function ProfileScreenWeb() {
 
         {/* Filter Controls & Search */}
         <View style={[styles.controlsRow, { gap: spacing.md }]}>
-          <View style={[styles.tabsRow, { gap: spacing.sm }]}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={[styles.tabsScrollContent, { gap: spacing.sm }]}
+            style={styles.tabsScrollView}
+          >
             {(
               [
                 { id: 'all', label: 'All' },
@@ -721,7 +726,7 @@ export default function ProfileScreenWeb() {
                 </Pressable>
               );
             })}
-          </View>
+          </ScrollView>
 
           <View
             style={[
@@ -874,13 +879,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexWrap: 'wrap',
   },
-  tabsRow: {
+  tabsScrollView: {
+    flexGrow: 0,
+    maxWidth: '100%',
+  },
+  tabsScrollContent: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     alignItems: 'center',
+    paddingVertical: 2,
   },
   tabButton: {
     borderWidth: 1,
+    flexShrink: 0,
   },
   searchBox: {
     flexDirection: 'row',
