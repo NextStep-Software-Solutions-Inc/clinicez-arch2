@@ -205,6 +205,11 @@ export async function initWebDatabase(): Promise<ReturnType<typeof drizzle>> {
   return initPromise;
 }
 
+export async function ensureDatabaseReady(): Promise<void> {
+  if (initializedDrizzleDb) return;
+  await initWebDatabase();
+}
+
 // Proxied originalDb that forwards queries to initializedDrizzleDb once ready
 export const originalDb = new Proxy({} as any, {
   get(_target, prop, receiver) {

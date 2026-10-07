@@ -12,3 +12,6 @@ export { registerSyncTrigger };
 
 /** Web-only concern (sql.js snapshot to IndexedDB); native SQLite persists itself. */
 export async function flushDatabaseSnapshot(): Promise<void> {}
+
+/** Native SQLite is synchronous and always ready; web awaits initWebDatabase. */
+export async function ensureDatabaseReady(): Promise<void> {}

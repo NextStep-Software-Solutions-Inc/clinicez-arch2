@@ -128,6 +128,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           const storedId = await SecureStore.getItemAsync(INTERNAL_PATIENT_ID_KEY);
           if (storedId) {
             setInternalPatientId(storedId);
+            // Refresh/hydrate patient in local DB even when ID was previously cached in SecureStore
+            getPatientByClerkId(getTokenRef.current, userId)
+              .then((patient) => {
+                if (patient?.id) {
+                  return upsertPatientSummary(patient, userId);
+                }
+              })
+              .catch((err) =>
+                console.warn('[AuthContext] Background refresh of patient summary failed:', err)
+              );
             return;
           }
 
@@ -157,7 +167,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setInternalPatientId(patient.id);
             // Persist demographics to local SQLite so the app can show real
             // profile data immediately without waiting for the full-record fetch.
-            upsertPatientSummary(patient).catch((err) =>
+            upsertPatientSummary(patient, userId).catch((err) =>
               console.warn('[AuthContext] Failed to cache patient summary:', err)
             );
           } else {

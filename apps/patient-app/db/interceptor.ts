@@ -76,11 +76,17 @@ async function handleInterceptWrite(
 
   try {
     const now = new Date();
-    const syncPayload = {
+    const syncPayload: Record<string, any> = {
       ...values,
       clientId: entityId,
       updatedAt: now.toISOString(),
     };
+
+    if (tableName === 'patients') {
+      if (values.dob !== undefined && syncPayload.dateOfBirth === undefined) {
+        syncPayload.dateOfBirth = values.dob;
+      }
+    }
 
     const syncItem = {
       id: randomUUID(),

@@ -10,7 +10,7 @@
  * "pending" for re-upload.
  */
 
-import { originalDb, flushDatabaseSnapshot } from './index';
+import { originalDb, flushDatabaseSnapshot, ensureDatabaseReady } from './index';
 import {
   patients,
   patientAddresses,
@@ -55,10 +55,15 @@ function now(): Date {
  * Called immediately after login to populate the patients table from the
  * `PatientSummary` returned by `getPatientByClerkId()`.
  */
-export async function upsertPatientSummary(summary: PatientSummary): Promise<void> {
+export async function upsertPatientSummary(
+  summary: PatientSummary,
+  clerkUserId?: string | null,
+): Promise<void> {
+  await ensureDatabaseReady();
   const ts = now();
-  const row = {
+  const row: typeof patients.$inferInsert = {
     id: summary.id,
+    ...(clerkUserId ? { clerkUserId } : {}),
     firstName: summary.firstName,
     middleName: summary.middleName ?? null,
     lastName: summary.lastName,
@@ -98,6 +103,7 @@ export async function upsertPatientSummary(summary: PatientSummary): Promise<voi
  * server response are left untouched (they may be locally queued additions).
  */
 export async function hydrateFullRecord(record: PatientFullRecord): Promise<void> {
+  await ensureDatabaseReady();
   const ts = now();
   const patientId = record.demographics.id;
 

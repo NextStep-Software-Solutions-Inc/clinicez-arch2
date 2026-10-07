@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Image, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import { useUser } from '@clerk/expo';
 import * as ImagePicker from 'expo-image-picker';
@@ -7,12 +7,27 @@ import ThemedText from './ui/ThemedText';
 import { AppIcon } from './ui/Icon';
 import { dialog } from '@utils/dialog';
 import { useAppTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
+import { db } from '@db/index';
+import { patients } from '@db/schema/patients';
+import { eq } from 'drizzle-orm';
 
 const avatarFile = new File(Paths.document, 'profile_avatar.jpg');
 
 export default function ProfileCard() {
   const { colors, radii, shadows } = useAppTheme();
   const { user } = useUser();
+  const { internalPatientId } = useAuth();
+  const [patientRecord, setPatientRecord] = useState<{ firstName?: string | null; lastName?: string | null } | null>(null);
+
+  useEffect(() => {
+    if (!internalPatientId) return;
+    db.query.patients.findFirst({
+      where: eq(patients.id, internalPatientId),
+    }).then((p) => {
+      if (p) setPatientRecord({ firstName: p.firstName, lastName: p.lastName });
+    }).catch(() => {});
+  }, [internalPatientId]);
 
   // Locally cached URI — shown immediately on next launch before Clerk image loads
   const [localUri, setLocalUri] = useState<string | null>(null);
@@ -32,7 +47,9 @@ export default function ProfileCard() {
 
   const avatarSource = previewUri ?? localUri ?? user?.imageUrl ?? null;
 
+  const localDbName = [patientRecord?.firstName, patientRecord?.lastName].filter(Boolean).join(' ').trim();
   const displayName =
+    localDbName ||
     user?.fullName ||
     [user?.firstName, user?.lastName].filter(Boolean).join(' ') ||
     user?.emailAddresses[0]?.emailAddress ||

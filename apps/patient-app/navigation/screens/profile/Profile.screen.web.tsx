@@ -33,8 +33,9 @@ import {
   clinicalAssessments,
   patientPhysicalExamProfile,
   patientNcdQuestionnaire,
+  patients,
 } from '@db/schema/index';
-import { isNull, count } from 'drizzle-orm';
+import { isNull, count, eq } from 'drizzle-orm';
 import ThemedText from '@ui/ThemedText';
 import { AppIcon, type IconName } from '@ui/Icon';
 import { Avatar, ProgressBar } from '@ui/Primitives';
@@ -458,9 +459,26 @@ export default function ProfileScreenWeb() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSection, setSelectedSection] = useState<'all' | ProfileSectionGroup>('all');
+  const [patientRecord, setPatientRecord] = useState<{ firstName?: string | null; lastName?: string | null } | null>(null);
   const hasBackgroundFetchedRef = useRef(false);
 
+  const loadPatientRecord = useCallback(async () => {
+    if (!internalPatientId) return;
+    try {
+      const p = await db.query.patients.findFirst({
+        where: eq(patients.id, internalPatientId),
+      });
+      if (p) {
+        setPatientRecord({ firstName: p.firstName, lastName: p.lastName });
+      }
+    } catch (err) {
+      console.warn('[ProfileScreenWeb] Failed to load patient record:', err);
+    }
+  }, [internalPatientId]);
+
+  const localDbName = [patientRecord?.firstName, patientRecord?.lastName].filter(Boolean).join(' ').trim();
   const displayName =
+    localDbName ||
     user?.fullName ||
     [user?.firstName, user?.lastName].filter(Boolean).join(' ') ||
     user?.primaryEmailAddress?.emailAddress ||
@@ -475,15 +493,17 @@ export default function ProfileScreenWeb() {
     try {
       const record = await getPatientFullRecord(getToken, internalPatientId);
       await hydrateFullRecord(record);
+      await loadPatientRecord();
       return true;
     } catch (err) {
       console.warn('[ProfileScreenWeb] Failed to fetch full record:', err);
       return false;
     }
-  }, [internalPatientId, getToken]);
+  }, [internalPatientId, getToken, loadPatientRecord]);
 
   useEffect(() => {
     reloadCounts();
+    loadPatientRecord();
     if (!hasBackgroundFetchedRef.current) {
       hasBackgroundFetchedRef.current = true;
       NetInfo.fetch()
@@ -495,12 +515,15 @@ export default function ProfileScreenWeb() {
         })
         .catch(() => {});
     }
-  }, [fetchAndHydrateFullRecord, reloadCounts]);
+  }, [fetchAndHydrateFullRecord, reloadCounts, loadPatientRecord]);
 
   useEffect(() => {
-    const unsub = navigation.addListener('focus', reloadCounts);
+    const unsub = navigation.addListener('focus', () => {
+      reloadCounts();
+      loadPatientRecord();
+    });
     return unsub;
-  }, [navigation, reloadCounts]);
+  }, [navigation, reloadCounts, loadPatientRecord]);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);

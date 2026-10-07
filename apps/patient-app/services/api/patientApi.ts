@@ -172,3 +172,54 @@ export async function getPatientFullRecord(
 ): Promise<PatientFullRecord> {
     return api.get<PatientFullRecord>(getToken, `/patients/${patientId}/full-record`);
 }
+
+export interface PatientProfile {
+    demographics: PatientSummary;
+    addresses: AddressItem[];
+    emergencyContacts: EmergencyContactItem[];
+}
+
+/**
+ * Returns a slim demographic profile summary including the patient ID,
+ * basic contact details, addresses, and emergency contacts.
+ */
+export async function getPatientProfile(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+): Promise<PatientProfile> {
+    return api.get<PatientProfile>(getToken, `/patients/${patientId}`);
+}
+
+export interface UpdatePatientDemographicsPayload {
+    firstName: string;
+    middleName?: string | null;
+    lastName: string;
+    suffix?: string | null;
+    sex?: string | null;
+    dateOfBirth?: string | null; // YYYY-MM-DD
+    placeOfBirth?: string | null;
+    civilStatus?: string | null;
+    bloodType?: string | null;
+    nationality?: string | null;
+    ethnicity?: string | null;
+    religion?: string | null;
+    primaryLanguage?: string | null;
+    educationLevel?: string | null;
+    mobile?: string | null;
+    altPhone?: string | null;
+    email?: string | null;
+    messengerHandle?: string | null;
+    consentToShareInfo?: boolean;
+}
+
+/**
+ * Direct update to patient demographics (PUT /patients/{id}/demographics).
+ * Updates synchronous backend state immediately.
+ */
+export async function updatePatientDemographics(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    payload: UpdatePatientDemographicsPayload,
+): Promise<void> {
+    return api.put<void>(getToken, `/patients/${patientId}/demographics`, payload);
+}
