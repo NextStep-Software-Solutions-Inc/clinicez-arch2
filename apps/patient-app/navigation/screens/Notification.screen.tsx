@@ -1,14 +1,5 @@
 import { useCallback, useLayoutEffect, useState } from 'react';
-import {
-  Alert,
-  Platform,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  SectionList,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { Platform, Pressable, RefreshControl, ScrollView, SectionList, StyleSheet, View } from 'react-native';
 import { MaterialSymbolProps, SFSymbolProps, useFocusEffect, useNavigation, useTheme } from '@react-navigation/native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -30,6 +21,7 @@ import {
 } from 'services/notifications/notificationService';
 import type { NotificationCategory } from '@db/schema/notifications';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { dialog } from '@utils/dialog';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -142,7 +134,7 @@ function NotificationItem({ item, onPress, onDelete }: NotificationItemProps) {
 
   const handleDelete = () => {
     close();
-    Alert.alert('Delete Notification', 'Remove this notification?', [
+    dialog.alert('Delete Notification', 'Remove this notification?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: () => onDelete(item.id) },
     ]);

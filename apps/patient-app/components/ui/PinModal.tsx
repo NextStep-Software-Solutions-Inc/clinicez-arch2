@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Modal, View, Pressable, StyleSheet, Alert } from 'react-native';
+import { Modal, View, Pressable, StyleSheet } from 'react-native';
 import { useTheme } from '@react-navigation/native';
 import { useAuth } from 'contexts/AuthContext';
 import ThemedText from './ThemedText';
 import NumericKeypad from './NumericKeypad';
+import { dialog } from '@utils/dialog';
 
 const PIN_LENGTH = 4;
 const MAX_ATTEMPTS = 3;
@@ -57,7 +58,7 @@ export default function PinModal({ visible, title = 'Enter PIN', subtitle, onSuc
       setAttempts(newAttempts);
       setPin('');
       if (newAttempts >= MAX_ATTEMPTS) {
-        Alert.alert('Too many attempts', 'Please try again later.', [
+        dialog.alert('Too many attempts', 'Please try again later.', [
           { text: 'OK', onPress: onDismiss },
         ]);
       } else {

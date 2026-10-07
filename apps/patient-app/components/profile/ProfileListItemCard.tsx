@@ -1,4 +1,4 @@
-import { View, Pressable, StyleSheet, Alert, Platform } from 'react-native';
+import { View, Pressable, StyleSheet, Platform } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
@@ -9,6 +9,7 @@ import Animated, {
 import { useTheme } from '@react-navigation/native';
 import { AppIcon } from '@ui/Icon';
 import ThemedText from '@ui/ThemedText';
+import { dialog } from '@utils/dialog';
 
 const ACTION_W = 130; // total width of the revealed action panel
 
@@ -58,7 +59,7 @@ export default function ProfileListItemCard({
 
   const handleDelete = () => {
     close();
-    Alert.alert('Delete Entry', deleteMessage, [
+    dialog.alert('Delete Entry', deleteMessage, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: onDelete },
     ]);

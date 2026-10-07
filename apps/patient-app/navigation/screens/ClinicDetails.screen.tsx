@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, TextInput, View, RefreshControl } from 'react-native';
+import { FlatList, Modal, Pressable, ScrollView, StyleSheet, TextInput, View, RefreshControl } from 'react-native';
 import { useNavigation, useRoute, useTheme } from '@react-navigation/native';
 import { useAuth as useClerkAuth } from '@clerk/expo';
 import NetInfo from '@react-native-community/netinfo';
@@ -19,6 +19,7 @@ import {
   cancelClinicMembershipOnline,
 } from '../../services/discovery/discoveryService';
 import { ClinicDetail, ConsentSelection } from '../../services/discovery/types';
+import { dialog } from '@utils/dialog';
 
 function ConsentToggle({ label, value, onPress }: { label: string; value: boolean; onPress: () => void }) {
   const { colors } = useTheme();
@@ -102,7 +103,7 @@ export default function ClinicDetailsScreen() {
       if (mounted) {
         setIsLoading(false);
         if (!hasData) {
-          Alert.alert('Error', 'Unable to load clinic details.', [{ text: 'OK', onPress: () => navigation.goBack() }]);
+          dialog.alert('Error', 'Unable to load clinic details.', [{ text: 'OK', onPress: () => navigation.goBack() }]);
         }
       }
     };
@@ -144,7 +145,7 @@ export default function ClinicDetailsScreen() {
         setShowJoinModal(false);
         showOfflineAlert();
       } else {
-        Alert.alert('Join failed', error.message);
+        dialog.alert('Join failed', error.message);
       }
       setIsJoining(false);
       return;
@@ -156,7 +157,7 @@ export default function ClinicDetailsScreen() {
     }
     setShowJoinModal(false);
     setIsJoining(false);
-    Alert.alert('Request Submitted', `Your request to join ${clinic.name} has been submitted for approval.`);
+    dialog.alert('Request Submitted', `Your request to join ${clinic.name} has been submitted for approval.`);
   };
 
   const handleCancelRequest = async () => {
@@ -167,7 +168,7 @@ export default function ClinicDetailsScreen() {
       if (error.message === 'OFFLINE_ERROR') {
         showOfflineAlert();
       } else {
-        Alert.alert('Cancel failed', error.message);
+        dialog.alert('Cancel failed', error.message);
       }
       setIsCancelling(false);
       return;
@@ -181,7 +182,7 @@ export default function ClinicDetailsScreen() {
       navigation.goBack();
     }
     setIsCancelling(false);
-    Alert.alert('Request Cancelled', `Your request to join ${clinic.name} has been cancelled.`);
+    dialog.alert('Request Cancelled', `Your request to join ${clinic.name} has been cancelled.`);
   };
 
   if (isLoading) {

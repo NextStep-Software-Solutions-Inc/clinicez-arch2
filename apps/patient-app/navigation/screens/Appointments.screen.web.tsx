@@ -1,14 +1,5 @@
 import React, { useCallback, useRef, useState, useMemo } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  View,
-  useWindowDimensions,
-} from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
 import { useFocusEffect, useNavigation, useTheme } from '@react-navigation/native';
 import { useAuth as useClerkAuth } from '@clerk/expo';
 import { useNetInfo } from '@react-native-community/netinfo';
@@ -25,6 +16,7 @@ import { bookingDrafts } from '@db/schema/bookingDrafts';
 import { clinics as clinicsTable } from '@db/schema/clinics';
 import { fetchAppointments, getCachedAppointmentsWithLocalBookings } from '../../services/appointments/appointmentsService';
 import type { AppointmentItem } from '../../services/appointments/types';
+import { dialog } from '@utils/dialog';
 
 interface DraftSummary {
   id: string;
@@ -127,7 +119,7 @@ export default function AppointmentsScreenWeb() {
       setIsFromCache(false);
     } catch (error) {
       setIsFromCache(true);
-      Alert.alert(
+      dialog.alert(
         'Connection Error',
         'Failed to pull latest appointments from server. Showing cached data.',
         [
@@ -177,19 +169,19 @@ export default function AppointmentsScreenWeb() {
     });
 
   const handleCancel = (item: AppointmentItem) =>
-    Alert.alert('Cancel Appointment', `Cancel appointment at ${item.clinic.name}?`, [
+    dialog.alert('Cancel Appointment', `Cancel appointment at ${item.clinic.name}?`, [
       { text: 'Keep', style: 'cancel' },
       {
         text: 'Cancel Appointment',
         style: 'destructive',
-        onPress: () => Alert.alert('Notice', 'Cancellation requires online doctor confirmation.'),
+        onPress: () => dialog.alert('Notice', 'Cancellation requires online doctor confirmation.'),
       },
     ]);
 
   const handleBookNew = () => navigation.navigate('Main', { screen: 'BookingDraftScreen' });
 
   const handleDiscardDraft = (draftId: string) => {
-    Alert.alert('Discard Draft', 'Remove this appointment draft?', [
+    dialog.alert('Discard Draft', 'Remove this appointment draft?', [
       { text: 'Keep', style: 'cancel' },
       {
         text: 'Discard',

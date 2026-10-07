@@ -1,19 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Image,
-  Pressable,
-  StyleSheet,
-  ActivityIndicator,
-  Alert,
-  Platform,
-} from 'react-native';
+import { View, Image, Pressable, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { useTheme } from '@react-navigation/native';
 import { useUser } from '@clerk/expo';
 import * as ImagePicker from 'expo-image-picker';
 import { File, Paths } from 'expo-file-system';
 import { MaterialSymbol, SFSymbol } from '@react-navigation/native';
 import ThemedText from './ui/ThemedText';
+import { dialog } from '@utils/dialog';
 
 const avatarFile = new File(Paths.document, 'profile_avatar.jpg');
 export default function ProfileCard() {
@@ -64,7 +57,7 @@ export default function ProfileCard() {
     // Request permission
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert(
+      dialog.alert(
         'Permission Required',
         'Please allow access to your photo library to change your profile photo.',
         [{ text: 'OK' }],
@@ -96,13 +89,13 @@ export default function ProfileCard() {
 
       // 2. Upload to Clerk
       await user?.setProfileImage({ file: avatarFile });
-      Alert.alert('Success', 'Your profile photo has been updated.', [{ text: 'OK' }]);
+      dialog.alert('Success', 'Your profile photo has been updated.', [{ text: 'OK' }]);
 
       // Clear temp preview — Clerk's imageUrl will update via useUser re-render
       setPreviewUri(null);
     } catch (err) {
       console.warn('Avatar upload failed:', err);
-      Alert.alert(
+      dialog.alert(
         'Upload Failed',
         'Your photo was saved locally but could not be uploaded. It will retry on your next update.',
         [{ text: 'OK' }],

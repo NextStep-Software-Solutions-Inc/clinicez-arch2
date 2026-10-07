@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, ColorValue, Platform, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
+import { ActivityIndicator, ColorValue, Platform, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
 import useSWR from 'swr';
 import {
   MaterialSymbol,
@@ -21,6 +21,7 @@ import type { PickedFileInput } from '../../../services/files';
 import type { FilesScreenProps } from './navigationTypes';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { dialog } from '@utils/dialog';
 
 const BRAND = '#7C3AED';
 
@@ -80,7 +81,7 @@ export default function FilesUploadScreen({ route }: FilesScreenProps<'FilesUplo
 
   useEffect(() => {
     if (uploadError) {
-      Alert.alert('Files not ready', uploadError instanceof Error ? uploadError.message : 'Unable to prepare your files.');
+      dialog.alert('Files not ready', uploadError instanceof Error ? uploadError.message : 'Unable to prepare your files.');
     }
   }, [uploadError]);
 
@@ -102,7 +103,7 @@ export default function FilesUploadScreen({ route }: FilesScreenProps<'FilesUplo
         : ImagePicker.requestMediaLibraryPermissionsAsync(),
     );
     if (permission.status !== 'granted') {
-      Alert.alert('Permission needed', source === 'camera' ? 'Camera access is needed.' : 'Photo access is needed.');
+      dialog.alert('Permission needed', source === 'camera' ? 'Camera access is needed.' : 'Photo access is needed.');
       return;
     }
     const result = await runWithAutoLockPaused(() =>
@@ -137,7 +138,7 @@ export default function FilesUploadScreen({ route }: FilesScreenProps<'FilesUplo
       await importFiles({ patientId, folderId: folderId ?? null, documentTypeId: selectedTypeId, files: finalFiles, getToken });
       navigation.goBack();
     } catch (error) {
-      Alert.alert('Could not add file', error instanceof Error ? error.message : 'Unable to save this file.');
+      dialog.alert('Could not add file', error instanceof Error ? error.message : 'Unable to save this file.');
     } finally {
       setIsSaving(false);
     }
@@ -241,7 +242,7 @@ export default function FilesUploadScreen({ route }: FilesScreenProps<'FilesUplo
             {pickedFiles.map((item, index) => {
               const meta = typeMeta(selectedTypeId ?? '');
               return (
-                <ThemedView key={item.file.uri + index} style={[styles.selectedRow, { backgroundColor: colors.card }]}>
+                <ThemedView key={`${item.file.uri ?? item.file.name}-${index}`} style={[styles.selectedRow, { backgroundColor: colors.card }]}>
                   <ThemedView style={[styles.selectedIcon, { backgroundColor: meta.color + '18' }]}>
                     {Icon({ android: meta.android, ios: meta.ios, color: meta.color, size: 18 })}
                   </ThemedView>

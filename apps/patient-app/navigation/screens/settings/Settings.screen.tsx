@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Alert } from 'react-native';
+import { ScrollView, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import * as Updates from 'expo-updates';
 import { useAuth } from 'contexts/AuthContext';
@@ -7,6 +7,7 @@ import { useAppearance } from 'contexts/AppearanceContext';
 import { SettingsRow, SettingsSection } from '@ui/SettingsItem';
 import PinModal from '@ui/PinModal';
 import ProfileCard from 'components/ProfileCard';
+import { dialog } from '@utils/dialog';
 
 const THEME_LABELS: Record<string, string> = {
   system: 'System',
@@ -27,7 +28,7 @@ export default function SettingsScreen() {
     try {
       await Updates.checkForUpdateAsync();
     } catch (e) {
-      Alert.alert('Update Check Failed', 'Unable to check for updates. Please try again later.');
+      dialog.alert('Update Check Failed', 'Unable to check for updates. Please try again later.');
     }
   };
 
@@ -36,12 +37,12 @@ export default function SettingsScreen() {
       await Updates.fetchUpdateAsync();
       await Updates.reloadAsync();
     } catch (e) {
-      Alert.alert('Update Failed', 'Unable to download the update. Please try again later.');
+      dialog.alert('Update Failed', 'Unable to download the update. Please try again later.');
     }
   };
 
   const handleLogout = () => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
+    dialog.alert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Sign Out',

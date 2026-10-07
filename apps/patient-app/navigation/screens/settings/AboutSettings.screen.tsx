@@ -1,6 +1,7 @@
-import { ScrollView, Linking, Alert } from 'react-native';
+import { ScrollView, Linking } from 'react-native';
 import Constants from 'expo-constants';
 import { SettingsRow, SettingsSection } from '@ui/SettingsItem';
+import { dialog } from '@utils/dialog';
 
 const APP_VERSION = Constants.expoConfig?.version ?? '—';
 const BUILD_NUMBER =
@@ -11,7 +12,7 @@ const openUrl = async (url: string) => {
   if (supported) {
     await Linking.openURL(url);
   } else {
-    Alert.alert('Unable to open link', url);
+    dialog.alert('Unable to open link', url);
   }
 };
 

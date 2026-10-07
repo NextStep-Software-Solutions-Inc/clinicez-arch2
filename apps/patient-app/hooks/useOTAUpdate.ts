@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
-import { Alert } from 'react-native';
 import * as Updates from 'expo-updates';
 import { scheduleLocalNotification } from 'services/notifications/notificationService';
 import { safeAwait } from '@shared/safe';
+import { dialog } from '@utils/dialog';
 
 export function useOTAUpdate() {
   useEffect(() => {
@@ -18,7 +18,7 @@ export function useOTAUpdate() {
         await safeAwait(Updates.fetchUpdateAsync());
 
         // Show an in-app alert informing the user
-        Alert.alert(
+        dialog.alert(
           'Update Available',
           'A new version of the app has been downloaded. Would you like to restart the app to apply the update now?',
           [

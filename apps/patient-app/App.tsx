@@ -1,17 +1,23 @@
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Navigation, navigationRef } from './navigation/Navigation';
 import { linking } from './navigation/linking';
 import WebShell from 'components/ui/WebShell';
 import { useOTAUpdate } from 'hooks/useOTAUpdate';
-import { DefaultTheme, DarkTheme, MaterialDarkTheme, MaterialLightTheme, Theme, ThemeProvider } from "@react-navigation/native";
-import { ColorValue, Platform, StyleSheet, useColorScheme, View } from 'react-native';
+import { ThemeProvider } from "@react-navigation/native";
+import { useFonts } from 'expo-font';
+import { ActivityIndicator, ColorValue, Platform, StyleSheet, View } from 'react-native';
+import { AppThemeProvider, useAppTheme } from 'contexts/ThemeContext';
+import { buildNavigationTheme } from './constants/navigationTheme';
+import { fontAssets, setCustomFontsAvailable } from './constants/fonts';
+import { lightTheme } from './constants/theme';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { AuthProvider, useAuth } from 'contexts/AuthContext';
 import CustomAlertModal from 'components/ui/CustomAlertModal';
+import DialogHost from 'components/ui/DialogHost';
 import { OnboardingProvider } from 'contexts/OnboardingContext';
-import { AppearanceProvider, useAppearance } from 'contexts/AppearanceContext';
+import { AppearanceProvider } from 'contexts/AppearanceContext';
 import { NotificationProvider } from 'contexts/NotificationContext';
 import { ClerkProvider } from '@clerk/expo';
 import { tokenCache } from '@clerk/expo/token-cache';
@@ -101,27 +107,16 @@ function LockOverlay({ backgroundColor }: { backgroundColor: ColorValue }) {
 }
 
 function AppWithTheme() {
-  const systemScheme = useColorScheme();
-  const { themePreference } = useAppearance();
+  const theme = useAppTheme();
   const { showUserNotFoundAlert, setShowUserNotFoundAlert, userId, logout } = useAuth();
 
   useOTAUpdate();
 
-  const isDarkMode =
-    themePreference === 'dark'
-      ? true
-      : themePreference === 'light'
-        ? false
-        : systemScheme === 'dark';
-
-  const selectedTheme = Platform.select<Theme>({
-    ios: isDarkMode ? DarkTheme : DefaultTheme,
-    android: isDarkMode ? MaterialDarkTheme : MaterialLightTheme,
-  }) ?? DefaultTheme;
+  const selectedTheme = useMemo(() => buildNavigationTheme(theme), [theme]);
 
   return (
     <>
-      <StatusBar style={isDarkMode ? 'light' : 'dark'} />
+      <StatusBar style={theme.dark ? 'light' : 'dark'} />
       <DatabaseProvider>
         <SyncManager />
         <NotificationProvider>
@@ -132,6 +127,7 @@ function AppWithTheme() {
                   <Navigation ref={navigationRef} theme={selectedTheme} linking={linking} />
                   <LockOverlay backgroundColor={selectedTheme.colors.background} />
                 </WebShell>
+                <DialogHost />
                 <CustomAlertModal
                   visible={showUserNotFoundAlert}
                   title="Account Not Found"
@@ -153,6 +149,22 @@ function AppWithTheme() {
 }
 
 export default function App() {
+  const [fontsLoaded, fontError] = useFonts(fontAssets);
+
+  // If the typeface fails to load, fall back to the system font instead of rendering
+  // text against missing font families.
+  if (fontError) {
+    setCustomFontsAvailable(false);
+  }
+
+  if (!fontsLoaded && !fontError) {
+    return (
+      <View style={styles.boot}>
+        <ActivityIndicator size="large" color={lightTheme.colors.primary} />
+      </View>
+    );
+  }
+
   return (
     <SafeAreaProvider>
       <GestureHandlerRootView style={{ flex: 1 }}>
@@ -162,13 +174,15 @@ export default function App() {
           __experimental_resourceCache={Platform.OS !== 'web' ? resourceCache : undefined}
         >
           <AppearanceProvider>
-            <OnboardingProvider>
-              <AuthProvider>
-                <ErrorBoundary>
-                  <AppWithTheme />
-                </ErrorBoundary>
-              </AuthProvider>
-            </OnboardingProvider>
+            <AppThemeProvider>
+              <OnboardingProvider>
+                <AuthProvider>
+                  <ErrorBoundary>
+                    <AppWithTheme />
+                  </ErrorBoundary>
+                </AuthProvider>
+              </OnboardingProvider>
+            </AppThemeProvider>
           </AppearanceProvider>
         </ClerkProvider>
       </GestureHandlerRootView>
@@ -177,6 +191,12 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
+  boot: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: lightTheme.colors.background,
+  },
   lockOverlay: {
     bottom: 0,
     left: 0,

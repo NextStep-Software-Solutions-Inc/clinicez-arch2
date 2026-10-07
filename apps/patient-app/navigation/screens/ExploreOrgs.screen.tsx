@@ -1,16 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    Modal,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    TextInput,
-    View,
-} from 'react-native';
+import { ActivityIndicator, FlatList, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useNavigation, useTheme, MaterialSymbol, SFSymbol } from '@react-navigation/native';
 import EmptyState from '@ui/EmptyState';
 import { SkeletonCard } from '@ui/Skeleton';
@@ -31,6 +20,7 @@ import {
 } from '../../services/discovery/discoveryService';
 import { getOrganizationRoles, OrganizationRoleDto } from '../../services/api/discoveryApi';
 import { ConsentSelection, OrganizationView } from '../../services/discovery/types';
+import { dialog } from '@utils/dialog';
 
 type OrganizationFilter = 'all' | 'public' | 'private' | 'joined';
 
@@ -155,7 +145,7 @@ export default function ExploreOrgsScreen() {
             setOrganizations(data);
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : 'Unable to refresh organizations.';
-            Alert.alert('Error', message);
+            dialog.alert('Error', message);
         } finally {
             setIsRefreshing(false);
         }
@@ -271,7 +261,7 @@ export default function ExploreOrgsScreen() {
                 closeJoinModal();
                 showOfflineAlert();
             } else {
-                Alert.alert('Join failed', error.message);
+                dialog.alert('Join failed', error.message);
             }
             setIsJoining(false);
             return;
@@ -283,7 +273,7 @@ export default function ExploreOrgsScreen() {
         }
         closeJoinModal();
         setIsJoining(false);
-        Alert.alert('Joined', `You are now part of ${selectedOrg.name}.`);
+        dialog.alert('Joined', `You are now part of ${selectedOrg.name}.`);
     };
 
     return (

@@ -1,11 +1,12 @@
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ThemedText from '@ui/ThemedText';
 import ThemedView from '@ui/ThemedView';
 import type { FilesScreenProps } from './navigationTypes';
+import { dialog } from '@utils/dialog';
 
 const BRAND = '#7C3AED';
 
@@ -22,7 +23,7 @@ export default function FRKSetupScreen({ route }: FilesScreenProps<'FRKSetupScre
   }, [frk]);
 
   const handleContinue = useCallback(() => {
-    Alert.alert(
+    dialog.alert(
       'Are you sure?',
       'If you lose this key, you will not be able to recover your encrypted files on a new device. Please make sure you have saved it.',
       [

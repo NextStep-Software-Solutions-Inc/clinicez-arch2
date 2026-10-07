@@ -1,13 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import {
-  FlatList,
-  StyleSheet,
-  View,
-  Pressable,
-  Modal,
-  ScrollView,
-  Alert,
-} from 'react-native';
+import { FlatList, StyleSheet, View, Pressable, Modal, ScrollView } from 'react-native';
 import { useTheme } from '@react-navigation/native';
 import ThemedText from '@ui/ThemedText';
 import { db } from '@db/index';
@@ -18,6 +10,7 @@ import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
 import { useClinicNameMap } from 'hooks/useClinicNameMap';
 import { usePatientId } from 'hooks/usePatientId';
 import * as Sharing from 'expo-sharing';
+import { dialog } from '@utils/dialog';
 
 export default function LabResultsScreen() {
   const patientId = usePatientId();
@@ -100,10 +93,10 @@ export default function LabResultsScreen() {
   const handleShareReport = async () => {
     const isAvailable = await Sharing.isAvailableAsync();
     if (!isAvailable) {
-      Alert.alert('Notice', 'Sharing is not available on this device platform.');
+      dialog.alert('Notice', 'Sharing is not available on this device platform.');
       return;
     }
-    Alert.alert('Export PDF Report', 'Official sealed diagnostic laboratory certificate exported for sharing.');
+    dialog.alert('Export PDF Report', 'Official sealed diagnostic laboratory certificate exported for sharing.');
   };
 
   return (

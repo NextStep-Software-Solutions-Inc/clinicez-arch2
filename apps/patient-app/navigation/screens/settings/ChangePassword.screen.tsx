@@ -1,19 +1,11 @@
 import { useState } from 'react';
-import {
-  ScrollView,
-  View,
-  TextInput,
-  Pressable,
-  StyleSheet,
-  Alert,
-  ActivityIndicator,
-  Platform,
-} from 'react-native';
+import { ScrollView, View, TextInput, Pressable, StyleSheet, ActivityIndicator, Platform } from 'react-native';
 import { useNavigation, useTheme } from '@react-navigation/native';
 import { useUser } from '@clerk/expo';
 import { useForm, Controller } from 'react-hook-form';
 import { MaterialSymbol, SFSymbol } from '@react-navigation/native';
 import ThemedText from '@ui/ThemedText';
+import { dialog } from '@utils/dialog';
 
 interface FormValues {
   currentPassword: string;
@@ -137,7 +129,7 @@ export default function ChangePasswordScreen() {
         newPassword: data.newPassword,
         signOutOfOtherSessions: false,
       });
-      Alert.alert('Password Changed', 'Your password has been updated successfully.', [
+      dialog.alert('Password Changed', 'Your password has been updated successfully.', [
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
     } catch (err: any) {
@@ -145,7 +137,7 @@ export default function ChangePasswordScreen() {
         err?.errors?.[0]?.longMessage ??
         err?.errors?.[0]?.message ??
         'Failed to change password. Please check your current password and try again.';
-      Alert.alert('Error', message);
+      dialog.alert('Error', message);
     }
   };
 

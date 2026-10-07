@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialSymbol, SFSymbol, useNavigation, useTheme } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,6 +11,7 @@ import { formatBytes, getStorageOverview } from '../../../services/files';
 import type { FilesScreenProps } from './navigationTypes';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import CustomAlertModal from '../../../components/ui/CustomAlertModal';
+import { dialog } from '@utils/dialog';
 
 const BRAND = '#7C3AED';
 
@@ -269,7 +270,7 @@ export default function StorageScreen({ route }: FilesScreenProps<'StorageScreen
 
           <ThemedView style={styles.actionsRow}>
             <Pressable
-              onPress={() => Alert.alert('Free up space', 'Remove local cached copies of backed up files?', [
+              onPress={() => dialog.alert('Free up space', 'Remove local cached copies of backed up files?', [
                 { text: 'Cancel', style: 'cancel' },
                 { text: 'Free up', style: 'destructive', onPress: () => { } },
               ])}
@@ -279,7 +280,7 @@ export default function StorageScreen({ route }: FilesScreenProps<'StorageScreen
               <ThemedText style={[styles.actionBtnText, { color: colors.text }]}>Free up space</ThemedText>
             </Pressable>
             <Pressable
-              onPress={() => Alert.alert('Export', 'Not implemented yet.')}
+              onPress={() => dialog.alert('Export', 'Not implemented yet.')}
               style={({ pressed }) => [styles.actionBtn, { backgroundColor: dark ? '#1C1633' : '#fff', opacity: pressed ? 0.8 : 1 }]}
             >
               {Ic({ a: 'ios_share', i: 'square.and.arrow.up', color: BRAND, size: 18 })}

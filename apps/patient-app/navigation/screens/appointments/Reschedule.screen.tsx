@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useNavigation, useTheme } from '@react-navigation/native';
 import type { StaticScreenProps } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,6 +20,7 @@ import { db } from '@db/index';
 import { useAuth } from '../../../contexts/AuthContext';
 import { fetchAvailableSlots, rescheduleAppointment, getAppointmentDetail } from '../../../services/appointments/appointmentsService';
 import type { AvailableSlot, AppointmentItem } from '../../../services/appointments/types';
+import { dialog } from '@utils/dialog';
 
 type Props = StaticScreenProps<{
     appointmentId: string;
@@ -78,7 +79,7 @@ export default function RescheduleScreen({ route }: Props) {
         setSelectedSlotId(null);
         fetchAvailableSlots(clinicId, appointment.provider.id, selectedDate, getToken)
             .then(res => { if (mounted) setSlots(res.slots); })
-            .catch((err) => Alert.alert('Server Error', `Unable to load available slots. ${err?.message || ''}`))
+            .catch((err) => dialog.alert('Server Error', `Unable to load available slots. ${err?.message || ''}`))
             .finally(() => { if (mounted) setIsLoadingSlots(false); });
         return () => { mounted = false; };
     }, [clinicId, selectedDate, appointment]);
@@ -99,20 +100,20 @@ export default function RescheduleScreen({ route }: Props) {
             if (error.message === 'OFFLINE_ERROR') {
                 showOfflineAlert();
             } else {
-                Alert.alert('Error', 'Unable to update the appointment. Please try again.');
+                dialog.alert('Error', 'Unable to update the appointment. Please try again.');
             }
             setIsSaving(false);
             return;
         }
 
         if (!updated) {
-            Alert.alert('Error', 'Appointment not found in local cache. Please refresh and try again.');
+            dialog.alert('Error', 'Appointment not found in local cache. Please refresh and try again.');
             setIsSaving(false);
             return;
         }
 
         setIsSaving(false);
-        Alert.alert(
+        dialog.alert(
             'Reschedule Requested',
             `Your appointment has been updated to ${selectedSlot.displayTime} on ${format(new Date(selectedDate + 'T00:00:00'), 'EEE, MMM d, yyyy')}. Status reset to Pending — the clinic will re-confirm.`,
             [{ text: 'Done', onPress: () => navigation.goBack() }],

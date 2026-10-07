@@ -1,16 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    Modal,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    TextInput,
-    View,
-} from 'react-native';
+import { ActivityIndicator, FlatList, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useNavigation, useRoute, useTheme, MaterialSymbol, SFSymbol } from '@react-navigation/native';
 import { useAuth as useClerkAuth } from '@clerk/expo';
 import NetInfo from '@react-native-community/netinfo';
@@ -30,6 +19,7 @@ import {
     refreshClinicsFromApi,
 } from '../../services/discovery/discoveryService';
 import { ClinicDetail, ConsentSelection } from '../../services/discovery/types';
+import { dialog } from '@utils/dialog';
 
 type ClinicFilter = 'all' | 'public' | 'partnered' | 'joined';
 
@@ -150,7 +140,7 @@ export default function ExploreClinicsScreen() {
             setClinics(data);
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : 'Unable to refresh clinics.';
-            Alert.alert('Error', message);
+            dialog.alert('Error', message);
         } finally {
             setIsRefreshing(false);
         }
@@ -240,7 +230,7 @@ export default function ExploreClinicsScreen() {
                 closeJoinModal();
                 showOfflineAlert();
             } else {
-                Alert.alert('Join failed', error.message);
+                dialog.alert('Join failed', error.message);
             }
             setIsJoining(false);
             return;
@@ -252,7 +242,7 @@ export default function ExploreClinicsScreen() {
         }
         closeJoinModal();
         setIsJoining(false);
-        Alert.alert('Clinic joined', `${selectedClinic.name} has been added to your clinics.`);
+        dialog.alert('Clinic joined', `${selectedClinic.name} has been added to your clinics.`);
     };
 
     return (

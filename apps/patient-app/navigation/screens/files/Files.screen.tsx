@@ -8,7 +8,6 @@ import {
   StyleSheet,
   TextInput,
   View,
-  Alert,
 } from 'react-native';
 import { Theme, useNavigation, useTheme } from '@react-navigation/native';
 import { useAuth as useClerkAuth } from '@clerk/expo';

@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { View, StyleSheet, Alert } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { useNavigation, useTheme } from '@react-navigation/native';
 import { useAuth } from 'contexts/AuthContext';
 import ThemedText from '@ui/ThemedText';
 import NumericKeypad from '@ui/NumericKeypad';
+import { dialog } from '@utils/dialog';
 
 const PIN_LENGTH = 4;
 
@@ -69,7 +70,7 @@ export default function ChangePINScreen() {
     } else if (step === 'confirm') {
       if (entered === newPin) {
         await savePin(entered);
-        Alert.alert('PIN Changed', 'Your PIN has been updated successfully.', [
+        dialog.alert('PIN Changed', 'Your PIN has been updated successfully.', [
           { text: 'OK', onPress: () => navigation.goBack() },
         ]);
       } else {

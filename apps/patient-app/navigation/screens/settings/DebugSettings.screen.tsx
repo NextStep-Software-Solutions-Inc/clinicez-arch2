@@ -1,4 +1,4 @@
-import { ScrollView, Alert } from 'react-native';
+import { ScrollView } from 'react-native';
 import { storage as SecureStore } from '../../../utils/storage';
 import { useState, useEffect } from 'react';
 import { useOnboarding } from 'contexts/OnboardingContext';
@@ -8,6 +8,7 @@ import { seedDemoHealthRecords, clearAllData } from '@db/seedDemoData';
 import { seedCatalog } from 'services/discovery/discoveryService';
 import { seedMockNotifications } from 'services/notifications/notificationService';
 import { safeAwait } from '@shared/safe';
+import { dialog } from '@utils/dialog';
 
 // Only show this screen in development builds
 if (!__DEV__) {
@@ -49,7 +50,7 @@ export default function DebugSettingsScreen() {
 
   const handleOnboardingToggle = async (value: boolean) => {
     if (!value) {
-      Alert.alert(
+      dialog.alert(
         'Reset Onboarding',
         'This will clear the onboarding flag. The app will restart the welcome flow immediately.',
         [
@@ -72,7 +73,7 @@ export default function DebugSettingsScreen() {
 
   const handleSeedDemoHealthRecords = async () => {
     if (!internalPatientId || !userId) {
-      Alert.alert('Error', 'Verification pending or user not authenticated.');
+      dialog.alert('Error', 'Verification pending or user not authenticated.');
       return;
     }
     setIsSeedingHealth(true);
@@ -80,9 +81,9 @@ export default function DebugSettingsScreen() {
     setIsSeedingHealth(false);
     if (error) {
       console.error(error);
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to seed records.');
+      dialog.alert('Error', error instanceof Error ? error.message : 'Failed to seed records.');
     } else {
-      Alert.alert('Success', 'Demo health records seeded successfully.');
+      dialog.alert('Success', 'Demo health records seeded successfully.');
     }
   };
 
@@ -92,15 +93,15 @@ export default function DebugSettingsScreen() {
     setIsSeedingCatalog(false);
     if (error) {
       console.error(error);
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to seed catalog.');
+      dialog.alert('Error', error instanceof Error ? error.message : 'Failed to seed catalog.');
     } else {
-      Alert.alert('Success', 'Discovery catalog seeded successfully.');
+      dialog.alert('Success', 'Discovery catalog seeded successfully.');
     }
   };
 
   const handleSeedMockNotifications = async () => {
     if (!userId) {
-      Alert.alert('Error', 'No authenticated user ID found.');
+      dialog.alert('Error', 'No authenticated user ID found.');
       return;
     }
     setIsSeedingNotifications(true);
@@ -108,14 +109,14 @@ export default function DebugSettingsScreen() {
     setIsSeedingNotifications(false);
     if (error) {
       console.error(error);
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to seed notifications.');
+      dialog.alert('Error', error instanceof Error ? error.message : 'Failed to seed notifications.');
     } else {
-      Alert.alert('Success', 'Mock notifications seeded successfully.');
+      dialog.alert('Success', 'Mock notifications seeded successfully.');
     }
   };
 
   const handleClearAllData = () => {
-    Alert.alert(
+    dialog.alert(
       'Reset Database',
       'Are you sure you want to delete all local database records? This action is permanent and cannot be undone.',
       [
@@ -129,9 +130,9 @@ export default function DebugSettingsScreen() {
             setIsClearingData(false);
             if (error) {
                console.error(error);
-               Alert.alert('Error', error instanceof Error ? error.message : 'Failed to reset database.');
+               dialog.alert('Error', error instanceof Error ? error.message : 'Failed to reset database.');
             }
-            Alert.alert('Success', 'Local database has been cleared completely.');
+            dialog.alert('Success', 'Local database has been cleared completely.');
             await refreshStoreValues();
           }
         }

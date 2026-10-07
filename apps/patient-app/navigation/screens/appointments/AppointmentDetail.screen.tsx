@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Alert, Image, Linking, Platform, Pressable, ScrollView, StyleSheet, View, RefreshControl } from 'react-native';
+import { Image, Linking, Platform, Pressable, ScrollView, StyleSheet, View, RefreshControl } from 'react-native';
 import { useNavigation, useTheme } from '@react-navigation/native';
 import type { StaticScreenProps } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,6 +12,7 @@ import AppointmentStatusBadge from 'components/appointments/AppointmentStatusBad
 import { db } from '@db/index';
 import { getAppointmentDetail } from '../../../services/appointments/appointmentsService';
 import type { AppointmentItem, AttachedDocument, AffiliatedClinic, ProviderSnapshot } from '../../../services/appointments/types';
+import { dialog } from '@utils/dialog';
 
 type Props = StaticScreenProps<{ appointmentId: string }>;
 
@@ -179,7 +180,7 @@ export default function AppointmentDetailScreen({ route }: Props) {
             const detail = await getAppointmentDetail(appointmentId, db);
             setItem(detail);
         } catch (e) {
-            Alert.alert('Error', 'Unable to load appointment details.', [
+            dialog.alert('Error', 'Unable to load appointment details.', [
                 { text: 'OK', onPress: () => navigation.goBack() },
             ]);
         }
@@ -204,9 +205,9 @@ export default function AppointmentDetailScreen({ route }: Props) {
         const amount = item.invoiceAmount ?? 0;
         if (amount === 0) {
             setIsPaidLocally(true);
-            Alert.alert('Payment Confirmed', 'This appointment is free of charge. You\'re all set!');
+            dialog.alert('Payment Confirmed', 'This appointment is free of charge. You\'re all set!');
         } else {
-            Alert.alert(
+            dialog.alert(
                 'Online Payment Coming Soon',
                 `Secure online payment for ${item.currency ?? 'PHP'} ${amount.toFixed(2)} is being set up. Please pay at the clinic on your appointment day.`,
                 [{ text: 'OK' }],
@@ -224,7 +225,7 @@ export default function AppointmentDetailScreen({ route }: Props) {
     const handleViewProfile = () => {
         if (!item) return;
         if (item.provider.id === 'local-pending') {
-            Alert.alert(
+            dialog.alert(
                 'Provider Not Yet Assigned',
                 `${item.clinic.name} will assign a healthcare provider once your appointment request has been reviewed and confirmed. You will be notified when a provider is assigned.`,
                 [{ text: 'OK' }],
@@ -243,11 +244,11 @@ export default function AppointmentDetailScreen({ route }: Props) {
     };
 
     const handleCancel = () => {
-        Alert.alert('Cancel Appointment', 'Are you sure you want to cancel this appointment?', [
+        dialog.alert('Cancel Appointment', 'Are you sure you want to cancel this appointment?', [
             { text: 'Keep', style: 'cancel' },
             {
                 text: 'Cancel Appointment', style: 'destructive',
-                onPress: () => Alert.alert('Coming soon', 'Cancellation requires the backend API.')
+                onPress: () => dialog.alert('Coming soon', 'Cancellation requires the backend API.')
             },
         ]);
     };

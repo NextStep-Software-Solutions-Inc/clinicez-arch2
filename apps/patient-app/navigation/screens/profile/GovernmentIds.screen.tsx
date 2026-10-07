@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform, View, Alert } from 'react-native';
+import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useForm, Controller } from 'react-hook-form';
 import { db } from '@db/index';
@@ -16,6 +16,7 @@ import { randomUUID } from 'expo-crypto';
 import { usePatientId } from 'hooks/usePatientId';
 import { useAuth } from 'contexts/AuthContext';
 import { addToSyncQueue, syncPendingProfileWrites } from 'services/api/syncService';
+import { dialog } from '@utils/dialog';
 
 type PhilhealthCategory = 'MM' | 'DD';
 type DisabilityType = 'Physical' | 'Sensory' | 'Intellectual' | 'Psychosocial';
@@ -208,11 +209,11 @@ export default function GovernmentIdsScreen() {
   const onSave = handleSubmit(async (data) => {
     if (data.philhealthCategory === 'DD') {
       if (!data.sponsorPin?.trim()) {
-        Alert.alert('Required Field', 'For dependent benefits, Principal Member PIN is required.');
+        dialog.alert('Required Field', 'For dependent benefits, Principal Member PIN is required.');
         return;
       }
       if (!data.sponsorLastName?.trim() || !data.sponsorFirstName?.trim()) {
-        Alert.alert('Required Field', 'Principal Member Last Name and First Name are required.');
+        dialog.alert('Required Field', 'Principal Member Last Name and First Name are required.');
         return;
       }
     }

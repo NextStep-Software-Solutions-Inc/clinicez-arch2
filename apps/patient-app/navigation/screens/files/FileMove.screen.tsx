@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { FlatList, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { MaterialSymbol, SFSymbol, useNavigation, useTheme } from '@react-navigation/native';
 import ThemedText from '@ui/ThemedText';
 import ThemedView from '@ui/ThemedView';
 import { usePatientId } from 'hooks/usePatientId';
 import { listAllFolders, moveItem } from '../../../services/files';
 import type { FilesScreenProps } from './navigationTypes';
+import { dialog } from '@utils/dialog';
 
 const BRAND = '#7C3AED';
 
@@ -19,7 +20,7 @@ export default function FileMoveScreen({ route }: FilesScreenProps<'FileMoveScre
   useEffect(() => {
     listAllFolders(patientId)
       .then(setFolders)
-      .catch((error) => Alert.alert('Folders not available', error instanceof Error ? error.message : 'Unable to load your folders.'));
+      .catch((error) => dialog.alert('Folders not available', error instanceof Error ? error.message : 'Unable to load your folders.'));
   }, [patientId]);
 
   const options = useMemo(() => {
@@ -40,7 +41,7 @@ export default function FileMoveScreen({ route }: FilesScreenProps<'FileMoveScre
       await moveItem(patientId, itemKind, itemId, targetFolderId);
       navigation.goBack();
     } catch (error) {
-      Alert.alert('Could not move', error instanceof Error ? error.message : 'Unable to move this item.');
+      dialog.alert('Could not move', error instanceof Error ? error.message : 'Unable to move this item.');
     }
   };
 

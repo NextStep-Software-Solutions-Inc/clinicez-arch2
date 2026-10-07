@@ -1,13 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Modal,
-  Pressable,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Image, Modal, Pressable, StyleSheet, View } from 'react-native';
 import { useNavigation, useTheme } from '@react-navigation/native';
 import { useAuth as useAppAuth } from 'contexts/AuthContext';
 import ThemedText from '@ui/ThemedText';
@@ -21,6 +13,7 @@ import type { FilesScreenProps } from './navigationTypes';
 import RenameModal from '../../../components/ui/RenameModal';
 import CustomAlertModal from '../../../components/ui/CustomAlertModal';
 import { AppIcon } from '../../../components/ui/Icon';
+import { dialog } from '@utils/dialog';
 
 export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewerScreen'>) {
   const { colors } = useTheme();
@@ -67,7 +60,7 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
     try {
       window.open(preview.uri, '_blank');
     } catch (err) {
-      Alert.alert('Could not open file', err instanceof Error ? err.message : 'Unable to open this file.');
+      dialog.alert('Could not open file', err instanceof Error ? err.message : 'Unable to open this file.');
     }
   };
 
@@ -81,7 +74,7 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
       setDeleteModalOpen(false);
       navigation.goBack();
     } catch (err) {
-      Alert.alert('Could not delete', err instanceof Error ? err.message : 'Unknown error');
+      dialog.alert('Could not delete', err instanceof Error ? err.message : 'Unknown error');
     }
   };
 

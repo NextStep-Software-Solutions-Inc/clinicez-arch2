@@ -1,16 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import {
-  FlatList,
-  StyleSheet,
-  View,
-  Pressable,
-  Modal,
-  ScrollView,
-  TextInput,
-  Image,
-  Alert,
-  Platform,
-} from 'react-native';
+import { FlatList, StyleSheet, View, Pressable, Modal, ScrollView, TextInput, Image, Platform } from 'react-native';
 import { useTheme } from '@react-navigation/native';
 import ThemedText from '@ui/ThemedText';
 import { db } from '@db/index';
@@ -22,6 +11,7 @@ import { useClinicNameMap } from 'hooks/useClinicNameMap';
 import { usePatientId } from 'hooks/usePatientId';
 import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
+import { dialog } from '@utils/dialog';
 
 interface ExternalReceiptData {
   pharmacyName: string;
@@ -130,7 +120,7 @@ export default function PrescriptionsScreen() {
 
   const copyUpscToken = async (token: string) => {
     await Clipboard.setStringAsync(token);
-    Alert.alert('UPSC Copied', `Unique Prescription Security Code "${token}" copied to clipboard.`);
+    dialog.alert('UPSC Copied', `Unique Prescription Security Code "${token}" copied to clipboard.`);
   };
 
   const handleOpenSlip = (item: any) => {
@@ -148,7 +138,7 @@ export default function PrescriptionsScreen() {
   const handlePickPhoto = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Denied', 'Camera roll permissions are needed to attach pharmacy receipts.');
+      dialog.alert('Permission Denied', 'Camera roll permissions are needed to attach pharmacy receipts.');
       return;
     }
 
@@ -165,7 +155,7 @@ export default function PrescriptionsScreen() {
   const handleTakePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Denied', 'Camera permission is required to photograph your pharmacy receipt.');
+      dialog.alert('Permission Denied', 'Camera permission is required to photograph your pharmacy receipt.');
       return;
     }
 
@@ -182,7 +172,7 @@ export default function PrescriptionsScreen() {
   const handleSaveReceipt = () => {
     if (!selectedRx) return;
     if (!receiptNumber.trim()) {
-      Alert.alert('Required Field', 'Please enter the Official Receipt (OR) Number from your purchase.');
+      dialog.alert('Required Field', 'Please enter the Official Receipt (OR) Number from your purchase.');
       return;
     }
 
@@ -200,7 +190,7 @@ export default function PrescriptionsScreen() {
     }));
 
     setReceiptModalVisible(false);
-    Alert.alert(
+    dialog.alert(
       'Receipt Attached',
       `Official receipt from ${finalPharmacy} (OR #${receiptNumber.trim()}) attached to your digital health record.`
     );
@@ -209,12 +199,12 @@ export default function PrescriptionsScreen() {
   const copyVerificationLink = async (token: string) => {
     const portalUrl = (process.env.EXPO_PUBLIC_PORTAL_URL ?? '').replace(/\/+$/, '');
     if (!portalUrl) {
-      Alert.alert('Link Unavailable', 'The public verification portal is not configured for this app.');
+      dialog.alert('Link Unavailable', 'The public verification portal is not configured for this app.');
       return;
     }
     const url = `${portalUrl}/rx-verify/${token}`;
     await Clipboard.setStringAsync(url);
-    Alert.alert('Link Copied', 'Public pharmacy verification link copied to clipboard.');
+    dialog.alert('Link Copied', 'Public pharmacy verification link copied to clipboard.');
   };
 
   return (

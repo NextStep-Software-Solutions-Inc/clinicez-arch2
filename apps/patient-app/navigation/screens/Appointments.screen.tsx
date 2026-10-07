@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { Alert, FlatList, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { FlatList, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useNavigation, useTheme } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
@@ -110,6 +110,7 @@ function isPastItem(item: AppointmentItem): boolean {
 }
 
 import { useAuth as useClerkAuth } from '@clerk/expo';
+import { dialog } from '@utils/dialog';
 
 export default function AppointmentsScreen() {
     const { colors } = useTheme();
@@ -176,7 +177,7 @@ export default function AppointmentsScreen() {
             setIsFromCache(false);
         } catch (error) {
             setIsFromCache(true); // Network failed, so we are definitively using cache
-            Alert.alert(
+            dialog.alert(
                 'Connection Error',
                 'Failed to pull the latest appointments from the server. Showing cached data instead.',
                 [
@@ -228,11 +229,11 @@ export default function AppointmentsScreen() {
         });
 
     const handleCancel = (item: AppointmentItem) =>
-        Alert.alert('Cancel Appointment', `Cancel at ${item.clinic.name}?`, [
+        dialog.alert('Cancel Appointment', `Cancel at ${item.clinic.name}?`, [
             { text: 'Keep', style: 'cancel' },
             {
                 text: 'Cancel Appointment', style: 'destructive',
-                onPress: () => Alert.alert('Coming soon', 'Cancellation requires the backend API.')
+                onPress: () => dialog.alert('Coming soon', 'Cancellation requires the backend API.')
             },
         ]);
 
@@ -240,7 +241,7 @@ export default function AppointmentsScreen() {
         navigation.navigate('Main', { screen: 'BookingDraftScreen' });
 
     const handleDiscardDraft = (draftId: string) => {
-        Alert.alert('Discard Draft', 'Remove this booking draft?', [
+        dialog.alert('Discard Draft', 'Remove this booking draft?', [
             { text: 'Keep', style: 'cancel' },
             {
                 text: 'Discard',

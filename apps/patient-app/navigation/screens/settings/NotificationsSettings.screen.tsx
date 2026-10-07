@@ -1,11 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import {
-  Alert,
-  Linking,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { useTheme } from '@react-navigation/native';
 import { SettingsRow, SettingsSection } from '@ui/SettingsItem';
 import ThemedText from '@ui/ThemedText';
@@ -23,6 +17,7 @@ import {
   seedMockNotifications,
 } from 'services/notifications/notificationService';
 import type { NotificationCategory } from '@db/schema/notifications';
+import { dialog } from '@utils/dialog';
 
 // ─── Permission Banner ─────────────────────────────────────────────────────────
 
@@ -107,7 +102,7 @@ export default function NotificationsSettingsScreen() {
   };
 
   const handleClearAll = () => {
-    Alert.alert(
+    dialog.alert(
       'Clear All Notifications',
       'This will permanently remove all notifications from the feed. This cannot be undone.',
       [

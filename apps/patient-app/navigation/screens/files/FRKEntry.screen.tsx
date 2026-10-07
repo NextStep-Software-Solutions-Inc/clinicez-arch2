@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, TextInput, View, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, TextInput, View, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
@@ -9,6 +9,7 @@ import ThemedView from '@ui/ThemedView';
 import { unlockMakWithFrk } from '../../../services/files/frkService';
 import type { FilesScreenProps } from './navigationTypes';
 import { useTheme } from '@react-navigation/native';
+import { dialog } from '@utils/dialog';
 
 const BRAND = '#7C3AED';
 
@@ -31,7 +32,7 @@ export default function FRKEntryScreen({ route }: FilesScreenProps<'FRKEntryScre
   const handleSubmit = useCallback(async () => {
     const cleaned = frkInput.trim().toUpperCase();
     if (cleaned.replace(/-/g, '').length !== 16) {
-      Alert.alert('Invalid Key', 'The Recovery Key should be exactly 16 characters.');
+      dialog.alert('Invalid Key', 'The Recovery Key should be exactly 16 characters.');
       return;
     }
     
@@ -40,11 +41,11 @@ export default function FRKEntryScreen({ route }: FilesScreenProps<'FRKEntryScre
     setIsSubmitting(false);
 
     if (success) {
-      Alert.alert('Success', 'Your files have been successfully unlocked!', [
+      dialog.alert('Success', 'Your files have been successfully unlocked!', [
         { text: 'Continue', onPress: () => navigation.goBack() }
       ]);
     } else {
-      Alert.alert('Error', 'The Recovery Key is incorrect. Please try again.');
+      dialog.alert('Error', 'The Recovery Key is incorrect. Please try again.');
     }
   }, [frkInput, patientId, encryptedMAK, navigation]);
 

@@ -1,13 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import {
-  ScrollView,
-  StyleSheet,
-  View,
-  Pressable,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+import { ScrollView, StyleSheet, View, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation, useTheme } from '@react-navigation/native';
 import { db } from '@db/index';
 import { patientNcdQuestionnaire } from '@db/schema/patientNcdQuestionnaire';
@@ -22,6 +14,7 @@ import { usePatientId } from 'hooks/usePatientId';
 import { useAuth } from 'contexts/AuthContext';
 import { addToSyncQueue, syncPendingProfileWrites } from 'services/api/syncService';
 import { randomUUID } from 'expo-crypto';
+import { dialog } from '@utils/dialog';
 
 // ─── WHO/ISH CVD Risk Options (Q17) ──────────────────────────────────────────
 const Q17_OPTIONS = [
@@ -240,14 +233,14 @@ export default function NcdQuestionnaireScreen() {
       syncPendingProfileWrites(patientId, getToken).catch(console.error);
 
       setIsDirty(false);
-      Alert.alert(
+      dialog.alert(
         'Assessment Saved',
         'Your 24-item NCD Risk Questionnaire has been saved locally and queued for synchronization with your PhilHealth YAKAP eClaims record.',
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
     } catch (err: any) {
       console.error('Failed to save NCD Questionnaire:', err);
-      Alert.alert('Save Failed', err?.message || 'Could not save questionnaire. Please try again.');
+      dialog.alert('Save Failed', err?.message || 'Could not save questionnaire. Please try again.');
     } finally {
       setIsSaving(false);
     }

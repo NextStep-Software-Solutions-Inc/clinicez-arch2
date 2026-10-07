@@ -35,7 +35,8 @@ export default function ProfileFormField({
   const isDisabled = !editable && !picker;
   const isPickerField = picker || (!editable && !!rest.onPressIn);
 
-  const InputComponent = useBottomSheetInput ? BottomSheetTextInput : TextInput;
+  // Web sheets are plain modals (no gorhom context), so BottomSheetTextInput would throw there.
+  const InputComponent = useBottomSheetInput && Platform.OS !== 'web' ? BottomSheetTextInput : TextInput;
 
   const inputEl = (
     <InputComponent

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ColorValue, Platform, Pressable, StyleSheet, View, Modal } from 'react-native';
+import { ActivityIndicator, ColorValue, Platform, Pressable, StyleSheet, View, Modal } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import ZoomableImage from '../../../components/ui/ZoomableImage';
 import {
@@ -23,6 +23,7 @@ import type { PreparedPreviewFile } from '../../../services/files';
 import type { FilesScreenProps } from './navigationTypes';
 import RenameModal from '../../../components/ui/RenameModal';
 import CustomAlertModal from '../../../components/ui/CustomAlertModal';
+import { dialog } from '@utils/dialog';
 
 function Icon({ android, ios, color, size = 20 }: { android: MaterialSymbolProps["name"]; ios: SFSymbolProps["name"]; color: ColorValue; size?: number }) {
   return Platform.select({
@@ -76,7 +77,7 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
     try {
       const available = await Sharing.isAvailableAsync();
       if (!available) {
-        Alert.alert('No app available', 'This device cannot share files with other apps.');
+        dialog.alert('No app available', 'This device cannot share files with other apps.');
         return;
       }
       await runWithAutoLockPaused(() => Sharing.shareAsync(preview.uri, {
@@ -84,7 +85,7 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
         dialogTitle: preview.name,
       }));
     } catch (err) {
-      Alert.alert('Could not share file', err instanceof Error ? err.message : 'Unable to share this file.');
+      dialog.alert('Could not share file', err instanceof Error ? err.message : 'Unable to share this file.');
     }
   };
 
@@ -98,7 +99,7 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
       setDeleteModalOpen(false);
       navigation.goBack();
     } catch (err) {
-      Alert.alert('Could not delete', err instanceof Error ? err.message : 'Unknown error');
+      dialog.alert('Could not delete', err instanceof Error ? err.message : 'Unknown error');
     }
   };
 

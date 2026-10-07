@@ -1,17 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Image,
-  Pressable,
-  StyleSheet,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
+import { View, Image, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import { useTheme } from '@react-navigation/native';
 import { useUser } from '@clerk/expo';
 import * as ImagePicker from 'expo-image-picker';
 import ThemedText from './ui/ThemedText';
 import { AppIcon } from './ui/Icon';
+import { dialog } from '@utils/dialog';
 
 export default function ProfileCard() {
   const { colors } = useTheme();
@@ -92,13 +86,13 @@ export default function ProfileCard() {
       }
 
       await user?.setProfileImage({ file: fileToUpload });
-      Alert.alert('Success', 'Your profile photo has been updated.', [{ text: 'OK' }]);
+      dialog.alert('Success', 'Your profile photo has been updated.', [{ text: 'OK' }]);
 
       // Clear temp preview — Clerk's imageUrl will update via useUser re-render
       setPreviewUri(null);
     } catch (err) {
       console.warn('Avatar upload failed:', err);
-      Alert.alert(
+      dialog.alert(
         'Upload Failed',
         'Could not update photo with the server. Please try again.',
         [{ text: 'OK' }],

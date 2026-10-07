@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { MaterialSymbol, SFSymbol, useNavigation, useTheme } from '@react-navigation/native';
 import { useAuth as useAppAuth } from 'contexts/AuthContext';
 import { useAuth as useClerkAuth } from '@clerk/expo';
@@ -9,6 +9,7 @@ import ThemedView from '@ui/ThemedView';
 import { usePatientId } from 'hooks/usePatientId';
 import { cleanupPreviewCache, getFileById, preparePreviewFile } from '../../../services/files';
 import type { FilesScreenProps } from './navigationTypes';
+import { dialog } from '@utils/dialog';
 
 const BRAND = '#7C3AED';
 
@@ -31,12 +32,12 @@ export default function ExternalOpenConsentScreen({ route }: FilesScreenProps<'E
     setIsOpening(true);
     try {
       const available = await Sharing.isAvailableAsync();
-      if (!available) { Alert.alert('No app available', 'This device cannot open this file with another app.'); return; }
+      if (!available) { dialog.alert('No app available', 'This device cannot open this file with another app.'); return; }
       const preview = await preparePreviewFile(patientId, fileId, getToken);
       await runWithAutoLockPaused(() => Sharing.shareAsync(preview.uri, { mimeType: preview.mimeType, dialogTitle: preview.name }));
       navigation.goBack();
     } catch (error) {
-      Alert.alert('Could not open file', error instanceof Error ? error.message : 'Unable to open this file.');
+      dialog.alert('Could not open file', error instanceof Error ? error.message : 'Unable to open this file.');
     } finally { setIsOpening(false); }
   };
 

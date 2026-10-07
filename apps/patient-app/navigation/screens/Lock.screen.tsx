@@ -1,8 +1,9 @@
-import { View, StyleSheet, Pressable, Image, Alert } from 'react-native';
+import { View, StyleSheet, Pressable, Image } from 'react-native';
 import { useTheme } from '@react-navigation/native';
 import { useUser } from '@clerk/expo';
 import { useAuth } from 'contexts/AuthContext';
 import ThemedText from '@ui/ThemedText';
+import { dialog } from '@utils/dialog';
 
 interface LockScreenProps {
   onUnlockPress: () => void;
@@ -29,7 +30,7 @@ export default function LockScreen({ onUnlockPress }: LockScreenProps) {
     .toUpperCase();
 
   const handleLogout = () => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
+    dialog.alert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Sign Out', style: 'destructive', onPress: async () => { await logout(); } },
     ]);

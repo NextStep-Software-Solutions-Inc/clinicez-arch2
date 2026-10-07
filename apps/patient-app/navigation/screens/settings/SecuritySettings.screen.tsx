@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ScrollView, Alert, Platform } from 'react-native';
+import { ScrollView, Platform } from 'react-native';
 import { useNavigation, useTheme } from '@react-navigation/native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useAuth } from 'contexts/AuthContext';
@@ -10,6 +10,7 @@ import { SettingsRow, SettingsSection } from '@ui/SettingsItem';
 import PinModal from '@ui/PinModal';
 import CustomAlertModal from '@ui/CustomAlertModal';
 import { regenerateFrk } from '../../../services/files/frkService';
+import { dialog } from '@utils/dialog';
 
 const LOCK_TIMEOUT_OPTIONS = [
   { label: 'Immediately', value: 0 },
@@ -70,7 +71,7 @@ export default function SecuritySettingsScreen() {
         setNewGeneratedFrk(newFrk);
         setFrkSuccessModalVisible(true);
       } catch (err: any) {
-        Alert.alert('Error', err.message || 'Failed to regenerate Recovery Key.');
+        dialog.alert('Error', err.message || 'Failed to regenerate Recovery Key.');
       }
     }
   };
@@ -86,7 +87,7 @@ export default function SecuritySettingsScreen() {
 
   const handleTimeoutSelect = (value: LockTimeoutValue) => {
     if (value === -1) {
-      Alert.alert(
+      dialog.alert(
         'Disable auto-lock?',
         'Your app will stay unlocked indefinitely while running. Are you sure?',
         [

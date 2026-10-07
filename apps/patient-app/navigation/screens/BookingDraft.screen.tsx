@@ -18,18 +18,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useCallback, useEffect, useState } from 'react';
-import {
-  Alert,
-  FlatList,
-  Image,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  TextInput,
-  View,
-} from 'react-native';
+import { FlatList, Image, Platform, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { MaterialSymbol, SFSymbol, useFocusEffect, useNavigation, useTheme } from '@react-navigation/native';
 import type { StaticScreenProps } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -75,6 +64,7 @@ import type {
   BookingProviderOption,
   BookingServiceOption,
 } from '../../services/appointments/types';
+import { dialog } from '@utils/dialog';
 
 type WizardStep = 1 | 2 | 3 | 4 | 5;
 type Props = StaticScreenProps<{ clinicId?: string } | undefined>;
@@ -432,7 +422,7 @@ export default function BookingDraftScreen({ route }: Props) {
           if (!selectedClinicId && finalItems.length > 0) setSelectedClinicId(finalItems[0].id);
         }
       })
-      .catch(() => Alert.alert('Error', 'Unable to load your clinics.'))
+      .catch(() => dialog.alert('Error', 'Unable to load your clinics.'))
       .finally(() => { if (mounted) setIsLoadingClinics(false); });
     return () => { mounted = false; };
   }, [patientId, initialClinicId]);
@@ -446,7 +436,7 @@ export default function BookingDraftScreen({ route }: Props) {
     setSelectedService(null);
     fetchServiceOptions(selectedClinicId, patientId, getToken)
       .then(s => { if (mounted) setServices(s); })
-      .catch(() => Alert.alert('Error', 'Unable to load services.'))
+      .catch(() => dialog.alert('Error', 'Unable to load services.'))
       .finally(() => { if (mounted) setIsLoadingServices(false); });
     return () => { mounted = false; };
   }, [selectedClinicId]);
@@ -504,7 +494,7 @@ export default function BookingDraftScreen({ route }: Props) {
     setIsLoadingProviders(true);
     fetchProviderOptions(selectedClinicId, patientId, getToken)
       .then(p => { if (mounted) setProviders(p); })
-      .catch(() => Alert.alert('Error', 'Unable to load providers.'))
+      .catch(() => dialog.alert('Error', 'Unable to load providers.'))
       .finally(() => { if (mounted) setIsLoadingProviders(false); });
     return () => { mounted = false; };
   }, [step, selectedClinicId]);
@@ -518,7 +508,7 @@ export default function BookingDraftScreen({ route }: Props) {
     setSelectedSlotId(null);
     fetchAvailableSlots(selectedClinicId, selectedProvider?.id ?? '', selectedDate, getToken)
       .then((res) => { if (mounted) setSlots(res.slots); })
-      .catch((err) => Alert.alert('Server Error', `Unable to load available slots. ${err?.message || ''}`))
+      .catch((err) => dialog.alert('Server Error', `Unable to load available slots. ${err?.message || ''}`))
       .finally(() => { if (mounted) setIsLoadingSlots(false); });
     return () => { mounted = false; };
   }, [step, selectedClinicId, selectedProvider, selectedDate, skipSchedule]);
@@ -583,7 +573,7 @@ export default function BookingDraftScreen({ route }: Props) {
     // Payment gate
     const needsPayment = (selectedService?.price ?? 0) > 0;
     if (!asDraft && needsPayment && !hasPaid) {
-      Alert.alert(
+      dialog.alert(
         'Payment Required',
         `This service costs ${formatPrice(selectedService?.price, selectedService?.currency)}. Complete payment to confirm your booking.`,
         [
@@ -629,7 +619,7 @@ export default function BookingDraftScreen({ route }: Props) {
 
     if (saveErr || !serverDraftId) {
       console.error('[BookingDraftScreen] Save failed:', saveErr);
-      Alert.alert('Error', 'Unable to save. Please try again.');
+      dialog.alert('Error', 'Unable to save. Please try again.');
       setIsSaving(false);
       setIsDraftSaving(false);
       return;
@@ -651,18 +641,18 @@ export default function BookingDraftScreen({ route }: Props) {
       setIsDraftSaving(false);
 
       if (localSaveErr) {
-        Alert.alert('Error', 'Unable to save draft locally.');
+        dialog.alert('Error', 'Unable to save draft locally.');
         return;
       }
 
-      Alert.alert('Draft Saved', 'Your booking has been saved. Continue anytime from the Health tab.', [
+      dialog.alert('Draft Saved', 'Your booking has been saved. Continue anytime from the Health tab.', [
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
     } else {
       // Submit ready booking draft to the Clinic Dashboard via backend
       const [, submitErr] = await safeAwait(submitBookingDraftOnline(getToken, patientId, serverDraftId));
       if (submitErr) {
-        Alert.alert('Error', 'Unable to submit booking to clinic.');
+        dialog.alert('Error', 'Unable to submit booking to clinic.');
         setIsSaving(false);
         setIsDraftSaving(false);
         return;
@@ -709,7 +699,7 @@ export default function BookingDraftScreen({ route }: Props) {
       setIsSaving(false);
       setIsDraftSaving(false);
 
-      Alert.alert(
+      dialog.alert(
         'Booking Requested!',
         'Your appointment request has been submitted successfully to the clinic. You can view it in the Health tab.',
         [{ text: 'Done', onPress: () => navigation.goBack() }],
@@ -722,10 +712,10 @@ export default function BookingDraftScreen({ route }: Props) {
     if (price === 0) {
       // Free service — auto-confirm payment immediately
       setHasPaid(true);
-      Alert.alert('Confirmed', 'This service is free. Your booking is ready to confirm.');
+      dialog.alert('Confirmed', 'This service is free. Your booking is ready to confirm.');
     } else {
       // Paid service — payment gateway not yet integrated
-      Alert.alert(
+      dialog.alert(
         'Online Payment Coming Soon',
         'Secure payment integration is being set up. Please pay at the clinic on your appointment day.',
         [{ text: 'OK' }],

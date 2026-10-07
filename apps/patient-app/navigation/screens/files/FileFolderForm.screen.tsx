@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { MaterialSymbol, SFSymbol, useNavigation, useTheme } from '@react-navigation/native';
 import ThemedText from '@ui/ThemedText';
 import ThemedView from '@ui/ThemedView';
@@ -8,6 +8,7 @@ import { createFolder, getFolder, renameFolder } from '../../../services/files';
 import type { FilesScreenProps } from './navigationTypes';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { dialog } from '@utils/dialog';
 
 const BRAND = '#7C3AED';
 
@@ -25,7 +26,7 @@ export default function FileFolderFormScreen({ route }: FilesScreenProps<'FileFo
     if (!folderId) return;
     getFolder(patientId, folderId)
       .then((folder) => setName(folder?.name ?? ''))
-      .catch((error) => Alert.alert('Folder not available', error instanceof Error ? error.message : 'Unable to load this folder.'));
+      .catch((error) => dialog.alert('Folder not available', error instanceof Error ? error.message : 'Unable to load this folder.'));
   }, [folderId, patientId]);
 
   const handleSave = async () => {
@@ -35,7 +36,7 @@ export default function FileFolderFormScreen({ route }: FilesScreenProps<'FileFo
       else await createFolder(patientId, name, parentId ?? null);
       navigation.goBack();
     } catch (error) {
-      Alert.alert('Could not save folder', error instanceof Error ? error.message : 'Unable to save this folder.');
+      dialog.alert('Could not save folder', error instanceof Error ? error.message : 'Unable to save this folder.');
     } finally {
       setIsSaving(false);
     }
