@@ -1,7 +1,6 @@
 using ClinicEz.PhilHealthProxy.Application.Features.Yakap.Commands.GenerateAndSubmitReport;
 using ClinicEz.PhilHealthProxy.Application.Features.Yakap.Commands.GenerateAndValidateReport;
 using ClinicEz.PhilHealthProxy.Application.Features.Yakap.Queries.ExtractAndParseMasterlist;
-using ClinicEz.PhilHealthProxy.Domain.Catalogs;
 using ClinicEz.PhilHealthProxy.Domain.Interfaces;
 using ClinicEz.PhilHealthProxy.Domain.Models;
 using ClinicEz.Shared.Common;
@@ -76,31 +75,4 @@ public sealed class YakapController(
         bool isValid = masterlistParser.ValidatePin(pin);
         return Ok(ApiResponse<bool>.Success(isValid));
     }
-
-    // ── Catalogs & Data Dictionaries ─────────────────────────────────────────
-
-    [HttpGet("catalogs/diseases")]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<CatalogItem>>>(StatusCodes.Status200OK)]
-    public IActionResult GetDiseasesCatalog() =>
-        Ok(ApiResponse<IReadOnlyList<CatalogItem>>.Success(PhilHealthCatalogs.MedicalDiseases));
-
-    [HttpGet("catalogs/symptoms")]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<CatalogItem>>>(StatusCodes.Status200OK)]
-    public IActionResult GetSymptomsCatalog() =>
-        Ok(ApiResponse<IReadOnlyList<CatalogItem>>.Success(PhilHealthCatalogs.SignsAndSymptoms));
-
-    [HttpGet("catalogs/diagnostics")]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<CatalogItem>>>(StatusCodes.Status200OK)]
-    public IActionResult GetDiagnosticsCatalog() =>
-        Ok(ApiResponse<IReadOnlyList<CatalogItem>>.Success(PhilHealthCatalogs.DiagnosticServices));
-
-    [HttpGet("catalogs/management")]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<CatalogItem>>>(StatusCodes.Status200OK)]
-    public IActionResult GetManagementCatalog() =>
-        Ok(ApiResponse<IReadOnlyList<CatalogItem>>.Success(PhilHealthCatalogs.ManagementActions));
-
-    [HttpGet("catalogs/gamot")]
-    [ProducesResponseType<ApiResponse<IReadOnlyList<CatalogItem>>>(StatusCodes.Status200OK)]
-    public IActionResult GetGamotCatalog() =>
-        Ok(ApiResponse<IReadOnlyList<CatalogItem>>.Success(PhilHealthCatalogs.GamotFormulary));
 }

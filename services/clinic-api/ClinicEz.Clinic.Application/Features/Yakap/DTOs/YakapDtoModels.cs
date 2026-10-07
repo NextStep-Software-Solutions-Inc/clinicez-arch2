@@ -2,8 +2,6 @@ using System.Collections.Generic;
 
 namespace ClinicEz.Clinic.Application.Features.Yakap.DTOs;
 
-public sealed record YakapCatalogItemDto(string Code, string Description, string? Category = null);
-
 public sealed record YakapEnlistmentDto(
     string HciCaseNo,
     string HciTransNo,

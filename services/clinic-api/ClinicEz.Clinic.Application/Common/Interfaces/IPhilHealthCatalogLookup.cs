@@ -22,4 +22,11 @@ public interface IPhilHealthCatalogLookup
 
     /// <summary>Active entries whose description contains every token (case-insensitive), best (shortest) match first.</summary>
     IReadOnlyList<PhilHealthCatalogRecord> Search(string library, IReadOnlyCollection<string> tokens, int limit = 20);
+
+    /// <summary>
+    /// Typeahead search: active entries whose code starts with <paramref name="query"/> or whose description contains
+    /// every word of it. One result per code (libraries such as <c>lib_icd</c> list several terms per code); code
+    /// matches first, then shortest description.
+    /// </summary>
+    IReadOnlyList<PhilHealthCatalogRecord> SearchByCodeOrDescription(string library, string query, int limit = 20);
 }

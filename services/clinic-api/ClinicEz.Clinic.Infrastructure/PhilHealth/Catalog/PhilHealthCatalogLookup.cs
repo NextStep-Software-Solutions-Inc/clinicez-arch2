@@ -75,6 +75,41 @@ public sealed class PhilHealthCatalogLookup : IPhilHealthCatalogLookup, IPhilHea
             .ToList();
     }
 
+    public IReadOnlyList<PhilHealthCatalogRecord> SearchByCodeOrDescription(string library, string query, int limit = 20)
+    {
+        if (string.IsNullOrWhiteSpace(query)) return [];
+
+        var needle = query.Trim();
+        var words = needle.ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var snapshot = Get(library);
+
+        var byCode = new Dictionary<string, (PhilHealthCatalogRecord Record, bool CodeMatch)>(StringComparer.Ordinal);
+        for (var i = 0; i < snapshot.Records.Count; i++)
+        {
+            var record = snapshot.Records[i];
+            if (!record.IsActive) continue;
+
+            var codeMatch = record.Code.StartsWith(needle, StringComparison.OrdinalIgnoreCase);
+            var description = snapshot.LowerDescriptions[i];
+            if (!codeMatch && !words.All(description.Contains)) continue;
+
+            if (!byCode.TryGetValue(record.Code, out var existing)
+                || (codeMatch && !existing.CodeMatch)
+                || (codeMatch == existing.CodeMatch && record.Description.Length < existing.Record.Description.Length))
+            {
+                byCode[record.Code] = (record, codeMatch);
+            }
+        }
+
+        return byCode.Values
+            .OrderByDescending(v => v.CodeMatch)
+            .ThenBy(v => v.CodeMatch ? v.Record.Code.Length : v.Record.Description.Length)
+            .ThenBy(v => v.Record.Code, StringComparer.Ordinal)
+            .Take(Math.Max(1, limit))
+            .Select(v => v.Record)
+            .ToList();
+    }
+
     private Snapshot Get(string library) =>
         _snapshots.GetOrAdd(library, key => new Lazy<Snapshot>(() => Load(key), LazyThreadSafetyMode.ExecutionAndPublication)).Value;
 

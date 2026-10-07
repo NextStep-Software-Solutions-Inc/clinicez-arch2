@@ -169,17 +169,6 @@ public sealed class YakapTransmittalsController : ControllerBase
     }
 
     /// <summary>
-    /// Retrieves standard reference catalogs from PhilHealth (diseases, symptoms, diagnostics, management, gamot).
-    /// </summary>
-    [HttpGet("catalogs/{type}")]
-    [HasPermission(ClinicPermissions.YakapRead)]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<YakapCatalogItemDto>>>> GetCatalog(string type, CancellationToken ct)
-    {
-        var result = await _proxyClient.GetCatalogAsync(type, ct);
-        return Ok(result);
-    }
-
-    /// <summary>
     /// Extracts and parses the beneficiary registration masterlist from PhilHealth.
     /// </summary>
     [HttpPost("masterlist/extract")]
