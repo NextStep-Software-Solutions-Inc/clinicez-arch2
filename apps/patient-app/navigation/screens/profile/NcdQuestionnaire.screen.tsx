@@ -1,10 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
-import { useNavigation, useTheme } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { db } from '@db/index';
 import { patientNcdQuestionnaire } from '@db/schema/patientNcdQuestionnaire';
 import { eq } from 'drizzle-orm';
 import ThemedText from '@ui/ThemedText';
+import { AppIcon } from '@ui/Icon';
+import Screen from 'components/layout/Screen';
+import ProfileFormGrid from 'components/profile/ProfileFormGrid';
+import { useAppTheme } from 'contexts/ThemeContext';
 import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
 import ProfileFormField from 'components/profile/ProfileFormField';
 import ProfileDatePicker from 'components/profile/ProfileDatePicker';
@@ -29,7 +33,7 @@ export default function NcdQuestionnaireScreen() {
   const patientId = usePatientId();
   const { getToken } = useAuth();
   const navigation = useNavigation();
-  const { colors, dark: isDark } = useTheme();
+  const { colors, spacing, radii, sizes } = useAppTheme();
 
   const [recordId, setRecordId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -255,48 +259,52 @@ export default function NcdQuestionnaireScreen() {
   ) => {
     const currentVal = form[key];
     return (
-      <View style={[styles.questionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <View style={styles.qHeader}>
-          <View style={styles.qBadge}>
-            <ThemedText style={styles.qBadgeText}>Q{qNumber}</ThemedText>
+      <View style={[styles.questionCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radii.lg, padding: spacing.md, gap: spacing.sm }]}>
+        <View style={[styles.qHeader, { gap: spacing.sm }]}>
+          <View style={[styles.qBadge, { backgroundColor: colors.primary, borderRadius: radii.sm, paddingHorizontal: spacing.sm, paddingVertical: 2 }]}>
+            <ThemedText variant="captionBold" color="onPrimary">Q{qNumber}</ThemedText>
           </View>
-          <ThemedText style={[styles.qLabel, { color: colors.text }]}>{label}</ThemedText>
+          <ThemedText variant="bodyBold" style={{ flex: 1 }}>{label}</ThemedText>
         </View>
-        {helper && <ThemedText style={styles.qHelper}>{helper}</ThemedText>}
-        <View style={styles.ynButtonGroup}>
+        {helper && <ThemedText variant="small" color="textMuted" style={{ marginTop: -spacing.xs }}>{helper}</ThemedText>}
+        <View style={[styles.ynButtonGroup, { gap: spacing.md }]}>
           <Pressable
             style={[
               styles.ynButton,
-              currentVal === 'Y' && styles.ynButtonSelectedYes,
-              { borderColor: currentVal === 'Y' ? '#10B981' : colors.border },
+              {
+                borderRadius: radii.md,
+                paddingVertical: spacing.sm,
+                borderColor: currentVal === 'Y' ? colors.success : colors.border,
+                backgroundColor: currentVal === 'Y' ? colors.successBg : colors.surfaceSubtle,
+              },
             ]}
             onPress={() => updateField(key, currentVal === 'Y' ? null : 'Y')}
           >
             <ThemedText
-              style={[
-                styles.ynButtonText,
-                currentVal === 'Y' && styles.ynButtonTextSelected,
-              ]}
+              variant="bodyBold"
+              style={{ color: currentVal === 'Y' ? colors.successText : colors.text }}
             >
-              ✓ Yes
+              Yes
             </ThemedText>
           </Pressable>
 
           <Pressable
             style={[
               styles.ynButton,
-              currentVal === 'N' && styles.ynButtonSelectedNo,
-              { borderColor: currentVal === 'N' ? '#EF4444' : colors.border },
+              {
+                borderRadius: radii.md,
+                paddingVertical: spacing.sm,
+                borderColor: currentVal === 'N' ? colors.emergency : colors.border,
+                backgroundColor: currentVal === 'N' ? colors.emergencyBg : colors.surfaceSubtle,
+              },
             ]}
             onPress={() => updateField(key, currentVal === 'N' ? null : 'N')}
           >
             <ThemedText
-              style={[
-                styles.ynButtonText,
-                currentVal === 'N' && styles.ynButtonTextSelected,
-              ]}
+              variant="bodyBold"
+              style={{ color: currentVal === 'N' ? colors.emergencyText : colors.text }}
             >
-              ✕ No
+              No
             </ThemedText>
           </Pressable>
         </View>
@@ -305,520 +313,503 @@ export default function NcdQuestionnaireScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
+    <Screen width="form" scroll={false} padded={false}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {/* Banner */}
-        <View style={[styles.headerBanner, { backgroundColor: isDark ? '#1E293B' : '#EFF6FF', borderColor: colors.border }]}>
-          <ThemedText style={styles.bannerKicker}>PHILHEALTH YAKAP • EKONSULTA</ThemedText>
-          <ThemedText style={styles.bannerTitle}>Non-Communicable Disease (NCD) Risk Assessment</ThemedText>
-          <ThemedText style={styles.bannerDesc}>
-            Standardized 24-item survey aligned with DOH PhilPEN and PhilHealth KonsultaData v1.14 specification. Your answers establish clinical risk stratification and streamline preventive care consultations.
-          </ThemedText>
-        </View>
-
-        {/* Section 1: Tobacco Use (Q1–Q4) */}
-        <ProfileSectionHeader
-          title="Section 1: Tobacco & Smoking"
-          description="Assessing current, past, and secondhand tobacco exposure."
-        />
-        {renderYnQuestion(1, 'Do you currently smoke tobacco products (cigarettes, cigars, pipe)?', 'qid1Yn')}
-        {renderYnQuestion(2, 'Did you use tobacco products in the past? (Former smoker)', 'qid2Yn')}
-        {renderYnQuestion(3, 'Are you regularly exposed to secondhand smoke at home or work?', 'qid3Yn')}
-        {renderYnQuestion(4, 'Have you tried quitting smoking in the past 12 months?', 'qid4Yn')}
-
-        {/* Section 2: Alcohol Consumption (Q5–Q8) */}
-        <ProfileSectionHeader
-          title="Section 2: Alcohol Consumption"
-          description="Frequency and patterns of alcohol use (AUDIT-aligned)."
-        />
-        {/* Q5: 3-Way Choice (Y/N/X) */}
-        <View style={[styles.questionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.qHeader}>
-            <View style={styles.qBadge}>
-              <ThemedText style={styles.qBadgeText}>Q5</ThemedText>
-            </View>
-            <ThemedText style={[styles.qLabel, { color: colors.text }]}>
-              How often do you consume alcoholic beverages?
+        <ScrollView
+          contentInsetAdjustmentBehavior="automatic"
+          contentContainerStyle={[styles.content, { padding: spacing.lg, paddingBottom: spacing['4xl'] }]}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Banner */}
+          <View style={[styles.headerBanner, { backgroundColor: colors.primaryLight, borderColor: colors.primaryBorder, borderRadius: radii.xl, padding: spacing.lg, gap: spacing.xs, marginBottom: spacing.lg }]}>
+            <ThemedText variant="captionBold" color="primary">PHILHEALTH YAKAP • EKONSULTA</ThemedText>
+            <ThemedText variant="h2">Non-Communicable Disease (NCD) Risk Assessment</ThemedText>
+            <ThemedText variant="body" color="textSecondary">
+              Standardized 24-item survey aligned with DOH PhilPEN and PhilHealth KonsultaData v1.14 specification. Your answers establish clinical risk stratification and streamline preventive care consultations.
             </ThemedText>
           </View>
-          <ThemedText style={styles.qHelper}>
-            Y = 2+ times/week • N = Monthly or less • X = Never
-          </ThemedText>
-          <View style={styles.ynButtonGroup}>
-            <Pressable
-              style={[
-                styles.ynButton,
-                form.qid5Ynx === 'Y' && styles.ynButtonSelectedAmber,
-                { borderColor: form.qid5Ynx === 'Y' ? '#F59E0B' : colors.border },
-              ]}
-              onPress={() => updateField('qid5Ynx', form.qid5Ynx === 'Y' ? null : 'Y')}
-            >
-              <ThemedText style={[styles.ynButtonText, form.qid5Ynx === 'Y' && styles.ynButtonTextSelected]}>
-                Regular (2+/wk)
+
+          {/* Section 1: Tobacco Use (Q1–Q4) */}
+          <ProfileSectionHeader
+            title="Section 1: Tobacco & Smoking"
+            description="Assessing current, past, and secondhand tobacco exposure."
+          />
+          {renderYnQuestion(1, 'Do you currently smoke tobacco products (cigarettes, cigars, pipe)?', 'qid1Yn')}
+          {renderYnQuestion(2, 'Did you use tobacco products in the past? (Former smoker)', 'qid2Yn')}
+          {renderYnQuestion(3, 'Are you regularly exposed to secondhand smoke at home or work?', 'qid3Yn')}
+          {renderYnQuestion(4, 'Have you tried quitting smoking in the past 12 months?', 'qid4Yn')}
+
+          {/* Section 2: Alcohol Consumption (Q5–Q8) */}
+          <ProfileSectionHeader
+            title="Section 2: Alcohol Consumption"
+            description="Frequency and patterns of alcohol use (AUDIT-aligned)."
+          />
+          {/* Q5: 3-Way Choice (Y/N/X) */}
+          <View style={[styles.questionCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radii.lg, padding: spacing.md, gap: spacing.sm }]}>
+            <View style={[styles.qHeader, { gap: spacing.sm }]}>
+              <View style={[styles.qBadge, { backgroundColor: colors.primary, borderRadius: radii.sm, paddingHorizontal: spacing.sm, paddingVertical: 2 }]}>
+                <ThemedText variant="captionBold" color="onPrimary">Q5</ThemedText>
+              </View>
+              <ThemedText variant="bodyBold" style={{ flex: 1 }}>
+                How often do you consume alcoholic beverages?
               </ThemedText>
-            </Pressable>
-            <Pressable
-              style={[
-                styles.ynButton,
-                form.qid5Ynx === 'N' && styles.ynButtonSelectedBlue,
-                { borderColor: form.qid5Ynx === 'N' ? '#3B82F6' : colors.border },
-              ]}
-              onPress={() => updateField('qid5Ynx', form.qid5Ynx === 'N' ? null : 'N')}
-            >
-              <ThemedText style={[styles.ynButtonText, form.qid5Ynx === 'N' && styles.ynButtonTextSelected]}>
-                Occasionally
+            </View>
+            <ThemedText variant="small" color="textMuted" style={{ marginTop: -spacing.xs }}>
+              Regular = 2+ times/week • Occasionally = Monthly or less • Never
+            </ThemedText>
+            <View style={[styles.ynButtonGroup, { gap: spacing.sm }]}>
+              <Pressable
+                style={[
+                  styles.ynButton,
+                  {
+                    borderRadius: radii.md,
+                    paddingVertical: spacing.sm,
+                    borderColor: form.qid5Ynx === 'Y' ? colors.warning : colors.border,
+                    backgroundColor: form.qid5Ynx === 'Y' ? colors.warningBg : colors.surfaceSubtle,
+                  },
+                ]}
+                onPress={() => updateField('qid5Ynx', form.qid5Ynx === 'Y' ? null : 'Y')}
+              >
+                <ThemedText
+                  variant="bodyBold"
+                  style={{ color: form.qid5Ynx === 'Y' ? colors.warningText : colors.text }}
+                >
+                  Regular (2+/wk)
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.ynButton,
+                  {
+                    borderRadius: radii.md,
+                    paddingVertical: spacing.sm,
+                    borderColor: form.qid5Ynx === 'N' ? colors.info : colors.border,
+                    backgroundColor: form.qid5Ynx === 'N' ? colors.infoBg : colors.surfaceSubtle,
+                  },
+                ]}
+                onPress={() => updateField('qid5Ynx', form.qid5Ynx === 'N' ? null : 'N')}
+              >
+                <ThemedText
+                  variant="bodyBold"
+                  style={{ color: form.qid5Ynx === 'N' ? colors.infoText : colors.text }}
+                >
+                  Occasionally
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.ynButton,
+                  {
+                    borderRadius: radii.md,
+                    paddingVertical: spacing.sm,
+                    borderColor: form.qid5Ynx === 'X' ? colors.success : colors.border,
+                    backgroundColor: form.qid5Ynx === 'X' ? colors.successBg : colors.surfaceSubtle,
+                  },
+                ]}
+                onPress={() => updateField('qid5Ynx', form.qid5Ynx === 'X' ? null : 'X')}
+              >
+                <ThemedText
+                  variant="bodyBold"
+                  style={{ color: form.qid5Ynx === 'X' ? colors.successText : colors.text }}
+                >
+                  Never
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+
+          {renderYnQuestion(6, 'Do you consume 5 or more standard alcoholic drinks on a single occasion?', 'qid6Yn', 'Binge drinking screening')}
+          {renderYnQuestion(7, 'Has a relative, friend, or healthcare worker expressed concern about your drinking?', 'qid7Yn')}
+          {renderYnQuestion(8, 'Have you failed to do what was normally expected of you because of drinking?', 'qid8Yn')}
+
+          {/* Section 3: Nutrition & Diet (Q9–Q12) */}
+          <ProfileSectionHeader
+            title="Section 3: Diet & Nutrition"
+            description="Evaluation of dietary habits, salt, sugar, and fat intake."
+          />
+          {renderYnQuestion(9, 'Do you eat at least 3 to 5 servings of vegetables and fruits daily?', 'qid9Yn')}
+          {renderYnQuestion(10, 'Do you regularly eat high-fat, deep-fried foods, or processed meats?', 'qid10Yn')}
+          {renderYnQuestion(11, 'Do you frequently add table salt, soy sauce, or patis to meals?', 'qid11Yn')}
+          {renderYnQuestion(12, 'Do you drink sugary beverages (soda, sweet tea, energy drinks) daily?', 'qid12Yn')}
+
+          {/* Section 4: Physical Activity (Q13–Q16) */}
+          <ProfileSectionHeader
+            title="Section 4: Physical Activity"
+            description="Assessment of aerobic activity and sedentary lifestyle."
+          />
+          {renderYnQuestion(13, 'Do you engage in at least 150 minutes of moderate-intensity activity weekly?', 'qid13Yn', 'e.g. brisk walking, cycling, jogging')}
+          {renderYnQuestion(14, 'Do you spend 3 or more continuous hours sitting or reclining each day?', 'qid14Yn')}
+          {renderYnQuestion(15, 'Does your work or daily routine involve vigorous physical labor?', 'qid15Yn')}
+          {renderYnQuestion(16, 'Do you walk or bicycle for at least 10 minutes continuously to travel?', 'qid16Yn')}
+
+          {/* Section 5: Cardiovascular Risk Score (Q17) */}
+          <ProfileSectionHeader
+            title="Section 5: WHO/ISH Cardiovascular Risk"
+            description="10-year risk prediction of fatal or non-fatal CVD events."
+          />
+          <View style={[styles.questionCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radii.lg, padding: spacing.md, gap: spacing.sm }]}>
+            <View style={[styles.qHeader, { gap: spacing.sm }]}>
+              <View style={[styles.qBadge, { backgroundColor: colors.primary, borderRadius: radii.sm, paddingHorizontal: spacing.sm, paddingVertical: 2 }]}>
+                <ThemedText variant="captionBold" color="onPrimary">Q17</ThemedText>
+              </View>
+              <ThemedText variant="bodyBold" style={{ flex: 1 }}>
+                WHO/ISH 10-Year CVD Risk Prediction Score
               </ThemedText>
-            </Pressable>
+            </View>
+            <ThemedText variant="small" color="textMuted" style={{ marginTop: -spacing.xs }}>
+              Computed by your clinic provider based on age, gender, blood pressure, smoking, and blood sugar.
+            </ThemedText>
+
             <Pressable
-              style={[
-                styles.ynButton,
-                form.qid5Ynx === 'X' && styles.ynButtonSelectedGreen,
-                { borderColor: form.qid5Ynx === 'X' ? '#10B981' : colors.border },
-              ]}
-              onPress={() => updateField('qid5Ynx', form.qid5Ynx === 'X' ? null : 'X')}
+              style={[styles.pickerTrigger, { borderColor: colors.border, backgroundColor: colors.background, borderRadius: radii.md, paddingHorizontal: spacing.md, paddingVertical: spacing.md }]}
+              onPress={() => setShowQ17Modal(true)}
             >
-              <ThemedText style={[styles.ynButtonText, form.qid5Ynx === 'X' && styles.ynButtonTextSelected]}>
-                Never
+              <ThemedText variant="body" color={form.qid17Abcde ? 'text' : 'textMuted'}>
+                {Q17_OPTIONS.find((o) => o.value === form.qid17Abcde)?.label ?? 'Select Risk Category (A – E)'}
               </ThemedText>
+              <AppIcon name="chevronDown" size={sizes.iconSm} color="textMuted" />
             </Pressable>
           </View>
-        </View>
 
-        {renderYnQuestion(6, 'Do you consume 5 or more standard alcoholic drinks on a single occasion?', 'qid6Yn', 'Binge drinking screening')}
-        {renderYnQuestion(7, 'Has a relative, friend, or healthcare worker expressed concern about your drinking?', 'qid7Yn')}
-        {renderYnQuestion(8, 'Have you failed to do what was normally expected of you because of drinking?', 'qid8Yn')}
+          {/* Section 6: Medical History & Symptoms (Q18, Q23, Q24) */}
+          <ProfileSectionHeader
+            title="Section 6: Medical & Family History"
+            description="Pre-existing diagnoses and genetic pre-dispositions."
+          />
+          {renderYnQuestion(18, 'Have you been diagnosed with hypertension or taking blood pressure medication?', 'qid18Yn')}
+          {renderYnQuestion(23, 'Have you been diagnosed with diabetes or taking diabetes medication?', 'qid23Yn')}
+          {renderYnQuestion(24, 'Do you have a family history of premature cardiovascular disease, stroke, or diabetes?', 'qid24Yn')}
 
-        {/* Section 3: Nutrition & Diet (Q9–Q12) */}
-        <ProfileSectionHeader
-          title="Section 3: Diet & Nutrition"
-          description="Evaluation of dietary habits, salt, sugar, and fat intake."
+          {/* Section 7: Clinical Measurements & Lab Monitoring (Q19–Q22) */}
+          <ProfileSectionHeader
+            title="Section 7: Laboratory Checks & Biomarkers"
+            description="Diagnostic lab results recorded under PhilHealth YAKAP benefits."
+          />
+
+          {/* Q19: Fasting Blood Sugar */}
+          <View style={[styles.questionCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radii.lg, padding: spacing.md, gap: spacing.sm }]}>
+            <View style={[styles.qHeader, { gap: spacing.sm }]}>
+              <View style={[styles.qBadge, { backgroundColor: colors.primary, borderRadius: radii.sm, paddingHorizontal: spacing.sm, paddingVertical: 2 }]}>
+                <ThemedText variant="captionBold" color="onPrimary">Q19</ThemedText>
+              </View>
+              <ThemedText variant="bodyBold" style={{ flex: 1 }}>
+                Has Fasting Blood Sugar (FBS) been tested?
+              </ThemedText>
+            </View>
+            <View style={[styles.ynButtonGroup, { gap: spacing.md }]}>
+              <Pressable
+                style={[
+                  styles.ynButton,
+                  {
+                    borderRadius: radii.md,
+                    paddingVertical: spacing.sm,
+                    borderColor: form.qid19Yn === 'Y' ? colors.success : colors.border,
+                    backgroundColor: form.qid19Yn === 'Y' ? colors.successBg : colors.surfaceSubtle,
+                  },
+                ]}
+                onPress={() => updateField('qid19Yn', form.qid19Yn === 'Y' ? null : 'Y')}
+              >
+                <ThemedText variant="bodyBold" style={{ color: form.qid19Yn === 'Y' ? colors.successText : colors.text }}>
+                  Tested
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.ynButton,
+                  {
+                    borderRadius: radii.md,
+                    paddingVertical: spacing.sm,
+                    borderColor: form.qid19Yn === 'N' ? colors.emergency : colors.border,
+                    backgroundColor: form.qid19Yn === 'N' ? colors.emergencyBg : colors.surfaceSubtle,
+                  },
+                ]}
+                onPress={() => updateField('qid19Yn', form.qid19Yn === 'N' ? null : 'N')}
+              >
+                <ThemedText variant="bodyBold" style={{ color: form.qid19Yn === 'N' ? colors.emergencyText : colors.text }}>
+                  Not Tested
+                </ThemedText>
+              </Pressable>
+            </View>
+
+            {form.qid19Yn === 'Y' && (
+              <View style={[styles.labSubFields, { marginTop: spacing.sm, gap: spacing.sm }]}>
+                <ProfileFormGrid>
+                  <ProfileFormField
+                    label="FBS Value (mg/dL)"
+                    value={form.qid19FbsMgdl}
+                    onChangeText={handleFbsMgdlChange}
+                    keyboardType="numeric"
+                    placeholder="e.g. 95.0"
+                  />
+                  <ProfileFormField
+                    label="FBS Value (mmol/L) (Auto-computed)"
+                    value={form.qid19FbsMmol}
+                    onChangeText={(val) => updateField('qid19FbsMmol', val)}
+                    keyboardType="numeric"
+                    placeholder="e.g. 5.27"
+                  />
+                </ProfileFormGrid>
+                <ProfileDatePicker
+                  label="FBS Test Date"
+                  value={form.qid19FbsDate}
+                  onChange={(val) => updateField('qid19FbsDate', val)}
+                />
+              </View>
+            )}
+          </View>
+
+          {/* Q20: Total Cholesterol */}
+          <View style={[styles.questionCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radii.lg, padding: spacing.md, gap: spacing.sm }]}>
+            <View style={[styles.qHeader, { gap: spacing.sm }]}>
+              <View style={[styles.qBadge, { backgroundColor: colors.primary, borderRadius: radii.sm, paddingHorizontal: spacing.sm, paddingVertical: 2 }]}>
+                <ThemedText variant="captionBold" color="onPrimary">Q20</ThemedText>
+              </View>
+              <ThemedText variant="bodyBold" style={{ flex: 1 }}>
+                Has Total Cholesterol been tested?
+              </ThemedText>
+            </View>
+            <View style={[styles.ynButtonGroup, { gap: spacing.md }]}>
+              <Pressable
+                style={[
+                  styles.ynButton,
+                  {
+                    borderRadius: radii.md,
+                    paddingVertical: spacing.sm,
+                    borderColor: form.qid20Yn === 'Y' ? colors.success : colors.border,
+                    backgroundColor: form.qid20Yn === 'Y' ? colors.successBg : colors.surfaceSubtle,
+                  },
+                ]}
+                onPress={() => updateField('qid20Yn', form.qid20Yn === 'Y' ? null : 'Y')}
+              >
+                <ThemedText variant="bodyBold" style={{ color: form.qid20Yn === 'Y' ? colors.successText : colors.text }}>
+                  Tested
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.ynButton,
+                  {
+                    borderRadius: radii.md,
+                    paddingVertical: spacing.sm,
+                    borderColor: form.qid20Yn === 'N' ? colors.emergency : colors.border,
+                    backgroundColor: form.qid20Yn === 'N' ? colors.emergencyBg : colors.surfaceSubtle,
+                  },
+                ]}
+                onPress={() => updateField('qid20Yn', form.qid20Yn === 'N' ? null : 'N')}
+              >
+                <ThemedText variant="bodyBold" style={{ color: form.qid20Yn === 'N' ? colors.emergencyText : colors.text }}>
+                  Not Tested
+                </ThemedText>
+              </Pressable>
+            </View>
+
+            {form.qid20Yn === 'Y' && (
+              <View style={[styles.labSubFields, { marginTop: spacing.sm, gap: spacing.sm }]}>
+                <ProfileFormGrid>
+                  <ProfileFormField
+                    label="Cholesterol Value (mg/dL)"
+                    value={form.qid20CholeVal}
+                    onChangeText={(val) => updateField('qid20CholeVal', val)}
+                    keyboardType="numeric"
+                    placeholder="e.g. 185.0"
+                  />
+                  <ProfileDatePicker
+                    label="Cholesterol Test Date"
+                    value={form.qid20CholeDate}
+                    onChange={(val) => updateField('qid20CholeDate', val)}
+                  />
+                </ProfileFormGrid>
+              </View>
+            )}
+          </View>
+
+          {/* Q21: Urine Ketones */}
+          <View style={[styles.questionCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radii.lg, padding: spacing.md, gap: spacing.sm }]}>
+            <View style={[styles.qHeader, { gap: spacing.sm }]}>
+              <View style={[styles.qBadge, { backgroundColor: colors.primary, borderRadius: radii.sm, paddingHorizontal: spacing.sm, paddingVertical: 2 }]}>
+                <ThemedText variant="captionBold" color="onPrimary">Q21</ThemedText>
+              </View>
+              <ThemedText variant="bodyBold" style={{ flex: 1 }}>
+                Has Urine Ketones test been performed?
+              </ThemedText>
+            </View>
+            <View style={[styles.ynButtonGroup, { gap: spacing.md }]}>
+              <Pressable
+                style={[
+                  styles.ynButton,
+                  {
+                    borderRadius: radii.md,
+                    paddingVertical: spacing.sm,
+                    borderColor: form.qid21Yn === 'Y' ? colors.success : colors.border,
+                    backgroundColor: form.qid21Yn === 'Y' ? colors.successBg : colors.surfaceSubtle,
+                  },
+                ]}
+                onPress={() => updateField('qid21Yn', form.qid21Yn === 'Y' ? null : 'Y')}
+              >
+                <ThemedText variant="bodyBold" style={{ color: form.qid21Yn === 'Y' ? colors.successText : colors.text }}>
+                  Tested
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.ynButton,
+                  {
+                    borderRadius: radii.md,
+                    paddingVertical: spacing.sm,
+                    borderColor: form.qid21Yn === 'N' ? colors.emergency : colors.border,
+                    backgroundColor: form.qid21Yn === 'N' ? colors.emergencyBg : colors.surfaceSubtle,
+                  },
+                ]}
+                onPress={() => updateField('qid21Yn', form.qid21Yn === 'N' ? null : 'N')}
+              >
+                <ThemedText variant="bodyBold" style={{ color: form.qid21Yn === 'N' ? colors.emergencyText : colors.text }}>
+                  Not Tested
+                </ThemedText>
+              </Pressable>
+            </View>
+
+            {form.qid21Yn === 'Y' && (
+              <View style={[styles.labSubFields, { marginTop: spacing.sm, gap: spacing.sm }]}>
+                <ProfileFormGrid>
+                  <ProfileFormField
+                    label="Ketones Value (mg/dL or Scale 0–4)"
+                    value={form.qid21KetonVal}
+                    onChangeText={(val) => updateField('qid21KetonVal', val)}
+                    keyboardType="numeric"
+                    placeholder="e.g. 0 (Negative)"
+                  />
+                  <ProfileDatePicker
+                    label="Ketones Test Date"
+                    value={form.qid21KetonDate}
+                    onChange={(val) => updateField('qid21KetonDate', val)}
+                  />
+                </ProfileFormGrid>
+              </View>
+            )}
+          </View>
+
+          {/* Q22: Urine Protein */}
+          <View style={[styles.questionCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radii.lg, padding: spacing.md, gap: spacing.sm }]}>
+            <View style={[styles.qHeader, { gap: spacing.sm }]}>
+              <View style={[styles.qBadge, { backgroundColor: colors.primary, borderRadius: radii.sm, paddingHorizontal: spacing.sm, paddingVertical: 2 }]}>
+                <ThemedText variant="captionBold" color="onPrimary">Q22</ThemedText>
+              </View>
+              <ThemedText variant="bodyBold" style={{ flex: 1 }}>
+                Has Urine Protein (Albumin) test been performed?
+              </ThemedText>
+            </View>
+            <View style={[styles.ynButtonGroup, { gap: spacing.md }]}>
+              <Pressable
+                style={[
+                  styles.ynButton,
+                  {
+                    borderRadius: radii.md,
+                    paddingVertical: spacing.sm,
+                    borderColor: form.qid22Yn === 'Y' ? colors.success : colors.border,
+                    backgroundColor: form.qid22Yn === 'Y' ? colors.successBg : colors.surfaceSubtle,
+                  },
+                ]}
+                onPress={() => updateField('qid22Yn', form.qid22Yn === 'Y' ? null : 'Y')}
+              >
+                <ThemedText variant="bodyBold" style={{ color: form.qid22Yn === 'Y' ? colors.successText : colors.text }}>
+                  Tested
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.ynButton,
+                  {
+                    borderRadius: radii.md,
+                    paddingVertical: spacing.sm,
+                    borderColor: form.qid22Yn === 'N' ? colors.emergency : colors.border,
+                    backgroundColor: form.qid22Yn === 'N' ? colors.emergencyBg : colors.surfaceSubtle,
+                  },
+                ]}
+                onPress={() => updateField('qid22Yn', form.qid22Yn === 'N' ? null : 'N')}
+              >
+                <ThemedText variant="bodyBold" style={{ color: form.qid22Yn === 'N' ? colors.emergencyText : colors.text }}>
+                  Not Tested
+                </ThemedText>
+              </Pressable>
+            </View>
+
+            {form.qid22Yn === 'Y' && (
+              <View style={[styles.labSubFields, { marginTop: spacing.sm, gap: spacing.sm }]}>
+                <ProfileFormGrid>
+                  <ProfileFormField
+                    label="Protein Value (mg/dL or Scale 0–4)"
+                    value={form.qid22ProteinVal}
+                    onChangeText={(val) => updateField('qid22ProteinVal', val)}
+                    keyboardType="numeric"
+                    placeholder="e.g. 0 (Negative)"
+                  />
+                  <ProfileDatePicker
+                    label="Protein Test Date"
+                    value={form.qid22ProteinDate}
+                    onChange={(val) => updateField('qid22ProteinDate', val)}
+                  />
+                </ProfileFormGrid>
+              </View>
+            )}
+          </View>
+        </ScrollView>
+
+        {/* Save Bar */}
+        <ProfileSaveBar
+          onSave={handleSave}
+          saving={isSaving}
+          isDirty={isDirty}
+          label="Save & Sync NCD Assessment"
         />
-        {renderYnQuestion(9, 'Do you eat at least 3 to 5 servings of vegetables and fruits daily?', 'qid9Yn')}
-        {renderYnQuestion(10, 'Do you regularly eat high-fat, deep-fried foods, or processed meats?', 'qid10Yn')}
-        {renderYnQuestion(11, 'Do you frequently add table salt, soy sauce, or patis to meals?', 'qid11Yn')}
-        {renderYnQuestion(12, 'Do you drink sugary beverages (soda, sweet tea, energy drinks) daily?', 'qid12Yn')}
 
-        {/* Section 4: Physical Activity (Q13–Q16) */}
-        <ProfileSectionHeader
-          title="Section 4: Physical Activity"
-          description="Assessment of aerobic activity and sedentary lifestyle."
+        {/* Modal for Q17 CVD Risk selection */}
+        <ProfileSelectModal
+          visible={showQ17Modal}
+          title="WHO/ISH CVD Risk Category"
+          options={Q17_OPTIONS}
+          selected={form.qid17Abcde}
+          onSelect={(val) => {
+            updateField('qid17Abcde', val);
+            setShowQ17Modal(false);
+          }}
+          onClose={() => setShowQ17Modal(false)}
         />
-        {renderYnQuestion(13, 'Do you engage in at least 150 minutes of moderate-intensity activity weekly?', 'qid13Yn', 'e.g. brisk walking, cycling, jogging')}
-        {renderYnQuestion(14, 'Do you spend 3 or more continuous hours sitting or reclining each day?', 'qid14Yn')}
-        {renderYnQuestion(15, 'Does your work or daily routine involve vigorous physical labor?', 'qid15Yn')}
-        {renderYnQuestion(16, 'Do you walk or bicycle for at least 10 minutes continuously to travel?', 'qid16Yn')}
-
-        {/* Section 5: Cardiovascular Risk Score (Q17) */}
-        <ProfileSectionHeader
-          title="Section 5: WHO/ISH Cardiovascular Risk"
-          description="10-year risk prediction of fatal or non-fatal CVD events."
-        />
-        <View style={[styles.questionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.qHeader}>
-            <View style={styles.qBadge}>
-              <ThemedText style={styles.qBadgeText}>Q17</ThemedText>
-            </View>
-            <ThemedText style={[styles.qLabel, { color: colors.text }]}>
-              WHO/ISH 10-Year CVD Risk Prediction Score
-            </ThemedText>
-          </View>
-          <ThemedText style={styles.qHelper}>
-            Computed by your clinic provider based on age, gender, blood pressure, smoking, and blood sugar.
-          </ThemedText>
-
-          <Pressable
-            style={[styles.pickerTrigger, { borderColor: colors.border, backgroundColor: colors.background }]}
-            onPress={() => setShowQ17Modal(true)}
-          >
-            <ThemedText style={[styles.pickerTriggerText, { color: form.qid17Abcde ? colors.text : '#94A3B8' }]}>
-              {Q17_OPTIONS.find((o) => o.value === form.qid17Abcde)?.label ?? 'Select Risk Category (A – E)'}
-            </ThemedText>
-            <ThemedText style={{ color: colors.text, opacity: 0.6 }}>▼</ThemedText>
-          </Pressable>
-        </View>
-
-        {/* Section 6: Medical History & Symptoms (Q18, Q23, Q24) */}
-        <ProfileSectionHeader
-          title="Section 6: Medical & Family History"
-          description="Pre-existing diagnoses and genetic pre-dispositions."
-        />
-        {renderYnQuestion(18, 'Have you been diagnosed with hypertension or taking blood pressure medication?', 'qid18Yn')}
-        {renderYnQuestion(23, 'Have you been diagnosed with diabetes or taking diabetes medication?', 'qid23Yn')}
-        {renderYnQuestion(24, 'Do you have a family history of premature cardiovascular disease, stroke, or diabetes?', 'qid24Yn')}
-
-        {/* Section 7: Clinical Measurements & Lab Monitoring (Q19–Q22) */}
-        <ProfileSectionHeader
-          title="Section 7: Laboratory Checks & Biomarkers"
-          description="Diagnostic lab results recorded under PhilHealth YAKAP benefits."
-        />
-
-        {/* Q19: Fasting Blood Sugar */}
-        <View style={[styles.questionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.qHeader}>
-            <View style={styles.qBadge}>
-              <ThemedText style={styles.qBadgeText}>Q19</ThemedText>
-            </View>
-            <ThemedText style={[styles.qLabel, { color: colors.text }]}>
-              Has Fasting Blood Sugar (FBS) been tested?
-            </ThemedText>
-          </View>
-          <View style={styles.ynButtonGroup}>
-            <Pressable
-              style={[
-                styles.ynButton,
-                form.qid19Yn === 'Y' && styles.ynButtonSelectedYes,
-                { borderColor: form.qid19Yn === 'Y' ? '#10B981' : colors.border },
-              ]}
-              onPress={() => updateField('qid19Yn', form.qid19Yn === 'Y' ? null : 'Y')}
-            >
-              <ThemedText style={[styles.ynButtonText, form.qid19Yn === 'Y' && styles.ynButtonTextSelected]}>
-                ✓ Tested
-              </ThemedText>
-            </Pressable>
-            <Pressable
-              style={[
-                styles.ynButton,
-                form.qid19Yn === 'N' && styles.ynButtonSelectedNo,
-                { borderColor: form.qid19Yn === 'N' ? '#EF4444' : colors.border },
-              ]}
-              onPress={() => updateField('qid19Yn', form.qid19Yn === 'N' ? null : 'N')}
-            >
-              <ThemedText style={[styles.ynButtonText, form.qid19Yn === 'N' && styles.ynButtonTextSelected]}>
-                ✕ Not Tested
-              </ThemedText>
-            </Pressable>
-          </View>
-
-          {form.qid19Yn === 'Y' && (
-            <View style={styles.labSubFields}>
-              <ProfileFormField
-                label="FBS Value (mg/dL)"
-                value={form.qid19FbsMgdl}
-                onChangeText={handleFbsMgdlChange}
-                keyboardType="numeric"
-                placeholder="e.g. 95.0"
-              />
-              <ProfileFormField
-                label="FBS Value (mmol/L) (Auto-computed)"
-                value={form.qid19FbsMmol}
-                onChangeText={(val) => updateField('qid19FbsMmol', val)}
-                keyboardType="numeric"
-                placeholder="e.g. 5.27"
-              />
-              <ProfileDatePicker
-                label="FBS Test Date"
-                value={form.qid19FbsDate}
-                onChange={(val) => updateField('qid19FbsDate', val)}
-              />
-            </View>
-          )}
-        </View>
-
-        {/* Q20: Total Cholesterol */}
-        <View style={[styles.questionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.qHeader}>
-            <View style={styles.qBadge}>
-              <ThemedText style={styles.qBadgeText}>Q20</ThemedText>
-            </View>
-            <ThemedText style={[styles.qLabel, { color: colors.text }]}>
-              Has Total Cholesterol been tested?
-            </ThemedText>
-          </View>
-          <View style={styles.ynButtonGroup}>
-            <Pressable
-              style={[
-                styles.ynButton,
-                form.qid20Yn === 'Y' && styles.ynButtonSelectedYes,
-                { borderColor: form.qid20Yn === 'Y' ? '#10B981' : colors.border },
-              ]}
-              onPress={() => updateField('qid20Yn', form.qid20Yn === 'Y' ? null : 'Y')}
-            >
-              <ThemedText style={[styles.ynButtonText, form.qid20Yn === 'Y' && styles.ynButtonTextSelected]}>
-                ✓ Tested
-              </ThemedText>
-            </Pressable>
-            <Pressable
-              style={[
-                styles.ynButton,
-                form.qid20Yn === 'N' && styles.ynButtonSelectedNo,
-                { borderColor: form.qid20Yn === 'N' ? '#EF4444' : colors.border },
-              ]}
-              onPress={() => updateField('qid20Yn', form.qid20Yn === 'N' ? null : 'N')}
-            >
-              <ThemedText style={[styles.ynButtonText, form.qid20Yn === 'N' && styles.ynButtonTextSelected]}>
-                ✕ Not Tested
-              </ThemedText>
-            </Pressable>
-          </View>
-
-          {form.qid20Yn === 'Y' && (
-            <View style={styles.labSubFields}>
-              <ProfileFormField
-                label="Cholesterol Value (mg/dL)"
-                value={form.qid20CholeVal}
-                onChangeText={(val) => updateField('qid20CholeVal', val)}
-                keyboardType="numeric"
-                placeholder="e.g. 185.0"
-              />
-              <ProfileDatePicker
-                label="Cholesterol Test Date"
-                value={form.qid20CholeDate}
-                onChange={(val) => updateField('qid20CholeDate', val)}
-              />
-            </View>
-          )}
-        </View>
-
-        {/* Q21: Urine Ketones */}
-        <View style={[styles.questionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.qHeader}>
-            <View style={styles.qBadge}>
-              <ThemedText style={styles.qBadgeText}>Q21</ThemedText>
-            </View>
-            <ThemedText style={[styles.qLabel, { color: colors.text }]}>
-              Has Urine Ketones test been performed?
-            </ThemedText>
-          </View>
-          <View style={styles.ynButtonGroup}>
-            <Pressable
-              style={[
-                styles.ynButton,
-                form.qid21Yn === 'Y' && styles.ynButtonSelectedYes,
-                { borderColor: form.qid21Yn === 'Y' ? '#10B981' : colors.border },
-              ]}
-              onPress={() => updateField('qid21Yn', form.qid21Yn === 'Y' ? null : 'Y')}
-            >
-              <ThemedText style={[styles.ynButtonText, form.qid21Yn === 'Y' && styles.ynButtonTextSelected]}>
-                ✓ Tested
-              </ThemedText>
-            </Pressable>
-            <Pressable
-              style={[
-                styles.ynButton,
-                form.qid21Yn === 'N' && styles.ynButtonSelectedNo,
-                { borderColor: form.qid21Yn === 'N' ? '#EF4444' : colors.border },
-              ]}
-              onPress={() => updateField('qid21Yn', form.qid21Yn === 'N' ? null : 'N')}
-            >
-              <ThemedText style={[styles.ynButtonText, form.qid21Yn === 'N' && styles.ynButtonTextSelected]}>
-                ✕ Not Tested
-              </ThemedText>
-            </Pressable>
-          </View>
-
-          {form.qid21Yn === 'Y' && (
-            <View style={styles.labSubFields}>
-              <ProfileFormField
-                label="Ketones Value (mg/dL or Scale 0–4)"
-                value={form.qid21KetonVal}
-                onChangeText={(val) => updateField('qid21KetonVal', val)}
-                keyboardType="numeric"
-                placeholder="e.g. 0 (Negative)"
-              />
-              <ProfileDatePicker
-                label="Ketones Test Date"
-                value={form.qid21KetonDate}
-                onChange={(val) => updateField('qid21KetonDate', val)}
-              />
-            </View>
-          )}
-        </View>
-
-        {/* Q22: Urine Protein */}
-        <View style={[styles.questionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.qHeader}>
-            <View style={styles.qBadge}>
-              <ThemedText style={styles.qBadgeText}>Q22</ThemedText>
-            </View>
-            <ThemedText style={[styles.qLabel, { color: colors.text }]}>
-              Has Urine Protein (Albumin) test been performed?
-            </ThemedText>
-          </View>
-          <View style={styles.ynButtonGroup}>
-            <Pressable
-              style={[
-                styles.ynButton,
-                form.qid22Yn === 'Y' && styles.ynButtonSelectedYes,
-                { borderColor: form.qid22Yn === 'Y' ? '#10B981' : colors.border },
-              ]}
-              onPress={() => updateField('qid22Yn', form.qid22Yn === 'Y' ? null : 'Y')}
-            >
-              <ThemedText style={[styles.ynButtonText, form.qid22Yn === 'Y' && styles.ynButtonTextSelected]}>
-                ✓ Tested
-              </ThemedText>
-            </Pressable>
-            <Pressable
-              style={[
-                styles.ynButton,
-                form.qid22Yn === 'N' && styles.ynButtonSelectedNo,
-                { borderColor: form.qid22Yn === 'N' ? '#EF4444' : colors.border },
-              ]}
-              onPress={() => updateField('qid22Yn', form.qid22Yn === 'N' ? null : 'N')}
-            >
-              <ThemedText style={[styles.ynButtonText, form.qid22Yn === 'N' && styles.ynButtonTextSelected]}>
-                ✕ Not Tested
-              </ThemedText>
-            </Pressable>
-          </View>
-
-          {form.qid22Yn === 'Y' && (
-            <View style={styles.labSubFields}>
-              <ProfileFormField
-                label="Protein Value (mg/dL or Scale 0–4)"
-                value={form.qid22ProteinVal}
-                onChangeText={(val) => updateField('qid22ProteinVal', val)}
-                keyboardType="numeric"
-                placeholder="e.g. 0 (Negative)"
-              />
-              <ProfileDatePicker
-                label="Protein Test Date"
-                value={form.qid22ProteinDate}
-                onChange={(val) => updateField('qid22ProteinDate', val)}
-              />
-            </View>
-          )}
-        </View>
-      </ScrollView>
-
-      {/* Save Bar */}
-      <ProfileSaveBar
-        onSave={handleSave}
-        saving={isSaving}
-        isDirty={isDirty}
-        label="Save & Sync NCD Assessment"
-      />
-
-      {/* Modal for Q17 CVD Risk selection */}
-      <ProfileSelectModal
-        visible={showQ17Modal}
-        title="WHO/ISH CVD Risk Category"
-        options={Q17_OPTIONS}
-        selected={form.qid17Abcde}
-        onSelect={(val) => {
-          updateField('qid17Abcde', val);
-          setShowQ17Modal(false);
-        }}
-        onClose={() => setShowQ17Modal(false)}
-      />
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  content: { padding: 16, paddingBottom: 40 },
+  content: {},
   headerBanner: {
-    borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
-    padding: 16,
-    marginBottom: 16,
-    gap: 6,
-  },
-  bannerKicker: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#0284C7',
-    letterSpacing: 0.8,
-  },
-  bannerTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  bannerDesc: {
-    fontSize: 13,
-    lineHeight: 18,
-    opacity: 0.8,
   },
   questionCard: {
-    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    padding: 14,
-    marginBottom: 12,
-    gap: 10,
   },
   qHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 10,
   },
-  qBadge: {
-    backgroundColor: '#0284C7',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  qBadgeText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  qLabel: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '600',
-    lineHeight: 20,
-  },
-  qHelper: {
-    fontSize: 12,
-    opacity: 0.65,
-    marginTop: -4,
-  },
+  qBadge: {},
   ynButtonGroup: {
     flexDirection: 'row',
-    gap: 10,
   },
   ynButton: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  ynButtonSelectedYes: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-  },
-  ynButtonSelectedNo: {
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-  },
-  ynButtonSelectedAmber: {
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-  },
-  ynButtonSelectedBlue: {
-    backgroundColor: 'rgba(59, 130, 246, 0.15)',
-  },
-  ynButtonSelectedGreen: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-  },
-  ynButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  ynButtonTextSelected: {
-    fontWeight: '800',
-  },
   pickerTrigger: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  pickerTriggerText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  labSubFields: {
-    marginTop: 6,
-    gap: 6,
-  },
+  labSubFields: {},
 });

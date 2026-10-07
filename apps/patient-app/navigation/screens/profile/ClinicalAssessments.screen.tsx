@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
-import { useTheme } from '@react-navigation/native';
+import { useAppTheme } from 'contexts/ThemeContext';
+import { useBreakpoint } from 'hooks/useBreakpoint';
+import Screen from 'components/layout/Screen';
 import { db } from '@db/index';
 import { clinicalAssessments } from '@db/schema/clinicalAssessments';
 import { eq, desc } from 'drizzle-orm';
@@ -75,7 +77,8 @@ function formatJsonField(raw: string | null | undefined): string | null {
 export default function ClinicalAssessmentsScreen() {
   const patientId = usePatientId();
   const { getClinicName } = useClinicNameMap();
-  const { colors } = useTheme();
+  const { colors, radii, spacing } = useAppTheme();
+  const { isDesktop } = useBreakpoint();
   const [records, setRecords] = useState<any[]>([]);
 
   useEffect(() => {
@@ -84,27 +87,32 @@ export default function ClinicalAssessmentsScreen() {
   }, [patientId]);
 
   return (
-    <FlatList
-      data={records}
-      keyExtractor={(item) => item.id}
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={styles.content}
-      ListEmptyComponent={<ProfileSectionHeader title="" description="No clinical assessments recorded yet." />}
-      renderItem={({ item }) => (
-        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <ProfileSectionHeader title={item.assessmentType ?? 'Assessment'} />
-          <ProfileReadOnlyField label="Date" value={item.date} />
-          <ProfileReadOnlyField label="Clinic Source" value={getClinicName(item.clinicId) ?? item.assessedBy ?? null} />
-          <ProfileReadOnlyField label="Assessed By" value={item.assessedBy} />
-          <ProfileReadOnlyField label="Scores" value={formatJsonField(item.scoresJson)} />
-          <ProfileReadOnlyField label="Findings" value={formatJsonField(item.findingsJson)} />
-        </View>
-      )}
-    />
+    <Screen width="content" scroll={false} padded={false}>
+      <FlatList
+        key={isDesktop ? 'grid-2' : 'list-1'}
+        numColumns={isDesktop ? 2 : 1}
+        data={records}
+        keyExtractor={(item) => item.id}
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={[styles.content, { padding: spacing.lg, paddingBottom: spacing['4xl'], gap: spacing.md }]}
+        columnWrapperStyle={isDesktop ? { gap: spacing.md } : undefined}
+        ListEmptyComponent={<ProfileSectionHeader title="" description="No clinical assessments recorded yet." />}
+        renderItem={({ item }) => (
+          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radii.lg, padding: spacing.md, flex: 1 }]}>
+            <ProfileSectionHeader title={item.assessmentType ?? 'Assessment'} />
+            <ProfileReadOnlyField label="Date" value={item.date} />
+            <ProfileReadOnlyField label="Clinic Source" value={getClinicName(item.clinicId) ?? item.assessedBy ?? null} />
+            <ProfileReadOnlyField label="Assessed By" value={item.assessedBy} />
+            <ProfileReadOnlyField label="Scores" value={formatJsonField(item.scoresJson)} />
+            <ProfileReadOnlyField label="Findings" value={formatJsonField(item.findingsJson)} />
+          </View>
+        )}
+      />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 16, paddingBottom: 40 },
-  card: { borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: 12, marginBottom: 12 },
+  content: {},
+  card: { borderWidth: StyleSheet.hairlineWidth },
 });

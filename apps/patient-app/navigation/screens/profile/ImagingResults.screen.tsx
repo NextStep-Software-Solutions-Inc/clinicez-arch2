@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
-import { useTheme } from '@react-navigation/native';
+import { useAppTheme } from 'contexts/ThemeContext';
+import { useBreakpoint } from 'hooks/useBreakpoint';
+import Screen from 'components/layout/Screen';
 import { db } from '@db/index';
 import { imagingResults } from '@db/schema/imagingResults';
 import { eq, desc } from 'drizzle-orm';
@@ -9,11 +11,11 @@ import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
 import { useClinicNameMap } from 'hooks/useClinicNameMap';
 import { usePatientId } from 'hooks/usePatientId';
 
-
 export default function ImagingResultsScreen() {
   const patientId = usePatientId();
   const { getClinicName } = useClinicNameMap();
-  const { colors } = useTheme();
+  const { colors, radii, spacing } = useAppTheme();
+  const { isDesktop } = useBreakpoint();
   const [records, setRecords] = useState<any[]>([]);
 
   useEffect(() => {
@@ -22,31 +24,36 @@ export default function ImagingResultsScreen() {
   }, [patientId]);
 
   return (
-    <FlatList
-      data={records}
-      keyExtractor={(item) => item.id}
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={styles.content}
-      ListEmptyComponent={<ProfileSectionHeader title="" description="No imaging results recorded yet." />}
-      renderItem={({ item }) => (
-        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <ProfileSectionHeader title={[item.imagingType, item.bodyPart].filter(Boolean).join(' — ') || 'Imaging Result'} />
-          <ProfileReadOnlyField label="Date" value={item.examDate} />
-          <ProfileReadOnlyField label="Imaging Type" value={item.imagingType} />
-          <ProfileReadOnlyField label="Body Part" value={item.bodyPart} />
-          <ProfileReadOnlyField label="Radiologist" value={item.radiologist} />
-          <ProfileReadOnlyField label="Findings" value={item.findings} />
-          <ProfileReadOnlyField label="Impression" value={item.impression} />
-          <ProfileReadOnlyField label="Recommendation" value={item.recommendation} />
-          <ProfileReadOnlyField label="Clinic Source" value={getClinicName(item.clinicId) ?? item.orderingPhysician ?? null} />
-          <ProfileReadOnlyField label="Ordered By" value={item.orderingPhysician} />
-        </View>
-      )}
-    />
+    <Screen width="content" scroll={false} padded={false}>
+      <FlatList
+        key={isDesktop ? 'grid-2' : 'list-1'}
+        numColumns={isDesktop ? 2 : 1}
+        data={records}
+        keyExtractor={(item) => item.id}
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={[styles.content, { padding: spacing.lg, paddingBottom: spacing['4xl'], gap: spacing.md }]}
+        columnWrapperStyle={isDesktop ? { gap: spacing.md } : undefined}
+        ListEmptyComponent={<ProfileSectionHeader title="" description="No imaging results recorded yet." />}
+        renderItem={({ item }) => (
+          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: radii.lg, padding: spacing.md, flex: 1 }]}>
+            <ProfileSectionHeader title={[item.imagingType, item.bodyPart].filter(Boolean).join(' — ') || 'Imaging Result'} />
+            <ProfileReadOnlyField label="Date" value={item.examDate} />
+            <ProfileReadOnlyField label="Imaging Type" value={item.imagingType} />
+            <ProfileReadOnlyField label="Body Part" value={item.bodyPart} />
+            <ProfileReadOnlyField label="Radiologist" value={item.radiologist} />
+            <ProfileReadOnlyField label="Findings" value={item.findings} />
+            <ProfileReadOnlyField label="Impression" value={item.impression} />
+            <ProfileReadOnlyField label="Recommendation" value={item.recommendation} />
+            <ProfileReadOnlyField label="Clinic Source" value={getClinicName(item.clinicId) ?? item.orderingPhysician ?? null} />
+            <ProfileReadOnlyField label="Ordered By" value={item.orderingPhysician} />
+          </View>
+        )}
+      />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 16, paddingBottom: 40 },
-  card: { borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: 12, marginBottom: 12 },
+  content: {},
+  card: { borderWidth: StyleSheet.hairlineWidth },
 });

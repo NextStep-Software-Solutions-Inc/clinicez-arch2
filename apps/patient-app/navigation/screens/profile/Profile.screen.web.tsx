@@ -5,10 +5,9 @@ import {
   View,
   Pressable,
   TextInput,
-  useWindowDimensions,
   ActivityIndicator,
 } from 'react-native';
-import { useNavigation, useTheme } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import NetInfo from '@react-native-community/netinfo';
 import { db } from '@db/index';
 import {
@@ -36,24 +35,31 @@ import {
   patientNcdQuestionnaire,
 } from '@db/schema/index';
 import { isNull, count } from 'drizzle-orm';
-import ProfileCard from 'components/ProfileCard';
 import ThemedText from '@ui/ThemedText';
+import { AppIcon, type IconName } from '@ui/Icon';
+import { Avatar, ProgressBar } from '@ui/Primitives';
+import Badge from '@ui/Badge';
+import { useAppTheme } from 'contexts/ThemeContext';
+import { useBreakpoint } from 'hooks/useBreakpoint';
 import { useAuth } from 'contexts/AuthContext';
+import { useUser } from '@clerk/expo';
 import { useOfflineAlert } from 'contexts/OfflineAlertContext';
 import { getPatientFullRecord } from 'services/api/patientApi';
 import { hydrateFullRecord } from '@db/hydrate';
 
-interface ProfileCategoryItem {
+export type ProfileSectionGroup = 'personal' | 'medical' | 'clinical' | 'settings';
+
+export interface ProfileCategoryItem {
   id: string;
   title: string;
   subtitle: string;
-  icon: string;
+  icon: IconName;
   screen: string;
-  section: 'identity' | 'medical' | 'clinical';
+  section: ProfileSectionGroup;
   countKey?: keyof Counts;
 }
 
-type Counts = {
+export type Counts = {
   addresses: number;
   emergency: number;
   providers: number;
@@ -79,65 +85,65 @@ type Counts = {
 };
 
 const CATEGORIES: ProfileCategoryItem[] = [
-  // Section: Identity & Contacts
+  // ── Personal & Contacts ──────────────────────────────────────────
   {
     id: 'demographics',
     title: 'Personal Demographics',
     subtitle: 'Name, date of birth, biological sex, civil status',
-    icon: '👤',
+    icon: 'user',
     screen: 'PersonalDemographicsScreen',
-    section: 'identity',
+    section: 'personal',
   },
   {
     id: 'government-ids',
     title: 'Government & Insurance IDs',
     subtitle: 'PhilHealth PIN, SSS, GSIS, HMO memberships',
-    icon: '🪪',
+    icon: 'badge',
     screen: 'GovernmentIdsScreen',
-    section: 'identity',
+    section: 'personal',
   },
   {
     id: 'contact',
     title: 'Contact Information',
     subtitle: 'Primary mobile, email, messenger addresses',
-    icon: '📞',
+    icon: 'phone',
     screen: 'ContactInfoScreen',
-    section: 'identity',
+    section: 'personal',
   },
   {
     id: 'addresses',
     title: 'Addresses',
     subtitle: 'Permanent and secondary residential addresses',
-    icon: '📍',
+    icon: 'location',
     screen: 'AddressesScreen',
-    section: 'identity',
+    section: 'personal',
     countKey: 'addresses',
   },
   {
     id: 'emergency',
     title: 'Emergency Contacts',
     subtitle: 'Primary & secondary designated contacts',
-    icon: '🚨',
+    icon: 'emergencyContact',
     screen: 'EmergencyContactsScreen',
-    section: 'identity',
+    section: 'personal',
     countKey: 'emergency',
   },
   {
     id: 'providers',
     title: 'Healthcare Providers',
     subtitle: 'Primary care physicians & assigned clinics',
-    icon: '👨‍⚕️',
+    icon: 'stethoscope',
     screen: 'HealthcareProvidersScreen',
-    section: 'identity',
+    section: 'personal',
     countKey: 'providers',
   },
 
-  // Section: Medical Background
+  // ── Medical Background & Lifestyle ──────────────────────────────
   {
     id: 'allergies',
     title: 'Allergies & Sensitivities',
     subtitle: 'Drug, food, and environmental allergies',
-    icon: '⚠️',
+    icon: 'warning',
     screen: 'AllergiesScreen',
     section: 'medical',
     countKey: 'allergies',
@@ -146,7 +152,7 @@ const CATEGORIES: ProfileCategoryItem[] = [
     id: 'medications',
     title: 'Current Medications',
     subtitle: 'Ongoing maintenance & self-reported medications',
-    icon: '💊',
+    icon: 'pill',
     screen: 'MedicationsScreen',
     section: 'medical',
     countKey: 'medications',
@@ -155,7 +161,7 @@ const CATEGORIES: ProfileCategoryItem[] = [
     id: 'surgical-history',
     title: 'Surgical History',
     subtitle: 'Prior surgeries, dates, and procedures',
-    icon: '🩺',
+    icon: 'scissors',
     screen: 'SurgicalHistoryScreen',
     section: 'medical',
     countKey: 'surgeries',
@@ -164,7 +170,7 @@ const CATEGORIES: ProfileCategoryItem[] = [
     id: 'past-illnesses',
     title: 'Past Illnesses',
     subtitle: 'Resolved conditions, hospitalizations, childhood illnesses',
-    icon: '🩹',
+    icon: 'activity',
     screen: 'PastIllnessesScreen',
     section: 'medical',
     countKey: 'illnesses',
@@ -173,7 +179,7 @@ const CATEGORIES: ProfileCategoryItem[] = [
     id: 'chronic-conditions',
     title: 'Chronic Conditions',
     subtitle: 'Hypertension, Diabetes, Asthma, ongoing diagnoses',
-    icon: '📊',
+    icon: 'heartPulse',
     screen: 'ChronicConditionsScreen',
     section: 'medical',
     countKey: 'chronic',
@@ -182,7 +188,7 @@ const CATEGORIES: ProfileCategoryItem[] = [
     id: 'disabilities',
     title: 'Disabilities & Special Needs',
     subtitle: 'Physical, sensory, or developmental support',
-    icon: '♿',
+    icon: 'accessibility',
     screen: 'DisabilitiesScreen',
     section: 'medical',
     countKey: 'disabilities',
@@ -191,7 +197,7 @@ const CATEGORIES: ProfileCategoryItem[] = [
     id: 'immunizations-self',
     title: 'Immunizations (Self-Reported)',
     subtitle: 'Vaccine history provided by patient',
-    icon: '💉',
+    icon: 'syringe',
     screen: 'ImmunizationsSelfScreen',
     section: 'medical',
     countKey: 'immunizations',
@@ -200,7 +206,7 @@ const CATEGORIES: ProfileCategoryItem[] = [
     id: 'family-history',
     title: 'Family Health History',
     subtitle: 'Hereditary conditions across direct relatives',
-    icon: '🧬',
+    icon: 'family',
     screen: 'FamilyHistoryScreen',
     section: 'medical',
     countKey: 'family',
@@ -209,7 +215,7 @@ const CATEGORIES: ProfileCategoryItem[] = [
     id: 'social-history',
     title: 'Social & Lifestyle History',
     subtitle: 'Smoking, alcohol, diet, physical activity',
-    icon: '🥗',
+    icon: 'wellness',
     screen: 'SocialHistoryScreen',
     section: 'medical',
   },
@@ -217,7 +223,7 @@ const CATEGORIES: ProfileCategoryItem[] = [
     id: 'occupation',
     title: 'Occupational Health',
     subtitle: 'Work hazards, industry, employment classification',
-    icon: '💼',
+    icon: 'briefcase',
     screen: 'OccupationScreen',
     section: 'medical',
   },
@@ -225,7 +231,7 @@ const CATEGORIES: ProfileCategoryItem[] = [
     id: 'travel-history',
     title: 'Travel History',
     subtitle: 'Recent domestic and international trips',
-    icon: '✈️',
+    icon: 'flight',
     screen: 'TravelHistoryScreen',
     section: 'medical',
     countKey: 'travel',
@@ -234,7 +240,7 @@ const CATEGORIES: ProfileCategoryItem[] = [
     id: 'obstetric',
     title: 'Obstetric Profile',
     subtitle: 'Pregnancies, deliveries, maternal health history',
-    icon: '🤰',
+    icon: 'heartPulse',
     screen: 'ObstetricProfileScreen',
     section: 'medical',
     countKey: 'pregnancies',
@@ -243,7 +249,7 @@ const CATEGORIES: ProfileCategoryItem[] = [
     id: 'male-reproductive',
     title: 'Male Reproductive Health',
     subtitle: 'Prostate, reproductive wellness, screenings',
-    icon: '♂️',
+    icon: 'user',
     screen: 'MaleReproductiveScreen',
     section: 'medical',
   },
@@ -251,7 +257,7 @@ const CATEGORIES: ProfileCategoryItem[] = [
     id: 'dental-vision',
     title: 'Dental & Vision Profile',
     subtitle: 'Last dental exam, dentures, glasses / contacts',
-    icon: '👁️',
+    icon: 'vision',
     screen: 'DentalVisionScreen',
     section: 'medical',
   },
@@ -259,17 +265,17 @@ const CATEGORIES: ProfileCategoryItem[] = [
     id: 'mental-health',
     title: 'Mental Health History',
     subtitle: 'Therapy, screenings, emotional wellness support',
-    icon: '🧠',
+    icon: 'brain',
     screen: 'MentalHealthScreen',
     section: 'medical',
   },
 
-  // Section: Clinical Records (Read-only verified)
+  // ── Clinical Records ─────────────────────────────────────────────
   {
     id: 'vitals',
     title: 'Vital Signs',
     subtitle: 'Blood pressure, heart rate, temperature, BMI history',
-    icon: '💓',
+    icon: 'heartPulse',
     screen: 'VitalSignsScreen',
     section: 'clinical',
     countKey: 'vitals',
@@ -278,7 +284,7 @@ const CATEGORIES: ProfileCategoryItem[] = [
     id: 'consultations',
     title: 'Consultations',
     subtitle: 'Clinical notes & encounter summaries from doctors',
-    icon: '📋',
+    icon: 'chat',
     screen: 'ConsultationsScreen',
     section: 'clinical',
     countKey: 'consults',
@@ -287,7 +293,7 @@ const CATEGORIES: ProfileCategoryItem[] = [
     id: 'prescriptions',
     title: 'Prescriptions & e-Rx',
     subtitle: 'Active digital prescriptions with UPSC QR verification',
-    icon: '💊',
+    icon: 'pill',
     screen: 'PrescriptionsScreen',
     section: 'clinical',
     countKey: 'rxs',
@@ -296,7 +302,7 @@ const CATEGORIES: ProfileCategoryItem[] = [
     id: 'lab-results',
     title: 'Laboratory Results',
     subtitle: 'Blood work, urinalysis, pathology findings',
-    icon: '🧪',
+    icon: 'lab',
     screen: 'LabResultsScreen',
     section: 'clinical',
     countKey: 'labs',
@@ -305,7 +311,7 @@ const CATEGORIES: ProfileCategoryItem[] = [
     id: 'imaging-results',
     title: 'Imaging & Radiology',
     subtitle: 'X-rays, ultrasounds, CT scans, MRIs',
-    icon: '🩻',
+    icon: 'image',
     screen: 'ImagingResultsScreen',
     section: 'clinical',
     countKey: 'imaging',
@@ -314,7 +320,7 @@ const CATEGORIES: ProfileCategoryItem[] = [
     id: 'vaccinations-admin',
     title: 'Administered Vaccinations',
     subtitle: 'Clinic-administered vaccines with lot numbers & batch',
-    icon: '🛡️',
+    icon: 'shield',
     screen: 'VaccinationsAdministeredScreen',
     section: 'clinical',
     countKey: 'vaccinations',
@@ -323,7 +329,7 @@ const CATEGORIES: ProfileCategoryItem[] = [
     id: 'clinical-assessments',
     title: 'Clinical Assessments',
     subtitle: 'Formal diagnoses and physician evaluations',
-    icon: '🔬',
+    icon: 'clipboard',
     screen: 'ClinicalAssessmentsScreen',
     section: 'clinical',
     countKey: 'assessments',
@@ -332,7 +338,7 @@ const CATEGORIES: ProfileCategoryItem[] = [
     id: 'physical-exam',
     title: 'Physical Examination',
     subtitle: 'HEENT, cardiovascular, respiratory findings',
-    icon: '🩺',
+    icon: 'monitor',
     screen: 'PhysicalExamScreen',
     section: 'clinical',
     countKey: 'physicalExams',
@@ -341,37 +347,54 @@ const CATEGORIES: ProfileCategoryItem[] = [
     id: 'ncd-questionnaire',
     title: 'NCD Risk Assessment',
     subtitle: 'PhilHealth non-communicable disease questionnaire',
-    icon: '📝',
+    icon: 'checklist',
     screen: 'NcdQuestionnaireScreen',
     section: 'clinical',
     countKey: 'ncdQuestionnaires',
+  },
+
+  // ── Settings Shortcuts ───────────────────────────────────────────
+  {
+    id: 'settings-appearance',
+    title: 'Appearance',
+    subtitle: 'Light, dark, or system matching theme',
+    icon: 'eye',
+    screen: 'AppearanceSettingsScreen',
+    section: 'settings',
+  },
+  {
+    id: 'settings-security',
+    title: 'Security & App Lock',
+    subtitle: 'PIN management and session locking',
+    icon: 'lock',
+    screen: 'SecuritySettingsScreen',
+    section: 'settings',
+  },
+  {
+    id: 'settings-notifications',
+    title: 'Notification Preferences',
+    subtitle: 'Appointment reminders, clinical updates',
+    icon: 'notifications',
+    screen: 'NotificationsSettingsScreen',
+    section: 'settings',
+  },
+  {
+    id: 'settings-about',
+    title: 'About ClinicEz',
+    subtitle: 'App version, licensing, legal information',
+    icon: 'info',
+    screen: 'AboutSettingsScreen',
+    section: 'settings',
   },
 ];
 
 async function loadCounts(): Promise<Counts> {
   const [
-    addressCount,
-    emergencyCount,
-    providerCount,
-    allergyCount,
-    medicationCount,
-    surgeryCount,
-    illnessCount,
-    chronicCount,
-    disabilityCount,
-    immunizationCount,
-    familyCount,
-    travelCount,
-    pregnancyCount,
-    vitalCount,
-    consultCount,
-    rxCount,
-    labCount,
-    imagingCount,
-    vaccinationCount,
-    assessmentCount,
-    physicalExamCount,
-    ncdQuestionnaireCount,
+    addressCount, emergencyCount, providerCount, allergyCount, medicationCount,
+    surgeryCount, illnessCount, chronicCount, disabilityCount, immunizationCount,
+    familyCount, travelCount, pregnancyCount, vitalCount, consultCount,
+    rxCount, labCount, imagingCount, vaccinationCount, assessmentCount,
+    physicalExamCount, ncdQuestionnaireCount,
   ] = await Promise.all([
     db.select({ c: count() }).from(patientAddresses).where(isNull(patientAddresses.deletedAt)),
     db.select({ c: count() }).from(emergencyContacts).where(isNull(emergencyContacts.deletedAt)),
@@ -424,20 +447,24 @@ async function loadCounts(): Promise<Counts> {
 }
 
 export default function ProfileScreenWeb() {
-  const { colors, dark: isDark } = useTheme();
+  const { colors, radii, spacing, sizes, shadows } = useAppTheme();
+  const { isWorkstation, isWide } = useBreakpoint();
   const navigation = useNavigation<any>();
-  const { internalPatientId, getToken, logout } = useAuth();
+  const { internalPatientId, getToken } = useAuth();
+  const { user } = useUser();
   const { showOfflineAlert } = useOfflineAlert();
-  const { width } = useWindowDimensions();
 
   const [counts, setCounts] = useState<Counts | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedSection, setSelectedSection] = useState<'all' | 'identity' | 'medical' | 'clinical'>('all');
+  const [selectedSection, setSelectedSection] = useState<'all' | ProfileSectionGroup>('all');
   const hasBackgroundFetchedRef = useRef(false);
 
-  const isDesktop = width >= 1024;
-  const isTablet = width >= 680 && width < 1024;
+  const displayName =
+    user?.fullName ||
+    [user?.firstName, user?.lastName].filter(Boolean).join(' ') ||
+    user?.primaryEmailAddress?.emailAddress ||
+    'Patient';
 
   const reloadCounts = useCallback(() => {
     loadCounts().then(setCounts).catch(console.error);
@@ -493,6 +520,25 @@ export default function ProfileScreenWeb() {
     }
   }, [fetchAndHydrateFullRecord, reloadCounts, showOfflineAlert]);
 
+  // Profile completeness score (0..1)
+  const completeness = useMemo(() => {
+    if (!counts) return 0.35;
+    const personalKeys: (keyof Counts)[] = [
+      'addresses',
+      'emergency',
+      'providers',
+      'allergies',
+      'medications',
+      'chronic',
+      'immunizations',
+    ];
+    let filled = 1; // 1 for account/name
+    personalKeys.forEach((k) => {
+      if (counts[k] > 0) filled += 1;
+    });
+    return Math.min(1, Math.max(0.2, filled / (personalKeys.length + 1)));
+  }, [counts]);
+
   // Filtered categories
   const filteredCategories = useMemo(() => {
     return CATEGORIES.filter((cat) => {
@@ -506,125 +552,185 @@ export default function ProfileScreenWeb() {
     });
   }, [selectedSection, searchQuery]);
 
+  // Responsive card column basis: 3 col on >= 1280, 2 col on >= 768, 1 col compact
+  const cardWidthStyle = isWide
+    ? { width: '31.8%' as const }
+    : isWorkstation
+      ? { width: '48.5%' as const }
+      : { width: '100%' as const };
+
   return (
     <ScrollView
       style={[styles.root, { backgroundColor: colors.background }]}
-      contentContainerStyle={[styles.scrollContent, { paddingBottom: isDesktop ? 32 : 96 }]}
+      contentContainerStyle={[
+        styles.scrollContent,
+        {
+          paddingVertical: spacing['2xl'],
+          paddingHorizontal: spacing.xl,
+          paddingBottom: spacing['4xl'],
+        },
+      ]}
       showsVerticalScrollIndicator={false}
     >
-      <View style={styles.container}>
-        {/* Profile Card Summary */}
-        <ProfileCard />
+      <View style={[styles.container, { maxWidth: sizes.contentMaxWidth, gap: spacing['2xl'] }]}>
+        {/* Header Overview Card */}
+        <View
+          style={[
+            styles.headerCard,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              borderRadius: radii.xl,
+              padding: spacing['2xl'],
+            },
+            shadows.sm,
+          ]}
+        >
+          <View style={[styles.headerCardTop, { gap: spacing.lg }]}>
+            <Avatar name={displayName} size="lg" />
 
-        {/* Header Title & Controls */}
-        <View style={styles.headerRow}>
-          <View>
-            <ThemedText style={[styles.sectionTitle, { color: colors.text }]}>
-              Medical Profile & Health Records
-            </ThemedText>
-            <ThemedText style={[styles.sectionSubtitle, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-              Review your complete health background, verified clinical results, and personal demographics.
-            </ThemedText>
-          </View>
+            <View style={styles.headerInfo}>
+              <View style={[styles.nameRow, { gap: spacing.md }]}>
+                <ThemedText variant="h1" numberOfLines={1}>
+                  {displayName}
+                </ThemedText>
+                <Badge
+                  tone="primary"
+                  label={`ID: ${internalPatientId ? internalPatientId.slice(0, 8) + '...' : 'Verified'}`}
+                  size="sm"
+                />
+              </View>
 
-          <View style={styles.headerActions}>
+              <ThemedText variant="small" color="textMuted">
+                Patient Account • Clinical Record & Medical Health Overview
+              </ThemedText>
+            </View>
+
             <Pressable
               onPress={handleRefresh}
               disabled={isRefreshing}
-              style={({ pressed }) => [
-                styles.syncButton,
-                { borderColor: isDark ? '#334155' : '#CBD5E1' },
-                pressed && { opacity: 0.7 },
+              style={({ pressed, hovered }: any) => [
+                styles.syncBtn,
+                {
+                  borderColor: hovered ? colors.primaryBorder : colors.border,
+                  backgroundColor: pressed || hovered ? colors.surfaceMuted : colors.surfaceSubtle,
+                  borderRadius: radii.md,
+                  paddingHorizontal: spacing.lg,
+                  paddingVertical: spacing.sm,
+                  gap: spacing.sm,
+                },
               ]}
+              accessibilityRole="button"
+              accessibilityLabel="Sync profile from server"
             >
               {isRefreshing ? (
-                <ActivityIndicator size="small" color="#3B82F6" />
+                <ActivityIndicator size="small" color={colors.primary} />
               ) : (
-                <ThemedText style={styles.syncButtonText}>🔄 Sync Server</ThemedText>
+                <>
+                  <AppIcon name="sync" size={sizes.iconSm} color="primary" />
+                  <ThemedText variant="smallBold" color="primary">
+                    Sync Server
+                  </ThemedText>
+                </>
               )}
             </Pressable>
+          </View>
 
-            {!isDesktop && (
-              <Pressable
-                onPress={() => logout()}
-                style={({ pressed }) => [
-                  styles.signOutButtonMobile,
-                  { borderColor: isDark ? '#334155' : '#CBD5E1' },
-                  pressed && { opacity: 0.7 },
-                ]}
-              >
-                <ThemedText style={styles.signOutButtonText}>Sign Out</ThemedText>
-              </Pressable>
-            )}
+          {/* Completeness bar */}
+          <View style={[styles.completenessSection, { marginTop: spacing.xl, gap: spacing.xs }]}>
+            <View style={styles.completenessRow}>
+              <ThemedText variant="smallBold">Profile Completeness</ThemedText>
+              <ThemedText variant="smallBold" color="primary">
+                {Math.round(completeness * 100)}%
+              </ThemedText>
+            </View>
+            <ProgressBar value={completeness} tone="primary" />
           </View>
         </View>
 
-        {/* Filter Tabs & Search Bar */}
-        <View style={styles.controlsRow}>
-          <View style={styles.tabsRow}>
-            {(['all', 'identity', 'medical', 'clinical'] as const).map((sec) => {
-              const isActive = selectedSection === sec;
-              const label =
-                sec === 'all'
-                  ? 'All Records (28)'
-                  : sec === 'identity'
-                    ? 'Identity & Contacts'
-                    : sec === 'medical'
-                      ? 'Medical Background'
-                      : 'Clinical Records';
-
+        {/* Filter Controls & Search */}
+        <View style={[styles.controlsRow, { gap: spacing.md }]}>
+          <View style={[styles.tabsRow, { gap: spacing.sm }]}>
+            {(
+              [
+                { id: 'all', label: 'All' },
+                { id: 'personal', label: 'Personal' },
+                { id: 'medical', label: 'Medical History' },
+                { id: 'clinical', label: 'Clinical Records' },
+                { id: 'settings', label: 'Settings' },
+              ] as const
+            ).map((tab) => {
+              const isActive = selectedSection === tab.id;
               return (
                 <Pressable
-                  key={sec}
-                  onPress={() => setSelectedSection(sec)}
-                  style={({ pressed }) => [
+                  key={tab.id}
+                  onPress={() => setSelectedSection(tab.id)}
+                  style={({ pressed, hovered }: any) => [
                     styles.tabButton,
-                    isActive && styles.tabButtonActive,
-                    { borderColor: isDark ? '#334155' : '#E2E8F0' },
-                    pressed && { opacity: 0.8 },
+                    {
+                      borderRadius: radii.full,
+                      borderColor: isActive
+                        ? colors.primary
+                        : hovered
+                          ? colors.borderDark
+                          : colors.border,
+                      backgroundColor: isActive
+                        ? colors.primary
+                        : pressed || hovered
+                          ? colors.surfaceMuted
+                          : colors.card,
+                      paddingHorizontal: spacing.lg,
+                      paddingVertical: spacing.sm,
+                    },
                   ]}
+                  accessibilityRole="button"
                 >
                   <ThemedText
-                    style={[
-                      styles.tabButtonText,
-                      isActive ? styles.tabButtonTextActive : { color: isDark ? '#94A3B8' : '#64748B' },
-                    ]}
+                    variant="smallBold"
+                    style={{ color: isActive ? colors.onPrimary : colors.textSecondary }}
                   >
-                    {label}
+                    {tab.label}
                   </ThemedText>
                 </Pressable>
               );
             })}
           </View>
 
-          <View style={[styles.searchBox, { borderColor: isDark ? '#334155' : '#CBD5E1' }]}>
-            <ThemedText style={{ fontSize: 16 }}>🔍</ThemedText>
+          <View
+            style={[
+              styles.searchBox,
+              {
+                borderColor: colors.border,
+                backgroundColor: colors.card,
+                borderRadius: radii.md,
+                paddingHorizontal: spacing.md,
+                paddingVertical: spacing.sm,
+                gap: spacing.sm,
+              },
+            ]}
+          >
+            <AppIcon name="search" size={sizes.iconSm} color="textMuted" />
             <TextInput
               style={[styles.searchInput, { color: colors.text }]}
               value={searchQuery}
               onChangeText={setSearchQuery}
-              placeholder="Search medical categories..."
-              placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
+              placeholder="Search profile sections..."
+              placeholderTextColor={colors.textMuted}
             />
             {searchQuery.length > 0 && (
-              <Pressable onPress={() => setSearchQuery('')}>
-                <ThemedText style={{ color: '#94A3B8', fontWeight: '700' }}>✕</ThemedText>
+              <Pressable
+                onPress={() => setSearchQuery('')}
+                accessibilityRole="button"
+                accessibilityLabel="Clear search"
+              >
+                <AppIcon name="close" size={sizes.iconSm} color="textMuted" />
               </Pressable>
             )}
           </View>
         </View>
 
-        {/* Categories Responsive Grid */}
-        <View
-          style={[
-            styles.grid,
-            isDesktop
-              ? styles.grid3Col
-              : isTablet
-                ? styles.grid2Col
-                : styles.grid1Col,
-          ]}
-        >
+        {/* Section Cards Responsive Grid */}
+        <View style={[styles.grid, { gap: spacing.lg }]}>
           {filteredCategories.map((cat) => {
             const countValue = cat.countKey && counts ? counts[cat.countKey] : null;
 
@@ -632,51 +738,55 @@ export default function ProfileScreenWeb() {
               <Pressable
                 key={cat.id}
                 onPress={() => navigation.navigate('Main', { screen: cat.screen })}
-                style={({ pressed }) => [
+                style={({ pressed, hovered }: any) => [
                   styles.categoryCard,
+                  cardWidthStyle,
                   {
-                    backgroundColor: isDark ? '#1E293B' : '#FFFFFF',
-                    borderColor: isDark ? '#334155' : '#E2E8F0',
+                    backgroundColor: colors.card,
+                    borderColor: hovered ? colors.primaryBorder : colors.border,
+                    borderRadius: radii.lg,
+                    padding: spacing.xl,
+                    gap: spacing.md,
                   },
-                  pressed && { opacity: 0.82, transform: [{ scale: 0.99 }] },
+                  shadows.sm,
+                  (pressed || hovered) && {
+                    backgroundColor: hovered ? colors.surfaceMuted : colors.card,
+                  },
                 ]}
+                accessibilityRole="button"
+                accessibilityLabel={`${cat.title}: ${cat.subtitle}`}
               >
                 <View style={styles.cardTop}>
-                  <View style={styles.cardIconCircle}>
-                    <ThemedText style={{ fontSize: 22 }}>{cat.icon}</ThemedText>
+                  <View
+                    style={[
+                      styles.cardIconCircle,
+                      {
+                        width: sizes.controlLg,
+                        height: sizes.controlLg,
+                        borderRadius: radii.md,
+                        backgroundColor: colors.primaryLight,
+                      },
+                    ]}
+                  >
+                    <AppIcon name={cat.icon} size={sizes.iconMd} color="primary" />
                   </View>
+
                   {countValue !== null ? (
-                    <View
-                      style={[
-                        styles.countBadge,
-                        {
-                          backgroundColor:
-                            countValue > 0 ? 'rgba(59, 130, 246, 0.12)' : isDark ? '#334155' : '#F1F5F9',
-                        },
-                      ]}
-                    >
-                      <ThemedText
-                        style={[
-                          styles.countBadgeText,
-                          { color: countValue > 0 ? '#3B82F6' : isDark ? '#94A3B8' : '#64748B' },
-                        ]}
-                      >
-                        {countValue} {countValue === 1 ? 'record' : 'records'}
-                      </ThemedText>
-                    </View>
+                    <Badge
+                      tone={countValue > 0 ? 'primary' : 'neutral'}
+                      label={`${countValue} ${countValue === 1 ? 'record' : 'records'}`}
+                      size="sm"
+                    />
                   ) : (
-                    <ThemedText style={styles.openArrow}>→</ThemedText>
+                    <AppIcon name="forward" size={sizes.iconSm} color="textLight" />
                   )}
                 </View>
 
-                <View style={styles.cardContent}>
-                  <ThemedText style={[styles.cardTitle, { color: colors.text }]} numberOfLines={1}>
+                <View style={[styles.cardContent, { gap: spacing.xs }]}>
+                  <ThemedText variant="bodyBold" numberOfLines={1}>
                     {cat.title}
                   </ThemedText>
-                  <ThemedText
-                    style={[styles.cardSubtitle, { color: isDark ? '#94A3B8' : '#64748B' }]}
-                    numberOfLines={2}
-                  >
+                  <ThemedText variant="small" color="textMuted" numberOfLines={2}>
                     {cat.subtitle}
                   </ThemedText>
                 </View>
@@ -695,130 +805,77 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   scrollContent: {
-    paddingVertical: 24,
-    paddingHorizontal: 20,
+    flexGrow: 1,
   },
   container: {
-    maxWidth: 1280,
     width: '100%',
-    marginHorizontal: 'auto',
-    gap: 24,
+    alignSelf: 'center',
   },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    flexWrap: 'wrap',
-    gap: 16,
-  },
-  sectionTitle: {
-    fontSize: 26,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-  },
-  sectionSubtitle: {
-    fontSize: 14,
-    marginTop: 4,
-    maxWidth: 640,
-  },
-  syncButton: {
+  headerCard: {
     borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
   },
-  syncButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#3B82F6',
-  },
-  headerActions: {
+  headerCardTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    flexWrap: 'wrap',
   },
-  signOutButtonMobile: {
+  headerInfo: {
+    flex: 1,
+    minWidth: 240,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  syncBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
     borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
   },
-  signOutButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#EF4444',
+  completenessSection: {
+    width: '100%',
+  },
+  completenessRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   controlsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     flexWrap: 'wrap',
-    gap: 14,
   },
   tabsRow: {
     flexDirection: 'row',
-    gap: 8,
     flexWrap: 'wrap',
+    alignItems: 'center',
   },
   tabButton: {
     borderWidth: 1,
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-  },
-  tabButtonActive: {
-    backgroundColor: '#3B82F6',
-    borderColor: '#3B82F6',
-  },
-  tabButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  tabButtonTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '700',
   },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
     borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
     minWidth: 260,
+    flex: 1,
+    maxWidth: 360,
   },
   searchInput: {
     flex: 1,
-    fontSize: 13,
+    padding: 0,
+    borderWidth: 0,
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 16,
-  },
-  grid3Col: {
-    // 3 cards per row: each gets ~32%
-  },
-  grid2Col: {
-    // 2 cards per row
-  },
-  grid1Col: {
-    // 1 card per row
   },
   categoryCard: {
-    flexBasis: '31%',
+    borderWidth: 1,
     flexGrow: 1,
     minWidth: 280,
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 20,
-    gap: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
-    elevation: 2,
   },
   cardTop: {
     flexDirection: 'row',
@@ -826,35 +883,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cardIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: 'rgba(59, 130, 246, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  countBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  countBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  openArrow: {
-    fontSize: 18,
-    color: '#94A3B8',
-  },
   cardContent: {
-    gap: 4,
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  cardSubtitle: {
-    fontSize: 13,
-    lineHeight: 18,
+    flex: 1,
   },
 });
