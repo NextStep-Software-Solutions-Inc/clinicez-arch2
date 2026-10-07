@@ -16,8 +16,8 @@ public class CorsPolicyTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                { "Cors:AllowedOrigins:0", "https://clinicez-portal-pro.vercel.app" },
-                { "Facility:BaseDomain", "clinicez.net" }
+                { "Cors:AllowedOrigins:0", "https://portal-preview.vercel.app" },
+                { "Facility:BaseDomain", "example.com" }
             })
             .Build();
 
@@ -30,15 +30,15 @@ public class CorsPolicyTests
     }
 
     [Theory]
-    [InlineData("https://clinicez.net")]
-    [InlineData("https://v2.clinicez.net")]
-    [InlineData("https://clinic.clinicez.net")]
-    [InlineData("https://lab.clinicez.net")]
-    [InlineData("https://pharmacy.clinicez.net")]
-    [InlineData("https://org.clinicez.net")]
-    [InlineData("https://portal.clinicez.net")]
-    [InlineData("https://sub.v2.clinicez.net")]
-    [InlineData("https://clinicez-portal-pro.vercel.app")]
+    [InlineData("https://example.com")]
+    [InlineData("https://v2.example.com")]
+    [InlineData("https://clinic.example.com")]
+    [InlineData("https://lab.example.com")]
+    [InlineData("https://pharmacy.example.com")]
+    [InlineData("https://org.example.com")]
+    [InlineData("https://portal.example.com")]
+    [InlineData("https://sub.v2.example.com")]
+    [InlineData("https://portal-preview.vercel.app")]
     public void ProductionPolicy_AllowsValidOriginsAndSubdomains(string origin)
     {
         Assert.NotNull(_productionPolicy);
@@ -47,12 +47,12 @@ public class CorsPolicyTests
     }
 
     [Theory]
-    [InlineData("https://clinicez.ph")]
-    [InlineData("https://clinic.clinicez.ph")]
-    [InlineData("https://evil-clinicez.net")]
-    [InlineData("https://notclinicez.net")]
-    [InlineData("https://clinicez.net.attacker.com")]
-    [InlineData("https://clinicez.ph.attacker.com")]
+    [InlineData("https://example.ph")]
+    [InlineData("https://clinic.example.ph")]
+    [InlineData("https://evil-example.com")]
+    [InlineData("https://notexample.com")]
+    [InlineData("https://example.com.attacker.com")]
+    [InlineData("https://example.ph.attacker.com")]
     [InlineData("https://malicious.com")]
     [InlineData("http://untrusted-site.com")]
     [InlineData("")]

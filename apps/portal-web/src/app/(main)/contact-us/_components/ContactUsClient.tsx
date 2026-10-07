@@ -1,6 +1,7 @@
 "use client";
 
 import { Mail, MapPin, Phone } from "lucide-react";
+import { siteEmails } from "@/config/site";
 
 export function ContactUsClient() {
   return (
@@ -42,8 +43,14 @@ export function ContactUsClient() {
             <div>
               <h3 className="text-xl font-bold mb-2">Email Us</h3>
               <p className="text-muted-foreground leading-relaxed">
-                connect@nextstep-software.com<br />
-                sales@nextstep-software.com
+                {[siteEmails.contact, siteEmails.sales]
+                  .filter((email): email is string => Boolean(email))
+                  .map((email, index) => (
+                    <span key={email}>
+                      {index > 0 && <br />}
+                      {email}
+                    </span>
+                  ))}
               </p>
             </div>
           </div>

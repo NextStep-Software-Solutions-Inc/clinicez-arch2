@@ -1,36 +1,18 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
-import { safeAwait, ApiResponse, ApiError, resolveTenantContext } from '@shared/safe';
+import { safeAwait, ApiResponse, ApiError, resolveTenantContext, resolveServiceApiUrl } from '@shared/safe';
 
 const resolveDefaultBaseUrl = (fallbackPort: number = 5245): string => {
-  if (typeof window !== 'undefined' && window.location?.hostname) {
-    const hostname = window.location.hostname.toLowerCase();
-    const protocol = window.location.protocol || 'http:';
+  const hasBrowserLocation = typeof window !== 'undefined' && !!window.location?.hostname;
 
-    // Local development or direct IP access uses explicit dev port
-    if (
-      hostname === 'localhost' ||
-      hostname.endsWith('.localhost') ||
-      hostname.endsWith('.lvh.me') ||
-      /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)
-    ) {
-      return `${protocol}//${hostname}:${fallbackPort}`;
-    }
-
-    // Dev environment on clinicez.net or nextstep-software.com defaults to deployed dev clinic API
-    if (hostname.endsWith('.dev.clinicez.net') || hostname.endsWith('.dev.nextstep-software.com')) {
-      return 'https://clinicez-clinic.api.dev.nextstep-software.com';
-    }
-
-    // Subdomain-based cloud or enterprise deployment (e.g. <facility>.clinic.<baseDomain> or clinic.<baseDomain>)
-    const match = hostname.match(/^(?:[a-z0-9-]+\.)?clinic\.(.+)$/);
-    if (match) {
-      return `https://clinic-api.${match[1]}`;
-    }
-
-    // Default to same-origin for ingress reverse-proxy routing
-    return `${protocol}//${hostname}`;
-  }
-  return `http://localhost:${fallbackPort}`;
+  // Every value below is a literal `process.env.EXPO_PUBLIC_*` read so Metro inlines it at build time.
+  return resolveServiceApiUrl({
+    hostname: hasBrowserLocation ? window.location.hostname : null,
+    protocol: hasBrowserLocation ? window.location.protocol : null,
+    serviceSubdomain: process.env.EXPO_PUBLIC_SERVICE_SUBDOMAIN,
+    baseDomain: process.env.EXPO_PUBLIC_BASE_DOMAIN,
+    template: process.env.EXPO_PUBLIC_API_URL_TEMPLATE,
+    fallbackPort,
+  });
 };
 
 export const CLINIC_BASE_URL = (

@@ -645,7 +645,7 @@ export default function BranchManagementClient() {
             <div className="col-span-1 space-y-1">
               <Label className="text-xs font-semibold">Contact Email</Label>
               <Input
-                placeholder="e.g. qc.branch@clinicez.ph"
+                placeholder="e.g. qc.branch@example.com"
                 value={formEmail}
                 onChange={e => setFormEmail(e.target.value)}
                 className="h-9 rounded-xl text-xs"

@@ -1,5 +1,6 @@
 import { PaymentReceipt, BillingInfo } from "@/services/billing.service"
 import { toast } from "sonner"
+import { siteEmails } from "@/config/site";
 
 export const printReceipt = (
   receipt: PaymentReceipt,
@@ -243,7 +244,7 @@ export const printReceipt = (
           </div>
 
           <div class="footer">
-            <p>Thank you for subscribing to ClinicEZ! For billing support, email billing@nextstep-software.com.</p>
+            <p>Thank you for subscribing to ClinicEZ!${siteEmails.billing ? ` For billing support, email ${siteEmails.billing}.` : ""}</p>
             <p style="margin-top: 8px;">&copy; ${new Date().getFullYear()} NextStep Software Corporation. All rights reserved.</p>
           </div>
         </div>

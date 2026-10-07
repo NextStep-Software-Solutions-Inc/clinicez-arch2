@@ -24,10 +24,10 @@ on:
         type: string
 
 env:
-  IMAGE_NAME: clinicez-philhealth-proxy
+  IMAGE_NAME: philhealth-proxy
   IMAGE_TAG: dev
-  CONTAINER_NAME: clinicez-philhealth-proxy
-  DEPLOY_DIR: "/opt/docker-stack/clinicez-philhealth-proxy"
+  CONTAINER_NAME: philhealth-proxy
+  DEPLOY_DIR: "/opt/docker-stack/philhealth-proxy"
   ENVIRONMENT: Development
 
 jobs:
@@ -80,7 +80,7 @@ jobs:
     - name: Create .env file
       env:
         ASPNETCORE_ENVIRONMENT: ${{ env.ENVIRONMENT }}
-        PORTAL_API_BASE_URL: ${{ vars.PORTAL_API_BASE_URL || 'http://clinicez-portal-api:8080' }}
+        PORTAL_API_BASE_URL: ${{ vars.PORTAL_API_BASE_URL || 'http://portal-api:8080' }}
         IMAGE_NAME: ${{ env.IMAGE_NAME }}
         IMAGE_TAG: ${{ env.IMAGE_TAG }}
       run: |
@@ -142,6 +142,9 @@ jobs:
           docker load < philhealth-proxy.tar.gz
 
           echo "==> Deploying with docker compose..."
+          # One-time migration: remove the container left over from the previous prefixed naming scheme
+          docker rm -f clinicez-philhealth-proxy 2>/dev/null || true
+
           docker compose up -d --force-recreate
 
           echo "==> Cleaning up old images..."

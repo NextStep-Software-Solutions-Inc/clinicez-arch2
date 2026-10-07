@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { usePlans } from "@/hooks/useBilling";
+import { salesContactHref } from "@/config/site";
 
 export function PricingClient({ 
   onAction, 
@@ -93,7 +94,7 @@ export function PricingClient({
                   if (tier.requiresCheckout && onAction) {
                     onAction(tier.id);
                   } else if (tier.id === "enterprise") {
-                    window.location.href = "mailto:sales@clinicez.net";
+                    window.location.href = salesContactHref();
                   }
                 }}
                 disabled={loadingTier === tier.id || (!tier.requiresCheckout && tier.id !== "enterprise" && !onAction)}

@@ -101,7 +101,7 @@ public static class DependencyInjection
                 var host = configuration["RabbitMq:Host"];
                 if (string.IsNullOrWhiteSpace(host) || host == "localhost")
                 {
-                    host = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true" ? "clinicez-rabbitmq" : (string.IsNullOrWhiteSpace(host) ? "localhost" : host);
+                    host = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true" ? "rabbitmq" : (string.IsNullOrWhiteSpace(host) ? "localhost" : host);
                 }
 
                 cfg.Host(host, configuration["RabbitMq:VirtualHost"] ?? "/", h =>

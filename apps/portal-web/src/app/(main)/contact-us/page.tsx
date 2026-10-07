@@ -1,5 +1,6 @@
 import { Metadata } from "next";
 import { ContactUsClient } from "./_components/ContactUsClient";
+import { absoluteUrl } from "@/config/site";
 
 export const metadata: Metadata = {
   title: "Contact Us | Clinic EZ",
@@ -8,11 +9,11 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Contact Us | Clinic EZ",
     description: "Get in touch with the Clinic EZ team.",
-    url: "https://clinicez.net/contact-us",
+    url: absoluteUrl("/contact-us"),
     siteName: "Clinic EZ",
     images: [
       {
-        url: "https://clinicez.net/og-contact.png",
+        url: absoluteUrl("/og-contact.png"),
         width: 1200,
         height: 630,
       }
@@ -24,7 +25,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Contact Us | Clinic EZ",
     description: "Get in touch with the Clinic EZ team.",
-    images: ["https://clinicez.net/og-contact.png"],
+    images: [absoluteUrl("/og-contact.png")],
   },
 };
 

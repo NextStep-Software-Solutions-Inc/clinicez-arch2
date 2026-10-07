@@ -33,13 +33,7 @@ import {
   IconInfoCircle,
 } from "@tabler/icons-react";
 import { getConsoleBaseDomain } from "@/utils/domain";
-
-const APP_SUBDOMAINS: Record<string, string> = {
-  Clinic: "clinic",
-  Laboratory: "lab",
-  Pharmacy: "pharmacy",
-  Organization: "org",
-};
+import { APP_SUBDOMAINS } from "@/config/site";
 
 interface FacilityOnboardingWizardProps {
   initialType?: "clinic" | "laboratory" | "pharmacy" | "organization" | null;
@@ -750,7 +744,7 @@ export default function FacilityOnboardingWizard({
                   <Input
                     id="contact-mail"
                     type="email"
-                    placeholder="e.g. clinic.bgc@clinicez.ph"
+                    placeholder="e.g. clinic.bgc@example.com"
                     value={contactEmail}
                     onChange={(e) => setContactEmail(e.target.value)}
                     className="h-9 text-xs rounded-xl"

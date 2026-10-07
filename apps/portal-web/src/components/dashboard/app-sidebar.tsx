@@ -46,7 +46,7 @@ export function AppSidebar({
   const data = {
     user: user || {
       name: "Dr. Admin",
-      email: "admin@clinicez.net",
+      email: "",
       avatar: "/avatars/shadcn.jpg",
     },
     navMain: [

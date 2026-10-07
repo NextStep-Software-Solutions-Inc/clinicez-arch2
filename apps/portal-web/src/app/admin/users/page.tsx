@@ -285,7 +285,7 @@ export default function AdminUsersPage() {
                 <Input
                   required
                   type="email"
-                  placeholder="e.g. user@clinicez.net"
+                  placeholder="e.g. user@example.com"
                   value={formData.email}
                   onChange={e => setFormData(prev => ({ ...prev, email: e.target.value }))}
                   className="rounded-xl"

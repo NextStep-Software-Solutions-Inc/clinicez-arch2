@@ -20,6 +20,9 @@ import {
   FileCheck,
 } from "lucide-react";
 
+// Public base URL of the object storage / CDN used for uploaded documents (configure in Vercel).
+const storagePublicUrl = (process.env.NEXT_PUBLIC_STORAGE_PUBLIC_URL ?? "").replace(/\/+$/, "");
+
 interface StudentIntakeClientProps {
   tenantSlug: string;
   tenantName: string;
@@ -165,7 +168,7 @@ export default function StudentIntakeClient({
         recordType: d.recordType,
         title: d.title,
         fileName: d.fileName,
-        storageUri: `https://storage.clinicez.ph/school-uploads/${studentId.trim()}/${d.fileName}`,
+        storageUri: [storagePublicUrl, "school-uploads", studentId.trim(), d.fileName].filter(Boolean).join("/"),
         notes: d.notes,
       })),
     };

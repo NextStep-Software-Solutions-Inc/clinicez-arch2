@@ -24,10 +24,10 @@ on:
         type: string
 
 env:
-  IMAGE_NAME: clinicez-organization-api
+  IMAGE_NAME: organization-api
   IMAGE_TAG: dev
-  CONTAINER_NAME: clinicez-organization-api
-  DEPLOY_DIR: "/opt/docker-stack/clinicez-organization-api"
+  CONTAINER_NAME: organization-api
+  DEPLOY_DIR: "/opt/docker-stack/organization-api"
   ENVIRONMENT: Development
 
 jobs:
@@ -86,9 +86,15 @@ jobs:
         RABBITMQ_PASSWORD: ${{ secrets.RABBITMQ_PASSWORD }}
         IMAGE_NAME: ${{ env.IMAGE_NAME }}
         IMAGE_TAG: ${{ env.IMAGE_TAG }}
-        BASE_DOMAIN: ${{ secrets.BASE_DOMAIN || 'dev.clinicez.net' }}
+        BASE_DOMAIN: ${{ secrets.BASE_DOMAIN || vars.BASE_DOMAIN }}
+        CORS_ALLOWED_DOMAINS: ${{ secrets.CORS_ALLOWED_DOMAINS || vars.CORS_ALLOWED_DOMAINS }}
+        CORS_ALLOWED_ORIGINS: ${{ secrets.CORS_ALLOWED_ORIGINS || vars.CORS_ALLOWED_ORIGINS }}
       run: |
-        for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING RABBITMQ_HOST RABBITMQ_USERNAME RABBITMQ_PASSWORD IMAGE_NAME IMAGE_TAG BASE_DOMAIN; do
+        if [ -z "$BASE_DOMAIN" ]; then
+          echo "::error::BASE_DOMAIN is not configured. Set it as a GitHub secret or variable (Settings -> Secrets and variables -> Actions)."
+          exit 1
+        fi
+        for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING RABBITMQ_HOST RABBITMQ_USERNAME RABBITMQ_PASSWORD IMAGE_NAME IMAGE_TAG BASE_DOMAIN CORS_ALLOWED_DOMAINS CORS_ALLOWED_ORIGINS; do
           echo "$var=$(printenv $var)" >> services/organization-api/.env
         done
 
@@ -146,6 +152,9 @@ jobs:
           docker load < organization-api.tar.gz
 
           echo "==> Deploying with docker compose..."
+          # One-time migration: remove the container left over from the previous prefixed naming scheme
+          docker rm -f clinicez-organization-api 2>/dev/null || true
+
           docker compose up -d --force-recreate
 
           echo "==> Cleaning up old images..."

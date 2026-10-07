@@ -15,6 +15,9 @@ const openUrl = async (url: string) => {
   }
 };
 
+// Support mailbox for this deployment (configure via EXPO_PUBLIC_SUPPORT_EMAIL).
+const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL ?? '';
+
 export default function AboutSettingsScreen() {
   return (
     <ScrollView
@@ -55,7 +58,7 @@ export default function AboutSettingsScreen() {
           icon={{ android: 'support_agent', ios: 'person.fill.questionmark' }}
           iconColor="#10B981"
           right={{ type: 'chevron' }}
-          onPress={() => openUrl('mailto:support@clinicez.net?subject=Clinic EZ%20Support')}
+          onPress={() => SUPPORT_EMAIL && openUrl(`mailto:${SUPPORT_EMAIL}?subject=Clinic EZ%20Support`)}
         />
         <SettingsRow
           title="Report a Bug"
@@ -64,7 +67,7 @@ export default function AboutSettingsScreen() {
           right={{ type: 'chevron' }}
           onPress={() =>
             openUrl(
-              `mailto:support@clinicez.net?subject=Bug%20Report%20v${APP_VERSION}&body=Describe%20the%20issue%3A%0A%0ASteps%20to%20reproduce%3A%0A%0AExpected%20behavior%3A`,
+              `mailto:${SUPPORT_EMAIL}?subject=Bug%20Report%20v${APP_VERSION}&body=Describe%20the%20issue%3A%0A%0ASteps%20to%20reproduce%3A%0A%0AExpected%20behavior%3A`,
             )
           }
         />

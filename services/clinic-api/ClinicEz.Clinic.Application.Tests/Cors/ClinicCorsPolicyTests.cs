@@ -14,9 +14,9 @@ public class ClinicCorsPolicyTests
 {
     [Theory]
     [InlineData("http://localhost:8081")]
-    [InlineData("https://clinic.dev.clinicez.net")]
-    [InlineData("https://tenant1.clinic.dev.clinicez.net")]
-    [InlineData("https://clinicez-clinic.api.dev.nextstep-software.com")]
+    [InlineData("https://clinic.dev.example.com")]
+    [InlineData("https://tenant1.clinic.dev.example.com")]
+    [InlineData("https://clinic.api.dev.partner.example.org")]
     [InlineData("https://any-dev-origin.example.org")]
     [InlineData("https://custom-preview-branch.vercel.app")]
     public void DevelopmentEnvironment_AllowsAnyOrigin(string origin)
@@ -40,12 +40,12 @@ public class ClinicCorsPolicyTests
     }
 
     [Theory]
-    [InlineData("https://clinicez.net")]
-    [InlineData("https://clinic.clinicez.net")]
-    [InlineData("https://tenant1.clinic.clinicez.net")]
-    [InlineData("https://nextstep-software.com")]
-    [InlineData("https://dev.nextstep-software.com")]
-    [InlineData("https://clinicez-clinic.api.dev.nextstep-software.com")]
+    [InlineData("https://example.com")]
+    [InlineData("https://clinic.example.com")]
+    [InlineData("https://tenant1.clinic.example.com")]
+    [InlineData("https://partner.example.org")]
+    [InlineData("https://dev.partner.example.org")]
+    [InlineData("https://clinic.api.dev.partner.example.org")]
     [InlineData("https://preview.vercel.app")]
     [InlineData("http://localhost:8081")]
     public void ProductionPolicy_AllowsTrustedOrigins(string origin)
@@ -54,8 +54,8 @@ public class ClinicCorsPolicyTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                { "Facility:BaseDomain", "clinicez.net" },
-                { "Cors:AllowedDomains:0", "nextstep-software.com" }
+                { "Facility:BaseDomain", "example.com" },
+                { "Cors:AllowedDomains:0", "partner.example.org" }
             })
             .Build();
 
@@ -76,7 +76,7 @@ public class ClinicCorsPolicyTests
 
     [Theory]
     [InlineData("https://evil-hacker.com")]
-    [InlineData("https://attacker-clinicez.net.org")]
+    [InlineData("https://attacker-example.com.org")]
     [InlineData("http://untrusted-site.io")]
     [InlineData("")]
     public void ProductionPolicy_RejectsUntrustedOrigins(string origin)
@@ -85,8 +85,8 @@ public class ClinicCorsPolicyTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                { "Facility:BaseDomain", "clinicez.net" },
-                { "Cors:AllowedDomains:0", "nextstep-software.com" }
+                { "Facility:BaseDomain", "example.com" },
+                { "Cors:AllowedDomains:0", "partner.example.org" }
             })
             .Build();
 

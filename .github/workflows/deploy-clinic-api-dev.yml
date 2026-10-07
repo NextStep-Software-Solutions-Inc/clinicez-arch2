@@ -24,10 +24,10 @@ on:
         type: string
 
 env:
-  IMAGE_NAME: clinicez-clinic-api
+  IMAGE_NAME: clinic-api
   IMAGE_TAG: dev
-  CONTAINER_NAME: clinicez-clinic-api
-  DEPLOY_DIR: "/opt/docker-stack/clinicez-clinic-api"
+  CONTAINER_NAME: clinic-api
+  DEPLOY_DIR: "/opt/docker-stack/clinic-api"
   ENVIRONMENT: Development
 
 jobs:
@@ -86,10 +86,17 @@ jobs:
         RABBITMQ_PASSWORD: ${{ secrets.RABBITMQ_PASSWORD }}
         IMAGE_NAME: ${{ env.IMAGE_NAME }}
         IMAGE_TAG: ${{ env.IMAGE_TAG }}
-        BASE_DOMAIN: ${{ secrets.BASE_DOMAIN || 'dev.clinicez.net' }}
-        SERVICES_PORTAL_API_URL: ${{ secrets.SERVICES_PORTAL_API_URL || 'http://clinicez-portal-api:8080' }}
+        BASE_DOMAIN: ${{ secrets.BASE_DOMAIN || vars.BASE_DOMAIN }}
+        CORS_ALLOWED_DOMAINS: ${{ secrets.CORS_ALLOWED_DOMAINS || vars.CORS_ALLOWED_DOMAINS }}
+        CORS_ALLOWED_ORIGINS: ${{ secrets.CORS_ALLOWED_ORIGINS || vars.CORS_ALLOWED_ORIGINS }}
+        VERIFICATION_BASE_URL: ${{ vars.VERIFICATION_BASE_URL }}
+        SERVICES_PORTAL_API_URL: ${{ secrets.SERVICES_PORTAL_API_URL || vars.SERVICES_PORTAL_API_URL || 'http://portal-api:8080' }}
       run: |
-        for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING RABBITMQ_HOST RABBITMQ_USERNAME RABBITMQ_PASSWORD IMAGE_NAME IMAGE_TAG BASE_DOMAIN SERVICES_PORTAL_API_URL; do
+        if [ -z "$BASE_DOMAIN" ]; then
+          echo "::error::BASE_DOMAIN is not configured. Set it as a GitHub secret or variable (Settings -> Secrets and variables -> Actions)."
+          exit 1
+        fi
+        for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING RABBITMQ_HOST RABBITMQ_USERNAME RABBITMQ_PASSWORD IMAGE_NAME IMAGE_TAG BASE_DOMAIN CORS_ALLOWED_DOMAINS CORS_ALLOWED_ORIGINS VERIFICATION_BASE_URL SERVICES_PORTAL_API_URL; do
           echo "$var=$(printenv $var)" >> services/clinic-api/.env
         done
 
@@ -147,6 +154,9 @@ jobs:
           docker load < clinic-api.tar.gz
 
           echo "==> Deploying with docker compose..."
+          # One-time migration: remove the container left over from the previous prefixed naming scheme
+          docker rm -f clinicez-clinic-api 2>/dev/null || true
+
           docker compose up -d --force-recreate
 
           echo "==> Cleaning up old images..."

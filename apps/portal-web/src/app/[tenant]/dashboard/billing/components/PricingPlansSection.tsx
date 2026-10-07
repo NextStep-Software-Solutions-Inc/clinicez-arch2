@@ -1,6 +1,7 @@
 import React from "react"
 import { CheckCircle2, Loader2 } from "lucide-react"
 import { BillingPlan, BillingInfo } from "@/services/billing.service"
+import { salesContactHref } from "@/config/site";
 
 interface PricingPlansSectionProps {
   tiers: BillingPlan[]
@@ -114,7 +115,7 @@ export default function PricingPlansSection({
                   if (tier.requiresCheckout) {
                     handlePlanClick(tier.id)
                   } else if (tier.id === "enterprise") {
-                    window.location.href = "mailto:sales@clinicez.net"
+                    window.location.href = salesContactHref()
                   }
                 }}
                 disabled={isCurrentPlan || isLoading === tier.id || (!tier.requiresCheckout && tier.id !== "enterprise")}

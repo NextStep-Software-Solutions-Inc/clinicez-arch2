@@ -34,6 +34,63 @@ export const ROOT_HOSTNAMES = new Set([
 const STORAGE_KEY_TENANT = 'clinicez_active_tenant';
 const STORAGE_KEY_CLINIC = 'clinicez_active_clinic';
 
+/** Service subdomains used when no override is configured. */
+export const DEFAULT_SERVICE_SUBDOMAINS: readonly string[] = ['clinic', 'lab', 'pharmacy', 'org'];
+
+// `process` is provided by the bundler / runtime (Expo, Next.js, Bun, Node); reads below tolerate its absence.
+declare const process: { env: Record<string, string | undefined> };
+
+/**
+ * Reads the configured service subdomain list (comma separated), e.g. "clinic,lab,pharmacy,org".
+ * Configure via `EXPO_PUBLIC_SERVICE_SUBDOMAINS` (Expo apps) or `NEXT_PUBLIC_SERVICE_SUBDOMAINS` (Next.js).
+ * Each read must stay a literal `process.env.NAME` expression so bundlers can inline the value.
+ */
+function readConfiguredServiceSubdomains(): string | undefined {
+  let value: string | undefined;
+  try {
+    value = process.env.EXPO_PUBLIC_SERVICE_SUBDOMAINS;
+  } catch {
+    // process is not defined in this runtime
+  }
+  if (!value) {
+    try {
+      value = process.env.NEXT_PUBLIC_SERVICE_SUBDOMAINS;
+    } catch {
+      // process is not defined in this runtime
+    }
+  }
+  return value;
+}
+
+/** Parses a comma / whitespace separated list into valid, lowercase, de-duplicated DNS labels. */
+export function parseServiceSubdomains(raw: string | null | undefined): string[] {
+  if (!raw) return [...DEFAULT_SERVICE_SUBDOMAINS];
+  const labels = raw
+    .split(/[\s,;]+/)
+    .map((label) => label.trim().toLowerCase())
+    .filter((label) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(label));
+  return labels.length > 0 ? Array.from(new Set(labels)) : [...DEFAULT_SERVICE_SUBDOMAINS];
+}
+
+/** Returns the service subdomains (clinic, lab, ...) recognised by this deployment. */
+export function getServiceSubdomains(): string[] {
+  return parseServiceSubdomains(readConfiguredServiceSubdomains());
+}
+
+/**
+ * Builds a regex matching `<tenant>.<service>.<baseDomain>` hostnames for the configured services.
+ * Capture groups: 1 = tenant/facility slug, 2 = service subdomain, 3 = base domain.
+ */
+export function buildServiceHostRegex(services: string[] = getServiceSubdomains()): RegExp {
+  const alternatives = services.map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  return new RegExp(`^([a-z0-9-]+)\\.(${alternatives})\\.(.+)$`);
+}
+
+function isReservedSubdomain(label: string): boolean {
+  return RESERVED_SUBDOMAINS.has(label) || getServiceSubdomains().includes(label);
+}
+
+
 /**
  * Checks whether a hostname represents a root or system service entry point
  * rather than a specific tenant instance.
@@ -73,13 +130,14 @@ export function isRootHostname(hostname: string): boolean {
   }
 
   // Service root where the first label is a reserved keyword:
-  // e.g. clinic.dev.example.com, clinic.localhost, lab.example.com, portal.example.com, www.example.com, dev.example.com
-  if (RESERVED_SUBDOMAINS.has(parts[0])) {
+  // e.g. clinic.<baseDomain>, clinic.localhost, lab.example.com, portal.example.com, www.example.com, dev.example.com
+  if (isReservedSubdomain(parts[0])) {
     return true;
   }
 
   // Service roots on local or internal network (e.g. clinic.local, clinic.lan)
-  if (/^(?:clinic|lab|pharmacy|org|portal|dev|admin|api)\.(?:local|internal|lan)$/.test(cleanHost)) {
+  const localServiceLabels = Array.from(new Set([...getServiceSubdomains(), 'portal', 'dev', 'admin', 'api']));
+  if (new RegExp(`^(?:${localServiceLabels.join('|')})\.(?:local|internal|lan)$`).test(cleanHost)) {
     return true;
   }
 
@@ -94,7 +152,7 @@ export function isValidTenantSlug(slug: string | null | undefined): slug is stri
   const clean = slug.trim().toLowerCase();
   if (clean.length < 2 || clean.length > 63) return false;
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(clean)) return false;
-  if (RESERVED_SUBDOMAINS.has(clean)) return false;
+  if (isReservedSubdomain(clean)) return false;
   return true;
 }
 
@@ -115,8 +173,8 @@ export function extractTenantFromHostname(hostname: string): string | null {
 
   let candidate: string | null = null;
 
-  // 1. Nested service on any base domain (e.g. <slug>.(clinic|lab|pharmacy|org).<baseDomain>)
-  const serviceMatch = cleanHost.match(/^([a-z0-9-]+)\.(?:clinic|lab|pharmacy|org)\.(.+)$/);
+  // 1. Nested service on any base domain (e.g. <slug>.<service>.<baseDomain>; services come from getServiceSubdomains())
+  const serviceMatch = cleanHost.match(buildServiceHostRegex());
   // 2. Portal tenant on localhost or virtual host (e.g. <tenant>.localhost or <tenant>.lvh.me)
   const localPortalMatch = cleanHost.match(/^([a-z0-9-]+)\.(?:localhost|lvh\.me)$/);
   // 3. Portal tenant on dev wildcard (e.g. <tenant>.dev.<baseDomain>)
@@ -174,7 +232,7 @@ export function resolveTenantContext(): TenantContext {
   // 1. Subdomain Check (Only if not a recognized root domain)
   if (!isRoot) {
     const cleanHost = hostname.toLowerCase().split(':')[0].trim();
-    const serviceMatch = cleanHost.match(/^([a-z0-9-]+)\.(?:clinic|lab|pharmacy|org)\.(.+)$/);
+    const serviceMatch = cleanHost.match(buildServiceHostRegex());
     const facilitySlug = serviceMatch && isValidTenantSlug(serviceMatch[1]) ? serviceMatch[1] : null;
 
     const subdomainTenant = extractTenantFromHostname(hostname);
@@ -217,7 +275,7 @@ export function resolveTenantContext(): TenantContext {
   }
 
   // 3. Stored Tenant Check
-  // Note: On root domains (e.g. clinic.dev.clinicez.net, clinic.clinicez.net),
+  // Note: On service root domains (e.g. clinic.<baseDomain>),
   // we do not auto-bind storedTenant without explicit user selection, so the bare root
   // correctly displays the "Select Clinic Workspace" screen.
   try {

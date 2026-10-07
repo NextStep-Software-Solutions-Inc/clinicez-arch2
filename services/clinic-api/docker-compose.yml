@@ -4,12 +4,12 @@
 # All secrets are injected via .env written at deploy time by GitHub Actions.
 # No host ports exposed; routed via npm-default (NPM) and connected to data-network.
 
-name: clinicez-clinic-api
+name: clinic-api
 
 services:
   clinic-api:
-    image: ${IMAGE_NAME:-clinicez-clinic-api}:${IMAGE_TAG:-dev}
-    container_name: clinicez-clinic-api
+    image: ${IMAGE_NAME:-clinic-api}:${IMAGE_TAG:-dev}
+    container_name: ${CONTAINER_NAME:-clinic-api}
     labels:
       - "project=clinicez"
       - "environment=dev"
@@ -24,8 +24,11 @@ services:
       - RabbitMq__Host=${RABBITMQ_HOST}
       - RabbitMq__Username=${RABBITMQ_USERNAME}
       - RabbitMq__Password=${RABBITMQ_PASSWORD}
-      - Services__PortalApiUrl=${SERVICES_PORTAL_API_URL:-http://clinicez-portal-api:8080}
-      - Facility__BaseDomain=${BASE_DOMAIN:-dev.clinicez.net}
+      - Services__PortalApiUrl=${SERVICES_PORTAL_API_URL:-http://portal-api:8080}
+      - Facility__BaseDomain=${BASE_DOMAIN:?BASE_DOMAIN must be set}
+      - Cors__AllowedDomains=${CORS_ALLOWED_DOMAINS:-}
+      - Cors__AllowedOrigins=${CORS_ALLOWED_ORIGINS:-}
+      - Verification__BaseUrl=${VERIFICATION_BASE_URL:-}
     restart: unless-stopped
 
 networks:

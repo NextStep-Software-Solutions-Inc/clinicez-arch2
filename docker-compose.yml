@@ -3,7 +3,7 @@ version: '3.8'
 services:
   rabbitmq:
     image: rabbitmq:3-management
-    container_name: clinicez-rabbitmq
+    container_name: ${RABBITMQ_CONTAINER_NAME:-rabbitmq}
     ports:
       - "5672:5672"     # AMQP protocol port
       - "15672:15672"   # Management HTTP UI

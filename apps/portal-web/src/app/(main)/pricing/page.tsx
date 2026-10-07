@@ -1,5 +1,6 @@
 import { Metadata } from "next";
 import { PricingClient } from "./_components/PricingClient";
+import { absoluteUrl } from "@/config/site";
 
 export const metadata: Metadata = {
   title: "Pricing | Clinic EZ",
@@ -8,11 +9,11 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Pricing | Clinic EZ",
     description: "Simple, transparent pricing for healthcare management.",
-    url: "https://clinicez.net/pricing",
+    url: absoluteUrl("/pricing"),
     siteName: "Clinic EZ",
     images: [
       {
-        url: "https://clinicez.net/og-pricing.png",
+        url: absoluteUrl("/og-pricing.png"),
         width: 1200,
         height: 630,
       }
@@ -24,7 +25,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Pricing | Clinic EZ",
     description: "Simple, transparent pricing for healthcare management.",
-    images: ["https://clinicez.net/og-pricing.png"],
+    images: [absoluteUrl("/og-pricing.png")],
   },
 };
 

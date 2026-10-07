@@ -8,6 +8,7 @@ import { LandingWorkflow } from "./_components/LandingWorkflow";
 import { LandingTestimonials } from "./_components/LandingTestimonials";
 import { LandingFAQ } from "./_components/LandingFAQ";
 import { LandingCTA } from "./_components/LandingCTA";
+import { absoluteUrl } from "@/config/site";
 
 export const metadata: Metadata = {
   title: "Clinic EZ | The Modern Healthcare Portal",
@@ -16,11 +17,11 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Clinic EZ | The Modern Healthcare Portal",
     description: "Next-generation clinic management and healthcare administration.",
-    url: "https://clinicez.net",
+    url: absoluteUrl("/"),
     siteName: "Clinic EZ",
     images: [
       {
-        url: "https://clinicez.net/og-image.png",
+        url: absoluteUrl("/og-image.png"),
         width: 1200,
         height: 630,
       }
@@ -32,7 +33,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Clinic EZ | The Modern Healthcare Portal",
     description: "Next-generation clinic management and healthcare administration.",
-    images: ["https://clinicez.net/og-image.png"],
+    images: [absoluteUrl("/og-image.png")],
   },
 };
 

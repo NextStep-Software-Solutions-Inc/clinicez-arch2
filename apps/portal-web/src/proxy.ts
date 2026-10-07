@@ -1,5 +1,7 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
+import { buildServiceHostRegex, getServiceSubdomains } from '@shared/safe/tenant';
+import { APP_SUBDOMAINS } from '@/config/site';
 
 const isProtectedRoute = createRouteMatcher([
     '/:tenant/dashboard(.*)',
@@ -7,9 +9,18 @@ const isProtectedRoute = createRouteMatcher([
     '/admin(.*)'
 ]);
 
+// Generic reserved labels; service subdomains (clinic, lab, ...) are added from configuration
+// (NEXT_PUBLIC_SERVICE_SUBDOMAINS) so they are never treated as tenant slugs.
 const RESERVED_SUBDOMAINS = new Set([
-    'www', 'app', 'api', 'admin', 'clinic', 'lab', 'pharmacy', 'dev', 'portal', 'localhost'
+    'www', 'app', 'api', 'admin', 'dev', 'portal', 'localhost'
 ]);
+
+// Service subdomains recognised by this deployment: NEXT_PUBLIC_SERVICE_SUBDOMAINS plus the per-facility-type names.
+const getKnownServiceSubdomains = (): string[] =>
+    Array.from(new Set([...getServiceSubdomains(), ...Object.values(APP_SUBDOMAINS)]));
+
+const isReservedSubdomain = (label: string): boolean =>
+    RESERVED_SUBDOMAINS.has(label) || getKnownServiceSubdomains().includes(label);
 
 // 60-second in-memory slug existence cache at edge/proxy
 const slugCache = new Map<string, { exists: boolean; timestamp: number }>();
@@ -49,7 +60,7 @@ export default clerkMiddleware(async (auth, req) => {
     let subdomain: string | null = null;
     const cleanHost = hostname.split(':')[0].trim();
 
-    const serviceMatch = cleanHost.match(/^([a-z0-9-]+)\.(?:clinic|lab|pharmacy|org)\.(.+)$/);
+    const serviceMatch = cleanHost.match(buildServiceHostRegex(getKnownServiceSubdomains()));
     const localMatch = cleanHost.match(/^([a-z0-9-]+)\.(?:localhost|lvh\.me)$/);
     const devMatch = cleanHost.match(/^([a-z0-9-]+)\.dev\.(.+)$/);
     const directMatch = cleanHost.match(/^([a-z0-9-]+)\.([a-z0-9-]+\.[a-z0-9-.]+)$/);
@@ -64,7 +75,7 @@ export default clerkMiddleware(async (auth, req) => {
         subdomain = directMatch[1];
     }
 
-    if (subdomain && !RESERVED_SUBDOMAINS.has(subdomain) && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(subdomain)) {
+    if (subdomain && !isReservedSubdomain(subdomain) && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(subdomain)) {
         // Skip API routes or static files if any slipped through matcher
         if (pathname.startsWith('/api') || pathname.startsWith('/_next') || pathname === '/notfound') {
             return NextResponse.next();

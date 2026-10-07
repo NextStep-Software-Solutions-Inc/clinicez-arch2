@@ -385,7 +385,7 @@ export default function PatientsScreen() {
       externalLabName,
       documentType: externalFileType,
       notes: externalNotes,
-      documentUrl: 'https://storage.clinicez.ph/external-labs/lab-result.pdf',
+      documentUrl: [process.env.EXPO_PUBLIC_STORAGE_PUBLIC_URL, 'external-labs', 'lab-result.pdf'].filter(Boolean).join('/'),
       uploadedBy: currentName || undefined
     });
     setAttaching(false);

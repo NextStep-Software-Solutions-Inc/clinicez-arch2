@@ -1,3 +1,4 @@
+using ClinicEz.Shared.Common;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,8 +14,8 @@ public static class CorsExtensions
     /// <summary>
     /// Registers unified CORS policies for ClinicEz microservices.
     /// In Development environments (or when Cors:AllowAnyOrigin is true), all origins are permitted with credentials.
-    /// In Production, trusted wildcards (*.clinicez.net, *.nextstep-software.com, *.vercel.app, localhost) and
-    /// any origins defined in Cors:AllowedOrigins are permitted.
+    /// In Production, the configured Facility:BaseDomain (and its subdomains), Cors:AllowedDomains, *.vercel.app previews,
+    /// localhost and any origins defined in Cors:AllowedOrigins are permitted.
     /// </summary>
     public static IServiceCollection AddClinicEzCors(
         this IServiceCollection services,
@@ -43,7 +44,7 @@ public static class CorsExtensions
             // Production Policy: restrict to trusted company domains and explicitly configured origins
             options.AddPolicy(ProductionPolicyName, policy =>
             {
-                var extraOrigins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+                var extraOrigins = configuration.GetStringList("Cors:AllowedOrigins");
 
                 policy
                     .SetIsOriginAllowed(origin =>
@@ -78,7 +79,7 @@ public static class CorsExtensions
                 }
                 else
                 {
-                    var extraOrigins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+                    var extraOrigins = configuration.GetStringList("Cors:AllowedOrigins");
 
                     policy
                         .SetIsOriginAllowed(origin =>
@@ -118,7 +119,7 @@ public static class CorsExtensions
             }
         }
 
-        var allowedDomains = configuration.GetSection("Cors:AllowedDomains").Get<string[]>() ?? [];
+        var allowedDomains = configuration.GetStringList("Cors:AllowedDomains");
         foreach (var domain in allowedDomains)
         {
             if (string.IsNullOrWhiteSpace(domain)) continue;

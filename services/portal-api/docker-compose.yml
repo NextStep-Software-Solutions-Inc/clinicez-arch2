@@ -4,12 +4,12 @@
 # All secrets are injected via .env written at deploy time by GitHub Actions.
 # No host ports exposed; routed via npm-default (NPM) and connected to data-network.
 
-name: clinicez-portal-api
+name: portal-api
 
 services:
   portal-api:
-    image: ${IMAGE_NAME:-clinicez-portal-api}:${IMAGE_TAG:-latest}
-    container_name: ${CONTAINER_NAME:-clinicez-portal-api}
+    image: ${IMAGE_NAME:-portal-api}:${IMAGE_TAG:-latest}
+    container_name: ${CONTAINER_NAME:-portal-api}
     labels:
       - "project=clinicez"
       - "environment=${ENVIRONMENT_LABEL:-prod}"
@@ -28,7 +28,14 @@ services:
       - RabbitMq__Host=${RABBITMQ_HOST}
       - RabbitMq__Username=${RABBITMQ_USERNAME}
       - RabbitMq__Password=${RABBITMQ_PASSWORD}
-      - Facility__BaseDomain=${BASE_DOMAIN:-dev.clinicez.net}
+      - Facility__BaseDomain=${BASE_DOMAIN:?BASE_DOMAIN must be set}
+      - Cors__AllowedDomains=${CORS_ALLOWED_DOMAINS:-}
+      - Cors__AllowedOrigins=${CORS_ALLOWED_ORIGINS:-}
+      - Clerk__AuthorizedParties=${CLERK_AUTHORIZED_PARTIES:-}
+      - Facility__Subdomains__Clinic=${FACILITY_SUBDOMAIN_CLINIC:-clinic}
+      - Facility__Subdomains__Laboratory=${FACILITY_SUBDOMAIN_LABORATORY:-lab}
+      - Facility__Subdomains__Pharmacy=${FACILITY_SUBDOMAIN_PHARMACY:-pharmacy}
+      - Facility__Subdomains__Organization=${FACILITY_SUBDOMAIN_ORGANIZATION:-org}
     restart: unless-stopped
 
 networks:

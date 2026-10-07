@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { products } from "@/constants/products";
 import Icon from "@/components/Icon";
+import { absoluteUrl } from "@/config/site";
 export const metadata: Metadata = {
   title: "Products | Clinic EZ",
   description: "Explore the Clinic EZ product ecosystem.",
@@ -10,11 +11,11 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Products | Clinic EZ",
     description: "Explore the Clinic EZ product ecosystem.",
-    url: "https://clinicez.net/products",
+    url: absoluteUrl("/products"),
     siteName: "Clinic EZ",
     images: [
       {
-        url: "https://clinicez.net/og-products.png",
+        url: absoluteUrl("/og-products.png"),
         width: 1200,
         height: 630,
       }
@@ -26,7 +27,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Products | Clinic EZ",
     description: "Explore the Clinic EZ product ecosystem.",
-    images: ["https://clinicez.net/og-products.png"],
+    images: [absoluteUrl("/og-products.png")],
   },
 };
 

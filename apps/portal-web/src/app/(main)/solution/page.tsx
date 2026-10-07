@@ -1,5 +1,6 @@
 import { Metadata } from "next";
 import { Building2, Stethoscope, FlaskConical, Pill, CheckCircle2 } from "lucide-react";
+import { absoluteUrl } from "@/config/site";
 
 export const metadata: Metadata = {
   title: "Solutions | Clinic EZ",
@@ -8,11 +9,11 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Solutions | Clinic EZ",
     description: "Tailored healthcare management solutions for Clinics, Hospitals, and Pharmacies.",
-    url: "https://clinicez.net/solution",
+    url: absoluteUrl("/solution"),
     siteName: "Clinic EZ",
     images: [
       {
-        url: "https://clinicez.net/og-solutions.png",
+        url: absoluteUrl("/og-solutions.png"),
         width: 1200,
         height: 630,
       }
@@ -24,7 +25,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Solutions | Clinic EZ",
     description: "Tailored healthcare management solutions for Clinics, Hospitals, and Pharmacies.",
-    images: ["https://clinicez.net/og-solutions.png"],
+    images: [absoluteUrl("/og-solutions.png")],
   },
 };
 

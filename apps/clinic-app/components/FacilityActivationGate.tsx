@@ -21,7 +21,18 @@ import {
   clearActiveTenantContext,
   isValidTenantSlug,
   getStoredTenantSlug,
+  parseServiceHost,
+  buildServiceHostRegex,
 } from '@shared/safe';
+
+// Subdomain this app is served from (e.g. <workspace>.<service>.<baseDomain>); configurable per deployment.
+const SERVICE_SUBDOMAIN = (process.env.EXPO_PUBLIC_SERVICE_SUBDOMAIN || 'clinic').trim().toLowerCase();
+
+/** Builds `<protocol>//<host>[:port]` keeping the current scheme and port. */
+const buildHostUrl = (host: string): string => {
+  const { protocol, port } = window.location;
+  return `${protocol}//${host}${port ? `:${port}` : ''}`;
+};
 
 interface LicenseContextValue {
   license: FacilityLicenseStatus | null;
@@ -117,9 +128,9 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
     // If on web and on wildcard root domain, navigate to dedicated tenant subdomain
     if (typeof window !== 'undefined' && window.location) {
       const host = window.location.hostname.toLowerCase();
-      const matchRoot = host.match(/^clinic\.(.+)$/);
-      if (matchRoot) {
-        window.location.href = `https://${trimmed}.clinic.${matchRoot[1]}`;
+      const rootParts = parseServiceHost(host, SERVICE_SUBDOMAIN);
+      if (rootParts && !rootParts.facility) {
+        window.location.href = buildHostUrl(`${trimmed}.${SERVICE_SUBDOMAIN}.${rootParts.baseDomain}`);
         return;
       }
     }
@@ -137,9 +148,9 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
     // If on a tenant subdomain on web, return to root domain
     if (typeof window !== 'undefined' && window.location) {
       const host = window.location.hostname.toLowerCase();
-      const matchTenant = host.match(/^[a-z0-9-]+\.clinic\.(.+)$/);
-      if (matchTenant) {
-        window.location.href = `https://clinic.${matchTenant[1]}`;
+      const tenantParts = parseServiceHost(host, SERVICE_SUBDOMAIN);
+      if (tenantParts && tenantParts.facility) {
+        window.location.href = buildHostUrl(`${SERVICE_SUBDOMAIN}.${tenantParts.baseDomain}`);
         return;
       }
     }
@@ -254,10 +265,10 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
       }
       if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.hostname) {
         const host = window.location.hostname;
-        const match = host.match(/^[a-z0-9-]+\.(?:clinic|lab|pharmacy|org)\.(.+)$/);
+        const match = host.toLowerCase().match(buildServiceHostRegex());
         if (match) {
-          // Navigate to the root base domain (e.g. https://dev.clinicez.net or https://company.com) without hardcoded 'portal.'
-          return `https://${match[1]}`;
+          // Navigate to the root base domain (the part after the service subdomain) without any hardcoded prefix
+          return buildHostUrl(match[3]);
         }
         return window.location.origin;
       }

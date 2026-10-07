@@ -1,4 +1,5 @@
 import { Metadata } from "next";
+import { absoluteUrl } from "@/config/site";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -22,7 +23,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         title: `${blog.title} | Clinic EZ Blog`,
         description: blog.summary,
         type: "article",
-        url: `https://clinicez.com/blogs/${slug}`,
+        url: absoluteUrl(`/blogs/${slug}`),
         images: blog.bannerUrl ? [{ url: blog.bannerUrl }] : []
       }
     };

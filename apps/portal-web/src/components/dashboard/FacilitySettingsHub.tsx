@@ -151,7 +151,7 @@ export default function FacilitySettingsHub({
   const [letterheadHeader, setLetterheadHeader] = useState(facility?.letterheadHeader || facility?.name?.toUpperCase() || "METRO HEALTH INTEGRATED CLINIC");
   const [letterheadSubHeader, setLetterheadSubHeader] = useState(facility?.letterheadSubHeader || "Center for Ambulatory Medicine & Diagnostic Excellence");
   const [letterheadAddress, setLetterheadAddress] = useState(facility?.letterheadAddress || "Unit 402, High Street South Corporate Plaza, BGC, Taguig City");
-  const [letterheadContact, setLetterheadContact] = useState(facility?.letterheadContact || "Tel: +63 (2) 8876-5432 | Email: clinic.bgc@clinicez.ph");
+  const [letterheadContact, setLetterheadContact] = useState(facility?.letterheadContact || "Tel: +63 (2) 8876-5432 | Email: clinic@example.com");
   const [letterheadFooter, setLetterheadFooter] = useState(
     facility?.letterheadFooter || "This medical document and electronic prescription is digitally generated in compliance with Philippine FDA Circular 2020-004 and RA 10173 (Data Privacy Act of 2012)."
   );
@@ -210,7 +210,7 @@ export default function FacilitySettingsHub({
         [facility.streetAddress, facility.city, facility.province].filter(Boolean).join(", ") ||
         "Unit 402, High Street South Corporate Plaza, BGC, Taguig City"
       );
-      setLetterheadContact(facility.letterheadContact || facility.contactNumber || "Tel: +63 (2) 8876-5432 | Email: clinic.bgc@clinicez.ph");
+      setLetterheadContact(facility.letterheadContact || facility.contactNumber || "Tel: +63 (2) 8876-5432 | Email: clinic@example.com");
       setLetterheadFooter(
         facility.letterheadFooter ||
         "This medical document and electronic prescription is digitally generated in compliance with Philippine FDA Circular 2020-004 and RA 10173 (Data Privacy Act of 2012)."
@@ -428,7 +428,7 @@ export default function FacilitySettingsHub({
                     <Input
                       value={letterheadContact}
                       onChange={(e) => setLetterheadContact(e.target.value)}
-                      placeholder="e.g. Tel: +63 (2) 8876-5432 | Mobile: 0917-123-4567 | info@clinicez.ph"
+                      placeholder="e.g. Tel: +63 (2) 8876-5432 | Mobile: 0917-123-4567 | info@example.com"
                       className="h-9 text-xs rounded-xl"
                     />
                   </div>
@@ -742,7 +742,7 @@ export default function FacilitySettingsHub({
                     value={contactEmail}
                     onChange={(e) => setContactEmail(e.target.value)}
                     type="email"
-                    placeholder="e.g. clinic@clinicez.ph"
+                    placeholder="e.g. clinic@example.com"
                     className="h-9 text-xs rounded-xl"
                   />
                 </div>

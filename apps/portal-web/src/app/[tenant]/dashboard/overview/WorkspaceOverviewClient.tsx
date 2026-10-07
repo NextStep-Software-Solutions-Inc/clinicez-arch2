@@ -27,6 +27,7 @@ import {
     IconBuildingSkyscraper
 } from "@tabler/icons-react";
 import { getConsoleBaseDomain } from "@/utils/domain";
+import { APP_SUBDOMAINS } from "@/config/site";
 
 interface Facility {
     id: string;
@@ -43,13 +44,6 @@ const DASHBOARD_PORTS: Record<string, number> = {
     Laboratory: 8082,
     Pharmacy: 8083,
     Organization: 8084
-};
-
-const APP_SUBDOMAINS: Record<string, string> = {
-    Clinic: "clinic",
-    Laboratory: "lab",
-    Pharmacy: "pharmacy",
-    Organization: "org"
 };
 
 export default function WorkspaceOverviewClient({ tenantSlug }: { tenantSlug: string }) {

@@ -1,3 +1,4 @@
+using ClinicEz.Shared.Common;
 using ClinicEz.Portal.Api;
 using ClinicEz.Portal.Application;
 using ClinicEz.Portal.Infrastructure;
@@ -49,7 +50,7 @@ builder.Services
             OnTokenValidated = context =>
             {
                 var azp = context.Principal?.FindFirstValue("azp");
-                var authorizedParties = builder.Configuration.GetSection("Clerk:AuthorizedParties").Get<List<string>>();
+                var authorizedParties = builder.Configuration.GetAuthorizedParties("Clerk:AuthorizedParties");
 
                 bool isAuthorized = false;
 

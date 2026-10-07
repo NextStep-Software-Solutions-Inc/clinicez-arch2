@@ -1,3 +1,4 @@
+using ClinicEz.Shared.Common;
 using FluentValidation;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -30,7 +31,7 @@ public static class DependencyInjection
 
             options.AddPolicy("production", policy =>
             {
-                var extraOrigins = configuration?.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+                var extraOrigins = configuration?.GetStringList("Cors:AllowedOrigins") ?? [];
 
                 policy
                     .SetIsOriginAllowed(origin =>
@@ -54,7 +55,7 @@ public static class DependencyInjection
                         }
 
                         // Allow explicitly configured allowed domains and their subdomains
-                        var allowedDomains = configuration?.GetSection("Cors:AllowedDomains").Get<string[]>() ?? [];
+                        var allowedDomains = configuration?.GetStringList("Cors:AllowedDomains") ?? [];
                         foreach (var domain in allowedDomains)
                         {
                             if (string.IsNullOrWhiteSpace(domain)) continue;

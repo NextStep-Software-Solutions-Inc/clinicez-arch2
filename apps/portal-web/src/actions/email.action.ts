@@ -42,7 +42,7 @@ const getTransporter = () => {
 
 export const sendMail = async (payload: SendMailPayload): Promise<boolean> => {
   const transporter = getTransporter();
-  const fromEmail = process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER || "no-reply@clinicez.net";
+  const fromEmail = process.env.MAIL_FROM_EMAIL || process.env.SMTP_USER;
   const fromName = process.env.MAIL_FROM_NAME || "Clinic EZ";
 
   if (!transporter) {

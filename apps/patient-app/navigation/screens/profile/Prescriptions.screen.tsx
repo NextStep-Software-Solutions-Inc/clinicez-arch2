@@ -207,7 +207,12 @@ export default function PrescriptionsScreen() {
   };
 
   const copyVerificationLink = async (token: string) => {
-    const url = `https://portal.clinicez.ph/rx-verify/${token}`;
+    const portalUrl = (process.env.EXPO_PUBLIC_PORTAL_URL ?? '').replace(/\/+$/, '');
+    if (!portalUrl) {
+      Alert.alert('Link Unavailable', 'The public verification portal is not configured for this app.');
+      return;
+    }
+    const url = `${portalUrl}/rx-verify/${token}`;
     await Clipboard.setStringAsync(url);
     Alert.alert('Link Copied', 'Public pharmacy verification link copied to clipboard.');
   };

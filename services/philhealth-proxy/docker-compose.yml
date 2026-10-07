@@ -4,12 +4,12 @@
 # All secrets are injected via .env written at deploy time by GitHub Actions.
 # No host ports exposed; routed via npm-default (NPM) and connected to data-network.
 
-name: clinicez-philhealth-proxy
+name: philhealth-proxy
 
 services:
   philhealth-proxy:
-    image: ${IMAGE_NAME:-clinicez-philhealth-proxy}:${IMAGE_TAG:-dev}
-    container_name: clinicez-philhealth-proxy
+    image: ${IMAGE_NAME:-philhealth-proxy}:${IMAGE_TAG:-dev}
+    container_name: ${CONTAINER_NAME:-philhealth-proxy}
     labels:
       - "project=clinicez"
       - "environment=dev"
@@ -20,7 +20,7 @@ services:
       - npm-default
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
-      - PortalApi__BaseUrl=${PORTAL_API_BASE_URL:-http://clinicez-portal-api:8080}
+      - PortalApi__BaseUrl=${PORTAL_API_BASE_URL:-http://portal-api:8080}
     restart: unless-stopped
 
 networks:

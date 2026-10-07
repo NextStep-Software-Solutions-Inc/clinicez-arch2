@@ -49,5 +49,5 @@ This service is built using **Clean Architecture** principles and utilizes ASP.N
 A multi-stage `Dockerfile` is provided at the service root:
 
 ```bash
-docker build -t clinicez-portal-api:dev -f services/portal-api/Dockerfile .
+docker build -t portal-api:dev -f services/portal-api/Dockerfile .
 ```

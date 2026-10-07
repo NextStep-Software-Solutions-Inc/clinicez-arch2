@@ -21,6 +21,7 @@ import {
 import { toast } from "sonner";
 import FacilitySettingsHub, { FacilityData } from "./FacilitySettingsHub";
 import { getConsoleBaseDomain } from "@/utils/domain";
+import { APP_SUBDOMAINS } from "@/config/site";
 
 type Facility = FacilityData;
 
@@ -33,13 +34,6 @@ const DASHBOARD_PORTS: Record<string, number> = {
     Laboratory: 8082,
     Pharmacy: 8083,
     Organization: 8084
-};
-
-const APP_SUBDOMAINS: Record<string, string> = {
-    Clinic: "clinic",
-    Laboratory: "lab",
-    Pharmacy: "pharmacy",
-    Organization: "org"
 };
 
 function getFacilityDomain(fac: Facility, tenantSlug: string) {

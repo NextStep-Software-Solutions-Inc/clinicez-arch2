@@ -9,6 +9,7 @@ using ClinicEz.Shared.Documents;
 using ClinicEz.Shared.Documents.Components;
 using ClinicEz.Shared.Documents.Configuration;
 using ClinicEz.Shared.Documents.Security;
+using Microsoft.Extensions.Configuration;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -19,14 +20,17 @@ public class DiagnosticReportPdfGenerator : IDiagnosticReportPdfGenerator
 {
     private readonly IDocumentSecurityService _securityService;
     private readonly IQrCodeService _qrCodeService;
+    private readonly string _verificationBaseUrl;
 
     public DiagnosticReportPdfGenerator(
         IDocumentSecurityService? securityService = null,
-        IQrCodeService? qrCodeService = null)
+        IQrCodeService? qrCodeService = null,
+        IConfiguration? configuration = null)
     {
         QuestPdfInitializer.EnsureInitialized();
         _securityService = securityService ?? new DocumentSecurityService();
         _qrCodeService = qrCodeService ?? new QrCodeService();
+        _verificationBaseUrl = VerificationUrlResolver.Resolve(configuration);
     }
 
     public byte[] GeneratePdf(LabRequisition requisition, TenantPrintoutConfig? tenantConfig = null)
@@ -50,7 +54,7 @@ public class DiagnosticReportPdfGenerator : IDiagnosticReportPdfGenerator
             releasedDate);
 
         var verifyUrl = _securityService.GenerateVerificationUrl(
-            "https://clinicez.ph",
+            _verificationBaseUrl,
             "lab-report",
             requisition.AccessionNumber,
             digest);
@@ -400,7 +404,7 @@ public class DiagnosticReportPdfGenerator : IDiagnosticReportPdfGenerator
             FacilityName = "ClinicEz Diagnostic Laboratory",
             FacilitySubHeader = "Tertiary Clinical Laboratory • Clinical Chemistry • Hematology • Immunology",
             PhysicalAddress = "124 Medical Plaza, Taft Avenue, Manila, Philippines",
-            ContactNumbers = "Trunkline: (02) 8523-9000 • Email: lab@clinicez.ph",
+            ContactNumbers = "Trunkline: (02) 8523-9000 • Email: lab@example.com",
             DohLicenseToOperate = "DOH-LTO-2026-004412-CL",
             PhilHealthAccreditationNumber = "PHIC-LAB-992140",
             PrimaryColorHex = "#5B21B6",

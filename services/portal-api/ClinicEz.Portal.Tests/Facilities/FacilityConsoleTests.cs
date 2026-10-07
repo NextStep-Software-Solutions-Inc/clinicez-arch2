@@ -160,7 +160,7 @@ public class FacilityConsoleTests : IDisposable
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 { "ASPNETCORE_ENVIRONMENT", "Production" },
-                { "Facility:BaseDomain", "clinicez.net" }
+                { "Facility:BaseDomain", "example.com" }
             })
             .Build();
 
