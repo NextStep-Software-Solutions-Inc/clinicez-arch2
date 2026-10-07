@@ -1,4 +1,6 @@
 using System;
+using ClinicEz.Laboratory.Api.Authorization;
+using ClinicEz.Laboratory.Domain.Constants;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -6,6 +8,7 @@ using ClinicEz.Laboratory.Application.Features.Staff.Commands;
 using ClinicEz.Laboratory.Application.Features.Staff.DTOs;
 using ClinicEz.Laboratory.Application.Features.Staff.Queries;
 using ClinicEz.Laboratory.Domain.Enums;
+using ClinicEz.Laboratory.Domain.Interfaces;
 using ClinicEz.Shared.Common;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -30,31 +33,32 @@ public sealed record CreateLabStaffRequest(
 public sealed class StaffController : ControllerBase
 {
     private readonly ISender _sender;
+    private readonly ILabContext _context;
 
-    public StaffController(ISender sender)
+    public StaffController(ISender sender, ILabContext context)
     {
         _sender = sender;
+        _context = context;
     }
 
     [HttpGet]
-    public async Task<ActionResult<ApiResponse<List<LabStaffMemberDto>>>> GetStaffMembers(
-        [FromHeader(Name = "X-Facility-Id")] Guid? facilityId,
-        CancellationToken ct)
+    [HasPermission(LabPermissions.StaffRead)]
+    public async Task<ActionResult<ApiResponse<List<LabStaffMemberDto>>>> GetStaffMembers(CancellationToken ct)
     {
-        var targetLabId = facilityId ?? Guid.Empty;
+        // Laboratory comes from the validated session, never from a client header.
+        if (_context.LaboratoryId is not { } targetLabId) return Forbid();
         var result = await _sender.Send(new GetLabStaffMembersQuery(targetLabId), ct);
         return Ok(ApiResponse<List<LabStaffMemberDto>>.Success(result));
     }
 
     [HttpPost]
+    [HasPermission(LabPermissions.StaffManage)]
     public async Task<ActionResult<ApiResponse<LabStaffMemberDto>>> CreateStaffMember(
-        [FromHeader(Name = "X-Tenant-Id")] string? tenantId,
-        [FromHeader(Name = "X-Facility-Id")] Guid? facilityId,
         [FromBody] CreateLabStaffRequest request,
         CancellationToken ct)
     {
-        var targetTenantId = !string.IsNullOrWhiteSpace(tenantId) ? tenantId : "default";
-        var targetLabId = facilityId ?? Guid.Empty;
+        // Tenant and laboratory come from the validated session, never from client headers.
+        if (_context.LaboratoryId is not { } targetLabId || _context.TenantId is not { Length: > 0 } targetTenantId) return Forbid();
 
         var command = new CreateLabStaffMemberCommand(
             targetTenantId,

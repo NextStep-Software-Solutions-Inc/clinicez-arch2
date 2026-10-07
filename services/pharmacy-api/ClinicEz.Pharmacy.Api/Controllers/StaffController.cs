@@ -2,10 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Pharmacy.Api.Authorization;
 using ClinicEz.Pharmacy.Application.Features.Staff.Commands;
 using ClinicEz.Pharmacy.Application.Features.Staff.DTOs;
 using ClinicEz.Pharmacy.Application.Features.Staff.Queries;
+using ClinicEz.Pharmacy.Domain.Constants;
 using ClinicEz.Pharmacy.Domain.Enums;
+using ClinicEz.Pharmacy.Domain.Interfaces;
 using ClinicEz.Shared.Common;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -29,31 +32,33 @@ public sealed record CreatePharmacyStaffRequest(
 public sealed class StaffController : ControllerBase
 {
     private readonly ISender _sender;
+    private readonly IPharmacyContext _context;
 
-    public StaffController(ISender sender)
+    public StaffController(ISender sender, IPharmacyContext context)
     {
         _sender = sender;
+        _context = context;
     }
 
     [HttpGet]
-    public async Task<ActionResult<ApiResponse<List<PharmacyStaffMemberDto>>>> GetStaffMembers(
-        [FromHeader(Name = "X-Facility-Id")] Guid? facilityId,
-        CancellationToken ct)
+    [HasPermission(PharmacyPermissions.StaffRead)]
+    public async Task<ActionResult<ApiResponse<List<PharmacyStaffMemberDto>>>> GetStaffMembers(CancellationToken ct)
     {
-        var targetPharmacyId = facilityId ?? Guid.Empty;
+        // The pharmacy comes from the validated session, never from a client header.
+        var targetPharmacyId = _context.PharmacyId;
         var result = await _sender.Send(new GetPharmacyStaffMembersQuery(targetPharmacyId), ct);
         return Ok(ApiResponse<List<PharmacyStaffMemberDto>>.Success(result));
     }
 
     [HttpPost]
+    [HasPermission(PharmacyPermissions.StaffManage)]
     public async Task<ActionResult<ApiResponse<PharmacyStaffMemberDto>>> CreateStaffMember(
-        [FromHeader(Name = "X-Tenant-Id")] string? tenantId,
-        [FromHeader(Name = "X-Facility-Id")] Guid? facilityId,
         [FromBody] CreatePharmacyStaffRequest request,
         CancellationToken ct)
     {
-        var targetTenantId = !string.IsNullOrWhiteSpace(tenantId) ? tenantId : "default";
-        var targetPharmacyId = facilityId ?? Guid.Empty;
+        // Tenant and pharmacy come from the validated session, never from client headers.
+        var targetTenantId = _context.TenantId;
+        var targetPharmacyId = _context.PharmacyId;
 
         var command = new CreatePharmacyStaffMemberCommand(
             targetTenantId,

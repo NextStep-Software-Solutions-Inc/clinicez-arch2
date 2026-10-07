@@ -14,6 +14,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<PrescriptionOrderItem> PrescriptionOrderItems { get; set; }
     public DbSet<DispenseAuditRecord> DispenseAuditRecords { get; set; }
     public DbSet<PharmacyStaffMember> PharmacyStaffMembers { get; set; }
+    public DbSet<PharmacyRefreshToken> RefreshTokens { get; set; }
     public DbSet<PharmacySettings> PharmacySettings { get; set; }
     public DbSet<GamotBeneficiaryLedger> GamotBeneficiaryLedgers { get; set; }
     public DbSet<GamotLedgerTransaction> GamotLedgerTransactions { get; set; }
@@ -159,6 +160,24 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(e => e.Notes).HasMaxLength(500);
 
             entity.HasIndex(e => new { e.TenantId, e.PharmacyId, e.UniquePrescriptionSecurityCode });
+        });
+
+        modelBuilder.Entity<PharmacyStaffMember>(entity =>
+        {
+            entity.Property(e => e.PasswordHash).HasMaxLength(500);
+            entity.HasIndex(e => new { e.PharmacyId, e.Email });
+        });
+
+        modelBuilder.Entity<PharmacyRefreshToken>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.TokenHash).IsRequired().HasMaxLength(128);
+            entity.Property(e => e.DeviceLabel).HasMaxLength(150);
+            entity.HasIndex(e => e.TokenHash).IsUnique();
+            entity.HasIndex(e => e.FamilyId);
+            entity.HasIndex(e => e.StaffMemberId);
+            entity.HasOne(e => e.StaffMember).WithMany().HasForeignKey(e => e.StaffMemberId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.AddInboxStateEntity();

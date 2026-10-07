@@ -1,4 +1,6 @@
 using System;
+using ClinicEz.Laboratory.Api.Authorization;
+using ClinicEz.Laboratory.Domain.Constants;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -36,6 +38,7 @@ public sealed class ReportsController : ControllerBase
     }
 
     [HttpGet("{requisitionId:guid}")]
+    [HasPermission(LabPermissions.ReportsRead)]
     public async Task<ActionResult<ApiResponse<DiagnosticReportDto>>> GetReport(
         [FromRoute] Guid requisitionId,
         CancellationToken ct = default)
@@ -48,6 +51,7 @@ public sealed class ReportsController : ControllerBase
     }
 
     [HttpPost("{requisitionId:guid}/verify")]
+    [HasPermission(LabPermissions.ReportsVerify)]
     public async Task<ActionResult<ApiResponse<LabRequisitionDto>>> VerifyAndSignReport(
         [FromRoute] Guid requisitionId,
         [FromBody] VerifyReportRequest request,
@@ -67,6 +71,7 @@ public sealed class ReportsController : ControllerBase
     }
 
     [HttpGet("{requisitionId:guid}/pdf")]
+    [HasPermission(LabPermissions.ReportsRead)]
     public async Task<IActionResult> DownloadReportPdf(
         [FromRoute] Guid requisitionId,
         CancellationToken ct = default)
@@ -87,6 +92,7 @@ public sealed class ReportsController : ControllerBase
     }
 
     [HttpGet("{requisitionId:guid}/preview-html")]
+    [HasPermission(LabPermissions.ReportsRead)]
     public async Task<IActionResult> GetReportHtmlPreview(
         [FromRoute] Guid requisitionId,
         CancellationToken ct = default)
@@ -105,6 +111,7 @@ public sealed class ReportsController : ControllerBase
     }
 
     [HttpPost("{requisitionId:guid}/panic-dispatch")]
+    [HasPermission(LabPermissions.ReportsPanicDispatch)]
     public async Task<ActionResult<ApiResponse<CriticalPanicDispatchLogDto>>> RecordPanicDispatch(
         [FromRoute] Guid requisitionId,
         [FromBody] PanicDispatchRequest request,
@@ -124,6 +131,7 @@ public sealed class ReportsController : ControllerBase
     }
 
     [HttpGet("panic-alerts")]
+    [HasPermission(LabPermissions.ReportsRead)]
     public async Task<ActionResult<ApiResponse<List<CriticalPanicDispatchLogDto>>>> GetPanicAlerts(
         [FromQuery] int limit = 50,
         CancellationToken ct = default)

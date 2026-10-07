@@ -5,7 +5,10 @@ using MassTransit;
 
 namespace ClinicEz.Laboratory.Infrastructure.Persistence;
 
-public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options, Microsoft.Extensions.Configuration.IConfiguration configuration) : DbContext(options)
+public class ApplicationDbContext(
+    DbContextOptions<ApplicationDbContext> options,
+    Microsoft.Extensions.Configuration.IConfiguration configuration,
+    ClinicEz.Laboratory.Domain.Interfaces.ILabContext? labContext = null) : DbContext(options)
 {
     public DbSet<Product> Products { get; set; }
     public DbSet<LabRequisition> LabRequisitions { get; set; }
@@ -16,7 +19,14 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<QcRun> QcRuns { get; set; }
     public DbSet<CriticalPanicDispatchLog> CriticalPanicDispatchLogs { get; set; }
     public DbSet<LabStaffMember> LabStaffMembers { get; set; }
+    public DbSet<LabRefreshToken> LabRefreshTokens { get; set; }
     public DbSet<LabSettings> LabSettings { get; set; }
+
+    /// <summary>
+    /// Tenant of the authenticated staff session (from validated token claims). <c>null</c> for system scope
+    /// (consumers, Hangfire, seeders, tests) and anonymous public endpoints, which disables the tenant filter.
+    /// </summary>
+    private string? CurrentTenantId => labContext?.TenantId;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -121,6 +131,35 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(e => e.NotifiedDoctorName).IsRequired().HasMaxLength(100);
             entity.Property(e => e.CriticalFindings).IsRequired().HasMaxLength(1000);
         });
+
+        modelBuilder.Entity<LabStaffMember>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.PasswordHash).HasMaxLength(500);
+            entity.HasIndex(e => new { e.LaboratoryId, e.Email });
+        });
+
+        modelBuilder.Entity<LabRefreshToken>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.TokenHash).IsRequired().HasMaxLength(128);
+            entity.Property(e => e.DeviceLabel).HasMaxLength(150);
+            entity.HasIndex(e => e.TokenHash).IsUnique();
+            entity.HasIndex(e => e.FamilyId);
+            entity.HasIndex(e => e.StaffMemberId);
+            entity.HasOne(e => e.StaffMember).WithMany().HasForeignKey(e => e.StaffMemberId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Tenant isolation: authenticated staff only ever see rows of the tenant in their token. System scope
+        // (no HTTP principal: consumers, Hangfire, seeders) and anonymous public endpoints are not restricted.
+        modelBuilder.Entity<LabRequisition>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
+        modelBuilder.Entity<QcLot>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
+        modelBuilder.Entity<QcRun>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
+        modelBuilder.Entity<CriticalPanicDispatchLog>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
+        modelBuilder.Entity<LabStaffMember>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
+        modelBuilder.Entity<LabRefreshToken>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
+        modelBuilder.Entity<LabSettings>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
 
         modelBuilder.AddInboxStateEntity();
         modelBuilder.AddOutboxStateEntity();

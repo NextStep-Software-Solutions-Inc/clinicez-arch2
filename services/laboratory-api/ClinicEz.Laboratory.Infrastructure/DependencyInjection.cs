@@ -45,6 +45,15 @@ public static class DependencyInjection
         services.AddSingleton<ClinicEz.Shared.Licensing.IFacilityLicenseValidator, ClinicEz.Shared.Licensing.FacilityLicenseValidator>();
         services.AddClinicEzDocumentEngine();
 
+        // Facility-local authentication (no external identity provider; works offline/LAN).
+        // ILabContext must be registered before the dev auto-migration below builds a temporary provider.
+        services.AddHttpContextAccessor();
+        services.AddMemoryCache();
+        services.AddScoped<ClinicEz.Laboratory.Domain.Interfaces.ILabContext, ClinicEz.Laboratory.Infrastructure.Context.LabContext>();
+        services.AddSingleton<ClinicEz.Laboratory.Infrastructure.Auth.IStaffAccessCache, ClinicEz.Laboratory.Infrastructure.Auth.StaffAccessCache>();
+        services.AddScoped<ClinicEz.Laboratory.Infrastructure.Auth.IWorkspaceResolver, ClinicEz.Laboratory.Infrastructure.Auth.WorkspaceResolver>();
+        services.AddScoped<ClinicEz.Laboratory.Infrastructure.Auth.ILabAuthService, ClinicEz.Laboratory.Infrastructure.Auth.LabAuthService>();
+
         // Register publisher & clinical engine services
         services.AddScoped<IDiagnosticReportPublisher, DiagnosticReportPublisher>();
         services.AddScoped<IAnalyzerFeedService, AnalyzerFeedService>();

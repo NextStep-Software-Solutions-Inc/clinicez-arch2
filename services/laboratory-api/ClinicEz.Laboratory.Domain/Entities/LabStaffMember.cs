@@ -25,4 +25,14 @@ public sealed class LabStaffMember : BaseEntity
     public string? Specialty { get; set; }
 
     public bool IsActive { get; set; } = true;
+
+    // Facility-local credentials (no external identity provider; works fully offline on a LAN)
+    public string? PasswordHash { get; set; }
+    public bool MustChangePassword { get; set; }
+    public int FailedLoginCount { get; set; }
+    public DateTime? LockoutEnd { get; set; }
+    public DateTime? LastLoginAt { get; set; }
+
+    /// <summary>Incremented to revoke all issued access tokens and refresh tokens for this staff member.</summary>
+    public int TokenVersion { get; set; }
 }
