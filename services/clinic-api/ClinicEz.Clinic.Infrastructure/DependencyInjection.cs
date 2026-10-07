@@ -50,6 +50,12 @@ public static class DependencyInjection
         services.AddSingleton<ClinicEz.Shared.Licensing.IFacilityLicenseValidator, ClinicEz.Shared.Licensing.FacilityLicenseValidator>();
         services.AddHttpClient<ITenantLookupService, TenantLookupService>();
 
+        // Facility-local authentication (no external identity provider; works offline/LAN)
+        services.AddMemoryCache();
+        services.AddSingleton<ClinicEz.Clinic.Infrastructure.Auth.IStaffAccessCache, ClinicEz.Clinic.Infrastructure.Auth.StaffAccessCache>();
+        services.AddScoped<ClinicEz.Clinic.Infrastructure.Auth.IWorkspaceResolver, ClinicEz.Clinic.Infrastructure.Auth.WorkspaceResolver>();
+        services.AddScoped<ClinicEz.Clinic.Infrastructure.Auth.IClinicAuthService, ClinicEz.Clinic.Infrastructure.Auth.ClinicAuthService>();
+
         // Outbound patient webhook notifier
         services.AddHttpClient<IPatientWebhookNotifier, PatientWebhookNotifier>();
 

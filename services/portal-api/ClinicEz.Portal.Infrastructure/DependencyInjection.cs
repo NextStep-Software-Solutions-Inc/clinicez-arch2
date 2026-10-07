@@ -75,6 +75,12 @@ public static class DependencyInjection
             var clinicUrl = configuration["Services:ClinicApiUrl"] ?? configuration["ClinicSettings:ClinicApiUrl"] ?? "http://localhost:5245";
             client.BaseAddress = new Uri(clinicUrl.EndsWith('/') ? clinicUrl : $"{clinicUrl}/");
             client.Timeout = TimeSpan.FromSeconds(60);
+            // Trusted service-to-service credential: clinic-api rejects unauthenticated calls.
+            var internalKey = configuration["Internal:ApiKey"];
+            if (!string.IsNullOrWhiteSpace(internalKey))
+            {
+                client.DefaultRequestHeaders.TryAddWithoutValidation("X-Internal-Key", internalKey);
+            }
         })
         .AddStandardResilienceHandler();
 

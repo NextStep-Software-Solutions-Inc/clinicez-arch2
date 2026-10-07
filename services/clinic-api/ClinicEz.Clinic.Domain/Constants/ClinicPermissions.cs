@@ -72,6 +72,20 @@ public static class ClinicPermissions
     public const string YakapWrite = "yakap:write";
     public const string YakapSubmit = "yakap:submit";
 
+    /// <summary>
+    /// Minimal permission set granted to trusted internal services (authenticated by the shared internal key),
+    /// e.g. portal-api forwarding Yakap transmittal operations. Never includes staff/role/settings management.
+    /// </summary>
+    public static readonly IReadOnlyList<string> InternalService = new List<string>
+    {
+        YakapRead,
+        YakapWrite,
+        YakapSubmit,
+        PatientsRead,
+        ConsultationsRead,
+        SettingsRead
+    }.AsReadOnly();
+
     public static readonly IReadOnlyList<string> All = new List<string>
     {
         AppointmentsRead,

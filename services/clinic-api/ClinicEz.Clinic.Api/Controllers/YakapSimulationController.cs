@@ -11,6 +11,7 @@ namespace ClinicEz.Clinic.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/yakap/simulation")]
+[ServiceFilter(typeof(SimulationEnabledFilter))]
 public sealed class YakapSimulationController(
     IPhilHealthProxyClient proxyClient)
     : ControllerBase

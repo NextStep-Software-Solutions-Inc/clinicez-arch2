@@ -53,10 +53,20 @@ public class PermissionPolicyTests
     [Fact]
     public void ClinicContext_HasPermission_ValidatesPermissionsCorrectly()
     {
-        // Arrange
+        // Permissions come only from validated token claims. A forged X-Permissions header must be ignored.
         var httpContextAccessor = Substitute.For<IHttpContextAccessor>();
         var httpContext = new DefaultHttpContext();
-        httpContext.Request.Headers["X-Permissions"] = $"{ClinicPermissions.QueueCheckIn},{ClinicPermissions.TriageWrite}";
+        httpContext.Request.Headers["X-Permissions"] = $"{ClinicPermissions.ConsultationsSign},*";
+        httpContext.User = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(
+            new[]
+            {
+                new System.Security.Claims.Claim(ClinicClaimTypes.Subject, Guid.NewGuid().ToString()),
+                new System.Security.Claims.Claim(ClinicClaimTypes.TenantId, "tenant_test"),
+                new System.Security.Claims.Claim(ClinicClaimTypes.ClinicId, Guid.NewGuid().ToString()),
+                new System.Security.Claims.Claim(ClinicClaimTypes.Permission, ClinicPermissions.QueueCheckIn),
+                new System.Security.Claims.Claim(ClinicClaimTypes.Permission, ClinicPermissions.TriageWrite)
+            },
+            "Facility"));
         httpContextAccessor.HttpContext.Returns(httpContext);
 
         var config = new ConfigurationBuilder().Build();

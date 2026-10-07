@@ -29,6 +29,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<Product> Products { get; set; } = null!;
     public DbSet<ClinicRole> ClinicRoles { get; set; } = null!;
     public DbSet<StaffMember> StaffMembers { get; set; } = null!;
+    public DbSet<ClinicRefreshToken> RefreshTokens { get; set; } = null!;
     public DbSet<Appointment> Appointments { get; set; } = null!;
     public DbSet<QueueItem> QueueItems { get; set; } = null!;
     public DbSet<TriageVitals> TriageVitals { get; set; } = null!;
@@ -166,7 +167,21 @@ public class ApplicationDbContext : DbContext
                 .HasForeignKey(e => e.ClinicRoleId)
                 .OnDelete(DeleteBehavior.SetNull);
 
+            entity.Property(e => e.PasswordHash).HasMaxLength(500);
             entity.HasIndex(e => new { e.TenantId, e.ClinicId });
+            entity.HasIndex(e => new { e.ClinicId, e.Email });
+        });
+
+        modelBuilder.Entity<ClinicRefreshToken>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.TokenHash).IsRequired().HasMaxLength(128);
+            entity.Property(e => e.DeviceLabel).HasMaxLength(150);
+            entity.HasIndex(e => e.TokenHash).IsUnique();
+            entity.HasIndex(e => e.FamilyId);
+            entity.HasIndex(e => e.StaffMemberId);
+            entity.HasOne(e => e.StaffMember).WithMany().HasForeignKey(e => e.StaffMemberId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Appointment>(entity =>
@@ -485,7 +500,7 @@ public class ApplicationDbContext : DbContext
 
         modelBuilder.Entity<TenantLookupRecord>(entity =>
         {
-            entity.ToTable("Tenants", "main");
+            entity.ToTable("Tenants", "main", t => t.ExcludeFromMigrations());
             entity.HasKey(e => e.Id);
             entity.Property(e => e.TenantSlug);
             entity.Property(e => e.Name);
@@ -494,7 +509,7 @@ public class ApplicationDbContext : DbContext
 
         modelBuilder.Entity<FacilityLookupRecord>(entity =>
         {
-            entity.ToTable("Facilities", "main");
+            entity.ToTable("Facilities", "main", t => t.ExcludeFromMigrations());
             entity.HasKey(e => e.Id);
             entity.Property(e => e.TenantId);
             entity.Property(e => e.Name);

@@ -4,13 +4,33 @@ using System.Linq;
 using System.Security.Claims;
 using ClinicEz.Clinic.Domain.Constants;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.LocalAuth;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 
 namespace ClinicEz.Clinic.Infrastructure.Context;
 
+/// <summary>
+/// Per-request clinic scope. Fails closed:
+/// <list type="bullet">
+///   <item>Authenticated staff (Facility scheme): tenant, clinic, staff and permissions come ONLY from validated token claims.
+///   Client headers (X-Permissions, X-Staff-Id, ...) are ignored.</item>
+///   <item>Trusted internal services (Internal scheme): tenant/clinic come from the scoped values resolved by
+///   <c>InternalScopeMiddleware</c> (or X-Tenant-Id/X-Clinic-Id), with a minimal service permission set.</item>
+///   <item>Anonymous requests: workspace hints only (X-Tenant-Id / X-Clinic-Id). No permissions, and an unresolvable clinic
+///   maps to <see cref="UnauthenticatedClinicId"/> so global query filters match nothing.</item>
+///   <item>No HTTP request (background consumers, seeders): single-clinic configuration, or an empty clinic id which
+///   explicitly means "system scope".</item>
+/// </list>
+/// </summary>
 public sealed class ClinicContext : IClinicContext
 {
+    /// <summary>Sentinel for "no authenticated clinic". Never matches any real clinic row.</summary>
+    public static readonly Guid UnauthenticatedClinicId = new("00000000-0000-0000-0000-00000000dead");
+
+    public const string InternalTenantItemKey = "clinicez.internal.tenant";
+    public const string InternalClinicItemKey = "clinicez.internal.clinic";
+
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IConfiguration _configuration;
 
@@ -20,27 +40,44 @@ public sealed class ClinicContext : IClinicContext
         _configuration = configuration;
     }
 
+    private HttpContext? Http => _httpContextAccessor.HttpContext;
+
+    private static bool IsInternal(ClaimsPrincipal user) =>
+        user.Identity?.IsAuthenticated == true && user.HasClaim(FacilityAuthSchemes.InternalClaim, "true");
+
+    private static bool IsStaff(ClaimsPrincipal user) =>
+        user.Identity?.IsAuthenticated == true && !IsInternal(user);
+
+    private static string? Header(HttpContext http, string name) =>
+        http.Request.Headers.TryGetValue(name, out var value) && !string.IsNullOrWhiteSpace(value)
+            ? value.ToString()
+            : null;
+
     public string TenantId
     {
         get
         {
-            var httpContext = _httpContextAccessor.HttpContext;
-            if (httpContext != null)
+            var http = Http;
+            if (http is null)
             {
-                if (httpContext.Request.Headers.TryGetValue("X-Tenant-Id", out var tenantHeader) && !string.IsNullOrWhiteSpace(tenantHeader))
-                {
-                    return tenantHeader.ToString();
-                }
-
-                var claimTenant = httpContext.User.FindFirst("tenant_id")?.Value
-                                  ?? httpContext.User.FindFirst("org_id")?.Value;
-                if (!string.IsNullOrWhiteSpace(claimTenant))
-                {
-                    return claimTenant;
-                }
+                return _configuration["ClinicSettings:TenantId"] ?? "tenant_default";
             }
 
-            return _configuration["ClinicSettings:TenantId"] ?? "tenant_default";
+            if (IsStaff(http.User))
+            {
+                return http.User.FindFirst(ClinicClaimTypes.TenantId)?.Value ?? string.Empty;
+            }
+
+            if (IsInternal(http.User))
+            {
+                if (http.Items.TryGetValue(InternalTenantItemKey, out var scoped) && scoped is string scopedTenant)
+                    return scopedTenant;
+                return Header(http, "X-Tenant-Id") ?? string.Empty;
+            }
+
+            if (http.Items.TryGetValue(InternalTenantItemKey, out var anonScopedTenant) && anonScopedTenant is string anonTenantId)
+                return anonTenantId;
+            return Header(http, "X-Tenant-Id") ?? _configuration["ClinicSettings:TenantId"] ?? "tenant_default";
         }
     }
 
@@ -48,29 +85,29 @@ public sealed class ClinicContext : IClinicContext
     {
         get
         {
-            var httpContext = _httpContextAccessor.HttpContext;
-            if (httpContext != null)
+            var http = Http;
+            if (http is null)
             {
-                if (httpContext.Request.Headers.TryGetValue("X-Clinic-Id", out var clinicHeader) &&
-                    Guid.TryParse(clinicHeader.ToString(), out var clinicGuid))
-                {
-                    return clinicGuid;
-                }
-
-                var claimClinic = httpContext.User.FindFirst("clinic_id")?.Value;
-                if (!string.IsNullOrWhiteSpace(claimClinic) && Guid.TryParse(claimClinic, out var claimGuid))
-                {
-                    return claimGuid;
-                }
+                return Guid.TryParse(_configuration["ClinicSettings:ClinicId"], out var configured) ? configured : Guid.Empty;
             }
 
-            if (Guid.TryParse(_configuration["ClinicSettings:ClinicId"], out var configGuid))
+            if (IsStaff(http.User))
             {
-                return configGuid;
+                return Guid.TryParse(http.User.FindFirst(ClinicClaimTypes.ClinicId)?.Value, out var claimed)
+                    ? claimed
+                    : UnauthenticatedClinicId;
             }
 
-            // Fallback for single-clinic local hospital deployments
-            return Guid.Parse("11111111-1111-1111-1111-111111111111");
+            if (IsInternal(http.User))
+            {
+                if (http.Items.TryGetValue(InternalClinicItemKey, out var scoped) && scoped is Guid scopedClinic)
+                    return scopedClinic;
+                return Guid.TryParse(Header(http, "X-Clinic-Id"), out var headerClinic) ? headerClinic : UnauthenticatedClinicId;
+            }
+
+            if (Guid.TryParse(Header(http, "X-Clinic-Id"), out var hint)) return hint;
+            if (http.Items.TryGetValue(InternalClinicItemKey, out var anonScopedClinic) && anonScopedClinic is Guid anonClinicId) return anonClinicId;
+            return UnauthenticatedClinicId;
         }
     }
 
@@ -78,28 +115,19 @@ public sealed class ClinicContext : IClinicContext
     {
         get
         {
-            var httpContext = _httpContextAccessor.HttpContext;
-            if (httpContext != null)
+            var http = Http;
+            if (http is null)
             {
-                if (httpContext.Request.Headers.TryGetValue("X-Branch-Id", out var branchHeader) &&
-                    Guid.TryParse(branchHeader.ToString(), out var branchGuid))
-                {
-                    return branchGuid;
-                }
-
-                var claimBranch = httpContext.User.FindFirst("branch_id")?.Value;
-                if (!string.IsNullOrWhiteSpace(claimBranch) && Guid.TryParse(claimBranch, out var claimGuid))
-                {
-                    return claimGuid;
-                }
+                return Guid.TryParse(_configuration["ClinicSettings:BranchId"], out var configured) ? configured : null;
             }
 
-            if (Guid.TryParse(_configuration["ClinicSettings:BranchId"], out var configBranchGuid))
+            if (IsStaff(http.User))
             {
-                return configBranchGuid;
+                return Guid.TryParse(http.User.FindFirst(ClinicClaimTypes.BranchId)?.Value, out var claimed) ? claimed : null;
             }
 
-            return null;
+            // Branch is an operational hint (not a security boundary) for internal callers.
+            return IsInternal(http.User) && Guid.TryParse(Header(http, "X-Branch-Id"), out var hint) ? hint : null;
         }
     }
 
@@ -107,24 +135,9 @@ public sealed class ClinicContext : IClinicContext
     {
         get
         {
-            var httpContext = _httpContextAccessor.HttpContext;
-            if (httpContext != null)
-            {
-                if (httpContext.Request.Headers.TryGetValue("X-Staff-Id", out var staffHeader) &&
-                    Guid.TryParse(staffHeader.ToString(), out var staffGuid))
-                {
-                    return staffGuid;
-                }
-
-                var claimStaff = httpContext.User.FindFirst("staff_id")?.Value
-                                 ?? httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (!string.IsNullOrWhiteSpace(claimStaff) && Guid.TryParse(claimStaff, out var staffClaimGuid))
-                {
-                    return staffClaimGuid;
-                }
-            }
-
-            return null;
+            var http = Http;
+            if (http is null || !IsStaff(http.User)) return null;
+            return Guid.TryParse(http.User.FindFirst(ClinicClaimTypes.Subject)?.Value, out var id) ? id : null;
         }
     }
 
@@ -132,31 +145,21 @@ public sealed class ClinicContext : IClinicContext
     {
         get
         {
-            var httpContext = _httpContextAccessor.HttpContext;
-            if (httpContext != null)
+            var http = Http;
+            if (http is null)
             {
-                if (httpContext.Request.Headers.TryGetValue("X-Permissions", out var permHeader))
-                {
-                    return permHeader.ToString().Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                }
-
-                var claimPerms = httpContext.User.FindAll("permission").Select(c => c.Value).ToList();
-                if (claimPerms.Count > 0)
-                {
-                    return claimPerms;
-                }
-
-                // If user is Admin role claim
-                var roleClaim = httpContext.User.FindFirst(ClaimTypes.Role)?.Value ?? httpContext.User.FindFirst("role")?.Value;
-                if (string.Equals(roleClaim, "Admin", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(roleClaim, "ClinicAdmin", StringComparison.OrdinalIgnoreCase))
-                {
-                    return ClinicPermissions.All;
-                }
+                // Background/system scope (consumers, seeders) is trusted code, not a client.
+                return ClinicPermissions.All;
             }
 
-            // Default dev/local fallback: full permissions
-            return ClinicPermissions.All;
+            if (IsInternal(http.User)) return ClinicPermissions.InternalService;
+
+            if (IsStaff(http.User))
+            {
+                return http.User.FindAll(ClinicClaimTypes.Permission).Select(c => c.Value).ToList();
+            }
+
+            return Array.Empty<string>();
         }
     }
 

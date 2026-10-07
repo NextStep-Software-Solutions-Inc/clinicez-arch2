@@ -28,6 +28,7 @@ services:
       - RabbitMq__Username=${RABBITMQ_USERNAME:-rabbit_admin_node}
       - RabbitMq__Password=${RABBITMQ_PASSWORD}
       - Facility__BaseDomain=${BASE_DOMAIN:?BASE_DOMAIN must be set}
+      - Internal__ApiKey=${INTERNAL_API_KEY:?INTERNAL_API_KEY must be set}
     restart: unless-stopped
 
 networks:

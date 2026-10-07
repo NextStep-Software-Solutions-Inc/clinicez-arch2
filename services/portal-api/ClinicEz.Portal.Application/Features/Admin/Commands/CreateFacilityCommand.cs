@@ -115,7 +115,8 @@ public class CreateFacilityCommandHandler(
             Limits = limits,
             EnabledFeatures = features,
             IssuedAtUtc = DateTime.UtcNow,
-            ExpiresAtUtc = licenseExpiresAt
+            ExpiresAtUtc = licenseExpiresAt,
+            OwnerEmail = string.IsNullOrWhiteSpace(request.ContactEmail) ? null : request.ContactEmail.Trim()
         };
 
         var licenseToken = licenseSigner.SignLicense(licensePayload);
