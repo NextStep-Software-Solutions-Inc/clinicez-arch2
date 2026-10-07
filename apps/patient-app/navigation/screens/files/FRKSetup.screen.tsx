@@ -1,25 +1,35 @@
-import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ThemedText from '@ui/ThemedText';
-import ThemedView from '@ui/ThemedView';
+import Button from '@ui/Button';
+import { AppIcon } from '@ui/Icon';
+import Screen from '../../../components/layout/Screen';
 import type { FilesScreenProps } from './navigationTypes';
 import { dialog } from '@utils/dialog';
-
-const BRAND = '#7C3AED';
+import { useAppTheme } from '../../../contexts/ThemeContext';
 
 export default function FRKSetupScreen({ route }: FilesScreenProps<'FRKSetupScreen'>) {
+  const { colors, spacing, radii, sizes } = useAppTheme();
   const navigation = useNavigation();
-  const insets = useSafeAreaInsets();
   const { frk } = route.params;
   const [copied, setCopied] = useState(false);
 
   const copyToClipboard = useCallback(async () => {
-    await Clipboard.setStringAsync(frk);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(frk);
+      } else {
+        await Clipboard.setStringAsync(frk);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      await Clipboard.setStringAsync(frk);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   }, [frk]);
 
   const handleContinue = useCallback(() => {
@@ -28,62 +38,97 @@ export default function FRKSetupScreen({ route }: FilesScreenProps<'FRKSetupScre
       'If you lose this key, you will not be able to recover your encrypted files on a new device. Please make sure you have saved it.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'I have saved it', style: 'default', onPress: () => navigation.goBack() }
+        { text: 'I have saved it', style: 'default', onPress: () => navigation.goBack() },
       ]
     );
   }, [navigation]);
 
   return (
-    <ThemedView style={[styles.container, { paddingBottom: insets.bottom + 20 }]}>
-      <View style={styles.content}>
-        <ThemedText style={styles.title}>File Recovery Key</ThemedText>
-        <ThemedText style={styles.subtitle}>
-          Your files are end-to-end encrypted. We have generated a unique File Recovery Key (FRK) for you. 
+    <Screen width="form" scroll={false}>
+      <View style={[styles.content, { gap: spacing.lg, padding: spacing.xl }]}>
+        <View
+          style={[
+            styles.iconWrap,
+            {
+              width: sizes.avatarLg,
+              height: sizes.avatarLg,
+              borderRadius: radii.xl,
+              backgroundColor: colors.primaryLight,
+            },
+          ]}
+        >
+          <AppIcon name="key" size={sizes.iconXl} color="primary" />
+        </View>
+
+        <ThemedText variant="h2" style={styles.textCenter}>
+          File Recovery Key
+        </ThemedText>
+
+        <ThemedText variant="body" color="textSecondary" style={styles.textCenter}>
+          Your files are end-to-end encrypted. We have generated a unique File Recovery Key (FRK) for you.
           You will need this key to access your files if you log in from a new device.
         </ThemedText>
 
-        <View style={styles.keyContainer}>
-          <ThemedText style={styles.keyText}>{frk}</ThemedText>
+        <View
+          style={[
+            styles.keyBox,
+            {
+              backgroundColor: colors.surfaceSubtle,
+              borderColor: colors.primaryBorder,
+              borderWidth: sizes.borderWidth * 2,
+              borderRadius: radii.lg,
+              padding: spacing.lg,
+            },
+          ]}
+        >
+          <ThemedText variant="h2" color="primary" style={styles.keyText} numberOfLines={1}>
+            {frk}
+          </ThemedText>
         </View>
 
-        <Pressable onPress={copyToClipboard} style={styles.copyBtn}>
-          <ThemedText style={styles.copyBtnText}>{copied ? 'Copied!' : 'Copy to Clipboard'}</ThemedText>
-        </Pressable>
-
-        <Pressable onPress={handleContinue} style={styles.continueBtn}>
-          <ThemedText style={styles.continueBtnText}>I have saved my key</ThemedText>
-        </Pressable>
+        <View style={[styles.buttonGroup, { gap: spacing.md }]}>
+          <Button
+            label={copied ? 'Copied!' : 'Copy to Clipboard'}
+            variant="outline"
+            icon={copied ? 'check' : 'copy'}
+            fullWidth
+            onPress={copyToClipboard}
+          />
+          <Button
+            label="I have saved my key"
+            variant="primary"
+            fullWidth
+            onPress={handleContinue}
+          />
+        </View>
       </View>
-    </ThemedView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, justifyContent: 'space-between' },
-  content: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 20 },
-  title: { fontSize: 24, fontWeight: '800', textAlign: 'center' },
-  subtitle: { fontSize: 16, textAlign: 'center', opacity: 0.8, lineHeight: 22 },
-  keyContainer: { 
-    backgroundColor: 'rgba(124,58,237,0.1)', 
-    padding: 20, 
-    borderRadius: 16, 
-    borderWidth: 2, 
-    borderColor: 'rgba(124,58,237,0.3)',
-    marginTop: 20,
-  },
-  keyText: { fontSize: 22, fontWeight: '800', color: BRAND, letterSpacing: 2 },
-  copyBtn: { marginTop: 10, padding: 12 },
-  copyBtnText: { fontSize: 16, fontWeight: '700', color: BRAND },
-  continueBtn: { 
-    backgroundColor: BRAND, 
-    padding: 16, 
-    borderRadius: 12, 
+  content: {
+    flex: 1,
     alignItems: 'center',
-    shadowColor: BRAND,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    justifyContent: 'center',
   },
-  continueBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' }
+  iconWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  textCenter: {
+    textAlign: 'center',
+  },
+  keyBox: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  keyText: {
+    letterSpacing: 2,
+    textAlign: 'center',
+  },
+  buttonGroup: {
+    width: '100%',
+  },
 });

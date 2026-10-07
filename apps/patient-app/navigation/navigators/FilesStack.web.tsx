@@ -12,27 +12,28 @@ import FRKEntryScreen from '../screens/files/FRKEntry.screen';
 const FilesStackWeb = createNativeStackNavigator({
   screenOptions: {
     headerShown: false,
+    animation: 'none',
   },
   screens: {
     FilesBrowserScreen: createNativeStackScreen({
       screen: FilesScreen,
       options: {
         headerShown: false,
+        title: 'Files',
       },
     }),
     FilesUploadScreen: createNativeStackScreen({
       screen: FilesUploadScreen,
-      options: { title: 'Add File', presentation: 'modal' },
+      options: { title: 'Add File', headerShown: false },
     }),
     StorageScreen: createNativeStackScreen({
       screen: StorageScreen,
-      options: { title: 'Storage', presentation: 'modal' },
+      options: { title: 'Storage', headerShown: false },
     }),
     FileFolderFormScreen: createNativeStackScreen({
       screen: FileFolderFormScreen,
       options: {
         title: 'Folder',
-        presentation: 'formSheet',
         headerShown: false,
       },
     }),
@@ -40,7 +41,7 @@ const FilesStackWeb = createNativeStackNavigator({
       screen: FileMoveScreen,
       options: {
         title: 'Move',
-        presentation: 'formSheet',
+        headerShown: false,
       },
     }),
     FileViewerScreen: createNativeStackScreen({
@@ -49,15 +50,15 @@ const FilesStackWeb = createNativeStackNavigator({
     }),
     ExternalOpenConsentScreen: createNativeStackScreen({
       screen: ExternalOpenConsentScreen,
-      options: { title: 'Open in Another App', presentation: 'modal' },
+      options: { title: 'Open in Another App', headerShown: false },
     }),
     FRKSetupScreen: createNativeStackScreen({
       screen: FRKSetupScreen,
-      options: { title: 'Recovery Key', presentation: 'modal' },
+      options: { title: 'Recovery Key', headerShown: false },
     }),
     FRKEntryScreen: createNativeStackScreen({
       screen: FRKEntryScreen,
-      options: { title: 'Unlock', presentation: 'modal' },
+      options: { title: 'Unlock', headerShown: false },
     }),
   },
 });

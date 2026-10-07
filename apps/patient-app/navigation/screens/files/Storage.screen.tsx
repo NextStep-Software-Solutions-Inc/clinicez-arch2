@@ -1,134 +1,219 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { MaterialSymbol, SFSymbol, useNavigation, useTheme } from '@react-navigation/native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import ThemedText from '@ui/ThemedText';
-import ThemedView from '@ui/ThemedView';
+import Card from '@ui/Card';
+import Button from '@ui/Button';
+import Badge from '@ui/Badge';
+import { AppIcon, type IconName } from '@ui/Icon';
+import { Divider, ProgressBar } from '@ui/Primitives';
+import Screen from '../../../components/layout/Screen';
 import { usePatientId } from 'hooks/usePatientId';
 import { useAuth as useClerkAuth } from '@clerk/expo';
 import { formatBytes, getStorageOverview } from '../../../services/files';
 import type { FilesScreenProps } from './navigationTypes';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
-import CustomAlertModal from '../../../components/ui/CustomAlertModal';
+import { useContentInsets } from '../../../hooks/useContentInsets';
 import { dialog } from '@utils/dialog';
+import { useAppTheme } from '../../../contexts/ThemeContext';
+import type { ColorToken } from '../../../constants/theme';
 
-const BRAND = '#7C3AED';
+const TYPE_META: Record<string, { colorToken: ColorToken; icon: IconName }> = {
+  'file-type-xray': { colorToken: 'info', icon: 'activity' },
+  'file-type-lab-result': { colorToken: 'success', icon: 'lab' },
+  'file-type-medical-certificate': { colorToken: 'warning', icon: 'document' },
+  'file-type-prescription': { colorToken: 'emergency', icon: 'pill' },
+  'file-type-id': { colorToken: 'purple', icon: 'badge' },
+};
+const DEFAULT_TYPE: { colorToken: ColorToken; icon: IconName } = { colorToken: 'textSecondary', icon: 'document' };
 
-// ─── design helpers ───────────────────────────────────────────────────────────
-function Ic({ a, i, color, size = 20 }: { a: string; i: string; color: string; size?: number }) {
-  return (Platform.select<React.ReactNode>({
-    android: <MaterialSymbol name={a as any} size={size} color={color} />,
-    ios: <SFSymbol name={i as any} size={size - 2} color={color} />,
-  }) ?? null) as React.ReactElement | null;
+function typeMeta(id: string) {
+  return TYPE_META[id] ?? DEFAULT_TYPE;
 }
 
-const TYPE_META: Record<string, { color: string; a: string; i: string }> = {
-  'file-type-xray': { color: '#3B82F6', a: 'health_and_safety', i: 'waveform.path.ecg' },
-  'file-type-lab-result': { color: '#10B981', a: 'science', i: 'flask.fill' },
-  'file-type-medical-certificate': { color: '#F59E0B', a: 'verified', i: 'checkmark.seal.fill' },
-  'file-type-prescription': { color: '#EF4444', a: 'medication', i: 'cross.case.fill' },
-  'file-type-id': { color: '#8B5CF6', a: 'badge', i: 'person.crop.rectangle.fill' },
-};
-const DEFAULT_TYPE = { color: '#6B7280', a: 'description', i: 'doc.fill' };
-function typeMeta(id: string) { return TYPE_META[id] ?? DEFAULT_TYPE; }
 function iconForFile(f: any) {
-  if (f.previewKind === 'image') return { color: '#EC4899', a: 'image', i: 'photo.fill' };
-  if (f.previewKind === 'pdf') return { color: '#EF4444', a: 'picture_as_pdf', i: 'doc.richtext.fill' };
+  if (f.previewKind === 'image') return { colorToken: 'purple' as ColorToken, icon: 'image' as IconName };
+  if (f.previewKind === 'pdf') return { colorToken: 'emergency' as ColorToken, icon: 'pdf' as IconName };
   return typeMeta(f.fileTypeId ?? '');
 }
 
-// ─── Hero card ────────────────────────────────────────────────────────────────
-function StorageHero({ used, total, pending, onUpgrade }: { used: number; total: number; pending: number; onUpgrade: () => void }) {
+function StorageHero({
+  used,
+  total,
+  pending,
+  onUpgrade,
+}: {
+  used: number;
+  total: number;
+  pending: number;
+  onUpgrade: () => void;
+}) {
+  const { colors, spacing, radii, sizes, shadows } = useAppTheme();
   const pct = total > 0 ? Math.min(1, used / total) : 0;
   const pctInt = Math.round(pct * 100);
   const isHigh = pct > 0.85;
 
   return (
-    <LinearGradient
-      colors={['#5B21B6', '#7C3AED', '#8B5CF6']}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={styles.hero}
+    <View
+      style={[
+        styles.hero,
+        {
+          backgroundColor: colors.card,
+          borderColor: colors.border,
+          borderWidth: sizes.borderWidth,
+          borderRadius: radii.xl,
+          padding: spacing.xl,
+          gap: spacing.lg,
+        },
+        shadows.md,
+      ]}
     >
-      <ThemedView style={styles.heroTop}>
-        <ThemedView style={styles.heroIconBox}>
-          {Ic({ a: 'cloud', i: 'icloud.fill', color: '#fff', size: 28 })}
-        </ThemedView>
-        <ThemedView style={{ flex: 1, marginLeft: 12 }}>
-          <ThemedText style={[styles.heroTitle, { color: '#fff' }]}>Cloud Storage</ThemedText>
-          <ThemedView style={[
-            styles.heroBadge,
-            { backgroundColor: pending > 0 ? 'rgba(245,158,11,0.3)' : 'rgba(16,185,129,0.3)' },
-          ]}>
-            {Ic({ a: pending > 0 ? 'sync' : 'cloud_done', i: pending > 0 ? 'arrow.triangle.2.circlepath' : 'checkmark.icloud.fill', color: pending > 0 ? '#FCD34D' : '#6EE7B7', size: 12 })}
-            <ThemedText style={[styles.heroBadgeText, { color: pending > 0 ? '#FCD34D' : '#A7F3D0' }]}>
-              {pending > 0 ? `${pending} pending` : 'Sync active'}
-            </ThemedText>
-          </ThemedView>
-        </ThemedView>
-        <Pressable
-          onPress={onUpgrade}
-          style={({ pressed }) => [styles.upgradeBtn, { opacity: pressed ? 0.85 : 1 }]}
+      <View style={styles.heroTop}>
+        <View
+          style={[
+            styles.heroIconBox,
+            {
+              width: sizes.avatarMd,
+              height: sizes.avatarMd,
+              borderRadius: radii.md,
+              backgroundColor: colors.primaryLight,
+            },
+          ]}
         >
-          <ThemedText style={[styles.upgradeBtnText, { color: BRAND }]}>Upgrade</ThemedText>
-        </Pressable>
-      </ThemedView>
+          <AppIcon name="cloud" color="primary" size={sizes.iconLg} />
+        </View>
+        <View style={[styles.flex, { marginLeft: spacing.md }]}>
+          <ThemedText variant="h3">Cloud Storage</ThemedText>
+          <View style={{ marginTop: spacing.xs }}>
+            <Badge
+              tone={pending > 0 ? 'warning' : 'success'}
+              label={pending > 0 ? `${pending} pending` : 'Sync active'}
+              icon={pending > 0 ? 'sync' : 'check'}
+              size="sm"
+            />
+          </View>
+        </View>
+        <Button size="sm" variant="secondary" label="Upgrade" onPress={onUpgrade} />
+      </View>
 
-      <ThemedView style={styles.heroBarTrack}>
-        <ThemedView style={[styles.heroBarFill, { width: `${pctInt}%`, backgroundColor: isHigh ? '#FCA5A5' : '#fff' }]} />
-      </ThemedView>
+      <ProgressBar value={pct} tone={isHigh ? 'danger' : 'primary'} />
 
-      <ThemedView style={styles.heroLabels}>
-        <ThemedText style={[styles.heroLabelSm, { color: 'rgba(255,255,255,0.75)' }]}>{formatBytes(used)} used</ThemedText>
-        <ThemedText style={[styles.heroLabelBold, { color: '#fff' }]}>{formatBytes(total - used)} free · {pctInt}%</ThemedText>
-      </ThemedView>
-    </LinearGradient>
+      <View style={styles.heroLabels}>
+        <ThemedText variant="small" color="textMuted">
+          {formatBytes(used)} used
+        </ThemedText>
+        <ThemedText variant="smallBold" color={isHigh ? 'emergency' : 'text'}>
+          {formatBytes(total - used)} free ({pctInt}%)
+        </ThemedText>
+      </View>
+    </View>
   );
 }
 
-// ─── Stat pills ───────────────────────────────────────────────────────────────
-function StatPills({ filesCount, foldersCount, pending, avg }: { filesCount: number; foldersCount: number; pending: number; avg: number }) {
-  const { colors } = useTheme();
+function StatPills({
+  filesCount,
+  foldersCount,
+  pending,
+  avg,
+}: {
+  filesCount: number;
+  foldersCount: number;
+  pending: number;
+  avg: number;
+}) {
+  const { colors, spacing, radii, sizes } = useAppTheme();
   const pills = [
-    { label: 'Files', value: String(filesCount), color: '#3B82F6', a: 'insert_drive_file', i: 'doc.fill' },
-    { label: 'Folders', value: String(foldersCount), color: '#F59E0B', a: 'folder', i: 'folder.fill' },
-    { label: 'Pending', value: String(pending), color: BRAND, a: 'cloud_upload', i: 'icloud.and.arrow.up.fill' },
-    { label: 'Avg size', value: formatBytes(avg), color: '#10B981', a: 'data_usage', i: 'chart.bar.fill' },
+    { label: 'Files', value: String(filesCount), colorToken: 'info' as ColorToken, icon: 'document' as IconName },
+    { label: 'Folders', value: String(foldersCount), colorToken: 'warning' as ColorToken, icon: 'folder' as IconName },
+    { label: 'Pending', value: String(pending), colorToken: 'primary' as ColorToken, icon: 'upload' as IconName },
+    { label: 'Avg size', value: formatBytes(avg), colorToken: 'success' as ColorToken, icon: 'activity' as IconName },
   ];
+
   return (
-    <ThemedView style={styles.pillsRow}>
+    <View style={[styles.pillsRow, { gap: spacing.sm }]}>
       {pills.map((p) => (
-        <ThemedView key={p.label} style={[styles.pillCard, { backgroundColor: colors.card }]}>
-          <ThemedView style={[styles.pillIcon, { backgroundColor: p.color + '1A' }]}>
-            {Ic({ a: p.a, i: p.i, color: p.color, size: 18 })}
-          </ThemedView>
-          <ThemedText style={styles.pillValue}>{p.value}</ThemedText>
-          <ThemedText style={styles.pillLabel}>{p.label}</ThemedText>
-        </ThemedView>
+        <View
+          key={p.label}
+          style={[
+            styles.pillCard,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              borderWidth: sizes.borderWidth,
+              borderRadius: radii.md,
+              paddingVertical: spacing.md,
+              paddingHorizontal: spacing.sm,
+              gap: spacing.xs,
+            },
+          ]}
+        >
+          <View
+            style={[
+              styles.pillIcon,
+              {
+                width: sizes.controlSm,
+                height: sizes.controlSm,
+                borderRadius: radii.sm,
+                backgroundColor: colors.surfaceSubtle,
+              },
+            ]}
+          >
+            <AppIcon name={p.icon} color={p.colorToken} size={sizes.iconSm} />
+          </View>
+          <ThemedText variant="bodyBold">{p.value}</ThemedText>
+          <ThemedText variant="caption" color="textMuted">
+            {p.label}
+          </ThemedText>
+        </View>
       ))}
-    </ThemedView>
+    </View>
   );
 }
 
-// ─── Category chips ───────────────────────────────────────────────────────────
 function CategoryChips({ types, onPress }: { types: any[]; onPress: (id: string) => void }) {
+  const { colors, spacing, radii, sizes } = useAppTheme();
   if (!types.length) return null;
+
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsScroll}>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.chipsScroll, { gap: spacing.sm }]}>
       {types.slice(0, 6).map((t) => {
         const m = typeMeta(t.id);
         return (
           <Pressable
             key={t.id}
             onPress={() => onPress(t.id)}
-            style={({ pressed }) => [styles.chip, { backgroundColor: m.color + '15', opacity: pressed ? 0.75 : 1 }]}
+            accessibilityRole="button"
+            accessibilityLabel={`${t.label}: ${t.count}`}
+            style={({ pressed }) => [
+              styles.chip,
+              {
+                borderRadius: radii.lg,
+                paddingHorizontal: spacing.md,
+                paddingVertical: spacing.md,
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                borderWidth: sizes.borderWidth,
+                gap: spacing.xs,
+                opacity: pressed ? 0.75 : 1,
+              },
+            ]}
           >
-            <ThemedView style={[styles.chipIcon, { backgroundColor: m.color + '22' }]}>
-              {Ic({ a: m.a, i: m.i, color: m.color, size: 22 })}
-            </ThemedView>
-            <ThemedText style={[styles.chipLabel, { color: m.color }]}>{t.label}</ThemedText>
-            <ThemedText style={[styles.chipCount, { color: m.color }]}>{t.count}</ThemedText>
+            <View
+              style={[
+                styles.chipIcon,
+                {
+                  width: sizes.controlMd,
+                  height: sizes.controlMd,
+                  borderRadius: radii.md,
+                  backgroundColor: colors.surfaceSubtle,
+                },
+              ]}
+            >
+              <AppIcon name={m.icon} color={m.colorToken} size={sizes.iconMd} />
+            </View>
+            <ThemedText variant="smallBold">{t.label}</ThemedText>
+            <ThemedText variant="caption" color="textMuted">
+              {t.count} files
+            </ThemedText>
           </Pressable>
         );
       })}
@@ -136,48 +221,80 @@ function CategoryChips({ types, onPress }: { types: any[]; onPress: (id: string)
   );
 }
 
-// ─── File list row ────────────────────────────────────────────────────────────
-function FileListRow({ name, subtitle, sizeBytes, color, a, i }: { name: string; subtitle: string; sizeBytes: number; color: string; a: string; i: string }) {
+function FileListRow({
+  name,
+  subtitle,
+  sizeBytes,
+  colorToken,
+  icon,
+}: {
+  name: string;
+  subtitle: string;
+  sizeBytes: number;
+  colorToken: ColorToken;
+  icon: IconName;
+}) {
+  const { colors, spacing, radii, sizes } = useAppTheme();
   return (
-    <ThemedView style={styles.fileRow}>
-      <ThemedView style={[styles.fileRowIcon, { backgroundColor: color + '1A' }]}>
-        {Ic({ a, i, color, size: 20 })}
-      </ThemedView>
-      <ThemedView style={styles.fileRowBody}>
-        <ThemedText style={styles.fileRowName} numberOfLines={1}>{name}</ThemedText>
-        <ThemedText style={styles.fileRowSub} numberOfLines={1}>{subtitle}</ThemedText>
-      </ThemedView>
-      <ThemedText style={styles.fileRowSize}>{formatBytes(sizeBytes)}</ThemedText>
-    </ThemedView>
+    <View style={[styles.fileRow, { paddingVertical: spacing.md, gap: spacing.md }]}>
+      <View
+        style={[
+          styles.fileRowIcon,
+          {
+            width: sizes.controlMd,
+            height: sizes.controlMd,
+            borderRadius: radii.md,
+            backgroundColor: colors.surfaceSubtle,
+          },
+        ]}
+      >
+        <AppIcon name={icon} color={colorToken} size={sizes.iconMd} />
+      </View>
+      <View style={styles.flex}>
+        <ThemedText variant="bodyBold" numberOfLines={1}>
+          {name}
+        </ThemedText>
+        <ThemedText variant="caption" color="textMuted" numberOfLines={1}>
+          {subtitle}
+        </ThemedText>
+      </View>
+      <ThemedText variant="smallBold" color="textSecondary">
+        {formatBytes(sizeBytes)}
+      </ThemedText>
+    </View>
   );
 }
 
-// ─── Screen ───────────────────────────────────────────────────────────────────
-export default function StorageScreen({ route }: FilesScreenProps<'StorageScreen'>) {
-  const { colors, dark } = useTheme();
+export default function StorageScreen(_props: FilesScreenProps<'StorageScreen'>) {
+  const { colors, spacing } = useAppTheme();
   const navigation = useNavigation('StorageScreen');
-  const insets = useSafeAreaInsets();
   const patientId = usePatientId();
   const { getToken } = useClerkAuth();
-  const folderId = (route.params as any)?.folderId ?? null;
+  const insets = useContentInsets();
 
   const getTokenRef = useRef(getToken);
-  useEffect(() => { getTokenRef.current = getToken; }, [getToken]);
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
 
   const [contents, setContents] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
-  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const data = await getStorageOverview(patientId, getTokenRef.current);
       setContents(data);
-    } catch { setContents(null); }
-    finally { setLoading(false); }
+    } catch {
+      setContents(null);
+    } finally {
+      setLoading(false);
+    }
   }, [patientId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const stats = useMemo(() => {
     if (!contents) return null;
@@ -198,160 +315,145 @@ export default function StorageScreen({ route }: FilesScreenProps<'StorageScreen
     }
     const typeList = Array.from(byType.values()).sort((a, b) => b.size - a.size);
     const avg = filesCount ? Math.round(files.reduce((s, f) => s + (f.sizeBytes ?? 0), 0) / filesCount) : 0;
-    const recent = [...files].sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()).slice(0, 6);
+    const recent = [...files]
+      .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime())
+      .slice(0, 6);
     const largest = [...files].sort((a, b) => (b.sizeBytes ?? 0) - (a.sizeBytes ?? 0)).slice(0, 6);
 
     return { filesCount, foldersCount, pending, total, used, typeList, avg, recent, largest };
   }, [contents]);
 
-  const tabBarHeight = useBottomTabBarHeight() || 96 + insets.bottom;
+  const handleUpgrade = () => {
+    dialog.alert('Coming Soon', 'Upgrade options will be available in a future update.');
+  };
+
   return (
-    <ScrollView
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={[styles.scroll, { paddingBottom: tabBarHeight }]}
-      showsVerticalScrollIndicator={false}
-      refreshControl={<RefreshControl refreshing={loading} onRefresh={load} colors={[BRAND]} tintColor={BRAND} />}
+    <Screen
+      width="form"
+      scroll={true}
+      bottomInset={insets.bottom}
+      onRefresh={load}
+      refreshing={loading}
     >
-      {loading || !stats ? (
-        <ThemedView style={styles.loadingWrap}><ActivityIndicator size="large" color={BRAND} /></ThemedView>
-      ) : (
-        <>
-          <StorageHero used={stats.used} total={stats.total} pending={stats.pending} onUpgrade={() => setUpgradeModalOpen(true)} />
+      <View style={{ gap: spacing.xl }}>
+        {loading || !stats ? (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+        ) : (
+          <>
+            <StorageHero
+              used={stats.used}
+              total={stats.total}
+              pending={stats.pending}
+              onUpgrade={handleUpgrade}
+            />
 
-          <StatPills
-            filesCount={stats.filesCount}
-            foldersCount={stats.foldersCount}
-            pending={stats.pending}
-            avg={stats.avg}
-          />
+            <StatPills
+              filesCount={stats.filesCount}
+              foldersCount={stats.foldersCount}
+              pending={stats.pending}
+              avg={stats.avg}
+            />
 
-          {stats.typeList.length > 0 && (
-            <ThemedView style={styles.section}>
-              <ThemedText style={styles.sectionTitle}>Categories</ThemedText>
-              <CategoryChips types={stats.typeList} onPress={() => navigation.goBack()} />
-            </ThemedView>
-          )}
+            {stats.typeList.length > 0 && (
+              <View style={[styles.section, { gap: spacing.sm }]}>
+                <ThemedText variant="h3">Categories</ThemedText>
+                <CategoryChips types={stats.typeList} onPress={() => navigation.goBack()} />
+              </View>
+            )}
 
-          {stats.recent.length > 0 && (
-            <ThemedView style={styles.section}>
-              <ThemedText style={styles.sectionTitle}>Recent</ThemedText>
-              <ThemedView style={[styles.listCard, { backgroundColor: colors.card }]}>
-                {stats.recent.map((f: any, idx: number) => {
-                  const m = iconForFile(f);
-                  const ts = f.createdAt ? new Date(f.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
-                  return (
-                    <View key={f.id}>
-                      <FileListRow name={f.name} subtitle={`${f.typeLabel ?? 'File'}${ts ? '  ·  ' + ts : ''}`} sizeBytes={f.sizeBytes ?? 0} {...m} />
-                      {idx < stats.recent.length - 1 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
-                    </View>
-                  );
-                })}
-              </ThemedView>
-            </ThemedView>
-          )}
+            {stats.recent.length > 0 && (
+              <View style={[styles.section, { gap: spacing.sm }]}>
+                <ThemedText variant="h3">Recent</ThemedText>
+                <Card padding="md">
+                  {stats.recent.map((f: any, idx: number) => {
+                    const m = iconForFile(f);
+                    const ts = f.createdAt
+                      ? new Date(f.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+                      : '';
+                    return (
+                      <View key={f.id}>
+                        <FileListRow
+                          name={f.name}
+                          subtitle={`${f.typeLabel ?? 'File'}${ts ? '  ·  ' + ts : ''}`}
+                          sizeBytes={f.sizeBytes ?? 0}
+                          {...m}
+                        />
+                        {idx < stats.recent.length - 1 && <Divider />}
+                      </View>
+                    );
+                  })}
+                </Card>
+              </View>
+            )}
 
-          {stats.largest.length > 0 && (
-            <ThemedView style={styles.section}>
-              <ThemedText style={styles.sectionTitle}>Largest files</ThemedText>
-              <ThemedView style={[styles.listCard, { backgroundColor: colors.card }]}>
-                {stats.largest.map((f: any, idx: number) => {
-                  const m = iconForFile(f);
-                  const pct = stats.total > 0 ? Math.round(((f.sizeBytes ?? 0) / stats.total) * 100) : 0;
-                  return (
-                    <ThemedView key={f.id}>
-                      <FileListRow name={f.name} subtitle={`${pct}% of your storage`} sizeBytes={f.sizeBytes ?? 0} {...m} />
-                      {idx < stats.largest.length - 1 && <ThemedView style={[styles.divider, { backgroundColor: colors.border }]} />}
-                    </ThemedView>
-                  );
-                })}
-              </ThemedView>
-            </ThemedView>
-          )}
+            {stats.largest.length > 0 && (
+              <View style={[styles.section, { gap: spacing.sm }]}>
+                <ThemedText variant="h3">Largest files</ThemedText>
+                <Card padding="md">
+                  {stats.largest.map((f: any, idx: number) => {
+                    const m = iconForFile(f);
+                    const pct = stats.total > 0 ? Math.round(((f.sizeBytes ?? 0) / stats.total) * 100) : 0;
+                    return (
+                      <View key={f.id}>
+                        <FileListRow
+                          name={f.name}
+                          subtitle={`${pct}% of your storage`}
+                          sizeBytes={f.sizeBytes ?? 0}
+                          {...m}
+                        />
+                        {idx < stats.largest.length - 1 && <Divider />}
+                      </View>
+                    );
+                  })}
+                </Card>
+              </View>
+            )}
 
-          <ThemedView style={styles.actionsRow}>
-            <Pressable
-              onPress={() => dialog.alert('Free up space', 'Remove local cached copies of backed up files?', [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Free up', style: 'destructive', onPress: () => { } },
-              ])}
-              style={({ pressed }) => [styles.actionBtn, { backgroundColor: dark ? '#1C1633' : '#fff', opacity: pressed ? 0.8 : 1 }]}
-            >
-              {Ic({ a: 'cleaning_services', i: 'trash.fill', color: BRAND, size: 18 })}
-              <ThemedText style={[styles.actionBtnText, { color: colors.text }]}>Free up space</ThemedText>
-            </Pressable>
-            <Pressable
-              onPress={() => dialog.alert('Export', 'Not implemented yet.')}
-              style={({ pressed }) => [styles.actionBtn, { backgroundColor: dark ? '#1C1633' : '#fff', opacity: pressed ? 0.8 : 1 }]}
-            >
-              {Ic({ a: 'ios_share', i: 'square.and.arrow.up', color: BRAND, size: 18 })}
-              <ThemedText style={[styles.actionBtnText, { color: colors.text }]}>Export all</ThemedText>
-            </Pressable>
-          </ThemedView>
-        </>
-      )}
-
-      <CustomAlertModal
-        visible={upgradeModalOpen}
-        title="Coming Soon"
-        message="Upgrade options will be available in a future update."
-        icon="🚀"
-        onClose={() => setUpgradeModalOpen(false)}
-      />
-    </ScrollView>
+            <View style={[styles.actionsRow, { gap: spacing.md }]}>
+              <Button
+                variant="outline"
+                label="Free up space"
+                icon="trash"
+                style={styles.flex}
+                onPress={() =>
+                  dialog.alert('Free up space', 'Remove local cached copies of backed up files?', [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Free up', style: 'destructive', onPress: () => {} },
+                  ])
+                }
+              />
+              <Button
+                variant="outline"
+                label="Export all"
+                icon="share"
+                style={styles.flex}
+                onPress={() => dialog.alert('Export', 'Not implemented yet.')}
+              />
+            </View>
+          </>
+        )}
+      </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  handleRow: { height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
-  handle: { flex: 1, height: 4, borderRadius: 2, marginHorizontal: 60, opacity: 0.3 },
-  closeBtn: { position: 'absolute', right: 16, width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  scroll: { padding: 16, gap: 20 },
-  loadingWrap: { paddingTop: 80, alignItems: 'center' },
-
-  // hero
-  hero: { borderRadius: 20, padding: 20, gap: 16 },
+  flex: { flex: 1 },
+  loadingWrap: { paddingVertical: 80, alignItems: 'center' },
+  hero: {},
   heroTop: { flexDirection: 'row', alignItems: 'center' },
-  heroIconBox: { width: 52, height: 52, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
-  heroTitle: { fontSize: 16, fontWeight: '800' },
-  heroBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, marginTop: 4, alignSelf: 'flex-start' },
-  heroBadgeText: { fontSize: 11, fontWeight: '700' },
-  upgradeBtn: { backgroundColor: '#fff', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 },
-  upgradeBtnText: { fontSize: 13, fontWeight: '800' },
-  heroBarTrack: { height: 7, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.25)', overflow: 'hidden' },
-  heroBarFill: { height: '100%', borderRadius: 999 },
-  heroLabels: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 },
-  heroLabelSm: { fontSize: 12, fontWeight: '600' },
-  heroLabelBold: { fontSize: 12, fontWeight: '800' },
-
-  // stat pills
-  pillsRow: { flexDirection: 'row', gap: 10 },
-  pillCard: { flex: 1, borderRadius: 14, paddingVertical: 14, alignItems: 'center', gap: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 1 },
-  pillIcon: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  pillValue: { fontSize: 15, fontWeight: '800' },
-  pillLabel: { fontSize: 10, fontWeight: '600', opacity: 0.6, textAlign: 'center' },
-
-  // sections
-  section: { gap: 10 },
-  sectionTitle: { fontSize: 16, fontWeight: '800', marginLeft: 2 },
-  chipsScroll: { gap: 10, paddingVertical: 2 },
-  chip: { alignItems: 'center', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, gap: 6, minWidth: 80 },
-  chipIcon: { width: 48, height: 48, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
-  chipLabel: { fontSize: 12, fontWeight: '700' },
-  chipCount: { fontSize: 11, fontWeight: '600', opacity: 0.75 },
-
-  // file rows
-  listCard: { borderRadius: 16, paddingHorizontal: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 1 },
-  fileRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 12 },
-  fileRowIcon: { width: 40, height: 40, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  fileRowBody: { flex: 1, minWidth: 0 },
-  fileRowName: { fontSize: 14, fontWeight: '700' },
-  fileRowSub: { fontSize: 12, opacity: 0.55, marginTop: 2 },
-  fileRowSize: { fontSize: 12, fontWeight: '700', opacity: 0.75 },
-  divider: { height: StyleSheet.hairlineWidth, marginLeft: 52 },
-
-  // actions
-  actionsRow: { flexDirection: 'row', gap: 12 },
-  actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 1 },
-  actionBtnText: { fontSize: 13, fontWeight: '700' },
+  heroIconBox: { alignItems: 'center', justifyContent: 'center' },
+  heroLabels: { flexDirection: 'row', justifyContent: 'space-between' },
+  pillsRow: { flexDirection: 'row' },
+  pillCard: { flex: 1, alignItems: 'center' },
+  pillIcon: { alignItems: 'center', justifyContent: 'center' },
+  section: {},
+  chipsScroll: { paddingVertical: 2 },
+  chip: { alignItems: 'center', minWidth: 88 },
+  chipIcon: { alignItems: 'center', justifyContent: 'center' },
+  fileRow: { flexDirection: 'row', alignItems: 'center' },
+  fileRowIcon: { alignItems: 'center', justifyContent: 'center' },
+  actionsRow: { flexDirection: 'row' },
 });
-

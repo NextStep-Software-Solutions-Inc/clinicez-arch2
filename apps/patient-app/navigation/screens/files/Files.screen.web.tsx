@@ -4,20 +4,22 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  TextInput,
   View,
-  useWindowDimensions,
 } from 'react-native';
-import { useNavigation, useTheme } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { useAuth as useClerkAuth } from '@clerk/expo';
-import { useAuth as useAppAuth } from 'contexts/AuthContext';
-import * as Sharing from 'expo-sharing';
 import ThemedText from '@ui/ThemedText';
+import Button from '@ui/Button';
+import IconButton from '@ui/IconButton';
+import Card from '@ui/Card';
+import Badge from '@ui/Badge';
+import Input from '@ui/Input';
 import EmptyState from '@ui/EmptyState';
-import { AppIcon } from '../../../components/ui/Icon';
-import CustomAlertModal from '../../../components/ui/CustomAlertModal';
-import RenameModal from '../../../components/ui/RenameModal';
+import { AppIcon, type IconName } from '@ui/Icon';
+import { ProgressBar, Divider } from '@ui/Primitives';
+import Screen from '../../../components/layout/Screen';
 import { usePatientId } from 'hooks/usePatientId';
+import { useBreakpoint } from '../../../hooks/useBreakpoint';
 import {
   FileBrowserFile,
   FileBrowserFolder,
@@ -29,36 +31,52 @@ import {
   renameFolder,
   listFolderContents,
   formatBytes,
+  getFileConfig,
 } from '../../../services/files';
 import type { FilesScreenProps } from './navigationTypes';
 import { useFilesBrowser, useFrkCheck } from '../../../hooks/useFilesBrowser';
+import { FileRow } from '../../../components/files/FileRow.web';
+import RenameModal from '../../../components/ui/RenameModal';
+import { dialog } from '@utils/dialog';
+import { useAppTheme } from '../../../contexts/ThemeContext';
+import type { ColorToken } from '../../../constants/theme';
+import useSWR from 'swr';
 
-const BRAND = '#7C3AED';
+type SortOption = 'name-asc' | 'name-desc' | 'date-desc' | 'size-desc';
 
-function getFileIcon(file: FileBrowserFile) {
-  if (file.previewKind === 'image') return { icon: 'image', color: '#EC4899', label: 'Image' };
-  if (file.previewKind === 'pdf') return { icon: 'picture_as_pdf', color: '#EF4444', label: 'PDF' };
-  if (file.documentTypeId === 'file-type-lab-result') return { icon: 'science', color: '#10B981', label: 'Lab' };
-  if (file.documentTypeId === 'file-type-prescription') return { icon: 'medication', color: '#F59E0B', label: 'Rx' };
-  if (file.documentTypeId === 'file-type-xray') return { icon: 'health_and_safety', color: '#3B82F6', label: 'X-Ray' };
-  return { icon: 'description', color: '#6366F1', label: 'Doc' };
+const TYPE_META: Record<string, { colorToken: ColorToken; icon: IconName }> = {
+  'file-type-xray': { colorToken: 'info', icon: 'activity' },
+  'file-type-lab-result': { colorToken: 'success', icon: 'lab' },
+  'file-type-medical-certificate': { colorToken: 'warning', icon: 'document' },
+  'file-type-prescription': { colorToken: 'emergency', icon: 'pill' },
+  'file-type-id': { colorToken: 'purple', icon: 'badge' },
+};
+const DEFAULT_TYPE: { colorToken: ColorToken; icon: IconName } = { colorToken: 'textSecondary', icon: 'document' };
+
+function typeMeta(id: string) {
+  return TYPE_META[id] ?? DEFAULT_TYPE;
+}
+
+function getFileMeta(file: FileBrowserFile) {
+  if (file.previewKind === 'image') return { colorToken: 'purple' as ColorToken, icon: 'image' as IconName, label: 'Image' };
+  if (file.previewKind === 'pdf') return { colorToken: 'emergency' as ColorToken, icon: 'pdf' as IconName, label: 'PDF' };
+  const base = typeMeta(file.documentTypeId ?? '');
+  return { ...base, label: file.typeLabel || 'Document' };
 }
 
 export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowserScreen'>) {
-  const { colors, dark: isDark } = useTheme();
+  const { colors, spacing, radii, sizes, shadows } = useAppTheme();
   const navigation = useNavigation<any>();
   const patientId = usePatientId();
   const { getToken } = useClerkAuth();
-  const { runWithAutoLockPaused } = useAppAuth();
-  const { width } = useWindowDimensions();
-
-  const isDesktop = width >= 1024;
-  const isTablet = width >= 640 && width < 1024;
+  const { isDesktop } = useBreakpoint();
 
   const folderId = route.params?.folderId;
   const [query, setQuery] = useState('');
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [sortBy, setSortBy] = useState<SortOption>('name-asc');
   const [isSyncing, setIsSyncing] = useState(false);
-  const [alertModal, setAlertModal] = useState<{ title: string; message: string; icon?: string } | null>(null);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [renameTarget, setRenameTarget] = useState<{
     kind: 'file' | 'folder';
     id: string;
@@ -73,11 +91,12 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
     query
   );
 
-  const folderName = folderId
-    ? contents?.breadcrumbs?.length
-      ? contents.breadcrumbs[contents.breadcrumbs.length - 1].name
-      : 'Folder'
-    : 'Root Vault';
+  // Storage config for quota bar
+  const { data: fileConfig } = useSWR(
+    ['files-config-overview', patientId],
+    () => getFileConfig(patientId, getToken),
+    { revalidateOnFocus: false }
+  );
 
   const handleRenameSave = async (newName: string) => {
     if (!renameTarget) return;
@@ -92,26 +111,26 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
       await mutate(newContents, { revalidate: false });
       syncPendingFiles(patientId, getToken).then(() => mutate()).catch(console.error);
     } catch (e) {
-      setAlertModal({
-        title: 'Rename Error',
-        message: e instanceof Error ? e.message : 'Unable to rename item.',
-        icon: '⚠️',
-      });
+      dialog.alert('Rename Error', e instanceof Error ? e.message : 'Unable to rename item.');
     }
   };
 
   const handleDelete = async (kind: FileItemKind, id: string) => {
+    const confirmed = await dialog.confirm({
+      title: 'Delete item?',
+      message: `Are you sure you want to delete this ${kind}?`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!confirmed) return;
+
     try {
       await deleteItem(patientId, kind, id);
       const newContents = await listFolderContents(patientId, folderId ?? null, query, getToken);
       await mutate(newContents, { revalidate: false });
       syncPendingFiles(patientId, getToken).then(() => mutate()).catch(console.error);
     } catch (error) {
-      setAlertModal({
-        title: 'Delete Failed',
-        message: error instanceof Error ? error.message : 'Unable to delete item.',
-        icon: '🗑️',
-      });
+      dialog.alert('Delete Failed', error instanceof Error ? error.message : 'Unable to delete item.');
     }
   };
 
@@ -120,58 +139,37 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
     try {
       const result = await syncPendingFiles(patientId, getToken);
       if (result.skipped) {
-        setAlertModal({
-          title: 'Backup Waiting',
-          message: result.reason ?? 'Files will back up when internet is connected.',
-          icon: '⏳',
-        });
+        dialog.alert('Backup Waiting', result.reason ?? 'Files will back up when internet is connected.');
       } else if (result.failed > 0) {
-        setAlertModal({
-          title: 'Backup Needs Attention',
-          message: `${result.synced} backed up, ${result.failed} failed.`,
-          icon: '⚠️',
-        });
+        dialog.alert('Backup Needs Attention', `${result.synced} backed up, ${result.failed} failed.`);
       }
       refresh();
     } catch (error) {
-      setAlertModal({
-        title: 'Backup Failed',
-        message: error instanceof Error ? error.message : 'Unable to back up.',
-        icon: '❌',
-      });
+      dialog.alert('Backup Failed', error instanceof Error ? error.message : 'Unable to back up.');
     } finally {
       setIsSyncing(false);
     }
   }, [getToken, patientId, refresh]);
 
-  const handleShareFile = useCallback(
+  const handleDownloadFile = useCallback(
     async (fileId: string) => {
       try {
-        const available = await Sharing.isAvailableAsync();
-        if (!available) {
-          setAlertModal({
-            title: 'Sharing Not Available',
-            message: 'Your browser or device does not support native direct sharing.',
-            icon: '🚫',
-          });
-          return;
-        }
         const preview = await preparePreviewFile(patientId, fileId, getToken);
-        await runWithAutoLockPaused(() =>
-          Sharing.shareAsync(preview.uri, {
-            mimeType: preview.mimeType,
-            dialogTitle: preview.name,
-          })
-        );
+        if (typeof document !== 'undefined') {
+          const link = document.createElement('a');
+          link.href = preview.uri;
+          link.download = preview.name;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        } else {
+          window.open(preview.uri, '_blank');
+        }
       } catch (error) {
-        setAlertModal({
-          title: 'Could Not Share',
-          message: error instanceof Error ? error.message : 'Unable to share file.',
-          icon: '⚠️',
-        });
+        dialog.alert('Download Error', error instanceof Error ? error.message : 'Unable to download file.');
       }
     },
-    [patientId, runWithAutoLockPaused, getToken]
+    [patientId, getToken]
   );
 
   const openUpload = useCallback(() => {
@@ -193,384 +191,575 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
     [navigation]
   );
 
-  const folders = contents?.folders ?? [];
-  const files = contents?.files ?? [];
+  // Sorting
+  const sortedFolders = useMemo(() => {
+    const list = [...(contents?.folders ?? [])];
+    list.sort((a, b) => {
+      if (sortBy === 'name-desc') return b.name.localeCompare(a.name);
+      return a.name.localeCompare(b.name);
+    });
+    return list;
+  }, [contents?.folders, sortBy]);
+
+  const sortedFiles = useMemo(() => {
+    const list = [...(contents?.files ?? [])];
+    list.sort((a, b) => {
+      if (sortBy === 'name-desc') return b.name.localeCompare(a.name);
+      if (sortBy === 'date-desc') return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+      if (sortBy === 'size-desc') return (b.sizeBytes ?? 0) - (a.sizeBytes ?? 0);
+      return a.name.localeCompare(b.name);
+    });
+    return list;
+  }, [contents?.files, sortBy]);
+
+  const usedBytes = fileConfig?.usedStorageBytes ?? 0;
+  const quotaBytes = fileConfig?.quotaBytes ?? 500 * 1024 * 1024;
+  const usedRatio = quotaBytes > 0 ? Math.min(1, usedBytes / quotaBytes) : 0;
+
+  // Drop events on root area
+  const dropHandlers = {
+    onDragOver: (e: any) => {
+      e.preventDefault();
+      setIsDraggingOver(true);
+    },
+    onDragLeave: () => {
+      setIsDraggingOver(false);
+    },
+    onDrop: (e: any) => {
+      e.preventDefault();
+      setIsDraggingOver(false);
+      openUpload();
+    },
+  };
 
   return (
-    <ScrollView
-      style={[styles.root, { backgroundColor: colors.background }]}
-      contentContainerStyle={[styles.scrollContent, { paddingBottom: isDesktop ? 32 : 96 }]}
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={styles.container}>
-        {/* Header Row */}
-        <View style={styles.headerRow}>
-          <View style={styles.headerLeft}>
-            <View style={styles.badgeRow}>
-              <View style={styles.badgePill}>
-                <ThemedText style={styles.badgePillText}>ENCRYPTED HEALTH VAULT</ThemedText>
+    <Screen width="full" scroll={true} padded={false}>
+      <View
+        {...(dropHandlers as any)}
+        style={[
+          styles.container,
+          {
+            padding: spacing.xl,
+            backgroundColor: isDraggingOver ? colors.surfaceHighlight : colors.background,
+          },
+        ]}
+      >
+        <View style={[styles.layoutWrapper, isDesktop && styles.layoutRow, { gap: spacing.xl }]}>
+          {/* Main Browser Column */}
+          <View style={[styles.mainColumn, { gap: spacing.lg }]}>
+            {/* Action Bar (Upload, New Folder, Sync) */}
+            <View style={[styles.actionRow, { gap: spacing.md }]}>
+              <View style={[styles.leftActions, { gap: spacing.sm }]}>
+                <Button
+                  label="Upload"
+                  variant="primary"
+                  icon="upload"
+                  onPress={openUpload}
+                />
+                <Button
+                  label="New folder"
+                  variant="outline"
+                  icon="folderPlus"
+                  onPress={createFolder}
+                />
               </View>
-              {contents?.pendingSyncCount ? (
-                <View style={styles.pendingSyncPill}>
-                  <ThemedText style={styles.pendingSyncText}>
-                    ● {contents.pendingSyncCount} pending sync
-                  </ThemedText>
+
+              <View style={[styles.rightActions, { gap: spacing.sm }]}>
+                {/* Grid / List Toggle */}
+                <View
+                  style={[
+                    styles.toggleGroup,
+                    {
+                      borderColor: colors.border,
+                      borderWidth: sizes.borderWidth,
+                      borderRadius: radii.md,
+                      backgroundColor: colors.card,
+                    },
+                  ]}
+                >
+                  <IconButton
+                    icon="menu"
+                    accessibilityLabel="List view"
+                    color={viewMode === 'list' ? 'primary' : 'textMuted'}
+                    tone={viewMode === 'list' ? 'filled' : 'plain'}
+                    onPress={() => setViewMode('list')}
+                  />
+                  <IconButton
+                    icon="activity"
+                    accessibilityLabel="Grid view"
+                    color={viewMode === 'grid' ? 'primary' : 'textMuted'}
+                    tone={viewMode === 'grid' ? 'filled' : 'plain'}
+                    onPress={() => setViewMode('grid')}
+                  />
                 </View>
-              ) : null}
+
+                {/* Sort Toggle */}
+                <Pressable
+                  onPress={() => {
+                    setSortBy((curr) => {
+                      if (curr === 'name-asc') return 'name-desc';
+                      if (curr === 'name-desc') return 'date-desc';
+                      if (curr === 'date-desc') return 'size-desc';
+                      return 'name-asc';
+                    });
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Sort: ${sortBy}`}
+                  style={({ pressed }) => [
+                    styles.sortBtn,
+                    {
+                      borderColor: colors.border,
+                      borderWidth: sizes.borderWidth,
+                      borderRadius: radii.md,
+                      paddingHorizontal: spacing.md,
+                      paddingVertical: spacing.sm,
+                      backgroundColor: colors.card,
+                      gap: spacing.xs,
+                      opacity: pressed ? 0.8 : 1,
+                    },
+                  ]}
+                >
+                  <AppIcon name="sort" size={sizes.iconSm} color="textSecondary" />
+                  <ThemedText variant="smallBold" color="textSecondary">
+                    {sortBy === 'name-asc'
+                      ? 'Name (A-Z)'
+                      : sortBy === 'name-desc'
+                        ? 'Name (Z-A)'
+                        : sortBy === 'date-desc'
+                          ? 'Newest'
+                          : 'Size'}
+                  </ThemedText>
+                </Pressable>
+
+                <IconButton
+                  icon="sync"
+                  accessibilityLabel="Sync now"
+                  color="primary"
+                  onPress={handleSync}
+                  disabled={isSyncing}
+                />
+              </View>
             </View>
-            <ThemedText style={[styles.pageTitle, { color: colors.text }]}>
-              Medical Files & Documents
-            </ThemedText>
-            <ThemedText style={[styles.pageSubtitle, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-              Securely store, organize, and preview laboratory results, prescriptions, diagnostic scans, and clinical PDFs.
-            </ThemedText>
+
+            {/* Breadcrumbs + Search Filter Bar */}
+            <View
+              style={[
+                styles.filterBar,
+                {
+                  borderColor: colors.border,
+                  borderWidth: sizes.borderWidth,
+                  borderRadius: radii.lg,
+                  backgroundColor: colors.card,
+                  padding: spacing.sm,
+                  gap: spacing.md,
+                },
+                shadows.sm,
+              ]}
+            >
+              {/* Breadcrumb Trail */}
+              <View style={[styles.crumbRow, { gap: spacing.xs }]}>
+                <Pressable
+                  onPress={openRoot}
+                  accessibilityRole="button"
+                  accessibilityLabel="Root folder"
+                  style={styles.crumbBtn}
+                >
+                  <AppIcon name="home" size={sizes.iconSm} color={!folderId ? 'primary' : 'textMuted'} />
+                  <ThemedText
+                    variant="smallBold"
+                    color={!folderId ? 'primary' : 'textSecondary'}
+                    style={{ marginLeft: spacing.xxs }}
+                  >
+                    All files
+                  </ThemedText>
+                </Pressable>
+
+                {contents?.breadcrumbs?.map((crumb, idx) => {
+                  const isLast = idx === contents.breadcrumbs.length - 1;
+                  return (
+                    <React.Fragment key={crumb.id}>
+                      <ThemedText variant="caption" color="textLight">
+                        /
+                      </ThemedText>
+                      <Pressable
+                        onPress={() => (isLast ? undefined : openFolder(crumb.id))}
+                        disabled={isLast}
+                        accessibilityRole="button"
+                        accessibilityLabel={crumb.name}
+                        style={styles.crumbBtn}
+                      >
+                        <ThemedText
+                          variant="smallBold"
+                          color={isLast ? 'primary' : 'textSecondary'}
+                        >
+                          {crumb.name}
+                        </ThemedText>
+                      </Pressable>
+                    </React.Fragment>
+                  );
+                })}
+              </View>
+
+              {/* Search input field */}
+              <View
+                style={[
+                  styles.searchField,
+                  {
+                    backgroundColor: colors.surfaceSubtle,
+                    borderColor: colors.border,
+                    borderWidth: sizes.borderWidth,
+                    borderRadius: radii.md,
+                    paddingHorizontal: spacing.sm,
+                    gap: spacing.xs,
+                  },
+                ]}
+              >
+                <AppIcon name="search" size={sizes.iconSm} color="textMuted" />
+                <Input
+                  value={query}
+                  onChangeText={setQuery}
+                  placeholder="Search files..."
+                  containerStyle={{ marginBottom: 0, flex: 1 }}
+                />
+                {query ? (
+                  <Pressable onPress={() => setQuery('')} accessibilityLabel="Clear search">
+                    <AppIcon name="close" size={sizes.iconSm} color="textMuted" />
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
+
+            {/* Browser Content */}
+            {isLoading && !contents ? (
+              <View style={[styles.centerLoading, { paddingVertical: spacing['5xl'], gap: spacing.md }]}>
+                <ActivityIndicator size="large" color={colors.primary} />
+                <ThemedText variant="body" color="textMuted">
+                  Opening encrypted vault...
+                </ThemedText>
+              </View>
+            ) : sortedFolders.length === 0 && sortedFiles.length === 0 ? (
+              <Card padding="lg">
+                <EmptyState
+                  title={query ? 'No matching documents' : 'No documents in this folder'}
+                  message={
+                    query
+                      ? 'Try searching with a different keyword or filename.'
+                      : 'Drop files here to upload, or click "Upload" to select health documents.'
+                  }
+                  actionLabel={query ? undefined : 'Upload files'}
+                  onActionPress={query ? undefined : openUpload}
+                />
+              </Card>
+            ) : (
+              <View style={{ gap: spacing.lg }}>
+                {/* Folders List/Grid */}
+                {sortedFolders.length > 0 && (
+                  <View style={{ gap: spacing.sm }}>
+                    <ThemedText variant="captionBold" color="textMuted" style={{ textTransform: 'uppercase' }}>
+                      Folders ({sortedFolders.length})
+                    </ThemedText>
+                    {viewMode === 'list' ? (
+                      <View style={{ gap: spacing.xs }}>
+                        {sortedFolders.map((f) => (
+                          <FileRow
+                            key={f.id}
+                            item={f}
+                            onPress={() => openFolder(f.id)}
+                            onMove={() =>
+                              navigation.navigate('FileMoveScreen', {
+                                itemKind: 'folder',
+                                itemId: f.id,
+                                currentFolderId: f.parentId,
+                              })
+                            }
+                            onRename={() =>
+                              setRenameTarget({
+                                kind: 'folder',
+                                id: f.id,
+                                initialName: f.name,
+                              })
+                            }
+                            onDelete={() => handleDelete('folder', f.id)}
+                          />
+                        ))}
+                      </View>
+                    ) : (
+                      <View style={[styles.gridRow, { gap: spacing.md }]}>
+                        {sortedFolders.map((folder) => (
+                          <Pressable
+                            key={folder.id}
+                            onPress={() => openFolder(folder.id)}
+                            style={({ pressed }) => [
+                              styles.folderGridCard,
+                              {
+                                backgroundColor: colors.card,
+                                borderColor: colors.border,
+                                borderWidth: sizes.borderWidth,
+                                borderRadius: radii.lg,
+                                padding: spacing.md,
+                                gap: spacing.sm,
+                                opacity: pressed ? 0.9 : 1,
+                              },
+                              shadows.sm,
+                            ]}
+                          >
+                            <View style={styles.gridCardTop}>
+                              <View
+                                style={[
+                                  styles.cardIconBox,
+                                  {
+                                    width: sizes.controlLg,
+                                    height: sizes.controlLg,
+                                    borderRadius: radii.md,
+                                    backgroundColor: colors.warningBg,
+                                  },
+                                ]}
+                              >
+                                <AppIcon name="folder" color="warning" size={sizes.iconLg} />
+                              </View>
+                              <View style={{ flexDirection: 'row', gap: spacing.xxs }}>
+                                <IconButton
+                                  icon="edit"
+                                  accessibilityLabel="Rename"
+                                  size={sizes.iconSm}
+                                  onPress={(e) => {
+                                    e.stopPropagation();
+                                    setRenameTarget({
+                                      kind: 'folder',
+                                      id: folder.id,
+                                      initialName: folder.name,
+                                    });
+                                  }}
+                                />
+                                <IconButton
+                                  icon="trash"
+                                  accessibilityLabel="Delete"
+                                  color="emergency"
+                                  size={sizes.iconSm}
+                                  onPress={(e) => {
+                                    e.stopPropagation();
+                                    handleDelete('folder', folder.id);
+                                  }}
+                                />
+                              </View>
+                            </View>
+                            <ThemedText variant="bodyBold" numberOfLines={1}>
+                              {folder.name}
+                            </ThemedText>
+                            <ThemedText variant="caption" color="textMuted">
+                              {folder.childCount} items
+                            </ThemedText>
+                          </Pressable>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {/* Files List/Grid */}
+                {sortedFiles.length > 0 && (
+                  <View style={{ gap: spacing.sm }}>
+                    <ThemedText variant="captionBold" color="textMuted" style={{ textTransform: 'uppercase' }}>
+                      Files ({sortedFiles.length})
+                    </ThemedText>
+                    {viewMode === 'list' ? (
+                      <View style={{ gap: spacing.xs }}>
+                        {sortedFiles.map((file) => (
+                          <FileRow
+                            key={file.id}
+                            item={file}
+                            onPress={() => navigation.navigate('FileViewerScreen', { fileId: file.id })}
+                            onDownload={() => handleDownloadFile(file.id)}
+                            onMove={() =>
+                              navigation.navigate('FileMoveScreen', {
+                                itemKind: 'file',
+                                itemId: file.id,
+                                currentFolderId: file.folderId,
+                              })
+                            }
+                            onRename={() =>
+                              setRenameTarget({
+                                kind: 'file',
+                                id: file.id,
+                                initialName: file.name,
+                              })
+                            }
+                            onDelete={() => handleDelete('file', file.id)}
+                          />
+                        ))}
+                      </View>
+                    ) : (
+                      <View style={[styles.gridRow, { gap: spacing.md }]}>
+                        {sortedFiles.map((file) => {
+                          const meta = getFileMeta(file);
+                          return (
+                            <Pressable
+                              key={file.id}
+                              onPress={() => navigation.navigate('FileViewerScreen', { fileId: file.id })}
+                              style={({ pressed }) => [
+                                styles.fileGridCard,
+                                {
+                                  backgroundColor: colors.card,
+                                  borderColor: colors.border,
+                                  borderWidth: sizes.borderWidth,
+                                  borderRadius: radii.lg,
+                                  padding: spacing.md,
+                                  gap: spacing.sm,
+                                  opacity: pressed ? 0.9 : 1,
+                                },
+                                shadows.sm,
+                              ]}
+                            >
+                              <View style={styles.gridCardTop}>
+                                <View
+                                  style={[
+                                    styles.cardIconBox,
+                                    {
+                                      width: sizes.controlLg,
+                                      height: sizes.controlLg,
+                                      borderRadius: radii.md,
+                                      backgroundColor: colors.surfaceSubtle,
+                                    },
+                                  ]}
+                                >
+                                  <AppIcon name={meta.icon} color={meta.colorToken} size={sizes.iconLg} />
+                                </View>
+                                <View style={{ flexDirection: 'row', gap: spacing.xxs }}>
+                                  <IconButton
+                                    icon="download"
+                                    accessibilityLabel="Download"
+                                    color="primary"
+                                    size={sizes.iconSm}
+                                    onPress={(e) => {
+                                      e.stopPropagation();
+                                      handleDownloadFile(file.id);
+                                    }}
+                                  />
+                                  <IconButton
+                                    icon="trash"
+                                    accessibilityLabel="Delete"
+                                    color="emergency"
+                                    size={sizes.iconSm}
+                                    onPress={(e) => {
+                                      e.stopPropagation();
+                                      handleDelete('file', file.id);
+                                    }}
+                                  />
+                                </View>
+                              </View>
+
+                              <ThemedText variant="bodyBold" numberOfLines={2}>
+                                {file.name}
+                              </ThemedText>
+
+                              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <Badge tone="neutral" label={meta.label} size="sm" />
+                                <ThemedText variant="caption" color="textMuted">
+                                  {formatBytes(file.sizeBytes)}
+                                </ThemedText>
+                              </View>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    )}
+                  </View>
+                )}
+              </View>
+            )}
           </View>
 
-          {/* Action Toolbar */}
-          <View style={styles.toolbarActions}>
-            <Pressable
-              onPress={openUpload}
-              style={({ pressed }) => [styles.uploadBtn, pressed && { opacity: 0.85 }]}
-            >
-              <ThemedText style={styles.uploadBtnText}>☁️ Upload File</ThemedText>
-            </Pressable>
+          {/* Right Rail: Details & Storage Usage (>= 1024 Desktop) */}
+          {isDesktop && (
+            <View style={[styles.sideRail, { width: 320, gap: spacing.lg }]}>
+              {/* Storage Overview Card */}
+              <Card padding="lg" elevation="sm">
+                <View style={{ gap: spacing.md }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <ThemedText variant="h3">Storage Vault</ThemedText>
+                    <IconButton
+                      icon="externalLink"
+                      accessibilityLabel="Open storage screen"
+                      size={sizes.iconSm}
+                      onPress={() => navigation.navigate('StorageScreen', { folderId: folderId ?? null })}
+                    />
+                  </View>
 
-            <Pressable
-              onPress={createFolder}
-              style={({ pressed }) => [
-                styles.toolBtn,
-                { borderColor: isDark ? '#334155' : '#CBD5E1' },
-                pressed && { opacity: 0.75 },
-              ]}
-            >
-              <ThemedText style={[styles.toolBtnText, { color: colors.text }]}>
-                📁 New Folder
-              </ThemedText>
-            </Pressable>
+                  <ProgressBar value={usedRatio} tone={usedRatio > 0.85 ? 'danger' : 'primary'} />
 
-            <Pressable
-              onPress={handleSync}
-              disabled={isSyncing}
-              style={({ pressed }) => [
-                styles.toolBtn,
-                { borderColor: isDark ? '#334155' : '#CBD5E1' },
-                pressed && { opacity: 0.75 },
-              ]}
-            >
-              {isSyncing ? (
-                <ActivityIndicator size="small" color="#3B82F6" />
-              ) : (
-                <ThemedText style={styles.toolBtnTextPrimary}>🔄 Sync</ThemedText>
-              )}
-            </Pressable>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <ThemedText variant="small" color="textMuted">
+                      {formatBytes(usedBytes)} used
+                    </ThemedText>
+                    <ThemedText variant="smallBold">
+                      {formatBytes(quotaBytes)} total
+                    </ThemedText>
+                  </View>
 
-            <Pressable
-              onPress={() => navigation.navigate('StorageScreen', { folderId: folderId ?? null })}
-              style={({ pressed }) => [
-                styles.toolBtn,
-                { borderColor: isDark ? '#334155' : '#CBD5E1' },
-                pressed && { opacity: 0.75 },
-              ]}
-            >
-              <ThemedText style={[styles.toolBtnText, { color: colors.text }]}>
-                💾 Storage
-              </ThemedText>
-            </Pressable>
-          </View>
+                  <Divider />
+
+                  <View style={{ gap: spacing.sm }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                      <AppIcon name="shield" size={sizes.iconSm} color="success" />
+                      <ThemedText variant="small">End-to-end encrypted</ThemedText>
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                      <AppIcon name="lock" size={sizes.iconSm} color="primary" />
+                      <ThemedText variant="small">Client-side Web Crypto</ThemedText>
+                    </View>
+                  </View>
+
+                  <Button
+                    label="Storage details"
+                    variant="outline"
+                    fullWidth
+                    size="sm"
+                    onPress={() => navigation.navigate('StorageScreen', { folderId: folderId ?? null })}
+                  />
+                </View>
+              </Card>
+
+              {/* Recovery Key Setup info */}
+              <Card padding="md" elevation="sm">
+                <View style={{ gap: spacing.sm }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                    <AppIcon name="key" size={sizes.iconMd} color="primary" />
+                    <ThemedText variant="bodyBold">Recovery Key</ThemedText>
+                  </View>
+                  <ThemedText variant="small" color="textMuted">
+                    Your Master Access Key encrypts all documents. Make sure you have your 16-character key saved.
+                  </ThemedText>
+                  <Button
+                    label="Unlock / Enter Key"
+                    variant="ghost"
+                    size="sm"
+                    onPress={() =>
+                      navigation.navigate('FRKEntryScreen', {
+                        encryptedMAK: fileConfig?.encryptedMAK ?? '',
+                      })
+                    }
+                  />
+                </View>
+              </Card>
+            </View>
+          )}
         </View>
 
-        {/* Interactive Breadcrumbs Bar */}
-        <View
-          style={[
-            styles.breadcrumbsBar,
-            {
-              backgroundColor: isDark ? '#1E293B' : '#F8FAFC',
-              borderColor: isDark ? '#334155' : '#E2E8F0',
-            },
-          ]}
-        >
-          <View style={styles.breadcrumbsList}>
-            <Pressable onPress={openRoot} style={styles.crumbItem}>
-              <ThemedText style={[styles.crumbText, !folderId && styles.crumbTextActive]}>
-                📁 My Files
-              </ThemedText>
-            </Pressable>
-
-            {contents?.breadcrumbs?.map((crumb, idx) => {
-              const isLast = idx === contents.breadcrumbs.length - 1;
-              return (
-                <React.Fragment key={crumb.id}>
-                  <ThemedText style={styles.crumbSeparator}>/</ThemedText>
-                  <Pressable
-                    onPress={() => (isLast ? undefined : openFolder(crumb.id))}
-                    disabled={isLast}
-                    style={styles.crumbItem}
-                  >
-                    <ThemedText style={[styles.crumbText, isLast && styles.crumbTextActive]}>
-                      {crumb.name}
-                    </ThemedText>
-                  </Pressable>
-                </React.Fragment>
-              );
-            })}
-          </View>
-
-          {/* Quick Search */}
+        {/* Drop zone visual hint when dragging */}
+        {isDraggingOver && (
           <View
             style={[
-              styles.searchField,
+              styles.dragOverlay,
               {
-                backgroundColor: isDark ? '#0F172A' : '#FFFFFF',
-                borderColor: isDark ? '#334155' : '#CBD5E1',
+                backgroundColor: colors.overlay,
+                borderRadius: radii.xl,
               },
             ]}
           >
-            <ThemedText style={{ fontSize: 14 }}>🔍</ThemedText>
-            <TextInput
-              value={query}
-              onChangeText={setQuery}
-              placeholder="Search files and folders..."
-              placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
-              style={[styles.searchInput, { color: colors.text }]}
-            />
-            {query.length > 0 && (
-              <Pressable onPress={() => setQuery('')}>
-                <ThemedText style={{ color: '#94A3B8', fontWeight: '700' }}>✕</ThemedText>
-              </Pressable>
-            )}
-          </View>
-        </View>
-
-        {/* Loading State */}
-        {isLoading && !contents ? (
-          <View style={styles.centerLoading}>
-            <ActivityIndicator size="large" color="#3B82F6" />
-            <ThemedText style={styles.loadingSubtitle}>Opening medical vault...</ThemedText>
-          </View>
-        ) : folders.length === 0 && files.length === 0 ? (
-          <EmptyState
-            title={query ? 'No matching documents' : 'No documents in this folder'}
-            message={
-              query
-                ? 'Try searching with a different term or keyword.'
-                : 'Upload medical PDFs, laboratory results, or create subfolders to keep your records organized.'
-            }
-            actionLabel={query ? undefined : 'Upload File Now'}
-            onActionPress={query ? undefined : openUpload}
-          />
-        ) : (
-          <View style={styles.mainContent}>
-            {/* Folders Section */}
-            {folders.length > 0 && (
-              <View style={styles.sectionBlock}>
-                <View style={styles.sectionHeadingRow}>
-                  <ThemedText style={[styles.sectionHeading, { color: colors.text }]}>
-                    Folders ({folders.length})
-                  </ThemedText>
-                </View>
-
-                <View
-                  style={[
-                    styles.grid,
-                    isDesktop
-                      ? styles.grid4Col
-                      : isTablet
-                        ? styles.grid3Col
-                        : styles.grid1Col,
-                  ]}
-                >
-                  {folders.map((folder) => (
-                    <Pressable
-                      key={folder.id}
-                      onPress={() => openFolder(folder.id)}
-                      style={({ pressed }) => [
-                        styles.folderCard,
-                        {
-                          backgroundColor: isDark ? '#1E293B' : '#FFFFFF',
-                          borderColor: isDark ? '#334155' : '#E2E8F0',
-                        },
-                        pressed && { opacity: 0.85, transform: [{ scale: 0.99 }] },
-                      ]}
-                    >
-                      <View style={styles.folderCardTop}>
-                        <View style={styles.folderIconBadge}>
-                          <ThemedText style={{ fontSize: 24 }}>📁</ThemedText>
-                        </View>
-                        <View style={styles.folderActions}>
-                          <Pressable
-                            onPress={(e) => {
-                              e.stopPropagation();
-                              setRenameTarget({
-                                kind: 'folder',
-                                id: folder.id,
-                                initialName: folder.name,
-                              });
-                            }}
-                            style={styles.cardActionIcon}
-                          >
-                            <ThemedText style={{ fontSize: 13 }}>✏️</ThemedText>
-                          </Pressable>
-                          <Pressable
-                            onPress={(e) => {
-                              e.stopPropagation();
-                              handleDelete('folder', folder.id);
-                            }}
-                            style={styles.cardActionIcon}
-                          >
-                            <ThemedText style={{ fontSize: 13 }}>🗑️</ThemedText>
-                          </Pressable>
-                        </View>
-                      </View>
-
-                      <ThemedText
-                        style={[styles.folderName, { color: colors.text }]}
-                        numberOfLines={1}
-                      >
-                        {folder.name}
-                      </ThemedText>
-                      <ThemedText style={[styles.folderChildCount, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-                        {folder.childCount} {folder.childCount === 1 ? 'item' : 'items'}
-                      </ThemedText>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            {/* Files Section */}
-            {files.length > 0 && (
-              <View style={styles.sectionBlock}>
-                <View style={styles.sectionHeadingRow}>
-                  <ThemedText style={[styles.sectionHeading, { color: colors.text }]}>
-                    Files & Records ({files.length})
-                  </ThemedText>
-                </View>
-
-                <View
-                  style={[
-                    styles.grid,
-                    isDesktop
-                      ? styles.grid3Col
-                      : isTablet
-                        ? styles.grid2Col
-                        : styles.grid1Col,
-                  ]}
-                >
-                  {files.map((file) => {
-                    const meta = getFileIcon(file);
-                    return (
-                      <View
-                        key={file.id}
-                        style={[
-                          styles.fileCard,
-                          {
-                            backgroundColor: isDark ? '#1E293B' : '#FFFFFF',
-                            borderColor: isDark ? '#334155' : '#E2E8F0',
-                          },
-                        ]}
-                      >
-                        <View style={styles.fileCardHeader}>
-                          <View
-                            style={[
-                              styles.fileIconBadge,
-                              { backgroundColor: `${meta.color}15` },
-                            ]}
-                          >
-                            <AppIcon name={meta.icon as any} size={22} color={meta.color} />
-                          </View>
-                          <View style={styles.fileCardHeaderRight}>
-                            <View
-                              style={[
-                                styles.fileTypeTag,
-                                { backgroundColor: `${meta.color}18` },
-                              ]}
-                            >
-                              <ThemedText
-                                style={[styles.fileTypeTagText, { color: meta.color }]}
-                              >
-                                {meta.label}
-                              </ThemedText>
-                            </View>
-                            <ThemedText style={[styles.fileSizeText, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-                              {formatBytes(file.sizeBytes ?? 0)}
-                            </ThemedText>
-                          </View>
-                        </View>
-
-                        <Pressable
-                          onPress={() =>
-                            navigation.navigate('FileViewerScreen', { fileId: file.id })
-                          }
-                          style={styles.fileContentArea}
-                        >
-                          <ThemedText
-                            style={[styles.fileName, { color: colors.text }]}
-                            numberOfLines={2}
-                          >
-                            {file.name}
-                          </ThemedText>
-                        </Pressable>
-
-                        {/* File Action Footer */}
-                        <View
-                          style={[
-                            styles.fileCardFooter,
-                            { borderTopColor: isDark ? '#334155' : '#F1F5F9' },
-                          ]}
-                        >
-                          <Pressable
-                            onPress={() =>
-                              navigation.navigate('FileViewerScreen', { fileId: file.id })
-                            }
-                            style={styles.actionBtnPrimary}
-                          >
-                            <ThemedText style={styles.actionBtnPrimaryText}>Preview</ThemedText>
-                          </Pressable>
-
-                          <View style={styles.secondaryActions}>
-                            <Pressable
-                              onPress={() =>
-                                navigation.navigate('FileMoveScreen', {
-                                  itemKind: 'file',
-                                  itemId: file.id,
-                                  currentFolderId: file.folderId,
-                                })
-                              }
-                              style={styles.iconActionBtn}
-                              accessibilityLabel="Move file"
-                            >
-                              <ThemedText style={{ fontSize: 14 }}>↗️</ThemedText>
-                            </Pressable>
-
-                            <Pressable
-                              onPress={() =>
-                                setRenameTarget({
-                                  kind: 'file',
-                                  id: file.id,
-                                  initialName: file.name,
-                                })
-                              }
-                              style={styles.iconActionBtn}
-                              accessibilityLabel="Rename file"
-                            >
-                              <ThemedText style={{ fontSize: 14 }}>✏️</ThemedText>
-                            </Pressable>
-
-                            <Pressable
-                              onPress={() => handleDelete('file', file.id)}
-                              style={styles.iconActionBtn}
-                              accessibilityLabel="Delete file"
-                            >
-                              <ThemedText style={{ fontSize: 14 }}>🗑️</ThemedText>
-                            </Pressable>
-                          </View>
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
-            )}
+            <AppIcon name="upload" size={sizes.avatarLg} color={colors.onPrimary} />
+            <ThemedText variant="h2" color={colors.onPrimary} style={{ marginTop: spacing.md }}>
+              Drop files to upload
+            </ThemedText>
           </View>
         )}
       </View>
@@ -582,329 +771,104 @@ export default function FilesScreenWeb({ route }: FilesScreenProps<'FilesBrowser
         onSave={handleRenameSave}
         title={renameTarget?.kind === 'folder' ? 'Rename Folder' : 'Rename File'}
       />
-
-      <CustomAlertModal
-        visible={alertModal !== null}
-        onClose={() => setAlertModal(null)}
-        title={alertModal?.title ?? ''}
-        message={alertModal?.message ?? ''}
-        icon={alertModal?.icon}
-      />
-    </ScrollView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    width: '100%',
-  },
-  scrollContent: {
-    paddingVertical: 24,
-    paddingHorizontal: 20,
-  },
   container: {
-    maxWidth: 1280,
+    flex: 1,
+    minHeight: '100%',
+  },
+  layoutWrapper: {
     width: '100%',
+    maxWidth: 1400,
     marginHorizontal: 'auto',
-    gap: 24,
   },
-  headerRow: {
+  layoutRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'flex-start',
-    flexWrap: 'wrap',
-    gap: 16,
   },
-  headerLeft: {
-    gap: 6,
-    maxWidth: 680,
+  mainColumn: {
+    flex: 1,
+    minWidth: 0,
   },
-  badgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  badgePill: {
-    backgroundColor: 'rgba(59, 130, 246, 0.12)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  badgePillText: {
-    color: '#3B82F6',
-    fontWeight: '800',
-    fontSize: 11,
-    letterSpacing: 0.8,
-  },
-  pendingSyncPill: {
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  pendingSyncText: {
-    color: '#D97706',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  pageTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-  },
-  pageSubtitle: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  toolbarActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flexWrap: 'wrap',
-  },
-  uploadBtn: {
-    backgroundColor: '#3B82F6',
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    shadowColor: '#3B82F6',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  uploadBtnText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  toolBtn: {
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
-  toolBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  toolBtnTextPrimary: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#3B82F6',
-  },
-  breadcrumbsBar: {
+  sideRail: {},
+  actionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
     flexWrap: 'wrap',
-    gap: 12,
   },
-  breadcrumbsList: {
+  leftActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+  },
+  rightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  toggleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sortBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  filterBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     flexWrap: 'wrap',
   },
-  crumbItem: {
+  crumbRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  crumbBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingVertical: 4,
-    paddingHorizontal: 6,
-    borderRadius: 6,
-  },
-  crumbText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#64748B',
-  },
-  crumbTextActive: {
-    fontWeight: '700',
-    color: '#3B82F6',
-  },
-  crumbSeparator: {
-    color: '#94A3B8',
-    fontSize: 13,
   },
   searchField: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    minWidth: 260,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 13,
+    minWidth: 200,
+    height: 38,
   },
   centerLoading: {
-    paddingVertical: 64,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
   },
-  loadingSubtitle: {
-    fontSize: 14,
-    color: '#64748B',
-  },
-  mainContent: {
-    gap: 28,
-  },
-  sectionBlock: {
-    gap: 14,
-  },
-  sectionHeadingRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  sectionHeading: {
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: -0.3,
-  },
-  grid: {
+  gridRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 16,
   },
-  grid4Col: {
-    // 4 cards per row
-  },
-  grid3Col: {
-    // 3 cards per row
-  },
-  grid2Col: {
-    // 2 cards per row
-  },
-  grid1Col: {
-    flexDirection: 'column',
-  },
-  folderCard: {
-    flexBasis: '23.5%',
-    flexGrow: 1,
-    minWidth: 220,
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 16,
-    gap: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  folderCardTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  folderIconBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: 'rgba(245, 158, 11, 0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  folderActions: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  cardActionIcon: {
-    padding: 4,
-    borderRadius: 4,
-  },
-  folderName: {
-    fontSize: 15,
-    fontWeight: '700',
-    marginTop: 4,
-  },
-  folderChildCount: {
-    fontSize: 12,
-  },
-  fileCard: {
+  folderGridCard: {
     flexBasis: '31%',
     flexGrow: 1,
-    minWidth: 280,
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 18,
-    gap: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 6,
-    elevation: 2,
+    minWidth: 200,
   },
-  fileCardHeader: {
+  fileGridCard: {
+    flexBasis: '31%',
+    flexGrow: 1,
+    minWidth: 200,
+  },
+  gridCardTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  fileIconBadge: {
-    width: 42,
-    height: 42,
-    borderRadius: 10,
+  cardIconBox: {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  fileCardHeaderRight: {
-    alignItems: 'flex-end',
-    gap: 3,
-  },
-  fileTypeTag: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  fileTypeTagText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  fileSizeText: {
-    fontSize: 11,
-  },
-  fileContentArea: {
-    minHeight: 44,
+  dragOverlay: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
     justifyContent: 'center',
-  },
-  fileName: {
-    fontSize: 14,
-    fontWeight: '600',
-    lineHeight: 20,
-  },
-  fileCardFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    paddingTop: 10,
-  },
-  actionBtnPrimary: {
-    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  actionBtnPrimaryText: {
-    color: '#3B82F6',
-    fontWeight: '700',
-    fontSize: 12,
-  },
-  secondaryActions: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
-  },
-  iconActionBtn: {
-    padding: 4,
-    borderRadius: 4,
+    zIndex: 999,
   },
 });

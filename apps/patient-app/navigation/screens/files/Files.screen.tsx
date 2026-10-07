@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -9,17 +9,16 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { Theme, useNavigation, useTheme } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { useAuth as useClerkAuth } from '@clerk/expo';
 import { useAuth as useAppAuth } from 'contexts/AuthContext';
 import * as Sharing from 'expo-sharing';
 import EmptyState from '@ui/EmptyState';
 import ThemedText from '@ui/ThemedText';
-import CustomAlertModal from '../../../components/ui/CustomAlertModal';
+import { AppIcon } from '@ui/Icon';
 import RenameModal from '../../../components/ui/RenameModal';
 import { usePatientId } from 'hooks/usePatientId';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useContentInsets } from '../../../hooks/useContentInsets';
 import {
   FileBrowserFile,
   FileBrowserFolder,
@@ -32,32 +31,38 @@ import {
   listFolderContents,
 } from '../../../services/files';
 import type { FilesScreenProps } from './navigationTypes';
-import ThemedView from '@ui/ThemedView';
-
 import { useFilesBrowser, useFrkCheck } from '../../../hooks/useFilesBrowser';
-import { FileRow, Icon } from '../../../components/files/FileRow';
+import { FileRow } from '../../../components/files/FileRow';
 import { FilesHeader } from '../../../components/files/FilesHeader';
+import { dialog } from '@utils/dialog';
+import { useAppTheme } from '../../../contexts/ThemeContext';
 
 type BrowserItem = FileBrowserFolder | FileBrowserFile;
 type SectionHeader = { kind: 'section'; title: string; id: string };
 type ListEntry = BrowserItem | SectionHeader;
 
-const BRAND = '#7C3AED';
-
 export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScreen'>) {
-  const theme = useTheme();
-  const navigation = useNavigation('FilesBrowserScreen');
+  const { colors, spacing, radii, sizes, typography, shadows } = useAppTheme();
+  const navigation = useNavigation<any>('FilesBrowserScreen');
   const patientId = usePatientId();
   const { getToken } = useClerkAuth();
-  const insets = useSafeAreaInsets();
-  const tabBarHeight = useBottomTabBarHeight?.() || 96;
-  const fabBottom = 20 + insets.bottom + tabBarHeight;
+  const contentInsets = useContentInsets();
   const { runWithAutoLockPaused } = useAppAuth();
   const folderId = route.params?.folderId;
-  
+
   const [fabOpen, setFabOpen] = useState(false);
-  const [alertModal, setAlertModal] = useState<{ title: string; message: string; icon?: string } | null>(null);
-  const [renameTarget, setRenameTarget] = useState<{ kind: 'file' | 'folder', id: string, initialName: string } | null>(null);
+  const [renameTarget, setRenameTarget] = useState<{ kind: 'file' | 'folder'; id: string; initialName: string } | null>(null);
+  const [query, setQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // Hook checks and browser state
+  useFrkCheck(patientId);
+  const { contents, isLoading, isRefreshing, refresh, mutate } = useFilesBrowser(patientId, folderId ?? null, query);
+
+  const folderName = folderId
+    ? (contents?.breadcrumbs?.length ? contents.breadcrumbs[contents.breadcrumbs.length - 1].name : 'Folder')
+    : 'My Files';
 
   const handleRenameSave = async (newName: string) => {
     if (!renameTarget) return;
@@ -68,91 +73,71 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
         await renameFile(patientId, renameTarget.id, newName);
       }
       setRenameTarget(null);
-      // Instantly read from SQLite and update the UI directly
       const newContents = await listFolderContents(patientId, folderId ?? null, query, getToken);
       await mutate(newContents, { revalidate: false });
-      
-      // Now trigger background sync
       syncPendingFiles(patientId, getToken).then(() => mutate()).catch(console.error);
     } catch (e) {
-      setAlertModal({
-        title: 'Error',
-        message: e instanceof Error ? e.message : 'Unable to rename item.',
-        icon: '⚠️'
-      });
+      dialog.alert('Error', e instanceof Error ? e.message : 'Unable to rename item.');
     }
   };
-  const [query, setQuery] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const { colors, dark } = theme;
-  const styles = useMemo(() => createStyles(theme), [theme]);
-
-  // ─── Custom Hooks (100% SoC) ──────────────────────────────────────────────────
-  useFrkCheck(patientId);
-  const { contents, isLoading, isRefreshing, refresh, mutate } = useFilesBrowser(patientId, folderId ?? null, query);
-
-  const folderName = folderId
-    ? (contents?.breadcrumbs?.length ? contents.breadcrumbs[contents.breadcrumbs.length - 1].name : 'Folder')
-    : 'My Files';
 
   useLayoutEffect(() => {
     navigation.setOptions({
       headerLargeTitleEnabled: !isSearching,
       headerTitle: isSearching ? () => (
-        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', width: '100%', paddingRight: 8 }}>
-            <TextInput
-                value={query}
-                onChangeText={setQuery}
-                placeholder="Search files and folders…"
-                placeholderTextColor={colors.border}
-                autoFocus
-                style={{
-                    flex: 1,
-                    color: colors.text,
-                    fontSize: 16,
-                    paddingVertical: Platform.select({ ios: 6, android: 4 }),
-                    paddingHorizontal: 12,
-                    backgroundColor: colors.card,
-                    borderRadius: 10,
-                    borderWidth: StyleSheet.hairlineWidth,
-                    borderColor: colors.border,
-                    height: 36,
-                }}
-            />
+        <View style={styles.searchHeaderWrap}>
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search files and folders…"
+            placeholderTextColor={colors.textLight}
+            autoFocus
+            style={[
+              styles.searchHeaderInput,
+              typography.body,
+              {
+                color: colors.text,
+                backgroundColor: colors.card,
+                borderRadius: radii.md,
+                borderWidth: sizes.borderWidth,
+                borderColor: colors.border,
+                paddingHorizontal: spacing.md,
+              },
+            ]}
+          />
         </View>
       ) : folderName,
       headerRight: () => (
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 8 }}>
+        <View style={[styles.headerRightWrap, { gap: spacing.xs }]}>
+          <Pressable
+            onPress={() => {
+              if (isSearching) {
+                setQuery('');
+                setIsSearching(false);
+              } else {
+                setIsSearching(true);
+              }
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={isSearching ? 'Close search' : 'Search files'}
+            style={({ pressed }) => [{ padding: spacing.sm, opacity: pressed ? 0.7 : 1 }]}
+          >
+            <AppIcon name={isSearching ? 'close' : 'search'} color="text" size={sizes.iconLg} />
+          </Pressable>
+          {!isSearching && (
             <Pressable
-                onPress={() => {
-                    if (isSearching) {
-                        setQuery('');
-                        setIsSearching(false);
-                    } else {
-                        setIsSearching(true);
-                    }
-                }}
-                style={({ pressed }) => [{ padding: 8, opacity: pressed ? 0.7 : 1 }]}
+              onPress={() => navigation.navigate('StorageScreen', { folderId: folderId ?? null })}
+              accessibilityRole="button"
+              accessibilityLabel="Storage overview"
+              style={({ pressed }) => [{ padding: spacing.sm, opacity: pressed ? 0.7 : 1 }]}
             >
-                {isSearching ? (
-                    Icon({ android: 'close', ios: 'xmark', color: colors.text, size: 22 })
-                ) : (
-                    Icon({ android: 'search', ios: 'magnifyingglass', color: colors.text, size: 22 })
-                )}
+              <AppIcon name="cloud" color="primary" size={sizes.iconLg} />
             </Pressable>
-            {!isSearching && (
-              <Pressable
-                onPress={() => navigation.navigate('StorageScreen', { folderId: folderId ?? null })}
-                style={({ pressed }) => [{ padding: 8, opacity: pressed ? 0.7 : 1 }]}
-              >
-                {Icon({ android: 'cloud', ios: 'icloud.and.arrow.up.fill', color: colors.primary, size: 22 })}
-              </Pressable>
-            )}
+          )}
         </View>
       ),
     });
-  }, [navigation, folderName, folderId, colors, isSearching, query]);
+  }, [navigation, folderName, folderId, colors, isSearching, query, radii, sizes, spacing, typography]);
 
   const items = useMemo<ListEntry[]>(() => {
     const folders = contents?.folders ?? [];
@@ -170,17 +155,21 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
   }, [contents]);
 
   const handleDelete = async (kind: FileItemKind, id: string) => {
+    const confirmed = await dialog.confirm({
+      title: 'Delete item?',
+      message: 'This item will be deleted.',
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!confirmed) return;
+
     try {
       await deleteItem(patientId, kind, id);
-      
-      // Instantly read from SQLite and update the UI directly
       const newContents = await listFolderContents(patientId, folderId ?? null, query, getToken);
       await mutate(newContents, { revalidate: false });
-      
-      // Now trigger background sync
       syncPendingFiles(patientId, getToken).then(() => mutate()).catch(console.error);
     } catch (error) {
-      setAlertModal({ title: 'Could not delete', message: error instanceof Error ? error.message : 'Unable to delete this item.', icon: '🗑️' });
+      dialog.alert('Could not delete', error instanceof Error ? error.message : 'Unable to delete this item.');
     }
   };
 
@@ -189,48 +178,69 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
     try {
       const result = await syncPendingFiles(patientId, getToken);
       if (result.skipped) {
-        setAlertModal({ title: 'Backup waiting', message: result.reason ?? 'Files will back up when connected.', icon: '⏳' });
+        dialog.alert('Backup waiting', result.reason ?? 'Files will back up when connected.');
       } else if (result.failed > 0) {
-        setAlertModal({ title: 'Backup needs attention', message: `${result.synced} backed up, ${result.failed} failed.`, icon: '⚠️' });
+        dialog.alert('Backup needs attention', `${result.synced} backed up, ${result.failed} failed.`);
       }
       refresh();
     } catch (error) {
-      setAlertModal({ title: 'Backup failed', message: error instanceof Error ? error.message : 'Unable to back up.', icon: '❌' });
+      dialog.alert('Backup failed', error instanceof Error ? error.message : 'Unable to back up.');
     } finally {
       setIsSyncing(false);
     }
   }, [getToken, patientId, refresh]);
 
-  const shareFile = useCallback(async (fileId: string) => {
-    try {
-      const available = await Sharing.isAvailableAsync();
-      if (!available) {
-        setAlertModal({ title: 'No app available', message: 'This device cannot share files with other apps.', icon: '🚫' });
-        return;
+  const shareFile = useCallback(
+    async (fileId: string) => {
+      try {
+        const available = await Sharing.isAvailableAsync();
+        if (!available) {
+          dialog.alert('No app available', 'This device cannot share files with other apps.');
+          return;
+        }
+        const preview = await preparePreviewFile(patientId, fileId, getToken);
+        await runWithAutoLockPaused(() =>
+          Sharing.shareAsync(preview.uri, { mimeType: preview.mimeType, dialogTitle: preview.name })
+        );
+      } catch (error) {
+        dialog.alert('Could not share file', error instanceof Error ? error.message : 'Unable to share this file.');
       }
-      const preview = await preparePreviewFile(patientId, fileId, getToken);
-      await runWithAutoLockPaused(() => Sharing.shareAsync(preview.uri, { mimeType: preview.mimeType, dialogTitle: preview.name }));
-    } catch (error) {
-      setAlertModal({ title: 'Could not share file', message: error instanceof Error ? error.message : 'Unable to share this file.', icon: '⚠️' });
-    }
-  }, [patientId, runWithAutoLockPaused, getToken]);
+    },
+    [patientId, runWithAutoLockPaused, getToken]
+  );
 
-  const openUpload = useCallback(() => { navigation.navigate('FilesUploadScreen', { folderId: folderId ?? null }); }, [folderId, navigation]);
-  const createFolder = useCallback(() => { navigation.navigate('FileFolderFormScreen', { parentId: folderId ?? null }); }, [folderId, navigation]);
-  const openRoot = useCallback(() => { navigation.navigate('FilesBrowserScreen'); }, [navigation]);
-  const openFolder = useCallback((id: string) => { navigation.navigate('FilesBrowserScreen', { folderId: id }); }, [navigation]);
+  const openUpload = useCallback(() => {
+    navigation.navigate('FilesUploadScreen', { folderId: folderId ?? null });
+  }, [folderId, navigation]);
+
+  const createFolder = useCallback(() => {
+    navigation.navigate('FileFolderFormScreen', { parentId: folderId ?? null });
+  }, [folderId, navigation]);
+
+  const openRoot = useCallback(() => {
+    navigation.navigate('FilesBrowserScreen');
+  }, [navigation]);
+
+  const openFolder = useCallback(
+    (id: string) => {
+      navigation.navigate('FilesBrowserScreen', { folderId: id });
+    },
+    [navigation]
+  );
 
   if (isLoading && !contents) {
     return (
-      <ThemedView style={styles.center}>
-        <ActivityIndicator size="large" color={BRAND} />
-        <ThemedText style={styles.loadingText}>Loading your files…</ThemedText>
-      </ThemedView>
+      <View style={[styles.center, { backgroundColor: colors.background, gap: spacing.md }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <ThemedText variant="body" color="textMuted">
+          Loading your files…
+        </ThemedText>
+      </View>
     );
   }
 
   return (
-    <ThemedView style={{ flex: 1 }}>
+    <View style={[styles.flex, { backgroundColor: colors.background }]}>
       <FlatList<ListEntry>
         data={items}
         keyExtractor={(item) => item.id}
@@ -244,9 +254,15 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
             progressBackgroundColor={colors.background}
           />
         }
-        contentContainerStyle={[styles.listContent, { paddingBottom: 110 + tabBarHeight }]}
+        contentContainerStyle={[
+          styles.listContent,
+          {
+            padding: spacing.lg,
+            paddingBottom: contentInsets.bottom + spacing['3xl'],
+          },
+        ]}
         ItemSeparatorComponent={({ leadingItem }) =>
-          (leadingItem as ListEntry).kind === 'section' ? null : <View style={{ height: 8 }} />
+          (leadingItem as ListEntry).kind === 'section' ? null : <View style={{ height: spacing.sm }} />
         }
         ListHeaderComponent={
           <FilesHeader
@@ -263,14 +279,33 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
         ListEmptyComponent={
           <EmptyState
             title={query ? 'No matching files' : 'No files yet'}
-            message={query ? 'Try a different search term.' : 'Add health documents or create folders to stay organized.'}
+            message={
+              query
+                ? 'Try a different search term.'
+                : 'Add health documents or create folders to stay organized.'
+            }
             actionLabel={query ? undefined : 'Add a file'}
             onActionPress={query ? undefined : openUpload}
           />
         }
         renderItem={({ item }) => {
-          if ((item).kind === 'section') {
-            return <ThemedText style={styles.sectionHead}>{item.title}</ThemedText>;
+          if (item.kind === 'section') {
+            return (
+              <ThemedText
+                variant="captionBold"
+                color="textMuted"
+                style={[
+                  styles.sectionHead,
+                  {
+                    marginTop: spacing.md,
+                    marginBottom: spacing.xs,
+                    marginLeft: spacing.xs,
+                  },
+                ]}
+              >
+                {item.title}
+              </ThemedText>
+            );
           }
           const bItem = item;
           return (
@@ -284,14 +319,17 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
                 }
               }}
               onErrorPress={() => {
-                setAlertModal({
-                  title: 'Upload Failed',
-                  message: (bItem as FileBrowserFile).syncError ?? 'This file failed to upload to the cloud.',
-                  icon: '❌',
-                });
+                dialog.alert(
+                  'Upload Failed',
+                  (bItem as FileBrowserFile).syncError ?? 'This file failed to upload to the cloud.'
+                );
               }}
               onRename={() => {
-                setRenameTarget({ kind: bItem.kind as 'file' | 'folder', id: bItem.id, initialName: bItem.name });
+                setRenameTarget({
+                  kind: bItem.kind as 'file' | 'folder',
+                  id: bItem.id,
+                  initialName: bItem.name,
+                });
               }}
               onMove={() =>
                 navigation.navigate('FileMoveScreen', {
@@ -310,30 +348,87 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
         }}
       />
 
-      <View style={[styles.fabWrap, { bottom: fabBottom }]} pointerEvents="box-none">
+      {/* Floating Action Button */}
+      <View
+        style={[styles.fabWrap, { right: spacing.xl, bottom: contentInsets.bottom + spacing.md }]}
+        pointerEvents="box-none"
+      >
         {fabOpen && (
-          <View style={styles.fabMenu}>
+          <View style={[styles.fabMenu, { marginBottom: spacing.sm, gap: spacing.sm }]}>
             <Pressable
-              onPress={() => { setFabOpen(false); createFolder(); }}
+              onPress={() => {
+                setFabOpen(false);
+                createFolder();
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="New folder"
               style={({ pressed }) => [
                 styles.fabItem,
-                { backgroundColor: dark ? '#1C1633' : '#fff', opacity: pressed ? 0.8 : 1 },
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  borderWidth: sizes.borderWidth,
+                  borderRadius: radii.lg,
+                  paddingHorizontal: spacing.lg,
+                  paddingVertical: spacing.md,
+                  gap: spacing.md,
+                  opacity: pressed ? 0.8 : 1,
+                },
+                shadows.md,
               ]}
             >
-              {Icon({ android: 'create_new_folder', ios: 'folder.badge.plus', color: BRAND, size: 20 })}
-              <ThemedText style={[styles.fabItemLabel, { color: colors.text }]}>New folder</ThemedText>
+              <AppIcon name="folderPlus" color="primary" size={sizes.iconMd} />
+              <ThemedText variant="bodyBold">New folder</ThemedText>
             </Pressable>
+
             <Pressable
-              onPress={() => { setFabOpen(false); openUpload(); }}
-              style={({ pressed }) => [styles.fabItem, { backgroundColor: BRAND, opacity: pressed ? 0.85 : 1 }]}
+              onPress={() => {
+                setFabOpen(false);
+                openUpload();
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Upload file"
+              style={({ pressed }) => [
+                styles.fabItem,
+                {
+                  backgroundColor: colors.primary,
+                  borderRadius: radii.lg,
+                  paddingHorizontal: spacing.lg,
+                  paddingVertical: spacing.md,
+                  gap: spacing.md,
+                  opacity: pressed ? 0.85 : 1,
+                },
+                shadows.md,
+              ]}
             >
-              {Icon({ android: 'upload_file', ios: 'square.and.arrow.up', color: '#fff', size: 20 })}
-              <ThemedText style={styles.fabItemLabelWhite}>Upload file</ThemedText>
+              <AppIcon name="upload" color={colors.onPrimary} size={sizes.iconMd} />
+              <ThemedText variant="bodyBold" color={colors.onPrimary}>
+                Upload file
+              </ThemedText>
             </Pressable>
           </View>
         )}
-        <Pressable onPress={() => setFabOpen((s) => !s)} style={({ pressed }) => [styles.fab, { opacity: pressed ? 0.9 : 1 }]}>
-          {Icon({ android: fabOpen ? 'close' : 'add', ios: fabOpen ? 'xmark' : 'plus', color: '#fff', size: 28 })}
+        <Pressable
+          onPress={() => setFabOpen((s) => !s)}
+          accessibilityRole="button"
+          accessibilityLabel={fabOpen ? 'Close menu' : 'Add files or folders'}
+          style={({ pressed }) => [
+            styles.fab,
+            {
+              width: sizes.avatarMd + 16,
+              height: sizes.avatarMd + 16,
+              borderRadius: radii.full,
+              backgroundColor: colors.primary,
+              opacity: pressed ? 0.9 : 1,
+            },
+            shadows.lg,
+          ]}
+        >
+          <AppIcon
+            name={fabOpen ? 'close' : 'plus'}
+            color={colors.onPrimary}
+            size={sizes.iconLg}
+          />
         </Pressable>
       </View>
 
@@ -344,61 +439,49 @@ export default function FilesScreen({ route }: FilesScreenProps<'FilesBrowserScr
         onSave={handleRenameSave}
         title={renameTarget?.kind === 'folder' ? 'Rename folder' : 'Rename file'}
       />
-
-      <CustomAlertModal
-        visible={alertModal !== null}
-        onClose={() => setAlertModal(null)}
-        title={alertModal?.title ?? ''}
-        message={alertModal?.message ?? ''}
-        icon={alertModal?.icon ?? '☁️'}
-      />
-    </ThemedView>
+    </View>
   );
 }
 
-const createStyles = (theme: Theme) =>
-  StyleSheet.create({
-    listContent: { padding: 16, paddingBottom: 110 },
-    center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
-    loadingText: { fontSize: 14, opacity: 0.6 },
-    sectionHead: {
-      fontSize: 12,
-      fontWeight: '800',
-      opacity: 0.5,
-      letterSpacing: 0.7,
-      textTransform: 'uppercase',
-      marginTop: 12,
-      marginBottom: 8,
-      marginLeft: 4,
-    },
-    fabWrap: { position: 'absolute', right: 20, bottom: 36, alignItems: 'flex-end', zIndex: 9999, elevation: 20 },
-    fabMenu: { marginBottom: 10, gap: 10, alignItems: 'flex-end' },
-    fabItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-      paddingHorizontal: 18,
-      paddingVertical: 13,
-      borderRadius: 16,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 6,
-      elevation: 3,
-    },
-    fabItemLabel: { fontSize: 14, fontWeight: '700' },
-    fabItemLabelWhite: { color: '#fff', fontSize: 14, fontWeight: '700' },
-    fab: {
-      width: 60,
-      height: 60,
-      borderRadius: 30,
-      backgroundColor: BRAND,
-      alignItems: 'center',
-      justifyContent: 'center',
-      shadowColor: BRAND,
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.45,
-      shadowRadius: 10,
-      elevation: 8,
-    },
-  });
+const styles = StyleSheet.create({
+  flex: { flex: 1 },
+  listContent: {},
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  sectionHead: {
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  searchHeaderWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    paddingRight: 8,
+  },
+  searchHeaderInput: {
+    flex: 1,
+    height: 38,
+    paddingVertical: Platform.select({ ios: 6, android: 4 }),
+  },
+  headerRightWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  fabWrap: {
+    position: 'absolute',
+    alignItems: 'flex-end',
+    zIndex: 9999,
+  },
+  fabMenu: {
+    alignItems: 'flex-end',
+  },
+  fabItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  fab: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});
