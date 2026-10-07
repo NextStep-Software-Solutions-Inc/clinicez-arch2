@@ -8,6 +8,8 @@
   "scripts": {
     "lint:portal": "bun --filter @clinicez/portal-web lint",
     "typecheck:patient": "bun --filter @clinicez/patient-app typecheck",
+    "lint:patient-tokens": "bun --filter @clinicez/patient-app lint:tokens",
+    "test:tokens": "bun --cwd packages/design-tokens test",
     "typecheck:clinic": "bun --filter @clinicez/clinic-app typecheck",
     "typecheck:lab": "bun --filter @clinicez/laboratory-app typecheck",
     "typecheck:pharmacy": "bun --filter @clinicez/pharmacy-app typecheck",

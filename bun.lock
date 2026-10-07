@@ -65,6 +65,9 @@
       "dependencies": {
         "@callstack/liquid-glass": "^0.8.0",
         "@clerk/expo": "^3.3.0",
+        "@clinicez/design-tokens": "workspace:*",
+        "@expo-google-fonts/geist": "^0.4.2",
+        "@expo-google-fonts/geist-mono": "^0.4.3",
         "@expo/metro-runtime": "~56.0.21",
         "@gorhom/bottom-sheet": "^5.2.2",
         "@react-native-community/netinfo": "^12.0.1",
@@ -82,6 +85,7 @@
         "expo-constants": "^57.0.18",
         "expo-crypto": "^56.0.4",
         "expo-file-system": "^56.0.7",
+        "expo-font": "~56.0.7",
         "expo-image": "^57.0.0",
         "expo-image-picker": "^56.0.15",
         "expo-linear-gradient": "^56.0.4",
@@ -206,6 +210,10 @@
         "tw-animate-css": "^1.3.6",
         "typescript": "^5",
       },
+    },
+    "packages/design-tokens": {
+      "name": "@clinicez/design-tokens",
+      "version": "1.0.0",
     },
     "packages/shared-ts": {
       "name": "@shared/safe",
@@ -382,6 +390,8 @@
     "@clerk/types": ["@clerk/types@4.101.26", "", { "dependencies": { "@clerk/shared": "^3.47.8" } }, "sha512-tUeiElAZoXu9Dxom9t6IjkEfsfP7aWSVf5x5mCoHnSr2w+wV4EtEwoLl9vexT5LL0di4qidROSfcrOnorzczIQ=="],
 
     "@clinicez/clinic-app": ["@clinicez/clinic-app@workspace:apps/clinic-app"],
+
+    "@clinicez/design-tokens": ["@clinicez/design-tokens@workspace:packages/design-tokens"],
 
     "@clinicez/laboratory-app": ["@clinicez/laboratory-app@workspace:apps/laboratory-app"],
 
