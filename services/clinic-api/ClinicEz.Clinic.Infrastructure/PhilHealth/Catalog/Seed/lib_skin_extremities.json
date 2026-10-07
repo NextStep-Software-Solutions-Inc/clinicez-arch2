@@ -1,0 +1,17 @@
+{
+ "library": "lib_skin_extremities",
+ "kitVersion": "1.1",
+ "items": [
+  {"code":"1","description":"Essentially normal","isActive":true},
+  {"code":"10","description":"Weak pulses","isActive":true},
+  {"code":"2","description":"Clubbing","isActive":true},
+  {"code":"3","description":"Cold clammy","isActive":true},
+  {"code":"4","description":"Cyanosis/mottled skin","isActive":true},
+  {"code":"5","description":"Edema/swelling","isActive":true},
+  {"code":"6","description":"Decreased mobility","isActive":true},
+  {"code":"7","description":"Pale nailbeds","isActive":true},
+  {"code":"8","description":"Poor skin turgor","isActive":true},
+  {"code":"9","description":"Rashes/Petechiae","isActive":true},
+  {"code":"99","description":"Others","isActive":true}
+ ]
+}

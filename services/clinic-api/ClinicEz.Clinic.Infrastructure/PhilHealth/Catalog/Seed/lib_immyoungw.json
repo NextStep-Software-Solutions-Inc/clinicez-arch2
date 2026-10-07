@@ -1,0 +1,9 @@
+{
+ "library": "lib_immyoungw",
+ "kitVersion": "1.1",
+ "items": [
+  {"code":"999","description":"None","isActive":true},
+  {"code":"Y01","description":"HPV","isActive":true},
+  {"code":"Y02","description":"MMR","isActive":true}
+ ]
+}

@@ -53,6 +53,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<YakapTransmittalItem> YakapTransmittalItems { get; set; } = null!;
     public DbSet<PhilHealthSequenceTracker> PhilHealthSequenceTrackers { get; set; } = null!;
     public DbSet<TenantLookupRecord> Tenants { get; set; } = null!;
+    public DbSet<PhilHealthCatalogItem> PhilHealthCatalogItems { get; set; } = null!;
+    public DbSet<PhilHealthCatalogImportLog> PhilHealthCatalogImportLogs { get; set; } = null!;
     public DbSet<FacilityLookupRecord> Facilities { get; set; } = null!;
 
     public Guid CurrentClinicId => _clinicContext?.ClinicId ?? Guid.Empty;
@@ -515,6 +517,30 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.Name);
             entity.Property(e => e.Slug);
             entity.Property(e => e.IsDeleted);
+        });
+
+        // PhilHealth Catalog: official lib_* libraries shared by every clinic on this server (no tenant filter).
+        modelBuilder.Entity<PhilHealthCatalogItem>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Library).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.ItemKey).IsRequired().HasMaxLength(160);
+            entity.Property(e => e.Code).IsRequired().HasMaxLength(128);
+            entity.Property(e => e.Description).HasMaxLength(2000);
+            entity.Property(e => e.AttributesJson).HasColumnType("text");
+            entity.Property(e => e.KitVersion).HasMaxLength(40);
+            entity.HasIndex(e => new { e.Library, e.ItemKey }).IsUnique();
+            entity.HasIndex(e => new { e.Library, e.Code });
+        });
+
+        modelBuilder.Entity<PhilHealthCatalogImportLog>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Library).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.KitVersion).HasMaxLength(40);
+            entity.Property(e => e.ContentHash).HasMaxLength(64);
+            entity.Property(e => e.Message).HasMaxLength(500);
+            entity.HasIndex(e => new { e.Library, e.CreatedAt });
         });
 
         // MassTransit outbox

@@ -1,0 +1,20 @@
+{
+ "library": "lib_immchild",
+ "kitVersion": "1.1",
+ "items": [
+  {"code":"999","description":"None","isActive":true},
+  {"code":"C01","description":"BCG","isActive":true},
+  {"code":"C02","description":"OPV1","isActive":true},
+  {"code":"C03","description":"OPV2","isActive":true},
+  {"code":"C04","description":"OPV3","isActive":true},
+  {"code":"C05","description":"DPT1","isActive":true},
+  {"code":"C06","description":"DPT2","isActive":true},
+  {"code":"C07","description":"DPT3","isActive":true},
+  {"code":"C08","description":"Measles","isActive":true},
+  {"code":"C09","description":"Hepatitis B1","isActive":true},
+  {"code":"C10","description":"Hepatitis B2","isActive":true},
+  {"code":"C11","description":"Hepatitis B3","isActive":true},
+  {"code":"C12","description":"Hepatitis A","isActive":true},
+  {"code":"C13","description":"Varicella (Chicken Pox)","isActive":true}
+ ]
+}

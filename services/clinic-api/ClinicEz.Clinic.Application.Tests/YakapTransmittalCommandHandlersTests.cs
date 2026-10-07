@@ -27,7 +27,7 @@ public class YakapTransmittalCommandHandlersTests
     private readonly Guid _clinicId = Guid.NewGuid();
     private readonly string _tenantId = "tenant_yakap_test";
     private readonly IClinicContext _clinicContext;
-    private readonly IYakapClinicalMapper _mapper = new YakapClinicalMapper();
+    private readonly IYakapClinicalMapper _mapper = new YakapClinicalMapper(ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.PhilHealthCatalogLookup.FromBundledSeed());
 
     public YakapTransmittalCommandHandlersTests()
     {

@@ -20,6 +20,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Official PhilHealth lib_*.xlsx: the seed JSON is verified against them. -->
+    <None Include="..\ClinicEz.Clinic.Infrastructure\PhilHealth\Catalog\Source\*.xlsx" Link="PhilHealthSource\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
 

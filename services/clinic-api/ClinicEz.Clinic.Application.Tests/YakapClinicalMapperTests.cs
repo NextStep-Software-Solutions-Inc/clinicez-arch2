@@ -11,7 +11,7 @@ namespace ClinicEz.Clinic.Application.Tests;
 
 public class YakapClinicalMapperTests
 {
-    private readonly YakapClinicalMapper _mapper = new();
+    private readonly YakapClinicalMapper _mapper = new(ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.PhilHealthCatalogLookup.FromBundledSeed());
 
     [Theory]
     [InlineData("1990-05-15", "2026-10-03", "36 YR(S), 4 MO(S), 18 DAY(S)")]

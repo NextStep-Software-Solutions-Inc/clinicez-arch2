@@ -28,7 +28,7 @@ public class YakapTranche2BatchTransmittalTests
     private readonly Guid _clinicId = Guid.NewGuid();
     private readonly string _tenantId = "tenant_tranche2_test";
     private readonly IClinicContext _clinicContext;
-    private readonly IYakapClinicalMapper _mapper = new YakapClinicalMapper();
+    private readonly IYakapClinicalMapper _mapper = new YakapClinicalMapper(ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.PhilHealthCatalogLookup.FromBundledSeed());
 
     public YakapTranche2BatchTransmittalTests()
     {

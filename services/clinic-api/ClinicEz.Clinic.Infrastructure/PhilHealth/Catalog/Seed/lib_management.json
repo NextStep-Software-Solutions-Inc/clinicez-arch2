@@ -1,0 +1,12 @@
+{
+ "library": "lib_management",
+ "kitVersion": "1.1",
+ "items": [
+  {"code":"1","description":"Breastfeeding Program Education","isActive":true},
+  {"code":"2","description":"Counselling for Smoking Cessation","isActive":true},
+  {"code":"3","description":"Counselling for Lifestyle Modification","isActive":true},
+  {"code":"4","description":"Oral Check-up and Prophylaxis","isActive":true},
+  {"code":"0","description":"Not applicable","isActive":true},
+  {"code":"X","description":"Others","isActive":true}
+ ]
+}

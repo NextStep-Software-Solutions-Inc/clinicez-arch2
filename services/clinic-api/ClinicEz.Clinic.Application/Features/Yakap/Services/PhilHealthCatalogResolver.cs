@@ -2,36 +2,55 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
 
 namespace ClinicEz.Clinic.Application.Features.Yakap.Services;
 
 /// <summary>
-/// High-precision resolver and mapper between independent Clinic EMR data
-/// (free-text clinical notes, local inventory names, and lab orders)
-/// and official PhilHealth Konsulta / YAKAP statutory catalogs (lib_*).
+/// Resolver and mapper between independent Clinic EMR data (free-text clinical notes, local inventory names, and
+/// lab orders) and the official PhilHealth Konsulta / YAKAP libraries (<c>lib_*</c>).
+/// <para>
+/// The wording rules below (which phrases mean which condition) are clinical heuristics. The <b>codes</b> are never
+/// written here: every code is looked up in the PhilHealth Catalog by its official description, so a new kit version
+/// is picked up without a code change and a library that is not loaded can never produce a made-up code.
+/// </para>
 /// </summary>
-public static class PhilHealthCatalogResolver
+public sealed class PhilHealthCatalogResolver
 {
-    // ── 1. lib_mdisease: Past Medical History & Family History ──────────────────
-    private static readonly (string Code, string CanonicalName, string[] Aliases)[] DiseaseRules =
+    public const string MedicineLibrary = "lib_medicine";
+    public const string MedicalHistoryLibrary = "lib_mdiseases";
+    public const string DiagnosticLibrary = "lib_diagnostic";
+
+    /// <summary>PhilHealth's own placeholder for "no medicine needed in this episode of care" (first row of lib_medicine).</summary>
+    public const string NoMedicineCode = "NOMED0000000000000000000000000";
+
+    private readonly IPhilHealthCatalogLookup _catalog;
+
+    public PhilHealthCatalogResolver(IPhilHealthCatalogLookup catalog) => _catalog = catalog;
+
+    // ---- 1. lib_mdiseases: past medical history & family history ---------------------------------------------------
+
+    private static readonly (string CatalogDescription, string[] Aliases)[] DiseaseRules =
     [
-        ("011", "Essential Hypertension", ["hypertens", "hpn", "htn", "high blood", "elevated bp"]),
-        ("006", "Diabetes Mellitus", ["diabet", "dm2", "t2dm", "t1dm", "niddm", "iddm", "hyperglycemia"]),
-        ("002", "Bronchial Asthma", ["asthma", "reactive airway", "wheezing"]),
-        ("001", "Allergies", ["allerg", "allergic rhinitis", "atopy", "urticaria"]),
-        ("007", "COPD / Emphysema", ["copd", "emphysema", "chronic bronchitis"]),
-        ("003", "Cancer / Malignancy", ["cancer", "malignan", "carcinoma", "tumor", "neoplasm", "leukemia", "lymphoma"]),
-        ("004", "Cerebrovascular Disease (Stroke)", ["stroke", "cva", "cerebrovascular", "tia", "brain attack", "infarct"]),
-        ("005", "Coronary Artery Disease", ["coronary", "cad", "ihd", "angina", "myocardial", "heart attack"]),
-        ("010", "Hyperlipidemia / Dyslipidemia", ["dyslipid", "hyperlipid", "high cholesterol", "hypercholesterolemia", "triglyceride"]),
-        ("015", "Tuberculosis", ["tuberculosis", "tb", "ptb", "koch", "mycobacter"]),
-        ("008", "Epilepsy / Seizure Disorder", ["epilep", "seizure", "convulsion"]),
-        ("009", "Hepatitis", ["hepatitis", "hepa b", "hepa a", "hepa c"]),
-        ("012", "Peptic Ulcer Disease", ["peptic ulcer", "pud", "gastric ulcer", "duodenal ulcer", "hyperacidity", "gerd"]),
-        ("013", "Pneumonia", ["pneumonia", "cap", "hap", "lung infection"]),
-        ("014", "Thyroid Disease", ["thyroid", "goiter", "hyperthyroid", "hypothyroid"]),
-        ("016", "Urinary Tract Infection", ["urinary tract infection", "uti", "pyelonephritis", "cystitis"])
+        ("Hypertension", ["hypertens", "hpn", "htn", "high blood", "elevated bp"]),
+        ("Diabetes Mellitus", ["diabet", "dm2", "t2dm", "t1dm", "niddm", "iddm", "hyperglycemia"]),
+        ("Asthma", ["asthma", "reactive airway", "wheezing"]),
+        ("Allergy", ["allerg", "allergic rhinitis", "atopy", "urticaria"]),
+        ("Emphysema", ["copd", "emphysema", "chronic bronchitis"]),
+        ("Cancer", ["cancer", "malignan", "carcinoma", "tumor", "neoplasm", "leukemia", "lymphoma"]),
+        ("Cerebrovascular Disease", ["stroke", "cva", "cerebrovascular", "tia", "brain attack", "infarct"]),
+        ("Coronary Artery Disease", ["coronary", "cad", "ihd", "angina", "myocardial", "heart attack"]),
+        ("Hyperlipidemia", ["dyslipid", "hyperlipid", "high cholesterol", "hypercholesterolemia", "triglyceride"]),
+        ("Extrapulmonary Tuberculosis", ["extrapulmonary", "extra-pulmonary", "tb meningitis", "spinal tb", "pott"]),
+        ("Pulmonary Tuberculosis", ["tuberculosis", "tb", "ptb", "koch", "mycobacter"]),
+        ("Epilepsy/Seizure Disorder", ["epilep", "seizure", "convulsion"]),
+        ("Hepatitis", ["hepatitis", "hepa b", "hepa a", "hepa c"]),
+        ("Peptic Ulcer", ["peptic ulcer", "pud", "gastric ulcer", "duodenal ulcer", "hyperacidity", "gerd"]),
+        ("Pneumonia", ["pneumonia", "cap", "hap", "lung infection"]),
+        ("Thyroid Disease", ["thyroid", "goiter", "hyperthyroid", "hypothyroid"]),
+        ("Urinary Tract Infection", ["urinary tract infection", "uti", "pyelonephritis", "cystitis"]),
+        ("Mental Illness", ["mental illness", "depress", "anxiety", "psychosis", "schizophren", "bipolar"]),
     ];
 
     private static readonly string[] NegationPrefixes =
@@ -39,7 +58,7 @@ public static class PhilHealthCatalogResolver
         "no ", "denies ", "negative for ", "without ", "ruled out ", "r/o ", "non-", "not "
     ];
 
-    public static (List<YakapMedicalHistoryDto> Histories, List<YakapSpecificHistoryDto> Specifics) ResolveMedicalHistories(
+    public (List<YakapMedicalHistoryDto> Histories, List<YakapSpecificHistoryDto> Specifics) ResolveMedicalHistories(
         string? chronicConditionsText,
         List<PhilHealthConditionEntryDto>? customMedicalHistories = null)
     {
@@ -47,7 +66,7 @@ public static class PhilHealthCatalogResolver
         var specifics = new List<YakapSpecificHistoryDto>();
         var addedCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        // Priority 1: Explicitly selected options from Standalone Profile UI (100% precision)
+        // Priority 1: options the clinician explicitly selected from the catalog (full precision)
         if (customMedicalHistories?.Count > 0)
         {
             foreach (var mh in customMedicalHistories)
@@ -62,7 +81,9 @@ public static class PhilHealthCatalogResolver
                 return (histories, specifics);
         }
 
-        // Priority 2: Deterministic NLP resolution of free-text chronic conditions
+        var others = OthersMedicalHistoryCode();
+
+        // Priority 2: deterministic resolution of free-text chronic conditions
         if (!string.IsNullOrWhiteSpace(chronicConditionsText))
         {
             var segments = chronicConditionsText.Split([';', ',', '/', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -75,123 +96,82 @@ public static class PhilHealthCatalogResolver
                 if (NegationPrefixes.Any(neg => lower.StartsWith(neg) || lower.Contains(" " + neg)))
                     continue;
 
-                bool matched = false;
-                foreach (var (code, canonicalName, aliases) in DiseaseRules)
+                var matched = false;
+                foreach (var (catalogDescription, aliases) in DiseaseRules)
                 {
-                    if (aliases.Any(alias => Regex.IsMatch(lower, $@"\b{Regex.Escape(alias)}\b", RegexOptions.IgnoreCase) || lower.Contains(alias)))
+                    if (!aliases.Any(alias => Regex.IsMatch(lower, $@"\b{Regex.Escape(alias)}\b", RegexOptions.IgnoreCase) || lower.Contains(alias)))
+                        continue;
+
+                    var entry = _catalog.FindByDescription(MedicalHistoryLibrary, catalogDescription);
+                    if (entry is null) continue; // not in the loaded catalog: never invent a code
+
+                    if (addedCodes.Add(entry.Code))
                     {
-                        if (addedCodes.Add(code))
-                        {
-                            histories.Add(new YakapMedicalHistoryDto(code));
-                            specifics.Add(new YakapSpecificHistoryDto(code, canonicalName));
-                        }
-                        matched = true;
+                        histories.Add(new YakapMedicalHistoryDto(entry.Code));
+                        specifics.Add(new YakapSpecificHistoryDto(entry.Code, entry.Description));
                     }
+                    matched = true;
                 }
 
-                // If clinician entered an uncataloged condition, safely map to code "99" (Others)
-                if (!matched && !string.IsNullOrWhiteSpace(rawSegment) && addedCodes.Add("99_" + rawSegment))
+                // An uncatalogued condition entered by the clinician maps to the library's "Others".
+                if (!matched && others is not null && !string.IsNullOrWhiteSpace(rawSegment) && addedCodes.Add(others + "_" + rawSegment))
                 {
-                    histories.Add(new YakapMedicalHistoryDto("99"));
-                    specifics.Add(new YakapSpecificHistoryDto("99", rawSegment.Length > 50 ? rawSegment[..50] : rawSegment));
+                    histories.Add(new YakapMedicalHistoryDto(others));
+                    specifics.Add(new YakapSpecificHistoryDto(others, rawSegment.Length > 50 ? rawSegment[..50] : rawSegment));
                 }
             }
         }
 
-        // Priority 3: Statutory DTD '+' fallback if completely unrecorded
+        // Priority 3: statutory fallback when nothing is recorded ("None")
         if (histories.Count == 0)
         {
-            histories.Add(new YakapMedicalHistoryDto("99"));
-            specifics.Add(new YakapSpecificHistoryDto("99", "None"));
+            var none = _catalog.FindByDescription(MedicalHistoryLibrary, "None");
+            if (none is not null)
+            {
+                histories.Add(new YakapMedicalHistoryDto(none.Code));
+                specifics.Add(new YakapSpecificHistoryDto(none.Code, none.Description));
+            }
         }
 
         return (histories, specifics);
     }
 
-    // ── 2. lib_signssymptoms: Signs & Symptoms Resolution ─────────────────────
-    private static readonly (string Code, string[] Keywords)[] SymptomRules =
-    [
-        ("37", ["hypertens", "high blood", "elevated bp", "hpn"]),
-        ("13", ["fever", "lagnat", "febrile", "pyrexia", "chills"]),
-        ("7",  ["cough", "ubo", "tussis"]),
-        ("14", ["headache", "sakit ng ulo", "cephalalgia", "migraine"]),
-        ("5",  ["chest pain", "angina", "paninikip ng dibdib"]),
-        ("2",  ["abdominal pain", "sakit ng tiyan", "stomach ache", "cramps"]),
-        ("10", ["dyspnea", "shortness of breath", "hirap huminga", "breathlessness"]),
-        ("9",  ["dizziness", "vertigo", "hilo", "lightheaded"]),
-        ("24", ["vomit", "pagsusuka", "emesis"]),
-        ("19", ["nausea", "nasusuka"]),
-        ("8",  ["diarrhea", "pagtatae", "loose stool"]),
-        ("21", ["rash", "skin lesion", "kati", "pruritus"]),
-        ("38", ["pain", "masakit", "body ache", "myalgia", "arthralgia"])
-    ];
-
-    public static (string SignsSymptoms, string? OtherComplaint) ResolveSignsAndSymptoms(string? subjectiveText)
+    /// <summary>
+    /// Conditions named in free text that the catalog recognises, with their official code and description. Unlike
+    /// <see cref="ResolveMedicalHistories"/> it adds no "Others"/"None" filler, so it suits pre-filling a profile for review.
+    /// </summary>
+    public List<PhilHealthConditionEntryDto> ResolveKnownConditions(string? chronicConditionsText)
     {
-        if (string.IsNullOrWhiteSpace(subjectiveText))
-        {
-            return ("X", "Routine consultation / baseline profiling");
-        }
+        var found = new List<PhilHealthConditionEntryDto>();
+        if (string.IsNullOrWhiteSpace(chronicConditionsText)) return found;
 
-        var lower = subjectiveText.ToLowerInvariant();
-        var matchedCodes = new List<string>();
-
-        foreach (var (code, keywords) in SymptomRules)
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var segments = chronicConditionsText.Split([';', ',', '/', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var segment in segments)
         {
-            if (keywords.Any(k => lower.Contains(k)))
+            var lower = segment.ToLowerInvariant();
+            if (NegationPrefixes.Any(neg => lower.StartsWith(neg) || lower.Contains(" " + neg))) continue;
+
+            foreach (var (catalogDescription, aliases) in DiseaseRules)
             {
-                matchedCodes.Add(code);
+                if (!aliases.Any(alias => Regex.IsMatch(lower, $@"\b{Regex.Escape(alias)}\b", RegexOptions.IgnoreCase) || lower.Contains(alias)))
+                    continue;
+                var entry = _catalog.FindByDescription(MedicalHistoryLibrary, catalogDescription);
+                if (entry is not null && seen.Add(entry.Code))
+                    found.Add(new PhilHealthConditionEntryDto(entry.Code, entry.Description));
             }
         }
-
-        // DTD schema requires that if "X" is emitted, pOtherComplaint must be provided.
-        // If specific symptoms were detected, we format as e.g. "13;7;X" so that both the
-        // statutory code and the doctor's free-text explanation are preserved.
-        if (matchedCodes.Count > 0)
-        {
-            matchedCodes.Add("X");
-            return (string.Join(";", matchedCodes), subjectiveText);
-        }
-
-        // Fallback for unclassified subjective text: Code "X" (Other complaint)
-        return ("X", subjectiveText);
+        return found;
     }
 
-    // ── 3. lib_medicine: Essential GAMOT Formulary 30-Char UPSC Resolution ────
-    private static readonly (string Code, string Generic, string Strength)[] GamotFormulary =
-    [
-        ("AMLOD0000000005TAB00000000100", "amlodipine", "5"),
-        ("AMLOD0000000010TAB00000000100", "amlodipine", "10"),
-        ("LOSAR0000000050TAB00000000100", "losartan", "50"),
-        ("LOSAR0000000100TAB00000000100", "losartan", "100"),
-        ("METOP0000000050TAB00000000100", "metoprolol", "50"),
-        ("ENALA0000000010TAB00000000100", "enalapril", "10"),
-        ("METFO0000000500TAB00000000100", "metformin", "500"),
-        ("GLICL0000000080TAB00000000100", "gliclazide", "80"),
-        ("GLICL0000000030TAB00000000100", "gliclazide", "30"),
-        ("GLIME0000000002TAB00000000100", "glimepiride", "2"),
-        ("SIMVA0000000020TAB00000000100", "simvastatin", "20"),
-        ("SIMVA0000000040TAB00000000100", "simvastatin", "40"),
-        ("ATORV0000000020TAB00000000100", "atorvastatin", "20"),
-        ("ATORV0000000040TAB00000000100", "atorvastatin", "40"),
-        ("SALBU0000000100INH00000000001", "salbutamol", "100"),
-        ("SALBU0000000002NEB00000000030", "salbutamol", "2"),
-        ("AMOXC0000000500CAP00000000100", "amoxicillin", "500"),
-        ("COAMO0000000625TAB00000000100", "co-amoxiclav", "625"),
-        ("AZITH0000000500TAB00000000003", "azithromycin", "500"),
-        ("CIPRO0000000500TAB00000000100", "ciprofloxacin", "500"),
-        ("COTRI0000000800TAB00000000100", "cotrimoxazole", "800"),
-        ("PARAC0000000500TAB00000000100", "paracetamol", "500"),
-        ("IBUPR0000000200TAB00000000100", "ibuprofen", "200"),
-        ("MEFEN0000000500CAP00000000100", "mefenamic", "500"),
-        ("OMEPZ0000000020CAP00000000100", "omeprazole", "20"),
-        ("ORSOL0000000000SACH0000000025", "ors", "")
-    ];
+    private string? OthersMedicalHistoryCode() => _catalog.FindByDescription(MedicalHistoryLibrary, "Others")?.Code;
 
-    public static string ResolveDrugCode(string? genericName, string? dosage = null)
+    // ---- 2. lib_medicine: 30-character drug codes ---------------------------------------------------------------
+
+    public string ResolveDrugCode(string? genericName, string? dosage = null)
     {
         if (string.IsNullOrWhiteSpace(genericName))
-            return "NOMED0000000000000000000000000";
+            return NoMedicineCode;
 
         var clean = genericName.Trim();
 
@@ -199,61 +179,92 @@ public static class PhilHealthCatalogResolver
         if (clean.Length == 30 && clean.All(char.IsLetterOrDigit))
             return clean.ToUpperInvariant();
 
-        var genLower = clean.ToLowerInvariant();
-        var doseLower = (dosage ?? string.Empty).ToLowerInvariant();
+        // 2. Look the medicine up in lib_medicine: generic name, and strength when one is given
+        var match = FindMedicine(clean, dosage);
+        if (match is not null)
+            return match.Code;
 
-        // 2. High-precision lookup in official GAMOT Formulary
-        foreach (var (code, gen, strength) in GamotFormulary)
-        {
-            if (genLower.Contains(gen))
-            {
-                if (string.IsNullOrEmpty(strength) || genLower.Contains(strength) || doseLower.Contains(strength))
-                {
-                    return code.PadRight(30, '0');
-                }
-            }
-        }
-
-        // 3. Fallback: Sanitize & zero-pad to exactly 30 characters for non-formulary EMR medications
+        // 3. Not in the catalog: sanitise and zero-pad to 30 characters so the transmittal validation flags it for mapping
         var alphanumeric = new string(clean.Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
-        if (alphanumeric.Length >= 30)
-            return alphanumeric[..30];
-
-        return alphanumeric.PadRight(30, '0');
+        return alphanumeric.Length >= 30 ? alphanumeric[..30] : alphanumeric.PadRight(30, '0');
     }
 
-    // ── 4. lib_diagnostic: 13 Yakap Laboratory & Imaging Services ─────────────
-    private static readonly (string Code, string[] Aliases)[] DiagnosticRules =
-    [
-        ("1",  ["cbc", "complete blood count", "platelet count", "hemoglobin", "hematocrit"]),
-        ("2",  ["urinalysis", "urine routine", "routine urinalysis"]),
-        ("3",  ["fecalysis", "stool exam", "routine stool"]),
-        ("4",  ["sputum", "genexpert", "afb", "acid fast bacilli"]),
-        ("5",  ["fbs", "fasting blood sugar", "fasting blood glucose"]),
-        ("6",  ["rbs", "random blood sugar", "random blood glucose"]),
-        ("7",  ["ogtt", "oral glucose tolerance"]),
-        ("8",  ["lipid", "cholesterol", "triglyceride", "hdl", "ldl"]),
-        ("9",  ["creatinine", "serum creatinine"]),
-        ("10", ["hba1c", "glycated hemoglobin"]),
-        ("11", ["chest x-ray", "chest xray", "cxr", "chest radiograph"]),
-        ("12", ["ecg", "electrocardiogram", "12-lead"]),
-        ("13", ["pap smear", "via", "cervical screening", "acetic acid"]),
-        ("14", ["fobt", "fecal occult blood"]),
-        ("15", ["ppd", "mantoux", "tuberculin"])
-    ];
-
-    public static string ResolveDiagnosticCode(string? testName)
+    private PhilHealthCatalogRecord? FindMedicine(string genericName, string? dosage)
     {
-        if (string.IsNullOrWhiteSpace(testName))
-            return "99";
+        // "Amlodipine 5 mg tablet" -> generic word(s) "amlodipine"; strength "5 mg" comes from the name or the dosage.
+        var strength = ExtractStrength(genericName) ?? ExtractStrength(dosage);
+        var words = Regex.Split(genericName.ToLowerInvariant(), @"[^a-z\-]+")
+            .Where(w => w.Length >= 3 && w is not ("mg" or "mcg" or "tab" or "tablet" or "cap" or "capsule" or "ml" or "syrup" or "the" or "and"))
+            .ToArray();
+        if (words.Length == 0) return null;
 
-        var lower = testName.ToLowerInvariant();
-        foreach (var (code, aliases) in DiagnosticRules)
+        var candidates = _catalog.Search(MedicineLibrary, [words[0]], limit: 500);
+        if (candidates.Count == 0) return null;
+
+        IEnumerable<PhilHealthCatalogRecord> narrowed = candidates;
+        foreach (var word in words.Skip(1))
         {
-            if (aliases.Any(a => lower.Contains(a)))
-                return code;
+            var withWord = narrowed.Where(c => c.Description.Contains(word, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (withWord.Count > 0) narrowed = withWord;
         }
 
-        return "99"; // Other Diagnostic Exam
+        if (strength is not null)
+        {
+            var pattern = new Regex($@"(?<![\d.]){Regex.Escape(strength).Replace("\\ ", @"\s*")}(?![\d.])", RegexOptions.IgnoreCase);
+            var withStrength = narrowed.Where(c => pattern.IsMatch(c.Description)).ToList();
+            return withStrength.OrderBy(c => c.Description.Length).ThenBy(c => c.Code, StringComparer.Ordinal).FirstOrDefault();
+        }
+
+        // Without a strength only an unambiguous generic can be resolved.
+        var list = narrowed.ToList();
+        return list.Count == 1 ? list[0] : null;
+    }
+
+    private static string? ExtractStrength(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        var m = Regex.Match(text, @"(\d+(?:\.\d+)?)\s*(mg|mcg|g|ml|iu)\b", RegexOptions.IgnoreCase);
+        return m.Success ? $"{m.Groups[1].Value} {m.Groups[2].Value.ToLowerInvariant()}" : null;
+    }
+
+    // ---- 3. lib_diagnostic: laboratory & imaging services --------------------------------------------------------
+
+    private static readonly (string CatalogDescription, string[] Aliases)[] DiagnosticRules =
+    [
+        ("Complete Blood Count", ["cbc", "complete blood count", "hemoglobin", "hematocrit"]),
+        ("Platelet", ["platelet count"]),
+        ("Urinalysis", ["urinalysis", "urine routine", "routine urinalysis"]),
+        ("Fecalysis", ["fecalysis", "stool exam", "routine stool"]),
+        ("Sputum Microscopy", ["sputum", "genexpert", "afb", "acid fast bacilli"]),
+        ("Fasting Blood Sugar", ["fbs", "fasting blood sugar", "fasting blood glucose"]),
+        ("Random Blood Sugar", ["rbs", "random blood sugar", "random blood glucose"]),
+        ("Oral Glucose Tolerance Test", ["ogtt", "oral glucose tolerance"]),
+        ("Lipid Profile", ["lipid", "cholesterol", "triglyceride", "hdl", "ldl"]),
+        ("Creatinine", ["creatinine", "serum creatinine"]),
+        ("HbA1c", ["hba1c", "glycated hemoglobin"]),
+        ("Chest X-Ray", ["chest x-ray", "chest xray", "cxr", "chest radiograph"]),
+        ("Electrocardiogram (ECG)", ["ecg", "electrocardiogram", "12-lead"]),
+        ("Paps Smear", ["pap smear", "paps smear", "cervical screening"]),
+        ("Fecal Occult Blood", ["fobt", "fecal occult blood"]),
+        ("PPD Test (Tuberculosis)", ["ppd", "mantoux", "tuberculin"]),
+    ];
+
+    /// <summary>The library's "Others" code, used when a test is not one of the catalogued services.</summary>
+    public string OtherDiagnosticCode() => _catalog.FindByDescription(DiagnosticLibrary, "Others")?.Code ?? string.Empty;
+
+    public string ResolveDiagnosticCode(string? testName)
+    {
+        if (string.IsNullOrWhiteSpace(testName))
+            return OtherDiagnosticCode();
+
+        var lower = testName.ToLowerInvariant();
+        foreach (var (catalogDescription, aliases) in DiagnosticRules)
+        {
+            if (!aliases.Any(a => lower.Contains(a))) continue;
+            var entry = _catalog.FindByDescription(DiagnosticLibrary, catalogDescription);
+            if (entry is not null) return entry.Code;
+        }
+
+        return OtherDiagnosticCode();
     }
 }

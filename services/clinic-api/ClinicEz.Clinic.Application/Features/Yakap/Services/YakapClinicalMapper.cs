@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
@@ -10,6 +11,15 @@ namespace ClinicEz.Clinic.Application.Features.Yakap.Services;
 
 public sealed class YakapClinicalMapper : IYakapClinicalMapper
 {
+    private readonly PhilHealthCatalogResolver _resolver;
+    private readonly IPhilHealthCatalogLookup _catalog;
+
+    public YakapClinicalMapper(IPhilHealthCatalogLookup catalog)
+    {
+        _catalog = catalog;
+        _resolver = new PhilHealthCatalogResolver(catalog);
+    }
+
     public YakapReportDocumentDto MapToYakapReportDocument(
         string reportTagging,
         string effectiveYear,
@@ -343,7 +353,7 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
                         {
                             var resolvedDrugCode = !string.IsNullOrWhiteSpace(rx.PhilHealthDrugCode)
                                 ? FormatDrugCode(rx.PhilHealthDrugCode)
-                                : PhilHealthCatalogResolver.ResolveDrugCode(rx.GenericName, rx.Dosage);
+                                : _resolver.ResolveDrugCode(rx.GenericName, rx.Dosage);
 
                             decimal unitPrice = 0m;
                             if (feeScheduleMap != null)
@@ -516,11 +526,11 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
         return null;
     }
 
-    private static (List<YakapMedicalHistoryDto> Histories, List<YakapSpecificHistoryDto> Specifics) MapMedicalHistories(
+    private (List<YakapMedicalHistoryDto> Histories, List<YakapSpecificHistoryDto> Specifics) MapMedicalHistories(
         ClinicPatient patient,
         PhilHealthPatientProfileDto? customProfile)
     {
-        return PhilHealthCatalogResolver.ResolveMedicalHistories(
+        return _resolver.ResolveMedicalHistories(
             patient.ChronicConditions,
             customProfile?.MedicalHistories);
     }
@@ -544,7 +554,7 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
         return list;
     }
 
-    private static (List<YakapMedicalHistoryDto> Histories, List<YakapSpecificHistoryDto> Specifics) MapFamilyHistories(
+    private (List<YakapMedicalHistoryDto> Histories, List<YakapSpecificHistoryDto> Specifics) MapFamilyHistories(
         PhilHealthPatientProfileDto? customProfile)
     {
         var histories = new List<YakapMedicalHistoryDto>();
@@ -564,8 +574,10 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
 
         if (histories.Count == 0)
         {
-            histories.Add(new YakapMedicalHistoryDto("99"));
-            specifics.Add(new YakapSpecificHistoryDto("99", "None"));
+            // PhilHealth's own "None" entry in lib_mdiseases (never a literal code)
+            var none = _catalog.FindByDescription(PhilHealthCatalogResolver.MedicalHistoryLibrary, "None");
+            histories.Add(new YakapMedicalHistoryDto(none?.Code ?? string.Empty));
+            specifics.Add(new YakapSpecificHistoryDto(none?.Code ?? string.Empty, "None"));
         }
         else if (specifics.Count == 0)
         {
@@ -832,7 +844,7 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
             Qid24Yn: GetVal("ncd_qid24") != string.Empty ? GetVal("ncd_qid24") : GetVal("qid24_yn"));
     }
 
-    private static List<YakapDiagnosticOrderDto> MapDiagnosticOrders(
+    private List<YakapDiagnosticOrderDto> MapDiagnosticOrders(
         ConsultationEncounter encounter,
         IReadOnlyDictionary<Guid, List<ClinicLabOrder>>? labOrdersMap)
     {
@@ -846,11 +858,11 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
                 {
                     var diagCode = !string.IsNullOrWhiteSpace(item.PhilHealthServiceCode)
                         ? item.PhilHealthServiceCode
-                        : PhilHealthCatalogResolver.ResolveDiagnosticCode(item.TestName);
+                        : _resolver.ResolveDiagnosticCode(item.TestName);
 
                     diagOrders.Add(new YakapDiagnosticOrderDto(
                         DiagnosticId: diagCode,
-                        OthRemarks: diagCode == "99" ? item.TestName : (item.Instructions ?? string.Empty),
+                        OthRemarks: diagCode == _resolver.OtherDiagnosticCode() ? item.TestName : (item.Instructions ?? string.Empty),
                         IsPhysicianRecommendation: "Y",
                         PatientRemarks: "Followed",
                         ReportStatus: "U",
@@ -862,7 +874,7 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
         if (diagOrders.Count == 0)
         {
             diagOrders.Add(new YakapDiagnosticOrderDto(
-                DiagnosticId: "99",
+                DiagnosticId: _resolver.OtherDiagnosticCode(),
                 OthRemarks: "None",
                 IsPhysicianRecommendation: "N",
                 PatientRemarks: string.Empty,

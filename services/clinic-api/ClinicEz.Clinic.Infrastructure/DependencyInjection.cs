@@ -31,6 +31,9 @@ public static class DependencyInjection
             throw new InvalidOperationException("DbSchema configuration value is required but was not specified.");
         }
 
+        // Must be registered before Hangfire/MassTransit so the schema exists when they start (fresh on-prem installs).
+        services.AddHostedService<ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.DatabaseMigrationHostedService>();
+
         services.AddHttpContextAccessor();
         services.AddScoped<IClinicContext, ClinicContext>();
 
@@ -55,6 +58,14 @@ public static class DependencyInjection
         services.AddSingleton<ClinicEz.Clinic.Infrastructure.Auth.IStaffAccessCache, ClinicEz.Clinic.Infrastructure.Auth.StaffAccessCache>();
         services.AddScoped<ClinicEz.Clinic.Infrastructure.Auth.IWorkspaceResolver, ClinicEz.Clinic.Infrastructure.Auth.WorkspaceResolver>();
         services.AddScoped<ClinicEz.Clinic.Infrastructure.Auth.IClinicAuthService, ClinicEz.Clinic.Infrastructure.Auth.ClinicAuthService>();
+
+        // PhilHealth Catalog: bundled lib_* JSON seeded on every boot + idempotent administrator import
+        services.AddScoped<ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.IPhilHealthCatalogImportService, ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.PhilHealthCatalogImportService>();
+        services.AddScoped<ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.IPhilHealthCatalogQueryService, ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.PhilHealthCatalogQueryService>();
+        services.AddSingleton<ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.PhilHealthCatalogLookup>();
+        services.AddSingleton<ClinicEz.Clinic.Application.Common.Interfaces.IPhilHealthCatalogLookup>(sp => sp.GetRequiredService<ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.PhilHealthCatalogLookup>());
+        services.AddSingleton<ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.IPhilHealthCatalogCache>(sp => sp.GetRequiredService<ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.PhilHealthCatalogLookup>());
+        services.AddHostedService<ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.PhilHealthCatalogSeedHostedService>();
 
         // Outbound patient webhook notifier
         services.AddHttpClient<IPatientWebhookNotifier, PatientWebhookNotifier>();

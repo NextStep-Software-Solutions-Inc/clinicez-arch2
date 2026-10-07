@@ -67,6 +67,9 @@ public static class ClinicPermissions
     public const string RolesRead = "roles:read";
     public const string RolesManage = "roles:manage";
 
+    // PhilHealth Catalog (official lib_* libraries): importing a newer kit or a corrected library
+    public const string PhilHealthCatalogImport = "philhealth.catalog.import";
+
     // PhilHealth Yakap Transmittals & Integration
     public const string YakapRead = "yakap:read";
     public const string YakapWrite = "yakap:write";
@@ -123,6 +126,7 @@ public static class ClinicPermissions
         RolesManage,
         YakapRead,
         YakapWrite,
-        YakapSubmit
+        YakapSubmit,
+        PhilHealthCatalogImport
     }.AsReadOnly();
 }

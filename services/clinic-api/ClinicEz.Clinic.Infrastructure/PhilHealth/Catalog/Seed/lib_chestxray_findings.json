@@ -1,0 +1,19 @@
+{
+ "library": "lib_chestxray_findings",
+ "kitVersion": "1.1",
+ "items": [
+  {"code":"1","description":"NORMAL","isActive":true},
+  {"code":"10","description":"BRONCHIOLITIS","isActive":true},
+  {"code":"11","description":"CHRONIC OBSTRUCTIVE PULMONARY DISEASE","isActive":true},
+  {"code":"12","description":"PULMONARY MASS","isActive":true},
+  {"code":"2","description":"PNEUMONIA","isActive":true},
+  {"code":"3","description":"PTB/KOCHS","isActive":true},
+  {"code":"4","description":"PLEURAL EFFUSION","isActive":true},
+  {"code":"5","description":"PNEUMOTHORAX","isActive":true},
+  {"code":"6","description":"EMPHYSEMA","isActive":true},
+  {"code":"7","description":"CHRONIC BRONCHITIS","isActive":true},
+  {"code":"8","description":"BRONCHIECTASIS","isActive":true},
+  {"code":"9","description":"ACUTE BRONCHITIS","isActive":true},
+  {"code":"99","description":"OTHERS","isActive":true}
+ ]
+}
