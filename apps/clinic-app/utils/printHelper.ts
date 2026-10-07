@@ -1,4 +1,5 @@
-import { Linking, Alert } from 'react-native';
+import { Alert } from 'react-native';
+import { openDocument } from '../services/documentOpener';
 
 /**
  * Facility letterhead printed around a receipt. Every field is optional so callers
@@ -13,16 +14,8 @@ export interface PrintLetterhead {
 }
 
 export async function openPrintableUrl(url: string): Promise<boolean> {
-  try {
-    const supported = await Linking.canOpenURL(url);
-    if (supported) {
-      await Linking.openURL(url);
-      return true;
-    }
-    return false;
-  } catch {
-    return false;
-  }
+  // Clinic API documents need the session token, so they are downloaded with it and handed to the share sheet.
+  return openDocument(url);
 }
 
 export function printReceiptDialog(title: string, details: string, letterhead?: PrintLetterhead) {

@@ -1,9 +1,9 @@
 /**
  * Minimal per-device key/value storage.
  *
- * Web: `localStorage` (survives reloads, same mechanism as the tenant/workspace context
- * in @shared/safe). Native: in-memory for the current app session - persistent native
- * storage would need a new native module, which this app does not otherwise require.
+ * Web (this file): `localStorage` (survives reloads, same mechanism as the tenant/workspace context
+ * in @shared/safe). Native builds resolve `deviceStorage.native.ts` instead, which persists to SQLite.
+ * Never store secrets here - use `services/secureStorage`.
  */
 const memory = new Map<string, string>();
 

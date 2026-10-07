@@ -5,6 +5,8 @@ import { useFonts } from 'expo-font';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Navigation, linkingOptions, navigationTheme } from './navigation/Navigation';
 import { FacilityActivationGate } from './components/FacilityActivationGate';
+import { ConnectionGate } from './components/connection/ConnectionGate';
+import { AuthGate } from './components/auth/AuthGate';
 import { ClinicProvider } from './context/ClinicContext';
 import { StaffProvider } from './context/StaffContext';
 import { FeedbackHost } from './components/ui';
@@ -31,13 +33,17 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />
-      <FacilityActivationGate>
-        <ClinicProvider>
-          <StaffProvider>
-            <Navigation linking={linkingOptions} theme={navigationTheme} />
-          </StaffProvider>
-        </ClinicProvider>
-      </FacilityActivationGate>
+      <ConnectionGate>
+        <FacilityActivationGate>
+          <AuthGate>
+            <ClinicProvider>
+              <StaffProvider>
+                <Navigation linking={linkingOptions} theme={navigationTheme} />
+              </StaffProvider>
+            </ClinicProvider>
+          </AuthGate>
+        </FacilityActivationGate>
+      </ConnectionGate>
       <FeedbackHost />
     </SafeAreaProvider>
   );

@@ -1,12 +1,10 @@
 import { theme } from '../constants/theme';
 import type { PrintLetterhead } from './printHelper';
+import { openDocument } from '../services/documentOpener';
 
 export async function openPrintableUrl(url: string): Promise<boolean> {
-  if (typeof window !== 'undefined') {
-    window.open(url, '_blank', 'noopener,noreferrer');
-    return true;
-  }
-  return false;
+  // Clinic API documents need the session token, so they are fetched and shown through a blob URL.
+  return openDocument(url);
 }
 
 function escapeHtml(value: string): string {

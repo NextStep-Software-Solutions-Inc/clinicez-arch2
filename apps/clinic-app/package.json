@@ -9,13 +9,23 @@
     "@expo-google-fonts/geist": "^0.4.2",
     "@expo-google-fonts/geist-mono": "^0.4.3",
     "@expo/metro-runtime": "~56.0.21",
+    "@react-native-community/netinfo": "^12.0.1",
     "@react-navigation/bottom-tabs": "^8.0.0-alpha.33",
     "@react-navigation/core": "8.0.0-alpha.26",
     "@react-navigation/native": "^8.0.0-alpha.28",
     "@shared/safe": "workspace:*",
     "axios": "^1.18.0",
     "expo": "~56.0.8",
+    "expo-constants": "^57.0.18",
+    "expo-crypto": "^56.0.4",
+    "expo-document-picker": "^57.0.3",
+    "expo-file-system": "^56.0.7",
     "expo-font": "~56.0.7",
+    "expo-local-authentication": "~56.0.4",
+    "expo-print": "^57.0.2",
+    "expo-secure-store": "~56.0.4",
+    "expo-sharing": "^56.0.16",
+    "expo-sqlite": "~56.0.4",
     "expo-status-bar": "~56.0.4",
     "lucide-react-native": "^1.52.0",
     "react": "19.2.3",
@@ -41,7 +51,8 @@
     "build:clinic-web": "bun run build:web",
     "build": "bun run build:web",
     "typecheck": "tsc --noEmit",
-    "lint:tokens": "node scripts/check-tokens.mjs"
+    "lint:tokens": "node scripts/check-tokens.mjs",
+    "test": "bun test tests"
   },
   "private": true
 }

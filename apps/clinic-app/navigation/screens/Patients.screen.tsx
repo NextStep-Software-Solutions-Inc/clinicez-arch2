@@ -7,7 +7,6 @@ import {
   Pressable,
   ActivityIndicator,
   Modal,
-  Linking,
 } from 'react-native';
 import { TextInput } from '@ui/Text';
 import { Alert } from '@utils/feedback';
@@ -16,6 +15,7 @@ import { ThemedText, Badge, Button, Input, Card, Icon, EmptyState, ErrorState, S
 import SegmentedControl from '@ui/SegmentedControl';
 import { useClinic } from '@context/ClinicContext';
 import { useStaff } from '@context/StaffContext';
+import { openDocument } from '../../services/documentOpener';
 import { notify } from '@utils/feedback';
 import { ResponsiveLayout } from '@layout';
 import { theme } from '@constants/theme';
@@ -315,7 +315,7 @@ export default function PatientsScreen() {
   const handleDownloadAttachment = async (attachmentId: string) => {
     try {
       const url = clinicService.getRecordAttachmentDownloadUrl(attachmentId);
-      await Linking.openURL(url);
+      if (!(await openDocument(url))) throw new Error('Could not open the document');
     } catch (e: any) {
       Alert.alert('Unable to open document', e.message || 'Network error');
     }
@@ -1455,7 +1455,7 @@ export default function PatientsScreen() {
                   onPress={async () => {
                     const url = clinicService.getLabOrderSlipPdfUrl(selectedSlip.orderId);
                     try {
-                      await Linking.openURL(url);
+                      if (!(await openDocument(url))) throw new Error('Could not open the document');
                     } catch {
                       Alert.alert('Download Error', 'Could not open requisition slip PDF. Please check connection and try again.');
                     }

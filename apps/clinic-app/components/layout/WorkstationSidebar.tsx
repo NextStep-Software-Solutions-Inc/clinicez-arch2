@@ -3,7 +3,7 @@ import { View, StyleSheet, Pressable, ScrollView, PressableStateCallbackType } f
 import ThemedText from '../ui/ThemedText';
 import Badge from '../ui/Badge';
 import Icon, { IconName } from '../ui/Icon';
-import StaffPicker from './StaffPicker';
+import UserMenu from './UserMenu';
 import { theme } from '../../constants/theme';
 import { useClinic } from '../../context/ClinicContext';
 
@@ -95,7 +95,7 @@ export default function WorkstationSidebar({
 
       {/* Footer: facility + who is working */}
       <View style={styles.footer}>
-        <StaffPicker variant="card" />
+        <UserMenu variant="card" />
 
         {facilityName ? (
           <View style={styles.facility}>

@@ -2,7 +2,7 @@ import React from 'react';
 import { View, StyleSheet, ViewStyle } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Icon from '../ui/Icon';
-import StaffPicker from './StaffPicker';
+import UserMenu from './UserMenu';
 import { theme } from '../../constants/theme';
 import { useClinic } from '../../context/ClinicContext';
 import { useBreakpoint } from '../../utils/useBreakpoint';
@@ -63,7 +63,7 @@ export default function ClinicHeaderBar({
         {rightAction ?? null}
 
         {/* On workstation widths the picker lives in the sidebar footer. */}
-        {isCompact ? <StaffPicker compact /> : null}
+        {isCompact ? <UserMenu compact /> : null}
       </View>
     </View>
   );

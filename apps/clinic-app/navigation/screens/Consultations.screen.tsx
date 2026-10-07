@@ -5,7 +5,6 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
-  Linking,
 } from 'react-native';
 import { Alert, notify } from '@utils/feedback';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -29,6 +28,7 @@ import PrescriptionSlipModal from '../../components/PrescriptionSlipModal';
 import RecordExternalDispenseModal from '../../components/RecordExternalDispenseModal';
 import { useClinic } from '../../context/ClinicContext';
 import { useStaff, formatStaffName } from '../../context/StaffContext';
+import { openDocument } from '../../services/documentOpener';
 import {
   clinicService,
   PatientQueueItem,
@@ -970,7 +970,9 @@ export default function ConsultationsScreen() {
     const orderId = typeof orderOrId === 'string' ? orderOrId : orderOrId.id;
     const found = typeof orderOrId === 'string' ? labOrders.find((o) => o.id === orderOrId) : orderOrId;
     const url = clinicService.getLabReportPdfUrl(orderId);
-    Linking.openURL(url).catch(() => {
+    openDocument(url).then((opened) => {
+      if (!opened) throw new Error('Could not open the document');
+    }).catch(() => {
       Alert.alert(
         'Could not open the PDF report',
         [
@@ -1318,7 +1320,7 @@ export default function ConsultationsScreen() {
 
   const downloadPdf = async (url: string, failureMessage: string) => {
     try {
-      await Linking.openURL(url);
+      if (!(await openDocument(url))) throw new Error('Could not open the document');
     } catch {
       Alert.alert('Download error', failureMessage);
     }

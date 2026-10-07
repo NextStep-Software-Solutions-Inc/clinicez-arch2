@@ -1,5 +1,5 @@
-import { clinicApiClient, pharmacyApiClient, CLINIC_BASE_URL, API_PREFIX } from './apiClient';
-import { SyncStatus, joinApiUrl } from '@shared/safe';
+import { clinicApiClient, pharmacyApiClient, clinicApiUrl } from './apiClient';
+import { SyncStatus } from '@shared/safe';
 
 export type QueuePriority = 'Routine' | 'Urgent' | 'Emergency';
 export type QueueStatus = 'Waiting' | 'Triaged' | 'InConsultation' | 'Completed' | 'Cancelled' | 'NoShow';
@@ -952,11 +952,11 @@ export const clinicService = {
   },
 
   getPrescriptionSlipPdfUrl(consultationId: string) {
-    return joinApiUrl(CLINIC_BASE_URL, `/prescriptions/${consultationId}/slip-pdf`);
+    return clinicApiUrl(`/prescriptions/${consultationId}/slip-pdf`);
   },
 
   getPrescriptionSlipPdfByNumberUrl(prescriptionNumber: string) {
-    return joinApiUrl(CLINIC_BASE_URL, `/prescriptions/by-number/${encodeURIComponent(prescriptionNumber)}/slip-pdf`);
+    return clinicApiUrl(`/prescriptions/by-number/${encodeURIComponent(prescriptionNumber)}/slip-pdf`);
   },
 
   // ICD-10 Search
@@ -1112,11 +1112,11 @@ export const clinicService = {
   },
 
   getLabReportPdfUrl(orderId: string) {
-    return joinApiUrl(CLINIC_BASE_URL, `/lab-orders/${orderId}/report-pdf`);
+    return clinicApiUrl(`/lab-orders/${orderId}/report-pdf`);
   },
 
   getLabOrderSlipPdfUrl(orderId: string) {
-    return joinApiUrl(CLINIC_BASE_URL, `/lab-orders/${orderId}/slip-pdf`);
+    return clinicApiUrl(`/lab-orders/${orderId}/slip-pdf`);
   },
 
   // Clinical Decision Support (CDS) Safety Engine
@@ -1191,6 +1191,16 @@ export const clinicService = {
 
   async deactivateStaff(id: string) {
     return clinicApiClient.delete(`/staff/${id}`);
+  },
+
+  /** Sets a temporary password; the staff member must change it at next sign-in. Requires `staff:manage`. */
+  async setStaffTemporaryPassword(id: string, temporaryPassword: string) {
+    return clinicApiClient.post(`/staff/${id}/credentials`, { temporaryPassword });
+  },
+
+  /** Signs the staff member out of every device. Requires `staff:manage`. */
+  async revokeStaffSessions(id: string) {
+    return clinicApiClient.post(`/staff/${id}/revoke-sessions`, {});
   },
 
   async getLicenseStatus() {
@@ -1291,7 +1301,7 @@ export const clinicService = {
   },
 
   getMedicalCertificatePdfUrl(id: string) {
-    return joinApiUrl(CLINIC_BASE_URL, `/documents/medical-certificates/${id}/pdf`);
+    return clinicApiUrl(`/documents/medical-certificates/${id}/pdf`);
   },
 
   async issueReferralLetter(payload: {
@@ -1322,7 +1332,7 @@ export const clinicService = {
   },
 
   getReferralLetterPdfUrl(id: string) {
-    return joinApiUrl(CLINIC_BASE_URL, `/documents/referrals/${id}/pdf`);
+    return clinicApiUrl(`/documents/referrals/${id}/pdf`);
   },
 
   async verifyDocument(securityDigestOrNumber: string) {
@@ -1360,7 +1370,7 @@ export const clinicService = {
   },
 
   getRecordAttachmentDownloadUrl(attachmentId: string) {
-    return joinApiUrl(CLINIC_BASE_URL, `/records/attachments/${attachmentId}/download`);
+    return clinicApiUrl(`/records/attachments/${attachmentId}/download`);
   },
 
   async uploadRecordAttachmentFile(formData: FormData) {

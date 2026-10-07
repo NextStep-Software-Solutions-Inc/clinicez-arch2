@@ -23,6 +23,10 @@ import { useFacilityLicense } from '../../components/FacilityActivationGate';
 import { BulkStudentImportModal } from '../../components/BulkStudentImportModal';
 import { useClinic } from '../../context/ClinicContext';
 import { useStaff } from '../../context/StaffContext';
+import { usePermission } from '../../context/AuthContext';
+import { PERMISSIONS } from '../../constants/permissions';
+import StaffAccessModal from '../../components/settings/StaffAccessModal';
+import SecuritySection from '../../components/settings/SecuritySection';
 import {
   clinicService,
   DailyEodReport,
@@ -126,6 +130,8 @@ export default function SettingsScreen() {
   const { license, openActivationModal, refreshLicense } = useFacilityLicense();
   const { refresh: refreshClinic } = useClinic();
   const { reload: reloadStaffContext } = useStaff();
+  const canManageStaff = usePermission(PERMISSIONS.staffManage);
+  const [accessStaff, setAccessStaff] = useState<StaffMember | null>(null);
 
   const [eodReport, setEodReport] = useState<DailyEodReport | null>(null);
   const [settings, setSettings] = useState<ClinicSettingsRecord | null>(null);
@@ -804,7 +810,7 @@ export default function SettingsScreen() {
               <EmptyState
                 icon="patients"
                 title="No staff added yet"
-                description="Add doctors, nurses and front-desk staff so they can be chosen in Working as."
+                description="Add doctors, nurses and front-desk staff so they can sign in and be assigned to patients."
                 actionTitle="Add staff"
                 onAction={handleOpenAddStaff}
               />
@@ -832,12 +838,19 @@ export default function SettingsScreen() {
                       </ThemedText>
                     ) : null}
                   </View>
-                  <Button title="Deactivate" variant="secondary" size="sm" onPress={() => handleDeactivateStaff(s.id)} />
+                  <View style={styles.itemTitleRow}>
+                    {canManageStaff ? (
+                      <Button title="Access" variant="secondary" size="sm" icon="key" onPress={() => setAccessStaff(s)} />
+                    ) : null}
+                    <Button title="Deactivate" variant="secondary" size="sm" onPress={() => handleDeactivateStaff(s.id)} />
+                  </View>
                 </View>
               ))
             )}
           </CardContent>
         </Card>
+
+        <SecuritySection />
 
         {/* Patient custom fields */}
         <Card>
@@ -1336,6 +1349,7 @@ export default function SettingsScreen() {
           });
         }}
       />
+      <StaffAccessModal staff={accessStaff} onClose={() => setAccessStaff(null)} />
     </ResponsiveLayout>
   );
 }

@@ -200,37 +200,92 @@ export function extractTenantFromHostname(hostname: string): string | null {
 }
 
 /**
- * Returns any previously stored valid workspace slug from localStorage.
+ * Minimal synchronous key/value storage used to remember the active workspace.
+ * Web uses `localStorage` automatically. Native apps (no `localStorage`, no `window.location`) register
+ * their own persistent storage once at startup with {@link setTenantStorage}.
  */
-export function getStoredTenantSlug(): string | null {
-  if (typeof window === 'undefined') return null;
+export interface TenantStorage {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+}
+
+let customTenantStorage: TenantStorage | null = null;
+
+/** Registers (or clears) the storage used for workspace persistence. Call once before first use on native. */
+export function setTenantStorage(storage: TenantStorage | null): void {
+  customTenantStorage = storage;
+}
+
+function tenantStorage(): TenantStorage | null {
+  if (customTenantStorage) return customTenantStorage;
   try {
-    const stored = localStorage.getItem(STORAGE_KEY_TENANT);
-    if (stored && isValidTenantSlug(stored)) {
-      return stored;
-    }
+    if (typeof localStorage !== 'undefined') return localStorage;
   } catch {
-    // Ignore error
+    // Access can throw in sandboxed frames / private mode.
   }
   return null;
 }
 
+/** React Native defines `window` but not `window.location`; only a real browser location is usable. */
+function browserLocation(): Location | null {
+  try {
+    if (typeof window !== 'undefined' && window.location) return window.location;
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function readStorage(key: string): string | null {
+  try {
+    return tenantStorage()?.getItem(key) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStorage(key: string, value: string): void {
+  try {
+    tenantStorage()?.setItem(key, value);
+  } catch {
+    // Storage may be full or unavailable; the workspace simply is not remembered.
+  }
+}
+
+function removeStorage(key: string): void {
+  try {
+    tenantStorage()?.removeItem(key);
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Returns any previously stored valid workspace slug.
+ */
+export function getStoredTenantSlug(): string | null {
+  const stored = readStorage(STORAGE_KEY_TENANT);
+  return stored && isValidTenantSlug(stored) ? stored : null;
+}
+
 /**
  * Resolves tenant and facility context using priority order:
- * 1. Subdomain from hostname (if not a root domain)
- * 2. URL Query parameters (?tenant=...&facilityId=...)
- * 3. LocalStorage persistence (if not a bare root access)
+ * 1. Subdomain from hostname (if not a root domain; browsers only)
+ * 2. URL Query parameters (?tenant=...&facilityId=...; browsers only)
+ * 3. Stored workspace (if not a bare root access)
  */
 export function resolveTenantContext(): TenantContext {
-  if (typeof window === 'undefined') {
+  const location = browserLocation();
+  if (!location && !tenantStorage()) {
     return { tenantSlug: null, clinicId: null, source: 'none', isRoot: false };
   }
 
-  const hostname = window.location.hostname || '';
-  const isRoot = isRootHostname(hostname);
+  const hostname = location?.hostname || '';
+  const isRoot = location ? isRootHostname(hostname) : false;
 
   // 1. Subdomain Check (Only if not a recognized root domain)
-  if (!isRoot) {
+  if (location && !isRoot) {
     const cleanHost = hostname.toLowerCase().split(':')[0].trim();
     const serviceMatch = cleanHost.match(buildServiceHostRegex());
     const facilitySlug = serviceMatch && isValidTenantSlug(serviceMatch[1]) ? serviceMatch[1] : null;
@@ -238,8 +293,7 @@ export function resolveTenantContext(): TenantContext {
     const subdomainTenant = extractTenantFromHostname(hostname);
     if (subdomainTenant && isValidTenantSlug(subdomainTenant)) {
       const cachedClinic =
-        localStorage.getItem(`${STORAGE_KEY_CLINIC}_${subdomainTenant}`) ||
-        localStorage.getItem(STORAGE_KEY_CLINIC);
+        readStorage(`${STORAGE_KEY_CLINIC}_${subdomainTenant}`) || readStorage(STORAGE_KEY_CLINIC);
       return {
         tenantSlug: subdomainTenant,
         facilitySlug: facilitySlug || undefined,
@@ -251,82 +305,76 @@ export function resolveTenantContext(): TenantContext {
   }
 
   // 2. Query Parameters Check (?tenant=...&facilityId=...)
-  try {
-    const searchParams = new URLSearchParams(window.location.search);
-    const queryTenant = searchParams.get('tenant') || searchParams.get('tenantSlug');
-    const queryClinic = searchParams.get('facilityId') || searchParams.get('clinicId');
+  if (location) {
+    try {
+      const searchParams = new URLSearchParams(location.search);
+      const queryTenant = searchParams.get('tenant') || searchParams.get('tenantSlug');
+      const queryClinic = searchParams.get('facilityId') || searchParams.get('clinicId');
 
-    if (queryTenant && isValidTenantSlug(queryTenant)) {
-      const cleanTenant = queryTenant.trim().toLowerCase();
-      localStorage.setItem(STORAGE_KEY_TENANT, cleanTenant);
-      if (queryClinic) {
-        localStorage.setItem(`${STORAGE_KEY_CLINIC}_${cleanTenant}`, queryClinic);
-        localStorage.setItem(STORAGE_KEY_CLINIC, queryClinic);
+      if (queryTenant && isValidTenantSlug(queryTenant)) {
+        const cleanTenant = queryTenant.trim().toLowerCase();
+        writeStorage(STORAGE_KEY_TENANT, cleanTenant);
+        if (queryClinic) {
+          writeStorage(`${STORAGE_KEY_CLINIC}_${cleanTenant}`, queryClinic);
+          writeStorage(STORAGE_KEY_CLINIC, queryClinic);
+        }
+        return {
+          tenantSlug: cleanTenant,
+          clinicId: queryClinic || readStorage(`${STORAGE_KEY_CLINIC}_${cleanTenant}`),
+          source: 'query',
+          isRoot,
+        };
       }
-      return {
-        tenantSlug: cleanTenant,
-        clinicId: queryClinic || localStorage.getItem(`${STORAGE_KEY_CLINIC}_${cleanTenant}`),
-        source: 'query',
-        isRoot,
-      };
+    } catch {
+      // Ignore URLSearchParams parsing failure in non-browser environments
     }
-  } catch {
-    // Ignore URLSearchParams parsing failure in non-browser environments
   }
 
   // 3. Stored Tenant Check
   // Note: On service root domains (e.g. clinic.<baseDomain>),
   // we do not auto-bind storedTenant without explicit user selection, so the bare root
   // correctly displays the "Select Clinic Workspace" screen.
-  try {
-    const storedTenant = localStorage.getItem(STORAGE_KEY_TENANT);
-    if (storedTenant) {
-      if (isValidTenantSlug(storedTenant)) {
-        if (!isRoot) {
-          const storedClinic =
-            localStorage.getItem(`${STORAGE_KEY_CLINIC}_${storedTenant}`) ||
-            localStorage.getItem(STORAGE_KEY_CLINIC);
-          return {
-            tenantSlug: storedTenant,
-            clinicId: storedClinic,
-            source: 'storage',
-            isRoot: false,
-          };
-        }
-      } else {
-        // Purge invalid slug (e.g. 'clinic.dev' or reserved words)
-        localStorage.removeItem(STORAGE_KEY_TENANT);
+  const storedTenant = readStorage(STORAGE_KEY_TENANT);
+  if (storedTenant) {
+    if (isValidTenantSlug(storedTenant)) {
+      if (!isRoot) {
+        const storedClinic =
+          readStorage(`${STORAGE_KEY_CLINIC}_${storedTenant}`) || readStorage(STORAGE_KEY_CLINIC);
+        return {
+          tenantSlug: storedTenant,
+          clinicId: storedClinic,
+          source: 'storage',
+          isRoot: false,
+        };
       }
+    } else {
+      // Purge invalid slug (e.g. 'clinic.dev' or reserved words)
+      removeStorage(STORAGE_KEY_TENANT);
     }
-  } catch {
-    // Ignore localStorage access failure in sandboxed environments
   }
 
   return { tenantSlug: null, clinicId: null, source: 'none', isRoot };
 }
 
 export function setActiveTenantContext(tenantSlug: string, clinicId?: string): void {
-  if (typeof window === 'undefined') return;
   const cleanTenant = tenantSlug.trim().toLowerCase();
   if (isValidTenantSlug(cleanTenant)) {
-    localStorage.setItem(STORAGE_KEY_TENANT, cleanTenant);
+    writeStorage(STORAGE_KEY_TENANT, cleanTenant);
     if (clinicId) {
-      localStorage.setItem(`${STORAGE_KEY_CLINIC}_${cleanTenant}`, clinicId);
-      localStorage.setItem(STORAGE_KEY_CLINIC, clinicId);
+      writeStorage(`${STORAGE_KEY_CLINIC}_${cleanTenant}`, clinicId);
+      writeStorage(STORAGE_KEY_CLINIC, clinicId);
     }
   }
 }
 
 export function setActiveClinicId(clinicId: string, tenantSlug?: string): void {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(STORAGE_KEY_CLINIC, clinicId);
+  writeStorage(STORAGE_KEY_CLINIC, clinicId);
   if (tenantSlug && isValidTenantSlug(tenantSlug)) {
-    localStorage.setItem(`${STORAGE_KEY_CLINIC}_${tenantSlug.trim().toLowerCase()}`, clinicId);
+    writeStorage(`${STORAGE_KEY_CLINIC}_${tenantSlug.trim().toLowerCase()}`, clinicId);
   }
 }
 
 export function clearActiveTenantContext(): void {
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem(STORAGE_KEY_TENANT);
-  localStorage.removeItem(STORAGE_KEY_CLINIC);
+  removeStorage(STORAGE_KEY_TENANT);
+  removeStorage(STORAGE_KEY_CLINIC);
 }
