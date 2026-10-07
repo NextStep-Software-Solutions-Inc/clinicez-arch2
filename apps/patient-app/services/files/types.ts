@@ -31,8 +31,22 @@ export interface FileBrowserContents {
   pendingSyncCount: number;
 }
 
+/**
+ * Browser-side file handle (a DOM File/Blob with a name). Used by the web build, where
+ * files come from <input type="file"> or drag & drop instead of expo-file-system.
+ */
+export interface WebPickedFile {
+  name: string;
+  size: number;
+  type: string;
+  uri?: string;
+  arrayBuffer(): Promise<ArrayBuffer>;
+}
+
+export type PickedFileSource = ExpoFile | WebPickedFile;
+
 export interface PickedFileInput {
-  file: ExpoFile;
+  file: PickedFileSource;
   name?: string;
   mimeType?: string;
   sizeBytes?: number;

@@ -1,5 +1,4 @@
-import { Buffer } from 'buffer';
-import * as Crypto from 'expo-crypto';
+import { aesDecryptBase64, aesEncrypt, base64ToBytes, deriveAesKeyBase64, generateAesKeyBase64 } from './aes';
 import { storage } from '@utils/storage';
 import { db } from '@db/index';
 import { fileUploadConfig } from '@db/schema/fileUploadConfig';
@@ -18,17 +17,6 @@ function getFrkSecureKey(patientId: string) {
   return `${FRK_KEY_PREFIX}_${patientId}`;
 }
 
-function toHex(buffer: ArrayBuffer) {
-  return Array.from(new Uint8Array(buffer))
-    .map((value) => value.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-async function sha256(str: string) {
-  // Use digestStringAsync to avoid needing TextEncoder which is not available natively in React Native
-  return await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, str);
-}
-
 // Generate a random 16-character FRK (e.g. ABCD-EFGH-IJKL-MNOP)
 export function generateFrk() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -39,16 +27,9 @@ export function generateFrk() {
   return `${frk.slice(0, 4)}-${frk.slice(4, 8)}-${frk.slice(8, 12)}-${frk.slice(12, 16)}`;
 }
 
-// Derive a 256-bit AES key from the FRK string using SHA-256 for simplicity
-async function deriveKeyFromFrk(frk: string): Promise<Crypto.AESEncryptionKey> {
-  const hashHex = await sha256(frk.replace(/-/g, '').toUpperCase());
-  // take first 32 bytes (64 hex chars) - actually sha256 is exactly 32 bytes (64 hex chars)
-  const bytes = new Uint8Array(32);
-  for (let i = 0; i < 32; i++) {
-    bytes[i] = parseInt(hashHex.slice(i * 2, i * 2 + 2), 16);
-  }
-  const encoded = Buffer.from(bytes).toString('base64');
-  return Crypto.AESEncryptionKey.import(encoded, 'base64');
+// Derive a 256-bit AES key (base64) from the FRK string using SHA-256 for simplicity
+async function deriveKeyFromFrk(frk: string): Promise<string> {
+  return deriveAesKeyBase64(frk.replace(/-/g, '').toUpperCase());
 }
 
 // Ensure the device has the MAK initialized
@@ -76,18 +57,17 @@ export async function initializeMakAndFrkIfNeeded(
   // Use existing MAK if we have it, otherwise generate random MAK
   let makEncoded = localMak;
   if (!makEncoded) {
-    const mak = await Crypto.AESEncryptionKey.generate(Crypto.AESKeySize.AES256);
-    makEncoded = await mak.encoded('base64');
+    makEncoded = await generateAesKeyBase64();
   }
   
   // Encrypt MAK with FRK
   // Pass makEncoded (base64 string) directly, since BinaryInput accepts base64 strings
-  const sealed = await Crypto.aesEncryptAsync(makEncoded, frkKey);
+  const sealed = await aesEncrypt(makEncoded, frkKey);
   
   const encryptedMAKJson = JSON.stringify({
-    cipherText: await sealed.combined('base64'),
-    iv: await sealed.iv('base64'),
-    tag: await sealed.tag('base64'),
+    cipherText: sealed.combinedBase64,
+    iv: sealed.ivBase64,
+    tag: sealed.tagBase64,
     algorithm: 'AES-256-GCM'
   });
 
@@ -114,12 +94,8 @@ export async function unlockMakWithFrk(patientId: string, frk: string, encrypted
   try {
     const frkKey = await deriveKeyFromFrk(frk);
     const parsed = JSON.parse(encryptedMAKJson);
-    const combinedBytes = new Uint8Array(Buffer.from(parsed.cipherText, 'base64'));
-    const sealed = Crypto.AESSealedData.fromCombined(
-      combinedBytes, 
-      { ivLength: 12, tagLength: 16 }
-    );
-    const makEncoded = await Crypto.aesDecryptAsync(sealed, frkKey, { output: 'base64' });
+    const combinedBytes = base64ToBytes(parsed.cipherText);
+    const makEncoded = await aesDecryptBase64(combinedBytes, frkKey);
     
     // Success, save locally
     await storage.setItemAsync(getMakSecureKey(patientId), makEncoded);
@@ -142,12 +118,12 @@ export async function regenerateFrk(patientId: string, getToken: () => Promise<s
   const frkKey = await deriveKeyFromFrk(newFrk);
   
   // Encrypt existing local MAK with the new FRK
-  const sealed = await Crypto.aesEncryptAsync(localMak, frkKey);
+  const sealed = await aesEncrypt(localMak, frkKey);
   
   const encryptedMAKJson = JSON.stringify({
-    cipherText: await sealed.combined('base64'),
-    iv: await sealed.iv('base64'),
-    tag: await sealed.tag('base64'),
+    cipherText: sealed.combinedBase64,
+    iv: sealed.ivBase64,
+    tag: sealed.tagBase64,
     algorithm: 'AES-256-GCM'
   });
 

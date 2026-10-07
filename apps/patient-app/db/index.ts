@@ -9,3 +9,6 @@ const expo = SQLite.openDatabaseSync(`Clinic EZ_patient_${APP_VARIANT}.db`);
 export const originalDb = drizzle(expo, { schema });
 export const db = createDbWithInterceptor(originalDb);
 export { registerSyncTrigger };
+
+/** Web-only concern (sql.js snapshot to IndexedDB); native SQLite persists itself. */
+export async function flushDatabaseSnapshot(): Promise<void> {}

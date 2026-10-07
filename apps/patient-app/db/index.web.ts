@@ -37,7 +37,12 @@ async function loadPersistedBytes(): Promise<Uint8Array | null> {
   }
 }
 
-export async function persistDatabaseSnapshot(): Promise<void> {
+let persistChain: Promise<void> = Promise.resolve();
+let dirty = false;
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+const PERSIST_DEBOUNCE_MS = 300;
+
+async function writeSnapshot(): Promise<void> {
   if (!rawSqlDatabase) return;
   try {
     const bytes = rawSqlDatabase.export();
@@ -49,11 +54,79 @@ export async function persistDatabaseSnapshot(): Promise<void> {
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
+    idb.close();
   } catch (err) {
     console.warn('[WebDB] Failed to persist SQLite snapshot to IndexedDB:', err);
   }
 }
 
+/** Serialized (never concurrent) snapshot write; resolves once this snapshot is stored. */
+export function persistDatabaseSnapshot(): Promise<void> {
+  dirty = false;
+  persistChain = persistChain.then(writeSnapshot, writeSnapshot);
+  return persistChain;
+}
+
+/**
+ * Write any pending changes now. Call after bulk writes (e.g. server hydration) and on
+ * page hide so data survives a reload even inside the debounce window.
+ */
+export async function flushDatabaseSnapshot(): Promise<void> {
+  if (persistTimer) {
+    clearTimeout(persistTimer);
+    persistTimer = null;
+  }
+  if (dirty) {
+    await persistDatabaseSnapshot();
+  } else {
+    await persistChain;
+  }
+}
+
+function markDirty() {
+  dirty = true;
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    void persistDatabaseSnapshot();
+  }, PERSIST_DEBOUNCE_MS);
+}
+
+const WRITE_STATEMENT = /^\s*(insert|update|delete|replace|create|drop|alter)\b/i;
+
+/**
+ * Instruments the raw sql.js handle so EVERY write schedules a snapshot - including the
+ * ones made through `originalDb` (server hydration, auth summary upserts) which bypass the
+ * sync interceptor. Hooking the handle (not a drizzle proxy) also fires on execution rather
+ * than on query-builder creation.
+ */
+function instrumentWrites(raw: Database) {
+  const prepare = raw.prepare.bind(raw);
+  const run = raw.run.bind(raw);
+  const exec = raw.exec.bind(raw);
+  raw.prepare = ((sql: string, params?: any) => {
+    if (WRITE_STATEMENT.test(sql)) markDirty();
+    return prepare(sql, params);
+  }) as typeof raw.prepare;
+  raw.run = ((sql: string, params?: any) => {
+    if (WRITE_STATEMENT.test(sql)) markDirty();
+    return run(sql, params);
+  }) as typeof raw.run;
+  raw.exec = ((sql: string, params?: any) => {
+    if (WRITE_STATEMENT.test(sql)) markDirty();
+    return exec(sql, params);
+  }) as typeof raw.exec;
+}
+
+function registerFlushOnHide() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') void flushDatabaseSnapshot();
+  });
+  window.addEventListener('pagehide', () => {
+    void flushDatabaseSnapshot();
+  });
+}
 let rawSqlDatabase: Database | null = null;
 let initializedDrizzleDb: ReturnType<typeof drizzle> | null = null;
 let initPromise: Promise<ReturnType<typeof drizzle>> | null = null;
@@ -121,6 +194,10 @@ export async function initWebDatabase(): Promise<ReturnType<typeof drizzle>> {
       await persistDatabaseSnapshot();
     }
 
+    // Instrument AFTER schema bootstrap + first snapshot so migrations don't queue extra writes.
+    instrumentWrites(rawSqlDatabase);
+    registerFlushOnHide();
+
     initializedDrizzleDb = drizzle(rawSqlDatabase, { schema });
     return initializedDrizzleDb;
   })();
@@ -141,22 +218,8 @@ export const originalDb = new Proxy({} as any, {
 // Wrapped db with the same sync-interceptor as mobile
 const intercepted = createDbWithInterceptor(originalDb);
 
-// Proxy interceptor to also trigger snapshot persistence on writes
-export const db = new Proxy(intercepted, {
-  get(target, prop, receiver) {
-    const orig = Reflect.get(target, prop, receiver);
-    if (prop === 'insert' || prop === 'update' || prop === 'delete') {
-      return function (...args: any[]) {
-        const res = orig.apply(target, args);
-        // Persist DB snapshot to IndexedDB shortly after mutation
-        setTimeout(() => {
-          persistDatabaseSnapshot().catch(() => {});
-        }, 100);
-        return res;
-      };
-    }
-    return orig;
-  },
-});
+// Same sync-interceptor as mobile. Snapshot persistence is handled at the sql.js handle level
+// (see instrumentWrites), so both db and originalDb writes are persisted.
+export const db = intercepted;
 
 export { registerSyncTrigger };
