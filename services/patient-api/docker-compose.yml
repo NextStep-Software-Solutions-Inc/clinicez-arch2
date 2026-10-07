@@ -26,6 +26,8 @@ services:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
       - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}
       - ConnectionStrings__Redis=${REDIS_CONNECTION_STRING}
+      - Clerk__Authority=${CLERK_AUTHORITY:-https://amazing-mosquito-75.clerk.accounts.dev}
+      - Clerk__Audience=${CLERK_AUDIENCE:-}
       - Clerk__WebhookSecret=${CLERK_WEBHOOK_SECRET}
       - R2__AccountId=${R2_ACCOUNT_ID}
       - R2__BucketName=${R2_BUCKET_NAME}

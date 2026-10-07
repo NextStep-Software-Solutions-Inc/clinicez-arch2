@@ -77,6 +77,7 @@ builder.Services
                 return Task.CompletedTask;
             }
         };
+    });
 builder.Services.AddAuthorization();
 
 builder.Services.Configure<ForwardedHeadersOptions>(options =>

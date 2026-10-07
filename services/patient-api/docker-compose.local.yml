@@ -12,8 +12,8 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=patientapp_db;Username=${POSTGRES_USER:-patientapp};Password=${POSTGRES_PASSWORD:-patientapp_secret}
       - ConnectionStrings__Redis=redis:6379
-      - Clerk__Authority=${CLERK_AUTHORITY}
-      - Clerk__Audience=${CLERK_AUDIENCE}
+      - Clerk__Authority=${CLERK_AUTHORITY:-https://amazing-mosquito-75.clerk.accounts.dev}
+      - Clerk__Audience=${CLERK_AUDIENCE:-}
       - Clerk__WebhookSecret=${CLERK_WEBHOOK_SECRET}
       - R2__AccountId=${R2_ACCOUNT_ID}
       - R2__BucketName=${R2_BUCKET_NAME}

@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using ClinicEz.Shared.Interfaces;
 using Hangfire;
 using Hangfire.PostgreSql;
@@ -172,25 +173,7 @@ public static class DependencyInjection
         services.AddScoped<IFileUploadReconciliationJob, FileUploadReconciliationJob>();
 
         // ── Clerk JWT Bearer Authentication ───────────────────────────────────
-        var clerkAuthority = configuration["Clerk:Authority"]
-            ?? throw new InvalidOperationException("Clerk:Authority is not configured.");
-
-        var clerkAudience = configuration["Clerk:Audience"];
-
-        services
-            .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-            .AddJwtBearer(options =>
-            {
-                options.Authority = clerkAuthority;
-                options.TokenValidationParameters = new TokenValidationParameters
-                {
-                    ValidateIssuer = true,
-                    ValidateLifetime = true,
-                    ValidateIssuerSigningKey = true,
-                    ValidateAudience = !string.IsNullOrWhiteSpace(clerkAudience),
-                    ValidAudience = clerkAudience,
-                };
-            });
+        services.AddClerkAuthentication(configuration);
 
         // ── Dev auto-migration & seeding ──────────────────────────────────────
         if (env is not null && env.IsDevelopment())
@@ -203,6 +186,39 @@ public static class DependencyInjection
 
         services.AddHostedService<ClinicPingBackgroundService>();
         
+        return services;
+    }
+
+    public static IServiceCollection AddClerkAuthentication(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        var clerkAuthority = configuration["Clerk:Authority"]
+            ?? throw new InvalidOperationException("Clerk:Authority is not configured.");
+
+        var clerkAudience = configuration["Clerk:Audience"];
+
+        // Clerk session tokens issued by frontend SDKs (e.g. @clerk/expo) do not include an 'aud' claim by default.
+        // Disable audience validation unless a custom JWT template audience is explicitly configured (and not mistakenly set to authority).
+        var shouldValidateAudience = !string.IsNullOrWhiteSpace(clerkAudience)
+            && !string.Equals(clerkAudience, clerkAuthority, StringComparison.OrdinalIgnoreCase);
+
+        services
+            .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+            .AddJwtBearer(options =>
+            {
+                options.Authority = clerkAuthority;
+                options.TokenValidationParameters = new TokenValidationParameters
+                {
+                    NameClaimType = ClaimTypes.NameIdentifier,
+                    ValidateIssuer = true,
+                    ValidateLifetime = true,
+                    ValidateIssuerSigningKey = true,
+                    ValidateAudience = shouldValidateAudience,
+                    ValidAudience = shouldValidateAudience ? clerkAudience : null,
+                };
+            });
+
         return services;
     }
 }
