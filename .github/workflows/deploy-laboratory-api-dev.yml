@@ -82,6 +82,8 @@ jobs:
         ASPNETCORE_ENVIRONMENT: ${{ env.ENVIRONMENT }}
         CONNECTION_STRING: ${{ secrets.LABORATORY_DB_CONNECTION_STRING }}
         RABBITMQ_PASSWORD: ${{ secrets.RABBITMQ_PASSWORD }}
+        INTERNAL_API_KEY: ${{ secrets.INTERNAL_API_KEY }}
+        LAB_JWT_SIGNING_KEY: ${{ secrets.LAB_JWT_SIGNING_KEY }}
         IMAGE_NAME: ${{ env.IMAGE_NAME }}
         IMAGE_TAG: ${{ env.IMAGE_TAG }}
         BASE_DOMAIN: ${{ secrets.BASE_DOMAIN || vars.BASE_DOMAIN }}
@@ -90,7 +92,7 @@ jobs:
           echo "::error::BASE_DOMAIN is not configured. Set it as a GitHub secret or variable (Settings -> Secrets and variables -> Actions)."
           exit 1
         fi
-        for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING RABBITMQ_PASSWORD IMAGE_NAME IMAGE_TAG BASE_DOMAIN; do
+        for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING RABBITMQ_PASSWORD INTERNAL_API_KEY LAB_JWT_SIGNING_KEY IMAGE_NAME IMAGE_TAG BASE_DOMAIN; do
           echo "$var=$(printenv $var)" >> services/laboratory-api/.env
         done
 
