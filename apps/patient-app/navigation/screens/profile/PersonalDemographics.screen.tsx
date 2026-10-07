@@ -21,6 +21,7 @@ import {
   getPatientProfile,
   getPatientByClerkId,
   updatePatientDemographics,
+  fromBackendBloodType,
   type PatientSummary,
 } from 'services/api/patientApi';
 import { upsertPatientSummary } from '@db/hydrate';
@@ -164,7 +165,7 @@ export default function PersonalDemographicsScreen() {
               dob: serverData.dateOfBirth ?? '',
               placeOfBirth: serverData.placeOfBirth ?? '',
               civilStatus: (serverData.civilStatus as any) ?? '',
-              bloodType: (serverData.bloodType as any) ?? '',
+              bloodType: (fromBackendBloodType(serverData.bloodType) as any) ?? '',
               nationality: serverData.nationality ?? 'Filipino',
               ethnicity: serverData.ethnicity ?? '',
               religion: serverData.religion ?? '',
@@ -213,7 +214,19 @@ export default function PersonalDemographicsScreen() {
         educationLevel: data.educationLevel || null,
       };
 
-      // 1. Save to local SQLite
+      // 1. Sync First Name and Last Name with Clerk user profile
+      if (user) {
+        try {
+          await user.update({
+            firstName: payload.firstName,
+            lastName: payload.lastName,
+          });
+        } catch (clerkErr) {
+          console.warn('[PersonalDemographics] Clerk user update failed:', clerkErr);
+        }
+      }
+
+      // 2. Save to local SQLite
       const now = new Date();
       await db.insert(patients).values({
         id: patientId,
@@ -226,10 +239,10 @@ export default function PersonalDemographicsScreen() {
         set: { ...payload, updatedAt: now },
       });
 
-      // 2. Persist snapshot to IndexedDB (on web)
+      // 3. Persist snapshot to IndexedDB (on web)
       await flushDatabaseSnapshot();
 
-      // 3. Directly update backend API
+      // 4. Directly update backend API
       try {
         const existing = await db.query.patients.findFirst({
           where: eq(patients.id, patientId),

@@ -29,7 +29,7 @@ public sealed class UpdatePatientDemographicsCommandHandler : IRequestHandler<Up
         patient.DateOfBirth     = request.DateOfBirth;
         patient.PlaceOfBirth    = request.PlaceOfBirth;
         patient.CivilStatus     = Enum.TryParse<CivilStatus>(request.CivilStatus, true, out var cs) ? cs : null;
-        patient.BloodType       = Enum.TryParse<BloodType>(request.BloodType, true, out var bt) ? bt : null;
+        patient.BloodType       = BloodTypeParser.TryParse(request.BloodType, out var bt) ? bt : null;
         patient.Nationality     = request.Nationality;
         patient.Ethnicity       = request.Ethnicity;
         patient.Religion        = request.Religion;

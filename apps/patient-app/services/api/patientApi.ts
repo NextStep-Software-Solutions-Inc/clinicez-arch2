@@ -212,6 +212,51 @@ export interface UpdatePatientDemographicsPayload {
     consentToShareInfo?: boolean;
 }
 
+export const BLOOD_TYPE_TO_BACKEND: Record<string, string> = {
+    'A+': 'APositive',
+    'A-': 'ANegative',
+    'B+': 'BPositive',
+    'B-': 'BNegative',
+    'AB+': 'ABPositive',
+    'AB-': 'ABNegative',
+    'O+': 'OPositive',
+    'O-': 'ONegative',
+    'Unknown': 'Unknown',
+};
+
+export const BACKEND_TO_BLOOD_TYPE: Record<string, string> = {
+    APositive: 'A+',
+    aPositive: 'A+',
+    ANegative: 'A-',
+    aNegative: 'A-',
+    BPositive: 'B+',
+    bPositive: 'B+',
+    BNegative: 'B-',
+    bNegative: 'B-',
+    ABPositive: 'AB+',
+    aBPositive: 'AB+',
+    abPositive: 'AB+',
+    ABNegative: 'AB-',
+    aBNegative: 'AB-',
+    abNegative: 'AB-',
+    OPositive: 'O+',
+    oPositive: 'O+',
+    ONegative: 'O-',
+    oNegative: 'O-',
+    Unknown: 'Unknown',
+    unknown: 'Unknown',
+};
+
+export function toBackendBloodType(val: string | null | undefined): string | null {
+    if (!val) return null;
+    return BLOOD_TYPE_TO_BACKEND[val] ?? val;
+}
+
+export function fromBackendBloodType(val: string | null | undefined): string | null {
+    if (!val) return null;
+    return BACKEND_TO_BLOOD_TYPE[val] ?? val;
+}
+
 /**
  * Direct update to patient demographics (PUT /patients/{id}/demographics).
  * Updates synchronous backend state immediately.
@@ -221,5 +266,10 @@ export async function updatePatientDemographics(
     patientId: string,
     payload: UpdatePatientDemographicsPayload,
 ): Promise<void> {
-    return api.put<void>(getToken, `/patients/${patientId}/demographics`, payload);
+    const backendPayload = {
+        ...payload,
+        bloodType: toBackendBloodType(payload.bloodType),
+    };
+    return api.put<void>(getToken, `/patients/${patientId}/demographics`, backendPayload);
 }
+

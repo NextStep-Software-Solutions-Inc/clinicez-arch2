@@ -34,7 +34,7 @@ public sealed class UpdatePatientDemographicsCommandValidator : AbstractValidato
             .When(x => x.CivilStatus is not null);
 
         RuleFor(x => x.BloodType)
-            .Must(s => Enum.TryParse<BloodType>(s, true, out _))
+            .Must(s => BloodTypeParser.TryParse(s, out _))
             .WithErrorCode(ErrorCodes.InvalidEnumValue)
             .When(x => x.BloodType is not null);
 

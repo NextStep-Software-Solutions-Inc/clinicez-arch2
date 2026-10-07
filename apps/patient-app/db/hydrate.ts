@@ -34,7 +34,7 @@ import {
   patientDentalVision,
   patientMentalHealthProfile,
 } from './schema/index';
-import type { PatientFullRecord, PatientSummary } from '../services/api/patientApi';
+import { fromBackendBloodType, type PatientFullRecord, type PatientSummary } from '../services/api/patientApi';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -71,7 +71,7 @@ export async function upsertPatientSummary(
     sex: (summary.sex as any) ?? null,
     dob: summary.dateOfBirth ?? null,
     placeOfBirth: summary.placeOfBirth ?? null,
-    bloodType: (summary.bloodType as any) ?? null,
+    bloodType: (fromBackendBloodType(summary.bloodType) as any) ?? null,
     civilStatus: (summary.civilStatus as any) ?? null,
     nationality: summary.nationality ?? 'Filipino',
     ethnicity: summary.ethnicity ?? null,

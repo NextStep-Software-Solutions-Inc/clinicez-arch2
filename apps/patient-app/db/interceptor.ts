@@ -1,5 +1,6 @@
 import { syncQueue } from './schema/syncQueue';
 import { randomUUID } from 'expo-crypto';
+import { toBackendBloodType } from '../services/api/patientApi';
 
 export const TABLE_TO_ENTITY_TYPE: Record<string, string> = {
   patients: 'patient',
@@ -85,6 +86,9 @@ async function handleInterceptWrite(
     if (tableName === 'patients') {
       if (values.dob !== undefined && syncPayload.dateOfBirth === undefined) {
         syncPayload.dateOfBirth = values.dob;
+      }
+      if (values.bloodType !== undefined) {
+        syncPayload.bloodType = toBackendBloodType(values.bloodType);
       }
     }
 

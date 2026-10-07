@@ -103,7 +103,7 @@ public sealed class PatientSyncProcessor : ISyncEntityProcessor
         DateOfBirth = p.DateOfBirth,
         PlaceOfBirth = p.PlaceOfBirth,
         CivilStatus = Enum.TryParse<CivilStatus>(p.CivilStatus, true, out var cs) ? cs : null,
-        BloodType = Enum.TryParse<BloodType>(p.BloodType, true, out var bt) ? bt : null,
+        BloodType = BloodTypeParser.TryParse(p.BloodType, out var bt) ? bt : null,
         Nationality = p.Nationality,
         Ethnicity = p.Ethnicity,
         Religion = p.Religion,
@@ -126,7 +126,7 @@ public sealed class PatientSyncProcessor : ISyncEntityProcessor
         patient.DateOfBirth = p.DateOfBirth;
         patient.PlaceOfBirth = p.PlaceOfBirth;
         patient.CivilStatus = Enum.TryParse<CivilStatus>(p.CivilStatus, true, out var cs) ? cs : null;
-        patient.BloodType = Enum.TryParse<BloodType>(p.BloodType, true, out var bt) ? bt : null;
+        patient.BloodType = BloodTypeParser.TryParse(p.BloodType, out var bt) ? bt : null;
         patient.Nationality = p.Nationality;
         patient.Ethnicity = p.Ethnicity;
         patient.Religion = p.Religion;
