@@ -1,10 +1,11 @@
-﻿import React from 'react';
+import React, { useEffect } from 'react';
 import { Modal, View, StyleSheet, Dimensions } from 'react-native';
 import ThemedText from './ThemedText';
 import ThemedView from './ThemedView';
 import { AppIcon, type IconName } from './Icon';
 import Button from './Button';
 import { useAppTheme } from '../../contexts/ThemeContext';
+import { triggerHaptic } from '../../utils/haptics';
 
 interface OfflineAlertModalProps {
   visible: boolean;
@@ -29,6 +30,12 @@ export default function OfflineAlertModal({
 }: OfflineAlertModalProps) {
   const { colors, radii, spacing, sizes, shadows } = useAppTheme();
 
+  useEffect(() => {
+    if (visible) {
+      void triggerHaptic('warning');
+    }
+  }, [visible]);
+
   const resolvedIconName: IconName = iconName ?? 'wifiOff';
   const showCustomIconString = !!icon && !iconName;
 
@@ -46,7 +53,8 @@ export default function OfflineAlertModal({
             shadows.lg,
             {
               backgroundColor: colors.surface,
-              borderColor: colors.border,
+              borderColor: colors.warning,
+              borderWidth: 2,
               borderRadius: radii.xl,
               padding: spacing['2xl'],
             },
@@ -57,7 +65,7 @@ export default function OfflineAlertModal({
             style={[
               styles.iconWrapper,
               {
-                backgroundColor: colors.urgentBg,
+                backgroundColor: colors.warningBg,
                 borderRadius: radii.full,
                 marginBottom: spacing.xl,
               },
@@ -66,7 +74,7 @@ export default function OfflineAlertModal({
             {showCustomIconString ? (
               <ThemedText style={styles.legacyIcon}>{icon}</ThemedText>
             ) : (
-              <AppIcon name={resolvedIconName} size={sizes.iconLg} color="urgentText" />
+              <AppIcon name={resolvedIconName} size={sizes.iconLg} color="warningText" />
             )}
           </View>
 
@@ -105,7 +113,6 @@ const styles = StyleSheet.create({
   dialog: {
     width: Math.min(width - 48, 380),
     alignItems: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
   },
   iconWrapper: {
     width: 64,

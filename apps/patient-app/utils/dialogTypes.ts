@@ -1,5 +1,7 @@
 export type DialogButtonStyle = 'default' | 'cancel' | 'destructive';
 
+export type DialogTone = 'error' | 'warning' | 'success' | 'info';
+
 export interface DialogButton {
   text?: string;
   style?: DialogButtonStyle;
@@ -7,9 +9,13 @@ export interface DialogButton {
 }
 
 export interface DialogOptions {
-  /** Android only (parity with Alert.alert). On web, tapping the backdrop dismisses when true. */
+  /** Android only (parity with Alert.alert). On web and custom dialogs, tapping the backdrop dismisses when true. */
   cancelable?: boolean;
   onDismiss?: () => void;
+  /** Explicit tone for colored borders, icons, and haptics. Auto-detected from title/buttons if omitted. */
+  type?: DialogTone;
+  /** Force native OS alert (UIAlertController / AlertDialog) on native mobile instead of themed custom dialog */
+  nativeAlert?: boolean;
 }
 
 export interface ConfirmOptions {
@@ -18,6 +24,8 @@ export interface ConfirmOptions {
   confirmLabel?: string;
   cancelLabel?: string;
   destructive?: boolean;
+  type?: DialogTone;
+  nativeAlert?: boolean;
 }
 
 export interface DialogRequest {
@@ -26,6 +34,7 @@ export interface DialogRequest {
   message?: string;
   buttons: DialogButton[];
   options?: DialogOptions;
+  tone: DialogTone;
 }
 
 /** Shared signature: identical to `Alert.alert` so call sites can be swapped mechanically. */

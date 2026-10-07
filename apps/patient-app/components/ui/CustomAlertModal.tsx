@@ -1,10 +1,14 @@
-﻿import React from 'react';
+import React, { useEffect } from 'react';
 import { Modal, View, StyleSheet, Dimensions } from 'react-native';
 import ThemedText from './ThemedText';
 import ThemedView from './ThemedView';
 import { AppIcon, type IconName } from './Icon';
 import Button from './Button';
 import { useAppTheme } from '../../contexts/ThemeContext';
+import type { ColorToken } from '@clinicez/design-tokens';
+import type { DialogTone } from '../../utils/dialogTypes';
+import { resolveDialogTone } from '../../utils/dialogTone';
+import { triggerHaptic } from '../../utils/haptics';
 
 interface CustomAlertModalProps {
   visible: boolean;
@@ -18,6 +22,7 @@ interface CustomAlertModalProps {
   confirmText?: string;
   cancelText?: string;
   destructive?: boolean;
+  type?: DialogTone;
 }
 
 const { width } = Dimensions.get('window');
@@ -34,11 +39,48 @@ export default function CustomAlertModal({
   confirmText = 'Confirm',
   cancelText = 'Cancel',
   destructive = false,
+  type,
 }: CustomAlertModalProps) {
   const { colors, radii, spacing, sizes, shadows } = useAppTheme();
 
-  // If no explicit icon or iconName, default to a semantic icon name (no emoji)
-  const resolvedIconName: IconName = iconName ?? (destructive ? 'alert' : 'info');
+  const tone = resolveDialogTone(title, message, undefined, type, destructive);
+
+  // Trigger haptics when alert opens
+  useEffect(() => {
+    if (visible) {
+      void triggerHaptic(tone);
+    }
+  }, [visible, tone]);
+
+  const borderColors: Record<DialogTone, string> = {
+    error: colors.emergency,
+    warning: colors.warning,
+    success: colors.success,
+    info: colors.border,
+  };
+
+  const iconBgColors: Record<DialogTone, string> = {
+    error: colors.emergencyBg,
+    warning: colors.warningBg,
+    success: colors.successBg,
+    info: colors.primaryLight,
+  };
+
+  const iconColors: Record<DialogTone, ColorToken> = {
+    error: 'emergency',
+    warning: 'warningText',
+    success: 'success',
+    info: 'primary',
+  };
+
+  const defaultIcons: Record<DialogTone, IconName> = {
+    error: 'alert',
+    warning: 'warning',
+    success: 'check',
+    info: 'info',
+  };
+
+  const resolvedIconName: IconName = iconName ?? defaultIcons[tone];
   const showCustomIconString = !!icon && !iconName;
 
   return (
@@ -55,7 +97,8 @@ export default function CustomAlertModal({
             shadows.lg,
             {
               backgroundColor: colors.surface,
-              borderColor: colors.border,
+              borderColor: borderColors[tone],
+              borderWidth: tone === 'info' ? StyleSheet.hairlineWidth : 2,
               borderRadius: radii.xl,
               padding: spacing['2xl'],
             },
@@ -66,7 +109,7 @@ export default function CustomAlertModal({
             style={[
               styles.iconWrapper,
               {
-                backgroundColor: destructive ? colors.emergencyBg : colors.primaryLight,
+                backgroundColor: iconBgColors[tone],
                 borderRadius: radii.full,
                 marginBottom: spacing.xl,
               },
@@ -78,7 +121,7 @@ export default function CustomAlertModal({
               <AppIcon
                 name={resolvedIconName}
                 size={sizes.iconLg}
-                color={destructive ? 'emergencyText' : 'primary'}
+                color={iconColors[tone]}
               />
             )}
           </View>
@@ -106,7 +149,7 @@ export default function CustomAlertModal({
               />
               <Button
                 label={confirmText}
-                variant={destructive ? 'danger' : 'primary'}
+                variant={destructive || tone === 'error' ? 'danger' : 'primary'}
                 onPress={onConfirm}
                 style={styles.flexButton}
               />
@@ -114,7 +157,7 @@ export default function CustomAlertModal({
           ) : (
             <Button
               label={buttonText}
-              variant="primary"
+              variant={destructive || tone === 'error' ? 'danger' : 'primary'}
               onPress={onClose}
               fullWidth
             />
@@ -135,7 +178,6 @@ const styles = StyleSheet.create({
   dialog: {
     width: Math.min(width - 48, 380),
     alignItems: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
   },
   iconWrapper: {
     width: 64,

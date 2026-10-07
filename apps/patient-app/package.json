@@ -7,8 +7,8 @@
   },
   "dependencies": {
     "@callstack/liquid-glass": "^0.8.0",
-    "@clinicez/design-tokens": "workspace:*",
     "@clerk/expo": "^3.3.0",
+    "@clinicez/design-tokens": "workspace:*",
     "@expo-google-fonts/geist": "^0.4.2",
     "@expo-google-fonts/geist-mono": "^0.4.3",
     "@expo/metro-runtime": "~56.0.21",
@@ -29,6 +29,7 @@
     "expo-crypto": "^56.0.4",
     "expo-file-system": "^56.0.7",
     "expo-font": "~56.0.7",
+    "expo-haptics": "~56.0.3",
     "expo-image": "^57.0.0",
     "expo-image-picker": "^56.0.15",
     "expo-linear-gradient": "^56.0.4",
