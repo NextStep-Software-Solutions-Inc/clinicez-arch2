@@ -31,10 +31,13 @@ export default function MaleReproductiveScreen() {
   });
   const hasVasectomy = watch('hasVasectomy');
 
+  const [hasRecord, setHasRecord] = useState(false);
+
   useEffect(() => {
     db.query.patientMaleReproductive.findFirst({ where: eq(patientMaleReproductive.patientId, patientId) })
       .then((row) => {
         if (row) {
+          setHasRecord(true);
           reset({
             hasVasectomy: row.hasVasectomy ?? false,
             vasectomyDate: row.vasectomyDate ?? '',
@@ -54,15 +57,20 @@ export default function MaleReproductiveScreen() {
         conditions: data.conditions.trim() || null,
         updatedAt: new Date(),
       };
-      await db.insert(patientMaleReproductive).values({
-        id: randomUUID(),
-        patientId,
-        ...payload,
-        createdAt: new Date(),
-      }).onConflictDoUpdate({
-        target: patientMaleReproductive.patientId,
-        set: payload,
-      });
+      if (hasRecord) {
+        await db
+          .update(patientMaleReproductive)
+          .set(payload)
+          .where(eq(patientMaleReproductive.patientId, patientId));
+      } else {
+        await db.insert(patientMaleReproductive).values({
+          id: randomUUID(),
+          patientId,
+          ...payload,
+          createdAt: new Date(),
+        });
+        setHasRecord(true);
+      }
 
       await flushAndSyncProfile(patientId, getToken);
       reset(data);

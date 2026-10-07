@@ -149,7 +149,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               const userEmail = user?.primaryEmailAddress?.emailAddress;
               const newPatientId = await createPatient(getTokenRef.current, {
                 clerkUserId: userId,
-                firstName: user?.firstName?.trim() || userEmail || 'User',
+                firstName: user?.firstName?.trim() || user?.fullName?.trim() || userEmail || 'Patient',
                 lastName: user?.lastName?.trim() || '',
                 nationality: 'Filipino',
               });

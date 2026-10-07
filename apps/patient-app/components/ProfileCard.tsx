@@ -20,14 +20,19 @@ export default function ProfileCard() {
   const { internalPatientId } = useAuth();
   const [patientRecord, setPatientRecord] = useState<{ firstName?: string | null; lastName?: string | null } | null>(null);
 
-  useEffect(() => {
+  const reloadPatient = useCallback(async () => {
     if (!internalPatientId) return;
-    db.query.patients.findFirst({
-      where: eq(patients.id, internalPatientId),
-    }).then((p) => {
+    try {
+      const p = await db.query.patients.findFirst({
+        where: eq(patients.id, internalPatientId),
+      });
       if (p) setPatientRecord({ firstName: p.firstName, lastName: p.lastName });
-    }).catch(() => {});
+    } catch {}
   }, [internalPatientId]);
+
+  useEffect(() => {
+    reloadPatient();
+  }, [reloadPatient, user?.firstName, user?.lastName, user?.fullName]);
 
   // Locally cached URI — shown immediately on next launch before Clerk image loads
   const [localUri, setLocalUri] = useState<string | null>(null);
@@ -47,13 +52,21 @@ export default function ProfileCard() {
 
   const avatarSource = previewUri ?? localUri ?? user?.imageUrl ?? null;
 
-  const localDbName = [patientRecord?.firstName, patientRecord?.lastName].filter(Boolean).join(' ').trim();
+  // Discard placeholder/stale values like 'Clinic', 'Unknown', 'Active', 'Demo'
+  const isPlaceholderName = !patientRecord?.firstName ||
+    ['Unknown', 'Clinic', 'Active', 'Demo'].includes(patientRecord.firstName);
+
+  const localDbName = !isPlaceholderName
+    ? [patientRecord?.firstName, patientRecord?.lastName].filter((p) => p && p !== 'Unknown' && p !== 'User').join(' ').trim()
+    : null;
+
+  const clerkName = user?.fullName || [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim();
+
   const displayName =
+    clerkName ||
     localDbName ||
-    user?.fullName ||
-    [user?.firstName, user?.lastName].filter(Boolean).join(' ') ||
     user?.emailAddresses[0]?.emailAddress ||
-    'User';
+    'Patient';
 
   const initials = displayName
     .split(' ')

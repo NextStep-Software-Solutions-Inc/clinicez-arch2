@@ -83,10 +83,13 @@ export default function SocialHistoryScreen() {
   const substanceUse = watch('substanceUse');
   const alcoholUseLevel = watch('alcoholUseLevel');
 
+  const [hasRecord, setHasRecord] = useState(false);
+
   useEffect(() => {
     db.query.patientSocialHistory.findFirst({ where: eq(patientSocialHistory.patientId, patientId) })
       .then((row) => {
         if (row) {
+          setHasRecord(true);
           reset({
             tobaccoStatus: row.tobaccoStatus ?? '',
             cigsPerDay: row.cigsPerDay?.toString() ?? '',
@@ -130,9 +133,20 @@ export default function SocialHistoryScreen() {
         sleepQuality: data.sleepQuality || null,
         updatedAt: new Date(),
       };
-      await db.insert(patientSocialHistory).values({
-        id: randomUUID(), patientId: patientId, ...payload, createdAt: new Date(),
-      }).onConflictDoUpdate({ target: patientSocialHistory.patientId, set: payload });
+      if (hasRecord) {
+        await db
+          .update(patientSocialHistory)
+          .set(payload)
+          .where(eq(patientSocialHistory.patientId, patientId));
+      } else {
+        await db.insert(patientSocialHistory).values({
+          id: randomUUID(),
+          patientId: patientId,
+          ...payload,
+          createdAt: new Date(),
+        });
+        setHasRecord(true);
+      }
 
       await flushAndSyncProfile(patientId, getToken);
       reset(data);

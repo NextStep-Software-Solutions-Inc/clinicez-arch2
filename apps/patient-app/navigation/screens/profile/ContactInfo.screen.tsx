@@ -102,19 +102,16 @@ export default function ContactInfoScreen() {
 
       const existing = await db.query.patients.findFirst({ where: eq(patients.id, patientId) });
 
-      // Resolve valid name: never fallback to 'Unknown'
-      const firstName = (
-        (existing?.firstName && existing.firstName !== 'Unknown' ? existing.firstName : null) ||
-        (serverDemo?.firstName && serverDemo.firstName !== 'Unknown' ? serverDemo.firstName : null) ||
-        user?.firstName ||
-        'Clinic'
-      );
-      const lastName = (
-        (existing?.lastName && existing.lastName !== 'Unknown' ? existing.lastName : null) ||
-        (serverDemo?.lastName && serverDemo.lastName !== 'Unknown' ? serverDemo.lastName : null) ||
-        user?.lastName ||
-        'User'
-      );
+      // Clean name resolution: NEVER use placeholder fallbacks like 'Clinic', 'User', 'Unknown', 'Active', 'Demo'
+      const cleanServerFirst = serverDemo?.firstName && !['Unknown', 'Clinic', 'Active', 'Demo'].includes(serverDemo.firstName) ? serverDemo.firstName.trim() : null;
+      const cleanDbFirst = existing?.firstName && !['Unknown', 'Clinic', 'Active', 'Demo'].includes(existing.firstName) ? existing.firstName.trim() : null;
+      const cleanClerkFirst = user?.firstName?.trim() || null;
+      const firstName = cleanServerFirst || cleanDbFirst || cleanClerkFirst || user?.fullName?.trim() || 'Patient';
+
+      const cleanServerLast = serverDemo?.lastName && !['Unknown', 'User'].includes(serverDemo.lastName) ? serverDemo.lastName.trim() : null;
+      const cleanDbLast = existing?.lastName && !['Unknown', 'User'].includes(existing.lastName) ? existing.lastName.trim() : null;
+      const cleanClerkLast = user?.lastName?.trim() || null;
+      const lastName = cleanServerLast || cleanDbLast || cleanClerkLast || '';
 
       const payload = {
         mobile: data.mobile.trim() || null,
@@ -153,25 +150,37 @@ export default function ContactInfoScreen() {
       try {
         await updatePatientDemographics(getToken, patientId, {
           firstName,
-          middleName: existing?.middleName ?? serverDemo?.middleName ?? null,
+          middleName: serverDemo?.middleName ?? existing?.middleName ?? null,
           lastName,
-          suffix: existing?.suffix ?? serverDemo?.suffix ?? null,
-          sex: existing?.sex ?? serverDemo?.sex ?? null,
-          dateOfBirth: existing?.dob ?? serverDemo?.dateOfBirth ?? null,
-          placeOfBirth: existing?.placeOfBirth ?? serverDemo?.placeOfBirth ?? null,
-          civilStatus: existing?.civilStatus ?? serverDemo?.civilStatus ?? null,
-          bloodType: existing?.bloodType ?? serverDemo?.bloodType ?? null,
-          nationality: existing?.nationality ?? serverDemo?.nationality ?? 'Filipino',
-          ethnicity: existing?.ethnicity ?? serverDemo?.ethnicity ?? null,
-          religion: existing?.religion ?? serverDemo?.religion ?? null,
-          primaryLanguage: existing?.primaryLanguage ?? serverDemo?.primaryLanguage ?? null,
-          educationLevel: existing?.educationLevel ?? serverDemo?.educationLevel ?? null,
+          suffix: serverDemo?.suffix ?? existing?.suffix ?? null,
+          sex: serverDemo?.sex ?? existing?.sex ?? null,
+          dateOfBirth: serverDemo?.dateOfBirth ?? existing?.dob ?? null,
+          placeOfBirth: serverDemo?.placeOfBirth ?? existing?.placeOfBirth ?? null,
+          civilStatus: serverDemo?.civilStatus ?? existing?.civilStatus ?? null,
+          bloodType: (serverDemo?.bloodType && serverDemo.bloodType !== 'Unknown' ? serverDemo.bloodType : null) ?? (existing?.bloodType && existing.bloodType !== 'Unknown' ? existing.bloodType : null),
+          nationality: serverDemo?.nationality ?? existing?.nationality ?? null,
+          ethnicity: serverDemo?.ethnicity ?? existing?.ethnicity ?? null,
+          religion: serverDemo?.religion ?? existing?.religion ?? null,
+          primaryLanguage: serverDemo?.primaryLanguage ?? existing?.primaryLanguage ?? null,
+          educationLevel: serverDemo?.educationLevel ?? existing?.educationLevel ?? null,
           mobile: payload.mobile,
           altPhone: payload.altPhone,
           email: payload.email,
           messengerHandle: payload.messengerHandle,
-          consentToShareInfo: existing?.consentToShareInfo ?? serverDemo?.consentToShareInfo ?? false,
+          consentToShareInfo: serverDemo?.consentToShareInfo ?? existing?.consentToShareInfo ?? false,
         });
+
+        if (serverDemo) {
+          await upsertPatientSummary({
+            ...serverDemo,
+            firstName,
+            lastName,
+            mobile: payload.mobile,
+            altPhone: payload.altPhone,
+            email: payload.email,
+            messengerHandle: payload.messengerHandle,
+          }, userId);
+        }
 
         // Push any remaining sync queue items
         await flushAndSyncProfile(patientId, getToken);

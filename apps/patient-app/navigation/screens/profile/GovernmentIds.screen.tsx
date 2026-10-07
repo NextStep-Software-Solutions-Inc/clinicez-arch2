@@ -178,10 +178,13 @@ export default function GovernmentIdsScreen() {
   const philhealthCategory = watch('philhealthCategory');
   const mod11Status = useMemo(() => validatePhilHealthPinMod11(philhealthId || ''), [philhealthId]);
 
+  const [hasRecord, setHasRecord] = useState(false);
+
   useEffect(() => {
     db.query.patientGovernmentIds.findFirst({ where: eq(patientGovernmentIds.patientId, patientId) })
       .then((row) => {
         if (row) {
+          setHasRecord(true);
           reset({
             philhealthId: row.philhealthId ?? '',
             philhealthCategory: row.philhealthCategory ?? '',
@@ -250,16 +253,21 @@ export default function GovernmentIdsScreen() {
         hmoCoverageEnd: data.hmoCoverageEnd,
       };
 
-      await db.insert(patientGovernmentIds).values({
-        id: randomUUID(),
-        patientId,
-        ...payload,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }).onConflictDoUpdate({
-        target: patientGovernmentIds.patientId,
-        set: { ...payload, updatedAt: new Date() },
-      });
+      if (hasRecord) {
+        await db
+          .update(patientGovernmentIds)
+          .set({ ...payload, updatedAt: new Date() })
+          .where(eq(patientGovernmentIds.patientId, patientId));
+      } else {
+        await db.insert(patientGovernmentIds).values({
+          id: randomUUID(),
+          patientId,
+          ...payload,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+        setHasRecord(true);
+      }
 
       await flushAndSyncProfile(patientId, getToken);
 

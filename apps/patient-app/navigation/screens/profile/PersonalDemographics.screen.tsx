@@ -35,7 +35,7 @@ type FormValues = {
   dob: string;
   placeOfBirth: string;
   civilStatus: 'Single' | 'Married' | 'Widowed' | 'Separated' | 'Divorced' | '';
-  bloodType: 'A+' | 'A-' | 'B+' | 'B-' | 'AB+' | 'AB-' | 'O+' | 'O-' | 'Unknown' | '';
+  bloodType: 'A+' | 'A-' | 'B+' | 'B-' | 'AB+' | 'AB-' | 'O+' | 'O-' | '';
   nationality: string;
   ethnicity: string;
   religion: string;
@@ -62,7 +62,6 @@ const BLOOD_TYPE_OPTIONS = [
   { label: 'B+', value: 'B+' }, { label: 'B-', value: 'B-' },
   { label: 'AB+', value: 'AB+' }, { label: 'AB-', value: 'AB-' },
   { label: 'O+', value: 'O+' }, { label: 'O-', value: 'O-' },
-  { label: 'Unknown', value: 'Unknown' },
 ];
 
 const EDUCATION_OPTIONS = [
@@ -111,8 +110,9 @@ export default function PersonalDemographicsScreen() {
       try {
         const row = await db.query.patients.findFirst({ where: eq(patients.id, patientId) });
         if (row && isMounted) {
-          const localFirst = (!row.firstName || row.firstName === 'Unknown') ? (user?.firstName || '') : row.firstName;
-          const localLast = (!row.lastName || row.lastName === 'Unknown') ? (user?.lastName || '') : row.lastName;
+          const localFirst = (!row.firstName || row.firstName === 'Unknown' || row.firstName === 'Clinic') ? (user?.firstName || (row.firstName === 'Unknown' || row.firstName === 'Clinic' ? '' : row.firstName)) : row.firstName;
+          const localLast = (!row.lastName || row.lastName === 'Unknown' || row.lastName === 'User') ? (user?.lastName || (row.lastName === 'Unknown' || row.lastName === 'User' ? '' : row.lastName)) : row.lastName;
+          const rawBlood = row.bloodType === 'Unknown' ? '' : (row.bloodType ?? '');
           reset({
             firstName: localFirst,
             middleName: row.middleName ?? '',
@@ -122,8 +122,8 @@ export default function PersonalDemographicsScreen() {
             dob: row.dob ?? '',
             placeOfBirth: row.placeOfBirth ?? '',
             civilStatus: (row.civilStatus as any) ?? '',
-            bloodType: (row.bloodType as any) ?? '',
-            nationality: row.nationality ?? 'Filipino',
+            bloodType: (rawBlood as any),
+            nationality: row.nationality ?? '',
             ethnicity: row.ethnicity ?? '',
             religion: row.religion ?? '',
             primaryLanguage: row.primaryLanguage ?? '',
@@ -158,8 +158,10 @@ export default function PersonalDemographicsScreen() {
 
           // Update form if user has not started modifying it
           if (!isDirtyRef.current) {
-            const validFirst = (!serverData.firstName || serverData.firstName === 'Unknown') ? (user?.firstName || '') : serverData.firstName;
-            const validLast = (!serverData.lastName || serverData.lastName === 'Unknown') ? (user?.lastName || '') : serverData.lastName;
+            const validFirst = (!serverData.firstName || serverData.firstName === 'Unknown' || serverData.firstName === 'Clinic') ? (user?.firstName || (serverData.firstName === 'Unknown' || serverData.firstName === 'Clinic' ? '' : serverData.firstName)) : serverData.firstName;
+            const validLast = (!serverData.lastName || serverData.lastName === 'Unknown' || serverData.lastName === 'User') ? (user?.lastName || (serverData.lastName === 'Unknown' || serverData.lastName === 'User' ? '' : serverData.lastName)) : serverData.lastName;
+            const parsedBlood = fromBackendBloodType(serverData.bloodType);
+            const bloodVal = (parsedBlood === 'Unknown' ? '' : (parsedBlood ?? ''));
             reset({
               firstName: validFirst,
               middleName: serverData.middleName ?? '',
@@ -169,8 +171,8 @@ export default function PersonalDemographicsScreen() {
               dob: serverData.dateOfBirth ?? '',
               placeOfBirth: serverData.placeOfBirth ?? '',
               civilStatus: (serverData.civilStatus as any) ?? '',
-              bloodType: (fromBackendBloodType(serverData.bloodType) as any) ?? '',
-              nationality: serverData.nationality ?? 'Filipino',
+              bloodType: (bloodVal as any),
+              nationality: serverData.nationality ?? '',
               ethnicity: serverData.ethnicity ?? '',
               religion: serverData.religion ?? '',
               primaryLanguage: serverData.primaryLanguage ?? '',
@@ -207,7 +209,7 @@ export default function PersonalDemographicsScreen() {
         middleName: data.middleName ? data.middleName.trim() : null,
         suffix: data.suffix ? data.suffix.trim() : null,
         placeOfBirth: data.placeOfBirth ? data.placeOfBirth.trim() : null,
-        nationality: data.nationality ? data.nationality.trim() : 'Filipino',
+        nationality: data.nationality ? data.nationality.trim() : null,
         ethnicity: data.ethnicity ? data.ethnicity.trim() : null,
         religion: data.religion ? data.religion.trim() : null,
         primaryLanguage: data.primaryLanguage ? data.primaryLanguage.trim() : null,

@@ -215,20 +215,22 @@ export default function NcdQuestionnaireScreen() {
         updatedAt: now,
       };
 
-      // 1. Upsert into local SQLite
-      await db
-        .insert(patientNcdQuestionnaire)
-        .values({
-          id: entityId,
-          ...payload,
-          createdAt: now,
-        })
-        .onConflictDoUpdate({
-          target: patientNcdQuestionnaire.patientId,
-          set: payload,
-        });
-
-      setRecordId(entityId);
+      // 1. Save into local SQLite
+      if (recordId) {
+        await db
+          .update(patientNcdQuestionnaire)
+          .set(payload)
+          .where(eq(patientNcdQuestionnaire.patientId, patientId));
+      } else {
+        await db
+          .insert(patientNcdQuestionnaire)
+          .values({
+            id: entityId,
+            ...payload,
+            createdAt: now,
+          });
+        setRecordId(entityId);
+      }
 
       await flushAndSyncProfile(patientId, getToken);
 

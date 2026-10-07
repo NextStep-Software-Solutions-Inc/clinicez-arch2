@@ -46,10 +46,13 @@ export default function DentalVisionScreen() {
     defaultValues: { dentistName: '', dentistClinic: '', orthodonticDevice: '', eyeDoctorName: '', correctiveLenses: '' },
   });
 
+  const [hasRecord, setHasRecord] = useState(false);
+
   useEffect(() => {
     db.query.patientDentalVision.findFirst({ where: eq(patientDentalVision.patientId, patientId) })
       .then((row) => {
         if (row) {
+          setHasRecord(true);
           reset({
             dentistName: row.dentistName ?? '',
             dentistClinic: row.dentistClinic ?? '',
@@ -74,10 +77,20 @@ export default function DentalVisionScreen() {
         updatedAt: new Date(),
       };
 
-      await db
-        .insert(patientDentalVision)
-        .values({ id: randomUUID(), patientId, ...payload, createdAt: new Date() })
-        .onConflictDoUpdate({ target: patientDentalVision.patientId, set: payload });
+      if (hasRecord) {
+        await db
+          .update(patientDentalVision)
+          .set(payload)
+          .where(eq(patientDentalVision.patientId, patientId));
+      } else {
+        await db.insert(patientDentalVision).values({
+          id: randomUUID(),
+          patientId,
+          ...payload,
+          createdAt: new Date(),
+        });
+        setHasRecord(true);
+      }
 
       await flushAndSyncProfile(patientId, getToken);
       reset(data);

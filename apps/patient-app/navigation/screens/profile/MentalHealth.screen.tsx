@@ -46,10 +46,13 @@ export default function MentalHealthScreen() {
     defaultValues: { hasPriorDiagnosis: false, providerName: '', providerSpecialty: '', providerClinic: '', psychotherapyStatus: '' },
   });
 
+  const [hasRecord, setHasRecord] = useState(false);
+
   useEffect(() => {
     db.query.patientMentalHealthProfile.findFirst({ where: eq(patientMentalHealthProfile.patientId, patientId) })
       .then((row) => {
         if (row) {
+          setHasRecord(true);
           reset({
             hasPriorDiagnosis: row.hasPriorDiagnosis ?? false,
             providerName: row.providerName ?? '',
@@ -73,15 +76,20 @@ export default function MentalHealthScreen() {
         psychotherapyStatus: data.psychotherapyStatus || null,
         updatedAt: new Date(),
       };
-      await db.insert(patientMentalHealthProfile).values({
-        id: randomUUID(),
-        patientId,
-        ...payload,
-        createdAt: new Date(),
-      }).onConflictDoUpdate({
-        target: patientMentalHealthProfile.patientId,
-        set: payload,
-      });
+      if (hasRecord) {
+        await db
+          .update(patientMentalHealthProfile)
+          .set(payload)
+          .where(eq(patientMentalHealthProfile.patientId, patientId));
+      } else {
+        await db.insert(patientMentalHealthProfile).values({
+          id: randomUUID(),
+          patientId,
+          ...payload,
+          createdAt: new Date(),
+        });
+        setHasRecord(true);
+      }
 
       await flushAndSyncProfile(patientId, getToken);
       reset(data);

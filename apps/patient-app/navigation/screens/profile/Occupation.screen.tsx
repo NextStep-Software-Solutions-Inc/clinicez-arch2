@@ -46,10 +46,13 @@ export default function OccupationScreen() {
     defaultValues: { occupation: '', employer: '', industry: '', workEnvironment: '', yearsInOccupation: '', hazardExposure: '' },
   });
 
+  const [hasRecord, setHasRecord] = useState(false);
+
   useEffect(() => {
     db.query.patientOccupation.findFirst({ where: eq(patientOccupation.patientId, patientId) })
       .then((row) => {
         if (row) {
+          setHasRecord(true);
           reset({
             occupation: row.occupation ?? '',
             employer: row.employer ?? '',
@@ -72,15 +75,20 @@ export default function OccupationScreen() {
         yearsInOccupation: data.yearsInOccupation ? parseInt(data.yearsInOccupation, 10) : null,
         updatedAt: new Date(),
       };
-      await db.insert(patientOccupation).values({
-        id: randomUUID(),
-        patientId,
-        ...payload,
-        createdAt: new Date(),
-      }).onConflictDoUpdate({
-        target: patientOccupation.patientId,
-        set: payload,
-      });
+      if (hasRecord) {
+        await db
+          .update(patientOccupation)
+          .set(payload)
+          .where(eq(patientOccupation.patientId, patientId));
+      } else {
+        await db.insert(patientOccupation).values({
+          id: randomUUID(),
+          patientId,
+          ...payload,
+          createdAt: new Date(),
+        });
+        setHasRecord(true);
+      }
 
       await flushAndSyncProfile(patientId, getToken);
       reset(data);

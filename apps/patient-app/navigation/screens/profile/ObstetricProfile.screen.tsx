@@ -138,10 +138,13 @@ export default function ObstetricProfileScreen() {
     }
   };
 
+  const [hasObsRecord, setHasObsRecord] = useState(false);
+
   useEffect(() => {
     db.query.patientObstetricProfile.findFirst({ where: eq(patientObstetricProfile.patientId, patientId) })
       .then((row) => {
         if (row) {
+          setHasObsRecord(true);
           obsForm.reset({
             menarche: row.ageAtMenarche?.toString() ?? '',
             lastMenstrualPeriod: row.lmp ?? '',
@@ -177,12 +180,20 @@ export default function ObstetricProfileScreen() {
         livingChildren: data.living ? parseInt(data.living, 10) : null,
         updatedAt: new Date(),
       };
-      await db.insert(patientObstetricProfile).values({
-        id: randomUUID(), patientId, ...payload, createdAt: new Date()
-      }).onConflictDoUpdate({
-        target: patientObstetricProfile.patientId,
-        set: payload,
-      });
+      if (hasObsRecord) {
+        await db
+          .update(patientObstetricProfile)
+          .set(payload)
+          .where(eq(patientObstetricProfile.patientId, patientId));
+      } else {
+        await db.insert(patientObstetricProfile).values({
+          id: randomUUID(),
+          patientId,
+          ...payload,
+          createdAt: new Date(),
+        });
+        setHasObsRecord(true);
+      }
 
       await flushAndSyncProfile(patientId, getToken);
       obsForm.reset(data);
