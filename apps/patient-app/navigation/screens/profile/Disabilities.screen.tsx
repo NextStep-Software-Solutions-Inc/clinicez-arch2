@@ -20,6 +20,8 @@ import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
+import { getPatientFullRecord } from 'services/api/patientApi';
+import { hydrateFullRecord } from '@db/hydrate';
 
 type Form = { id: string | null; bodyPart: string; classification: string; isPwdCertified: boolean; };
 const EMPTY: Form = { id: null, bodyPart: '', classification: '', isPwdCertified: false };
@@ -35,14 +37,27 @@ export default function DisabilitiesScreen() {
 
   const load = async () => {
     try {
-      const rows = await db.select().from(patientDisabilities).where(eq(patientDisabilities.patientId, patientId));
-      setItems(rows.filter((r) => !r.deletedAt));
+      let rows = await db.select().from(patientDisabilities).where(eq(patientDisabilities.patientId, patientId));
+      let active = rows.filter((r) => !r.deletedAt);
+      if (active.length === 0 && getToken && patientId) {
+        try {
+          const fullRecord = await getPatientFullRecord(getToken, patientId);
+          if (fullRecord) {
+            await hydrateFullRecord(fullRecord);
+            rows = await db.select().from(patientDisabilities).where(eq(patientDisabilities.patientId, patientId));
+            active = rows.filter((r) => !r.deletedAt);
+          }
+        } catch (fetchErr) {
+          console.warn('[DisabilitiesScreen] Could not hydrate from server:', fetchErr);
+        }
+      }
+      setItems(active);
     } catch (err) {
       console.warn('[DisabilitiesScreen] Failed to load disabilities:', err);
     }
   };
 
-  useEffect(() => { load(); }, [patientId]);
+  useEffect(() => { load(); }, [patientId, getToken]);
 
   const openEdit = (row: any) => {
     reset({
@@ -63,7 +78,7 @@ export default function DisabilitiesScreen() {
     });
     if (!confirmed) return;
     try {
-      await db.update(patientDisabilities).set({ deletedAt: new Date() }).where(eq(patientDisabilities.id, id));
+      await db.update(patientDisabilities).set({ deletedAt: new Date(), patientId }).where(eq(patientDisabilities.id, id));
       await flushAndSyncProfile(patientId, getToken);
       load();
     } catch (err: any) {
@@ -75,6 +90,7 @@ export default function DisabilitiesScreen() {
     setSaving(true);
     const { id, ...rest } = data;
     const fields = {
+      patientId,
       bodyPart: rest.bodyPart.trim() || null,
       classification: rest.classification.trim(),
       isPwdCertified: rest.isPwdCertified,
@@ -84,12 +100,22 @@ export default function DisabilitiesScreen() {
       if (id) {
         await db.update(patientDisabilities).set(fields).where(eq(patientDisabilities.id, id));
       } else {
-        await db.insert(patientDisabilities).values({ id: randomUUID(), patientId, ...fields, createdAt: new Date() });
+        await db.insert(patientDisabilities).values({ id: randomUUID(), ...fields, createdAt: new Date() });
       }
-      await flushAndSyncProfile(patientId, getToken);
+      const syncResult = await flushAndSyncProfile(patientId, getToken);
       sheetRef.current?.dismiss();
       load();
-      dialog.alert('Saved', 'Disability record saved successfully.');
+
+      if (syncResult.isOffline) {
+        dialog.alert('Saved Offline', 'Disability record saved locally and will sync when you are back online.');
+      } else if (!syncResult.success && syncResult.failed > 0) {
+        dialog.alert(
+          'Sync Warning',
+          `Saved locally, but server sync failed: ${syncResult.reason || 'Server conflict or validation error'}. Changes will retry automatically.`
+        );
+      } else {
+        dialog.alert('Saved', 'Disability record saved successfully.');
+      }
     } catch (e: any) {
       console.error(e);
       dialog.alert('Error', e?.message || 'Failed to save disability record.');

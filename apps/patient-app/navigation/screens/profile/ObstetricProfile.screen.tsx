@@ -26,6 +26,8 @@ import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
+import { getPatientFullRecord } from 'services/api/patientApi';
+import { hydrateFullRecord } from '@db/hydrate';
 
 // ── Obstetric Profile Form ──────────────────────────────────────────────────
 
@@ -141,8 +143,10 @@ export default function ObstetricProfileScreen() {
   const [hasObsRecord, setHasObsRecord] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
     db.query.patientObstetricProfile.findFirst({ where: eq(patientObstetricProfile.patientId, patientId) })
-      .then((row) => {
+      .then(async (row) => {
+        if (!isMounted) return;
         if (row) {
           setHasObsRecord(true);
           obsForm.reset({
@@ -157,17 +161,51 @@ export default function ObstetricProfileScreen() {
             abortion: row.abortion?.toString() ?? '',
             living: row.livingChildren?.toString() ?? '',
           });
+        } else if (getToken && patientId) {
+          try {
+            const fullRecord = await getPatientFullRecord(getToken, patientId);
+            if (fullRecord && isMounted) {
+              await hydrateFullRecord(fullRecord);
+              const hydratedRow = await db.query.patientObstetricProfile.findFirst({
+                where: eq(patientObstetricProfile.patientId, patientId),
+              });
+              if (hydratedRow && isMounted) {
+                setHasObsRecord(true);
+                obsForm.reset({
+                  menarche: hydratedRow.ageAtMenarche?.toString() ?? '',
+                  lastMenstrualPeriod: hydratedRow.lmp ?? '',
+                  cycleLength: hydratedRow.cycleLength?.toString() ?? '',
+                  cycleDuration: hydratedRow.cycleDuration?.toString() ?? '',
+                  dysmenorrhea: hydratedRow.dysmenorrheaSeverity ?? '',
+                  menopauseAge: hydratedRow.ageAtMenopause?.toString() ?? '',
+                  gravida: hydratedRow.gravida?.toString() ?? '',
+                  para: hydratedRow.para?.toString() ?? '',
+                  abortion: hydratedRow.abortion?.toString() ?? '',
+                  living: hydratedRow.livingChildren?.toString() ?? '',
+                });
+              }
+              loadPregnancies();
+              loadContra();
+            }
+          } catch (fetchErr) {
+            console.warn('[ObstetricProfile] Could not hydrate full record from server:', fetchErr);
+          }
         }
       })
       .catch(console.error);
     loadPregnancies();
     loadContra();
-  }, [patientId]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [patientId, getToken]);
 
   const onSaveObs = obsForm.handleSubmit(async (data) => {
     setSaving(true);
     try {
       const payload = {
+        patientId,
         ageAtMenarche: data.menarche ? parseInt(data.menarche, 10) : null,
         lmp: data.lastMenstrualPeriod || null,
         cycleLength: data.cycleLength ? parseInt(data.cycleLength, 10) : null,
@@ -188,16 +226,25 @@ export default function ObstetricProfileScreen() {
       } else {
         await db.insert(patientObstetricProfile).values({
           id: randomUUID(),
-          patientId,
           ...payload,
           createdAt: new Date(),
         });
         setHasObsRecord(true);
       }
 
-      await flushAndSyncProfile(patientId, getToken);
+      const syncResult = await flushAndSyncProfile(patientId, getToken);
       obsForm.reset(data);
-      dialog.alert('Saved', 'Obstetric profile saved successfully.');
+
+      if (syncResult.isOffline) {
+        dialog.alert('Saved Offline', 'Obstetric profile saved locally and will sync when you are back online.');
+      } else if (!syncResult.success && syncResult.failed > 0) {
+        dialog.alert(
+          'Sync Warning',
+          `Saved locally, but server sync failed: ${syncResult.reason || 'Server conflict or validation error'}. Changes will retry automatically.`
+        );
+      } else {
+        dialog.alert('Saved', 'Obstetric profile saved successfully.');
+      }
     } catch (e: any) {
       console.error(e);
       dialog.alert('Error', e?.message || 'Failed to save obstetric profile.');
@@ -211,6 +258,7 @@ export default function ObstetricProfileScreen() {
     try {
       const { id, ...rest } = data;
       const fields = {
+        patientId,
         year: rest.year ? parseInt(rest.year, 10) : null,
         outcome: rest.outcome || null,
         gestationalAgeWeeks: rest.gestationalWeeks ? parseInt(rest.gestationalWeeks, 10) : null,
@@ -221,12 +269,22 @@ export default function ObstetricProfileScreen() {
       if (id) {
         await db.update(patientPregnancies).set(fields).where(eq(patientPregnancies.id, id));
       } else {
-        await db.insert(patientPregnancies).values({ id: randomUUID(), patientId, ...fields, createdAt: new Date() });
+        await db.insert(patientPregnancies).values({ id: randomUUID(), ...fields, createdAt: new Date() });
       }
-      await flushAndSyncProfile(patientId, getToken);
+      const syncResult = await flushAndSyncProfile(patientId, getToken);
       pregSheetRef.current?.dismiss();
       loadPregnancies();
-      dialog.alert('Saved', 'Pregnancy record saved successfully.');
+
+      if (syncResult.isOffline) {
+        dialog.alert('Saved Offline', 'Pregnancy record saved locally and will sync when you are back online.');
+      } else if (!syncResult.success && syncResult.failed > 0) {
+        dialog.alert(
+          'Sync Warning',
+          `Saved locally, but server sync failed: ${syncResult.reason || 'Server conflict or validation error'}. Changes will retry automatically.`
+        );
+      } else {
+        dialog.alert('Saved', 'Pregnancy record saved successfully.');
+      }
     } catch (e: any) {
       console.error(e);
       dialog.alert('Error', e?.message || 'Failed to save pregnancy record.');
@@ -244,7 +302,7 @@ export default function ObstetricProfileScreen() {
     });
     if (!confirmed) return;
     try {
-      await db.update(patientPregnancies).set({ deletedAt: new Date() }).where(eq(patientPregnancies.id, id));
+      await db.update(patientPregnancies).set({ deletedAt: new Date(), patientId }).where(eq(patientPregnancies.id, id));
       await flushAndSyncProfile(patientId, getToken);
       loadPregnancies();
     } catch (err: any) {
@@ -256,6 +314,7 @@ export default function ObstetricProfileScreen() {
     setSavingContra(true);
     const { id, ...rest } = data;
     const fields = {
+      patientId,
       method: rest.method,
       isCurrent: rest.isCurrent,
       dateStarted: rest.startDate || null,
@@ -266,12 +325,22 @@ export default function ObstetricProfileScreen() {
       if (id) {
         await db.update(patientContraceptiveHistory).set(fields).where(eq(patientContraceptiveHistory.id, id));
       } else {
-        await db.insert(patientContraceptiveHistory).values({ id: randomUUID(), patientId, ...fields, createdAt: new Date() });
+        await db.insert(patientContraceptiveHistory).values({ id: randomUUID(), ...fields, createdAt: new Date() });
       }
-      await flushAndSyncProfile(patientId, getToken);
+      const syncResult = await flushAndSyncProfile(patientId, getToken);
       contraSheetRef.current?.dismiss();
       loadContra();
-      dialog.alert('Saved', 'Contraceptive method saved successfully.');
+
+      if (syncResult.isOffline) {
+        dialog.alert('Saved Offline', 'Contraceptive method saved locally and will sync when you are back online.');
+      } else if (!syncResult.success && syncResult.failed > 0) {
+        dialog.alert(
+          'Sync Warning',
+          `Saved locally, but server sync failed: ${syncResult.reason || 'Server conflict or validation error'}. Changes will retry automatically.`
+        );
+      } else {
+        dialog.alert('Saved', 'Contraceptive method saved successfully.');
+      }
     } catch (e: any) {
       console.error(e);
       dialog.alert('Error', e?.message || 'Failed to save contraceptive method.');
@@ -289,7 +358,7 @@ export default function ObstetricProfileScreen() {
     });
     if (!confirmed) return;
     try {
-      await db.update(patientContraceptiveHistory).set({ deletedAt: new Date() }).where(eq(patientContraceptiveHistory.id, id));
+      await db.update(patientContraceptiveHistory).set({ deletedAt: new Date(), patientId }).where(eq(patientContraceptiveHistory.id, id));
       await flushAndSyncProfile(patientId, getToken);
       loadContra();
     } catch (err: any) {

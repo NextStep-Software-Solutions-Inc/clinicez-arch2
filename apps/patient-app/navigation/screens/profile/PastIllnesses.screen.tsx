@@ -19,6 +19,8 @@ import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
+import { getPatientFullRecord } from 'services/api/patientApi';
+import { hydrateFullRecord } from '@db/hydrate';
 
 type Form = { id: string | null; diagnosis: string; duration: string; complications: string; };
 const EMPTY: Form = { id: null, diagnosis: '', duration: '', complications: '' };
@@ -34,14 +36,27 @@ export default function PastIllnessesScreen() {
 
   const load = async () => {
     try {
-      const rows = await db.select().from(patientPastIllnesses).where(eq(patientPastIllnesses.patientId, patientId));
-      setItems(rows.filter((r) => !r.deletedAt));
+      let rows = await db.select().from(patientPastIllnesses).where(eq(patientPastIllnesses.patientId, patientId));
+      let active = rows.filter((r) => !r.deletedAt);
+      if (active.length === 0 && getToken && patientId) {
+        try {
+          const fullRecord = await getPatientFullRecord(getToken, patientId);
+          if (fullRecord) {
+            await hydrateFullRecord(fullRecord);
+            rows = await db.select().from(patientPastIllnesses).where(eq(patientPastIllnesses.patientId, patientId));
+            active = rows.filter((r) => !r.deletedAt);
+          }
+        } catch (fetchErr) {
+          console.warn('[PastIllnessesScreen] Could not hydrate from server:', fetchErr);
+        }
+      }
+      setItems(active);
     } catch (err) {
       console.warn('[PastIllnessesScreen] Failed to load illnesses:', err);
     }
   };
 
-  useEffect(() => { load(); }, [patientId]);
+  useEffect(() => { load(); }, [patientId, getToken]);
 
   const openEdit = (row: any) => {
     reset({
@@ -62,7 +77,7 @@ export default function PastIllnessesScreen() {
     });
     if (!confirmed) return;
     try {
-      await db.update(patientPastIllnesses).set({ deletedAt: new Date() }).where(eq(patientPastIllnesses.id, id));
+      await db.update(patientPastIllnesses).set({ deletedAt: new Date(), patientId }).where(eq(patientPastIllnesses.id, id));
       await flushAndSyncProfile(patientId, getToken);
       load();
     } catch (err: any) {
@@ -74,6 +89,7 @@ export default function PastIllnessesScreen() {
     setSaving(true);
     const { id, ...rest } = data;
     const fields = {
+      patientId,
       diagnosis: rest.diagnosis.trim(),
       duration: rest.duration.trim() || null,
       complications: rest.complications.trim() || null,
@@ -83,12 +99,22 @@ export default function PastIllnessesScreen() {
       if (id) {
         await db.update(patientPastIllnesses).set(fields).where(eq(patientPastIllnesses.id, id));
       } else {
-        await db.insert(patientPastIllnesses).values({ id: randomUUID(), patientId, ...fields, createdAt: new Date() });
+        await db.insert(patientPastIllnesses).values({ id: randomUUID(), ...fields, createdAt: new Date() });
       }
-      await flushAndSyncProfile(patientId, getToken);
+      const syncResult = await flushAndSyncProfile(patientId, getToken);
       sheetRef.current?.dismiss();
       load();
-      dialog.alert('Saved', 'Past illness saved successfully.');
+
+      if (syncResult.isOffline) {
+        dialog.alert('Saved Offline', 'Past illness saved locally and will sync when you are back online.');
+      } else if (!syncResult.success && syncResult.failed > 0) {
+        dialog.alert(
+          'Sync Warning',
+          `Saved locally, but server sync failed: ${syncResult.reason || 'Server conflict or validation error'}. Changes will retry automatically.`
+        );
+      } else {
+        dialog.alert('Saved', 'Past illness saved successfully.');
+      }
     } catch (e: any) {
       console.error(e);
       dialog.alert('Error', e?.message || 'Failed to save illness.');

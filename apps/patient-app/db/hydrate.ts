@@ -13,6 +13,7 @@
 import { originalDb, flushDatabaseSnapshot, ensureDatabaseReady } from './index';
 import {
   patients,
+  patientGovernmentIds,
   patientAddresses,
   emergencyContacts,
   patientHealthcareProviders,
@@ -33,9 +34,15 @@ import {
   patientMaleReproductive,
   patientDentalVision,
   patientMentalHealthProfile,
+  patientNcdQuestionnaire,
   syncQueue,
 } from './schema/index';
-import { fromBackendBloodType, type PatientFullRecord, type PatientSummary } from '../services/api/patientApi';
+import {
+  fromBackendBloodType,
+  type PatientFullRecord,
+  type PatientSummary,
+  type PatientNcdQuestionnaireDto,
+} from '../services/api/patientApi';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -115,9 +122,69 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
     await upsertPatientSummary(record.demographics);
   }
 
-  // 2. government IDs: local schema is a flat singleton keyed by patientId,
-  //    but the API returns a list of typed ID items that don't map 1:1.
-  //    Skip for now — those are managed via the sync queue on user edits.
+  // 2. government IDs: map the list of typed ID items into the singleton row
+  if (!pendingEntityIds.has(patientId)) {
+    const govIds = record.governmentIds || [];
+    const findItem = (type: string) =>
+      govIds.find((g) => g.idType?.toLowerCase() === type.toLowerCase());
+
+    const philhealth = findItem('philhealth');
+    const sss = findItem('sss');
+    const gsis = findItem('gsis');
+    const pagibig = findItem('pagibig');
+    const tin = findItem('tin');
+    const senior = findItem('seniorcitizen');
+    const pwd = findItem('pwd');
+    const hmo = findItem('hmo');
+
+    const idMap: Record<string, { id: string; clientId: string }> = {};
+    for (const g of govIds) {
+      if (g.idType) {
+        idMap[g.idType] = { id: g.id, clientId: g.clientId };
+        idMap[g.idType.toLowerCase()] = { id: g.id, clientId: g.clientId };
+      }
+    }
+
+    const existingGov = await originalDb.query.patientGovernmentIds.findFirst({
+      where: (t: any, { eq }: any) => eq(t.patientId, patientId),
+    });
+
+    const govRow: typeof patientGovernmentIds.$inferInsert = {
+      id: existingGov?.id || patientId,
+      patientId,
+      philhealthId: philhealth?.idNumber ?? existingGov?.philhealthId ?? null,
+      philhealthCategory: existingGov?.philhealthCategory ?? null,
+      sponsorPin: existingGov?.sponsorPin ?? null,
+      sponsorLastName: existingGov?.sponsorLastName ?? null,
+      sponsorFirstName: existingGov?.sponsorFirstName ?? null,
+      sponsorMiddleName: existingGov?.sponsorMiddleName ?? null,
+      sponsorSuffix: existingGov?.sponsorSuffix ?? null,
+      sponsorDob: existingGov?.sponsorDob ?? null,
+      sponsorRelationship: existingGov?.sponsorRelationship ?? null,
+      sssNumber: sss?.idNumber ?? existingGov?.sssNumber ?? null,
+      gsisNumber: gsis?.idNumber ?? existingGov?.gsisNumber ?? null,
+      pagibigId: pagibig?.idNumber ?? existingGov?.pagibigId ?? null,
+      tin: tin?.idNumber ?? existingGov?.tin ?? null,
+      seniorCitizenId: senior?.idNumber ?? existingGov?.seniorCitizenId ?? null,
+      isPwd: Boolean(pwd?.idNumber) || (existingGov?.isPwd ?? false),
+      pwdIdNumber: pwd?.idNumber ?? existingGov?.pwdIdNumber ?? null,
+      disabilityType: existingGov?.disabilityType ?? null,
+      hmoProvider: existingGov?.hmoProvider ?? null,
+      hmoPolicyNumber: hmo?.idNumber ?? existingGov?.hmoPolicyNumber ?? null,
+      hmoPlanType: existingGov?.hmoPlanType ?? null,
+      hmoCoverageStart: existingGov?.hmoCoverageStart ?? null,
+      hmoCoverageEnd: existingGov?.hmoCoverageEnd ?? null,
+      createdAt: existingGov?.createdAt ?? ts,
+      updatedAt: ts,
+      syncedAt: ts,
+      serverId: JSON.stringify(idMap),
+    };
+
+    await originalDb
+      .insert(patientGovernmentIds)
+      .values(govRow)
+      .onConflictDoUpdate({ target: patientGovernmentIds.patientId, set: govRow });
+  }
 
   // 3. addresses
   for (const addr of record.addresses) {
@@ -611,5 +678,66 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   }
 
   // Web: persist the whole hydrated record before returning so a reload keeps it.
+  await flushDatabaseSnapshot();
+}
+
+/**
+ * Hydrates patient's 24-item PhilHealth NCD Risk Questionnaire from the Yakap API.
+ */
+export async function hydrateNcdQuestionnaire(
+  patientId: string,
+  ncd: PatientNcdQuestionnaireDto
+): Promise<void> {
+  await ensureDatabaseReady();
+  const ts = now();
+  const existingNcd = await originalDb.query.patientNcdQuestionnaire.findFirst({
+    where: (t: any, { eq }: any) => eq(t.patientId, patientId),
+  });
+
+  const row: typeof patientNcdQuestionnaire.$inferInsert = {
+    id: existingNcd?.id || patientId,
+    patientId,
+    qid1Yn: ncd.qid1Yn ?? null,
+    qid2Yn: ncd.qid2Yn ?? null,
+    qid3Yn: ncd.qid3Yn ?? null,
+    qid4Yn: ncd.qid4Yn ?? null,
+    qid5Ynx: ncd.qid5Ynx ?? null,
+    qid6Yn: ncd.qid6Yn ?? null,
+    qid7Yn: ncd.qid7Yn ?? null,
+    qid8Yn: ncd.qid8Yn ?? null,
+    qid9Yn: ncd.qid9Yn ?? null,
+    qid10Yn: ncd.qid10Yn ?? null,
+    qid11Yn: ncd.qid11Yn ?? null,
+    qid12Yn: ncd.qid12Yn ?? null,
+    qid13Yn: ncd.qid13Yn ?? null,
+    qid14Yn: ncd.qid14Yn ?? null,
+    qid15Yn: ncd.qid15Yn ?? null,
+    qid16Yn: ncd.qid16Yn ?? null,
+    qid17Abcde: ncd.qid17Abcde ?? null,
+    qid18Yn: ncd.qid18Yn ?? null,
+    qid19Yn: ncd.qid19Yn ?? null,
+    qid19FbsMgdl: ncd.qid19FbsMgdl ? Number(ncd.qid19FbsMgdl) : null,
+    qid19FbsMmol: ncd.qid19FbsMmol ? Number(ncd.qid19FbsMmol) : null,
+    qid19FbsDate: ncd.qid19FbsDate ?? null,
+    qid20Yn: ncd.qid20Yn ?? null,
+    qid20CholeVal: ncd.qid20CholeVal ? Number(ncd.qid20CholeVal) : null,
+    qid20CholeDate: ncd.qid20CholeDate ?? null,
+    qid21Yn: ncd.qid21Yn ?? null,
+    qid21KetonVal: ncd.qid21KetonVal ? Number(ncd.qid21KetonVal) : null,
+    qid21KetonDate: ncd.qid21KetonDate ?? null,
+    qid22Yn: ncd.qid22Yn ?? null,
+    qid22ProteinVal: ncd.qid22ProteinVal ? Number(ncd.qid22ProteinVal) : null,
+    qid22ProteinDate: ncd.qid22ProteinDate ?? null,
+    qid23Yn: ncd.qid23Yn ?? null,
+    qid24Yn: ncd.qid24Yn ?? null,
+    createdAt: existingNcd?.createdAt ?? ts,
+    updatedAt: ts,
+    syncedAt: ts,
+  };
+
+  await originalDb
+    .insert(patientNcdQuestionnaire)
+    .values(row)
+    .onConflictDoUpdate({ target: patientNcdQuestionnaire.patientId, set: row });
   await flushDatabaseSnapshot();
 }

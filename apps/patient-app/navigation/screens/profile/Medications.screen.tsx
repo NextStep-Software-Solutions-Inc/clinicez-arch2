@@ -21,6 +21,8 @@ import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
+import { getPatientFullRecord } from 'services/api/patientApi';
+import { hydrateFullRecord } from '@db/hydrate';
 
 type MedForm = {
   id: string | null;
@@ -48,14 +50,27 @@ export default function MedicationsScreen() {
 
   const load = async () => {
     try {
-      const rows = await db.select().from(patientMedications).where(eq(patientMedications.patientId, patientId));
-      setItems(rows.filter((r) => !r.deletedAt));
+      let rows = await db.select().from(patientMedications).where(eq(patientMedications.patientId, patientId));
+      let active = rows.filter((r) => !r.deletedAt);
+      if (active.length === 0 && getToken && patientId) {
+        try {
+          const fullRecord = await getPatientFullRecord(getToken, patientId);
+          if (fullRecord) {
+            await hydrateFullRecord(fullRecord);
+            rows = await db.select().from(patientMedications).where(eq(patientMedications.patientId, patientId));
+            active = rows.filter((r) => !r.deletedAt);
+          }
+        } catch (fetchErr) {
+          console.warn('[MedicationsScreen] Could not hydrate from server:', fetchErr);
+        }
+      }
+      setItems(active);
     } catch (err) {
       console.warn('[MedicationsScreen] Failed to load medications:', err);
     }
   };
 
-  useEffect(() => { load(); }, [patientId]);
+  useEffect(() => { load(); }, [patientId, getToken]);
 
   const openEdit = (row: any) => {
     reset({
@@ -81,7 +96,7 @@ export default function MedicationsScreen() {
     });
     if (!confirmed) return;
     try {
-      await db.update(patientMedications).set({ deletedAt: new Date() }).where(eq(patientMedications.id, id));
+      await db.update(patientMedications).set({ deletedAt: new Date(), patientId }).where(eq(patientMedications.id, id));
       await flushAndSyncProfile(patientId, getToken);
       load();
     } catch (err: any) {
@@ -93,6 +108,7 @@ export default function MedicationsScreen() {
     setSaving(true);
     const { id, ...rest } = data;
     const fields = {
+      patientId,
       drugName: rest.drugName.trim(),
       dosage: rest.dosage.trim() || null,
       dosageForm: rest.dosageForm.trim() || null,
@@ -107,12 +123,22 @@ export default function MedicationsScreen() {
       if (id) {
         await db.update(patientMedications).set(fields).where(eq(patientMedications.id, id));
       } else {
-        await db.insert(patientMedications).values({ id: randomUUID(), patientId, ...fields, createdAt: new Date() });
+        await db.insert(patientMedications).values({ id: randomUUID(), ...fields, createdAt: new Date() });
       }
-      await flushAndSyncProfile(patientId, getToken);
+      const syncResult = await flushAndSyncProfile(patientId, getToken);
       sheetRef.current?.dismiss();
       load();
-      dialog.alert('Saved', 'Medication saved successfully.');
+
+      if (syncResult.isOffline) {
+        dialog.alert('Saved Offline', 'Medication saved locally and will sync when you are back online.');
+      } else if (!syncResult.success && syncResult.failed > 0) {
+        dialog.alert(
+          'Sync Warning',
+          `Saved locally, but server sync failed: ${syncResult.reason || 'Server conflict or validation error'}. Changes will retry automatically.`
+        );
+      } else {
+        dialog.alert('Saved', 'Medication saved successfully.');
+      }
     } catch (e: any) {
       console.error(e);
       dialog.alert('Error', e?.message || 'Failed to save medication.');

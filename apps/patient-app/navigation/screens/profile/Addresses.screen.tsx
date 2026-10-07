@@ -21,6 +21,8 @@ import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
+import { getPatientFullRecord } from 'services/api/patientApi';
+import { hydrateFullRecord } from '@db/hydrate';
 
 type AddressForm = {
   id: string | null;
@@ -59,9 +61,23 @@ export default function AddressesScreen() {
 
   const load = async () => {
     try {
-      const rows = await db.select().from(patientAddresses)
+      let rows = await db.select().from(patientAddresses)
         .where(eq(patientAddresses.patientId, patientId));
-      setAddresses(rows.filter((r) => !r.deletedAt));
+      let active = rows.filter((r) => !r.deletedAt);
+      if (active.length === 0 && getToken && patientId) {
+        try {
+          const fullRecord = await getPatientFullRecord(getToken, patientId);
+          if (fullRecord) {
+            await hydrateFullRecord(fullRecord);
+            rows = await db.select().from(patientAddresses)
+              .where(eq(patientAddresses.patientId, patientId));
+            active = rows.filter((r) => !r.deletedAt);
+          }
+        } catch (fetchErr) {
+          console.warn('[AddressesScreen] Could not hydrate from server:', fetchErr);
+        }
+      }
+      setAddresses(active);
     } catch (err) {
       console.warn('[AddressesScreen] Failed to load addresses:', err);
     }
@@ -69,7 +85,7 @@ export default function AddressesScreen() {
 
   useEffect(() => {
     load();
-  }, [patientId]);
+  }, [patientId, getToken]);
 
   const openAdd = () => {
     reset(EMPTY_FORM);
@@ -100,7 +116,7 @@ export default function AddressesScreen() {
     });
     if (!confirmed) return;
     try {
-      await db.update(patientAddresses).set({ deletedAt: new Date() }).where(eq(patientAddresses.id, id));
+      await db.update(patientAddresses).set({ deletedAt: new Date(), patientId }).where(eq(patientAddresses.id, id));
       await flushAndSyncProfile(patientId, getToken);
       load();
     } catch (err: any) {
@@ -113,6 +129,7 @@ export default function AddressesScreen() {
     const { id, houseNo, streetBarangay, postalCode, ...rest } = data;
     const dbFields = {
       ...rest,
+      patientId,
       houseStreet: houseNo.trim() || null,
       barangay: streetBarangay.trim() || null,
       cityMunicipality: rest.cityMunicipality.trim(),
@@ -126,12 +143,22 @@ export default function AddressesScreen() {
       if (id) {
         await db.update(patientAddresses).set(dbFields).where(eq(patientAddresses.id, id));
       } else {
-        await db.insert(patientAddresses).values({ id: randomUUID(), patientId, ...dbFields, createdAt: new Date() });
+        await db.insert(patientAddresses).values({ id: randomUUID(), ...dbFields, createdAt: new Date() });
       }
-      await flushAndSyncProfile(patientId, getToken);
+      const syncResult = await flushAndSyncProfile(patientId, getToken);
       sheetRef.current?.dismiss();
       load();
-      dialog.alert('Saved', 'Address saved successfully.');
+
+      if (syncResult.isOffline) {
+        dialog.alert('Saved Offline', 'Address saved locally and will sync when you are back online.');
+      } else if (!syncResult.success && syncResult.failed > 0) {
+        dialog.alert(
+          'Sync Warning',
+          `Saved locally, but server sync failed: ${syncResult.reason || 'Server conflict or validation error'}. Changes will retry automatically.`
+        );
+      } else {
+        dialog.alert('Saved', 'Address saved successfully.');
+      }
     } catch (e: any) {
       console.error(e);
       dialog.alert('Error', e?.message || 'Failed to save address.');

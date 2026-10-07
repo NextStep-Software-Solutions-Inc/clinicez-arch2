@@ -20,6 +20,8 @@ import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
+import { getPatientFullRecord } from 'services/api/patientApi';
+import { hydrateFullRecord } from '@db/hydrate';
 
 type ProviderForm = {
   id: string | null;
@@ -53,8 +55,21 @@ export default function HealthcareProvidersScreen() {
 
   const load = async () => {
     try {
-      const rows = await db.select().from(patientHealthcareProviders).where(eq(patientHealthcareProviders.patientId, patientId));
-      setProviders(rows.filter((r) => !r.deletedAt));
+      let rows = await db.select().from(patientHealthcareProviders).where(eq(patientHealthcareProviders.patientId, patientId));
+      let active = rows.filter((r) => !r.deletedAt);
+      if (active.length === 0 && getToken && patientId) {
+        try {
+          const fullRecord = await getPatientFullRecord(getToken, patientId);
+          if (fullRecord) {
+            await hydrateFullRecord(fullRecord);
+            rows = await db.select().from(patientHealthcareProviders).where(eq(patientHealthcareProviders.patientId, patientId));
+            active = rows.filter((r) => !r.deletedAt);
+          }
+        } catch (fetchErr) {
+          console.warn('[HealthcareProvidersScreen] Could not hydrate from server:', fetchErr);
+        }
+      }
+      setProviders(active);
     } catch (err) {
       console.warn('[HealthcareProvidersScreen] Failed to load providers:', err);
     }
@@ -62,7 +77,7 @@ export default function HealthcareProvidersScreen() {
 
   useEffect(() => {
     load();
-  }, [patientId]);
+  }, [patientId, getToken]);
 
   const openAdd = () => { reset(EMPTY); sheetRef.current?.present(); };
   const openEdit = (row: any) => {
@@ -86,7 +101,7 @@ export default function HealthcareProvidersScreen() {
     });
     if (!confirmed) return;
     try {
-      await db.update(patientHealthcareProviders).set({ deletedAt: new Date() }).where(eq(patientHealthcareProviders.id, id));
+      await db.update(patientHealthcareProviders).set({ deletedAt: new Date(), patientId }).where(eq(patientHealthcareProviders.id, id));
       await flushAndSyncProfile(patientId, getToken);
       load();
     } catch (err: any) {
@@ -98,6 +113,7 @@ export default function HealthcareProvidersScreen() {
     setSaving(true);
     const { id, ...rest } = data;
     const fields = {
+      patientId,
       providerType: rest.providerType,
       name: rest.name.trim(),
       specialty: rest.specialty.trim() || null,
@@ -110,12 +126,22 @@ export default function HealthcareProvidersScreen() {
         await db.update(patientHealthcareProviders).set(fields).where(eq(patientHealthcareProviders.id, id));
       } else {
         const newId = randomUUID();
-        await db.insert(patientHealthcareProviders).values({ id: newId, patientId, ...fields, createdAt: new Date() });
+        await db.insert(patientHealthcareProviders).values({ id: newId, ...fields, createdAt: new Date() });
       }
-      await flushAndSyncProfile(patientId, getToken);
+      const syncResult = await flushAndSyncProfile(patientId, getToken);
       sheetRef.current?.dismiss();
       load();
-      dialog.alert('Saved', 'Healthcare provider saved successfully.');
+
+      if (syncResult.isOffline) {
+        dialog.alert('Saved Offline', 'Healthcare provider saved locally and will sync when you are back online.');
+      } else if (!syncResult.success && syncResult.failed > 0) {
+        dialog.alert(
+          'Sync Warning',
+          `Saved locally, but server sync failed: ${syncResult.reason || 'Server conflict or validation error'}. Changes will retry automatically.`
+        );
+      } else {
+        dialog.alert('Saved', 'Healthcare provider saved successfully.');
+      }
     } catch (e: any) {
       console.error(e);
       dialog.alert('Error', e?.message || 'Failed to save provider.');

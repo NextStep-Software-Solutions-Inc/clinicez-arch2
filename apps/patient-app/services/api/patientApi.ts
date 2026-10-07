@@ -273,3 +273,63 @@ export async function updatePatientDemographics(
     return api.put<void>(getToken, `/patients/${patientId}/demographics`, backendPayload);
 }
 
+// ── NCD Questionnaire (PhilHealth Yakap) ──────────────────────────────────────
+
+export interface PatientNcdQuestionnaireDto {
+    patientId: string;
+    qid1Yn?: string | null;
+    qid2Yn?: string | null;
+    qid3Yn?: string | null;
+    qid4Yn?: string | null;
+    qid5Ynx?: string | null;
+    qid6Yn?: string | null;
+    qid7Yn?: string | null;
+    qid8Yn?: string | null;
+    qid9Yn?: string | null;
+    qid10Yn?: string | null;
+    qid11Yn?: string | null;
+    qid12Yn?: string | null;
+    qid13Yn?: string | null;
+    qid14Yn?: string | null;
+    qid15Yn?: string | null;
+    qid16Yn?: string | null;
+    qid17Abcde?: string | null;
+    qid18Yn?: string | null;
+    qid19Yn?: string | null;
+    qid19FbsMgdl?: number | null;
+    qid19FbsMmol?: number | null;
+    qid19FbsDate?: string | null;
+    qid20Yn?: string | null;
+    qid20CholeVal?: number | null;
+    qid20CholeDate?: string | null;
+    qid21Yn?: string | null;
+    qid21KetonVal?: number | null;
+    qid21KetonDate?: string | null;
+    qid22Yn?: string | null;
+    qid22ProteinVal?: number | null;
+    qid22ProteinDate?: string | null;
+    qid23Yn?: string | null;
+    qid24Yn?: string | null;
+    syncedAt?: string | null;
+}
+
+export async function getNcdQuestionnaire(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+): Promise<PatientNcdQuestionnaireDto | null> {
+    try {
+        return await api.get<PatientNcdQuestionnaireDto>(getToken, `/patients/${patientId}/yakap/ncd`);
+    } catch (err) {
+        if (err instanceof ApiError && err.status === 404) return null;
+        throw err;
+    }
+}
+
+export async function updateNcdQuestionnaire(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    payload: Omit<PatientNcdQuestionnaireDto, 'patientId' | 'syncedAt'>,
+): Promise<PatientNcdQuestionnaireDto> {
+    return api.put<PatientNcdQuestionnaireDto>(getToken, `/patients/${patientId}/yakap/ncd`, payload);
+}
+

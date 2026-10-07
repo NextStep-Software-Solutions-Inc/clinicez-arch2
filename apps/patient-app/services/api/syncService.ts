@@ -39,24 +39,33 @@ export async function addToSyncQueue(
   await db.insert(syncQueue).values(syncItem);
 }
 
+export interface ProfileSyncResult {
+  success: boolean;
+  synced: number;
+  failed: number;
+  skipped: boolean;
+  isOffline?: boolean;
+  reason?: string;
+}
+
 /**
  * Syncs all pending patient profile writes to the backend.
  */
 export async function syncPendingProfileWrites(
   patientId: string,
   getToken?: () => Promise<string | null>,
-): Promise<{ synced: number; failed: number; skipped: boolean; reason?: string }> {
+): Promise<ProfileSyncResult> {
   if (!getToken) {
-    return { synced: 0, failed: 0, skipped: true, reason: 'Auth token retriever not available.' };
+    return { success: false, synced: 0, failed: 0, skipped: true, reason: 'Auth token retriever not available.' };
   }
 
   if (isSyncing) {
-    return { synced: 0, failed: 0, skipped: true, reason: 'Sync already in progress.' };
+    return { success: true, synced: 0, failed: 0, skipped: true, reason: 'Sync already in progress.' };
   }
 
   const network = await NetInfo.fetch();
   if (!network.isConnected) {
-    return { synced: 0, failed: 0, skipped: true, reason: 'Device is offline.' };
+    return { success: true, synced: 0, failed: 0, skipped: true, isOffline: true, reason: 'Device is offline.' };
   }
 
   isSyncing = true;
@@ -70,7 +79,7 @@ export async function syncPendingProfileWrites(
 
     if (pendingItems.length === 0) {
       isSyncing = false;
-      return { synced: 0, failed: 0, skipped: false };
+      return { success: true, synced: 0, failed: 0, skipped: false };
     }
 
     const ids = pendingItems.map((item) => item.id);
@@ -88,7 +97,7 @@ export async function syncPendingProfileWrites(
       operation: item.operation,
       clientTimestamp: item.createdAt.toISOString(),
       payloadJson: item.operation === 'delete' ? null : item.payloadJson,
-      entityId: item.operation === 'delete' ? (item.entityId ?? undefined) : undefined,
+      entityId: item.entityId ?? undefined,
     }));
 
     try {
@@ -100,8 +109,8 @@ export async function syncPendingProfileWrites(
       await flushDatabaseSnapshot();
 
       isSyncing = false;
-      return { synced: ack.accepted, failed: 0, skipped: false };
-    } catch (apiError) {
+      return { success: true, synced: ack.accepted, failed: 0, skipped: false };
+    } catch (apiError: any) {
       console.error('[SyncService] API push failed:', apiError);
 
       // 6. Mark items back to failed for retry
@@ -117,12 +126,18 @@ export async function syncPendingProfileWrites(
       await flushDatabaseSnapshot();
 
       isSyncing = false;
-      return { synced: 0, failed: pendingItems.length, skipped: false, reason: 'API call failed' };
+      return {
+        success: false,
+        synced: 0,
+        failed: pendingItems.length,
+        skipped: false,
+        reason: apiError?.message || 'API call failed',
+      };
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('[SyncService] Error running sync runner:', error);
     isSyncing = false;
-    return { synced: 0, failed: 0, skipped: true, reason: 'Database error' };
+    return { success: false, synced: 0, failed: 0, skipped: true, reason: error?.message || 'Database error' };
   }
 }
 
@@ -133,7 +148,7 @@ export async function syncPendingProfileWrites(
 export async function flushAndSyncProfile(
   patientId: string,
   getToken?: () => Promise<string | null>,
-): Promise<{ synced: number; failed: number; skipped: boolean; reason?: string }> {
+): Promise<ProfileSyncResult> {
   await flushDatabaseSnapshot();
   return syncPendingProfileWrites(patientId, getToken);
 }

@@ -20,6 +20,8 @@ import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
+import { getPatientFullRecord } from 'services/api/patientApi';
+import { hydrateFullRecord } from '@db/hydrate';
 
 type Form = { id: string | null; vaccineName: string; doseNumber: string; lotNumber: string; date: string; administeredBy: string; };
 const EMPTY: Form = { id: null, vaccineName: '', doseNumber: '', lotNumber: '', date: '', administeredBy: '' };
@@ -35,14 +37,27 @@ export default function ImmunizationsSelfScreen() {
 
   const load = async () => {
     try {
-      const rows = await db.select().from(patientImmunizationsSelf).where(eq(patientImmunizationsSelf.patientId, patientId));
-      setItems(rows.filter((r) => !r.deletedAt));
+      let rows = await db.select().from(patientImmunizationsSelf).where(eq(patientImmunizationsSelf.patientId, patientId));
+      let active = rows.filter((r) => !r.deletedAt);
+      if (active.length === 0 && getToken && patientId) {
+        try {
+          const fullRecord = await getPatientFullRecord(getToken, patientId);
+          if (fullRecord) {
+            await hydrateFullRecord(fullRecord);
+            rows = await db.select().from(patientImmunizationsSelf).where(eq(patientImmunizationsSelf.patientId, patientId));
+            active = rows.filter((r) => !r.deletedAt);
+          }
+        } catch (fetchErr) {
+          console.warn('[ImmunizationsSelfScreen] Could not hydrate from server:', fetchErr);
+        }
+      }
+      setItems(active);
     } catch (err) {
       console.warn('[ImmunizationsSelfScreen] Failed to load immunizations:', err);
     }
   };
 
-  useEffect(() => { load(); }, [patientId]);
+  useEffect(() => { load(); }, [patientId, getToken]);
 
   const openEdit = (row: any) => {
     reset({
@@ -65,7 +80,7 @@ export default function ImmunizationsSelfScreen() {
     });
     if (!confirmed) return;
     try {
-      await db.update(patientImmunizationsSelf).set({ deletedAt: new Date() }).where(eq(patientImmunizationsSelf.id, id));
+      await db.update(patientImmunizationsSelf).set({ deletedAt: new Date(), patientId }).where(eq(patientImmunizationsSelf.id, id));
       await flushAndSyncProfile(patientId, getToken);
       load();
     } catch (err: any) {
@@ -77,6 +92,7 @@ export default function ImmunizationsSelfScreen() {
     setSaving(true);
     const { id, ...rest } = data;
     const fields = {
+      patientId,
       vaccineName: rest.vaccineName.trim(),
       doseNumber: rest.doseNumber.trim() || null,
       lotNumber: rest.lotNumber.trim() || null,
@@ -88,12 +104,22 @@ export default function ImmunizationsSelfScreen() {
       if (id) {
         await db.update(patientImmunizationsSelf).set(fields).where(eq(patientImmunizationsSelf.id, id));
       } else {
-        await db.insert(patientImmunizationsSelf).values({ id: randomUUID(), patientId, ...fields, createdAt: new Date() });
+        await db.insert(patientImmunizationsSelf).values({ id: randomUUID(), ...fields, createdAt: new Date() });
       }
-      await flushAndSyncProfile(patientId, getToken);
+      const syncResult = await flushAndSyncProfile(patientId, getToken);
       sheetRef.current?.dismiss();
       load();
-      dialog.alert('Saved', 'Immunization record saved successfully.');
+
+      if (syncResult.isOffline) {
+        dialog.alert('Saved Offline', 'Immunization record saved locally and will sync when you are back online.');
+      } else if (!syncResult.success && syncResult.failed > 0) {
+        dialog.alert(
+          'Sync Warning',
+          `Saved locally, but server sync failed: ${syncResult.reason || 'Server conflict or validation error'}. Changes will retry automatically.`
+        );
+      } else {
+        dialog.alert('Saved', 'Immunization record saved successfully.');
+      }
     } catch (e: any) {
       console.error(e);
       dialog.alert('Error', e?.message || 'Failed to save immunization record.');

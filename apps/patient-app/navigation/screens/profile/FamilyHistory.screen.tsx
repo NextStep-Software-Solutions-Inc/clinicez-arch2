@@ -20,6 +20,8 @@ import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
+import { getPatientFullRecord } from 'services/api/patientApi';
+import { hydrateFullRecord } from '@db/hydrate';
 import ThemedBottomSheetModal from '@ui/ThemedBottomSheetModal';
 
 type FamilySide = 'Paternal' | 'Maternal' | 'Both' | 'Unknown';
@@ -57,14 +59,27 @@ export default function FamilyHistoryScreen() {
 
   const load = async () => {
     try {
-      const rows = await db.select().from(patientFamilyHistory).where(eq(patientFamilyHistory.patientId, patientId));
-      setItems(rows.filter((r) => !r.deletedAt));
+      let rows = await db.select().from(patientFamilyHistory).where(eq(patientFamilyHistory.patientId, patientId));
+      let active = rows.filter((r) => !r.deletedAt);
+      if (active.length === 0 && getToken && patientId) {
+        try {
+          const fullRecord = await getPatientFullRecord(getToken, patientId);
+          if (fullRecord) {
+            await hydrateFullRecord(fullRecord);
+            rows = await db.select().from(patientFamilyHistory).where(eq(patientFamilyHistory.patientId, patientId));
+            active = rows.filter((r) => !r.deletedAt);
+          }
+        } catch (fetchErr) {
+          console.warn('[FamilyHistoryScreen] Could not hydrate from server:', fetchErr);
+        }
+      }
+      setItems(active);
     } catch (err) {
       console.warn('[FamilyHistoryScreen] Failed to load family history:', err);
     }
   };
 
-  useEffect(() => { load(); }, [patientId]);
+  useEffect(() => { load(); }, [patientId, getToken]);
 
   const openEdit = (row: any) => {
     reset({
@@ -90,7 +105,7 @@ export default function FamilyHistoryScreen() {
     });
     if (!confirmed) return;
     try {
-      await db.update(patientFamilyHistory).set({ deletedAt: new Date() }).where(eq(patientFamilyHistory.id, id));
+      await db.update(patientFamilyHistory).set({ deletedAt: new Date(), patientId }).where(eq(patientFamilyHistory.id, id));
       await flushAndSyncProfile(patientId, getToken);
       load();
     } catch (err: any) {
@@ -102,6 +117,7 @@ export default function FamilyHistoryScreen() {
     setSaving(true);
     const { id, ...rest } = data;
     const fields = {
+      patientId,
       condition: rest.condition.trim(),
       affectedRelative: rest.affectedRelative.trim() || null,
       side: rest.side || null,
@@ -116,12 +132,22 @@ export default function FamilyHistoryScreen() {
       if (id) {
         await db.update(patientFamilyHistory).set(fields).where(eq(patientFamilyHistory.id, id));
       } else {
-        await db.insert(patientFamilyHistory).values({ id: randomUUID(), patientId, ...fields, createdAt: new Date() });
+        await db.insert(patientFamilyHistory).values({ id: randomUUID(), ...fields, createdAt: new Date() });
       }
-      await flushAndSyncProfile(patientId, getToken);
+      const syncResult = await flushAndSyncProfile(patientId, getToken);
       sheetRef.current?.dismiss();
       load();
-      dialog.alert('Saved', 'Family health condition saved successfully.');
+
+      if (syncResult.isOffline) {
+        dialog.alert('Saved Offline', 'Family health condition saved locally and will sync when you are back online.');
+      } else if (!syncResult.success && syncResult.failed > 0) {
+        dialog.alert(
+          'Sync Warning',
+          `Saved locally, but server sync failed: ${syncResult.reason || 'Server conflict or validation error'}. Changes will retry automatically.`
+        );
+      } else {
+        dialog.alert('Saved', 'Family health condition saved successfully.');
+      }
     } catch (e: any) {
       console.error(e);
       dialog.alert('Error', e?.message || 'Failed to save record.');

@@ -20,6 +20,8 @@ import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
+import { getPatientFullRecord } from 'services/api/patientApi';
+import { hydrateFullRecord } from '@db/hydrate';
 import ThemedBottomSheetModal from '@ui/ThemedBottomSheetModal';
 
 type AllergySeverity = 'Mild' | 'Moderate' | 'Severe' | 'LifeThreatening';
@@ -55,14 +57,27 @@ export default function AllergiesScreen() {
 
   const load = async () => {
     try {
-      const rows = await db.select().from(patientAllergies).where(eq(patientAllergies.patientId, patientId));
-      setItems(rows.filter((r) => !r.deletedAt));
+      let rows = await db.select().from(patientAllergies).where(eq(patientAllergies.patientId, patientId));
+      let active = rows.filter((r) => !r.deletedAt);
+      if (active.length === 0 && getToken && patientId) {
+        try {
+          const fullRecord = await getPatientFullRecord(getToken, patientId);
+          if (fullRecord) {
+            await hydrateFullRecord(fullRecord);
+            rows = await db.select().from(patientAllergies).where(eq(patientAllergies.patientId, patientId));
+            active = rows.filter((r) => !r.deletedAt);
+          }
+        } catch (fetchErr) {
+          console.warn('[AllergiesScreen] Could not hydrate from server:', fetchErr);
+        }
+      }
+      setItems(active);
     } catch (err) {
       console.warn('[AllergiesScreen] Failed to load allergies:', err);
     }
   };
 
-  useEffect(() => { load(); }, [patientId]);
+  useEffect(() => { load(); }, [patientId, getToken]);
 
   const openEdit = (row: any) => {
     reset({
@@ -85,7 +100,7 @@ export default function AllergiesScreen() {
     });
     if (!confirmed) return;
     try {
-      await db.update(patientAllergies).set({ deletedAt: new Date() }).where(eq(patientAllergies.id, id));
+      await db.update(patientAllergies).set({ deletedAt: new Date(), patientId }).where(eq(patientAllergies.id, id));
       await flushAndSyncProfile(patientId, getToken);
       load();
     } catch (err: any) {
@@ -98,6 +113,7 @@ export default function AllergiesScreen() {
     const { id, ...rest } = data;
     try {
       const payload = {
+        patientId,
         allergen: rest.allergen.trim(),
         reactionType: rest.reactionType.trim() || null,
         severity: rest.severity || null,
@@ -110,15 +126,24 @@ export default function AllergiesScreen() {
       } else {
         await db.insert(patientAllergies).values({
           id: randomUUID(),
-          patientId,
           ...payload,
           createdAt: new Date(),
         });
       }
-      await flushAndSyncProfile(patientId, getToken);
+      const syncResult = await flushAndSyncProfile(patientId, getToken);
       sheetRef.current?.dismiss();
       load();
-      dialog.alert('Saved', 'Allergy saved successfully.');
+
+      if (syncResult.isOffline) {
+        dialog.alert('Saved Offline', 'Allergy saved locally and will sync when you are back online.');
+      } else if (!syncResult.success && syncResult.failed > 0) {
+        dialog.alert(
+          'Sync Warning',
+          `Saved locally, but server sync failed: ${syncResult.reason || 'Server conflict or validation error'}. Changes will retry automatically.`
+        );
+      } else {
+        dialog.alert('Saved', 'Allergy saved successfully.');
+      }
     } catch (e: any) {
       console.error(e);
       dialog.alert('Error', e?.message || 'Failed to save allergy.');

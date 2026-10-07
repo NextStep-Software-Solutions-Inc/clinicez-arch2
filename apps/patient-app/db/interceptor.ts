@@ -85,6 +85,103 @@ async function handleInterceptWrite(
       updatedAt: now.toISOString(),
     };
 
+    if (tableName === 'patient_government_ids') {
+      const targetPatientId = values?.patientId || extractIdFromCondition(condition) || entityId;
+      let idMap: Record<string, { id: string; clientId: string }> = {};
+      try {
+        let mapStr = values?.serverId;
+        if (!mapStr && originalDb.query?.patientGovernmentIds?.findFirst) {
+          const existingRow = await originalDb.query.patientGovernmentIds.findFirst({
+            where: (t: any, { eq }: any) => eq(t.patientId, targetPatientId),
+          });
+          mapStr = existingRow?.serverId;
+        }
+        if (mapStr) {
+          idMap = typeof mapStr === 'string' ? JSON.parse(mapStr) : mapStr;
+        }
+      } catch (err) {
+        console.warn('[DB Interceptor] Failed to read existing serverId map for government IDs:', err);
+      }
+
+      const idDefs: Array<{
+        idType: 'PhilHealth' | 'SSS' | 'GSIS' | 'PagIbig' | 'TIN' | 'SeniorCitizen' | 'PWD' | 'HMO';
+        idNumber: string | null | undefined;
+        extra?: Record<string, any>;
+      }> = [
+        {
+          idType: 'PhilHealth',
+          idNumber: values.philhealthId,
+          extra: {
+            philhealthCategory: values.philhealthCategory || null,
+            sponsorPin: values.sponsorPin || null,
+            sponsorLastName: values.sponsorLastName || null,
+            sponsorFirstName: values.sponsorFirstName || null,
+            sponsorMiddleName: values.sponsorMiddleName || null,
+            sponsorSuffix: values.sponsorSuffix || null,
+            sponsorDob: values.sponsorDob || null,
+            sponsorRelationship: values.sponsorRelationship || null,
+          },
+        },
+        { idType: 'SSS', idNumber: values.sssNumber },
+        { idType: 'GSIS', idNumber: values.gsisNumber },
+        { idType: 'PagIbig', idNumber: values.pagibigId },
+        { idType: 'TIN', idNumber: values.tin },
+        { idType: 'SeniorCitizen', idNumber: values.seniorCitizenId },
+        { idType: 'PWD', idNumber: values.pwdIdNumber },
+        { idType: 'HMO', idNumber: values.hmoPolicyNumber },
+      ];
+
+      let queuedCount = 0;
+      for (const def of idDefs) {
+        const existingServer = idMap[def.idType] || idMap[def.idType.toLowerCase()];
+        const trimmedNumber = typeof def.idNumber === 'string' ? def.idNumber.trim() : (def.idNumber ? String(def.idNumber) : '');
+
+        if (trimmedNumber) {
+          const isUpdate = Boolean(existingServer?.id);
+          const itemPayload = {
+            patientId: targetPatientId,
+            idType: def.idType,
+            idNumber: trimmedNumber,
+            clientId: existingServer?.clientId || randomUUID(),
+            updatedAt: now.toISOString(),
+            ...(def.extra || {}),
+          };
+
+          const syncItem = {
+            id: randomUUID(),
+            entityType: 'patient_government_ids' as const,
+            entityId: existingServer?.id || itemPayload.clientId,
+            operation: isUpdate ? ('update' as const) : ('create' as const),
+            payloadJson: JSON.stringify(itemPayload),
+            status: 'pending' as const,
+            retryCount: 0,
+            createdAt: now,
+          };
+          await originalDb.insert(syncQueue).values(syncItem);
+          queuedCount++;
+        } else if (existingServer?.id) {
+          const syncItem = {
+            id: randomUUID(),
+            entityType: 'patient_government_ids' as const,
+            entityId: existingServer.id,
+            operation: 'delete' as const,
+            payloadJson: null,
+            status: 'pending' as const,
+            retryCount: 0,
+            createdAt: now,
+          };
+          await originalDb.insert(syncQueue).values(syncItem);
+          queuedCount++;
+        }
+      }
+
+      console.log(`[DB Interceptor] Successfully queued ${queuedCount} typed items for patient_government_ids (${targetPatientId})`);
+      if (globalSyncTrigger) {
+        globalSyncTrigger();
+      }
+      return;
+    }
+
     if (tableName === 'patients') {
       if (values?.dob !== undefined && syncPayload.dateOfBirth === undefined) {
         syncPayload.dateOfBirth = values.dob;
@@ -93,8 +190,9 @@ async function handleInterceptWrite(
         syncPayload.bloodType = toBackendBloodType(values.bloodType);
       }
     } else {
-      if (!syncPayload.patientId && values?.patientId) {
-        syncPayload.patientId = values.patientId;
+      const targetPatientId = values?.patientId || extractIdFromCondition(condition) || (tableName.startsWith('patient_') ? entityId : undefined);
+      if (targetPatientId) {
+        syncPayload.patientId = targetPatientId;
       }
     }
 

@@ -20,6 +20,8 @@ import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
+import { getPatientFullRecord } from 'services/api/patientApi';
+import { hydrateFullRecord } from '@db/hydrate';
 
 type Form = { id: string | null; destination: string; cityProvince: string; departureDate: string; returnDate: string; purpose: string; illnessDuringAfterTravel: string; };
 const EMPTY: Form = { id: null, destination: '', cityProvince: '', departureDate: '', returnDate: '', purpose: '', illnessDuringAfterTravel: '' };
@@ -35,14 +37,27 @@ export default function TravelHistoryScreen() {
 
   const load = async () => {
     try {
-      const rows = await db.select().from(patientTravelHistory).where(eq(patientTravelHistory.patientId, patientId));
-      setItems(rows.filter((r) => !r.deletedAt));
+      let rows = await db.select().from(patientTravelHistory).where(eq(patientTravelHistory.patientId, patientId));
+      let active = rows.filter((r) => !r.deletedAt);
+      if (active.length === 0 && getToken && patientId) {
+        try {
+          const fullRecord = await getPatientFullRecord(getToken, patientId);
+          if (fullRecord) {
+            await hydrateFullRecord(fullRecord);
+            rows = await db.select().from(patientTravelHistory).where(eq(patientTravelHistory.patientId, patientId));
+            active = rows.filter((r) => !r.deletedAt);
+          }
+        } catch (fetchErr) {
+          console.warn('[TravelHistoryScreen] Could not hydrate from server:', fetchErr);
+        }
+      }
+      setItems(active);
     } catch (err) {
       console.warn('[TravelHistoryScreen] Failed to load travel history:', err);
     }
   };
 
-  useEffect(() => { load(); }, [patientId]);
+  useEffect(() => { load(); }, [patientId, getToken]);
 
   const openEdit = (row: any) => {
     reset({
@@ -66,7 +81,7 @@ export default function TravelHistoryScreen() {
     });
     if (!confirmed) return;
     try {
-      await db.update(patientTravelHistory).set({ deletedAt: new Date() }).where(eq(patientTravelHistory.id, id));
+      await db.update(patientTravelHistory).set({ deletedAt: new Date(), patientId }).where(eq(patientTravelHistory.id, id));
       await flushAndSyncProfile(patientId, getToken);
       load();
     } catch (err: any) {
@@ -78,6 +93,7 @@ export default function TravelHistoryScreen() {
     setSaving(true);
     const { id, ...rest } = data;
     const fields = {
+      patientId,
       destination: rest.destination.trim(),
       cityProvince: rest.cityProvince.trim() || null,
       departureDate: rest.departureDate || null,
@@ -90,12 +106,22 @@ export default function TravelHistoryScreen() {
       if (id) {
         await db.update(patientTravelHistory).set(fields).where(eq(patientTravelHistory.id, id));
       } else {
-        await db.insert(patientTravelHistory).values({ id: randomUUID(), patientId, ...fields, createdAt: new Date() });
+        await db.insert(patientTravelHistory).values({ id: randomUUID(), ...fields, createdAt: new Date() });
       }
-      await flushAndSyncProfile(patientId, getToken);
+      const syncResult = await flushAndSyncProfile(patientId, getToken);
       sheetRef.current?.dismiss();
       load();
-      dialog.alert('Saved', 'Travel record saved successfully.');
+
+      if (syncResult.isOffline) {
+        dialog.alert('Saved Offline', 'Travel record saved locally and will sync when you are back online.');
+      } else if (!syncResult.success && syncResult.failed > 0) {
+        dialog.alert(
+          'Sync Warning',
+          `Saved locally, but server sync failed: ${syncResult.reason || 'Server conflict or validation error'}. Changes will retry automatically.`
+        );
+      } else {
+        dialog.alert('Saved', 'Travel record saved successfully.');
+      }
     } catch (e: any) {
       console.error(e);
       dialog.alert('Error', e?.message || 'Failed to save travel record.');

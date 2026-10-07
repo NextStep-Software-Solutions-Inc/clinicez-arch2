@@ -17,6 +17,8 @@ import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
+import { getPatientFullRecord } from 'services/api/patientApi';
+import { hydrateFullRecord } from '@db/hydrate';
 
 type FormValues = { hasVasectomy: boolean; vasectomyDate: string; conditions: string; };
 
@@ -34,8 +36,10 @@ export default function MaleReproductiveScreen() {
   const [hasRecord, setHasRecord] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
     db.query.patientMaleReproductive.findFirst({ where: eq(patientMaleReproductive.patientId, patientId) })
-      .then((row) => {
+      .then(async (row) => {
+        if (!isMounted) return;
         if (row) {
           setHasRecord(true);
           reset({
@@ -43,15 +47,40 @@ export default function MaleReproductiveScreen() {
             vasectomyDate: row.vasectomyDate ?? '',
             conditions: row.conditions ?? '',
           });
+        } else if (getToken && patientId) {
+          try {
+            const fullRecord = await getPatientFullRecord(getToken, patientId);
+            if (fullRecord && isMounted) {
+              await hydrateFullRecord(fullRecord);
+              const hydratedRow = await db.query.patientMaleReproductive.findFirst({
+                where: eq(patientMaleReproductive.patientId, patientId),
+              });
+              if (hydratedRow && isMounted) {
+                setHasRecord(true);
+                reset({
+                  hasVasectomy: hydratedRow.hasVasectomy ?? false,
+                  vasectomyDate: hydratedRow.vasectomyDate ?? '',
+                  conditions: hydratedRow.conditions ?? '',
+                });
+              }
+            }
+          } catch (fetchErr) {
+            console.warn('[MaleReproductive] Could not hydrate full record from server:', fetchErr);
+          }
         }
       })
       .catch(console.error);
-  }, [patientId, reset]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [patientId, reset, getToken]);
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
     try {
       const payload = {
+        patientId,
         hasVasectomy: data.hasVasectomy,
         vasectomyDate: data.hasVasectomy ? (data.vasectomyDate || null) : null,
         conditions: data.conditions.trim() || null,
@@ -65,18 +94,32 @@ export default function MaleReproductiveScreen() {
       } else {
         await db.insert(patientMaleReproductive).values({
           id: randomUUID(),
-          patientId,
           ...payload,
           createdAt: new Date(),
         });
         setHasRecord(true);
       }
 
-      await flushAndSyncProfile(patientId, getToken);
-      reset(data);
-      dialog.alert('Saved', 'Your reproductive health record has been updated successfully.', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+      const syncResult = await flushAndSyncProfile(patientId, getToken);
+
+      if (syncResult.isOffline) {
+        reset(data);
+        dialog.alert('Saved Offline', 'Your reproductive health record has been saved locally and will sync when you are back online.', [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+      } else if (!syncResult.success && syncResult.failed > 0) {
+        reset(data);
+        dialog.alert(
+          'Sync Warning',
+          `Saved locally, but server sync failed: ${syncResult.reason || 'Server conflict or validation error'}. Changes will retry automatically.`,
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
+        );
+      } else {
+        reset(data);
+        dialog.alert('Saved', 'Your reproductive health record has been updated successfully.', [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+      }
     } catch (e: any) {
       console.error(e);
       dialog.alert('Error', e?.message || 'Failed to save reproductive health record.');

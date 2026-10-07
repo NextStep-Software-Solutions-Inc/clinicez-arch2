@@ -19,6 +19,8 @@ import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
+import { getPatientFullRecord } from 'services/api/patientApi';
+import { hydrateFullRecord } from '@db/hydrate';
 
 type Form = { id: string | null; diagnosis: string; controlStatus: string; monitoringFrequency: string; };
 const EMPTY: Form = { id: null, diagnosis: '', controlStatus: '', monitoringFrequency: '' };
@@ -34,14 +36,27 @@ export default function ChronicConditionsScreen() {
 
   const load = async () => {
     try {
-      const rows = await db.select().from(patientChronicConditions).where(eq(patientChronicConditions.patientId, patientId));
-      setItems(rows.filter((r) => !r.deletedAt));
+      let rows = await db.select().from(patientChronicConditions).where(eq(patientChronicConditions.patientId, patientId));
+      let active = rows.filter((r) => !r.deletedAt);
+      if (active.length === 0 && getToken && patientId) {
+        try {
+          const fullRecord = await getPatientFullRecord(getToken, patientId);
+          if (fullRecord) {
+            await hydrateFullRecord(fullRecord);
+            rows = await db.select().from(patientChronicConditions).where(eq(patientChronicConditions.patientId, patientId));
+            active = rows.filter((r) => !r.deletedAt);
+          }
+        } catch (fetchErr) {
+          console.warn('[ChronicConditionsScreen] Could not hydrate from server:', fetchErr);
+        }
+      }
+      setItems(active);
     } catch (err) {
       console.warn('[ChronicConditionsScreen] Failed to load conditions:', err);
     }
   };
 
-  useEffect(() => { load(); }, [patientId]);
+  useEffect(() => { load(); }, [patientId, getToken]);
 
   const openEdit = (row: any) => {
     reset({
@@ -62,7 +77,7 @@ export default function ChronicConditionsScreen() {
     });
     if (!confirmed) return;
     try {
-      await db.update(patientChronicConditions).set({ deletedAt: new Date() }).where(eq(patientChronicConditions.id, id));
+      await db.update(patientChronicConditions).set({ deletedAt: new Date(), patientId }).where(eq(patientChronicConditions.id, id));
       await flushAndSyncProfile(patientId, getToken);
       load();
     } catch (err: any) {
@@ -74,6 +89,7 @@ export default function ChronicConditionsScreen() {
     setSaving(true);
     const { id, ...rest } = data;
     const fields = {
+      patientId,
       diagnosis: rest.diagnosis.trim(),
       controlStatus: rest.controlStatus.trim() || null,
       monitoringFrequency: rest.monitoringFrequency.trim() || null,
@@ -83,12 +99,22 @@ export default function ChronicConditionsScreen() {
       if (id) {
         await db.update(patientChronicConditions).set(fields).where(eq(patientChronicConditions.id, id));
       } else {
-        await db.insert(patientChronicConditions).values({ id: randomUUID(), patientId, ...fields, createdAt: new Date() });
+        await db.insert(patientChronicConditions).values({ id: randomUUID(), ...fields, createdAt: new Date() });
       }
-      await flushAndSyncProfile(patientId, getToken);
+      const syncResult = await flushAndSyncProfile(patientId, getToken);
       sheetRef.current?.dismiss();
       load();
-      dialog.alert('Saved', 'Chronic condition saved successfully.');
+
+      if (syncResult.isOffline) {
+        dialog.alert('Saved Offline', 'Chronic condition saved locally and will sync when you are back online.');
+      } else if (!syncResult.success && syncResult.failed > 0) {
+        dialog.alert(
+          'Sync Warning',
+          `Saved locally, but server sync failed: ${syncResult.reason || 'Server conflict or validation error'}. Changes will retry automatically.`
+        );
+      } else {
+        dialog.alert('Saved', 'Chronic condition saved successfully.');
+      }
     } catch (e: any) {
       console.error(e);
       dialog.alert('Error', e?.message || 'Failed to save condition.');

@@ -19,6 +19,8 @@ import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
+import { getPatientFullRecord } from 'services/api/patientApi';
+import { hydrateFullRecord } from '@db/hydrate';
 
 const MAX_CONTACTS = 3;
 
@@ -48,8 +50,21 @@ export default function EmergencyContactsScreen() {
 
   const load = async () => {
     try {
-      const rows = await db.select().from(emergencyContacts).where(eq(emergencyContacts.patientId, patientId));
-      setContacts(rows.filter((r) => !r.deletedAt).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)));
+      let rows = await db.select().from(emergencyContacts).where(eq(emergencyContacts.patientId, patientId));
+      let active = rows.filter((r) => !r.deletedAt).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+      if (active.length === 0 && getToken && patientId) {
+        try {
+          const fullRecord = await getPatientFullRecord(getToken, patientId);
+          if (fullRecord) {
+            await hydrateFullRecord(fullRecord);
+            rows = await db.select().from(emergencyContacts).where(eq(emergencyContacts.patientId, patientId));
+            active = rows.filter((r) => !r.deletedAt).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+          }
+        } catch (fetchErr) {
+          console.warn('[EmergencyContactsScreen] Could not hydrate from server:', fetchErr);
+        }
+      }
+      setContacts(active);
     } catch (err) {
       console.warn('[EmergencyContactsScreen] Failed to load contacts:', err);
     }
@@ -57,7 +72,7 @@ export default function EmergencyContactsScreen() {
 
   useEffect(() => {
     load();
-  }, [patientId]);
+  }, [patientId, getToken]);
 
   const openAdd = () => { reset(EMPTY); sheetRef.current?.present(); };
   const openEdit = (row: any) => {
@@ -78,7 +93,7 @@ export default function EmergencyContactsScreen() {
     });
     if (!confirmed) return;
     try {
-      await db.update(emergencyContacts).set({ deletedAt: new Date() }).where(eq(emergencyContacts.id, id));
+      await db.update(emergencyContacts).set({ deletedAt: new Date(), patientId }).where(eq(emergencyContacts.id, id));
       await flushAndSyncProfile(patientId, getToken);
       load();
     } catch (err: any) {
@@ -90,6 +105,7 @@ export default function EmergencyContactsScreen() {
     setSaving(true);
     const { id, ...rest } = data;
     const fields = {
+      patientId,
       name: rest.name.trim(),
       relationship: rest.relationship.trim(),
       phone: rest.phone.trim(),
@@ -102,14 +118,24 @@ export default function EmergencyContactsScreen() {
         await db.update(emergencyContacts).set({ ...fields, updatedAt: new Date() }).where(eq(emergencyContacts.id, id));
       } else {
         await db.insert(emergencyContacts).values({
-          id: randomUUID(), patientId, ...fields,
+          id: randomUUID(), ...fields,
           sortOrder: contacts.length, createdAt: new Date(), updatedAt: new Date(),
         });
       }
-      await flushAndSyncProfile(patientId, getToken);
+      const syncResult = await flushAndSyncProfile(patientId, getToken);
       sheetRef.current?.dismiss();
       load();
-      dialog.alert('Saved', 'Emergency contact saved successfully.');
+
+      if (syncResult.isOffline) {
+        dialog.alert('Saved Offline', 'Emergency contact saved locally and will sync when you are back online.');
+      } else if (!syncResult.success && syncResult.failed > 0) {
+        dialog.alert(
+          'Sync Warning',
+          `Saved locally, but server sync failed: ${syncResult.reason || 'Server conflict or validation error'}. Changes will retry automatically.`
+        );
+      } else {
+        dialog.alert('Saved', 'Emergency contact saved successfully.');
+      }
     } catch (e: any) {
       console.error(e);
       dialog.alert('Error', e?.message || 'Failed to save emergency contact.');

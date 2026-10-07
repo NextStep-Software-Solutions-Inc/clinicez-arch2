@@ -16,6 +16,8 @@ import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
+import { getPatientFullRecord } from 'services/api/patientApi';
+import { hydrateFullRecord } from '@db/hydrate';
 
 type WorkEnvironment = 'Office' | 'Field' | 'Factory' | 'Healthcare' | 'Agriculture' | 'Other';
 
@@ -49,8 +51,10 @@ export default function OccupationScreen() {
   const [hasRecord, setHasRecord] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
     db.query.patientOccupation.findFirst({ where: eq(patientOccupation.patientId, patientId) })
-      .then((row) => {
+      .then(async (row) => {
+        if (!isMounted) return;
         if (row) {
           setHasRecord(true);
           reset({
@@ -61,16 +65,44 @@ export default function OccupationScreen() {
             yearsInOccupation: row.yearsInOccupation?.toString() ?? '',
             hazardExposure: row.hazardExposure ?? '',
           });
+        } else if (getToken && patientId) {
+          try {
+            const fullRecord = await getPatientFullRecord(getToken, patientId);
+            if (fullRecord && isMounted) {
+              await hydrateFullRecord(fullRecord);
+              const hydratedRow = await db.query.patientOccupation.findFirst({
+                where: eq(patientOccupation.patientId, patientId),
+              });
+              if (hydratedRow && isMounted) {
+                setHasRecord(true);
+                reset({
+                  occupation: hydratedRow.occupation ?? '',
+                  employer: hydratedRow.employer ?? '',
+                  industry: hydratedRow.industry ?? '',
+                  workEnvironment: (hydratedRow.workEnvironment as WorkEnvironment) ?? '',
+                  yearsInOccupation: hydratedRow.yearsInOccupation?.toString() ?? '',
+                  hazardExposure: hydratedRow.hazardExposure ?? '',
+                });
+              }
+            }
+          } catch (fetchErr) {
+            console.warn('[Occupation] Could not hydrate full record from server:', fetchErr);
+          }
         }
       })
       .catch(console.error);
-  }, [patientId, reset]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [patientId, reset, getToken]);
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
     try {
       const payload = {
         ...data,
+        patientId,
         workEnvironment: data.workEnvironment || null,
         yearsInOccupation: data.yearsInOccupation ? parseInt(data.yearsInOccupation, 10) : null,
         updatedAt: new Date(),
@@ -83,18 +115,32 @@ export default function OccupationScreen() {
       } else {
         await db.insert(patientOccupation).values({
           id: randomUUID(),
-          patientId,
           ...payload,
           createdAt: new Date(),
         });
         setHasRecord(true);
       }
 
-      await flushAndSyncProfile(patientId, getToken);
-      reset(data);
-      dialog.alert('Saved', 'Your occupation details have been updated successfully.', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+      const syncResult = await flushAndSyncProfile(patientId, getToken);
+
+      if (syncResult.isOffline) {
+        reset(data);
+        dialog.alert('Saved Offline', 'Your occupation details have been saved locally and will sync when you are back online.', [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+      } else if (!syncResult.success && syncResult.failed > 0) {
+        reset(data);
+        dialog.alert(
+          'Sync Warning',
+          `Saved locally, but server sync failed: ${syncResult.reason || 'Server conflict or validation error'}. Changes will retry automatically.`,
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
+        );
+      } else {
+        reset(data);
+        dialog.alert('Saved', 'Your occupation details have been updated successfully.', [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+      }
     } catch (e: any) {
       console.error(e);
       dialog.alert('Error', e?.message || 'Failed to save occupation details.');

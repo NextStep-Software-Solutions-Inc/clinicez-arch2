@@ -20,6 +20,8 @@ import { randomUUID } from 'expo-crypto';
 import { usePatientId } from 'hooks/usePatientId';
 import { useAuth } from 'contexts/AuthContext';
 import { flushAndSyncProfile } from 'services/api/syncService';
+import { getPatientFullRecord } from 'services/api/patientApi';
+import { hydrateFullRecord } from '@db/hydrate';
 import { dialog } from '@utils/dialog';
 
 type PhilhealthCategory = 'MM' | 'DD';
@@ -181,8 +183,11 @@ export default function GovernmentIdsScreen() {
   const [hasRecord, setHasRecord] = useState(false);
 
   useEffect(() => {
-    db.query.patientGovernmentIds.findFirst({ where: eq(patientGovernmentIds.patientId, patientId) })
-      .then((row) => {
+    let isMounted = true;
+    db.query.patientGovernmentIds
+      .findFirst({ where: eq(patientGovernmentIds.patientId, patientId) })
+      .then(async (row) => {
+        if (!isMounted) return;
         if (row) {
           setHasRecord(true);
           reset({
@@ -209,10 +214,53 @@ export default function GovernmentIdsScreen() {
             hmoCoverageStart: row.hmoCoverageStart ?? '',
             hmoCoverageEnd: row.hmoCoverageEnd ?? '',
           });
+        } else if (getToken && patientId) {
+          try {
+            const fullRecord = await getPatientFullRecord(getToken, patientId);
+            if (fullRecord && isMounted) {
+              await hydrateFullRecord(fullRecord);
+              const hydratedRow = await db.query.patientGovernmentIds.findFirst({
+                where: eq(patientGovernmentIds.patientId, patientId),
+              });
+              if (hydratedRow && isMounted) {
+                setHasRecord(true);
+                reset({
+                  philhealthId: hydratedRow.philhealthId ?? '',
+                  philhealthCategory: hydratedRow.philhealthCategory ?? '',
+                  sponsorPin: hydratedRow.sponsorPin ?? '',
+                  sponsorLastName: hydratedRow.sponsorLastName ?? '',
+                  sponsorFirstName: hydratedRow.sponsorFirstName ?? '',
+                  sponsorMiddleName: hydratedRow.sponsorMiddleName ?? '',
+                  sponsorSuffix: hydratedRow.sponsorSuffix ?? '',
+                  sponsorDob: hydratedRow.sponsorDob ?? '',
+                  sponsorRelationship: (hydratedRow.sponsorRelationship as any) ?? '',
+                  sssNumber: hydratedRow.sssNumber ?? '',
+                  gsisNumber: hydratedRow.gsisNumber ?? '',
+                  pagIbigNumber: hydratedRow.pagibigId ?? '',
+                  tinNumber: hydratedRow.tin ?? '',
+                  seniorCitizenId: hydratedRow.seniorCitizenId ?? '',
+                  isPwd: hydratedRow.isPwd ?? false,
+                  pwdIdNumber: hydratedRow.pwdIdNumber ?? '',
+                  disabilityType: hydratedRow.disabilityType ?? '',
+                  hmoProvider: hydratedRow.hmoProvider ?? '',
+                  hmoPolicyNumber: hydratedRow.hmoPolicyNumber ?? '',
+                  hmoPlanType: hydratedRow.hmoPlanType ?? '',
+                  hmoCoverageStart: hydratedRow.hmoCoverageStart ?? '',
+                  hmoCoverageEnd: hydratedRow.hmoCoverageEnd ?? '',
+                });
+              }
+            }
+          } catch (fetchErr) {
+            console.warn('[GovernmentIds] Could not hydrate full record from server:', fetchErr);
+          }
         }
       })
       .catch(console.error);
-  }, [patientId, reset]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [patientId, reset, getToken]);
 
   const onSave = handleSubmit(async (data) => {
     if (data.philhealthCategory === 'DD') {
@@ -256,7 +304,7 @@ export default function GovernmentIdsScreen() {
       if (hasRecord) {
         await db
           .update(patientGovernmentIds)
-          .set({ ...payload, updatedAt: new Date() })
+          .set({ ...payload, patientId, updatedAt: new Date() })
           .where(eq(patientGovernmentIds.patientId, patientId));
       } else {
         await db.insert(patientGovernmentIds).values({
@@ -269,12 +317,28 @@ export default function GovernmentIdsScreen() {
         setHasRecord(true);
       }
 
-      await flushAndSyncProfile(patientId, getToken);
+      const syncResult = await flushAndSyncProfile(patientId, getToken);
 
-      reset(data);
-      dialog.alert('Saved', 'Your government & insurance IDs have been updated successfully.', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+      if (syncResult.isOffline) {
+        reset(data);
+        dialog.alert(
+          'Saved Offline',
+          'Your government & insurance IDs have been saved locally and will sync when you are back online.',
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
+        );
+      } else if (!syncResult.success && syncResult.failed > 0) {
+        reset(data);
+        dialog.alert(
+          'Sync Warning',
+          `Saved locally, but server sync failed: ${syncResult.reason || 'Server conflict or validation error'}. Changes will retry automatically.`,
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
+        );
+      } else {
+        reset(data);
+        dialog.alert('Saved', 'Your government & insurance IDs have been updated successfully.', [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+      }
     } catch (e: any) {
       console.error(e);
       dialog.alert('Error', e?.message || 'Failed to save government & insurance IDs.');

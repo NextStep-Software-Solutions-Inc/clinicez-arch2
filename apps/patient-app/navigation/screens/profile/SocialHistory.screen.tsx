@@ -17,6 +17,8 @@ import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
+import { getPatientFullRecord } from 'services/api/patientApi';
+import { hydrateFullRecord } from '@db/hydrate';
 
 type TobaccoStatus = 'Never' | 'Former' | 'Current';
 type SleepQuality = 'Good' | 'Fair' | 'Poor';
@@ -86,8 +88,10 @@ export default function SocialHistoryScreen() {
   const [hasRecord, setHasRecord] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
     db.query.patientSocialHistory.findFirst({ where: eq(patientSocialHistory.patientId, patientId) })
-      .then((row) => {
+      .then(async (row) => {
+        if (!isMounted) return;
         if (row) {
           setHasRecord(true);
           reset({
@@ -114,16 +118,60 @@ export default function SocialHistoryScreen() {
             caffeineUse: row.caffeineUse ?? '',
             dailyScreenTime: row.dailyScreenTime ?? '',
           });
+        } else if (getToken && patientId) {
+          try {
+            const fullRecord = await getPatientFullRecord(getToken, patientId);
+            if (fullRecord && isMounted) {
+              await hydrateFullRecord(fullRecord);
+              const hydratedRow = await db.query.patientSocialHistory.findFirst({
+                where: eq(patientSocialHistory.patientId, patientId),
+              });
+              if (hydratedRow && isMounted) {
+                setHasRecord(true);
+                reset({
+                  tobaccoStatus: hydratedRow.tobaccoStatus ?? '',
+                  cigsPerDay: hydratedRow.cigsPerDay?.toString() ?? '',
+                  quitDate: hydratedRow.quitDate ?? '',
+                  otherTobaccoProducts: hydratedRow.otherTobaccoProducts ?? '',
+                  alcoholUseLevel: hydratedRow.alcoholUseLevel ?? '',
+                  alcoholType: hydratedRow.alcoholType ?? '',
+                  alcoholFrequencyDaysPerWeek: hydratedRow.alcoholFrequencyDaysPerWeek?.toString() ?? '',
+                  alcoholQuantityPerOccasion: hydratedRow.alcoholQuantityPerOccasion?.toString() ?? '',
+                  substanceUse: hydratedRow.substanceUse ?? false,
+                  substanceName: hydratedRow.substanceName ?? '',
+                  substanceRoute: hydratedRow.substanceRoute ?? '',
+                  substanceFrequency: hydratedRow.substanceFrequency ?? '',
+                  activityLevel: hydratedRow.activityLevel ?? '',
+                  exerciseType: hydratedRow.exerciseType ?? '',
+                  exerciseFrequencyDaysPerWeek: hydratedRow.exerciseFrequencyDaysPerWeek?.toString() ?? '',
+                  dietPattern: hydratedRow.dietPattern ?? '',
+                  foodRestrictions: hydratedRow.foodRestrictions ?? '',
+                  sleepAvgHours: hydratedRow.sleepAvgHours?.toString() ?? '',
+                  sleepQuality: hydratedRow.sleepQuality ?? '',
+                  waterIntake: hydratedRow.waterIntake ?? '',
+                  caffeineUse: hydratedRow.caffeineUse ?? '',
+                  dailyScreenTime: hydratedRow.dailyScreenTime ?? '',
+                });
+              }
+            }
+          } catch (fetchErr) {
+            console.warn('[SocialHistory] Could not hydrate full record from server:', fetchErr);
+          }
         }
       })
       .catch(console.error);
-  }, [patientId, reset]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [patientId, reset, getToken]);
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
     try {
       const payload = {
         ...data,
+        patientId,
         tobaccoStatus: data.tobaccoStatus || null,
         cigsPerDay: data.cigsPerDay ? parseInt(data.cigsPerDay) : null,
         alcoholFrequencyDaysPerWeek: data.alcoholFrequencyDaysPerWeek ? parseInt(data.alcoholFrequencyDaysPerWeek) : null,
@@ -141,18 +189,32 @@ export default function SocialHistoryScreen() {
       } else {
         await db.insert(patientSocialHistory).values({
           id: randomUUID(),
-          patientId: patientId,
           ...payload,
           createdAt: new Date(),
         });
         setHasRecord(true);
       }
 
-      await flushAndSyncProfile(patientId, getToken);
-      reset(data);
-      dialog.alert('Saved', 'Your social history has been updated successfully.', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+      const syncResult = await flushAndSyncProfile(patientId, getToken);
+
+      if (syncResult.isOffline) {
+        reset(data);
+        dialog.alert('Saved Offline', 'Your social history has been saved locally and will sync when you are back online.', [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+      } else if (!syncResult.success && syncResult.failed > 0) {
+        reset(data);
+        dialog.alert(
+          'Sync Warning',
+          `Saved locally, but server sync failed: ${syncResult.reason || 'Server conflict or validation error'}. Changes will retry automatically.`,
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
+        );
+      } else {
+        reset(data);
+        dialog.alert('Saved', 'Your social history has been updated successfully.', [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+      }
     } catch (e: any) {
       console.error(e);
       dialog.alert('Error', e?.message || 'Failed to save social history.');

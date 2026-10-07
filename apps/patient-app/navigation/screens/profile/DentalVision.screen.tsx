@@ -16,6 +16,8 @@ import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
+import { getPatientFullRecord } from 'services/api/patientApi';
+import { hydrateFullRecord } from '@db/hydrate';
 
 type CorrectiveLenses = 'None' | 'Glasses' | 'Contacts' | 'Both';
 
@@ -49,8 +51,10 @@ export default function DentalVisionScreen() {
   const [hasRecord, setHasRecord] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
     db.query.patientDentalVision.findFirst({ where: eq(patientDentalVision.patientId, patientId) })
-      .then((row) => {
+      .then(async (row) => {
+        if (!isMounted) return;
         if (row) {
           setHasRecord(true);
           reset({
@@ -60,15 +64,42 @@ export default function DentalVisionScreen() {
             eyeDoctorName: row.eyeDoctorName ?? '',
             correctiveLenses: (row.correctiveLenses as CorrectiveLenses) ?? '',
           });
+        } else if (getToken && patientId) {
+          try {
+            const fullRecord = await getPatientFullRecord(getToken, patientId);
+            if (fullRecord && isMounted) {
+              await hydrateFullRecord(fullRecord);
+              const hydratedRow = await db.query.patientDentalVision.findFirst({
+                where: eq(patientDentalVision.patientId, patientId),
+              });
+              if (hydratedRow && isMounted) {
+                setHasRecord(true);
+                reset({
+                  dentistName: hydratedRow.dentistName ?? '',
+                  dentistClinic: hydratedRow.dentistClinic ?? '',
+                  orthodonticDevice: hydratedRow.orthodonticDevice ?? '',
+                  eyeDoctorName: hydratedRow.eyeDoctorName ?? '',
+                  correctiveLenses: (hydratedRow.correctiveLenses as CorrectiveLenses) ?? '',
+                });
+              }
+            }
+          } catch (fetchErr) {
+            console.warn('[DentalVision] Could not hydrate full record from server:', fetchErr);
+          }
         }
       })
       .catch(console.error);
-  }, [patientId, reset]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [patientId, reset, getToken]);
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
     try {
       const payload = {
+        patientId,
         dentistName: data.dentistName.trim() || null,
         dentistClinic: data.dentistClinic.trim() || null,
         orthodonticDevice: data.orthodonticDevice.trim() || null,
@@ -85,18 +116,32 @@ export default function DentalVisionScreen() {
       } else {
         await db.insert(patientDentalVision).values({
           id: randomUUID(),
-          patientId,
           ...payload,
           createdAt: new Date(),
         });
         setHasRecord(true);
       }
 
-      await flushAndSyncProfile(patientId, getToken);
-      reset(data);
-      dialog.alert('Saved', 'Your dental & vision record has been updated successfully.', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+      const syncResult = await flushAndSyncProfile(patientId, getToken);
+
+      if (syncResult.isOffline) {
+        reset(data);
+        dialog.alert('Saved Offline', 'Your dental & vision record has been saved locally and will sync when you are back online.', [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+      } else if (!syncResult.success && syncResult.failed > 0) {
+        reset(data);
+        dialog.alert(
+          'Sync Warning',
+          `Saved locally, but server sync failed: ${syncResult.reason || 'Server conflict or validation error'}. Changes will retry automatically.`,
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
+        );
+      } else {
+        reset(data);
+        dialog.alert('Saved', 'Your dental & vision record has been updated successfully.', [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+      }
     } catch (e: any) {
       console.error(e);
       dialog.alert('Error', e?.message || 'Failed to save dental & vision record.');
