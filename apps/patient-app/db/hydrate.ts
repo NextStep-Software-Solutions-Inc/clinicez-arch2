@@ -33,6 +33,7 @@ import {
   patientMaleReproductive,
   patientDentalVision,
   patientMentalHealthProfile,
+  syncQueue,
 } from './schema/index';
 import { fromBackendBloodType, type PatientFullRecord, type PatientSummary } from '../services/api/patientApi';
 
@@ -107,8 +108,13 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   const ts = now();
   const patientId = record.demographics.id;
 
+  const pendingQueue = await originalDb.select({ entityId: syncQueue.entityId }).from(syncQueue);
+  const pendingEntityIds = new Set(pendingQueue.map((q) => q.entityId));
+
   // 1. demographics
-  await upsertPatientSummary(record.demographics);
+  if (!pendingEntityIds.has(patientId)) {
+    await upsertPatientSummary(record.demographics);
+  }
 
   // 2. government IDs: local schema is a flat singleton keyed by patientId,
   //    but the API returns a list of typed ID items that don't map 1:1.
@@ -116,6 +122,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
 
   // 3. addresses
   for (const addr of record.addresses) {
+    if (pendingEntityIds.has(addr.id)) continue;
     const row = {
       id: addr.id,
       patientId,
@@ -141,6 +148,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   // 4. emergency contacts
   for (let i = 0; i < record.emergencyContacts.length; i++) {
     const ec = record.emergencyContacts[i];
+    if (pendingEntityIds.has(ec.id)) continue;
     const row = {
       id: ec.id,
       patientId,
@@ -170,6 +178,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   };
   for (let i = 0; i < record.healthcareProviders.length; i++) {
     const hp = record.healthcareProviders[i];
+    if (pendingEntityIds.has(hp.id)) continue;
     const typeKey = i === 0 ? 'primary_care' : i === 1 ? 'specialist_1' : 'specialist_2';
     const row = {
       id: hp.id,
@@ -192,6 +201,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
 
   // 6. allergies
   for (const al of record.allergies) {
+    if (pendingEntityIds.has(al.id)) continue;
     const row = {
       id: al.id,
       patientId,
@@ -213,6 +223,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
 
   // 7. medications  (local: drugName, dosage, dosageForm, frequency, prescribingPhysician, startDate, indication, isActive)
   for (const med of record.medications) {
+    if (pendingEntityIds.has(med.id)) continue;
     const row = {
       id: med.id,
       patientId,
@@ -237,6 +248,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
 
   // 8. surgical history  (local: procedure, surgeon, facility, date, anesthesiaType, complications)
   for (const sh of record.surgicalHistories) {
+    if (pendingEntityIds.has(sh.id)) continue;
     const row = {
       id: sh.id,
       patientId,
@@ -259,6 +271,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
 
   // 9. past illnesses  (local: diagnosis, duration, complications)
   for (const pi of record.pastIllnesses) {
+    if (pendingEntityIds.has(pi.id)) continue;
     const row = {
       id: pi.id,
       patientId,
@@ -278,6 +291,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
 
   // 10. chronic conditions  (local: diagnosis, controlStatus, monitoringFrequency)
   for (const cc of record.chronicConditions) {
+    if (pendingEntityIds.has(cc.id)) continue;
     const row = {
       id: cc.id,
       patientId,
@@ -297,6 +311,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
 
   // 11. disabilities  (local: bodyPart, classification, isPwdCertified)
   for (const dis of record.disabilities) {
+    if (pendingEntityIds.has(dis.id)) continue;
     const row = {
       id: dis.id,
       patientId,
@@ -316,6 +331,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
 
   // 12. immunizations self  (local: immunizationCategory, vaccineName, doseNumber, lotNumber, date, administeredBy)
   for (const imm of record.immunizationsSelf) {
+    if (pendingEntityIds.has(imm.id)) continue;
     const row = {
       id: imm.id,
       patientId,
@@ -338,7 +354,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
 
   // 13. social history (singleton)
   //     Local schema differs significantly — map best-effort
-  if (record.socialHistory) {
+  if (record.socialHistory && !pendingEntityIds.has(patientId)) {
     const sh = record.socialHistory;
     const row = {
       id: sh.id,
@@ -374,11 +390,12 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
     await originalDb
       .insert(patientSocialHistory)
       .values(row)
-      .onConflictDoUpdate({ target: patientSocialHistory.id, set: row });
+      .onConflictDoUpdate({ target: patientSocialHistory.patientId, set: row });
   }
 
   // 14. family history  (local: condition, affectedRelative, side, ageOfOnset, isDeceased, ageAtDeath, causeOfDeath, notes)
   for (const fh of record.familyHistories) {
+    if (pendingEntityIds.has(fh.id)) continue;
     const row = {
       id: fh.id,
       patientId,
@@ -402,7 +419,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   }
 
   // 15. occupation (singleton)  (local: occupation, employer, industry, workEnvironment, yearsInOccupation, hazardExposure)
-  if (record.occupation) {
+  if (record.occupation && !pendingEntityIds.has(patientId)) {
     const occ = record.occupation;
     const row = {
       id: occ.id,
@@ -420,11 +437,12 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
     await originalDb
       .insert(patientOccupation)
       .values(row)
-      .onConflictDoUpdate({ target: patientOccupation.id, set: row });
+      .onConflictDoUpdate({ target: patientOccupation.patientId, set: row });
   }
 
   // 16. travel history  (local: destination, cityProvince, departureDate, returnDate, purpose, illnessDuringAfterTravel)
   for (const th of record.travelHistories) {
+    if (pendingEntityIds.has(th.id)) continue;
     const row = {
       id: th.id,
       patientId,
@@ -447,7 +465,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
 
   // 17. obstetric profile (singleton)
   //     Local schema uses: gravida, para, abortion, livingChildren, lmp, cycleLength, etc.
-  if (record.obstetricProfile) {
+  if (record.obstetricProfile && !pendingEntityIds.has(patientId)) {
     const op = record.obstetricProfile;
     const row = {
       id: op.id,
@@ -482,11 +500,12 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
     await originalDb
       .insert(patientObstetricProfile)
       .values(row)
-      .onConflictDoUpdate({ target: patientObstetricProfile.id, set: row });
+      .onConflictDoUpdate({ target: patientObstetricProfile.patientId, set: row });
   }
 
   // 18. pregnancies  (local: year, outcome, gestationalAgeWeeks, deliveryType, birthWeightKg, complications, facility)
   for (const preg of record.pregnancies) {
+    if (pendingEntityIds.has(preg.id)) continue;
     const row = {
       id: preg.id,
       patientId,
@@ -510,6 +529,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
 
   // 19. contraceptive history  (local: method, isCurrent, dateStarted, reasonForStopping)
   for (const ch of record.contraceptiveHistories) {
+    if (pendingEntityIds.has(ch.id)) continue;
     const row = {
       id: ch.id,
       patientId,
@@ -529,7 +549,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   }
 
   // 20. male reproductive (singleton)  (local: hasVasectomy, vasectomyDate, conditions)
-  if (record.maleReproductive) {
+  if (record.maleReproductive && !pendingEntityIds.has(patientId)) {
     const mr = record.maleReproductive;
     const row = {
       id: mr.id,
@@ -544,11 +564,11 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
     await originalDb
       .insert(patientMaleReproductive)
       .values(row)
-      .onConflictDoUpdate({ target: patientMaleReproductive.id, set: row });
+      .onConflictDoUpdate({ target: patientMaleReproductive.patientId, set: row });
   }
 
   // 21. dental & vision (singleton)  (local: dentistName, dentistClinic, orthodonticDevice, eyeDoctorName, correctiveLenses)
-  if (record.dentalVision) {
+  if (record.dentalVision && !pendingEntityIds.has(patientId)) {
     const dv = record.dentalVision;
     const row = {
       id: dv.id,
@@ -565,13 +585,13 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
     await originalDb
       .insert(patientDentalVision)
       .values(row)
-      .onConflictDoUpdate({ target: patientDentalVision.id, set: row });
+      .onConflictDoUpdate({ target: patientDentalVision.patientId, set: row });
   }
 
   // 22. mental health profile (singleton)
   //     Local schema: hasPriorDiagnosis, providerName, providerSpecialty, providerClinic, psychotherapyStatus
   //     API DTO has more fields — map best-effort
-  if (record.mentalHealthProfile) {
+  if (record.mentalHealthProfile && !pendingEntityIds.has(patientId)) {
     const mh = record.mentalHealthProfile;
     const row = {
       id: mh.id,
@@ -588,7 +608,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
     await originalDb
       .insert(patientMentalHealthProfile)
       .values(row)
-      .onConflictDoUpdate({ target: patientMentalHealthProfile.id, set: row });
+      .onConflictDoUpdate({ target: patientMentalHealthProfile.patientId, set: row });
   }
 
   // Web: persist the whole hydrated record before returning so a reload keeps it.

@@ -10,8 +10,12 @@ import ProfileFormField from 'components/profile/ProfileFormField';
 import ProfileSelectModal from 'components/profile/ProfileSelectModal';
 import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
 import ProfileSaveBar from 'components/profile/ProfileSaveBar';
+import Screen from 'components/layout/Screen';
 import { usePatientId } from 'hooks/usePatientId';
-import { addToSyncQueue } from 'services/api/syncService';
+import { useAuth } from 'contexts/AuthContext';
+import { useAppTheme } from 'contexts/ThemeContext';
+import { dialog } from '@utils/dialog';
+import { flushAndSyncProfile } from 'services/api/syncService';
 
 type WorkEnvironment = 'Office' | 'Field' | 'Factory' | 'Healthcare' | 'Agriculture' | 'Other';
 
@@ -32,6 +36,8 @@ const WORK_ENV_OPTIONS = [
 
 export default function OccupationScreen() {
   const patientId = usePatientId();
+  const { getToken } = useAuth();
+  const { spacing } = useAppTheme();
   const navigation = useNavigation();
   const [saving, setSaving] = useState(false);
   const [envModal, setEnvModal] = useState(false);
@@ -44,7 +50,14 @@ export default function OccupationScreen() {
     db.query.patientOccupation.findFirst({ where: eq(patientOccupation.patientId, patientId) })
       .then((row) => {
         if (row) {
-          reset({ occupation: row.occupation ?? '', employer: row.employer ?? '', industry: row.industry ?? '', workEnvironment: row.workEnvironment ?? '', yearsInOccupation: row.yearsInOccupation?.toString() ?? '', hazardExposure: row.hazardExposure ?? '' });
+          reset({
+            occupation: row.occupation ?? '',
+            employer: row.employer ?? '',
+            industry: row.industry ?? '',
+            workEnvironment: (row.workEnvironment as WorkEnvironment) ?? '',
+            yearsInOccupation: row.yearsInOccupation?.toString() ?? '',
+            hazardExposure: row.hazardExposure ?? '',
+          });
         }
       })
       .catch(console.error);
@@ -59,43 +72,63 @@ export default function OccupationScreen() {
         yearsInOccupation: data.yearsInOccupation ? parseInt(data.yearsInOccupation, 10) : null,
         updatedAt: new Date(),
       };
-      const result = await db.insert(patientOccupation).values({ id: randomUUID(), patientId: patientId, ...payload, createdAt: new Date() }).onConflictDoUpdate({ target: patientOccupation.patientId, set: payload }).returning({ id: patientOccupation.id });
-      const savedId = result[0]?.id ?? patientId;
-      await addToSyncQueue('patient_occupation', savedId, 'update', { ...payload, patientId, id: savedId });
+      await db.insert(patientOccupation).values({
+        id: randomUUID(),
+        patientId,
+        ...payload,
+        createdAt: new Date(),
+      }).onConflictDoUpdate({
+        target: patientOccupation.patientId,
+        set: payload,
+      });
+
+      await flushAndSyncProfile(patientId, getToken);
       reset(data);
-      navigation.goBack();
-    } catch (e) { console.error(e); } finally { setSaving(false); }
+      dialog.alert('Saved', 'Your occupation details have been updated successfully.', [
+        { text: 'OK', onPress: () => navigation.goBack() },
+      ]);
+    } catch (e: any) {
+      console.error(e);
+      dialog.alert('Error', e?.message || 'Failed to save occupation details.');
+    } finally {
+      setSaving(false);
+    }
   });
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <ProfileSectionHeader title="Occupation Details" />
-        <Controller control={control} name="occupation" render={({ field }) => (
-          <ProfileFormField label="Occupation / Job Title" value={field.value} onChangeText={field.onChange} placeholder="e.g. Software Engineer, Nurse" />
-        )} />
-        <Controller control={control} name="employer" render={({ field }) => (
-          <ProfileFormField label="Employer / Company" value={field.value} onChangeText={field.onChange} placeholder="Optional" />
-        )} />
-        <Controller control={control} name="industry" render={({ field }) => (
-          <ProfileFormField label="Industry / Sector" value={field.value} onChangeText={field.onChange} placeholder="e.g. Healthcare, IT, Education" />
-        )} />
+    <Screen width="form" scroll={false} padded={false}>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { padding: spacing.md }]} keyboardShouldPersistTaps="handled">
+          <ProfileSectionHeader title="Occupation Details" />
+          <Controller control={control} name="occupation" render={({ field }) => (
+            <ProfileFormField label="Occupation / Job Title" value={field.value} onChangeText={field.onChange} placeholder="e.g. Software Engineer, Nurse" />
+          )} />
+          <Controller control={control} name="employer" render={({ field }) => (
+            <ProfileFormField label="Employer / Company" value={field.value} onChangeText={field.onChange} placeholder="Optional" />
+          )} />
+          <Controller control={control} name="industry" render={({ field }) => (
+            <ProfileFormField label="Industry / Sector" value={field.value} onChangeText={field.onChange} placeholder="e.g. Healthcare, IT, Education" />
+          )} />
+          <Controller control={control} name="workEnvironment" render={({ field }) => (
+            <ProfileFormField label="Work Environment" value={WORK_ENV_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setEnvModal(true)} placeholder="Select environment" />
+          )} />
+          <Controller control={control} name="yearsInOccupation" render={({ field }) => (
+            <ProfileFormField label="Years in Current Occupation" value={field.value} onChangeText={field.onChange} keyboardType="numeric" placeholder="Optional" />
+          )} />
+          <Controller control={control} name="hazardExposure" render={({ field }) => (
+            <ProfileFormField label="Occupational Hazard Exposure" value={field.value} onChangeText={field.onChange} multiline placeholder="e.g. Chemical exposure, Radiation, Noise" />
+          )} />
+        </ScrollView>
+        <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} />
         <Controller control={control} name="workEnvironment" render={({ field }) => (
-          <ProfileFormField label="Work Environment" value={WORK_ENV_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setEnvModal(true)} placeholder="Select environment" />
+          <ProfileSelectModal visible={envModal} title="Work Environment" options={WORK_ENV_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setEnvModal(false)} />
         )} />
-        <Controller control={control} name="yearsInOccupation" render={({ field }) => (
-          <ProfileFormField label="Years in Current Occupation" value={field.value} onChangeText={field.onChange} keyboardType="numeric" placeholder="Optional" />
-        )} />
-        <Controller control={control} name="hazardExposure" render={({ field }) => (
-          <ProfileFormField label="Occupational Hazard Exposure" value={field.value} onChangeText={field.onChange} multiline placeholder="e.g. Chemical exposure, Radiation, Noise" />
-        )} />
-      </ScrollView>
-      <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} />
-      <Controller control={control} name="workEnvironment" render={({ field }) => (
-        <ProfileSelectModal visible={envModal} title="Work Environment" options={WORK_ENV_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setEnvModal(false)} />
-      )} />
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </Screen>
   );
 }
 
-const styles = StyleSheet.create({ flex: { flex: 1 }, content: { padding: 16, paddingBottom: 24 } });
+const styles = StyleSheet.create({
+  flex: { flex: 1 },
+  content: { paddingBottom: 24 },
+});

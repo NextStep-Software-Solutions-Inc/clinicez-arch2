@@ -25,6 +25,7 @@ export const TABLE_TO_ENTITY_TYPE: Record<string, string> = {
   patient_male_reproductive: 'patient_male_reproductive',
   patient_dental_vision: 'patient_dental_vision',
   patient_mental_health_profile: 'patient_mental_health_profile',
+  patient_ncd_questionnaire: 'patient_ncd_questionnaire',
 };
 
 let globalSyncTrigger: (() => void) | null = null;
@@ -56,7 +57,7 @@ async function handleInterceptWrite(
   const entityType = TABLE_TO_ENTITY_TYPE[tableName];
   if (!entityType) return;
 
-  let entityId = values.id || values.clientId;
+  let entityId = values?.id || values?.clientId;
 
   if (!entityId && condition) {
     entityId = extractIdFromCondition(condition);
@@ -64,9 +65,9 @@ async function handleInterceptWrite(
 
   if (!entityId) {
     if (tableName === 'patients') {
-      entityId = values.id || (condition ? extractIdFromCondition(condition) : null);
+      entityId = values?.id || (condition ? extractIdFromCondition(condition) : null);
     } else {
-      entityId = values.patientId || (condition ? extractIdFromCondition(condition) : null);
+      entityId = values?.patientId || (condition ? extractIdFromCondition(condition) : null);
     }
   }
 
@@ -77,6 +78,7 @@ async function handleInterceptWrite(
 
   try {
     const now = new Date();
+    const effectiveOperation = values?.deletedAt ? 'delete' : operation;
     const syncPayload: Record<string, any> = {
       ...values,
       clientId: entityId,
@@ -84,11 +86,15 @@ async function handleInterceptWrite(
     };
 
     if (tableName === 'patients') {
-      if (values.dob !== undefined && syncPayload.dateOfBirth === undefined) {
+      if (values?.dob !== undefined && syncPayload.dateOfBirth === undefined) {
         syncPayload.dateOfBirth = values.dob;
       }
-      if (values.bloodType !== undefined) {
+      if (values?.bloodType !== undefined) {
         syncPayload.bloodType = toBackendBloodType(values.bloodType);
+      }
+    } else {
+      if (!syncPayload.patientId && values?.patientId) {
+        syncPayload.patientId = values.patientId;
       }
     }
 
@@ -96,15 +102,15 @@ async function handleInterceptWrite(
       id: randomUUID(),
       entityType: entityType as any,
       entityId,
-      operation,
-      payloadJson: JSON.stringify(syncPayload),
+      operation: effectiveOperation,
+      payloadJson: effectiveOperation === 'delete' ? null : JSON.stringify(syncPayload),
       status: 'pending' as const,
       retryCount: 0,
       createdAt: now,
     };
 
     await originalDb.insert(syncQueue).values(syncItem);
-    console.log(`[DB Interceptor] Successfully queued ${operation} for ${entityType} (${entityId})`);
+    console.log(`[DB Interceptor] Successfully queued ${effectiveOperation} for ${entityType} (${entityId})`);
 
     if (globalSyncTrigger) {
       globalSyncTrigger();
@@ -118,7 +124,7 @@ function createQueryProxy(
   originalDb: any,
   builder: any,
   table: any,
-  operation: 'create' | 'update',
+  operation: 'create' | 'update' | 'delete',
   values: any,
   condition?: any
 ): any {
@@ -202,6 +208,21 @@ function wrapInsertBuilder(originalDb: any, builder: any, table: any) {
   });
 }
 
+function wrapDeleteBuilder(originalDb: any, builder: any, table: any) {
+  return new Proxy(builder, {
+    get(target, prop, receiver) {
+      if (prop === 'where') {
+        return function (cond: any) {
+          const nextBuilder = target.where(cond);
+          return createQueryProxy(originalDb, nextBuilder, table, 'delete', {}, cond);
+        };
+      }
+      const val = Reflect.get(target, prop, receiver);
+      return typeof val === 'function' ? val.bind(target) : val;
+    }
+  });
+}
+
 export function createDbWithInterceptor<T extends object>(originalDb: T): T {
   return new Proxy(originalDb, {
     get(target, prop, receiver) {
@@ -215,6 +236,12 @@ export function createDbWithInterceptor<T extends object>(originalDb: T): T {
         return function (table: any) {
           const builder = (target as any).update(table);
           return wrapUpdateBuilder(target, builder, table);
+        };
+      }
+      if (prop === 'delete') {
+        return function (table: any) {
+          const builder = (target as any).delete(table);
+          return wrapDeleteBuilder(target, builder, table);
         };
       }
       return Reflect.get(target, prop, receiver);

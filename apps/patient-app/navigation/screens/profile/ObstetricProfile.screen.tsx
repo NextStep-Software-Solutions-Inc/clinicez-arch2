@@ -20,8 +20,12 @@ import ProfileSaveBar from 'components/profile/ProfileSaveBar';
 import ProfileSelectModal from 'components/profile/ProfileSelectModal';
 import ProfileToggle from 'components/profile/ProfileToggle';
 import ProfileDatePicker from 'components/profile/ProfileDatePicker';
+import Screen from 'components/layout/Screen';
 import { usePatientId } from 'hooks/usePatientId';
-
+import { useAuth } from 'contexts/AuthContext';
+import { useAppTheme } from 'contexts/ThemeContext';
+import { dialog } from '@utils/dialog';
+import { flushAndSyncProfile } from 'services/api/syncService';
 
 // ── Obstetric Profile Form ──────────────────────────────────────────────────
 
@@ -70,7 +74,6 @@ type ContraForm = {
   method: string;
   isCurrent: boolean;
   startDate: string;
-  endDate: string;
   stopReason: string;
 };
 
@@ -91,6 +94,8 @@ const CONTRA_OPTIONS = [
 
 export default function ObstetricProfileScreen() {
   const patientId = usePatientId();
+  const { getToken } = useAuth();
+  const { spacing } = useAppTheme();
   const navigation = useNavigation();
   const [saving, setSaving] = useState(false);
   const [savingPreg, setSavingPreg] = useState(false);
@@ -112,16 +117,25 @@ export default function ObstetricProfileScreen() {
   });
 
   const contraForm = useForm<ContraForm>({
-    defaultValues: { id: null, method: '', isCurrent: false, startDate: '', endDate: '', stopReason: '' },
+    defaultValues: { id: null, method: '', isCurrent: false, startDate: '', stopReason: '' },
   });
 
   const loadPregnancies = async () => {
-    const rows = await db.select().from(patientPregnancies).where(eq(patientPregnancies.patientId, patientId));
-    setPregnancies(rows.filter((r) => !r.deletedAt));
+    try {
+      const rows = await db.select().from(patientPregnancies).where(eq(patientPregnancies.patientId, patientId));
+      setPregnancies(rows.filter((r) => !r.deletedAt));
+    } catch (err) {
+      console.warn('[ObstetricProfileScreen] Failed to load pregnancies:', err);
+    }
   };
+
   const loadContra = async () => {
-    const rows = await db.select().from(patientContraceptiveHistory).where(eq(patientContraceptiveHistory.patientId, patientId));
-    setContraItems(rows.filter((r) => !r.deletedAt));
+    try {
+      const rows = await db.select().from(patientContraceptiveHistory).where(eq(patientContraceptiveHistory.patientId, patientId));
+      setContraItems(rows.filter((r) => !r.deletedAt));
+    } catch (err) {
+      console.warn('[ObstetricProfileScreen] Failed to load contraceptive history:', err);
+    }
   };
 
   useEffect(() => {
@@ -145,112 +159,240 @@ export default function ObstetricProfileScreen() {
       .catch(console.error);
     loadPregnancies();
     loadContra();
-  }, []);
+  }, [patientId]);
 
   const onSaveObs = obsForm.handleSubmit(async (data) => {
     setSaving(true);
     try {
       const payload = {
-        ageAtMenarche: data.menarche ? parseInt(data.menarche) : null,
+        ageAtMenarche: data.menarche ? parseInt(data.menarche, 10) : null,
         lmp: data.lastMenstrualPeriod || null,
-        cycleLength: data.cycleLength ? parseInt(data.cycleLength) : null,
-        cycleDuration: data.cycleDuration ? parseInt(data.cycleDuration) : null,
+        cycleLength: data.cycleLength ? parseInt(data.cycleLength, 10) : null,
+        cycleDuration: data.cycleDuration ? parseInt(data.cycleDuration, 10) : null,
         dysmenorrheaSeverity: (data.dysmenorrhea as 'None' | 'Mild' | 'Moderate' | 'Severe') || null,
-        ageAtMenopause: data.menopauseAge ? parseInt(data.menopauseAge) : null,
-        gravida: data.gravida ? parseInt(data.gravida) : null,
-        para: data.para ? parseInt(data.para) : null,
-        abortion: data.abortion ? parseInt(data.abortion) : null,
-        livingChildren: data.living ? parseInt(data.living) : null,
+        ageAtMenopause: data.menopauseAge ? parseInt(data.menopauseAge, 10) : null,
+        gravida: data.gravida ? parseInt(data.gravida, 10) : null,
+        para: data.para ? parseInt(data.para, 10) : null,
+        abortion: data.abortion ? parseInt(data.abortion, 10) : null,
+        livingChildren: data.living ? parseInt(data.living, 10) : null,
         updatedAt: new Date(),
       };
-      await db.insert(patientObstetricProfile).values({ id: randomUUID(), patientId, ...payload, createdAt: new Date() }).onConflictDoUpdate({ target: patientObstetricProfile.patientId, set: payload });
+      await db.insert(patientObstetricProfile).values({
+        id: randomUUID(), patientId, ...payload, createdAt: new Date()
+      }).onConflictDoUpdate({
+        target: patientObstetricProfile.patientId,
+        set: payload,
+      });
+
+      await flushAndSyncProfile(patientId, getToken);
       obsForm.reset(data);
-    } catch (e) { console.error(e); } finally { setSaving(false); }
+      dialog.alert('Saved', 'Obstetric profile saved successfully.');
+    } catch (e: any) {
+      console.error(e);
+      dialog.alert('Error', e?.message || 'Failed to save obstetric profile.');
+    } finally {
+      setSaving(false);
+    }
   });
 
   const onSavePreg = pregForm.handleSubmit(async (data) => {
     setSavingPreg(true);
     try {
       const { id, ...rest } = data;
-
-      const payload = { ...rest, gestationalWeeks: data.gestationalWeeks ? parseInt(data.gestationalWeeks) : null, year: data.year ? parseInt(data.year) : null };
+      const fields = {
+        year: rest.year ? parseInt(rest.year, 10) : null,
+        outcome: rest.outcome || null,
+        gestationalAgeWeeks: rest.gestationalWeeks ? parseInt(rest.gestationalWeeks, 10) : null,
+        deliveryType: rest.deliveryMode || null,
+        complications: rest.complications.trim() || null,
+        updatedAt: new Date(),
+      };
       if (id) {
-        await db.update(patientPregnancies).set({ ...payload, updatedAt: new Date() }).where(eq(patientPregnancies.id, id));
+        await db.update(patientPregnancies).set(fields).where(eq(patientPregnancies.id, id));
       } else {
-        await db.insert(patientPregnancies).values({ id: randomUUID(), patientId, ...payload, createdAt: new Date(), updatedAt: new Date() });
+        await db.insert(patientPregnancies).values({ id: randomUUID(), patientId, ...fields, createdAt: new Date() });
       }
+      await flushAndSyncProfile(patientId, getToken);
       pregSheetRef.current?.dismiss();
       loadPregnancies();
-    } catch (e) { console.error(e); } finally { setSavingPreg(false); }
+      dialog.alert('Saved', 'Pregnancy record saved successfully.');
+    } catch (e: any) {
+      console.error(e);
+      dialog.alert('Error', e?.message || 'Failed to save pregnancy record.');
+    } finally {
+      setSavingPreg(false);
+    }
   });
+
+  const onDeletePreg = async (id: string, label?: string) => {
+    const confirmed = await dialog.confirm({
+      title: 'Delete Pregnancy Record',
+      message: `Are you sure you want to remove ${label || 'this record'}?`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await db.update(patientPregnancies).set({ deletedAt: new Date() }).where(eq(patientPregnancies.id, id));
+      await flushAndSyncProfile(patientId, getToken);
+      loadPregnancies();
+    } catch (err: any) {
+      dialog.alert('Error', err?.message || 'Failed to delete pregnancy record.');
+    }
+  };
 
   const onSaveContra = contraForm.handleSubmit(async (data) => {
     setSavingContra(true);
     const { id, ...rest } = data;
+    const fields = {
+      method: rest.method,
+      isCurrent: rest.isCurrent,
+      dateStarted: rest.startDate || null,
+      reasonForStopping: rest.stopReason.trim() || null,
+      updatedAt: new Date(),
+    };
     try {
       if (id) {
-        await db.update(patientContraceptiveHistory).set({ ...rest, updatedAt: new Date() }).where(eq(patientContraceptiveHistory.id, id));
+        await db.update(patientContraceptiveHistory).set(fields).where(eq(patientContraceptiveHistory.id, id));
       } else {
-        await db.insert(patientContraceptiveHistory).values({ id: randomUUID(), patientId, ...rest, createdAt: new Date(), updatedAt: new Date() });
+        await db.insert(patientContraceptiveHistory).values({ id: randomUUID(), patientId, ...fields, createdAt: new Date() });
       }
+      await flushAndSyncProfile(patientId, getToken);
       contraSheetRef.current?.dismiss();
       loadContra();
-    } catch (e) { console.error(e); } finally { setSavingContra(false); }
+      dialog.alert('Saved', 'Contraceptive method saved successfully.');
+    } catch (e: any) {
+      console.error(e);
+      dialog.alert('Error', e?.message || 'Failed to save contraceptive method.');
+    } finally {
+      setSavingContra(false);
+    }
   });
+
+  const onDeleteContra = async (id: string, methodName?: string) => {
+    const confirmed = await dialog.confirm({
+      title: 'Delete Contraceptive Record',
+      message: `Are you sure you want to remove ${methodName || 'this method'}?`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await db.update(patientContraceptiveHistory).set({ deletedAt: new Date() }).where(eq(patientContraceptiveHistory.id, id));
+      await flushAndSyncProfile(patientId, getToken);
+      loadContra();
+    } catch (err: any) {
+      dialog.alert('Error', err?.message || 'Failed to delete contraceptive record.');
+    }
+  };
 
   return (
     <BottomSheetModalProvider>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <ProfileSectionHeader title="Menstrual History" />
-          <Controller control={obsForm.control} name="menarche" render={({ field }) => (
-            <ProfileFormField label="Age at Menarche" value={field.value} onChangeText={field.onChange} keyboardType="numeric" placeholder="e.g. 12" />
-          )} />
-          <Controller control={obsForm.control} name="lastMenstrualPeriod" render={({ field }) => (
-            <ProfileDatePicker label="Last Menstrual Period" value={field.value} onChange={field.onChange} />
-          )} />
-          <Controller control={obsForm.control} name="cycleLength" render={({ field }) => (
-            <ProfileFormField label="Cycle Length (days)" value={field.value} onChangeText={field.onChange} keyboardType="numeric" placeholder="e.g. 28" />
-          )} />
-          <Controller control={obsForm.control} name="cycleDuration" render={({ field }) => (
-            <ProfileFormField label="Menstrual Duration (days)" value={field.value} onChangeText={field.onChange} keyboardType="numeric" placeholder="e.g. 5" />
-          )} />
-          <Controller control={obsForm.control} name="dysmenorrhea" render={({ field }) => (
-            <ProfileFormField label="Dysmenorrhea" value={field.value} onChangeText={field.onChange} placeholder="e.g. None, Mild, Severe" />
-          )} />
-          <Controller control={obsForm.control} name="menopauseAge" render={({ field }) => (
-            <ProfileFormField label="Age at Menopause (if applicable)" value={field.value} onChangeText={field.onChange} keyboardType="numeric" placeholder="Optional" />
-          )} />
+      <Screen width="form" scroll={false} padded={false}>
+        <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { padding: spacing.md }]} keyboardShouldPersistTaps="handled">
+            <ProfileSectionHeader title="Menstrual History" />
+            <Controller control={obsForm.control} name="menarche" render={({ field }) => (
+              <ProfileFormField label="Age at Menarche" value={field.value} onChangeText={field.onChange} keyboardType="numeric" placeholder="e.g. 12" />
+            )} />
+            <Controller control={obsForm.control} name="lastMenstrualPeriod" render={({ field }) => (
+              <ProfileDatePicker label="Last Menstrual Period" value={field.value} onChange={field.onChange} />
+            )} />
+            <Controller control={obsForm.control} name="cycleLength" render={({ field }) => (
+              <ProfileFormField label="Cycle Length (days)" value={field.value} onChangeText={field.onChange} keyboardType="numeric" placeholder="e.g. 28" />
+            )} />
+            <Controller control={obsForm.control} name="cycleDuration" render={({ field }) => (
+              <ProfileFormField label="Menstrual Duration (days)" value={field.value} onChangeText={field.onChange} keyboardType="numeric" placeholder="e.g. 5" />
+            )} />
+            <Controller control={obsForm.control} name="dysmenorrhea" render={({ field }) => (
+              <ProfileFormField label="Dysmenorrhea" value={field.value} onChangeText={field.onChange} placeholder="e.g. None, Mild, Severe" />
+            )} />
+            <Controller control={obsForm.control} name="menopauseAge" render={({ field }) => (
+              <ProfileFormField label="Age at Menopause (if applicable)" value={field.value} onChangeText={field.onChange} keyboardType="numeric" placeholder="Optional" />
+            )} />
 
-          <ProfileSectionHeader title="Obstetric Summary (GPAL)" />
-          <Controller control={obsForm.control} name="gravida" render={({ field }) => (
-            <ProfileFormField label="Gravida (G) — Total Pregnancies" value={field.value} onChangeText={field.onChange} keyboardType="numeric" />
-          )} />
-          <Controller control={obsForm.control} name="para" render={({ field }) => (
-            <ProfileFormField label="Para (P) — Live Births" value={field.value} onChangeText={field.onChange} keyboardType="numeric" />
-          )} />
-          <Controller control={obsForm.control} name="abortion" render={({ field }) => (
-            <ProfileFormField label="Abortion (A) — Losses" value={field.value} onChangeText={field.onChange} keyboardType="numeric" />
-          )} />
-          <Controller control={obsForm.control} name="living" render={({ field }) => (
-            <ProfileFormField label="Living Children (L)" value={field.value} onChangeText={field.onChange} keyboardType="numeric" />
-          )} />
+            <ProfileSectionHeader title="Obstetric Summary (GPAL)" />
+            <Controller control={obsForm.control} name="gravida" render={({ field }) => (
+              <ProfileFormField label="Gravida (G) — Total Pregnancies" value={field.value} onChangeText={field.onChange} keyboardType="numeric" />
+            )} />
+            <Controller control={obsForm.control} name="para" render={({ field }) => (
+              <ProfileFormField label="Para (P) — Live Births" value={field.value} onChangeText={field.onChange} keyboardType="numeric" />
+            )} />
+            <Controller control={obsForm.control} name="abortion" render={({ field }) => (
+              <ProfileFormField label="Abortion (A) — Losses" value={field.value} onChangeText={field.onChange} keyboardType="numeric" />
+            )} />
+            <Controller control={obsForm.control} name="living" render={({ field }) => (
+              <ProfileFormField label="Living Children (L)" value={field.value} onChangeText={field.onChange} keyboardType="numeric" />
+            )} />
 
-          <ProfileSaveBar onSave={onSaveObs} saving={saving} isDirty={obsForm.formState.isDirty} label="Save Obstetric Profile" />
+            <ProfileSaveBar onSave={onSaveObs} saving={saving} isDirty={obsForm.formState.isDirty} label="Save Obstetric Profile" />
 
-          <ProfileSectionHeader title="Pregnancy History" />
-          {pregnancies.map((p) => (
-            <ProfileListItemCard key={p.id} title={[OUTCOME_OPTIONS.find(o => o.value === p.outcome)?.label ?? p.outcome, p.year ? `${p.year}` : ''].filter(Boolean).join(' — ')} subtitle={p.deliveryMode} onEdit={() => { pregForm.reset({ id: p.id, year: p.year?.toString() ?? '', outcome: p.outcome ?? '', gestationalWeeks: p.gestationalWeeks?.toString() ?? '', deliveryMode: p.deliveryMode ?? '', complications: p.complications ?? '' }); pregSheetRef.current?.present(); }} onDelete={async () => { await db.update(patientPregnancies).set({ deletedAt: new Date() }).where(eq(patientPregnancies.id, p.id)); loadPregnancies(); }} />
-          ))}
-          <ProfileAddButton label="Add Pregnancy" onPress={() => { pregForm.reset({ id: null, year: '', outcome: '', gestationalWeeks: '', deliveryMode: '', complications: '' }); pregSheetRef.current?.present(); }} />
+            <ProfileSectionHeader title="Pregnancy History" />
+            {pregnancies.map((p) => {
+              const outcomeLabel = OUTCOME_OPTIONS.find(o => o.value === p.outcome)?.label ?? p.outcome;
+              const deliveryLabel = DELIVERY_OPTIONS.find(o => o.value === p.deliveryType)?.label ?? p.deliveryType;
+              const cardTitle = [outcomeLabel, p.year ? `${p.year}` : ''].filter(Boolean).join(' — ');
+              return (
+                <ProfileListItemCard
+                  key={p.id}
+                  title={cardTitle}
+                  subtitle={deliveryLabel}
+                  onEdit={() => {
+                    pregForm.reset({
+                      id: p.id,
+                      year: p.year?.toString() ?? '',
+                      outcome: p.outcome ?? '',
+                      gestationalWeeks: p.gestationalAgeWeeks?.toString() ?? '',
+                      deliveryMode: p.deliveryType ?? '',
+                      complications: p.complications ?? '',
+                    });
+                    pregSheetRef.current?.present();
+                  }}
+                  onDelete={() => onDeletePreg(p.id, cardTitle)}
+                />
+              );
+            })}
+            <ProfileAddButton
+              label="Add Pregnancy"
+              onPress={() => {
+                pregForm.reset({ id: null, year: '', outcome: '', gestationalWeeks: '', deliveryMode: '', complications: '' });
+                pregSheetRef.current?.present();
+              }}
+            />
 
-          <ProfileSectionHeader title="Contraceptive History" />
-          {contraItems.map((c) => (
-            <ProfileListItemCard key={c.id} title={CONTRA_OPTIONS.find(o => o.value === c.method)?.label ?? c.method} badge={c.isCurrent ? 'Current' : 'Past'} onEdit={() => { contraForm.reset({ id: c.id, method: c.method ?? '', isCurrent: c.isCurrent ?? false, startDate: c.startDate ?? '', endDate: c.endDate ?? '', stopReason: c.stopReason ?? '' }); contraSheetRef.current?.present(); }} onDelete={async () => { await db.update(patientContraceptiveHistory).set({ deletedAt: new Date() }).where(eq(patientContraceptiveHistory.id, c.id)); loadContra(); }} />
-          ))}
-          <ProfileAddButton label="Add Contraceptive Method" onPress={() => { contraForm.reset({ id: null, method: '', isCurrent: false, startDate: '', endDate: '', stopReason: '' }); contraSheetRef.current?.present(); }} />
-        </ScrollView>
-      </KeyboardAvoidingView>
+            <ProfileSectionHeader title="Contraceptive History" />
+            {contraItems.map((c) => {
+              const methodLabel = CONTRA_OPTIONS.find(o => o.value === c.method)?.label ?? c.method;
+              return (
+                <ProfileListItemCard
+                  key={c.id}
+                  title={methodLabel}
+                  badge={c.isCurrent ? 'Current' : 'Past'}
+                  subtitle={c.dateStarted ? `Started: ${c.dateStarted}` : undefined}
+                  onEdit={() => {
+                    contraForm.reset({
+                      id: c.id,
+                      method: c.method ?? '',
+                      isCurrent: Boolean(c.isCurrent),
+                      startDate: c.dateStarted ?? '',
+                      stopReason: c.reasonForStopping ?? '',
+                    });
+                    contraSheetRef.current?.present();
+                  }}
+                  onDelete={() => onDeleteContra(c.id, methodLabel)}
+                />
+              );
+            })}
+            <ProfileAddButton
+              label="Add Contraceptive Method"
+              onPress={() => {
+                contraForm.reset({ id: null, method: '', isCurrent: false, startDate: '', stopReason: '' });
+                contraSheetRef.current?.present();
+              }}
+            />
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Screen>
 
       {/* Pregnancy Sheet */}
       <ThemedBottomSheetModal ref={pregSheetRef} snapPoints={['55%', '80%']} enablePanDownToClose keyboardBehavior="interactive" keyboardBlurBehavior="restore">
@@ -294,9 +436,6 @@ export default function ObstetricProfileScreen() {
           <Controller control={contraForm.control} name="startDate" render={({ field }) => (
             <ProfileDatePicker label="Start Date" value={field.value} onChange={field.onChange} />
           )} />
-          <Controller control={contraForm.control} name="endDate" render={({ field }) => (
-            <ProfileDatePicker label="End Date" value={field.value} onChange={field.onChange} />
-          )} />
           <Controller control={contraForm.control} name="stopReason" render={({ field }) => (
             <ProfileFormField label="Reason for Stopping" value={field.value} onChangeText={field.onChange} multiline placeholder="Optional" />
           )} />
@@ -312,6 +451,6 @@ export default function ObstetricProfileScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  content: { padding: 16, paddingBottom: 40 },
+  content: { paddingBottom: 40 },
   sheetContent: { padding: 16, paddingBottom: 16 },
 });

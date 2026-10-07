@@ -15,53 +15,100 @@ import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
 import ProfileSaveBar from 'components/profile/ProfileSaveBar';
 import { randomUUID } from 'expo-crypto';
 import { usePatientId } from 'hooks/usePatientId';
+import { useAuth } from 'contexts/AuthContext';
+import { useAppTheme } from 'contexts/ThemeContext';
+import { dialog } from '@utils/dialog';
+import { flushAndSyncProfile } from 'services/api/syncService';
 
 type Form = { id: string | null; diagnosis: string; duration: string; complications: string; };
 const EMPTY: Form = { id: null, diagnosis: '', duration: '', complications: '' };
 
 export default function PastIllnessesScreen() {
   const patientId = usePatientId();
+  const { getToken } = useAuth();
+  const { spacing } = useAppTheme();
   const [items, setItems] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const sheetRef = useRef<BottomSheetModalType>(null);
   const { control, handleSubmit, reset, formState: { isDirty } } = useForm<Form>({ defaultValues: EMPTY });
 
   const load = async () => {
-    const rows = await db.select().from(patientPastIllnesses).where(eq(patientPastIllnesses.patientId, patientId));
-    setItems(rows.filter((r) => !r.deletedAt));
+    try {
+      const rows = await db.select().from(patientPastIllnesses).where(eq(patientPastIllnesses.patientId, patientId));
+      setItems(rows.filter((r) => !r.deletedAt));
+    } catch (err) {
+      console.warn('[PastIllnessesScreen] Failed to load illnesses:', err);
+    }
   };
-  useEffect(() => { load(); }, []);
+
+  useEffect(() => { load(); }, [patientId]);
 
   const openEdit = (row: any) => {
-    reset({ id: row.id, diagnosis: row.diagnosis ?? '', duration: row.duration ?? '', complications: row.complications ?? '' });
+    reset({
+      id: row.id,
+      diagnosis: row.diagnosis ?? '',
+      duration: row.duration ?? '',
+      complications: row.complications ?? '',
+    });
     sheetRef.current?.present();
   };
 
-  const onDelete = async (id: string) => {
-    await db.update(patientPastIllnesses).set({ deletedAt: new Date() }).where(eq(patientPastIllnesses.id, id));
-    load();
+  const onDelete = async (id: string, diagnosisName?: string) => {
+    const confirmed = await dialog.confirm({
+      title: 'Delete Illness',
+      message: `Are you sure you want to remove ${diagnosisName || 'this illness'}?`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await db.update(patientPastIllnesses).set({ deletedAt: new Date() }).where(eq(patientPastIllnesses.id, id));
+      await flushAndSyncProfile(patientId, getToken);
+      load();
+    } catch (err: any) {
+      dialog.alert('Error', err?.message || 'Failed to delete illness.');
+    }
   };
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
     const { id, ...rest } = data;
+    const fields = {
+      diagnosis: rest.diagnosis.trim(),
+      duration: rest.duration.trim() || null,
+      complications: rest.complications.trim() || null,
+      updatedAt: new Date(),
+    };
     try {
       if (id) {
-        await db.update(patientPastIllnesses).set({ ...rest, updatedAt: new Date() }).where(eq(patientPastIllnesses.id, id));
+        await db.update(patientPastIllnesses).set(fields).where(eq(patientPastIllnesses.id, id));
       } else {
-        await db.insert(patientPastIllnesses).values({ id: randomUUID(), patientId, ...rest, createdAt: new Date(), updatedAt: new Date() });
+        await db.insert(patientPastIllnesses).values({ id: randomUUID(), patientId, ...fields, createdAt: new Date() });
       }
+      await flushAndSyncProfile(patientId, getToken);
       sheetRef.current?.dismiss();
       load();
-    } catch (e) { console.error(e); } finally { setSaving(false); }
+      dialog.alert('Saved', 'Past illness saved successfully.');
+    } catch (e: any) {
+      console.error(e);
+      dialog.alert('Error', e?.message || 'Failed to save illness.');
+    } finally {
+      setSaving(false);
+    }
   });
 
   return (
     <BottomSheetModalProvider>
-      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
+      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { padding: spacing.md }]}>
         <ProfileSectionHeader title="Past Illnesses" description="Record previous diagnoses and illnesses." />
         {items.map((item) => (
-          <ProfileListItemCard key={item.id} title={item.diagnosis} subtitle={item.duration} onEdit={() => openEdit(item)} onDelete={() => onDelete(item.id)} />
+          <ProfileListItemCard
+            key={item.id}
+            title={item.diagnosis}
+            subtitle={item.duration}
+            onEdit={() => openEdit(item)}
+            onDelete={() => onDelete(item.id, item.diagnosis)}
+          />
         ))}
         <ProfileAddButton label="Add Illness" onPress={() => { reset(EMPTY); sheetRef.current?.present(); }} />
       </ScrollView>
@@ -86,6 +133,6 @@ export default function PastIllnessesScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 16, paddingBottom: 40 },
+  content: { paddingBottom: 40 },
   sheetContent: { padding: 16, paddingBottom: 16 },
 });

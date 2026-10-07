@@ -16,57 +16,104 @@ import ProfileSaveBar from 'components/profile/ProfileSaveBar';
 import ProfileDatePicker from 'components/profile/ProfileDatePicker';
 import { randomUUID } from 'expo-crypto';
 import { usePatientId } from 'hooks/usePatientId';
-import { addToSyncQueue } from 'services/api/syncService';
+import { useAuth } from 'contexts/AuthContext';
+import { useAppTheme } from 'contexts/ThemeContext';
+import { dialog } from '@utils/dialog';
+import { flushAndSyncProfile } from 'services/api/syncService';
 
 type Form = { id: string | null; vaccineName: string; doseNumber: string; lotNumber: string; date: string; administeredBy: string; };
 const EMPTY: Form = { id: null, vaccineName: '', doseNumber: '', lotNumber: '', date: '', administeredBy: '' };
 
 export default function ImmunizationsSelfScreen() {
   const patientId = usePatientId();
+  const { getToken } = useAuth();
+  const { spacing } = useAppTheme();
   const [items, setItems] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const sheetRef = useRef<BottomSheetModalType>(null);
   const { control, handleSubmit, reset, formState: { isDirty } } = useForm<Form>({ defaultValues: EMPTY });
 
   const load = async () => {
-    const rows = await db.select().from(patientImmunizationsSelf).where(eq(patientImmunizationsSelf.patientId, patientId));
-    setItems(rows.filter((r) => !r.deletedAt));
+    try {
+      const rows = await db.select().from(patientImmunizationsSelf).where(eq(patientImmunizationsSelf.patientId, patientId));
+      setItems(rows.filter((r) => !r.deletedAt));
+    } catch (err) {
+      console.warn('[ImmunizationsSelfScreen] Failed to load immunizations:', err);
+    }
   };
-  useEffect(() => { load(); }, []);
+
+  useEffect(() => { load(); }, [patientId]);
 
   const openEdit = (row: any) => {
-    reset({ id: row.id, vaccineName: row.vaccineName ?? '', doseNumber: row.doseNumber ?? '', lotNumber: row.lotNumber ?? '', date: row.date ?? '', administeredBy: row.administeredBy ?? '' });
+    reset({
+      id: row.id,
+      vaccineName: row.vaccineName ?? '',
+      doseNumber: row.doseNumber?.toString() ?? '',
+      lotNumber: row.lotNumber ?? '',
+      date: row.date ?? '',
+      administeredBy: row.administeredBy ?? '',
+    });
     sheetRef.current?.present();
   };
 
-  const onDelete = async (id: string) => {
-    await db.update(patientImmunizationsSelf).set({ deletedAt: new Date() }).where(eq(patientImmunizationsSelf.id, id));
-    load();
+  const onDelete = async (id: string, vaccineName?: string) => {
+    const confirmed = await dialog.confirm({
+      title: 'Delete Immunization',
+      message: `Are you sure you want to remove ${vaccineName || 'this record'}?`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await db.update(patientImmunizationsSelf).set({ deletedAt: new Date() }).where(eq(patientImmunizationsSelf.id, id));
+      await flushAndSyncProfile(patientId, getToken);
+      load();
+    } catch (err: any) {
+      dialog.alert('Error', err?.message || 'Failed to delete immunization record.');
+    }
   };
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
     const { id, ...rest } = data;
+    const fields = {
+      vaccineName: rest.vaccineName.trim(),
+      doseNumber: rest.doseNumber.trim() || null,
+      lotNumber: rest.lotNumber.trim() || null,
+      date: rest.date || null,
+      administeredBy: rest.administeredBy.trim() || null,
+      updatedAt: new Date(),
+    };
     try {
       if (id) {
-        await db.update(patientImmunizationsSelf).set({ ...rest, updatedAt: new Date() }).where(eq(patientImmunizationsSelf.id, id));
-        await addToSyncQueue('patient_immunizations_self', id, 'update', { ...rest, patientId, id });
+        await db.update(patientImmunizationsSelf).set(fields).where(eq(patientImmunizationsSelf.id, id));
       } else {
-        const newId = randomUUID();
-        await db.insert(patientImmunizationsSelf).values({ id: newId, patientId, ...rest, createdAt: new Date(), updatedAt: new Date() });
-        await addToSyncQueue('patient_immunizations_self', newId, 'create', { ...rest, patientId, id: newId });
+        await db.insert(patientImmunizationsSelf).values({ id: randomUUID(), patientId, ...fields, createdAt: new Date() });
       }
+      await flushAndSyncProfile(patientId, getToken);
       sheetRef.current?.dismiss();
       load();
-    } catch (e) { console.error(e); } finally { setSaving(false); }
+      dialog.alert('Saved', 'Immunization record saved successfully.');
+    } catch (e: any) {
+      console.error(e);
+      dialog.alert('Error', e?.message || 'Failed to save immunization record.');
+    } finally {
+      setSaving(false);
+    }
   });
 
   return (
     <BottomSheetModalProvider>
-      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
+      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { padding: spacing.md }]}>
         <ProfileSectionHeader title="Self-Reported Immunizations" description="Vaccines you have received, reported by you." />
         {items.map((item) => (
-          <ProfileListItemCard key={item.id} title={item.vaccineName} subtitle={[item.doseNumber ? `Dose ${item.doseNumber}` : '', item.date].filter(Boolean).join(' · ')} onEdit={() => openEdit(item)} onDelete={() => onDelete(item.id)} />
+          <ProfileListItemCard
+            key={item.id}
+            title={item.vaccineName}
+            subtitle={[item.doseNumber ? `Dose ${item.doseNumber}` : '', item.date].filter(Boolean).join(' · ')}
+            onEdit={() => openEdit(item)}
+            onDelete={() => onDelete(item.id, item.vaccineName)}
+          />
         ))}
         <ProfileAddButton label="Add Vaccine" onPress={() => { reset(EMPTY); sheetRef.current?.present(); }} />
       </ScrollView>
@@ -97,6 +144,6 @@ export default function ImmunizationsSelfScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 16, paddingBottom: 40 },
+  content: { paddingBottom: 40 },
   sheetContent: { padding: 16, paddingBottom: 16 },
 });

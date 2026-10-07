@@ -10,8 +10,12 @@ import ProfileFormField from 'components/profile/ProfileFormField';
 import ProfileSelectModal from 'components/profile/ProfileSelectModal';
 import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
 import ProfileSaveBar from 'components/profile/ProfileSaveBar';
+import Screen from 'components/layout/Screen';
 import { usePatientId } from 'hooks/usePatientId';
-import { addToSyncQueue } from 'services/api/syncService';
+import { useAuth } from 'contexts/AuthContext';
+import { useAppTheme } from 'contexts/ThemeContext';
+import { dialog } from '@utils/dialog';
+import { flushAndSyncProfile } from 'services/api/syncService';
 
 type CorrectiveLenses = 'None' | 'Glasses' | 'Contacts' | 'Both';
 
@@ -32,6 +36,8 @@ const LENSES_OPTIONS = [
 
 export default function DentalVisionScreen() {
   const patientId = usePatientId();
+  const { getToken } = useAuth();
+  const { spacing } = useAppTheme();
   const navigation = useNavigation();
   const [saving, setSaving] = useState(false);
   const [lensesModal, setLensesModal] = useState(false);
@@ -49,7 +55,7 @@ export default function DentalVisionScreen() {
             dentistClinic: row.dentistClinic ?? '',
             orthodonticDevice: row.orthodonticDevice ?? '',
             eyeDoctorName: row.eyeDoctorName ?? '',
-            correctiveLenses: row.correctiveLenses ?? '',
+            correctiveLenses: (row.correctiveLenses as CorrectiveLenses) ?? '',
           });
         }
       })
@@ -60,52 +66,65 @@ export default function DentalVisionScreen() {
     setSaving(true);
     try {
       const payload = {
-        ...data,
+        dentistName: data.dentistName.trim() || null,
+        dentistClinic: data.dentistClinic.trim() || null,
+        orthodonticDevice: data.orthodonticDevice.trim() || null,
+        eyeDoctorName: data.eyeDoctorName.trim() || null,
         correctiveLenses: data.correctiveLenses || null,
         updatedAt: new Date(),
       };
 
-      const result = await db
+      await db
         .insert(patientDentalVision)
         .values({ id: randomUUID(), patientId, ...payload, createdAt: new Date() })
-        .onConflictDoUpdate({ target: patientDentalVision.patientId, set: payload })
-        .returning({ id: patientDentalVision.id });
-      const savedId = result[0]?.id ?? patientId;
-      await addToSyncQueue('patient_dental_vision', savedId, 'update', { ...payload, patientId, id: savedId });
+        .onConflictDoUpdate({ target: patientDentalVision.patientId, set: payload });
 
+      await flushAndSyncProfile(patientId, getToken);
       reset(data);
-      navigation.goBack();
-    } catch (e) { console.error(e); } finally { setSaving(false); }
+      dialog.alert('Saved', 'Your dental & vision record has been updated successfully.', [
+        { text: 'OK', onPress: () => navigation.goBack() },
+      ]);
+    } catch (e: any) {
+      console.error(e);
+      dialog.alert('Error', e?.message || 'Failed to save dental & vision record.');
+    } finally {
+      setSaving(false);
+    }
   });
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <ProfileSectionHeader title="Dental Health" />
-        <Controller control={control} name="dentistName" render={({ field }) => (
-          <ProfileFormField label="Dentist Name" value={field.value} onChangeText={field.onChange} placeholder="Optional" />
-        )} />
-        <Controller control={control} name="dentistClinic" render={({ field }) => (
-          <ProfileFormField label="Dental Clinic" value={field.value} onChangeText={field.onChange} placeholder="Optional" />
-        )} />
-        <Controller control={control} name="orthodonticDevice" render={({ field }) => (
-          <ProfileFormField label="Orthodontic Device / Appliance" value={field.value} onChangeText={field.onChange} placeholder="e.g. Braces, Retainer, Dentures" />
-        )} />
+    <Screen width="form" scroll={false} padded={false}>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { padding: spacing.md }]} keyboardShouldPersistTaps="handled">
+          <ProfileSectionHeader title="Dental Health" />
+          <Controller control={control} name="dentistName" render={({ field }) => (
+            <ProfileFormField label="Dentist Name" value={field.value} onChangeText={field.onChange} placeholder="Optional" />
+          )} />
+          <Controller control={control} name="dentistClinic" render={({ field }) => (
+            <ProfileFormField label="Dental Clinic" value={field.value} onChangeText={field.onChange} placeholder="Optional" />
+          )} />
+          <Controller control={control} name="orthodonticDevice" render={({ field }) => (
+            <ProfileFormField label="Orthodontic Device / Appliance" value={field.value} onChangeText={field.onChange} placeholder="e.g. Braces, Retainer, Dentures" />
+          )} />
 
-        <ProfileSectionHeader title="Vision Health" />
-        <Controller control={control} name="eyeDoctorName" render={({ field }) => (
-          <ProfileFormField label="Eye Doctor / Ophthalmologist" value={field.value} onChangeText={field.onChange} placeholder="Optional" />
-        )} />
+          <ProfileSectionHeader title="Vision Health" />
+          <Controller control={control} name="eyeDoctorName" render={({ field }) => (
+            <ProfileFormField label="Eye Doctor / Ophthalmologist" value={field.value} onChangeText={field.onChange} placeholder="Optional" />
+          )} />
+          <Controller control={control} name="correctiveLenses" render={({ field }) => (
+            <ProfileFormField label="Corrective Lenses" value={LENSES_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setLensesModal(true)} placeholder="Select option" />
+          )} />
+        </ScrollView>
+        <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} />
         <Controller control={control} name="correctiveLenses" render={({ field }) => (
-          <ProfileFormField label="Corrective Lenses" value={LENSES_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setLensesModal(true)} placeholder="Select option" />
+          <ProfileSelectModal visible={lensesModal} title="Corrective Lenses" options={LENSES_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setLensesModal(false)} />
         )} />
-      </ScrollView>
-      <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} />
-      <Controller control={control} name="correctiveLenses" render={({ field }) => (
-        <ProfileSelectModal visible={lensesModal} title="Corrective Lenses" options={LENSES_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setLensesModal(false)} />
-      )} />
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </Screen>
   );
 }
 
-const styles = StyleSheet.create({ flex: { flex: 1 }, content: { padding: 16, paddingBottom: 24 } });
+const styles = StyleSheet.create({
+  flex: { flex: 1 },
+  content: { paddingBottom: 24 },
+});

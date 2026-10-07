@@ -16,58 +16,106 @@ import ProfileSaveBar from 'components/profile/ProfileSaveBar';
 import ProfileDatePicker from 'components/profile/ProfileDatePicker';
 import { randomUUID } from 'expo-crypto';
 import { usePatientId } from 'hooks/usePatientId';
-import { addToSyncQueue } from 'services/api/syncService';
+import { useAuth } from 'contexts/AuthContext';
+import { useAppTheme } from 'contexts/ThemeContext';
+import { dialog } from '@utils/dialog';
+import { flushAndSyncProfile } from 'services/api/syncService';
 
-// Form uses DB schema field names exactly: destination, cityProvince, departureDate, returnDate, purpose, illnessDuringAfterTravel
 type Form = { id: string | null; destination: string; cityProvince: string; departureDate: string; returnDate: string; purpose: string; illnessDuringAfterTravel: string; };
 const EMPTY: Form = { id: null, destination: '', cityProvince: '', departureDate: '', returnDate: '', purpose: '', illnessDuringAfterTravel: '' };
 
 export default function TravelHistoryScreen() {
   const patientId = usePatientId();
+  const { getToken } = useAuth();
+  const { spacing } = useAppTheme();
   const [items, setItems] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const sheetRef = useRef<BottomSheetModalType>(null);
   const { control, handleSubmit, reset, formState: { isDirty } } = useForm<Form>({ defaultValues: EMPTY });
 
   const load = async () => {
-    const rows = await db.select().from(patientTravelHistory).where(eq(patientTravelHistory.patientId, patientId));
-    setItems(rows.filter((r) => !r.deletedAt));
+    try {
+      const rows = await db.select().from(patientTravelHistory).where(eq(patientTravelHistory.patientId, patientId));
+      setItems(rows.filter((r) => !r.deletedAt));
+    } catch (err) {
+      console.warn('[TravelHistoryScreen] Failed to load travel history:', err);
+    }
   };
-  useEffect(() => { load(); }, []);
+
+  useEffect(() => { load(); }, [patientId]);
 
   const openEdit = (row: any) => {
-    reset({ id: row.id, destination: row.destination ?? '', cityProvince: row.cityProvince ?? '', departureDate: row.departureDate ?? '', returnDate: row.returnDate ?? '', purpose: row.purpose ?? '', illnessDuringAfterTravel: row.illnessDuringAfterTravel ?? '' });
+    reset({
+      id: row.id,
+      destination: row.destination ?? '',
+      cityProvince: row.cityProvince ?? '',
+      departureDate: row.departureDate ?? '',
+      returnDate: row.returnDate ?? '',
+      purpose: row.purpose ?? '',
+      illnessDuringAfterTravel: row.illnessDuringAfterTravel ?? '',
+    });
     sheetRef.current?.present();
   };
 
-  const onDelete = async (id: string) => {
-    await db.update(patientTravelHistory).set({ deletedAt: new Date() }).where(eq(patientTravelHistory.id, id));
-    load();
+  const onDelete = async (id: string, destinationName?: string) => {
+    const confirmed = await dialog.confirm({
+      title: 'Delete Travel Record',
+      message: `Are you sure you want to remove ${destinationName || 'this trip'}?`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await db.update(patientTravelHistory).set({ deletedAt: new Date() }).where(eq(patientTravelHistory.id, id));
+      await flushAndSyncProfile(patientId, getToken);
+      load();
+    } catch (err: any) {
+      dialog.alert('Error', err?.message || 'Failed to delete travel record.');
+    }
   };
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
     const { id, ...rest } = data;
+    const fields = {
+      destination: rest.destination.trim(),
+      cityProvince: rest.cityProvince.trim() || null,
+      departureDate: rest.departureDate || null,
+      returnDate: rest.returnDate || null,
+      purpose: (rest.purpose.trim() as any) || 'Other',
+      illnessDuringAfterTravel: rest.illnessDuringAfterTravel.trim() || null,
+      updatedAt: new Date(),
+    };
     try {
       if (id) {
-        await db.update(patientTravelHistory).set({ ...rest, purpose: (rest.purpose as any) || 'Other', updatedAt: new Date() }).where(eq(patientTravelHistory.id, id));
-        await addToSyncQueue('patient_travel_history', id, 'update', { ...rest, purpose: (rest.purpose as any) || 'Other', patientId, id });
+        await db.update(patientTravelHistory).set(fields).where(eq(patientTravelHistory.id, id));
       } else {
-        const newId = randomUUID();
-        await db.insert(patientTravelHistory).values({ id: newId, patientId, ...rest, purpose: (rest.purpose as any) || 'Other', createdAt: new Date(), updatedAt: new Date() });
-        await addToSyncQueue('patient_travel_history', newId, 'create', { ...rest, purpose: (rest.purpose as any) || 'Other', patientId, id: newId });
+        await db.insert(patientTravelHistory).values({ id: randomUUID(), patientId, ...fields, createdAt: new Date() });
       }
+      await flushAndSyncProfile(patientId, getToken);
       sheetRef.current?.dismiss();
       load();
-    } catch (e) { console.error(e); } finally { setSaving(false); }
+      dialog.alert('Saved', 'Travel record saved successfully.');
+    } catch (e: any) {
+      console.error(e);
+      dialog.alert('Error', e?.message || 'Failed to save travel record.');
+    } finally {
+      setSaving(false);
+    }
   });
 
   return (
     <BottomSheetModalProvider>
-      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
+      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { padding: spacing.md }]}>
         <ProfileSectionHeader title="Travel History" description="Recent international or domestic travel." />
         {items.map((item) => (
-          <ProfileListItemCard key={item.id} title={[item.destination, item.country].filter(Boolean).join(', ')} subtitle={[item.departureDate, item.returnDate].filter(Boolean).join(' – ')} onEdit={() => openEdit(item)} onDelete={() => onDelete(item.id)} />
+          <ProfileListItemCard
+            key={item.id}
+            title={[item.destination, item.cityProvince].filter(Boolean).join(', ')}
+            subtitle={[item.departureDate, item.returnDate].filter(Boolean).join(' – ')}
+            onEdit={() => openEdit(item)}
+            onDelete={() => onDelete(item.id, item.destination)}
+          />
         ))}
         <ProfileAddButton label="Add Trip" onPress={() => { reset(EMPTY); sheetRef.current?.present(); }} />
       </ScrollView>
@@ -90,7 +138,6 @@ export default function TravelHistoryScreen() {
           <Controller control={control} name="purpose" render={({ field }) => (
             <ProfileFormField label="Purpose" value={field.value} onChangeText={field.onChange} placeholder="e.g. Tourism, Business" />
           )} />
-
           <Controller control={control} name="illnessDuringAfterTravel" render={({ field }) => (
             <ProfileFormField label="Health Issues During Travel" value={field.value} onChangeText={field.onChange} multiline placeholder="None, or describe" />
           )} />
@@ -102,6 +149,6 @@ export default function TravelHistoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 16, paddingBottom: 40 },
+  content: { paddingBottom: 40 },
   sheetContent: { padding: 16, paddingBottom: 16 },
 });

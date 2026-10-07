@@ -16,6 +16,10 @@ import ProfileSelectModal from 'components/profile/ProfileSelectModal';
 import ProfileToggle from 'components/profile/ProfileToggle';
 import { randomUUID } from 'expo-crypto';
 import { usePatientId } from 'hooks/usePatientId';
+import { useAuth } from 'contexts/AuthContext';
+import { useAppTheme } from 'contexts/ThemeContext';
+import { dialog } from '@utils/dialog';
+import { flushAndSyncProfile } from 'services/api/syncService';
 import ThemedBottomSheetModal from '@ui/ThemedBottomSheetModal';
 
 type FamilySide = 'Paternal' | 'Maternal' | 'Both' | 'Unknown';
@@ -42,6 +46,8 @@ const SIDE_OPTIONS = [
 
 export default function FamilyHistoryScreen() {
   const patientId = usePatientId();
+  const { getToken } = useAuth();
+  const { spacing } = useAppTheme();
   const [items, setItems] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const [sideModal, setSideModal] = useState(false);
@@ -50,47 +56,92 @@ export default function FamilyHistoryScreen() {
   const isDeceased = watch('isDeceased');
 
   const load = async () => {
-    const rows = await db.select().from(patientFamilyHistory).where(eq(patientFamilyHistory.patientId, patientId));
-    setItems(rows.filter((r) => !r.deletedAt));
+    try {
+      const rows = await db.select().from(patientFamilyHistory).where(eq(patientFamilyHistory.patientId, patientId));
+      setItems(rows.filter((r) => !r.deletedAt));
+    } catch (err) {
+      console.warn('[FamilyHistoryScreen] Failed to load family history:', err);
+    }
   };
+
   useEffect(() => { load(); }, [patientId]);
 
   const openEdit = (row: any) => {
-    reset({ id: row.id, condition: row.condition ?? '', affectedRelative: row.affectedRelative ?? '', side: row.side ?? '', ageOfOnset: row.ageOfOnset?.toString() ?? '', isDeceased: row.isDeceased ?? false, ageAtDeath: row.ageAtDeath?.toString() ?? '', causeOfDeath: row.causeOfDeath ?? '', notes: row.notes ?? '' });
+    reset({
+      id: row.id,
+      condition: row.condition ?? '',
+      affectedRelative: row.affectedRelative ?? '',
+      side: (row.side as FamilySide) ?? '',
+      ageOfOnset: row.ageOfOnset?.toString() ?? '',
+      isDeceased: row.isDeceased ?? false,
+      ageAtDeath: row.ageAtDeath?.toString() ?? '',
+      causeOfDeath: row.causeOfDeath ?? '',
+      notes: row.notes ?? '',
+    });
     sheetRef.current?.present();
   };
 
-  const onDelete = async (id: string) => {
-    await db.update(patientFamilyHistory).set({ deletedAt: new Date() }).where(eq(patientFamilyHistory.id, id));
-    load();
+  const onDelete = async (id: string, conditionName?: string) => {
+    const confirmed = await dialog.confirm({
+      title: 'Delete Family Condition',
+      message: `Are you sure you want to remove ${conditionName || 'this record'}?`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await db.update(patientFamilyHistory).set({ deletedAt: new Date() }).where(eq(patientFamilyHistory.id, id));
+      await flushAndSyncProfile(patientId, getToken);
+      load();
+    } catch (err: any) {
+      dialog.alert('Error', err?.message || 'Failed to delete record.');
+    }
   };
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
     const { id, ...rest } = data;
+    const fields = {
+      condition: rest.condition.trim(),
+      affectedRelative: rest.affectedRelative.trim() || null,
+      side: rest.side || null,
+      ageOfOnset: data.ageOfOnset ? parseInt(data.ageOfOnset, 10) : null,
+      isDeceased: rest.isDeceased,
+      ageAtDeath: data.ageAtDeath ? parseInt(data.ageAtDeath, 10) : null,
+      causeOfDeath: rest.causeOfDeath.trim() || null,
+      notes: rest.notes.trim() || null,
+      updatedAt: new Date(),
+    };
     try {
-      const payload = {
-        ...rest,
-        side: rest.side || null,
-        ageOfOnset: data.ageOfOnset ? parseInt(data.ageOfOnset, 10) : null,
-        ageAtDeath: data.ageAtDeath ? parseInt(data.ageAtDeath, 10) : null,
-      };
       if (id) {
-        await db.update(patientFamilyHistory).set({ ...payload, updatedAt: new Date() }).where(eq(patientFamilyHistory.id, id));
+        await db.update(patientFamilyHistory).set(fields).where(eq(patientFamilyHistory.id, id));
       } else {
-        await db.insert(patientFamilyHistory).values({ id: randomUUID(), patientId, ...payload, createdAt: new Date(), updatedAt: new Date() });
+        await db.insert(patientFamilyHistory).values({ id: randomUUID(), patientId, ...fields, createdAt: new Date() });
       }
+      await flushAndSyncProfile(patientId, getToken);
       sheetRef.current?.dismiss();
       load();
-    } catch (e) { console.error(e); } finally { setSaving(false); }
+      dialog.alert('Saved', 'Family health condition saved successfully.');
+    } catch (e: any) {
+      console.error(e);
+      dialog.alert('Error', e?.message || 'Failed to save record.');
+    } finally {
+      setSaving(false);
+    }
   });
 
   return (
     <BottomSheetModalProvider>
-      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
+      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { padding: spacing.md }]}>
         <ProfileSectionHeader title="Family Health History" description="Hereditary conditions in your immediate family." />
         {items.map((item) => (
-          <ProfileListItemCard key={item.id} title={item.condition} subtitle={[item.affectedRelative, item.side].filter(Boolean).join(' · ')} onEdit={() => openEdit(item)} onDelete={() => onDelete(item.id)} />
+          <ProfileListItemCard
+            key={item.id}
+            title={item.condition}
+            subtitle={[item.affectedRelative, item.side].filter(Boolean).join(' · ')}
+            onEdit={() => openEdit(item)}
+            onDelete={() => onDelete(item.id, item.condition)}
+          />
         ))}
         <ProfileAddButton label="Add Family Condition" onPress={() => { reset(EMPTY); sheetRef.current?.present(); }} />
       </ScrollView>
@@ -137,6 +188,6 @@ export default function FamilyHistoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 16, paddingBottom: 40 },
+  content: { paddingBottom: 40 },
   sheetContent: { padding: 16, paddingBottom: 16 },
 });

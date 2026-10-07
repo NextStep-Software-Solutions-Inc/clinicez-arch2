@@ -12,7 +12,11 @@ import ProfileToggle from 'components/profile/ProfileToggle';
 import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
 import ProfileSaveBar from 'components/profile/ProfileSaveBar';
 import { usePatientId } from 'hooks/usePatientId';
-import { addToSyncQueue } from 'services/api/syncService';
+import Screen from 'components/layout/Screen';
+import { useAuth } from 'contexts/AuthContext';
+import { useAppTheme } from 'contexts/ThemeContext';
+import { dialog } from '@utils/dialog';
+import { flushAndSyncProfile } from 'services/api/syncService';
 
 type TobaccoStatus = 'Never' | 'Former' | 'Current';
 type SleepQuality = 'Good' | 'Fair' | 'Poor';
@@ -58,6 +62,8 @@ const SLEEP_QUALITY_OPTIONS = [
 
 export default function SocialHistoryScreen() {
   const patientId = usePatientId();
+  const { getToken } = useAuth();
+  const { spacing } = useAppTheme();
   const navigation = useNavigation();
   const [saving, setSaving] = useState(false);
   const [modal, setModal] = useState<'tobacco' | 'alcohol' | 'activity' | 'sleep' | null>(null);
@@ -124,24 +130,28 @@ export default function SocialHistoryScreen() {
         sleepQuality: data.sleepQuality || null,
         updatedAt: new Date(),
       };
-      const result = await db.insert(patientSocialHistory).values({
+      await db.insert(patientSocialHistory).values({
         id: randomUUID(), patientId: patientId, ...payload, createdAt: new Date(),
-      }).onConflictDoUpdate({ target: patientSocialHistory.patientId, set: payload }).returning({ id: patientSocialHistory.id });
-      const savedId = result[0]?.id ?? patientId;
-      await addToSyncQueue('patient_social_history', savedId, 'update', { ...payload, patientId, id: savedId });
+      }).onConflictDoUpdate({ target: patientSocialHistory.patientId, set: payload });
+
+      await flushAndSyncProfile(patientId, getToken);
       reset(data);
-      navigation.goBack();
-    } catch (e) {
+      dialog.alert('Saved', 'Your social history has been updated successfully.', [
+        { text: 'OK', onPress: () => navigation.goBack() },
+      ]);
+    } catch (e: any) {
       console.error(e);
+      dialog.alert('Error', e?.message || 'Failed to save social history.');
     } finally {
       setSaving(false);
     }
   });
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <ProfileSectionHeader title="Tobacco Use" />
+    <Screen width="form" scroll={false} padded={false}>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { padding: spacing.md }]} keyboardShouldPersistTaps="handled">
+          <ProfileSectionHeader title="Tobacco Use" />
         <Controller control={control} name="tobaccoStatus" render={({ field }) => (
           <ProfileFormField label="Tobacco Status" value={TOBACCO_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setModal('tobacco')} placeholder="Select status" />
         )} />
@@ -249,6 +259,7 @@ export default function SocialHistoryScreen() {
         <ProfileSelectModal visible={modal === 'sleep'} title="Sleep Quality" options={SLEEP_QUALITY_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setModal(null)} />
       )} />
     </KeyboardAvoidingView>
+    </Screen>
   );
 }
 

@@ -16,8 +16,10 @@ import ProfileSaveBar from 'components/profile/ProfileSaveBar';
 import ProfileSelectModal from 'components/profile/ProfileSelectModal';
 import { randomUUID } from 'expo-crypto';
 import { usePatientId } from 'hooks/usePatientId';
-import { addToSyncQueue } from 'services/api/syncService';
-
+import { useAuth } from 'contexts/AuthContext';
+import { useAppTheme } from 'contexts/ThemeContext';
+import { dialog } from '@utils/dialog';
+import { flushAndSyncProfile } from 'services/api/syncService';
 
 type ProviderForm = {
   id: string | null;
@@ -40,6 +42,8 @@ const PROVIDER_TYPE_OPTIONS = [
 
 export default function HealthcareProvidersScreen() {
   const patientId = usePatientId();
+  const { getToken } = useAuth();
+  const { spacing } = useAppTheme();
   const [providers, setProviders] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const [typeModal, setTypeModal] = useState(false);
@@ -48,39 +52,73 @@ export default function HealthcareProvidersScreen() {
   const { control, handleSubmit, reset, formState: { isDirty } } = useForm<ProviderForm>({ defaultValues: EMPTY });
 
   const load = async () => {
-    const rows = await db.select().from(patientHealthcareProviders).where(eq(patientHealthcareProviders.patientId, patientId));
-    setProviders(rows.filter((r) => !r.deletedAt));
+    try {
+      const rows = await db.select().from(patientHealthcareProviders).where(eq(patientHealthcareProviders.patientId, patientId));
+      setProviders(rows.filter((r) => !r.deletedAt));
+    } catch (err) {
+      console.warn('[HealthcareProvidersScreen] Failed to load providers:', err);
+    }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, [patientId]);
 
   const openAdd = () => { reset(EMPTY); sheetRef.current?.present(); };
   const openEdit = (row: any) => {
-    reset({ id: row.id, providerType: row.providerType ?? 'primary_care', name: row.name ?? '', specialty: row.specialty ?? '', clinicHospital: row.clinicHospital ?? '', phone: row.phone ?? '' });
+    reset({
+      id: row.id,
+      providerType: row.providerType ?? 'primary_care',
+      name: row.name ?? '',
+      specialty: row.specialty ?? '',
+      clinicHospital: row.clinicHospital ?? '',
+      phone: row.phone ?? '',
+    });
     sheetRef.current?.present();
   };
 
-  const onDelete = async (id: string) => {
-    await db.update(patientHealthcareProviders).set({ deletedAt: new Date() }).where(eq(patientHealthcareProviders.id, id));
-    load();
+  const onDelete = async (id: string, name?: string) => {
+    const confirmed = await dialog.confirm({
+      title: 'Delete Provider',
+      message: `Are you sure you want to remove ${name || 'this provider'}?`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await db.update(patientHealthcareProviders).set({ deletedAt: new Date() }).where(eq(patientHealthcareProviders.id, id));
+      await flushAndSyncProfile(patientId, getToken);
+      load();
+    } catch (err: any) {
+      dialog.alert('Error', err?.message || 'Failed to delete provider.');
+    }
   };
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
     const { id, ...rest } = data;
+    const fields = {
+      providerType: rest.providerType,
+      name: rest.name.trim(),
+      specialty: rest.specialty.trim() || null,
+      clinicHospital: rest.clinicHospital.trim() || null,
+      phone: rest.phone.trim() || null,
+      updatedAt: new Date(),
+    };
     try {
       if (id) {
-        await db.update(patientHealthcareProviders).set({ ...rest, updatedAt: new Date() }).where(eq(patientHealthcareProviders.id, id));
-        await addToSyncQueue('patient_healthcare_providers', id, 'update', { ...rest, patientId, id });
+        await db.update(patientHealthcareProviders).set(fields).where(eq(patientHealthcareProviders.id, id));
       } else {
         const newId = randomUUID();
-        await db.insert(patientHealthcareProviders).values({ id: newId, patientId, ...rest, createdAt: new Date(), updatedAt: new Date() });
-        await addToSyncQueue('patient_healthcare_providers', newId, 'create', { ...rest, patientId, id: newId });
+        await db.insert(patientHealthcareProviders).values({ id: newId, patientId, ...fields, createdAt: new Date() });
       }
+      await flushAndSyncProfile(patientId, getToken);
       sheetRef.current?.dismiss();
       load();
-    } catch (e) {
+      dialog.alert('Saved', 'Healthcare provider saved successfully.');
+    } catch (e: any) {
       console.error(e);
+      dialog.alert('Error', e?.message || 'Failed to save provider.');
     } finally {
       setSaving(false);
     }
@@ -90,7 +128,7 @@ export default function HealthcareProvidersScreen() {
 
   return (
     <BottomSheetModalProvider>
-      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
+      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { padding: spacing.md }]}>
         <ProfileSectionHeader title="Your Doctors" description="Add your primary care physician and specialists." />
         {providers.map((p) => (
           <ProfileListItemCard
@@ -99,7 +137,7 @@ export default function HealthcareProvidersScreen() {
             subtitle={[p.specialty, p.clinicHospital].filter(Boolean).join(' · ')}
             badge={typeLabel(p.providerType)}
             onEdit={() => openEdit(p)}
-            onDelete={() => onDelete(p.id)}
+            onDelete={() => onDelete(p.id, p.name)}
           />
         ))}
         <ProfileAddButton label="Add Provider" onPress={openAdd} />
@@ -137,6 +175,6 @@ export default function HealthcareProvidersScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 16, paddingBottom: 40 },
+  content: { paddingBottom: 40 },
   sheetContent: { padding: 16, paddingBottom: 16 },
 });

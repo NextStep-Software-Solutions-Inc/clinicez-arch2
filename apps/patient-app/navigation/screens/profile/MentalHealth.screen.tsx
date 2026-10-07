@@ -11,7 +11,12 @@ import ProfileToggle from 'components/profile/ProfileToggle';
 import ProfileSelectModal from 'components/profile/ProfileSelectModal';
 import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
 import ProfileSaveBar from 'components/profile/ProfileSaveBar';
+import Screen from 'components/layout/Screen';
 import { usePatientId } from 'hooks/usePatientId';
+import { useAuth } from 'contexts/AuthContext';
+import { useAppTheme } from 'contexts/ThemeContext';
+import { dialog } from '@utils/dialog';
+import { flushAndSyncProfile } from 'services/api/syncService';
 
 type PsychotherapyStatus = 'Active' | 'Inactive' | 'None';
 
@@ -31,6 +36,8 @@ const PSYCHOTHERAPY_OPTIONS = [
 
 export default function MentalHealthScreen() {
   const patientId = usePatientId();
+  const { getToken } = useAuth();
+  const { spacing } = useAppTheme();
   const navigation = useNavigation();
   const [saving, setSaving] = useState(false);
   const [therapyModal, setTherapyModal] = useState(false);
@@ -48,7 +55,7 @@ export default function MentalHealthScreen() {
             providerName: row.providerName ?? '',
             providerSpecialty: row.providerSpecialty ?? '',
             providerClinic: row.providerClinic ?? '',
-            psychotherapyStatus: row.psychotherapyStatus ?? '',
+            psychotherapyStatus: (row.psychotherapyStatus as PsychotherapyStatus) ?? '',
           });
         }
       })
@@ -59,44 +66,69 @@ export default function MentalHealthScreen() {
     setSaving(true);
     try {
       const payload = {
-        ...data,
+        hasPriorDiagnosis: data.hasPriorDiagnosis,
+        providerName: data.providerName.trim() || null,
+        providerSpecialty: data.providerSpecialty.trim() || null,
+        providerClinic: data.providerClinic.trim() || null,
         psychotherapyStatus: data.psychotherapyStatus || null,
         updatedAt: new Date(),
       };
-      await db.insert(patientMentalHealthProfile).values({ id: randomUUID(), patientId: patientId, ...payload, createdAt: new Date() }).onConflictDoUpdate({ target: patientMentalHealthProfile.patientId, set: payload });
+      await db.insert(patientMentalHealthProfile).values({
+        id: randomUUID(),
+        patientId,
+        ...payload,
+        createdAt: new Date(),
+      }).onConflictDoUpdate({
+        target: patientMentalHealthProfile.patientId,
+        set: payload,
+      });
+
+      await flushAndSyncProfile(patientId, getToken);
       reset(data);
-      navigation.goBack();
-    } catch (e) { console.error(e); } finally { setSaving(false); }
+      dialog.alert('Saved', 'Your mental health profile has been updated successfully.', [
+        { text: 'OK', onPress: () => navigation.goBack() },
+      ]);
+    } catch (e: any) {
+      console.error(e);
+      dialog.alert('Error', e?.message || 'Failed to save mental health profile.');
+    } finally {
+      setSaving(false);
+    }
   });
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <ProfileSectionHeader title="Mental Health Profile" description="Confidential — visible only to your healthcare provider." />
-        <Controller control={control} name="hasPriorDiagnosis" render={({ field }) => (
-          <ProfileToggle label="Has Prior Mental Health Diagnosis" value={field.value} onValueChange={field.onChange} />
-        )} />
-        <ProfileSectionHeader title="Mental Health Provider" />
-        <Controller control={control} name="providerName" render={({ field }) => (
-          <ProfileFormField label="Provider Name" value={field.value} onChangeText={field.onChange} placeholder="Optional" />
-        )} />
-        <Controller control={control} name="providerSpecialty" render={({ field }) => (
-          <ProfileFormField label="Specialty" value={field.value} onChangeText={field.onChange} placeholder="e.g. Psychiatrist, Psychologist, Counselor" />
-        )} />
-        <Controller control={control} name="providerClinic" render={({ field }) => (
-          <ProfileFormField label="Clinic / Hospital" value={field.value} onChangeText={field.onChange} placeholder="Optional" />
-        )} />
-        <ProfileSectionHeader title="Psychotherapy" />
+    <Screen width="form" scroll={false} padded={false}>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { padding: spacing.md }]} keyboardShouldPersistTaps="handled">
+          <ProfileSectionHeader title="Mental Health Profile" description="Confidential — visible only to your healthcare provider." />
+          <Controller control={control} name="hasPriorDiagnosis" render={({ field }) => (
+            <ProfileToggle label="Has Prior Mental Health Diagnosis" value={field.value} onValueChange={field.onChange} />
+          )} />
+          <ProfileSectionHeader title="Mental Health Provider" />
+          <Controller control={control} name="providerName" render={({ field }) => (
+            <ProfileFormField label="Provider Name" value={field.value} onChangeText={field.onChange} placeholder="Optional" />
+          )} />
+          <Controller control={control} name="providerSpecialty" render={({ field }) => (
+            <ProfileFormField label="Specialty" value={field.value} onChangeText={field.onChange} placeholder="e.g. Psychiatrist, Psychologist, Counselor" />
+          )} />
+          <Controller control={control} name="providerClinic" render={({ field }) => (
+            <ProfileFormField label="Clinic / Hospital" value={field.value} onChangeText={field.onChange} placeholder="Optional" />
+          )} />
+          <ProfileSectionHeader title="Psychotherapy" />
+          <Controller control={control} name="psychotherapyStatus" render={({ field }) => (
+            <ProfileFormField label="Psychotherapy Status" value={PSYCHOTHERAPY_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setTherapyModal(true)} placeholder="Select status" />
+          )} />
+        </ScrollView>
+        <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} />
         <Controller control={control} name="psychotherapyStatus" render={({ field }) => (
-          <ProfileFormField label="Psychotherapy Status" value={PSYCHOTHERAPY_OPTIONS.find(o => o.value === field.value)?.label || ''} onPressIn={() => setTherapyModal(true)} placeholder="Select status" />
+          <ProfileSelectModal visible={therapyModal} title="Psychotherapy Status" options={PSYCHOTHERAPY_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setTherapyModal(false)} />
         )} />
-      </ScrollView>
-      <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} />
-      <Controller control={control} name="psychotherapyStatus" render={({ field }) => (
-        <ProfileSelectModal visible={therapyModal} title="Psychotherapy Status" options={PSYCHOTHERAPY_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setTherapyModal(false)} />
-      )} />
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </Screen>
   );
 }
 
-const styles = StyleSheet.create({ flex: { flex: 1 }, content: { padding: 16, paddingBottom: 24 } });
+const styles = StyleSheet.create({
+  flex: { flex: 1 },
+  content: { paddingBottom: 24 },
+});

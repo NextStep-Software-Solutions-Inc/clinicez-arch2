@@ -15,6 +15,10 @@ import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
 import ProfileSaveBar from 'components/profile/ProfileSaveBar';
 import { randomUUID } from 'expo-crypto';
 import { usePatientId } from 'hooks/usePatientId';
+import { useAuth } from 'contexts/AuthContext';
+import { useAppTheme } from 'contexts/ThemeContext';
+import { dialog } from '@utils/dialog';
+import { flushAndSyncProfile } from 'services/api/syncService';
 
 const MAX_CONTACTS = 3;
 
@@ -34,6 +38,8 @@ const EMPTY: ContactForm = {
 
 export default function EmergencyContactsScreen() {
   const patientId = usePatientId();
+  const { getToken } = useAuth();
+  const { spacing } = useAppTheme();
   const [contacts, setContacts] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const sheetRef = useRef<BottomSheetModalType>(null);
@@ -41,11 +47,17 @@ export default function EmergencyContactsScreen() {
   const { control, handleSubmit, reset, formState: { isDirty } } = useForm<ContactForm>({ defaultValues: EMPTY });
 
   const load = async () => {
-    const rows = await db.select().from(emergencyContacts).where(eq(emergencyContacts.patientId, patientId));
-    setContacts(rows.filter((r) => !r.deletedAt).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)));
+    try {
+      const rows = await db.select().from(emergencyContacts).where(eq(emergencyContacts.patientId, patientId));
+      setContacts(rows.filter((r) => !r.deletedAt).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)));
+    } catch (err) {
+      console.warn('[EmergencyContactsScreen] Failed to load contacts:', err);
+    }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, [patientId]);
 
   const openAdd = () => { reset(EMPTY); sheetRef.current?.present(); };
   const openEdit = (row: any) => {
@@ -57,27 +69,50 @@ export default function EmergencyContactsScreen() {
     sheetRef.current?.present();
   };
 
-  const onDelete = async (id: string) => {
-    await db.update(emergencyContacts).set({ deletedAt: new Date() }).where(eq(emergencyContacts.id, id));
-    load();
+  const onDelete = async (id: string, contactName?: string) => {
+    const confirmed = await dialog.confirm({
+      title: 'Delete Contact',
+      message: `Are you sure you want to remove ${contactName || 'this contact'} from emergency contacts?`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await db.update(emergencyContacts).set({ deletedAt: new Date() }).where(eq(emergencyContacts.id, id));
+      await flushAndSyncProfile(patientId, getToken);
+      load();
+    } catch (err: any) {
+      dialog.alert('Error', err?.message || 'Failed to delete contact.');
+    }
   };
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
     const { id, ...rest } = data;
+    const fields = {
+      name: rest.name.trim(),
+      relationship: rest.relationship.trim(),
+      phone: rest.phone.trim(),
+      altPhone: rest.altPhone.trim() || null,
+      email: rest.email.trim() || null,
+      address: rest.address.trim() || null,
+    };
     try {
       if (id) {
-        await db.update(emergencyContacts).set({ ...rest, updatedAt: new Date() }).where(eq(emergencyContacts.id, id));
+        await db.update(emergencyContacts).set({ ...fields, updatedAt: new Date() }).where(eq(emergencyContacts.id, id));
       } else {
         await db.insert(emergencyContacts).values({
-          id: randomUUID(), patientId, ...rest,
+          id: randomUUID(), patientId, ...fields,
           sortOrder: contacts.length, createdAt: new Date(), updatedAt: new Date(),
         });
       }
+      await flushAndSyncProfile(patientId, getToken);
       sheetRef.current?.dismiss();
       load();
-    } catch (e) {
+      dialog.alert('Saved', 'Emergency contact saved successfully.');
+    } catch (e: any) {
       console.error(e);
+      dialog.alert('Error', e?.message || 'Failed to save emergency contact.');
     } finally {
       setSaving(false);
     }
@@ -85,7 +120,7 @@ export default function EmergencyContactsScreen() {
 
   return (
     <BottomSheetModalProvider>
-      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
+      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { padding: spacing.md }]}>
         <ProfileSectionHeader title="Emergency Contacts" description="Add up to 3 emergency contacts." />
 
         {contacts.map((c) => (
@@ -94,7 +129,7 @@ export default function EmergencyContactsScreen() {
             title={c.name}
             subtitle={[c.relationship, c.phone].filter(Boolean).join(' · ')}
             onEdit={() => openEdit(c)}
-            onDelete={() => onDelete(c.id)}
+            onDelete={() => onDelete(c.id, c.name)}
             deleteMessage={`Remove ${c.name} from emergency contacts?`}
           />
         ))}
@@ -137,6 +172,6 @@ export default function EmergencyContactsScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 16, paddingBottom: 40 },
+  content: { paddingBottom: 40 },
   sheetContent: { padding: 16, paddingBottom: 16 },
 });

@@ -19,7 +19,7 @@ import { useAppTheme } from 'contexts/ThemeContext';
 import { randomUUID } from 'expo-crypto';
 import { usePatientId } from 'hooks/usePatientId';
 import { useAuth } from 'contexts/AuthContext';
-import { addToSyncQueue, syncPendingProfileWrites } from 'services/api/syncService';
+import { flushAndSyncProfile } from 'services/api/syncService';
 import { dialog } from '@utils/dialog';
 
 type PhilhealthCategory = 'MM' | 'DD';
@@ -261,14 +261,15 @@ export default function GovernmentIdsScreen() {
         set: { ...payload, updatedAt: new Date() },
       });
 
-      // Queue for background sync
-      await addToSyncQueue('patient_government_ids', patientId, 'update', payload);
-      syncPendingProfileWrites(patientId, getToken).catch(console.error);
+      await flushAndSyncProfile(patientId, getToken);
 
       reset(data);
-      navigation.goBack();
-    } catch (e) {
+      dialog.alert('Saved', 'Your government & insurance IDs have been updated successfully.', [
+        { text: 'OK', onPress: () => navigation.goBack() },
+      ]);
+    } catch (e: any) {
       console.error(e);
+      dialog.alert('Error', e?.message || 'Failed to save government & insurance IDs.');
     } finally {
       setSaving(false);
     }

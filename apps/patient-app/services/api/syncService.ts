@@ -1,4 +1,4 @@
-import { db } from '@db/index';
+import { db, flushDatabaseSnapshot } from '@db/index';
 import { syncQueue } from '@db/schema/syncQueue';
 import { pushSyncPayload, type SyncItemRequest } from './patientApi';
 import { eq, inArray, or } from 'drizzle-orm';
@@ -88,6 +88,7 @@ export async function syncPendingProfileWrites(
       operation: item.operation,
       clientTimestamp: item.createdAt.toISOString(),
       payloadJson: item.operation === 'delete' ? null : item.payloadJson,
+      entityId: item.entityId ?? undefined,
     }));
 
     try {
@@ -96,6 +97,7 @@ export async function syncPendingProfileWrites(
 
       // 5. Successful push: delete synced items from SQLite
       await db.delete(syncQueue).where(inArray(syncQueue.id, ids));
+      await flushDatabaseSnapshot();
 
       isSyncing = false;
       return { synced: ack.accepted, failed: 0, skipped: false };
@@ -112,6 +114,7 @@ export async function syncPendingProfileWrites(
           })
           .where(eq(syncQueue.id, item.id));
       }
+      await flushDatabaseSnapshot();
 
       isSyncing = false;
       return { synced: 0, failed: pendingItems.length, skipped: false, reason: 'API call failed' };
@@ -122,3 +125,16 @@ export async function syncPendingProfileWrites(
     return { synced: 0, failed: 0, skipped: true, reason: 'Database error' };
   }
 }
+
+/**
+ * Flushes the in-memory SQLite snapshot to persistent storage (IndexedDB on web)
+ * and attempts an immediate push of pending profile writes to the backend.
+ */
+export async function flushAndSyncProfile(
+  patientId: string,
+  getToken?: () => Promise<string | null>,
+): Promise<{ synced: number; failed: number; skipped: boolean; reason?: string }> {
+  await flushDatabaseSnapshot();
+  return syncPendingProfileWrites(patientId, getToken);
+}
+

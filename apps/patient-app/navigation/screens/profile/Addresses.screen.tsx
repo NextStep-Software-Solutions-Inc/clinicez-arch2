@@ -1,9 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
-import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
-import { useNavigation, useTheme } from '@react-navigation/native';
+import { ScrollView, StyleSheet } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { db } from '@db/index';
 import { patientAddresses } from '@db/schema/patientAddresses';
-import { eq, isNull } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import BottomSheetScrollView from '@ui/ThemedBottomSheetScrollView';
 import type { BottomSheetModal as BottomSheetModalType } from '@gorhom/bottom-sheet';
@@ -17,7 +17,10 @@ import ProfileSaveBar from 'components/profile/ProfileSaveBar';
 import ProfileSelectModal from 'components/profile/ProfileSelectModal';
 import { randomUUID } from 'expo-crypto';
 import { usePatientId } from 'hooks/usePatientId';
-
+import { useAuth } from 'contexts/AuthContext';
+import { useAppTheme } from 'contexts/ThemeContext';
+import { dialog } from '@utils/dialog';
+import { flushAndSyncProfile } from 'services/api/syncService';
 
 type AddressForm = {
   id: string | null;
@@ -43,8 +46,9 @@ const EMPTY_FORM: AddressForm = {
 
 export default function AddressesScreen() {
   const patientId = usePatientId();
+  const { getToken } = useAuth();
   const navigation = useNavigation();
-  const { colors } = useTheme();
+  const { colors, spacing } = useAppTheme();
   const [addresses, setAddresses] = useState<any[]>([]);
   const [editing, setEditing] = useState<AddressForm | null>(null);
   const [saving, setSaving] = useState(false);
@@ -54,12 +58,18 @@ export default function AddressesScreen() {
   const { control, handleSubmit, reset, formState: { isDirty } } = useForm<AddressForm>({ defaultValues: EMPTY_FORM });
 
   const load = async () => {
-    const rows = await db.select().from(patientAddresses)
-      .where(eq(patientAddresses.patientId, patientId));
-    setAddresses(rows.filter((r) => !r.deletedAt));
+    try {
+      const rows = await db.select().from(patientAddresses)
+        .where(eq(patientAddresses.patientId, patientId));
+      setAddresses(rows.filter((r) => !r.deletedAt));
+    } catch (err) {
+      console.warn('[AddressesScreen] Failed to load addresses:', err);
+    }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, [patientId]);
 
   const openAdd = () => {
     reset(EMPTY_FORM);
@@ -82,19 +92,34 @@ export default function AddressesScreen() {
   };
 
   const onDelete = async (id: string) => {
-    await db.update(patientAddresses).set({ deletedAt: new Date() }).where(eq(patientAddresses.id, id));
-    load();
+    const confirmed = await dialog.confirm({
+      title: 'Delete Address',
+      message: 'Are you sure you want to remove this address?',
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await db.update(patientAddresses).set({ deletedAt: new Date() }).where(eq(patientAddresses.id, id));
+      await flushAndSyncProfile(patientId, getToken);
+      load();
+    } catch (err: any) {
+      dialog.alert('Error', err?.message || 'Failed to delete address.');
+    }
   };
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
     const { id, houseNo, streetBarangay, postalCode, ...rest } = data;
-    // Map form field names → DB column names
     const dbFields = {
       ...rest,
-      houseStreet: houseNo,
-      barangay: streetBarangay,
-      zipCode: postalCode,
+      houseStreet: houseNo.trim() || null,
+      barangay: streetBarangay.trim() || null,
+      cityMunicipality: rest.cityMunicipality.trim(),
+      province: rest.province.trim() || null,
+      region: rest.region.trim() || null,
+      zipCode: postalCode.trim() || null,
+      country: rest.country.trim() || 'Philippines',
       updatedAt: new Date(),
     };
     try {
@@ -103,10 +128,13 @@ export default function AddressesScreen() {
       } else {
         await db.insert(patientAddresses).values({ id: randomUUID(), patientId, ...dbFields, createdAt: new Date() });
       }
+      await flushAndSyncProfile(patientId, getToken);
       sheetRef.current?.dismiss();
       load();
-    } catch (e) {
+      dialog.alert('Saved', 'Address saved successfully.');
+    } catch (e: any) {
       console.error(e);
+      dialog.alert('Error', e?.message || 'Failed to save address.');
     } finally {
       setSaving(false);
     }
@@ -114,7 +142,7 @@ export default function AddressesScreen() {
 
   return (
     <BottomSheetModalProvider>
-      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
+      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { padding: spacing.md }]}>
         <ProfileSectionHeader title="Your Addresses" description="You can add a primary home address and a secondary address." />
 
         {addresses.map((a) => (
@@ -137,10 +165,7 @@ export default function AddressesScreen() {
         enablePanDownToClose
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
-        backgroundStyle={{ backgroundColor: colors.card }}
-        handleIndicatorStyle={{ backgroundColor: colors.text }}
       >
-        
         <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           <ProfileSectionHeader title={editing?.id ? 'Edit Address' : 'Add Address'} />
           <Controller control={control} name="type" render={({ field }) => (
@@ -185,6 +210,6 @@ export default function AddressesScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 16, paddingBottom: 40 },
+  content: { paddingBottom: 40 },
   sheetContent: { padding: 16, paddingBottom: 16 },
 });

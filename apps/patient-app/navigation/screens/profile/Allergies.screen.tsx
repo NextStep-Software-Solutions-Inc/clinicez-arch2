@@ -16,6 +16,10 @@ import ProfileSelectModal from 'components/profile/ProfileSelectModal';
 import ProfileToggle from 'components/profile/ProfileToggle';
 import { randomUUID } from 'expo-crypto';
 import { usePatientId } from 'hooks/usePatientId';
+import { useAuth } from 'contexts/AuthContext';
+import { useAppTheme } from 'contexts/ThemeContext';
+import { dialog } from '@utils/dialog';
+import { flushAndSyncProfile } from 'services/api/syncService';
 import ThemedBottomSheetModal from '@ui/ThemedBottomSheetModal';
 
 type AllergySeverity = 'Mild' | 'Moderate' | 'Severe' | 'LifeThreatening';
@@ -40,6 +44,8 @@ const SEVERITY_OPTIONS = [
 
 export default function AllergiesScreen() {
   const patientId = usePatientId();
+  const { getToken } = useAuth();
+  const { spacing } = useAppTheme();
   const [items, setItems] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const [severityModal, setSeverityModal] = useState(false);
@@ -48,20 +54,43 @@ export default function AllergiesScreen() {
   const { control, handleSubmit, reset, formState: { isDirty } } = useForm<AllergyForm>({ defaultValues: EMPTY });
 
   const load = async () => {
-    const rows = await db.select().from(patientAllergies).where(eq(patientAllergies.patientId, patientId));
-    setItems(rows.filter((r) => !r.deletedAt));
+    try {
+      const rows = await db.select().from(patientAllergies).where(eq(patientAllergies.patientId, patientId));
+      setItems(rows.filter((r) => !r.deletedAt));
+    } catch (err) {
+      console.warn('[AllergiesScreen] Failed to load allergies:', err);
+    }
   };
 
   useEffect(() => { load(); }, [patientId]);
 
   const openEdit = (row: any) => {
-    reset({ id: row.id, allergen: row.allergen ?? '', reactionType: row.reactionType ?? '', severity: row.severity ?? '', management: row.management ?? '', isActive: row.isActive ?? true });
+    reset({
+      id: row.id,
+      allergen: row.allergen ?? '',
+      reactionType: row.reactionType ?? '',
+      severity: row.severity ?? '',
+      management: row.management ?? '',
+      isActive: row.isActive ?? true,
+    });
     sheetRef.current?.present();
   };
 
-  const onDelete = async (id: string) => {
-    await db.update(patientAllergies).set({ deletedAt: new Date() }).where(eq(patientAllergies.id, id));
-    load();
+  const onDelete = async (id: string, allergenName?: string) => {
+    const confirmed = await dialog.confirm({
+      title: 'Delete Allergy',
+      message: `Are you sure you want to remove ${allergenName || 'this allergy'}?`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await db.update(patientAllergies).set({ deletedAt: new Date() }).where(eq(patientAllergies.id, id));
+      await flushAndSyncProfile(patientId, getToken);
+      load();
+    } catch (err: any) {
+      dialog.alert('Error', err?.message || 'Failed to delete allergy.');
+    }
   };
 
   const onSave = handleSubmit(async (data) => {
@@ -69,8 +98,11 @@ export default function AllergiesScreen() {
     const { id, ...rest } = data;
     try {
       const payload = {
-        ...rest,
+        allergen: rest.allergen.trim(),
+        reactionType: rest.reactionType.trim() || null,
         severity: rest.severity || null,
+        management: rest.management.trim() || null,
+        isActive: rest.isActive,
         updatedAt: new Date(),
       };
       if (id) {
@@ -83,10 +115,13 @@ export default function AllergiesScreen() {
           createdAt: new Date(),
         });
       }
+      await flushAndSyncProfile(patientId, getToken);
       sheetRef.current?.dismiss();
       load();
-    } catch (e) {
+      dialog.alert('Saved', 'Allergy saved successfully.');
+    } catch (e: any) {
       console.error(e);
+      dialog.alert('Error', e?.message || 'Failed to save allergy.');
     } finally {
       setSaving(false);
     }
@@ -94,7 +129,7 @@ export default function AllergiesScreen() {
 
   return (
     <BottomSheetModalProvider>
-      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
+      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { padding: spacing.md }]}>
         <ProfileSectionHeader title="Known Allergies" description="List all known drug, food, and environmental allergies." />
         {items.map((a) => (
           <ProfileListItemCard
@@ -103,7 +138,7 @@ export default function AllergiesScreen() {
             subtitle={[a.severity, a.reactionType].filter(Boolean).join(' · ')}
             badge={a.isActive ? 'Active' : 'Inactive'}
             onEdit={() => openEdit(a)}
-            onDelete={() => onDelete(a.id)}
+            onDelete={() => onDelete(a.id, a.allergen)}
           />
         ))}
         <ProfileAddButton label="Add Allergy" onPress={() => { reset(EMPTY); sheetRef.current?.present(); }} />
@@ -138,6 +173,6 @@ export default function AllergiesScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 16, paddingBottom: 40 },
+  content: { paddingBottom: 40 },
   sheetContent: { padding: 16, paddingBottom: 16 },
 });

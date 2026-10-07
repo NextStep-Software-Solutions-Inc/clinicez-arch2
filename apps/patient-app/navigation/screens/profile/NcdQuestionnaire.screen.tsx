@@ -16,7 +16,7 @@ import ProfileSelectModal from 'components/profile/ProfileSelectModal';
 import ProfileSaveBar from 'components/profile/ProfileSaveBar';
 import { usePatientId } from 'hooks/usePatientId';
 import { useAuth } from 'contexts/AuthContext';
-import { addToSyncQueue, syncPendingProfileWrites } from 'services/api/syncService';
+import { flushAndSyncProfile } from 'services/api/syncService';
 import { randomUUID } from 'expo-crypto';
 import { dialog } from '@utils/dialog';
 
@@ -230,11 +230,7 @@ export default function NcdQuestionnaireScreen() {
 
       setRecordId(entityId);
 
-      // 2. Queue for background sync to patient-api & PhilHealth proxy
-      await addToSyncQueue('patient_ncd_questionnaire', patientId, 'update', payload);
-
-      // 3. Attempt immediate sync if connected
-      syncPendingProfileWrites(patientId, getToken).catch(console.error);
+      await flushAndSyncProfile(patientId, getToken);
 
       setIsDirty(false);
       dialog.alert(

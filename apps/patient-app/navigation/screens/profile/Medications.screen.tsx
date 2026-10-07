@@ -17,7 +17,10 @@ import ProfileToggle from 'components/profile/ProfileToggle';
 import ProfileDatePicker from 'components/profile/ProfileDatePicker';
 import { randomUUID } from 'expo-crypto';
 import { usePatientId } from 'hooks/usePatientId';
-
+import { useAuth } from 'contexts/AuthContext';
+import { useAppTheme } from 'contexts/ThemeContext';
+import { dialog } from '@utils/dialog';
+import { flushAndSyncProfile } from 'services/api/syncService';
 
 type MedForm = {
   id: string | null;
@@ -35,6 +38,8 @@ const EMPTY: MedForm = { id: null, drugName: '', dosage: '', dosageForm: '', fre
 
 export default function MedicationsScreen() {
   const patientId = usePatientId();
+  const { getToken } = useAuth();
+  const { spacing } = useAppTheme();
   const [items, setItems] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const sheetRef = useRef<BottomSheetModalType>(null);
@@ -42,35 +47,75 @@ export default function MedicationsScreen() {
   const { control, handleSubmit, reset, formState: { isDirty } } = useForm<MedForm>({ defaultValues: EMPTY });
 
   const load = async () => {
-    const rows = await db.select().from(patientMedications).where(eq(patientMedications.patientId, patientId));
-    setItems(rows.filter((r) => !r.deletedAt));
+    try {
+      const rows = await db.select().from(patientMedications).where(eq(patientMedications.patientId, patientId));
+      setItems(rows.filter((r) => !r.deletedAt));
+    } catch (err) {
+      console.warn('[MedicationsScreen] Failed to load medications:', err);
+    }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [patientId]);
 
   const openEdit = (row: any) => {
-    reset({ id: row.id, drugName: row.drugName ?? '', dosage: row.dosage ?? '', dosageForm: row.dosageForm ?? '', frequency: row.frequency ?? '', prescribingPhysician: row.prescribingPhysician ?? '', startDate: row.startDate ?? '', indication: row.indication ?? '', isActive: row.isActive ?? true });
+    reset({
+      id: row.id,
+      drugName: row.drugName ?? '',
+      dosage: row.dosage ?? '',
+      dosageForm: row.dosageForm ?? '',
+      frequency: row.frequency ?? '',
+      prescribingPhysician: row.prescribingPhysician ?? '',
+      startDate: row.startDate ?? '',
+      indication: row.indication ?? '',
+      isActive: row.isActive ?? true,
+    });
     sheetRef.current?.present();
   };
 
-  const onDelete = async (id: string) => {
-    await db.update(patientMedications).set({ deletedAt: new Date() }).where(eq(patientMedications.id, id));
-    load();
+  const onDelete = async (id: string, drugName?: string) => {
+    const confirmed = await dialog.confirm({
+      title: 'Delete Medication',
+      message: `Are you sure you want to remove ${drugName || 'this medication'}?`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await db.update(patientMedications).set({ deletedAt: new Date() }).where(eq(patientMedications.id, id));
+      await flushAndSyncProfile(patientId, getToken);
+      load();
+    } catch (err: any) {
+      dialog.alert('Error', err?.message || 'Failed to delete medication.');
+    }
   };
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
     const { id, ...rest } = data;
+    const fields = {
+      drugName: rest.drugName.trim(),
+      dosage: rest.dosage.trim() || null,
+      dosageForm: rest.dosageForm.trim() || null,
+      frequency: rest.frequency.trim() || null,
+      prescribingPhysician: rest.prescribingPhysician.trim() || null,
+      startDate: rest.startDate || null,
+      indication: rest.indication.trim() || null,
+      isActive: rest.isActive,
+      updatedAt: new Date(),
+    };
     try {
       if (id) {
-        await db.update(patientMedications).set({ ...rest, updatedAt: new Date() }).where(eq(patientMedications.id, id));
+        await db.update(patientMedications).set(fields).where(eq(patientMedications.id, id));
       } else {
-        await db.insert(patientMedications).values({ id: randomUUID(), patientId, ...rest, createdAt: new Date(), updatedAt: new Date() });
+        await db.insert(patientMedications).values({ id: randomUUID(), patientId, ...fields, createdAt: new Date() });
       }
+      await flushAndSyncProfile(patientId, getToken);
       sheetRef.current?.dismiss();
       load();
-    } catch (e) {
+      dialog.alert('Saved', 'Medication saved successfully.');
+    } catch (e: any) {
       console.error(e);
+      dialog.alert('Error', e?.message || 'Failed to save medication.');
     } finally {
       setSaving(false);
     }
@@ -78,7 +123,7 @@ export default function MedicationsScreen() {
 
   return (
     <BottomSheetModalProvider>
-      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
+      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { padding: spacing.md }]}>
         <ProfileSectionHeader title="Current & Past Medications" />
         {items.map((m) => (
           <ProfileListItemCard
@@ -87,7 +132,7 @@ export default function MedicationsScreen() {
             subtitle={[m.dosage, m.frequency].filter(Boolean).join(' · ')}
             badge={m.isActive ? 'Active' : 'Past'}
             onEdit={() => openEdit(m)}
-            onDelete={() => onDelete(m.id)}
+            onDelete={() => onDelete(m.id, m.drugName)}
           />
         ))}
         <ProfileAddButton label="Add Medication" onPress={() => { reset(EMPTY); sheetRef.current?.present(); }} />
@@ -128,6 +173,6 @@ export default function MedicationsScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 16, paddingBottom: 40 },
+  content: { paddingBottom: 40 },
   sheetContent: { padding: 16, paddingBottom: 16 },
 });

@@ -16,54 +16,106 @@ import ProfileSaveBar from 'components/profile/ProfileSaveBar';
 import ProfileDatePicker from 'components/profile/ProfileDatePicker';
 import { randomUUID } from 'expo-crypto';
 import { usePatientId } from 'hooks/usePatientId';
-
+import { useAuth } from 'contexts/AuthContext';
+import { useAppTheme } from 'contexts/ThemeContext';
+import { dialog } from '@utils/dialog';
+import { flushAndSyncProfile } from 'services/api/syncService';
 
 type SurgForm = { id: string | null; procedure: string; surgeon: string; facility: string; date: string; anesthesiaType: string; complications: string; };
 const EMPTY: SurgForm = { id: null, procedure: '', surgeon: '', facility: '', date: '', anesthesiaType: '', complications: '' };
 
 export default function SurgicalHistoryScreen() {
   const patientId = usePatientId();
+  const { getToken } = useAuth();
+  const { spacing } = useAppTheme();
   const [items, setItems] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const sheetRef = useRef<BottomSheetModalType>(null);
   const { control, handleSubmit, reset, formState: { isDirty } } = useForm<SurgForm>({ defaultValues: EMPTY });
 
   const load = async () => {
-    const rows = await db.select().from(patientSurgicalHistory).where(eq(patientSurgicalHistory.patientId, patientId));
-    setItems(rows.filter((r) => !r.deletedAt));
+    try {
+      const rows = await db.select().from(patientSurgicalHistory).where(eq(patientSurgicalHistory.patientId, patientId));
+      setItems(rows.filter((r) => !r.deletedAt));
+    } catch (err) {
+      console.warn('[SurgicalHistoryScreen] Failed to load records:', err);
+    }
   };
-  useEffect(() => { load(); }, []);
+
+  useEffect(() => { load(); }, [patientId]);
 
   const openEdit = (row: any) => {
-    reset({ id: row.id, procedure: row.procedure ?? '', surgeon: row.surgeon ?? '', facility: row.facility ?? '', date: row.date ?? '', anesthesiaType: row.anesthesiaType ?? '', complications: row.complications ?? '' });
+    reset({
+      id: row.id,
+      procedure: row.procedure ?? '',
+      surgeon: row.surgeon ?? '',
+      facility: row.facility ?? '',
+      date: row.date ?? '',
+      anesthesiaType: row.anesthesiaType ?? '',
+      complications: row.complications ?? '',
+    });
     sheetRef.current?.present();
   };
 
-  const onDelete = async (id: string) => {
-    await db.update(patientSurgicalHistory).set({ deletedAt: new Date() }).where(eq(patientSurgicalHistory.id, id));
-    load();
+  const onDelete = async (id: string, procedureName?: string) => {
+    const confirmed = await dialog.confirm({
+      title: 'Delete Procedure',
+      message: `Are you sure you want to remove ${procedureName || 'this procedure'}?`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await db.update(patientSurgicalHistory).set({ deletedAt: new Date() }).where(eq(patientSurgicalHistory.id, id));
+      await flushAndSyncProfile(patientId, getToken);
+      load();
+    } catch (err: any) {
+      dialog.alert('Error', err?.message || 'Failed to delete procedure.');
+    }
   };
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
     const { id, ...rest } = data;
+    const fields = {
+      procedure: rest.procedure.trim(),
+      surgeon: rest.surgeon.trim() || null,
+      facility: rest.facility.trim() || null,
+      date: rest.date || null,
+      anesthesiaType: rest.anesthesiaType.trim() || null,
+      complications: rest.complications.trim() || null,
+      updatedAt: new Date(),
+    };
     try {
       if (id) {
-        await db.update(patientSurgicalHistory).set({ ...rest, updatedAt: new Date() }).where(eq(patientSurgicalHistory.id, id));
+        await db.update(patientSurgicalHistory).set(fields).where(eq(patientSurgicalHistory.id, id));
       } else {
-        await db.insert(patientSurgicalHistory).values({ id: randomUUID(), patientId, ...rest, createdAt: new Date(), updatedAt: new Date() });
+        await db.insert(patientSurgicalHistory).values({ id: randomUUID(), patientId, ...fields, createdAt: new Date() });
       }
+      await flushAndSyncProfile(patientId, getToken);
       sheetRef.current?.dismiss();
       load();
-    } catch (e) { console.error(e); } finally { setSaving(false); }
+      dialog.alert('Saved', 'Procedure saved successfully.');
+    } catch (e: any) {
+      console.error(e);
+      dialog.alert('Error', e?.message || 'Failed to save procedure.');
+    } finally {
+      setSaving(false);
+    }
   });
 
   return (
     <BottomSheetModalProvider>
-      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
+      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { padding: spacing.md }]}>
         <ProfileSectionHeader title="Surgical History" description="List all surgeries and procedures you have undergone." />
         {items.map((s) => (
-          <ProfileListItemCard key={s.id} title={s.procedure} subtitle={[s.date, s.facility].filter(Boolean).join(' · ')} onEdit={() => openEdit(s)} onDelete={() => onDelete(s.id)} />
+          <ProfileListItemCard
+            key={s.id}
+            title={s.procedure}
+            subtitle={[s.date, s.facility].filter(Boolean).join(' · ')}
+            onEdit={() => openEdit(s)}
+            onDelete={() => onDelete(s.id, s.procedure)}
+          />
         ))}
         <ProfileAddButton label="Add Procedure" onPress={() => { reset(EMPTY); sheetRef.current?.present(); }} />
       </ScrollView>
@@ -97,6 +149,6 @@ export default function SurgicalHistoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 16, paddingBottom: 40 },
+  content: { paddingBottom: 40 },
   sheetContent: { padding: 16, paddingBottom: 16 },
 });

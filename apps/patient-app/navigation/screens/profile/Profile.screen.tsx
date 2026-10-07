@@ -36,6 +36,7 @@ import { useAuth } from 'contexts/AuthContext';
 import { useOfflineAlert } from 'contexts/OfflineAlertContext';
 import { getPatientFullRecord } from 'services/api/patientApi';
 import { hydrateFullRecord } from '@db/hydrate';
+import { syncPendingProfileWrites } from 'services/api/syncService';
 
 type Counts = {
   addresses: number;
@@ -147,6 +148,9 @@ export default function ProfileScreen() {
   const fetchAndHydrateFullRecord = useCallback(async (): Promise<boolean> => {
     if (!internalPatientId) return false;
     try {
+      await syncPendingProfileWrites(internalPatientId, getToken).catch((err) => {
+        console.warn('[ProfileScreen] Sync pending writes before hydration failed:', err);
+      });
       const record = await getPatientFullRecord(getToken, internalPatientId);
       await hydrateFullRecord(record);
       return true;
