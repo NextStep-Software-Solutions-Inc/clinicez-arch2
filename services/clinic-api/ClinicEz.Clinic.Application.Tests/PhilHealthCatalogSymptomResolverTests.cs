@@ -55,6 +55,35 @@ public class PhilHealthCatalogSymptomResolverTests
     }
 
     [Fact]
+    public void Exam_defaults_are_each_librarys_own_active_essentially_normal_entry()
+    {
+        var exam = _resolver.EssentiallyNormalExam();
+
+        var expected = new (string? Code, string Library)[]
+        {
+            (exam.SkinId, "lib_skin_extremities"),
+            (exam.HeentId, "lib_heent"),
+            (exam.ChestId, "lib_chest"),
+            (exam.HeartId, "lib_heart"),
+            (exam.AbdomenId, "lib_abdomen"),
+            (exam.NeuroId, "lib_neuro"),
+            (exam.RectalId, "lib_digital_rectal"),
+            (exam.GuId, "lib_genitourinary"),
+        };
+
+        foreach (var (code, library) in expected)
+        {
+            var entry = Catalog.Find(library, code ?? string.Empty);
+            entry.Should().NotBeNull($"{library} must resolve '{code}'");
+            entry!.IsActive.Should().BeTrue();
+            entry.Description.ToLowerInvariant().Should().StartWith("essentially normal", library);
+        }
+
+        // The old literal "1" would have meant "Adynamic precordium" (an inactive finding) for the heart.
+        exam.HeartId.Should().Be("5");
+    }
+
+    [Fact]
     public void Every_resolved_code_exists_in_its_library()
     {
         foreach (var text in new[] { "cough", "fever", "diarrhea", "rash", "abdominal pain", "shortness of breath" })

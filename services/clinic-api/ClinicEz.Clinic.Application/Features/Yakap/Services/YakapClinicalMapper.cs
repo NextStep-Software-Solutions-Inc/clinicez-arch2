@@ -239,7 +239,7 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
                     OtherComplaint: "First tranche baseline profiling",
                     PainSite: string.Empty,
                     PhysicalExam: pePertinent,
-                    PhysicalExamMiscs: [new YakapPhysicalExamMiscDto("1", "1", "1", "1", "1", "1", "1", "1")],
+                    PhysicalExamMiscs: [_resolver.EssentiallyNormalExam()],
                     PhysicalExamSpecifics: new YakapPhysicalExamSpecificDto(string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty),
                     IcdCodes: ["Z00.0"],
                     Diagnostics: [],
@@ -336,7 +336,7 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
                         OtherComplaint: otherComplaint,
                         PainSite: painSite,
                         PhysicalExam: encPe,
-                        PhysicalExamMiscs: [new YakapPhysicalExamMiscDto("1", "1", "1", "1", "1", "1", "1", "1")],
+                        PhysicalExamMiscs: [_resolver.EssentiallyNormalExam()],
                         PhysicalExamSpecifics: new YakapPhysicalExamSpecificDto(string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty),
                         IcdCodes: icdCodes,
                         Diagnostics: encDiagnostics,
@@ -738,7 +738,7 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
             DeficiencyRemarks: string.Empty);
     }
 
-    private static List<YakapPhysicalExamMiscDto> MapPhysicalExamMiscs(PhilHealthPatientProfileDto? customProfile)
+    private List<YakapPhysicalExamMiscDto> MapPhysicalExamMiscs(PhilHealthPatientProfileDto? customProfile)
     {
         if (customProfile != null)
         {
@@ -753,7 +753,7 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
                 GuId: customProfile.GuId)];
         }
 
-        return [new YakapPhysicalExamMiscDto("1", "1", "1", "1", "1", "1", "1", "1")];
+        return [_resolver.EssentiallyNormalExam()];
     }
 
     private static YakapPhysicalExamSpecificDto MapPhysicalExamSpecifics(PhilHealthPatientProfileDto? customProfile)

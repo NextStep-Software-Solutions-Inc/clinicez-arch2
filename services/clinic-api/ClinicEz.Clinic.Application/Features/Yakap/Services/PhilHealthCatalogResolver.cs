@@ -314,6 +314,25 @@ public sealed class PhilHealthCatalogResolver
         return entry?.Code ?? string.Empty;
     }
 
+    /// <summary>The library's "Essentially normal" finding for an examination library, or empty if it has none.</summary>
+    public string EssentiallyNormalCode(string library) =>
+        _catalog.List(library)
+            .FirstOrDefault(r => r.IsActive && r.Description.StartsWith("Essentially normal", StringComparison.OrdinalIgnoreCase))
+            ?.Code ?? string.Empty;
+
+    /// <summary>
+    /// Organ-system defaults used until the clinician records the examination: each library's own
+    /// "Essentially normal" entry (the codes differ per library, so they can never be written as literals).
+    /// </summary>
+    public YakapPhysicalExamMiscDto EssentiallyNormalExam() => new(
+        SkinId: EssentiallyNormalCode("lib_skin_extremities"),
+        HeentId: EssentiallyNormalCode("lib_heent"),
+        ChestId: EssentiallyNormalCode("lib_chest"),
+        HeartId: EssentiallyNormalCode("lib_heart"),
+        AbdomenId: EssentiallyNormalCode("lib_abdomen"),
+        NeuroId: EssentiallyNormalCode("lib_neuro"),
+        RectalId: EssentiallyNormalCode("lib_digital_rectal"),
+        GuId: EssentiallyNormalCode("lib_genitourinary"));
     /// <summary>The "None" immunization code (shared by all immunization libraries).</summary>
     public string NoImmunizationCode() => _catalog.FindByDescription(ChildImmunizationLibrary, "None")?.Code ?? string.Empty;
 }

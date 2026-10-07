@@ -91,6 +91,17 @@ public sealed class PrescriptionsController : ControllerBase
         return File(pdfBytes, "application/pdf", $"Prescription-{slip.PrescriptionNumber}.pdf");
     }
 
+    /// <summary>Drugstores this clinic has recorded external dispenses with (most used first).</summary>
+    [HttpGet("external-pharmacies")]
+    [HasPermission(ClinicPermissions.ConsultationsRead)]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<string>>>> GetRecentExternalPharmacies(
+        [FromQuery] int take = 12,
+        CancellationToken ct = default)
+    {
+        var result = await _sender.Send(new GetRecentExternalPharmaciesQuery(take), ct);
+        return Ok(ApiResponse<IReadOnlyList<string>>.Success(result));
+    }
+
     [HttpPost("{consultationId:guid}/record-external-dispense")]
     [HasPermission(ClinicPermissions.ConsultationsWrite)]
     public async Task<ActionResult<ApiResponse<PrescriptionSlipDto>>> RecordExternalDispense(
