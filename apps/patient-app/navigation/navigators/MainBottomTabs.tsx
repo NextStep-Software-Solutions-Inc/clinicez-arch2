@@ -21,12 +21,15 @@ const getTabIcon = (androidName: string, iosName: string, webName: string) => {
 };
 
 const MainBottomTabs = createBottomTabNavigator({
-  screenOptions: {
+  // Brand-tinted native tabs (replaces the Android Material You / system accent).
+  screenOptions: ({ theme }) => ({
     animation: 'shift',
+    tabBarActiveTintColor: theme.colors.primary,
+    tabBarActiveIndicatorColor: `26`,
     tabBarStyle: {
       backgroundColor: isLiquidGlassSupported ? 'transparent' : undefined,
     },
-  },
+  }),
   screens: {
     HomeScreen: createBottomTabScreen({
       screen: HomeStack,

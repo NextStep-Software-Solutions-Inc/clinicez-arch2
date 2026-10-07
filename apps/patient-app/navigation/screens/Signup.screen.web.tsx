@@ -1,20 +1,17 @@
 import React, { useState } from 'react';
-import {
-  StyleSheet,
-  View,
-  Pressable,
-  TextInput,
-  ScrollView,
-  ActivityIndicator,
-} from 'react-native';
-import { useNavigation, useTheme } from '@react-navigation/native';
+import { StyleSheet, View, Pressable, ScrollView } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { useSignUp } from '@clerk/expo';
+import { useAppTheme } from '../../contexts/ThemeContext';
 import ThemedText from '@ui/ThemedText';
+import Button from '@ui/Button';
+import Card from '@ui/Card';
+import Input from '@ui/Input';
 
 export default function SignupScreenWeb() {
   const navigation = useNavigation<any>();
   const { signUp, errors, fetchStatus } = useSignUp();
-  const { colors, dark: isDark } = useTheme();
+  const { colors, spacing, radii, sizes } = useAppTheme();
 
   const [firstName, setFirstName] = useState('');
   const [email, setEmail] = useState('');
@@ -22,6 +19,8 @@ export default function SignupScreenWeb() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const isLoading = fetchStatus === 'fetching';
+  const hasEmailError = errors?.fields?.emailAddress?.message;
+  const hasPasswordError = errors?.fields?.password?.message;
 
   const handleSignUp = async () => {
     if (!email.trim() || !password || isLoading) return;
@@ -49,161 +48,146 @@ export default function SignupScreenWeb() {
   return (
     <ScrollView
       style={[styles.root, { backgroundColor: colors.background }]}
-      contentContainerStyle={styles.scrollContent}
+      contentContainerStyle={[
+        styles.scrollContent,
+        {
+          paddingVertical: spacing['4xl'],
+          paddingHorizontal: spacing.xl,
+        },
+      ]}
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
-      <View style={styles.cardContainer}>
+      <View style={[styles.cardContainer, { maxWidth: sizes.dialogWidth, gap: spacing.xl }]}>
         {/* Brand Header */}
-        <View style={styles.brandHeader}>
-          <View style={styles.logoBadge}>
-            <ThemedText style={styles.logoText}>CLINIC EZ</ThemedText>
+        <View style={[styles.brandHeader, { gap: spacing.sm }]}>
+          <View
+            style={[
+              styles.logoBadge,
+              {
+                backgroundColor: colors.primary,
+                borderRadius: radii.sm,
+                paddingHorizontal: spacing.md,
+                paddingVertical: spacing.xs,
+              },
+            ]}
+          >
+            <ThemedText variant="smallBold" color="onPrimary" style={styles.logoText}>
+              CLINIC EZ
+            </ThemedText>
           </View>
-          <ThemedText style={[styles.title, { color: colors.text }]}>Create your account</ThemedText>
-          <ThemedText style={[styles.subtitle, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+          <ThemedText variant="h1" style={{ textAlign: 'center' }}>
+            Create your account
+          </ThemedText>
+          <ThemedText variant="body" color="textSecondary" style={{ textAlign: 'center' }}>
             Join the patient portal to securely manage your health and appointments.
           </ThemedText>
         </View>
 
         {/* Global Error Banner */}
-        {errorMessage && (
-          <View style={styles.errorBanner}>
-            <ThemedText style={styles.errorBannerText}>{errorMessage}</ThemedText>
+        {errorMessage ? (
+          <View
+            style={[
+              styles.errorBanner,
+              {
+                backgroundColor: colors.emergencyBg,
+                borderColor: colors.emergencyBorder,
+                borderRadius: radii.md,
+                padding: spacing.md,
+              },
+            ]}
+          >
+            <ThemedText variant="smallBold" color="emergencyText" style={{ textAlign: 'center' }}>
+              {errorMessage}
+            </ThemedText>
           </View>
-        )}
+        ) : null}
 
         {/* Form Card */}
-        <View
-          style={[
-            styles.card,
-            {
-              backgroundColor: isDark ? '#1E293B' : '#FFFFFF',
-              borderColor: isDark ? '#334155' : '#E2E8F0',
-            },
-          ]}
-        >
-          {/* First Name Field */}
-          <View style={styles.field}>
-            <ThemedText style={[styles.label, { color: colors.text }]}>First Name</ThemedText>
-            <TextInput
-              style={[
-                styles.input,
-                {
-                  backgroundColor: isDark ? '#0F172A' : '#F8FAFC',
-                  borderColor: isDark ? '#334155' : '#CBD5E1',
-                  color: colors.text,
-                },
-              ]}
-              value={firstName}
-              onChangeText={setFirstName}
-              autoCapitalize="words"
-              autoComplete="given-name"
-              placeholder="e.g. Maria"
-              placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
-              returnKeyType="next"
-            />
-          </View>
+        <Card padding="lg" elevation="sm" style={[styles.card, { gap: spacing.lg }]}>
+          <Input
+            label="First Name"
+            value={firstName}
+            onChangeText={setFirstName}
+            autoCapitalize="words"
+            autoComplete="given-name"
+            placeholder="e.g. Maria"
+            returnKeyType="next"
+            containerStyle={{ marginBottom: 0 }}
+          />
 
-          {/* Email Field */}
-          <View style={styles.field}>
-            <ThemedText style={[styles.label, { color: colors.text }]}>Email Address</ThemedText>
-            <TextInput
-              style={[
-                styles.input,
-                {
-                  backgroundColor: isDark ? '#0F172A' : '#F8FAFC',
-                  borderColor: errors?.fields?.emailAddress
-                    ? '#EF4444'
-                    : isDark
-                      ? '#334155'
-                      : '#CBD5E1',
-                  color: colors.text,
-                },
-              ]}
-              value={email}
-              onChangeText={(text) => {
-                setEmail(text);
-                if (errorMessage) setErrorMessage(null);
-              }}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoComplete="email"
-              placeholder="you@example.com"
-              placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
-              returnKeyType="next"
-            />
-            {errors?.fields?.emailAddress && (
-              <ThemedText style={styles.fieldError}>
-                {errors.fields.emailAddress.message}
-              </ThemedText>
-            )}
-          </View>
+          <Input
+            label="Email Address"
+            value={email}
+            onChangeText={(text) => {
+              setEmail(text);
+              if (errorMessage) setErrorMessage(null);
+            }}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoComplete="email"
+            placeholder="you@example.com"
+            error={hasEmailError}
+            returnKeyType="next"
+            containerStyle={{ marginBottom: 0 }}
+          />
 
-          {/* Password Field */}
-          <View style={styles.field}>
-            <ThemedText style={[styles.label, { color: colors.text }]}>Password</ThemedText>
-            <TextInput
-              style={[
-                styles.input,
-                {
-                  backgroundColor: isDark ? '#0F172A' : '#F8FAFC',
-                  borderColor: errors?.fields?.password
-                    ? '#EF4444'
-                    : isDark
-                      ? '#334155'
-                      : '#CBD5E1',
-                  color: colors.text,
-                },
-              ]}
-              value={password}
-              onChangeText={(text) => {
-                setPassword(text);
-                if (errorMessage) setErrorMessage(null);
-              }}
-              secureTextEntry
-              autoComplete="new-password"
-              placeholder="Min. 8 characters"
-              placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
-              returnKeyType="done"
-              onSubmitEditing={handleSignUp}
-            />
-            {errors?.fields?.password && (
-              <ThemedText style={styles.fieldError}>
-                {errors.fields.password.message}
-              </ThemedText>
-            )}
-          </View>
+          <Input
+            label="Password"
+            value={password}
+            onChangeText={(text) => {
+              setPassword(text);
+              if (errorMessage) setErrorMessage(null);
+            }}
+            secureTextEntry
+            autoComplete="new-password"
+            placeholder="Min. 8 characters"
+            error={hasPasswordError}
+            hint="Use at least 8 characters with a mix of letters and numbers"
+            returnKeyType="done"
+            onSubmitEditing={handleSignUp}
+            containerStyle={{ marginBottom: 0 }}
+          />
 
-          {/* Submit Button */}
-          <Pressable
-            style={({ pressed }) => [
-              styles.cta,
-              (!email || !password || isLoading) && styles.ctaDisabled,
-              pressed && styles.ctaPressed,
-            ]}
+          {/* Required for Clerk's bot sign-up protection */}
+          <View nativeID="clerk-captcha" />
+
+          <Button
+            label="Create Account →"
+            variant="primary"
+            size="lg"
+            fullWidth
+            loading={isLoading}
+            disabled={!email.trim() || !password || isLoading}
             onPress={handleSignUp}
-            disabled={!email || !password || isLoading}
-          >
-            {isLoading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <ThemedText style={styles.ctaText}>Create Account →</ThemedText>
-            )}
-          </Pressable>
-        </View>
+          />
+        </Card>
 
         {/* Footer */}
-        <View style={styles.footer}>
-          <ThemedText style={[styles.footerText, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+        <View style={[styles.footer, { gap: spacing.xs }]}>
+          <ThemedText variant="body" color="textSecondary">
             Already have an account?{' '}
           </ThemedText>
           <Pressable
             onPress={() => navigation.navigate('Auth', { screen: 'Login' })}
-            style={({ pressed }) => [pressed && { opacity: 0.7 }]}
+            accessibilityRole="button"
           >
-            <ThemedText style={styles.signInLink}>Sign In</ThemedText>
+            <ThemedText variant="bodyBold" color="primary">
+              Sign in
+            </ThemedText>
           </Pressable>
         </View>
+
+        {/* Back to Landing Page */}
+        <Pressable
+          onPress={() => navigation.navigate('Onboarding', { screen: 'Welcome' })}
+          style={[styles.backToHomeBtn, { paddingVertical: spacing.sm }]}
+          accessibilityRole="button"
+        >
+          <ThemedText variant="small" color="textMuted">
+            ← Back to Clinic EZ overview
+          </ThemedText>
+        </Pressable>
       </View>
     </ScrollView>
   );
@@ -218,122 +202,29 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 48,
-    paddingHorizontal: 20,
   },
   cardContainer: {
-    maxWidth: 440,
     width: '100%',
-    gap: 24,
   },
   brandHeader: {
     alignItems: 'center',
-    textAlign: 'center',
-    gap: 10,
   },
-  logoBadge: {
-    backgroundColor: '#3B82F6',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    marginBottom: 4,
-  },
+  logoBadge: {},
   logoText: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-    fontSize: 14,
     letterSpacing: 1.5,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-  },
-  subtitle: {
-    fontSize: 14,
-    lineHeight: 22,
-    textAlign: 'center',
-  },
   errorBanner: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    borderColor: '#EF4444',
     borderWidth: 1,
-    padding: 12,
-    borderRadius: 10,
-  },
-  errorBannerText: {
-    color: '#EF4444',
-    fontSize: 13,
-    fontWeight: '600',
-    textAlign: 'center',
   },
   card: {
-    borderRadius: 20,
-    padding: 28,
-    borderWidth: 1,
-    gap: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 16,
-    elevation: 4,
-  },
-  field: {
-    gap: 8,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-  },
-  fieldError: {
-    fontSize: 12,
-    color: '#EF4444',
-    fontWeight: '500',
-  },
-  cta: {
-    backgroundColor: '#3B82F6',
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#3B82F6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 3,
-    marginTop: 6,
-  },
-  ctaDisabled: {
-    opacity: 0.5,
-  },
-  ctaPressed: {
-    opacity: 0.85,
-    transform: [{ scale: 0.99 }],
-  },
-  ctaText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
+    width: '100%',
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  footerText: {
-    fontSize: 14,
-  },
-  signInLink: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#3B82F6',
+  backToHomeBtn: {
+    alignItems: 'center',
   },
 });

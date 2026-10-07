@@ -1,13 +1,15 @@
-import { ScrollView, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { ScrollView } from 'react-native';
 import { storage as SecureStore } from '../../../utils/storage';
-import { useState, useEffect } from 'react';
-import { useOnboarding } from 'contexts/OnboardingContext';
+import { useOnboarding } from '../../../contexts/OnboardingContext';
+import { useAppTheme } from '../../../contexts/ThemeContext';
 import { SettingsRow, SettingsSection } from '@ui/SettingsItem';
-import { useAuth } from 'contexts/AuthContext';
+import { useAuth } from '../../../contexts/AuthContext';
 import { seedDemoHealthRecords, clearAllData } from '@db/seedDemoData';
-import { seedCatalog } from 'services/discovery/discoveryService';
-import { seedMockNotifications } from 'services/notifications/notificationService';
+import { seedCatalog } from '../../../services/discovery/discoveryService';
+import { seedMockNotifications } from '../../../services/notifications/notificationService';
 import { safeAwait } from '@shared/safe';
+import { dialog } from '@utils/dialog';
 
 // Only show this screen in development builds
 if (!__DEV__) {
@@ -24,10 +26,11 @@ const SECURE_KEYS = [
 ] as const;
 
 export default function DebugSettingsScreen() {
+  const { colors, spacing, sizes } = useAppTheme();
   const { isComplete, complete, reset } = useOnboarding();
   const [storeValues, setStoreValues] = useState<Record<string, string | null>>({});
   const { userId, internalPatientId } = useAuth();
-  
+
   const [isSeedingHealth, setIsSeedingHealth] = useState(false);
   const [isSeedingCatalog, setIsSeedingCatalog] = useState(false);
   const [isSeedingNotifications, setIsSeedingNotifications] = useState(false);
@@ -49,7 +52,7 @@ export default function DebugSettingsScreen() {
 
   const handleOnboardingToggle = async (value: boolean) => {
     if (!value) {
-      Alert.alert(
+      dialog.alert(
         'Reset Onboarding',
         'This will clear the onboarding flag. The app will restart the welcome flow immediately.',
         [
@@ -72,50 +75,50 @@ export default function DebugSettingsScreen() {
 
   const handleSeedDemoHealthRecords = async () => {
     if (!internalPatientId || !userId) {
-      Alert.alert('Error', 'Verification pending or user not authenticated.');
+      dialog.alert('Error', 'Verification pending or user not authenticated.');
       return;
     }
     setIsSeedingHealth(true);
-    const [result, error] = await safeAwait(seedDemoHealthRecords(internalPatientId, userId))
+    const [, error] = await safeAwait(seedDemoHealthRecords(internalPatientId, userId));
     setIsSeedingHealth(false);
     if (error) {
       console.error(error);
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to seed records.');
+      dialog.alert('Error', error instanceof Error ? error.message : 'Failed to seed records.');
     } else {
-      Alert.alert('Success', 'Demo health records seeded successfully.');
+      dialog.alert('Success', 'Demo health records seeded successfully.');
     }
   };
 
   const handleSeedCatalog = async () => {
     setIsSeedingCatalog(true);
-    const [result, error] = await safeAwait(seedCatalog())
+    const [, error] = await safeAwait(seedCatalog());
     setIsSeedingCatalog(false);
     if (error) {
       console.error(error);
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to seed catalog.');
+      dialog.alert('Error', error instanceof Error ? error.message : 'Failed to seed catalog.');
     } else {
-      Alert.alert('Success', 'Discovery catalog seeded successfully.');
+      dialog.alert('Success', 'Discovery catalog seeded successfully.');
     }
   };
 
   const handleSeedMockNotifications = async () => {
     if (!userId) {
-      Alert.alert('Error', 'No authenticated user ID found.');
+      dialog.alert('Error', 'No authenticated user ID found.');
       return;
     }
     setIsSeedingNotifications(true);
-    const [result, error] = await safeAwait(seedMockNotifications(userId))
+    const [, error] = await safeAwait(seedMockNotifications(userId));
     setIsSeedingNotifications(false);
     if (error) {
       console.error(error);
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to seed notifications.');
+      dialog.alert('Error', error instanceof Error ? error.message : 'Failed to seed notifications.');
     } else {
-      Alert.alert('Success', 'Mock notifications seeded successfully.');
+      dialog.alert('Success', 'Mock notifications seeded successfully.');
     }
   };
 
   const handleClearAllData = () => {
-    Alert.alert(
+    dialog.alert(
       'Reset Database',
       'Are you sure you want to delete all local database records? This action is permanent and cannot be undone.',
       [
@@ -125,24 +128,31 @@ export default function DebugSettingsScreen() {
           style: 'destructive',
           onPress: async () => {
             setIsClearingData(true);
-            const [, error] = await safeAwait(clearAllData(internalPatientId || undefined, userId || undefined));
+            const [, error] = await safeAwait(
+              clearAllData(internalPatientId || undefined, userId || undefined),
+            );
             setIsClearingData(false);
             if (error) {
-               console.error(error);
-               Alert.alert('Error', error instanceof Error ? error.message : 'Failed to reset database.');
+              console.error(error);
+              dialog.alert('Error', error instanceof Error ? error.message : 'Failed to reset database.');
             }
-            Alert.alert('Success', 'Local database has been cleared completely.');
+            dialog.alert('Success', 'Local database has been cleared completely.');
             await refreshStoreValues();
-          }
-        }
-      ]
+          },
+        },
+      ],
     );
   };
 
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ padding: 16, gap: 0 }}
+      contentContainerStyle={{
+        padding: spacing.lg,
+        maxWidth: sizes.formMaxWidth,
+        alignSelf: 'center',
+        width: '100%',
+      }}
     >
       <SettingsSection
         title="Onboarding"
@@ -152,7 +162,7 @@ export default function DebugSettingsScreen() {
           title="Onboarding Complete"
           subtitle="Toggle OFF to test the onboarding flow"
           icon={{ android: 'rocket_launch', ios: 'star.fill' }}
-          iconColor="#F59E0B"
+          iconColor={colors.warning}
           right={{
             type: 'switch',
             value: isComplete,
@@ -169,7 +179,7 @@ export default function DebugSettingsScreen() {
           title="Seed Catalog Data"
           subtitle="Populates organizations, clinics, and provider lists"
           icon={{ android: 'corporate_fare', ios: 'building.2.fill' }}
-          iconColor="#8B5CF6"
+          iconColor={colors.purple}
           right={{ type: isSeedingCatalog ? 'loading' : 'none' }}
           disabled={isSeedingCatalog || isSeedingHealth || isSeedingNotifications || isClearingData}
           onPress={handleSeedCatalog}
@@ -178,7 +188,7 @@ export default function DebugSettingsScreen() {
           title="Seed Demo Health Records"
           subtitle="Populates health history, vitals, consultations"
           icon={{ android: 'database', ios: 'doc.plaintext.fill' }}
-          iconColor="#10B981"
+          iconColor={colors.success}
           right={{ type: isSeedingHealth ? 'loading' : 'none' }}
           disabled={isSeedingCatalog || isSeedingHealth || isSeedingNotifications || isClearingData}
           onPress={handleSeedDemoHealthRecords}
@@ -187,7 +197,7 @@ export default function DebugSettingsScreen() {
           title="Seed Mock Notifications"
           subtitle="Populates local mock reminders/updates"
           icon={{ android: 'notifications', ios: 'bell.fill' }}
-          iconColor="#3B82F6"
+          iconColor={colors.primary}
           right={{ type: isSeedingNotifications ? 'loading' : 'none' }}
           disabled={isSeedingCatalog || isSeedingHealth || isSeedingNotifications || isClearingData}
           onPress={handleSeedMockNotifications}
@@ -202,7 +212,7 @@ export default function DebugSettingsScreen() {
           title="Clear All Local Data"
           subtitle="Delete all patient profiles, clinics, and settings"
           icon={{ android: 'delete_forever', ios: 'trash.fill' }}
-          iconColor="#EF4444"
+          iconColor={colors.emergency}
           destructive={true}
           right={{ type: isClearingData ? 'loading' : 'none' }}
           disabled={isSeedingCatalog || isSeedingHealth || isSeedingNotifications || isClearingData}
@@ -217,7 +227,7 @@ export default function DebugSettingsScreen() {
         <SettingsRow
           title="Refresh"
           icon={{ android: 'refresh', ios: 'arrow.clockwise' }}
-          iconColor="#3B82F6"
+          iconColor={colors.primary}
           right={{ type: 'none' }}
           onPress={refreshStoreValues}
         />

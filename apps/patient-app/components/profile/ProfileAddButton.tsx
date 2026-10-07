@@ -1,6 +1,8 @@
+﻿import React from 'react';
 import { Pressable, StyleSheet } from 'react-native';
-import { useTheme } from '@react-navigation/native';
 import ThemedText from '@ui/ThemedText';
+import { AppIcon } from '@ui/Icon';
+import { useAppTheme } from '../../contexts/ThemeContext';
 
 interface ProfileAddButtonProps {
   label?: string;
@@ -13,36 +15,42 @@ export default function ProfileAddButton({
   onPress,
   disabled = false,
 }: ProfileAddButtonProps) {
-  const { colors } = useTheme();
+  const { colors, radii, sizes } = useAppTheme();
 
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled}
-      style={({ pressed }) => [
+      accessibilityRole="button"
+      style={({ pressed, hovered }: any) => [
         styles.button,
-        { borderColor: colors.primary },
+        {
+          borderColor: colors.primary,
+          borderRadius: radii.md,
+        },
+        hovered && { backgroundColor: colors.primarySubtle },
         pressed && { opacity: 0.65 },
         disabled && { opacity: 0.4 },
       ]}
     >
-      <ThemedText style={[styles.text, { color: colors.primary }]}>+ {label}</ThemedText>
+      <AppIcon name="plus" size={sizes.iconSm} color="primary" />
+      <ThemedText variant="bodyBold" color="primary">
+        {label}
+      </ThemedText>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   button: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
     borderWidth: 1.5,
-    borderRadius: 12,
     borderStyle: 'dashed',
     paddingVertical: 13,
-    alignItems: 'center',
     marginTop: 4,
     marginBottom: 6,
-  },
-  text: {
-    fontSize: 14,
-    fontWeight: '600',
   },
 });

@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform, View, Alert } from 'react-native';
+import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useForm, Controller } from 'react-hook-form';
 import { db } from '@db/index';
@@ -11,11 +11,16 @@ import ProfileToggle from 'components/profile/ProfileToggle';
 import ProfileDatePicker from 'components/profile/ProfileDatePicker';
 import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
 import ProfileSaveBar from 'components/profile/ProfileSaveBar';
+import ProfileFormGrid from 'components/profile/ProfileFormGrid';
 import ThemedText from '@ui/ThemedText';
+import Badge from '@ui/Badge';
+import Screen from 'components/layout/Screen';
+import { useAppTheme } from 'contexts/ThemeContext';
 import { randomUUID } from 'expo-crypto';
 import { usePatientId } from 'hooks/usePatientId';
 import { useAuth } from 'contexts/AuthContext';
 import { addToSyncQueue, syncPendingProfileWrites } from 'services/api/syncService';
+import { dialog } from '@utils/dialog';
 
 type PhilhealthCategory = 'MM' | 'DD';
 type DisabilityType = 'Physical' | 'Sensory' | 'Intellectual' | 'Psychosocial';
@@ -64,8 +69,8 @@ function validatePhilHealthPinMod11(rawPin: string): Mod11Result {
     expectedDigit: expectedCheckDigit,
     actualDigit: actualCheckDigit,
     message: isValid
-      ? '✓ Valid PhilHealth PIN (Mod-11 Verified)'
-      : `⚠️ Check digit mismatch (Expected ${expectedCheckDigit}, found ${actualCheckDigit})`,
+      ? 'Valid PhilHealth PIN (Mod-11 Verified)'
+      : `Check digit mismatch (Expected ${expectedCheckDigit}, found ${actualCheckDigit})`,
   };
 }
 
@@ -151,6 +156,7 @@ export default function GovernmentIdsScreen() {
   const patientId = usePatientId();
   const { getToken } = useAuth();
   const navigation = useNavigation();
+  const { colors, spacing, radii } = useAppTheme();
   const [saving, setSaving] = useState(false);
   const [modal, setModal] = useState<'philhealth' | 'disability' | 'hmoPlan' | 'sponsorRel' | null>(null);
 
@@ -208,11 +214,11 @@ export default function GovernmentIdsScreen() {
   const onSave = handleSubmit(async (data) => {
     if (data.philhealthCategory === 'DD') {
       if (!data.sponsorPin?.trim()) {
-        Alert.alert('Required Field', 'For dependent benefits, Principal Member PIN is required.');
+        dialog.alert('Required Field', 'For dependent benefits, Principal Member PIN is required.');
         return;
       }
       if (!data.sponsorLastName?.trim() || !data.sponsorFirstName?.trim()) {
-        Alert.alert('Required Field', 'Principal Member Last Name and First Name are required.');
+        dialog.alert('Required Field', 'Principal Member Last Name and First Name are required.');
         return;
       }
     }
@@ -269,262 +275,212 @@ export default function GovernmentIdsScreen() {
   });
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <ProfileSectionHeader title="PhilHealth" />
-        <Controller control={control} name="philhealthId" render={({ field }) => (
-          <>
-            <ProfileFormField
-              label="PhilHealth ID (PIN)"
-              value={field.value}
-              onChangeText={(text) => field.onChange(formatPhilhealthId(text))}
-              keyboardType="numeric"
-              placeholder="00-000000000-0"
-              maxLength={14}
-            />
-            {mod11Status.message && (
-              <View
-                style={[
-                  styles.mod11Badge,
-                  mod11Status.isValid
-                    ? styles.mod11BadgeValid
-                    : mod11Status.isComplete
-                    ? styles.mod11BadgeInvalid
-                    : styles.mod11BadgeIncomplete,
-                ]}
-              >
-                <ThemedText
-                  style={[
-                    styles.mod11BadgeText,
-                    mod11Status.isValid
-                      ? styles.mod11TextValid
-                      : mod11Status.isComplete
-                      ? styles.mod11TextInvalid
-                      : styles.mod11TextIncomplete,
-                  ]}
-                >
-                  {mod11Status.message}
-                </ThemedText>
-              </View>
-            )}
-          </>
-        )} />
-        <Controller control={control} name="philhealthCategory" render={({ field }) => (
-          <ProfileFormField
-            label="Category"
-            value={PHILHEALTH_CATEGORY_OPTIONS.find(o => o.value === field.value)?.label || ''}
-            onPressIn={() => setModal('philhealth')}
-            placeholder="Select category"
-          />
-        )} />
-
-        {philhealthCategory === 'DD' && (
-          <View style={styles.sponsorCard}>
-            <ThemedText style={styles.sponsorTitle}>Principal Member / Sponsor Credentials</ThemedText>
-            <ThemedText style={styles.sponsorSubtitle}>
-              Required for PhilHealth dependent benefits. Please provide the credentials of the sponsoring member.
-            </ThemedText>
-
-            <Controller control={control} name="sponsorPin" render={({ field }) => (
+    <Screen width="form" scroll={false} padded={false}>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView
+          contentInsetAdjustmentBehavior="automatic"
+          contentContainerStyle={[styles.content, { padding: spacing.lg, paddingBottom: spacing['4xl'] }]}
+          keyboardShouldPersistTaps="handled"
+        >
+          <ProfileSectionHeader title="PhilHealth" />
+          <Controller control={control} name="philhealthId" render={({ field }) => (
+            <>
               <ProfileFormField
-                label="Sponsoring Member PIN *"
+                label="PhilHealth ID (PIN)"
                 value={field.value}
                 onChangeText={(text) => field.onChange(formatPhilhealthId(text))}
                 keyboardType="numeric"
                 placeholder="00-000000000-0"
                 maxLength={14}
               />
-            )} />
+              {mod11Status.message ? (
+                <View style={{ marginTop: -spacing.xs, marginBottom: spacing.md }}>
+                  <Badge
+                    tone={mod11Status.isValid ? 'success' : mod11Status.isComplete ? 'danger' : 'warning'}
+                    icon={mod11Status.isValid ? 'check' : 'warning'}
+                    label={mod11Status.message}
+                  />
+                </View>
+              ) : null}
+            </>
+          )} />
+          <Controller control={control} name="philhealthCategory" render={({ field }) => (
+            <ProfileFormField
+              label="Category"
+              value={PHILHEALTH_CATEGORY_OPTIONS.find(o => o.value === field.value)?.label || ''}
+              onPressIn={() => setModal('philhealth')}
+              placeholder="Select category"
+            />
+          )} />
 
-            <Controller control={control} name="sponsorRelationship" render={({ field }) => (
-              <ProfileFormField
-                label="Relationship to Member *"
-                value={SPONSOR_RELATIONSHIP_OPTIONS.find(o => o.value === field.value)?.label || ''}
-                onPressIn={() => setModal('sponsorRel')}
-                placeholder="Select relationship"
-              />
-            )} />
+          {philhealthCategory === 'DD' && (
+            <View style={[styles.sponsorCard, { backgroundColor: colors.successBg, borderColor: colors.successBorder, borderRadius: radii.md, padding: spacing.md }]}>
+              <ThemedText variant="bodyBold">Principal Member / Sponsor Credentials</ThemedText>
+              <ThemedText variant="small" color="textSecondary" style={{ marginTop: spacing.xs, marginBottom: spacing.md }}>
+                Required for PhilHealth dependent benefits. Please provide the credentials of the sponsoring member.
+              </ThemedText>
 
-            <Controller control={control} name="sponsorLastName" render={({ field }) => (
-              <ProfileFormField
-                label="Sponsor Last Name *"
-                value={field.value}
-                onChangeText={field.onChange}
-                placeholder="Last Name"
-              />
-            )} />
+              <Controller control={control} name="sponsorPin" render={({ field }) => (
+                <ProfileFormField
+                  label="Sponsoring Member PIN *"
+                  value={field.value}
+                  onChangeText={(text) => field.onChange(formatPhilhealthId(text))}
+                  keyboardType="numeric"
+                  placeholder="00-000000000-0"
+                  maxLength={14}
+                />
+              )} />
 
-            <Controller control={control} name="sponsorFirstName" render={({ field }) => (
-              <ProfileFormField
-                label="Sponsor First Name *"
-                value={field.value}
-                onChangeText={field.onChange}
-                placeholder="First Name"
-              />
-            )} />
+              <Controller control={control} name="sponsorRelationship" render={({ field }) => (
+                <ProfileFormField
+                  label="Relationship to Member *"
+                  value={SPONSOR_RELATIONSHIP_OPTIONS.find(o => o.value === field.value)?.label || ''}
+                  onPressIn={() => setModal('sponsorRel')}
+                  placeholder="Select relationship"
+                />
+              )} />
 
-            <Controller control={control} name="sponsorMiddleName" render={({ field }) => (
-              <ProfileFormField
-                label="Sponsor Middle Name"
-                value={field.value}
-                onChangeText={field.onChange}
-                placeholder="Middle Name (Optional)"
-              />
-            )} />
+              <ProfileFormGrid>
+                <Controller control={control} name="sponsorLastName" render={({ field }) => (
+                  <ProfileFormField
+                    label="Sponsor Last Name *"
+                    value={field.value}
+                    onChangeText={field.onChange}
+                    placeholder="Last Name"
+                  />
+                )} />
 
-            <Controller control={control} name="sponsorSuffix" render={({ field }) => (
-              <ProfileFormField
-                label="Sponsor Suffix"
-                value={field.value}
-                onChangeText={field.onChange}
-                placeholder="e.g. Jr, Sr, III"
-              />
-            )} />
+                <Controller control={control} name="sponsorFirstName" render={({ field }) => (
+                  <ProfileFormField
+                    label="Sponsor First Name *"
+                    value={field.value}
+                    onChangeText={field.onChange}
+                    placeholder="First Name"
+                  />
+                )} />
+              </ProfileFormGrid>
 
-            <Controller control={control} name="sponsorDob" render={({ field }) => (
-              <ProfileDatePicker
-                label="Sponsor Date of Birth"
-                value={field.value}
-                onChange={field.onChange}
-              />
-            )} />
-          </View>
-        )}
+              <ProfileFormGrid>
+                <Controller control={control} name="sponsorMiddleName" render={({ field }) => (
+                  <ProfileFormField
+                    label="Sponsor Middle Name"
+                    value={field.value}
+                    onChangeText={field.onChange}
+                    placeholder="Middle Name (Optional)"
+                  />
+                )} />
 
-        <ProfileSectionHeader title="Other Government IDs" />
-        <Controller control={control} name="sssNumber" render={({ field }) => (
-          <ProfileFormField label="SSS Number" value={field.value} onChangeText={(text) => field.onChange(formatSssNumber(text))} keyboardType="numeric" placeholder="00-0000000-0" maxLength={12} />
+                <Controller control={control} name="sponsorSuffix" render={({ field }) => (
+                  <ProfileFormField
+                    label="Sponsor Suffix"
+                    value={field.value}
+                    onChangeText={field.onChange}
+                    placeholder="e.g. Jr, Sr, III"
+                  />
+                )} />
+              </ProfileFormGrid>
+
+              <Controller control={control} name="sponsorDob" render={({ field }) => (
+                <ProfileDatePicker
+                  label="Sponsor Date of Birth"
+                  value={field.value}
+                  onChange={field.onChange}
+                />
+              )} />
+            </View>
+          )}
+
+          <ProfileSectionHeader title="Other Government IDs" />
+          <ProfileFormGrid>
+            <Controller control={control} name="sssNumber" render={({ field }) => (
+              <ProfileFormField label="SSS Number" value={field.value} onChangeText={(text) => field.onChange(formatSssNumber(text))} keyboardType="numeric" placeholder="00-0000000-0" maxLength={12} />
+            )} />
+            <Controller control={control} name="gsisNumber" render={({ field }) => (
+              <ProfileFormField label="GSIS Number" value={field.value} onChangeText={field.onChange} placeholder="Optional" />
+            )} />
+          </ProfileFormGrid>
+          <ProfileFormGrid>
+            <Controller control={control} name="pagIbigNumber" render={({ field }) => (
+              <ProfileFormField label="Pag-IBIG (HDMF) Number" value={field.value} onChangeText={field.onChange} keyboardType="numeric" />
+            )} />
+            <Controller control={control} name="tinNumber" render={({ field }) => (
+              <ProfileFormField label="TIN Number" value={field.value} onChangeText={(text) => field.onChange(formatTinNumber(text))} keyboardType="numeric" placeholder="000-000-000-000" maxLength={15} />
+            )} />
+          </ProfileFormGrid>
+          <Controller control={control} name="seniorCitizenId" render={({ field }) => (
+            <ProfileFormField label="Senior Citizen ID" value={field.value} onChangeText={field.onChange} placeholder="Optional" />
+          )} />
+
+          <ProfileSectionHeader title="Person with Disability (PWD)" />
+          <Controller control={control} name="isPwd" render={({ field }) => (
+            <ProfileToggle label="Registered PWD" value={field.value} onValueChange={field.onChange} />
+          )} />
+          {isPwd && (
+            <ProfileFormGrid>
+              <Controller control={control} name="pwdIdNumber" render={({ field }) => (
+                <ProfileFormField label="PWD ID Number" value={field.value} onChangeText={field.onChange} />
+              )} />
+              <Controller control={control} name="disabilityType" render={({ field }) => (
+                <ProfileFormField
+                  label="Disability Type"
+                  value={DISABILITY_TYPE_OPTIONS.find(o => o.value === field.value)?.label || ''}
+                  onPressIn={() => setModal('disability')}
+                  placeholder="Select type"
+                />
+              )} />
+            </ProfileFormGrid>
+          )}
+
+          <ProfileSectionHeader title="HMO / Health Insurance" />
+          <ProfileFormGrid>
+            <Controller control={control} name="hmoProvider" render={({ field }) => (
+              <ProfileFormField label="HMO Provider" value={field.value} onChangeText={field.onChange} placeholder="e.g. Maxicare, Intellicare" />
+            )} />
+            <Controller control={control} name="hmoPolicyNumber" render={({ field }) => (
+              <ProfileFormField label="Policy / Member Number" value={field.value} onChangeText={field.onChange} />
+            )} />
+          </ProfileFormGrid>
+          <Controller control={control} name="hmoPlanType" render={({ field }) => (
+            <ProfileFormField
+              label="Plan Type"
+              value={HMO_PLAN_TYPE_OPTIONS.find(o => o.value === field.value)?.label || ''}
+              onPressIn={() => setModal('hmoPlan')}
+              placeholder="Select plan type"
+            />
+          )} />
+          <ProfileFormGrid>
+            <Controller control={control} name="hmoCoverageStart" render={({ field }) => (
+              <ProfileDatePicker label="Coverage Start Date" value={field.value} onChange={field.onChange} />
+            )} />
+            <Controller control={control} name="hmoCoverageEnd" render={({ field }) => (
+              <ProfileDatePicker label="Coverage End Date" value={field.value} onChange={field.onChange} />
+            )} />
+          </ProfileFormGrid>
+        </ScrollView>
+
+        <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} />
+
+        <Controller control={control} name="philhealthCategory" render={({ field }) => (
+          <ProfileSelectModal visible={modal === 'philhealth'} title="PhilHealth Category" options={PHILHEALTH_CATEGORY_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setModal(null)} />
         )} />
-        <Controller control={control} name="gsisNumber" render={({ field }) => (
-          <ProfileFormField label="GSIS Number" value={field.value} onChangeText={field.onChange} placeholder="Optional" />
+        <Controller control={control} name="sponsorRelationship" render={({ field }) => (
+          <ProfileSelectModal visible={modal === 'sponsorRel'} title="Relationship to Sponsor" options={SPONSOR_RELATIONSHIP_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setModal(null)} />
         )} />
-        <Controller control={control} name="pagIbigNumber" render={({ field }) => (
-          <ProfileFormField label="Pag-IBIG (HDMF) Number" value={field.value} onChangeText={field.onChange} keyboardType="numeric" />
-        )} />
-        <Controller control={control} name="tinNumber" render={({ field }) => (
-          <ProfileFormField label="TIN Number" value={field.value} onChangeText={(text) => field.onChange(formatTinNumber(text))} keyboardType="numeric" placeholder="000-000-000-000" maxLength={15} />
-        )} />
-        <Controller control={control} name="seniorCitizenId" render={({ field }) => (
-          <ProfileFormField label="Senior Citizen ID" value={field.value} onChangeText={field.onChange} placeholder="Optional" />
-        )} />
-
-        <ProfileSectionHeader title="Person with Disability (PWD)" />
-        <Controller control={control} name="isPwd" render={({ field }) => (
-          <ProfileToggle label="Registered PWD" value={field.value} onValueChange={field.onChange} />
-        )} />
-        {isPwd && (
-          <>
-            <Controller control={control} name="pwdIdNumber" render={({ field }) => (
-              <ProfileFormField label="PWD ID Number" value={field.value} onChangeText={field.onChange} />
-            )} />
-            <Controller control={control} name="disabilityType" render={({ field }) => (
-              <ProfileFormField
-                label="Disability Type"
-                value={DISABILITY_TYPE_OPTIONS.find(o => o.value === field.value)?.label || ''}
-                onPressIn={() => setModal('disability')}
-                placeholder="Select type"
-              />
-            )} />
-          </>
-        )}
-
-        <ProfileSectionHeader title="HMO / Health Insurance" />
-        <Controller control={control} name="hmoProvider" render={({ field }) => (
-          <ProfileFormField label="HMO Provider" value={field.value} onChangeText={field.onChange} placeholder="e.g. Maxicare, Intellicare" />
-        )} />
-        <Controller control={control} name="hmoPolicyNumber" render={({ field }) => (
-          <ProfileFormField label="Policy / Member Number" value={field.value} onChangeText={field.onChange} />
+        <Controller control={control} name="disabilityType" render={({ field }) => (
+          <ProfileSelectModal visible={modal === 'disability'} title="Disability Type" options={DISABILITY_TYPE_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setModal(null)} />
         )} />
         <Controller control={control} name="hmoPlanType" render={({ field }) => (
-          <ProfileFormField
-            label="Plan Type"
-            value={HMO_PLAN_TYPE_OPTIONS.find(o => o.value === field.value)?.label || ''}
-            onPressIn={() => setModal('hmoPlan')}
-            placeholder="Select plan type"
-          />
+          <ProfileSelectModal visible={modal === 'hmoPlan'} title="HMO Plan Type" options={HMO_PLAN_TYPE_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setModal(null)} />
         )} />
-        <Controller control={control} name="hmoCoverageStart" render={({ field }) => (
-          <ProfileDatePicker label="Coverage Start Date" value={field.value} onChange={field.onChange} />
-        )} />
-        <Controller control={control} name="hmoCoverageEnd" render={({ field }) => (
-          <ProfileDatePicker label="Coverage End Date" value={field.value} onChange={field.onChange} />
-        )} />
-      </ScrollView>
-
-      <ProfileSaveBar onSave={onSave} saving={saving} isDirty={isDirty} />
-
-      <Controller control={control} name="philhealthCategory" render={({ field }) => (
-        <ProfileSelectModal visible={modal === 'philhealth'} title="PhilHealth Category" options={PHILHEALTH_CATEGORY_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setModal(null)} />
-      )} />
-      <Controller control={control} name="sponsorRelationship" render={({ field }) => (
-        <ProfileSelectModal visible={modal === 'sponsorRel'} title="Relationship to Sponsor" options={SPONSOR_RELATIONSHIP_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setModal(null)} />
-      )} />
-      <Controller control={control} name="disabilityType" render={({ field }) => (
-        <ProfileSelectModal visible={modal === 'disability'} title="Disability Type" options={DISABILITY_TYPE_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setModal(null)} />
-      )} />
-      <Controller control={control} name="hmoPlanType" render={({ field }) => (
-        <ProfileSelectModal visible={modal === 'hmoPlan'} title="HMO Plan Type" options={HMO_PLAN_TYPE_OPTIONS} selected={field.value} onSelect={field.onChange} onClose={() => setModal(null)} />
-      )} />
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  content: { padding: 16, paddingBottom: 24 },
+  content: {},
   sponsorCard: {
-    backgroundColor: '#F0FDF4',
     borderWidth: 1,
-    borderColor: '#86EFAC',
-    borderRadius: 10,
-    padding: 14,
-    marginTop: 8,
-    marginBottom: 16,
-  },
-  sponsorTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#0F172A',
-    marginBottom: 4,
-  },
-  sponsorSubtitle: {
-    fontSize: 12,
-    color: '#475569',
-    lineHeight: 16,
-    marginBottom: 12,
-  },
-  mod11Badge: {
-    borderRadius: 8,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginTop: -8,
-    marginBottom: 12,
-    alignSelf: 'flex-start',
-  },
-  mod11BadgeValid: {
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-    borderColor: '#10B981',
-  },
-  mod11BadgeInvalid: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    borderColor: '#EF4444',
-  },
-  mod11BadgeIncomplete: {
-    backgroundColor: 'rgba(245, 158, 11, 0.1)',
-    borderColor: '#F59E0B',
-  },
-  mod11BadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  mod11TextValid: {
-    color: '#059669',
-  },
-  mod11TextInvalid: {
-    color: '#DC2626',
-  },
-  mod11TextIncomplete: {
-    color: '#D97706',
   },
 });

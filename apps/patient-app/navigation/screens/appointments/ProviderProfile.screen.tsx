@@ -1,165 +1,159 @@
-import { FlatList, Image, ScrollView, StyleSheet, View } from 'react-native';
-import { useTheme } from '@react-navigation/native';
+import { Image, StyleSheet, View } from 'react-native';
 import type { StaticScreenProps } from '@react-navigation/native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import ThemedText from '@ui/ThemedText';
-import ThemedView from '@ui/ThemedView';
-import EntityMediaCardHeader from '@ui/EntityMediaCardHeader';
+import ThemedText from '../../../components/ui/ThemedText';
+import Card from '../../../components/ui/Card';
+import Badge from '../../../components/ui/Badge';
+import { AppIcon } from '../../../components/ui/Icon';
+import Screen from '../../../components/layout/Screen';
+import EntityMediaCardHeader from '../../../components/ui/EntityMediaCardHeader';
+import { useAppTheme } from '../../../contexts/ThemeContext';
 import type { ProviderSnapshot, AffiliatedClinic } from '../../../services/appointments/types';
 
 function StarRating({ rating }: { rating: number }) {
-    const { colors } = useTheme();
-    const filled = Math.floor(rating);
-    const hasHalf = rating - filled >= 0.5;
-    const empty = 5 - filled - (hasHalf ? 1 : 0);
-    return (
-        <View style={starStyles.row}>
-            {Array.from({ length: filled }).map((_, i) => (
-                <ThemedText key={`f${i}`} style={starStyles.star}>★</ThemedText>
-            ))}
-            {hasHalf && <ThemedText style={starStyles.halfStar}>½</ThemedText>}
-            {Array.from({ length: empty }).map((_, i) => (
-                <ThemedText key={`e${i}`} style={[starStyles.star, starStyles.emptyStar, { color: colors.border }]}>☆</ThemedText>
-            ))}
-            <ThemedText style={[starStyles.ratingText, { color: colors.text }]}>{rating.toFixed(1)}</ThemedText>
-        </View>
-    );
+  const filled = Math.round(rating);
+  return (
+    <View style={styles.starRow}>
+      {Array.from({ length: 5 }, (_, i) => (
+        <AppIcon
+          key={i}
+          name="star"
+          size={16}
+          color={i < filled ? 'warning' : 'textLight'}
+        />
+      ))}
+      <ThemedText variant="smallBold" color="textSecondary" style={{ marginLeft: 4 }}>
+        {rating.toFixed(1)}
+      </ThemedText>
+    </View>
+  );
 }
-
-const starStyles = StyleSheet.create({
-    row: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-    star: { fontSize: 18, color: '#F59E0B' },
-    halfStar: { fontSize: 16, color: '#F59E0B', marginHorizontal: 1 },
-    emptyStar: { fontSize: 18 },
-    ratingText: { fontSize: 14, fontWeight: '700', marginLeft: 4, opacity: 0.8 },
-});
 
 type Props = StaticScreenProps<{ providerData: ProviderSnapshot }>;
 
 function AffiliatedClinicCard({ clinic }: { clinic: AffiliatedClinic }) {
-    return (
-        <EntityMediaCardHeader
-            name={clinic.name}
-            logoUrl={clinic.logoUrl}
-            coverImageUrl={clinic.coverImageUrl}
-            badgeLabel="Affiliated"
-            badgeColor="#6366F1"
-        />
-    );
+  const { colors } = useAppTheme();
+  return (
+    <EntityMediaCardHeader
+      name={clinic.name}
+      logoUrl={clinic.logoUrl}
+      coverImageUrl={clinic.coverImageUrl}
+      badgeLabel="Affiliated"
+      badgeColor={colors.purple}
+    />
+  );
 }
 
 export default function ProviderProfileScreen({ route }: Props) {
-    const { colors } = useTheme();
-    const insets = useSafeAreaInsets();
-    const { providerData: provider } = route.params;
+  const { colors, spacing, radii } = useAppTheme();
+  const { providerData: provider } = route.params;
 
-    const initials = provider.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+  const initials = provider.name
+    .split(' ')
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
 
-    return (
-        <ThemedView style={styles.screen}>
-            <ScrollView
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
-            >
-                {/* Header — Avatar + Name + Specialty */}
-                <View style={styles.header}>
-                    {provider.avatarUrl ? (
-                        <Image
-                            source={{ uri: provider.avatarUrl }}
-                            style={styles.avatar}
-                            accessibilityRole="image"
-                            accessibilityLabel={provider.name}
-                        />
-                    ) : (
-                        <View style={[styles.avatar, styles.avatarFallback]}>
-                            <ThemedText style={styles.avatarInitials}>{initials}</ThemedText>
-                        </View>
-                    )}
-                    <ThemedText style={styles.providerName}>{provider.name}</ThemedText>
-                    <ThemedText style={[styles.providerSpecialty, { color: colors.text }]}>
-                        {provider.specialty}
-                    </ThemedText>
+  return (
+    <Screen width="form" contentContainerStyle={{ gap: spacing.lg }}>
+      {/* Header - Avatar + Name + Specialty */}
+      <View style={[styles.header, { gap: spacing.sm, paddingVertical: spacing.lg }]}>
+        {provider.avatarUrl ? (
+          <Image
+            source={{ uri: provider.avatarUrl }}
+            style={[styles.avatar, { borderRadius: radii.full }]}
+            accessibilityRole="image"
+            accessibilityLabel={provider.name}
+          />
+        ) : (
+          <View
+            style={[
+              styles.avatar,
+              {
+                borderRadius: radii.full,
+                backgroundColor: colors.primaryLight,
+              },
+            ]}
+          >
+            <ThemedText variant="display" color="primaryText">
+              {initials}
+            </ThemedText>
+          </View>
+        )}
+        <ThemedText variant="h1" style={styles.textCenter}>
+          {provider.name}
+        </ThemedText>
+        {provider.specialty ? (
+          <ThemedText variant="bodyLarge" color="textSecondary" style={styles.textCenter}>
+            {provider.specialty}
+          </ThemedText>
+        ) : null}
 
-                    <StarRating rating={provider.rating} />
+        <StarRating rating={provider.rating} />
 
-                    {provider.credentials.length > 0 && (
-                        <View style={styles.credRow}>
-                            {provider.credentials.map(c => (
-                                <View
-                                    key={c}
-                                    style={[
-                                        styles.credChip,
-                                        { borderColor: colors.border, backgroundColor: 'rgba(99,102,241,0.1)' },
-                                    ]}
-                                >
-                                    <ThemedText style={[styles.credText, { color: colors.primary }]}>{c}</ThemedText>
-                                </View>
-                            ))}
-                        </View>
-                    )}
-                </View>
+        {provider.credentials.length > 0 && (
+          <View style={[styles.credRow, { gap: spacing.xs, marginTop: spacing.xs }]}>
+            {provider.credentials.map((c) => (
+              <Badge key={c} label={c} tone="primary" size="md" />
+            ))}
+          </View>
+        )}
+      </View>
 
-                {/* Biography */}
-                {provider.bio ? (
-                    <View style={[styles.section, { borderColor: colors.border, backgroundColor: colors.card }]}>
-                        <ThemedText style={styles.sectionTitle}>Biography</ThemedText>
-                        <ThemedText style={[styles.bioText, { color: colors.text }]}>{provider.bio}</ThemedText>
-                    </View>
-                ) : null}
+      {/* Biography */}
+      {provider.bio ? (
+        <Card padding="lg" style={{ gap: spacing.sm }}>
+          <ThemedText variant="captionBold" color="textMuted" style={styles.sectionTitle}>
+            BIOGRAPHY
+          </ThemedText>
+          <ThemedText variant="body" color="text">
+            {provider.bio}
+          </ThemedText>
+        </Card>
+      ) : null}
 
-                {/* Affiliated Clinics */}
-                {provider.affiliatedClinics.length > 0 && (
-                    <View style={[styles.section, { borderColor: colors.border, backgroundColor: colors.card }]}>
-                        <ThemedText style={styles.sectionTitle}>Affiliated Clinics</ThemedText>
-                        <FlatList
-                            data={provider.affiliatedClinics}
-                            keyExtractor={item => item.id}
-                            scrollEnabled={false}
-                            ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
-                            renderItem={({ item }) => <AffiliatedClinicCard clinic={item} />}
-                        />
-                    </View>
-                )}
-            </ScrollView>
-        </ThemedView>
-    );
+      {/* Affiliated Clinics */}
+      {provider.affiliatedClinics.length > 0 && (
+        <Card padding="lg" style={{ gap: spacing.md }}>
+          <ThemedText variant="captionBold" color="textMuted" style={styles.sectionTitle}>
+            AFFILIATED CLINICS
+          </ThemedText>
+          <View style={{ gap: spacing.md }}>
+            {provider.affiliatedClinics.map((clinic) => (
+              <AffiliatedClinicCard key={clinic.id} clinic={clinic} />
+            ))}
+          </View>
+        </Card>
+      )}
+    </Screen>
+  );
 }
 
 const styles = StyleSheet.create({
-    screen: { flex: 1 },
-    scrollContent: { gap: 12 },
-    header: {
-        alignItems: 'center',
-        paddingHorizontal: 24,
-        paddingTop: 24,
-        paddingBottom: 8,
-        gap: 8,
-    },
-    avatar: { width: 88, height: 88, borderRadius: 44 },
-    avatarFallback: {
-        backgroundColor: '#94A3B8',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    avatarInitials: { color: '#fff', fontSize: 30, fontWeight: '800' },
-    providerName: { fontSize: 22, fontWeight: '800', textAlign: 'center', marginTop: 4 },
-    providerSpecialty: { fontSize: 15, opacity: 0.7, textAlign: 'center' },
-    credRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginTop: 4 },
-    credChip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1 },
-    credText: { fontSize: 12, fontWeight: '700' },
-    section: {
-        marginHorizontal: 16,
-        borderRadius: 18,
-        borderWidth: StyleSheet.hairlineWidth,
-        padding: 16,
-        gap: 10,
-    },
-    sectionTitle: {
-        fontSize: 11,
-        fontWeight: '800',
-        letterSpacing: 0.6,
-        opacity: 0.55,
-        textTransform: 'uppercase',
-    },
-    bioText: { fontSize: 14, lineHeight: 22, opacity: 0.85 },
+  header: {
+    alignItems: 'center',
+  },
+  avatar: {
+    width: 88,
+    height: 88,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  textCenter: {
+    textAlign: 'center',
+  },
+  starRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  credRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+  },
+  sectionTitle: {
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
 });

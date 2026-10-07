@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { useTheme } from '@react-navigation/native';
+import { useAppTheme } from '../../contexts/ThemeContext';
 
 interface WebShellProps {
   children: React.ReactNode;
@@ -13,7 +13,7 @@ interface WebShellProps {
  * allowing web screens to utilize desktop and tablet widescreen layouts naturally.
  */
 export default function WebShellWeb({ children }: WebShellProps) {
-  const { colors } = useTheme();
+  const { colors } = useAppTheme();
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>

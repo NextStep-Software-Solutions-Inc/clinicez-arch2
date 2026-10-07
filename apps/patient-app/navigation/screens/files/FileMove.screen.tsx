@@ -1,16 +1,17 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Platform, Pressable, StyleSheet, View } from 'react-native';
-import { MaterialSymbol, SFSymbol, useNavigation, useTheme } from '@react-navigation/native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import ThemedText from '@ui/ThemedText';
-import ThemedView from '@ui/ThemedView';
+import { AppIcon } from '@ui/Icon';
+import Screen from '../../../components/layout/Screen';
 import { usePatientId } from 'hooks/usePatientId';
 import { listAllFolders, moveItem } from '../../../services/files';
 import type { FilesScreenProps } from './navigationTypes';
-
-const BRAND = '#7C3AED';
+import { dialog } from '@utils/dialog';
+import { useAppTheme } from '../../../contexts/ThemeContext';
 
 export default function FileMoveScreen({ route }: FilesScreenProps<'FileMoveScreen'>) {
-  const { colors, dark } = useTheme();
+  const { colors, spacing, radii, sizes, shadows } = useAppTheme();
   const navigation = useNavigation('FileMoveScreen');
   const patientId = usePatientId();
   const { itemKind, itemId, currentFolderId } = route.params;
@@ -19,7 +20,9 @@ export default function FileMoveScreen({ route }: FilesScreenProps<'FileMoveScre
   useEffect(() => {
     listAllFolders(patientId)
       .then(setFolders)
-      .catch((error) => Alert.alert('Folders not available', error instanceof Error ? error.message : 'Unable to load your folders.'));
+      .catch((error) =>
+        dialog.alert('Folders not available', error instanceof Error ? error.message : 'Unable to load your folders.')
+      );
   }, [patientId]);
 
   const options = useMemo(() => {
@@ -40,19 +43,19 @@ export default function FileMoveScreen({ route }: FilesScreenProps<'FileMoveScre
       await moveItem(patientId, itemKind, itemId, targetFolderId);
       navigation.goBack();
     } catch (error) {
-      Alert.alert('Could not move', error instanceof Error ? error.message : 'Unable to move this item.');
+      dialog.alert('Could not move', error instanceof Error ? error.message : 'Unable to move this item.');
     }
   };
 
   return (
-    <ThemedView style={[{ flex: 1 }, { backgroundColor: colors.background }]}>
+    <Screen width="form" scroll={false}>
       <FlatList
         data={options}
         keyExtractor={(item) => item.id ?? 'root'}
         contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { padding: spacing.lg, gap: spacing.sm }]}
         ListHeaderComponent={
-          <ThemedText style={[styles.help, { color: colors.text }]}>
+          <ThemedText variant="body" color="textSecondary" style={{ marginBottom: spacing.sm }}>
             Choose where to move this {itemKind}.
           </ThemedText>
         }
@@ -62,58 +65,81 @@ export default function FileMoveScreen({ route }: FilesScreenProps<'FileMoveScre
             <Pressable
               onPress={() => handleMove(item.id)}
               disabled={selected}
+              accessibilityRole="button"
+              accessibilityLabel={item.label}
               style={({ pressed }) => [
                 styles.row,
                 {
-                  backgroundColor: selected ? BRAND : dark ? '#1C1633' : '#fff',
+                  borderRadius: radii.lg,
+                  padding: spacing.md,
+                  gap: spacing.md,
+                  borderWidth: sizes.borderWidth,
+                  borderColor: selected ? colors.primary : colors.border,
+                  backgroundColor: selected ? colors.primary : colors.card,
                   opacity: pressed ? 0.75 : 1,
                 },
+                shadows.sm,
               ]}
             >
-              <View style={[styles.rowIcon, { backgroundColor: selected ? 'rgba(255,255,255,0.2)' : '#F59E0B1A' }]}>
-                {Platform.select({
-                  android: <MaterialSymbol name="folder" size={18} color={selected ? '#fff' : '#F59E0B'} />,
-                  ios: <SFSymbol name="folder.fill" size={15} color={selected ? '#fff' : '#F59E0B'} />,
-                })}
+              <View
+                style={[
+                  styles.rowIcon,
+                  {
+                    width: sizes.controlMd,
+                    height: sizes.controlMd,
+                    borderRadius: radii.md,
+                    backgroundColor: selected ? colors.primaryHover : colors.warningBg,
+                  },
+                ]}
+              >
+                <AppIcon
+                  name="folder"
+                  size={sizes.iconMd}
+                  color={selected ? colors.onPrimary : 'warning'}
+                />
               </View>
-              <View style={{ flex: 1 }}>
-                <ThemedText style={[styles.rowName, { color: selected ? '#fff' : colors.text }]} numberOfLines={2}>
+              <View style={styles.flex}>
+                <ThemedText
+                  variant="bodyBold"
+                  color={selected ? colors.onPrimary : 'text'}
+                  numberOfLines={2}
+                >
                   {item.label}
                 </ThemedText>
                 {selected ? (
-                  <ThemedText style={styles.currentLabel}>Current location</ThemedText>
+                  <ThemedText
+                    variant="caption"
+                    color={colors.onPrimary}
+                    style={{ opacity: 0.85, marginTop: spacing.xxs }}
+                  >
+                    Current location
+                  </ThemedText>
                 ) : null}
               </View>
-              {selected
-                ? Platform.select({
-                  android: <MaterialSymbol name="check_circle" size={20} color="#fff" />,
-                  ios: <SFSymbol name="checkmark.circle.fill" size={17} color="#fff" />,
-                })
-                : null}
+              {selected ? (
+                <AppIcon name="checkCircle" size={sizes.iconMd} color={colors.onPrimary} />
+              ) : null}
             </Pressable>
           );
         }}
       />
-    </ThemedView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 16, gap: 8, paddingBottom: 48 },
-  help: { fontSize: 13, opacity: 0.65, marginBottom: 4 },
+  content: {
+    paddingBottom: 48,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    borderRadius: 14,
-    padding: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 1,
   },
-  rowIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  rowName: { fontSize: 15, fontWeight: '700' },
-  currentLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: '600', marginTop: 2 },
+  rowIcon: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  flex: {
+    flex: 1,
+  },
 });

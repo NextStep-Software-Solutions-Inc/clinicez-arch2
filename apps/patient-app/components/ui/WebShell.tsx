@@ -1,6 +1,6 @@
-import React from 'react';
+﻿import React from 'react';
 import { View, StyleSheet, useWindowDimensions, Platform } from 'react-native';
-import { useTheme } from '@react-navigation/native';
+import { useAppTheme } from '../../contexts/ThemeContext';
 
 interface WebShellProps {
   children: React.ReactNode;
@@ -14,7 +14,7 @@ interface WebShellProps {
  */
 export default function WebShell({ children, maxWidth = 540 }: WebShellProps) {
   const { width } = useWindowDimensions();
-  const { colors } = useTheme();
+  const { colors, shadows } = useAppTheme();
 
   if (Platform.OS !== 'web' || width <= 640) {
     return <View style={styles.fullWidth}>{children}</View>;
@@ -25,6 +25,7 @@ export default function WebShell({ children, maxWidth = 540 }: WebShellProps) {
       <View
         style={[
           styles.innerContainer,
+          shadows.md,
           {
             maxWidth,
             backgroundColor: colors.background,
@@ -53,11 +54,6 @@ const styles = StyleSheet.create({
   innerContainer: {
     flex: 1,
     width: '100%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 16,
-    elevation: 4,
     borderLeftWidth: StyleSheet.hairlineWidth,
     borderRightWidth: StyleSheet.hairlineWidth,
   },

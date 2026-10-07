@@ -1,15 +1,16 @@
-import { useState, useEffect } from 'react';
-import { ScrollView, Alert, Platform } from 'react-native';
-import { useNavigation, useTheme } from '@react-navigation/native';
+import React, { useState, useEffect } from 'react';
+import { ScrollView, Platform } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import * as LocalAuthentication from 'expo-local-authentication';
-import { useAuth } from 'contexts/AuthContext';
+import { useAuth } from '../../../contexts/AuthContext';
 import { useAuth as useClerkAuth } from '@clerk/expo';
-import { usePatientId } from 'hooks/usePatientId';
+import { usePatientId } from '../../../hooks/usePatientId';
 import * as Clipboard from 'expo-clipboard';
+import { useAppTheme } from '../../../contexts/ThemeContext';
 import { SettingsRow, SettingsSection } from '@ui/SettingsItem';
 import PinModal from '@ui/PinModal';
-import CustomAlertModal from '@ui/CustomAlertModal';
 import { regenerateFrk } from '../../../services/files/frkService';
+import { dialog } from '@utils/dialog';
 
 const LOCK_TIMEOUT_OPTIONS = [
   { label: 'Immediately', value: 0 },
@@ -19,20 +20,19 @@ const LOCK_TIMEOUT_OPTIONS = [
   { label: 'Never', value: -1 },
 ] as const;
 
-type LockTimeoutValue = typeof LOCK_TIMEOUT_OPTIONS[number]['value'];
+type LockTimeoutValue = (typeof LOCK_TIMEOUT_OPTIONS)[number]['value'];
 
 export default function SecuritySettingsScreen() {
-  const navigation = useNavigation();
-  const { hasPIN, biometricsEnabled, lockTimeout, setBiometricsEnabled, setLockTimeout, lock } = useAuth();
+  const navigation = useNavigation<any>();
+  const { colors, spacing } = useAppTheme();
+  const { hasPIN, biometricsEnabled, lockTimeout, setBiometricsEnabled, setLockTimeout, lock } =
+    useAuth();
 
   const [biometricsSupported, setBiometricsSupported] = useState(false);
   const [biometricLabel, setBiometricLabel] = useState('Biometrics');
   const [pinModalVisible, setPinModalVisible] = useState(false);
   const [pendingBiometricValue, setPendingBiometricValue] = useState<boolean | null>(null);
   const [regenerateFrkPending, setRegenerateFrkPending] = useState(false);
-  const [frkConfirmModalVisible, setFrkConfirmModalVisible] = useState(false);
-  const [frkSuccessModalVisible, setFrkSuccessModalVisible] = useState(false);
-  const [newGeneratedFrk, setNewGeneratedFrk] = useState('');
 
   const { getToken } = useClerkAuth();
   const patientId = usePatientId();
@@ -67,26 +67,38 @@ export default function SecuritySettingsScreen() {
       setRegenerateFrkPending(false);
       try {
         const newFrk = await regenerateFrk(patientId, getToken);
-        setNewGeneratedFrk(newFrk);
-        setFrkSuccessModalVisible(true);
+        await Clipboard.setStringAsync(newFrk);
+        dialog.alert(
+          'Recovery Key Regenerated',
+          `Your new File Recovery Key is:\n\n${newFrk}\n\nIt has been copied to your clipboard. Please write this down immediately. Your old key will no longer work.`,
+        );
       } catch (err: any) {
-        Alert.alert('Error', err.message || 'Failed to regenerate Recovery Key.');
+        dialog.alert('Error', err.message || 'Failed to regenerate Recovery Key.');
       }
     }
   };
 
-  const requestFrkRegeneration = () => {
-    setFrkConfirmModalVisible(true);
+  const requestFrkRegeneration = async () => {
+    const confirmed = await dialog.confirm({
+      title: 'Regenerate Recovery Key?',
+      message:
+        'This will invalidate your current File Recovery Key. Any backups of the old key will no longer work to recover your files on a new device.\n\nAre you sure you want to proceed?',
+      confirmLabel: 'Regenerate',
+      destructive: true,
+    });
+    if (confirmed) {
+      setRegenerateFrkPending(true);
+      setPinModalVisible(true);
+    }
   };
 
   const handleLockNow = () => {
     lock();
-    // navigate() would fail as we'll be routed to LockFlow automatically
   };
 
   const handleTimeoutSelect = (value: LockTimeoutValue) => {
     if (value === -1) {
-      Alert.alert(
+      dialog.alert(
         'Disable auto-lock?',
         'Your app will stay unlocked indefinitely while running. Are you sure?',
         [
@@ -99,14 +111,11 @@ export default function SecuritySettingsScreen() {
     }
   };
 
-  const currentTimeoutLabel =
-    LOCK_TIMEOUT_OPTIONS.find((o) => o.value === lockTimeout)?.label ?? 'Custom';
-
   if (!hasPIN) {
     return (
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ padding: 16, gap: 24 }}
+        contentContainerStyle={{ padding: spacing.lg, gap: spacing.xl }}
       >
         <SettingsSection
           title="PIN Required"
@@ -115,7 +124,7 @@ export default function SecuritySettingsScreen() {
           <SettingsRow
             title="Set Up PIN"
             icon={{ android: 'lock', ios: 'lock.fill' }}
-            iconColor="#3B82F6"
+            iconColor={colors.primary}
             right={{ type: 'chevron' }}
             onPress={() => navigation.navigate('Main', { screen: 'ChangePINScreen' })}
           />
@@ -127,7 +136,7 @@ export default function SecuritySettingsScreen() {
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ padding: 16, gap: 0 }}
+      contentContainerStyle={{ padding: spacing.lg, gap: 0 }}
     >
       {/* Biometrics */}
       {biometricsSupported && (
@@ -141,7 +150,7 @@ export default function SecuritySettingsScreen() {
               android: 'fingerprint',
               ios: biometricLabel === 'Face ID' ? 'faceid' : 'touchid',
             }}
-            iconColor="#10B981"
+            iconColor={colors.success}
             right={{
               type: 'switch',
               value: biometricsEnabled,
@@ -156,14 +165,14 @@ export default function SecuritySettingsScreen() {
         <SettingsRow
           title="Change PIN"
           icon={{ android: 'password', ios: 'key.fill' }}
-          iconColor="#8B5CF6"
+          iconColor={colors.purple}
           right={{ type: 'chevron' }}
           onPress={() => navigation.navigate('Main', { screen: 'ChangePINScreen' })}
         />
         <SettingsRow
           title="Lock App Now"
           icon={{ android: 'lock', ios: 'lock.fill' }}
-          iconColor="#6B7280"
+          iconColor={colors.textMuted}
           right={{ type: 'none' }}
           onPress={handleLockNow}
         />
@@ -177,7 +186,7 @@ export default function SecuritySettingsScreen() {
         <SettingsRow
           title="Regenerate Recovery Key"
           icon={{ android: 'vpn_key', ios: 'key.icloud.fill' }}
-          iconColor="#F59E0B"
+          iconColor={colors.warning}
           right={{ type: 'none' }}
           onPress={requestFrkRegeneration}
         />
@@ -194,7 +203,7 @@ export default function SecuritySettingsScreen() {
             title={option.label}
             right={
               lockTimeout === option.value
-                ? { type: 'value', label: '✓' }
+                ? { type: 'value', label: 'Active' }
                 : { type: 'none' }
             }
             onPress={() => handleTimeoutSelect(option.value as LockTimeoutValue)}
@@ -205,43 +214,17 @@ export default function SecuritySettingsScreen() {
       <PinModal
         visible={pinModalVisible}
         title="Confirm PIN"
-        subtitle={regenerateFrkPending ? 'Enter your PIN to regenerate your File Recovery Key.' : `Enter your PIN to ${pendingBiometricValue ? 'enable' : 'disable'} ${biometricLabel}.`}
+        subtitle={
+          regenerateFrkPending
+            ? 'Enter your PIN to regenerate your File Recovery Key.'
+            : `Enter your PIN to ${pendingBiometricValue ? 'enable' : 'disable'} ${biometricLabel}.`
+        }
         onSuccess={handlePinSuccess}
         onDismiss={() => {
           setPinModalVisible(false);
           setPendingBiometricValue(null);
           setRegenerateFrkPending(false);
         }}
-      />
-
-      <CustomAlertModal
-        visible={frkConfirmModalVisible}
-        title="Regenerate Recovery Key?"
-        message="This will invalidate your current File Recovery Key. Any backups of the old key will no longer work to recover your files on a new device.\n\nAre you sure you want to proceed?"
-        icon="⚠️"
-        onClose={() => setFrkConfirmModalVisible(false)}
-        onConfirm={() => {
-          setFrkConfirmModalVisible(false);
-          setRegenerateFrkPending(true);
-          setPinModalVisible(true);
-        }}
-        confirmText="Regenerate"
-        cancelText="Cancel"
-        destructive
-      />
-
-      <CustomAlertModal
-        visible={frkSuccessModalVisible}
-        title="Recovery Key Regenerated"
-        message={`Your new File Recovery Key is:\n\n${newGeneratedFrk}\n\nPlease write this down immediately. Your old key will no longer work.`}
-        icon="🔑"
-        onClose={() => setFrkSuccessModalVisible(false)}
-        onConfirm={async () => {
-          await Clipboard.setStringAsync(newGeneratedFrk);
-          setFrkSuccessModalVisible(false);
-        }}
-        confirmText="Copy to Clipboard"
-        cancelText="Done"
       />
     </ScrollView>
   );

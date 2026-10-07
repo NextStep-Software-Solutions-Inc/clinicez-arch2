@@ -1,3 +1,4 @@
+import React, { useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -6,38 +7,38 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  ActivityIndicator,
-} from "react-native";
-import { Theme, useNavigation, useTheme } from "@react-navigation/native";
-import { useSignIn } from "@clerk/expo";
-import ThemedText from "@ui/ThemedText";
-import { useAuth } from "contexts/AuthContext";
-import { useState } from "react";
+} from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { useSignIn } from '@clerk/expo';
+import { useAppTheme } from '../../contexts/ThemeContext';
+import { useAuth } from '../../contexts/AuthContext';
+import ThemedText from '@ui/ThemedText';
+import Button from '@ui/Button';
+import Card from '@ui/Card';
+import Input from '@ui/Input';
 
-type Step = "email" | "code" | "password";
+type Step = 'email' | 'code' | 'password';
 
-const STEPS: Step[] = ["email", "code", "password"];
-const STEP_LABELS = ["Email", "Code", "Password"];
+const STEPS: Step[] = ['email', 'code', 'password'];
+const STEP_LABELS = ['Email', 'Code', 'Password'];
 
 export default function ForgotPasswordScreen() {
-  const navigation = useNavigation();
-  const theme = useTheme();
+  const navigation = useNavigation<any>();
+  const { colors, spacing, radii, sizes, typography } = useAppTheme();
   const { signIn, errors, fetchStatus } = useSignIn();
-  const { unlock, isAuthenticated } = useAuth();
+  const { unlock } = useAuth();
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const isLoading = fetchStatus === "fetching";
   const currentStepIndex = STEPS.indexOf(step);
-  const styles = createStyles(theme);
 
   const handleSendCode = async () => {
     const { error: createError } = await signIn.create({ identifier: email });
     if (createError) return;
 
-    const { error: sendError } =
-      await signIn.resetPasswordEmailCode.sendCode();
+    const { error: sendError } = await signIn.resetPasswordEmailCode.sendCode();
     if (sendError) return;
 
     setStep("code");
@@ -46,7 +47,6 @@ export default function ForgotPasswordScreen() {
   const handleVerifyCode = async () => {
     const { error } = await signIn.resetPasswordEmailCode.verifyCode({ code });
     if (error) return;
-    // After verifyCode succeeds, signIn.status becomes 'needs_new_password'
     setStep("password");
   };
 
@@ -61,7 +61,7 @@ export default function ForgotPasswordScreen() {
       await signIn.finalize({
         navigate: ({ session }) => {
           if (session?.currentTask) return;
-          unlock(); // Let state machine route to Main or SetupPIN based on hasPIN
+          unlock();
         },
       });
     }
@@ -69,38 +69,58 @@ export default function ForgotPasswordScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.page}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={[styles.page, { backgroundColor: colors.background }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[
+          styles.scroll,
+          {
+            paddingHorizontal: spacing.xl,
+            paddingTop: spacing.xl,
+            paddingBottom: spacing['2xl'],
+            gap: spacing.lg,
+          },
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         {/* Step indicator */}
-        <View style={styles.stepper}>
+        <View
+          style={[
+            styles.stepper,
+            {
+              borderColor: colors.border,
+              borderRadius: radii.md,
+              backgroundColor: colors.surfaceSubtle,
+              paddingHorizontal: spacing.md,
+              paddingVertical: spacing.sm,
+            },
+          ]}
+        >
           {STEPS.map((s, i) => (
-            <View key={s} style={styles.stepItem}>
+            <View key={s} style={[styles.stepItem, { gap: spacing.xs }]}>
               <View
                 style={[
                   styles.stepDot,
-                  i <= currentStepIndex && styles.stepDotActive,
+                  {
+                    width: sizes.controlSm - 4,
+                    height: sizes.controlSm - 4,
+                    borderRadius: radii.full,
+                    backgroundColor: i <= currentStepIndex ? colors.primary : colors.border,
+                  },
                 ]}
               >
                 <ThemedText
-                  style={[
-                    styles.stepNumber,
-                    i <= currentStepIndex && styles.stepNumberActive,
-                  ]}
+                  variant="captionBold"
+                  color={i <= currentStepIndex ? 'onPrimary' : 'textMuted'}
                 >
                   {i + 1}
                 </ThemedText>
               </View>
               <ThemedText
-                style={[
-                  styles.stepLabel,
-                  i <= currentStepIndex && styles.stepLabelActive,
-                ]}
+                variant="smallBold"
+                color={i <= currentStepIndex ? 'primary' : 'textMuted'}
               >
                 {STEP_LABELS[i]}
               </ThemedText>
@@ -108,7 +128,10 @@ export default function ForgotPasswordScreen() {
                 <View
                   style={[
                     styles.stepLine,
-                    i < currentStepIndex && styles.stepLineActive,
+                    {
+                      backgroundColor: i < currentStepIndex ? colors.primary : colors.border,
+                      marginHorizontal: spacing.xs,
+                    },
                   ]}
                 />
               )}
@@ -116,153 +139,152 @@ export default function ForgotPasswordScreen() {
           ))}
         </View>
 
-        <View style={styles.header}>
-          <ThemedText style={styles.brand}>Clinic EZ</ThemedText>
-          {step === "email" && (
+        <View style={[styles.header, { gap: spacing.xs }]}>
+          <ThemedText variant="captionBold" color="primary" style={styles.brand}>
+            Clinic EZ
+          </ThemedText>
+          {step === 'email' && (
             <>
-              <ThemedText style={styles.title}>Forgot password?</ThemedText>
-              <ThemedText style={styles.subtitle}>
+              <ThemedText variant="display">Forgot password?</ThemedText>
+              <ThemedText variant="body" color="textSecondary">
                 Enter your email and we'll send a reset code.
               </ThemedText>
             </>
           )}
-          {step === "code" && (
+          {step === 'code' && (
             <>
-              <ThemedText style={styles.title}>Check your email</ThemedText>
-              <ThemedText style={styles.subtitle}>
+              <ThemedText variant="display">Check your email</ThemedText>
+              <ThemedText variant="body" color="textSecondary">
                 Enter the 6-digit code we sent to {email}.
               </ThemedText>
             </>
           )}
-          {step === "password" && (
+          {step === 'password' && (
             <>
-              <ThemedText style={styles.title}>New password</ThemedText>
-              <ThemedText style={styles.subtitle}>
+              <ThemedText variant="display">New password</ThemedText>
+              <ThemedText variant="body" color="textSecondary">
                 Choose a strong password to protect your account.
               </ThemedText>
             </>
           )}
         </View>
 
-        <View style={[styles.card]}>
-          {step === "email" && (
-            <View style={styles.field}>
-              <ThemedText style={styles.label}>Email address</ThemedText>
-              <TextInput
-                style={{...styles.input}}
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-                placeholder="you@example.com"
-                placeholderTextColor="#9CA3AF"
-                autoFocus
-              />
-              {errors?.fields?.identifier && (
-                <ThemedText style={styles.error}>
-                  {errors.fields.identifier.message}
-                </ThemedText>
-              )}
-            </View>
+        <Card padding="lg" elevation="sm" style={[styles.card, { gap: spacing.md }]}>
+          {step === 'email' && (
+            <Input
+              label="Email address"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+              placeholder="you@example.com"
+              error={errors?.fields?.identifier?.message}
+              autoFocus
+              containerStyle={{ marginBottom: 0 }}
+            />
           )}
 
-          {step === "code" && (
-            <View style={styles.field}>
-              <ThemedText style={styles.label}>Reset code</ThemedText>
+          {step === 'code' && (
+            <View style={{ gap: spacing.xs, alignItems: 'center' }}>
+              <ThemedText variant="smallBold" color="textSecondary">
+                Reset code
+              </ThemedText>
               <TextInput
-                style={[styles.input, styles.codeInput]}
+                style={[
+                  styles.codeInput,
+                  typography.display,
+                  {
+                    width: '100%',
+                    backgroundColor: colors.inputBackground,
+                    borderColor: errors?.fields?.code ? colors.emergency : colors.border,
+                    borderRadius: radii.md,
+                    borderWidth: sizes.borderWidth,
+                    color: colors.text,
+                    paddingHorizontal: spacing.lg,
+                    paddingVertical: spacing.md,
+                  },
+                ]}
                 value={code}
                 onChangeText={setCode}
                 keyboardType="number-pad"
                 maxLength={6}
                 placeholder="000000"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={colors.textLight}
                 autoFocus
               />
-              {errors?.fields?.code && (
-                <ThemedText style={styles.error}>
+              {errors?.fields?.code?.message ? (
+                <ThemedText variant="small" color="emergencyText">
                   {errors.fields.code.message}
                 </ThemedText>
-              )}
+              ) : null}
             </View>
           )}
 
-          {step === "password" && (
-            <View style={styles.field}>
-              <ThemedText style={styles.label}>New password</ThemedText>
-              <TextInput
-                style={styles.input}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                autoComplete="new-password"
-                placeholder="Min. 8 characters"
-                placeholderTextColor="#9CA3AF"
-                autoFocus
-              />
-              {errors?.fields?.password && (
-                <ThemedText style={styles.error}>
-                  {errors.fields.password.message}
-                </ThemedText>
-              )}
-            </View>
+          {step === 'password' && (
+            <Input
+              label="New password"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              autoComplete="new-password"
+              placeholder="Min. 8 characters"
+              error={errors?.fields?.password?.message}
+              hint="Must be at least 8 characters"
+              autoFocus
+              containerStyle={{ marginBottom: 0 }}
+            />
           )}
-        </View>
+        </Card>
 
-        <Pressable
-          style={({ pressed }) => [
-            styles.cta,
-            (step === "email" && (!email || isLoading)) && styles.ctaDisabled,
-            (step === "code" && (code.length < 6 || isLoading)) &&
-              styles.ctaDisabled,
-            (step === "password" && (!password || isLoading)) &&
-              styles.ctaDisabled,
-            pressed && styles.ctaPressed,
-          ]}
+        <Button
+          label={
+            step === 'email'
+              ? 'Send reset code'
+              : step === 'code'
+                ? 'Verify code'
+                : 'Set new password'
+          }
+          variant="primary"
+          size="lg"
+          fullWidth
+          loading={isLoading}
+          disabled={
+            isLoading ||
+            (step === 'email' && !email) ||
+            (step === 'code' && code.length < 6) ||
+            (step === 'password' && !password)
+          }
           onPress={
-            step === "email"
+            step === 'email'
               ? handleSendCode
-              : step === "code"
+              : step === 'code'
                 ? handleVerifyCode
                 : handleSetPassword
           }
-          disabled={
-            isLoading ||
-            (step === "email" && !email) ||
-            (step === "code" && code.length < 6) ||
-            (step === "password" && !password)
-          }
-        >
-          {isLoading ? (
-            <ActivityIndicator color={theme.colors.text} />
-          ) : (
-            <ThemedText style={styles.ctaText}>
-              {step === "email"
-                ? "Send reset code"
-                : step === "code"
-                  ? "Verify code"
-                  : "Set new password"}
-            </ThemedText>
-          )}
-        </Pressable>
+        />
 
-        {step === "code" && (
-          <View style={styles.resendRow}>
-            <ThemedText style={styles.footerText}>Didn't get it? </ThemedText>
-            <Pressable
-              onPress={() => signIn.resetPasswordEmailCode.sendCode()}
-            >
-              <ThemedText style={styles.link}>Resend code</ThemedText>
+        {step === 'code' && (
+          <View style={[styles.resendRow, { gap: spacing.xs }]}>
+            <ThemedText variant="body" color="textSecondary">
+              Didn't get it?{' '}
+            </ThemedText>
+            <Pressable onPress={() => signIn.resetPasswordEmailCode.sendCode()} accessibilityRole="button">
+              <ThemedText variant="bodyBold" color="primary">
+                Resend code
+              </ThemedText>
             </Pressable>
           </View>
         )}
 
         <View style={styles.footer}>
           <Pressable
-            onPress={() => navigation.navigate("Auth", { screen: "Login" })}
+            onPress={() => navigation.navigate('Auth', { screen: 'Login' })}
+            accessibilityRole="button"
           >
-            <ThemedText style={styles.link}>Back to sign in</ThemedText>
+            <ThemedText variant="bodyBold" color="primary">
+              Back to sign in
+            </ThemedText>
           </Pressable>
         </View>
       </ScrollView>
@@ -270,171 +292,55 @@ export default function ForgotPasswordScreen() {
   );
 }
 
-const createStyles = (theme: Theme) => StyleSheet.create({
+const styles = StyleSheet.create({
   page: {
     flex: 1,
-    backgroundColor: theme.colors.background,
   },
-  scroll: {
-    paddingHorizontal: 28,
-    paddingTop: 32,
-    paddingBottom: 36,
-    gap: 20,
-    maxWidth: "auto",
-  },
+  scroll: {},
   stepper: {
-    flexDirection: "row",
-    alignItems: "center",
-    // flexWrap: "wrap",
-    justifyContent: "space-between",
-    marginBottom: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: theme.colors.border,
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
   },
   stepItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
     flexShrink: 1,
     minWidth: 0,
   },
   stepDot: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: theme.colors.border,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  stepDotActive: {
-    backgroundColor: theme.colors.primary,
-  },
-  stepNumber: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: theme.colors.text,
-  },
-  stepNumberActive: {
-    color: "#FFFFFF",
-  },
-  stepLabel: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: theme.colors.text,
-  },
-  stepLabelActive: {
-    color: theme.colors.text,
-    fontWeight: "600",
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   stepLine: {
     flex: 1,
     maxWidth: 50,
-    height: 1,
-    backgroundColor: theme.colors.border,
-    marginHorizontal: 6,
-  },
-  stepLineActive: {
-    backgroundColor: theme.colors.text,
+    height: 2,
   },
   header: {
-    gap: 10,
     marginBottom: 4,
   },
   brand: {
-    fontSize: 13,
     letterSpacing: 2,
-    textTransform: "uppercase",
-    opacity: 0.75,
-  },
-  title: {
-    fontSize: 34,
-    fontWeight: "700",
-    lineHeight: 42,
-  },
-  subtitle: {
-    fontSize: 16,
-    lineHeight: 24,
-    opacity: 0.75,
+    textTransform: 'uppercase',
   },
   card: {
-    backgroundColor: theme.colors.card,
-    borderRadius: 24,
-    padding: 24,
-    gap: 16,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 6,
-  },
-  field: {
-    gap: 8,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: theme.colors.text,
-  },
-  input: {
-    backgroundColor: theme.colors.background,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: theme.colors.text,
+    width: '100%',
   },
   codeInput: {
-    textAlign: "center",
-    fontSize: 32,
-    fontWeight: "700",
-    letterSpacing: 10,
-  },
-  error: {
-    fontSize: 13,
-    color: theme.colors.notification,
-  },
-  cta: {
-    backgroundColor: theme.colors.primary,
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 54,
-  },
-  ctaDisabled: {
-    opacity: 0.45,
-  },
-  ctaPressed: {
-    opacity: 0.84,
-  },
-  ctaText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#FFFFFF",
+    textAlign: 'center',
+    letterSpacing: 8,
   },
   resendRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   footer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
     marginTop: 4,
-  },
-  footerText: {
-    fontSize: 15,
-    opacity: 0.75,
-  },
-  link: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: theme.colors.primary,
   },
 });

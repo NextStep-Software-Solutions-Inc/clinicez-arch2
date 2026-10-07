@@ -1,5 +1,6 @@
 import { createNativeStackNavigator, createNativeStackScreen } from '@react-navigation/native-stack';
 import { isLiquidGlassSupported } from '@callstack/liquid-glass';
+import { radiusScale } from '@clinicez/design-tokens';
 
 import FilesScreen from '../screens/files/Files.screen';
 import FilesUploadScreen from '../screens/files/FilesUpload.screen';
@@ -37,7 +38,7 @@ const FilesStack = createNativeStackNavigator({
         presentation: 'formSheet',
         sheetAllowedDetents: [0.65],
         sheetGrabberVisible: true,
-        sheetCornerRadius: 20,
+        sheetCornerRadius: radiusScale['2xl'],
         headerShown: false,
       },
     }),
@@ -48,7 +49,7 @@ const FilesStack = createNativeStackNavigator({
         presentation: 'formSheet',
         sheetGrabberVisible: true,
         sheetAllowedDetents: [0.5, 1.0],
-        sheetCornerRadius: 20,
+        sheetCornerRadius: radiusScale['2xl'],
       },
     }),
     FileViewerScreen: createNativeStackScreen({

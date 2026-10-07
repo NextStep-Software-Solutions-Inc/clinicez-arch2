@@ -7,7 +7,10 @@
   },
   "dependencies": {
     "@callstack/liquid-glass": "^0.8.0",
+    "@clinicez/design-tokens": "workspace:*",
     "@clerk/expo": "^3.3.0",
+    "@expo-google-fonts/geist": "^0.4.2",
+    "@expo-google-fonts/geist-mono": "^0.4.3",
     "@expo/metro-runtime": "~56.0.21",
     "@gorhom/bottom-sheet": "^5.2.2",
     "@react-native-community/netinfo": "^12.0.1",
@@ -25,6 +28,7 @@
     "expo-constants": "^57.0.18",
     "expo-crypto": "^56.0.4",
     "expo-file-system": "^56.0.7",
+    "expo-font": "~56.0.7",
     "expo-image": "^57.0.0",
     "expo-image-picker": "^56.0.15",
     "expo-linear-gradient": "^56.0.4",
@@ -72,7 +76,9 @@
     "build:patient-web": "bun run build:web",
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint:tokens": "node scripts/check-tokens.mjs",
+    "test": "bun test tests"
   },
   "private": true
 }

@@ -1,92 +1,197 @@
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, StyleSheet, Pressable, Platform } from 'react-native';
-import { useTheme } from '@react-navigation/native';
-import { useState, useCallback, useEffect } from 'react';
-import { useAuth } from 'contexts/AuthContext';
+import { useAppTheme } from '../../contexts/ThemeContext';
+import { useAuth } from '../../contexts/AuthContext';
 import ThemedText from '@ui/ThemedText';
 import NumericKeypad from '@ui/NumericKeypad';
+import { AppIcon } from '@ui/Icon';
 
 const PIN_LENGTH = 4;
 const MAX_BIOMETRIC_ATTEMPTS = 3;
 
 function PINDots({ filled, shaking }: { filled: number; shaking: boolean }) {
-  const { colors } = useTheme();
-  const dotColor = shaking ? '#EF4444' : (colors.primary ?? '#3B82F6');
+  const { colors, radii, sizes } = useAppTheme();
+  const dotColor = shaking ? colors.emergency : colors.primary;
   return (
     <View style={styles.dotsRow}>
       {Array.from({ length: PIN_LENGTH }).map((_, i) => (
-        <View key={i} style={[styles.dot, { borderColor: dotColor }, i < filled && { backgroundColor: dotColor }]} />
+        <View
+          key={i}
+          style={[
+            styles.dot,
+            {
+              width: sizes.iconMd,
+              height: sizes.iconMd,
+              borderRadius: radii.full,
+              borderColor: dotColor,
+              backgroundColor: i < filled ? dotColor : colors.transparent,
+            },
+          ]}
+        />
       ))}
     </View>
   );
 }
 
 export default function UnlockScreen() {
+  const { colors, spacing, sizes } = useAppTheme();
   const { verifyPin, biometricsEnabled, authenticateWithBiometrics } = useAuth();
   const [currentInput, setCurrentInput] = useState('');
   const [error, setError] = useState('');
   const [shaking, setShaking] = useState(false);
   const [biometricFailures, setBiometricFailures] = useState(0);
-  const biometricsAvailable = biometricsEnabled && biometricFailures < MAX_BIOMETRIC_ATTEMPTS;
+
+  const biometricsAvailable =
+    Platform.OS !== 'web' && biometricsEnabled && biometricFailures < MAX_BIOMETRIC_ATTEMPTS;
 
   const triggerBiometrics = useCallback(async () => {
+    if (Platform.OS === 'web') return;
     const result = await authenticateWithBiometrics();
     if (result === 'error') {
-      setBiometricFailures(prev => { const next = prev + 1; if (next >= MAX_BIOMETRIC_ATTEMPTS) { setError('Biometrics unavailable. Use your PIN.'); } return next; });
+      setBiometricFailures((prev) => {
+        const next = prev + 1;
+        if (next >= MAX_BIOMETRIC_ATTEMPTS) {
+          setError('Biometrics unavailable. Use your PIN.');
+        }
+        return next;
+      });
     }
   }, [authenticateWithBiometrics]);
 
-  useEffect(() => { if (biometricsEnabled && biometricFailures === 0) { triggerBiometrics(); } }, []);
-
-  const handleWrongPIN = () => {
-    setShaking(true); setError('Incorrect PIN. Try again.');
-    setTimeout(() => { setCurrentInput(''); setShaking(false); }, 600);
-  };
-
-  const handleDigit = useCallback(async (digit: string) => {
-    if (currentInput.length >= PIN_LENGTH || shaking) return;
-    const next = currentInput + digit;
-    setCurrentInput(next); setError('');
-    if (next.length === PIN_LENGTH) {
-      setTimeout(async () => {
-        const ok = await verifyPin(next);
-        if (ok === false) handleWrongPIN();
-        // On success, isLocked becomes false → state machine routes to Main
-      }, 150);
+  useEffect(() => {
+    if (Platform.OS !== 'web' && biometricsEnabled && biometricFailures === 0) {
+      triggerBiometrics();
     }
-  }, [currentInput, shaking, verifyPin]);
+  }, [biometricsEnabled, biometricFailures, triggerBiometrics]);
 
-  const handleDelete = useCallback(() => { if (shaking) return; setCurrentInput(prev => prev.slice(0, -1)); setError(''); }, [shaking]);
+  const handleWrongPIN = useCallback(() => {
+    setShaking(true);
+    setError('Incorrect PIN. Try again.');
+    setTimeout(() => {
+      setCurrentInput('');
+      setShaking(false);
+    }, 600);
+  }, []);
+
+  const handleDigit = useCallback(
+    async (digit: string) => {
+      if (currentInput.length >= PIN_LENGTH || shaking) return;
+      const next = currentInput + digit;
+      setCurrentInput(next);
+      setError('');
+      if (next.length === PIN_LENGTH) {
+        setTimeout(async () => {
+          const ok = await verifyPin(next);
+          if (ok === false) handleWrongPIN();
+        }, 150);
+      }
+    },
+    [currentInput, shaking, verifyPin, handleWrongPIN],
+  );
+
+  const handleDelete = useCallback(() => {
+    if (shaking) return;
+    setCurrentInput((prev) => prev.slice(0, -1));
+    setError('');
+  }, [shaking]);
+
+  // Web hardware keyboard listener
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key >= '0' && e.key <= '9') {
+        handleDigit(e.key);
+      } else if (e.key === 'Backspace') {
+        handleDelete();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleDigit, handleDelete]);
 
   const biometricLabel = Platform.select({ ios: 'Use Face ID', default: 'Use Biometrics' });
 
   return (
-    <View style={styles.page}>
-      <View style={styles.header}>
-        <ThemedText style={styles.title}>Enter PIN</ThemedText>
-        <ThemedText style={styles.subtitle}>Enter your 4-digit PIN to unlock</ThemedText>
+    <View style={[styles.page, { backgroundColor: colors.background, paddingVertical: spacing['3xl'] }]}>
+      <View
+        style={[
+          styles.container,
+          {
+            maxWidth: sizes.dialogWidth,
+            gap: spacing.xl,
+            paddingHorizontal: spacing.xl,
+          },
+        ]}
+      >
+        <View style={[styles.header, { gap: spacing.sm }]}>
+          <View style={{ marginBottom: spacing.xs }}>
+            <AppIcon name="lock" size={sizes.iconXl * 1.5} color="primary" />
+          </View>
+          <ThemedText variant="h2" style={{ textAlign: 'center' }}>
+            Enter PIN
+          </ThemedText>
+          <ThemedText variant="body" color="textSecondary" style={{ textAlign: 'center' }}>
+            Enter your 4-digit PIN to unlock
+          </ThemedText>
+        </View>
+
+        <PINDots filled={currentInput.length} shaking={shaking} />
+
+        {error ? (
+          <ThemedText variant="small" color="emergencyText" style={{ textAlign: 'center' }}>
+            {error}
+          </ThemedText>
+        ) : (
+          <View style={{ height: spacing.lg }} />
+        )}
+
+        <NumericKeypad onPress={handleDigit} onDelete={handleDelete} />
+
+        {Platform.OS === 'web' ? (
+          <ThemedText variant="caption" color="textMuted" style={{ textAlign: 'center' }}>
+            Type numbers on your keyboard or use the keypad
+          </ThemedText>
+        ) : null}
+
+        {biometricsAvailable ? (
+          <Pressable
+            style={({ pressed }) => [styles.biometricBtn, pressed && { opacity: 0.6 }]}
+            onPress={triggerBiometrics}
+          >
+            <ThemedText variant="bodyBold" color="primary">
+              {biometricLabel}
+            </ThemedText>
+          </Pressable>
+        ) : null}
       </View>
-      <PINDots filled={currentInput.length} shaking={shaking} />
-      {error ? <ThemedText style={styles.error}>{error}</ThemedText> : <View style={styles.ph} />}
-      <NumericKeypad onPress={handleDigit} onDelete={handleDelete} />
-      {biometricsAvailable && (
-        <Pressable style={({ pressed }) => [styles.biometricBtn, pressed && styles.pressed]} onPress={triggerBiometrics}>
-          <ThemedText style={styles.biometricText}>{biometricLabel}</ThemedText>
-        </Pressable>
-      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, justifyContent: 'space-evenly', alignItems: 'center', paddingVertical: 48 },
-  header: { alignItems: 'center', paddingHorizontal: 32, gap: 8 },
-  title: { fontSize: 24, fontWeight: '700', textAlign: 'center' },
-  subtitle: { fontSize: 15, textAlign: 'center', opacity: 0.6 },
-  dotsRow: { flexDirection: 'row', gap: 20, justifyContent: 'center' },
-  dot: { width: 20, height: 20, borderRadius: 10, borderWidth: 2 },
-  error: { color: '#EF4444', fontSize: 14, textAlign: 'center' },
-  ph: { height: 20 },
-  biometricBtn: { padding: 12 },
-  pressed: { opacity: 0.6 },
-  biometricText: { fontSize: 16, color: '#3B82F6', fontWeight: '500' },
+  page: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  container: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  header: {
+    alignItems: 'center',
+  },
+  dotsRow: {
+    flexDirection: 'row',
+    gap: 20,
+    justifyContent: 'center',
+  },
+  dot: {
+    borderWidth: 2,
+  },
+  biometricBtn: {
+    padding: 12,
+  },
 });

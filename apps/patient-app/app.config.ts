@@ -1,3 +1,4 @@
+﻿// token-guard:ignore-file (native Expo build configuration colours)
 import type { ExpoConfig, ConfigContext } from 'expo/config';
 
 const EAS_PROJECT_ID = 'b73e0d31-2001-40df-b1a1-0482faebb5b1';

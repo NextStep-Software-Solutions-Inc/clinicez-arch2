@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { Image, StyleSheet, View, ViewStyle, ActivityIndicator } from 'react-native';
 import ThemedText from './ThemedText';
+import { useAppTheme } from '../../contexts/ThemeContext';
 
 const COVER_HEIGHT = 180;
 const LOGO_SIZE = 72;
@@ -26,6 +27,7 @@ export default function EntityCoverHeader({
   badgeColor,
   style,
 }: EntityCoverHeaderProps) {
+  const { colors, radii, shadows } = useAppTheme();
   const initials = name
     .split(' ')
     .map((w) => w[0])
@@ -64,46 +66,84 @@ export default function EntityCoverHeader({
             accessibilityLabel={`${name} cover photo`}
             onLoadStart={() => setCoverLoading(true)}
             onLoadEnd={() => setCoverLoading(false)}
-            onError={() => { setCoverError(true); setCoverLoading(false); }}
+            onError={() => {
+              setCoverError(true);
+              setCoverLoading(false);
+            }}
           />
         )}
         {coverLoading && (
-          <View style={[StyleSheet.absoluteFill, styles.loaderContainer]}>
-            <ActivityIndicator size="large" color="#ffffff" />
+          <View style={[StyleSheet.absoluteFill, styles.loaderContainer, { backgroundColor: colors.overlay }]}>
+            <ActivityIndicator size="large" color={colors.onPrimary} />
           </View>
         )}
       </View>
 
       {/* Status badge – top-right */}
       {badgeLabel ? (
-        <View style={[styles.badge, { backgroundColor: badgeColor ?? '#3B82F6' }]}>
-          <ThemedText style={styles.badgeText}>{badgeLabel}</ThemedText>
+        <View
+          style={[
+            styles.badge,
+            {
+              backgroundColor: badgeColor ?? colors.primary,
+              borderRadius: radii.full,
+            },
+          ]}
+        >
+          <ThemedText variant="badge" style={{ color: colors.onPrimary }}>
+            {badgeLabel}
+          </ThemedText>
         </View>
       ) : null}
 
       {/* Logo avatar – bottom-left, half-overlapping the cover */}
-      <View style={styles.logoShadow}>
-        <View style={styles.logoWrapper}>
+      <View style={[styles.logoShadow, shadows.md]}>
+        <View style={[styles.logoWrapper, { borderRadius: radii.full }]}>
           <Image
             source={require('../../assets/fallback_profile.jpg')}
-            style={styles.logo}
+            style={[styles.logo, { borderColor: colors.surface, borderRadius: radii.full }]}
             resizeMode="cover"
           />
           {logoUrl && !logoError && (
             <Image
               source={{ uri: logoUrl }}
-              style={[styles.logo, { position: 'absolute', top: 0, left: 0 }]}
+              style={[
+                styles.logo,
+                {
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  borderColor: colors.surface,
+                  borderRadius: radii.full,
+                },
+              ]}
               resizeMode="cover"
               accessibilityRole="image"
               accessibilityLabel={`${name} logo`}
               onLoadStart={() => setLogoLoading(true)}
               onLoadEnd={() => setLogoLoading(false)}
-              onError={() => { setLogoError(true); setLogoLoading(false); }}
+              onError={() => {
+                setLogoError(true);
+                setLogoLoading(false);
+              }}
             />
           )}
+          {(!logoUrl || logoError) && (
+            <View
+              style={[
+                StyleSheet.absoluteFill,
+                styles.logoFallback,
+                { backgroundColor: colors.primary, borderRadius: radii.full },
+              ]}
+            >
+              <ThemedText variant="h2" style={{ color: colors.onPrimary }}>
+                {initials}
+              </ThemedText>
+            </View>
+          )}
           {logoLoading && (
-            <View style={[StyleSheet.absoluteFill, styles.logoLoaderContainer]}>
-              <ActivityIndicator size="small" color="#3B82F6" />
+            <View style={[StyleSheet.absoluteFill, styles.logoLoaderContainer, { backgroundColor: colors.overlay }]}>
+              <ActivityIndicator size="small" color={colors.primary} />
             </View>
           )}
         </View>
@@ -124,7 +164,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: COVER_HEIGHT,
-    borderRadius: 0,
   },
   coverWrapper: {
     height: COVER_HEIGHT,
@@ -134,61 +173,36 @@ const styles = StyleSheet.create({
   logoWrapper: {
     width: LOGO_SIZE,
     height: LOGO_SIZE,
-    borderRadius: LOGO_SIZE / 2,
     overflow: 'hidden',
     position: 'relative',
   },
   loaderContainer: {
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.15)',
   },
   logoLoaderContainer: {
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.5)',
-  },
-  coverFallback: {
-    backgroundColor: '#1D3A6E',
   },
   badge: {
     position: 'absolute',
     top: 12,
     right: 12,
-    borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 4,
-  },
-  badgeText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '800',
   },
   logoShadow: {
     position: 'absolute',
     bottom: 0,
     left: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.22,
-    shadowRadius: 6,
-    elevation: 5,
   },
   logo: {
     width: LOGO_SIZE,
     height: LOGO_SIZE,
-    borderRadius: LOGO_SIZE / 2,
     borderWidth: 3,
-    borderColor: '#ffffff',
   },
   logoFallback: {
-    backgroundColor: '#2563EB',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  logoInitials: {
-    color: '#ffffff',
-    fontSize: 22,
-    fontWeight: '800',
   },
 });

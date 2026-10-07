@@ -1,87 +1,113 @@
 import React, { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Modal,
-  Pressable,
-  StyleSheet,
-  View,
-} from 'react-native';
-import { useNavigation, useTheme } from '@react-navigation/native';
-import { useAuth as useAppAuth } from 'contexts/AuthContext';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import ThemedText from '@ui/ThemedText';
+import Card from '@ui/Card';
+import Button from '@ui/Button';
+import { AppIcon } from '@ui/Icon';
 import { useAuth as useClerkAuth } from '@clerk/expo';
 import { usePatientId } from 'hooks/usePatientId';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useContentInsets } from '../../../hooks/useContentInsets';
 import { cleanupPreviewCache, preparePreviewFile, getFileById, deleteItem, renameFile } from '../../../services/files';
 import type { PreparedPreviewFile } from '../../../services/files';
 import type { FilesScreenProps } from './navigationTypes';
 import RenameModal from '../../../components/ui/RenameModal';
-import CustomAlertModal from '../../../components/ui/CustomAlertModal';
-import { AppIcon } from '../../../components/ui/Icon';
+import { dialog } from '@utils/dialog';
+import { useAppTheme } from '../../../contexts/ThemeContext';
 
-export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewerScreen'>) {
-  const { colors } = useTheme();
-  const navigation = useNavigation('FileViewerScreen');
+export default function FileViewerScreenWeb({ route }: FilesScreenProps<'FileViewerScreen'>) {
+  const { colors, spacing, radii, sizes, shadows } = useAppTheme();
+  const navigation = useNavigation<any>();
   const patientId = usePatientId();
-  const { runWithAutoLockPaused } = useAppAuth();
   const { getToken } = useClerkAuth();
   const { fileId } = route.params;
+  const contentInsets = useContentInsets();
+
   const [preview, setPreview] = useState<PreparedPreviewFile | null>(null);
   const [fileMetadata, setFileMetadata] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [renameModalOpen, setRenameModalOpen] = useState(false);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
 
-  const insets = useSafeAreaInsets();
-  let tabBarHeight = 0;
-  try { tabBarHeight = useBottomTabBarHeight?.() || 96; } catch (e) { tabBarHeight = 96; }
-
-  useEffect(() => {
-    let mounted = true;
+  const loadFile = () => {
+    setIsRetrying(true);
+    setError(null);
     Promise.all([
       preparePreviewFile(patientId, fileId, getToken),
-      getFileById(patientId, fileId)
+      getFileById(patientId, fileId),
     ])
       .then(([previewRes, fileRes]) => {
-        if (!mounted) return;
         setPreview(previewRes);
         setFileMetadata(fileRes);
         navigation.setOptions({ title: fileRes?.name || previewRes.name });
       })
       .catch((err) => {
-        if (mounted) setError(err instanceof Error ? err.message : 'Unable to open this preview.');
+        setError(err instanceof Error ? err.message : 'Unable to decrypt or load this file.');
+      })
+      .finally(() => {
+        setIsRetrying(false);
       });
+  };
+
+  useEffect(() => {
+    loadFile();
 
     return () => {
-      mounted = false;
       cleanupPreviewCache(patientId, fileId).catch(() => {});
     };
-  }, [fileId, navigation, patientId, getToken]);
+  }, [fileId, patientId]);
 
-  const handleDownloadOrOpen = () => {
+  const handleDownload = () => {
     if (!preview) return;
     try {
-      window.open(preview.uri, '_blank');
+      if (typeof document !== 'undefined') {
+        const link = document.createElement('a');
+        link.href = preview.uri;
+        link.download = preview.name;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } else {
+        window.open(preview.uri, '_blank');
+      }
     } catch (err) {
-      Alert.alert('Could not open file', err instanceof Error ? err.message : 'Unable to open this file.');
+      dialog.alert('Download failed', err instanceof Error ? err.message : 'Unable to download file.');
     }
   };
 
-  const handleDelete = () => {
-    setDeleteModalOpen(true);
+  const handleShare = async () => {
+    if (!preview) return;
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      try {
+        await navigator.share({
+          title: preview.name,
+          url: preview.uri,
+        });
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          handleDownload();
+        }
+      }
+    } else {
+      handleDownload();
+    }
   };
 
-  const performDelete = async () => {
+  const handleDelete = async () => {
+    const confirmed = await dialog.confirm({
+      title: 'Delete file?',
+      message: `Are you sure you want to delete "${fileMetadata?.name || preview?.name}"?`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!confirmed) return;
+
     try {
       await deleteItem(patientId, 'file', fileId);
-      setDeleteModalOpen(false);
       navigation.goBack();
     } catch (err) {
-      Alert.alert('Could not delete', err instanceof Error ? err.message : 'Unknown error');
+      dialog.alert('Could not delete', err instanceof Error ? err.message : 'Unknown error');
     }
   };
 
@@ -90,7 +116,7 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
     navigation.navigate('FileMoveScreen', {
       itemKind: 'file',
       itemId: fileId,
-      currentFolderId: fileMetadata.folderId
+      currentFolderId: fileMetadata.folderId,
     });
   };
 
@@ -106,137 +132,275 @@ export default function FileViewerScreen({ route }: FilesScreenProps<'FileViewer
   };
 
   if (error) {
+    const isRecoveryKeyError =
+      error.toLowerCase().includes('recovery key') ||
+      error.toLowerCase().includes('mak') ||
+      error.toLowerCase().includes('master access key');
+
     return (
-      <View style={styles.center}>
-        <ThemedText style={styles.errorTitle}>Preview not available</ThemedText>
-        <ThemedText style={[styles.errorText, { color: colors.text }]}>{error}</ThemedText>
+      <View style={[styles.center, { backgroundColor: colors.background, padding: spacing.xl, gap: spacing.lg }]}>
+        <AppIcon name="alert" size={sizes.avatarMd} color="emergency" />
+        <ThemedText variant="h3">Unable to open preview</ThemedText>
+        <ThemedText variant="body" color="textMuted" style={[styles.textCenter, { maxWidth: 500 }]}>
+          {error}
+        </ThemedText>
+        <View style={{ flexDirection: 'row', gap: spacing.md, marginTop: spacing.sm }}>
+          <Button label="Try again" variant="outline" loading={isRetrying} onPress={loadFile} />
+          {isRecoveryKeyError && (
+            <Button
+              label="Enter Recovery Key"
+              variant="primary"
+              onPress={() =>
+                navigation.navigate('FRKEntryScreen', {
+                  encryptedMAK: fileMetadata?.serverWrappedKeyJson ?? '',
+                })
+              }
+            />
+          )}
+        </View>
       </View>
     );
   }
 
   if (!preview) {
     return (
-      <View style={styles.center}>
+      <View style={[styles.center, { backgroundColor: colors.background, gap: spacing.md }]}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <ThemedText style={[styles.errorText, { color: colors.text }]}>Preparing preview...</ThemedText>
+        <ThemedText variant="body" color="textMuted">
+          Decrypting preview...
+        </ThemedText>
       </View>
     );
   }
+
+  const isShareSupported = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
 
   return (
     <View style={[styles.viewer, { backgroundColor: colors.background }]}>
       <View style={styles.previewSurface}>
         {preview.previewKind === 'image' ? (
-          <Image
-            source={{ uri: preview.uri }}
-            style={styles.image}
-            resizeMode="contain"
-          />
+          <View style={styles.mediaContainer}>
+            {React.createElement('img', {
+              src: preview.uri,
+              alt: preview.name,
+              style: {
+                maxWidth: '100%',
+                maxHeight: '100%',
+                objectFit: 'contain',
+                borderRadius: radii.md,
+              },
+            })}
+          </View>
         ) : preview.previewKind === 'pdf' ? (
-          <iframe
-            src={preview.uri}
-            title={preview.name}
-            style={{
-              width: '100%',
-              height: '100%',
-              border: 'none',
-              backgroundColor: '#fff',
-            } as any}
-          />
+          <View style={styles.mediaContainer}>
+            {React.createElement('iframe', {
+              src: preview.uri,
+              title: preview.name,
+              style: {
+                width: '100%',
+                height: '100%',
+                border: 'none',
+                backgroundColor: colors.card,
+                borderRadius: radii.md,
+              },
+            })}
+          </View>
         ) : (
-          <View style={styles.center}>
-            <AppIcon name="document" size={64} color={colors.text as string} />
-            <ThemedText style={[styles.errorTitle, { marginTop: 16 }]}>Preview not available</ThemedText>
-            <ThemedText style={[styles.errorText, { color: colors.text, marginTop: 8 }]}>
-              This file type cannot be rendered inline. You can download or open it in a new tab.
-            </ThemedText>
+          <View style={[styles.center, { padding: spacing.xl }]}>
+            <Card
+              padding="lg"
+              elevation="md"
+              style={[styles.downloadCard, { gap: spacing.lg, maxWidth: sizes.dialogWidth }]}
+            >
+              <View
+                style={[
+                  styles.downloadIconWrap,
+                  {
+                    width: sizes.avatarLg,
+                    height: sizes.avatarLg,
+                    borderRadius: radii.xl,
+                    backgroundColor: colors.primaryLight,
+                  },
+                ]}
+              >
+                <AppIcon name="document" size={sizes.iconXl} color="primary" />
+              </View>
+
+              <View style={[styles.center, { gap: spacing.xs }]}>
+                <ThemedText variant="h3" style={styles.textCenter} numberOfLines={2}>
+                  {preview.name}
+                </ThemedText>
+                <ThemedText variant="small" color="textMuted">
+                  {preview.mimeType || 'Document'}
+                </ThemedText>
+              </View>
+
+              <ThemedText variant="body" color="textSecondary" style={styles.textCenter}>
+                This document cannot be previewed inline. Download it to open with your local application.
+              </ThemedText>
+
+              <Button
+                label="Download File"
+                icon="download"
+                variant="primary"
+                fullWidth
+                onPress={handleDownload}
+              />
+            </Card>
           </View>
         )}
       </View>
 
       {/* Floating Action Toolbar */}
-      <View style={[styles.floatingToolbarWrap, { paddingBottom: Math.max(insets.bottom, tabBarHeight) + 24 }]}>
-        <View style={[styles.floatingToolbar, { backgroundColor: colors.card, shadowColor: '#000' }]}>
-          <Pressable onPress={() => setIsFullScreen(true)} style={styles.toolbarBtn}>
-            <AppIcon name="fullscreen" size={20} color={colors.text as string} />
-            <ThemedText style={styles.toolbarLabel}>Full Screen</ThemedText>
+      <View
+        style={[
+          styles.floatingToolbarWrap,
+          { paddingBottom: contentInsets.bottom + spacing.md },
+        ]}
+      >
+        <View
+          style={[
+            styles.floatingToolbar,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              borderWidth: sizes.borderWidth,
+              borderRadius: radii.full,
+              paddingHorizontal: spacing.lg,
+              paddingVertical: spacing.sm,
+              gap: spacing.sm,
+            },
+            shadows.lg,
+          ]}
+        >
+          <Pressable
+            onPress={() => setIsFullScreen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Full Screen"
+            style={styles.toolbarBtn}
+          >
+            <AppIcon name="externalLink" size={sizes.iconMd} color="text" />
+            <ThemedText variant="captionBold" color="text">
+              Full Screen
+            </ThemedText>
           </Pressable>
 
-          <Pressable onPress={handleDownloadOrOpen} style={styles.toolbarBtn}>
-            <AppIcon name="share" size={20} color={colors.text as string} />
-            <ThemedText style={styles.toolbarLabel}>Open / Save</ThemedText>
+          <Pressable
+            onPress={isShareSupported ? handleShare : handleDownload}
+            accessibilityRole="button"
+            accessibilityLabel={isShareSupported ? 'Share' : 'Download'}
+            style={styles.toolbarBtn}
+          >
+            <AppIcon name={isShareSupported ? 'share' : 'download'} size={sizes.iconMd} color="text" />
+            <ThemedText variant="captionBold" color="text">
+              {isShareSupported ? 'Share' : 'Download'}
+            </ThemedText>
           </Pressable>
 
-          <Pressable onPress={handleMove} style={styles.toolbarBtn}>
-            <AppIcon name="folder" size={20} color={colors.text as string} />
-            <ThemedText style={styles.toolbarLabel}>Move</ThemedText>
+          <Pressable
+            onPress={handleMove}
+            accessibilityRole="button"
+            accessibilityLabel="Move"
+            style={styles.toolbarBtn}
+          >
+            <AppIcon name="folderMove" size={sizes.iconMd} color="text" />
+            <ThemedText variant="captionBold" color="text">
+              Move
+            </ThemedText>
           </Pressable>
 
-          <Pressable onPress={() => setRenameModalOpen(true)} style={styles.toolbarBtn}>
-            <AppIcon name="edit" size={20} color={colors.text as string} />
-            <ThemedText style={styles.toolbarLabel}>Rename</ThemedText>
+          <Pressable
+            onPress={() => setRenameModalOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Rename"
+            style={styles.toolbarBtn}
+          >
+            <AppIcon name="edit" size={sizes.iconMd} color="text" />
+            <ThemedText variant="captionBold" color="text">
+              Rename
+            </ThemedText>
           </Pressable>
 
-          <Pressable onPress={handleDelete} style={styles.toolbarBtn}>
-            <AppIcon name="delete" size={20} color="#EF4444" />
-            <ThemedText style={[styles.toolbarLabel, { color: '#EF4444' }]}>Delete</ThemedText>
+          <Pressable
+            onPress={handleDelete}
+            accessibilityRole="button"
+            accessibilityLabel="Delete"
+            style={styles.toolbarBtn}
+          >
+            <AppIcon name="trash" size={sizes.iconMd} color="emergency" />
+            <ThemedText variant="captionBold" color="emergency">
+              Delete
+            </ThemedText>
           </Pressable>
         </View>
       </View>
 
       {/* Full Screen Modal */}
-      <Modal visible={isFullScreen} transparent={false} onRequestClose={() => setIsFullScreen(false)} animationType="fade">
-        <View style={{ flex: 1, backgroundColor: '#000' }}>
-          <View style={{ position: 'absolute', top: 20, right: 20, zIndex: 100 }}>
+      <Modal
+        visible={isFullScreen}
+        transparent={false}
+        onRequestClose={() => setIsFullScreen(false)}
+        animationType="fade"
+      >
+        <View style={[styles.flex, { backgroundColor: colors.overlay }]}>
+          <View style={[styles.closeOverlayBtnWrap, { top: spacing.lg, right: spacing.lg }]}>
             <Pressable
               onPress={() => setIsFullScreen(false)}
-              style={{ padding: 10, backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: 20, cursor: 'pointer' } as any}
+              accessibilityRole="button"
+              accessibilityLabel="Close full screen"
+              style={[
+                styles.closeOverlayBtn,
+                {
+                  borderRadius: radii.full,
+                  backgroundColor: colors.surfaceSubtle,
+                  padding: spacing.sm,
+                },
+              ]}
             >
-              <AppIcon name="close" size={24} color="#fff" />
+              <AppIcon name="close" size={sizes.iconLg} color="text" />
             </Pressable>
           </View>
-          {preview.previewKind === 'image' ? (
-            <Image
-              source={{ uri: preview.uri }}
-              style={styles.fullScreenImage}
-              resizeMode="contain"
-            />
-          ) : preview.previewKind === 'pdf' ? (
-            <iframe
-              src={preview.uri}
-              title={preview.name}
-              style={{
-                width: '100%',
-                height: '100%',
-                border: 'none',
-              } as any}
-            />
-          ) : null}
+
+          <View style={styles.fullScreenContent}>
+            {preview.previewKind === 'image' ? (
+              React.createElement('img', {
+                src: preview.uri,
+                alt: preview.name,
+                style: {
+                  maxWidth: '100%',
+                  maxHeight: '100%',
+                  objectFit: 'contain',
+                },
+              })
+            ) : preview.previewKind === 'pdf' ? (
+              React.createElement('iframe', {
+                src: preview.uri,
+                title: preview.name,
+                style: {
+                  width: '100%',
+                  height: '100%',
+                  border: 'none',
+                },
+              })
+            ) : null}
+          </View>
         </View>
       </Modal>
 
-      <RenameModal
-        visible={renameModalOpen}
-        initialName={fileMetadata?.name || preview.name}
-        onClose={() => setRenameModalOpen(false)}
-        onSave={handleRename}
-      />
-
-      <CustomAlertModal
-        visible={deleteModalOpen}
-        title="Delete File"
-        message={`Are you sure you want to delete "${fileMetadata?.name || preview.name}"?`}
-        onClose={() => setDeleteModalOpen(false)}
-        onConfirm={performDelete}
-        confirmText="Delete"
-        cancelText="Cancel"
-        destructive
-      />
+      {renameModalOpen && fileMetadata && (
+        <RenameModal
+          visible={renameModalOpen}
+          initialName={fileMetadata?.name || preview.name}
+          onClose={() => setRenameModalOpen(false)}
+          onSave={handleRename}
+        />
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   viewer: {
     flex: 1,
     position: 'relative',
@@ -247,29 +411,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     overflow: 'hidden',
   },
-  image: {
+  mediaContainer: {
     width: '100%',
     height: '100%',
-  },
-  fullScreenImage: {
-    width: '100%',
-    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
   },
   center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
   },
-  errorTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  errorText: {
-    fontSize: 14,
+  textCenter: {
     textAlign: 'center',
-    opacity: 0.7,
+  },
+  downloadCard: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  downloadIconWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   floatingToolbarWrap: {
     position: 'absolute',
@@ -277,29 +440,33 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     alignItems: 'center',
-    pointerEvents: 'box-none' as any,
+    pointerEvents: 'box-none',
   },
   floatingToolbar: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 30,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-    gap: 16,
+    justifyContent: 'space-between',
+    width: '100%',
+    maxWidth: 440,
   },
   toolbarBtn: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 8,
-    cursor: 'pointer',
-  } as any,
-  toolbarLabel: {
-    fontSize: 11,
-    marginTop: 4,
-    fontWeight: '500',
+    gap: 2,
+    minWidth: 54,
+  },
+  closeOverlayBtnWrap: {
+    position: 'absolute',
+    zIndex: 100,
+  },
+  closeOverlayBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fullScreenContent: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
   },
 });

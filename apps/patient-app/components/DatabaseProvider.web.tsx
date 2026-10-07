@@ -1,36 +1,37 @@
-import { View, Text, StyleSheet, ActivityIndicator, useColorScheme } from 'react-native';
+﻿import React from 'react';
+import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { useDatabaseMigrations } from '@db/migrate';
+import { useAppTheme } from '../contexts/ThemeContext';
+import ThemedText from './ui/ThemedText';
 
 interface Props {
   children: React.ReactNode;
 }
 
-export default function DatabaseProvider({ children }: Props) {
-  const scheme = useColorScheme();
-  const isDark = scheme === 'dark';
-  const bg = isDark ? '#0F172A' : '#F8FAFC';
-  const text = isDark ? '#F8FAFC' : '#0F172A';
-  const accent = '#3B82F6';
+export default function DatabaseProviderWeb({ children }: Props) {
+  const { colors, spacing } = useAppTheme();
   const { success, error } = useDatabaseMigrations();
 
   if (error) {
     return (
-      <View style={[styles.center, { backgroundColor: bg }]}>
-        <Text style={styles.errorTitle}>Web Database Initialization Error</Text>
-        <Text style={[styles.errorMessage, { color: text }]}>
+      <View style={[styles.center, { backgroundColor: colors.background, padding: spacing.xl }]}>
+        <ThemedText variant="title" color="emergency">
+          Web Database Initialization Error
+        </ThemedText>
+        <ThemedText variant="body" color="textSecondary" style={styles.errorMessage}>
           {error.message}
-        </Text>
+        </ThemedText>
       </View>
     );
   }
 
   if (!success) {
     return (
-      <View style={[styles.center, { backgroundColor: bg }]}>
-        <ActivityIndicator size="large" color={accent} />
-        <Text style={[styles.loadingText, { color: text }]}>
+      <View style={[styles.center, { backgroundColor: colors.background, padding: spacing.xl }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <ThemedText variant="bodyBold" color="textSecondary" style={styles.loadingText}>
           Loading Clinic EZ Patient Web Portal…
-        </Text>
+        </ThemedText>
       </View>
     );
   }
@@ -46,21 +47,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
-  errorTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#EF4444',
-  },
   errorMessage: {
-    fontSize: 14,
     textAlign: 'center',
     paddingHorizontal: 32,
-    opacity: 0.7,
   },
   loadingText: {
-    fontSize: 15,
-    fontWeight: '500',
     marginTop: 8,
-    opacity: 0.8,
   },
 });

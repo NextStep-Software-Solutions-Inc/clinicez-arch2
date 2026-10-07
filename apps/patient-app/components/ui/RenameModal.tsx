@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Modal, View, Pressable, StyleSheet, Dimensions, TextInput, Platform } from 'react-native';
-import { useTheme } from '@react-navigation/native';
+﻿import React, { useState, useEffect } from 'react';
+import { Modal, View, StyleSheet, Dimensions, TextInput } from 'react-native';
 import ThemedText from './ThemedText';
 import ThemedView from './ThemedView';
+import Button from './Button';
+import { useAppTheme } from '../../contexts/ThemeContext';
 
 interface RenameModalProps {
   visible: boolean;
@@ -21,7 +22,7 @@ export default function RenameModal({
   initialName,
   title = 'Rename',
 }: RenameModalProps) {
-  const { colors } = useTheme();
+  const { colors, radii, spacing, shadows } = useAppTheme();
   const [name, setName] = useState(initialName);
 
   useEffect(() => {
@@ -30,8 +31,12 @@ export default function RenameModal({
     }
   }, [visible, initialName]);
 
+  const canSave = !!name.trim() && name !== initialName;
+
   const handleSave = () => {
-    onSave(name);
+    if (canSave) {
+      onSave(name.trim());
+    }
   };
 
   return (
@@ -41,50 +46,63 @@ export default function RenameModal({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
-        <ThemedView style={[styles.dialog, { backgroundColor: colors.card }]}>
-          <ThemedText style={styles.title}>{title}</ThemedText>
-          
-          <ThemedView style={[
-            styles.inputWrap,
-            { backgroundColor: colors.background, borderColor: colors.border },
-          ]}>
+      <View style={[styles.overlay, { backgroundColor: colors.overlay }]}>
+        <ThemedView
+          style={[
+            styles.dialog,
+            shadows.lg,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              borderRadius: radii.xl,
+              padding: spacing['2xl'],
+            },
+          ]}
+        >
+          <ThemedText variant="h2" style={[styles.title, { marginBottom: spacing.lg }]}>
+            {title}
+          </ThemedText>
+
+          <ThemedView
+            style={[
+              styles.inputWrap,
+              {
+                backgroundColor: colors.background,
+                borderColor: colors.border,
+                borderRadius: radii.md,
+                marginBottom: spacing.xl,
+              },
+            ]}
+          >
             <TextInput
               value={name}
               onChangeText={setName}
               placeholder="Enter new name"
-              placeholderTextColor={String(colors.text) + '66'}
+              placeholderTextColor={colors.textMuted}
               autoFocus
-              style={[styles.input, { color: colors.text }]}
+              onSubmitEditing={handleSave}
+              returnKeyType="done"
+              style={[
+                styles.input,
+                { color: colors.text, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+              ]}
             />
           </ThemedView>
 
-          <View style={styles.buttonRow}>
-            <Pressable
+          <View style={[styles.buttonRow, { gap: spacing.md }]}>
+            <Button
+              label="Cancel"
+              variant="outline"
               onPress={onClose}
-              style={({ pressed }) => [
-                styles.button,
-                styles.cancelButton,
-                { backgroundColor: String(colors.text) + '11', opacity: pressed ? 0.7 : 1 },
-              ]}
-            >
-              <ThemedText style={[styles.buttonText, { color: colors.text }]}>Cancel</ThemedText>
-            </Pressable>
-            
-            <Pressable
+              style={styles.flexButton}
+            />
+            <Button
+              label="Save"
+              variant="primary"
               onPress={handleSave}
-              disabled={!name.trim() || name === initialName}
-              style={({ pressed }) => [
-                styles.button,
-                styles.saveButton,
-                { 
-                  backgroundColor: colors.primary, 
-                  opacity: (!name.trim() || name === initialName) ? 0.5 : (pressed ? 0.8 : 1) 
-                },
-              ]}
-            >
-              <ThemedText style={[styles.buttonText, { color: '#fff' }]}>Save</ThemedText>
-            </Pressable>
+              disabled={!canSave}
+              style={styles.flexButton}
+            />
           </View>
         </ThemedView>
       </View>
@@ -95,56 +113,28 @@ export default function RenameModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
   },
   dialog: {
-    width: Math.min(width - 48, 340),
-    borderRadius: 24,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 8,
+    width: Math.min(width - 48, 380),
+    borderWidth: StyleSheet.hairlineWidth,
   },
   title: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 20,
+    textAlign: 'center',
   },
   inputWrap: {
-    width: '100%',
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 16,
-    paddingVertical: Platform.OS === 'ios' ? 14 : 10,
-    marginBottom: 24,
+    borderWidth: 1,
   },
   input: {
-    fontSize: 16,
+    minHeight: 44,
   },
   buttonRow: {
     flexDirection: 'row',
-    gap: 12,
+    width: '100%',
   },
-  button: {
+  flexButton: {
     flex: 1,
-    height: 48,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  cancelButton: {
-    
-  },
-  saveButton: {
-    
-  },
-  buttonText: {
-    fontSize: 16,
-    fontWeight: '600',
   },
 });

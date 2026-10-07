@@ -1,15 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import {
-  FlatList,
-  StyleSheet,
-  View,
-  Pressable,
-  Modal,
-  ScrollView,
-  Alert,
-} from 'react-native';
-import { useTheme } from '@react-navigation/native';
+import { FlatList, StyleSheet, View, Pressable, Modal, ScrollView } from 'react-native';
 import ThemedText from '@ui/ThemedText';
+import Badge from '@ui/Badge';
+import { AppIcon } from '@ui/Icon';
+import Screen from 'components/layout/Screen';
+import { useAppTheme } from 'contexts/ThemeContext';
+import { useBreakpoint } from 'hooks/useBreakpoint';
 import { db } from '@db/index';
 import { labResults } from '@db/schema/labResults';
 import { eq, desc } from 'drizzle-orm';
@@ -18,11 +14,13 @@ import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
 import { useClinicNameMap } from 'hooks/useClinicNameMap';
 import { usePatientId } from 'hooks/usePatientId';
 import * as Sharing from 'expo-sharing';
+import { dialog } from '@utils/dialog';
 
 export default function LabResultsScreen() {
   const patientId = usePatientId();
   const { getClinicName } = useClinicNameMap();
-  const { colors } = useTheme();
+  const { colors, radii, spacing } = useAppTheme();
+  const { isDesktop } = useBreakpoint();
 
   const [records, setRecords] = useState<any[]>([]);
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
@@ -100,23 +98,45 @@ export default function LabResultsScreen() {
   const handleShareReport = async () => {
     const isAvailable = await Sharing.isAvailableAsync();
     if (!isAvailable) {
-      Alert.alert('Notice', 'Sharing is not available on this device platform.');
+      dialog.alert('Notice', 'Sharing is not available on this device platform.');
       return;
     }
-    Alert.alert('Export PDF Report', 'Official sealed diagnostic laboratory certificate exported for sharing.');
+    dialog.alert('Export PDF Report', 'Official sealed diagnostic laboratory certificate exported for sharing.');
   };
 
   return (
-    <View style={{ flex: 1 }}>
+    <Screen width="content" scroll={false} padded={false}>
       <FlatList
+        key={isDesktop ? 'grid-2' : 'list-1'}
+        numColumns={isDesktop ? 2 : 1}
         data={records}
         keyExtractor={(item) => item.id}
         contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          { padding: spacing.lg, paddingBottom: spacing['4xl'], gap: spacing.md },
+        ]}
+        columnWrapperStyle={isDesktop ? { gap: spacing.md } : undefined}
         ListHeaderComponent={
-          <View style={styles.headerBanner}>
-            <ThemedText style={styles.bannerTitle}>Official Diagnostic Laboratory Results</ThemedText>
-            <ThemedText style={styles.bannerSubtitle}>
+          <View
+            style={[
+              styles.headerBanner,
+              {
+                backgroundColor: colors.successBg,
+                borderColor: colors.successBorder,
+                borderRadius: radii.lg,
+                padding: spacing.md,
+                gap: spacing.xs,
+              },
+            ]}
+          >
+            <View style={styles.bannerHeaderRow}>
+              <AppIcon name="lab" color={colors.successText} size={20} />
+              <ThemedText variant="title" style={{ color: colors.successText, fontWeight: '700' }}>
+                Official Diagnostic Laboratory Results
+              </ThemedText>
+            </View>
+            <ThemedText variant="caption" style={{ color: colors.textSecondary, lineHeight: 18 }}>
               Signed and verified clinical laboratory reports ordered by your healthcare providers. View analyte findings, reference ranges, and export certified PDF records.
             </ThemedText>
           </View>
@@ -126,52 +146,68 @@ export default function LabResultsScreen() {
           const isCritical = item.flag?.toLowerCase().includes('panic') || item.flag?.toLowerCase().includes('critical');
           const isAbnormal = item.flag?.toLowerCase().includes('high') || item.flag?.toLowerCase().includes('low') || item.flag?.toLowerCase().includes('abnormal');
 
+          const badgeTone = isCritical ? 'danger' : isAbnormal ? 'warning' : 'success';
+          const badgeIcon = isCritical ? 'alert' : isAbnormal ? 'activity' : 'check';
+          const badgeLabel = isCritical ? 'Panic / Critical' : (item.flag || 'Normal');
+
           return (
-            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View
+              style={[
+                styles.card,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  borderRadius: radii.lg,
+                  padding: spacing.md,
+                  gap: spacing.sm,
+                  flex: 1,
+                },
+              ]}
+            >
               {/* Header with Test Name & Flag Pill */}
               <View style={styles.cardHeaderRow}>
-                <View style={{ flex: 1 }}>
-                  <ThemedText style={styles.testNameText}>{item.testName ?? 'Lab Result'}</ThemedText>
-                  <ThemedText style={styles.categorySubText}>{item.category || 'Diagnostic Clinical Workup'}</ThemedText>
-                </View>
-
-                {/* Status / Flag Pill */}
-                <View
-                  style={[
-                    styles.flagPill,
-                    isCritical
-                      ? styles.flagCritical
-                      : isAbnormal
-                      ? styles.flagAbnormal
-                      : styles.flagNormal,
-                  ]}
-                >
-                  <ThemedText
-                    style={[
-                      styles.flagPillText,
-                      isCritical
-                        ? styles.flagTextCritical
-                        : isAbnormal
-                        ? styles.flagTextAbnormal
-                        : styles.flagTextNormal,
-                    ]}
-                  >
-                    {isCritical ? '⚠️ Panic / Critical' : isAbnormal ? '⚡ ' + item.flag : '✓ Normal'}
+                <View style={{ flex: 1, gap: 2 }}>
+                  <ThemedText variant="title" style={{ color: colors.text, fontWeight: '700' }}>
+                    {item.testName ?? 'Lab Result'}
+                  </ThemedText>
+                  <ThemedText variant="caption" style={{ color: colors.primary, fontWeight: '600' }}>
+                    {item.category || 'Diagnostic Clinical Workup'}
                   </ThemedText>
                 </View>
+
+                {/* Status / Flag Badge */}
+                <Badge tone={badgeTone} label={badgeLabel} icon={badgeIcon} size="sm" />
               </View>
 
               {/* Primary Key Finding Display */}
-              <View style={styles.keyFindingBox}>
-                <ThemedText style={styles.keyFindingLabel}>Primary Parameter:</ThemedText>
-                <ThemedText style={styles.keyFindingVal}>
-                  {item.componentParameter ?? 'Primary Analyte'}: <ThemedText style={styles.boldVal}>{item.resultValue} {item.unit}</ThemedText>
+              <View
+                style={[
+                  styles.keyFindingBox,
+                  {
+                    backgroundColor: colors.surfaceSubtle,
+                    borderColor: colors.borderLight,
+                    borderRadius: radii.md,
+                    padding: spacing.sm,
+                    gap: 2,
+                  },
+                ]}
+              >
+                <ThemedText variant="caption" style={{ color: colors.textMuted, textTransform: 'uppercase', fontWeight: '700' }}>
+                  Primary Parameter:
                 </ThemedText>
-                <ThemedText style={styles.keyFindingRange}>Normal Reference: {item.referenceRange}</ThemedText>
+                <ThemedText variant="body" style={{ color: colors.text }}>
+                  {item.componentParameter ?? 'Primary Analyte'}:{' '}
+                  <ThemedText variant="bodyBold" style={{ color: colors.text }}>
+                    {item.resultValue} {item.unit}
+                  </ThemedText>
+                </ThemedText>
+                <ThemedText variant="caption" style={{ color: colors.textSecondary, fontStyle: 'italic' }}>
+                  Normal Reference: {item.referenceRange}
+                </ThemedText>
               </View>
 
               {/* Details Grid */}
-              <View style={styles.detailsGrid}>
+              <View style={{ gap: spacing.xs }}>
                 <ProfileReadOnlyField label="Ordered Date" value={item.dateOrdered} />
                 <ProfileReadOnlyField label="Result Date" value={item.dateResulted} />
                 <ProfileReadOnlyField
@@ -182,9 +218,24 @@ export default function LabResultsScreen() {
               </View>
 
               {/* Actions */}
-              <View style={styles.actionsRow}>
-                <Pressable style={styles.viewReportBtn} onPress={() => handleOpenReport(item)}>
-                  <ThemedText style={styles.viewReportBtnText}>📄 View Certified Diagnostic Report</ThemedText>
+              <View style={[styles.actionsRow, { borderTopColor: colors.borderLight, paddingTop: spacing.sm }]}>
+                <Pressable
+                  style={[
+                    styles.viewReportBtn,
+                    {
+                      backgroundColor: colors.primary,
+                      borderRadius: radii.md,
+                      paddingVertical: spacing.sm,
+                      paddingHorizontal: spacing.md,
+                      gap: spacing.xs,
+                    },
+                  ]}
+                  onPress={() => handleOpenReport(item)}
+                >
+                  <AppIcon name="document" color={colors.onPrimary} size={16} />
+                  <ThemedText variant="caption" style={{ color: colors.onPrimary, fontWeight: '700' }}>
+                    View Certified Diagnostic Report
+                  </ThemedText>
                 </Pressable>
               </View>
             </View>
@@ -194,54 +245,141 @@ export default function LabResultsScreen() {
 
       {/* Official Diagnostic Report Modal */}
       <Modal visible={reportModalVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalTopBar}>
-              <ThemedText style={styles.modalTopBarTitle}>Official Laboratory Certificate</ThemedText>
-              <Pressable onPress={() => setReportModalVisible(false)} style={styles.closeModalBtn}>
-                <ThemedText style={styles.closeModalText}>✕</ThemedText>
+        <View style={[styles.modalOverlay, { backgroundColor: colors.overlay, padding: spacing.md }]}>
+          <View
+            style={[
+              styles.modalContainer,
+              {
+                backgroundColor: colors.card,
+                borderRadius: radii.xl,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.modalTopBar,
+                {
+                  paddingHorizontal: spacing.lg,
+                  paddingVertical: spacing.md,
+                  backgroundColor: colors.surfaceSubtle,
+                  borderBottomColor: colors.borderLight,
+                },
+              ]}
+            >
+              <ThemedText variant="title" style={{ color: colors.text, fontWeight: '700' }}>
+                Official Laboratory Certificate
+              </ThemedText>
+              <Pressable onPress={() => setReportModalVisible(false)} hitSlop={8} style={styles.closeModalBtn}>
+                <AppIcon name="close" color={colors.textSecondary} size={20} />
               </Pressable>
             </View>
 
-            <ScrollView contentContainerStyle={styles.reportScrollContent}>
+            <ScrollView
+              contentContainerStyle={[
+                styles.reportScrollContent,
+                { padding: spacing.lg, gap: spacing.md },
+              ]}
+            >
               {/* Header Letterhead */}
-              <View style={styles.reportHeader}>
-                <ThemedText style={styles.labOrgName}>METRO HEALTH DIAGNOSTIC LABORATORY</ThemedText>
-                <ThemedText style={styles.labOrgMeta}>DOH Accreditation No. 04-CL-2026-0819 • PhilHealth Konsulta Accredited</ThemedText>
-                <ThemedText style={styles.labOrgMeta}>Medical Arts Bldg, San Pedro, Laguna • Contact: (02) 8912-3456</ThemedText>
-                <View style={styles.divider} />
-                <ThemedText style={styles.reportDocTitle}>OFFICIAL CLINICAL LABORATORY REPORT</ThemedText>
-                <View style={styles.reportMetaRow}>
-                  <ThemedText style={styles.metaKeyVal}>
-                    Report No: <ThemedText style={{ fontWeight: '800', color: '#0284C7' }}>{selectedReport?.reportNumber || 'LAB-20260930-0019'}</ThemedText>
+              <View style={[styles.reportHeader, { borderBottomColor: colors.borderLight, paddingBottom: spacing.sm }]}>
+                <ThemedText variant="title" style={{ color: colors.text, textAlign: 'center', fontWeight: '800' }}>
+                  METRO HEALTH DIAGNOSTIC LABORATORY
+                </ThemedText>
+                <ThemedText variant="caption" style={{ color: colors.textSecondary, textAlign: 'center', marginTop: 2 }}>
+                  DOH Accreditation No. 04-CL-2026-0819 • PhilHealth Konsulta Accredited
+                </ThemedText>
+                <ThemedText variant="caption" style={{ color: colors.textSecondary, textAlign: 'center' }}>
+                  Medical Arts Bldg, San Pedro, Laguna • Contact: (02) 8912-3456
+                </ThemedText>
+                <View style={[styles.divider, { backgroundColor: colors.borderLight, marginVertical: spacing.sm }]} />
+                <ThemedText variant="caption" style={{ color: colors.primary, letterSpacing: 1, textTransform: 'uppercase', fontWeight: '800' }}>
+                  OFFICIAL CLINICAL LABORATORY REPORT
+                </ThemedText>
+                <View style={[styles.reportMetaRow, { marginTop: spacing.xs }]}>
+                  <ThemedText variant="caption" style={{ color: colors.textSecondary }}>
+                    Report No:{' '}
+                    <ThemedText variant="caption" style={{ color: colors.primary, fontWeight: '700' }}>
+                      {selectedReport?.reportNumber || 'LAB-20260930-0019'}
+                    </ThemedText>
                   </ThemedText>
-                  <ThemedText style={styles.metaKeyVal}>Date: {selectedReport?.dateResulted || '2026-09-30'}</ThemedText>
+                  <ThemedText variant="caption" style={{ color: colors.textSecondary }}>
+                    Date: {selectedReport?.dateResulted || '2026-09-30'}
+                  </ThemedText>
                 </View>
               </View>
 
               {/* Patient and Doctor Demographics */}
-              <View style={styles.infoBox}>
+              <View
+                style={[
+                  styles.infoBox,
+                  {
+                    backgroundColor: colors.surfaceSubtle,
+                    borderColor: colors.borderLight,
+                    borderRadius: radii.md,
+                    padding: spacing.sm,
+                    gap: spacing.xs,
+                  },
+                ]}
+              >
                 <View style={styles.infoRow}>
-                  <ThemedText style={styles.infoLabel}>Ordering Physician:</ThemedText>
-                  <ThemedText style={styles.infoValue}>{selectedReport?.orderingPhysician || 'Dr. Roberto Cruz, MD'}</ThemedText>
+                  <ThemedText variant="caption" style={{ color: colors.textSecondary, fontWeight: '700' }}>
+                    Ordering Physician:
+                  </ThemedText>
+                  <ThemedText variant="caption" style={{ color: colors.text, fontWeight: '600' }}>
+                    {selectedReport?.orderingPhysician || 'Dr. Roberto Cruz, MD'}
+                  </ThemedText>
                 </View>
                 <View style={styles.infoRow}>
-                  <ThemedText style={styles.infoLabel}>Specimen / Test:</ThemedText>
-                  <ThemedText style={styles.infoValue}>{selectedReport?.testName}</ThemedText>
+                  <ThemedText variant="caption" style={{ color: colors.textSecondary, fontWeight: '700' }}>
+                    Specimen / Test:
+                  </ThemedText>
+                  <ThemedText variant="caption" style={{ color: colors.text, fontWeight: '600' }}>
+                    {selectedReport?.testName}
+                  </ThemedText>
                 </View>
                 <View style={styles.infoRow}>
-                  <ThemedText style={styles.infoLabel}>Diagnostic Section:</ThemedText>
-                  <ThemedText style={styles.infoValue}>{selectedReport?.category || 'Clinical Pathology'}</ThemedText>
+                  <ThemedText variant="caption" style={{ color: colors.textSecondary, fontWeight: '700' }}>
+                    Diagnostic Section:
+                  </ThemedText>
+                  <ThemedText variant="caption" style={{ color: colors.text, fontWeight: '600' }}>
+                    {selectedReport?.category || 'Clinical Pathology'}
+                  </ThemedText>
                 </View>
               </View>
 
               {/* Analytes Breakdown Table */}
-              <View style={styles.tableCard}>
-                <View style={styles.tableHeaderRow}>
-                  <ThemedText style={[styles.thCell, { flex: 2 }]}>Analyte / Parameter</ThemedText>
-                  <ThemedText style={[styles.thCell, { flex: 1, textAlign: 'center' }]}>Result</ThemedText>
-                  <ThemedText style={[styles.thCell, { flex: 1, textAlign: 'center' }]}>Range</ThemedText>
-                  <ThemedText style={[styles.thCell, { width: 50, textAlign: 'center' }]}>Flag</ThemedText>
+              <View
+                style={[
+                  styles.tableCard,
+                  {
+                    borderColor: colors.border,
+                    borderRadius: radii.md,
+                  },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.tableHeaderRow,
+                    {
+                      backgroundColor: colors.surfaceSubtle,
+                      borderBottomColor: colors.border,
+                      paddingVertical: spacing.sm,
+                      paddingHorizontal: spacing.sm,
+                    },
+                  ]}
+                >
+                  <ThemedText variant="caption" style={[styles.thCell, { flex: 2, color: colors.textSecondary, fontWeight: '700' }]}>
+                    Analyte / Parameter
+                  </ThemedText>
+                  <ThemedText variant="caption" style={[styles.thCell, { flex: 1, textAlign: 'center', color: colors.textSecondary, fontWeight: '700' }]}>
+                    Result
+                  </ThemedText>
+                  <ThemedText variant="caption" style={[styles.thCell, { flex: 1, textAlign: 'center', color: colors.textSecondary, fontWeight: '700' }]}>
+                    Range
+                  </ThemedText>
+                  <ThemedText variant="caption" style={[styles.thCell, { width: 50, textAlign: 'center', color: colors.textSecondary, fontWeight: '700' }]}>
+                    Flag
+                  </ThemedText>
                 </View>
 
                 {(selectedReport?.components || [
@@ -250,16 +388,48 @@ export default function LabResultsScreen() {
                   const isHigh = comp.flag?.toLowerCase().includes('high');
                   const isLow = comp.flag?.toLowerCase().includes('low');
                   return (
-                    <View key={idx} style={[styles.tableDataRow, idx % 2 === 1 && styles.tableDataRowAlt]}>
+                    <View
+                      key={idx}
+                      style={[
+                        styles.tableDataRow,
+                        {
+                          paddingVertical: spacing.sm,
+                          paddingHorizontal: spacing.sm,
+                          backgroundColor: idx % 2 === 1 ? colors.surfaceSubtle : undefined,
+                        },
+                      ]}
+                    >
                       <View style={{ flex: 2 }}>
-                        <ThemedText style={styles.tdParam}>{comp.parameter}</ThemedText>
-                        <ThemedText style={styles.tdUnit}>{comp.unit}</ThemedText>
+                        <ThemedText variant="caption" style={{ color: colors.text, fontWeight: '700' }}>
+                          {comp.parameter}
+                        </ThemedText>
+                        <ThemedText variant="caption" style={{ color: colors.textSecondary }}>
+                          {comp.unit}
+                        </ThemedText>
                       </View>
-                      <ThemedText style={[styles.tdResult, (isHigh || isLow) && styles.tdResultAbnormal]}>
+                      <ThemedText
+                        variant="caption"
+                        style={{
+                          flex: 1,
+                          textAlign: 'center',
+                          fontWeight: '700',
+                          color: (isHigh || isLow) ? colors.warningText : colors.text,
+                        }}
+                      >
                         {comp.value}
                       </ThemedText>
-                      <ThemedText style={styles.tdRange}>{comp.range}</ThemedText>
-                      <ThemedText style={[styles.tdFlag, (isHigh || isLow) ? styles.tdFlagAbnormal : styles.tdFlagNormal]}>
+                      <ThemedText variant="caption" style={{ flex: 1, textAlign: 'center', color: colors.textSecondary }}>
+                        {comp.range}
+                      </ThemedText>
+                      <ThemedText
+                        variant="caption"
+                        style={{
+                          width: 50,
+                          textAlign: 'center',
+                          fontWeight: '700',
+                          color: (isHigh || isLow) ? colors.warningText : colors.successText,
+                        }}
+                      >
                         {comp.flag === 'Normal' ? 'OK' : comp.flag}
                       </ThemedText>
                     </View>
@@ -268,65 +438,131 @@ export default function LabResultsScreen() {
               </View>
 
               {/* Official Laboratory Signatures */}
-              <View style={styles.signaturesRow}>
-                <View style={styles.sigBox}>
-                  <ThemedText style={styles.sigRole}>Registered Medical Technologist</ThemedText>
-                  <ThemedText style={styles.sigPerson}>{selectedReport?.medtech || 'Mark Joshua Bautista, RMT'}</ThemedText>
-                  <ThemedText style={styles.sigLicense}>PRC License No. 0091823</ThemedText>
-                  <ThemedText style={styles.sigVerified}>✓ Digitally Performed & Validated</ThemedText>
+              <View style={[styles.signaturesRow, { gap: spacing.sm, marginTop: spacing.xs }]}>
+                <View
+                  style={[
+                    styles.sigBox,
+                    {
+                      backgroundColor: colors.surfaceSubtle,
+                      borderColor: colors.borderLight,
+                      borderRadius: radii.md,
+                      padding: spacing.sm,
+                    },
+                  ]}
+                >
+                  <ThemedText variant="caption" style={{ color: colors.textMuted, textTransform: 'uppercase', fontWeight: '700' }}>
+                    Registered Medical Technologist
+                  </ThemedText>
+                  <ThemedText variant="caption" style={{ color: colors.text, textAlign: 'center', marginTop: 2, fontWeight: '700' }}>
+                    {selectedReport?.medtech || 'Mark Joshua Bautista, RMT'}
+                  </ThemedText>
+                  <ThemedText variant="caption" style={{ color: colors.textSecondary, marginTop: 1 }}>
+                    PRC License No. 0091823
+                  </ThemedText>
+                  <View style={[styles.sigStatusRow, { marginTop: spacing.xs }]}>
+                    <AppIcon name="check" size={14} color={colors.successText} />
+                    <ThemedText variant="caption" style={{ color: colors.successText, marginLeft: 4, fontWeight: '700' }}>
+                      Digitally Performed & Validated
+                    </ThemedText>
+                  </View>
                 </View>
-                <View style={styles.sigBox}>
-                  <ThemedText style={styles.sigRole}>Pathologist / Laboratory Director</ThemedText>
-                  <ThemedText style={styles.sigPerson}>{selectedReport?.pathologist || 'Dr. Evelyn Lim, MD, FPSP'}</ThemedText>
-                  <ThemedText style={styles.sigLicense}>PRC License No. 0078912</ThemedText>
-                  <ThemedText style={styles.sigVerified}>✓ Digitally Signed & Released</ThemedText>
+                <View
+                  style={[
+                    styles.sigBox,
+                    {
+                      backgroundColor: colors.surfaceSubtle,
+                      borderColor: colors.borderLight,
+                      borderRadius: radii.md,
+                      padding: spacing.sm,
+                    },
+                  ]}
+                >
+                  <ThemedText variant="caption" style={{ color: colors.textMuted, textTransform: 'uppercase', fontWeight: '700' }}>
+                    Pathologist / Laboratory Director
+                  </ThemedText>
+                  <ThemedText variant="caption" style={{ color: colors.text, textAlign: 'center', marginTop: 2, fontWeight: '700' }}>
+                    {selectedReport?.pathologist || 'Dr. Evelyn Lim, MD, FPSP'}
+                  </ThemedText>
+                  <ThemedText variant="caption" style={{ color: colors.textSecondary, marginTop: 1 }}>
+                    PRC License No. 0078912
+                  </ThemedText>
+                  <View style={[styles.sigStatusRow, { marginTop: spacing.xs }]}>
+                    <AppIcon name="check" size={14} color={colors.successText} />
+                    <ThemedText variant="caption" style={{ color: colors.successText, marginLeft: 4, fontWeight: '700' }}>
+                      Digitally Signed & Released
+                    </ThemedText>
+                  </View>
                 </View>
               </View>
             </ScrollView>
 
             {/* Modal Actions */}
-            <View style={styles.modalFooter}>
-              <Pressable style={styles.shareBtn} onPress={handleShareReport}>
-                <ThemedText style={styles.shareBtnText}>📤 Export / Share PDF</ThemedText>
+            <View
+              style={[
+                styles.modalFooter,
+                {
+                  padding: spacing.md,
+                  backgroundColor: colors.surfaceSubtle,
+                  borderTopColor: colors.borderLight,
+                  gap: spacing.sm,
+                },
+              ]}
+            >
+              <Pressable
+                style={[
+                  styles.shareBtn,
+                  {
+                    backgroundColor: colors.primary,
+                    borderRadius: radii.md,
+                    paddingVertical: spacing.sm,
+                    paddingHorizontal: spacing.md,
+                    gap: spacing.xs,
+                  },
+                ]}
+                onPress={handleShareReport}
+              >
+                <AppIcon name="share" color={colors.onPrimary} size={16} />
+                <ThemedText variant="caption" style={{ color: colors.onPrimary, fontWeight: '700' }}>
+                  Export / Share PDF
+                </ThemedText>
               </Pressable>
-              <Pressable style={styles.closeFullBtn} onPress={() => setReportModalVisible(false)}>
-                <ThemedText style={styles.closeFullBtnText}>Close Report</ThemedText>
+              <Pressable
+                style={[
+                  styles.closeFullBtn,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: colors.border,
+                    borderRadius: radii.md,
+                    paddingVertical: spacing.sm,
+                    paddingHorizontal: spacing.md,
+                  },
+                ]}
+                onPress={() => setReportModalVisible(false)}
+              >
+                <ThemedText variant="caption" style={{ color: colors.textSecondary, fontWeight: '700' }}>
+                  Close Report
+                </ThemedText>
               </Pressable>
             </View>
           </View>
         </View>
       </Modal>
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 16, paddingBottom: 40 },
+  content: {},
   headerBanner: {
-    backgroundColor: '#F0FDF4',
-    borderColor: '#BBF7D0',
     borderWidth: 1,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 16,
-    gap: 4,
   },
-  bannerTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#166534',
-  },
-  bannerSubtitle: {
-    fontSize: 12,
-    color: '#334155',
-    lineHeight: 18,
+  bannerHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   card: {
-    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    padding: 14,
-    marginBottom: 14,
-    gap: 10,
   },
   cardHeaderRow: {
     flexDirection: 'row',
@@ -334,90 +570,23 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 8,
   },
-  testNameText: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  categorySubText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#0284C7',
-    marginTop: 2,
-  },
-  flagPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  flagNormal: { backgroundColor: '#DCFCE7' },
-  flagAbnormal: { backgroundColor: '#FEF3C7' },
-  flagCritical: { backgroundColor: '#FEE2E2' },
-  flagPillText: {
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  flagTextNormal: { color: '#166534' },
-  flagTextAbnormal: { color: '#92400E' },
-  flagTextCritical: { color: '#991B1B' },
   keyFindingBox: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    padding: 10,
-    gap: 2,
-  },
-  keyFindingLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#64748B',
-    textTransform: 'uppercase',
-  },
-  keyFindingVal: {
-    fontSize: 13,
-    color: '#1E293B',
-  },
-  boldVal: {
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  keyFindingRange: {
-    fontSize: 11,
-    color: '#64748B',
-    fontStyle: 'italic',
-  },
-  detailsGrid: {
-    gap: 6,
   },
   actionsRow: {
-    marginTop: 6,
-    paddingTop: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#E2E8F0',
   },
   viewReportBtn: {
-    backgroundColor: '#0369A1',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 6,
+    flexDirection: 'row',
     alignItems: 'center',
-  },
-  viewReportBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    justifyContent: 'center',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 16,
   },
   modalContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
     width: '100%',
     maxWidth: 540,
     maxHeight: '92%',
@@ -427,223 +596,69 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#F8FAFC',
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-  },
-  modalTopBarTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#0F172A',
   },
   closeModalBtn: {
     padding: 4,
   },
-  closeModalText: {
-    fontSize: 16,
-    color: '#64748B',
-  },
-  reportScrollContent: {
-    padding: 16,
-    gap: 14,
-  },
+  reportScrollContent: {},
   reportHeader: {
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-    paddingBottom: 10,
-  },
-  labOrgName: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#0F172A',
-    textAlign: 'center',
-  },
-  labOrgMeta: {
-    fontSize: 10,
-    color: '#64748B',
-    textAlign: 'center',
   },
   divider: {
     height: 1,
-    backgroundColor: '#CBD5E1',
     width: '100%',
-    marginVertical: 8,
-  },
-  reportDocTitle: {
-    fontSize: 13,
-    fontWeight: '900',
-    color: '#0284C7',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
   },
   reportMetaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     width: '100%',
-    marginTop: 6,
-  },
-  metaKeyVal: {
-    fontSize: 11,
-    color: '#475569',
   },
   infoBox: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    padding: 10,
-    gap: 4,
   },
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  infoLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#64748B',
-  },
-  infoValue: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#0F172A',
-  },
   tableCard: {
-    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#CBD5E1',
     overflow: 'hidden',
   },
   tableHeaderRow: {
     flexDirection: 'row',
-    backgroundColor: '#F1F5F9',
-    paddingVertical: 8,
-    paddingHorizontal: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#CBD5E1',
   },
-  thCell: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#334155',
-  },
+  thCell: {},
   tableDataRow: {
     flexDirection: 'row',
-    paddingVertical: 8,
-    paddingHorizontal: 10,
     alignItems: 'center',
-  },
-  tableDataRowAlt: {
-    backgroundColor: '#F8FAFC',
-  },
-  tdParam: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  tdUnit: {
-    fontSize: 10,
-    color: '#64748B',
-  },
-  tdResult: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#0F172A',
-    textAlign: 'center',
-  },
-  tdResultAbnormal: {
-    color: '#B45309',
-  },
-  tdRange: {
-    flex: 1,
-    fontSize: 11,
-    color: '#64748B',
-    textAlign: 'center',
-  },
-  tdFlag: {
-    width: 50,
-    fontSize: 10,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  tdFlagNormal: {
-    color: '#166534',
-  },
-  tdFlagAbnormal: {
-    color: '#B45309',
   },
   signaturesRow: {
     flexDirection: 'row',
-    gap: 10,
-    marginTop: 8,
   },
   sigBox: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    padding: 10,
-    gap: 2,
     alignItems: 'center',
   },
-  sigRole: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#64748B',
-    textTransform: 'uppercase',
-  },
-  sigPerson: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#0F172A',
-    textAlign: 'center',
-  },
-  sigLicense: {
-    fontSize: 10,
-    color: '#475569',
-  },
-  sigVerified: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#166534',
-    marginTop: 4,
+  sigStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   modalFooter: {
-    padding: 12,
-    backgroundColor: '#F8FAFC',
     borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    gap: 8,
   },
   shareBtn: {
-    backgroundColor: '#0284C7',
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 6,
-  },
-  shareBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   closeFullBtn: {
-    backgroundColor: '#F1F5F9',
     borderWidth: 1,
-    borderColor: '#CBD5E1',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 6,
-  },
-  closeFullBtnText: {
-    color: '#334155',
-    fontSize: 12,
-    fontWeight: '700',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

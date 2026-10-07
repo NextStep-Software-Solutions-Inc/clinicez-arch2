@@ -1,3 +1,4 @@
+﻿import React, { useEffect } from 'react';
 import {
   Modal,
   View,
@@ -5,13 +6,10 @@ import {
   StyleSheet,
   Animated,
   FlatList,
-  Platform,
-  useColorScheme,
 } from 'react-native';
-import { useRef, useEffect } from 'react';
-import { useTheme } from '@react-navigation/native';
 import ThemedText from '@ui/ThemedText';
 import { AppIcon } from '@ui/Icon';
+import { useAppTheme } from '../../contexts/ThemeContext';
 
 export interface SelectOption {
   label: string;
@@ -35,9 +33,7 @@ export default function ProfileSelectModal({
   onSelect,
   onClose,
 }: ProfileSelectModalProps) {
-  const { colors, dark } = useTheme();
-  const systemScheme = useColorScheme();
-  const isDark = dark || systemScheme === 'dark';
+  const { colors, radii, sizes } = useAppTheme();
   const scale = new Animated.Value(0.88);
   const opacity = new Animated.Value(0);
 
@@ -68,15 +64,23 @@ export default function ProfileSelectModal({
       statusBarTranslucent
       onRequestClose={onClose}
     >
-      <Pressable style={styles.backdrop} onPress={onClose}>
+      <Pressable style={[styles.backdrop, { backgroundColor: colors.overlay }]} onPress={onClose}>
         <Animated.View
           style={[
             styles.sheet,
-            { backgroundColor: colors.card, borderColor: colors.border, transform: [{ scale }], opacity },
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              borderRadius: radii.xl,
+              transform: [{ scale }],
+              opacity,
+            },
           ]}
         >
-          <ThemedText style={[styles.title, { color: colors.text }]}>{title}</ThemedText>
-          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <ThemedText variant="bodyBold" style={[styles.title, { color: colors.text }]}>
+            {title}
+          </ThemedText>
+          <View style={[styles.divider, { backgroundColor: colors.borderLight }]} />
           <FlatList
             data={options}
             keyExtractor={(item) => item.value}
@@ -86,35 +90,39 @@ export default function ProfileSelectModal({
               return (
                 <Pressable
                   onPress={() => handleSelect(item.value)}
-                  style={({ pressed }) => [
+                  style={({ pressed, hovered }: any) => [
                     styles.option,
-                    { borderBottomColor: colors.border },
+                    { borderBottomColor: colors.borderLight },
+                    hovered && { backgroundColor: colors.surfaceSubtle },
                     pressed && { opacity: 0.6 },
-                    isSelected && { backgroundColor: colors.primary },
+                    isSelected && { backgroundColor: colors.primarySubtle },
                   ]}
                 >
                   <ThemedText
-                    style={[
-                      styles.optionText,
-                      { color: isSelected ? colors.card : colors.text },
-                      isSelected && styles.optionTextSelected,
-                    ]}
+                    variant={isSelected ? 'bodyBold' : 'body'}
+                    style={{ color: isSelected ? colors.primary : colors.text }}
                   >
                     {item.label}
                   </ThemedText>
                   {isSelected && (
-                    <AppIcon android="check" ios="checkmark" size={16} color={colors.card} />
+                    <AppIcon name="check" size={sizes.iconSm} color="primary" />
                   )}
                 </Pressable>
               );
             }}
           />
-          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <View style={[styles.divider, { backgroundColor: colors.borderLight }]} />
           <Pressable
             onPress={onClose}
-            style={({ pressed }) => [styles.cancelBtn, pressed && { opacity: 0.6 }]}
+            style={({ pressed, hovered }: any) => [
+              styles.cancelBtn,
+              hovered && { backgroundColor: colors.surfaceSubtle },
+              pressed && { opacity: 0.6 },
+            ]}
           >
-            <ThemedText style={[styles.cancelText, { color: colors.text }]}>Cancel</ThemedText>
+            <ThemedText variant="body" style={{ color: colors.text }}>
+              Cancel
+            </ThemedText>
           </Pressable>
         </Animated.View>
       </Pressable>
@@ -125,7 +133,6 @@ export default function ProfileSelectModal({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 28,
@@ -133,14 +140,11 @@ const styles = StyleSheet.create({
   sheet: {
     width: '100%',
     maxWidth: 380,
-    borderRadius: 18,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
     maxHeight: 480,
   },
   title: {
-    fontSize: 15,
-    fontWeight: '600',
     textAlign: 'center',
     paddingHorizontal: 20,
     paddingVertical: 14,
@@ -159,18 +163,8 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  optionText: {
-    fontSize: 15,
-  },
-  optionTextSelected: {
-    fontWeight: '600',
-  },
   cancelBtn: {
     paddingVertical: 15,
     alignItems: 'center',
-  },
-  cancelText: {
-    fontSize: 15,
-    fontWeight: '500',
   },
 });

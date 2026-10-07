@@ -1,24 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    Modal,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    TextInput,
-    View,
-} from 'react-native';
-import { useNavigation, useRoute, useTheme, MaterialSymbol, SFSymbol } from '@react-navigation/native';
+import { FlatList, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useAuth as useClerkAuth } from '@clerk/expo';
 import NetInfo from '@react-native-community/netinfo';
 import EmptyState from '@ui/EmptyState';
 import { SkeletonCard } from '@ui/Skeleton';
 import EntityMediaCardHeader from '@ui/EntityMediaCardHeader';
 import ThemedText from '@ui/ThemedText';
-import ThemedView from '@ui/ThemedView';
+import { AppIcon } from '@ui/Icon';
+import { useAppTheme } from '../../contexts/ThemeContext';
+import { useContentInsets } from '../../hooks/useContentInsets';
 import { useOfflineAlert } from 'contexts/OfflineAlertContext';
 import { safeAwait } from '@shared/safe';
 import { usePatientId } from 'hooks/usePatientId';
@@ -30,6 +21,7 @@ import {
     refreshClinicsFromApi,
 } from '../../services/discovery/discoveryService';
 import { ClinicDetail, ConsentSelection } from '../../services/discovery/types';
+import { dialog } from '@utils/dialog';
 
 type ClinicFilter = 'all' | 'public' | 'partnered' | 'joined';
 
@@ -49,38 +41,43 @@ function ConsentToggle({
     value: boolean;
     onPress: () => void;
 }) {
-    const { colors } = useTheme();
+    const { colors, radii, sizes } = useAppTheme();
 
     return (
         <Pressable
             onPress={onPress}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: value }}
             style={({ pressed }) => [
                 styles.consentRow,
                 {
                     borderColor: value ? colors.primary : colors.border,
-                    backgroundColor: value ? colors.card : 'transparent',
+                    backgroundColor: value ? colors.card : colors.transparent,
+                    borderRadius: radii.md,
                     opacity: pressed ? 0.75 : 1,
                 },
             ]}
         >
-            <ThemedView
+            <View
                 style={[
                     styles.checkbox,
                     {
                         borderColor: value ? colors.primary : colors.border,
-                        backgroundColor: value ? colors.primary : 'transparent',
+                        backgroundColor: value ? colors.primary : colors.transparent,
+                        borderRadius: radii.xs,
                     },
                 ]}
             >
-                <ThemedText style={styles.checkboxMark}>{value ? '✓' : ''}</ThemedText>
-            </ThemedView>
-            <ThemedText style={styles.consentLabel}>{label}</ThemedText>
+                {value ? <AppIcon name="check" size={sizes.iconSm - 2} color="onPrimary" /> : null}
+            </View>
+            <ThemedText variant="small" style={styles.consentLabel}>{label}</ThemedText>
         </Pressable>
     );
 }
 
 export default function ExploreClinicsScreen() {
-    const { colors } = useTheme();
+    const { colors, spacing, radii, sizes, typography } = useAppTheme();
+    const insets = useContentInsets();
     const navigation = useNavigation() as any;
     const route = useRoute() as any;
     const patientId = usePatientId();
@@ -150,7 +147,7 @@ export default function ExploreClinicsScreen() {
             setClinics(data);
         } catch (error: unknown) {
             const message = error instanceof Error ? error.message : 'Unable to refresh clinics.';
-            Alert.alert('Error', message);
+            dialog.alert('Error', message);
         } finally {
             setIsRefreshing(false);
         }
@@ -163,25 +160,27 @@ export default function ExploreClinicsScreen() {
         navigation.setOptions({
             headerLargeTitleEnabled: !isSearching,
             headerTitle: isSearching ? () => (
-                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', width: '100%', paddingRight: 8 }}>
+                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', width: '100%', paddingRight: spacing.sm }}>
                     <TextInput
                         value={searchQuery}
                         onChangeText={setSearchQuery}
                         placeholder="Search clinics..."
-                        placeholderTextColor={colors.border}
+                        placeholderTextColor={colors.textMuted}
                         autoFocus
-                        style={{
-                            flex: 1,
-                            color: colors.text,
-                            fontSize: 16,
-                            paddingVertical: Platform.select({ ios: 6, android: 4 }),
-                            paddingHorizontal: 12,
-                            backgroundColor: colors.card,
-                            borderRadius: 10,
-                            borderWidth: StyleSheet.hairlineWidth,
-                            borderColor: colors.border,
-                            height: 36,
-                        }}
+                        style={[
+                            typography.body,
+                            {
+                                flex: 1,
+                                color: colors.text,
+                                paddingVertical: Platform.select({ ios: spacing.xs + 2, android: spacing.xs }),
+                                paddingHorizontal: spacing.md,
+                                backgroundColor: colors.card,
+                                borderRadius: radii.md,
+                                borderWidth: sizes.borderWidth,
+                                borderColor: colors.border,
+                                height: sizes.controlMd - 4,
+                            },
+                        ]}
                     />
                 </View>
             ) : title,
@@ -195,23 +194,15 @@ export default function ExploreClinicsScreen() {
                             setIsSearching(true);
                         }
                     }}
-                    style={{ marginRight: 8, padding: 4 }}
+                    accessibilityRole="button"
+                    accessibilityLabel={isSearching ? 'Close search' : 'Search clinics'}
+                    style={{ marginRight: spacing.sm, padding: spacing.xs }}
                 >
-                    {isSearching ? (
-                        Platform.select({
-                            android: <MaterialSymbol name="close" size={24} color={colors.text} />,
-                            ios: <SFSymbol name="xmark" size={24} color={colors.text} />
-                        })
-                    ) : (
-                        Platform.select({
-                            android: <MaterialSymbol name="search" size={24} color={colors.text} />,
-                            ios: <SFSymbol name="magnifyingglass" size={24} color={colors.text} />
-                        })
-                    )}
+                    <AppIcon name={isSearching ? 'close' : 'search'} size={sizes.iconLg} color="text" />
                 </Pressable>
             ),
         });
-    }, [isSearching, searchQuery, colors, navigation, organizationName]);
+    }, [isSearching, searchQuery, colors, spacing, radii, sizes, typography, navigation, organizationName]);
 
     const openJoinModal = (clinic: ClinicDetail) => {
         setSelectedClinic(clinic);
@@ -240,7 +231,7 @@ export default function ExploreClinicsScreen() {
                 closeJoinModal();
                 showOfflineAlert();
             } else {
-                Alert.alert('Join failed', error.message);
+                dialog.alert('Join failed', error.message);
             }
             setIsJoining(false);
             return;
@@ -252,20 +243,20 @@ export default function ExploreClinicsScreen() {
         }
         closeJoinModal();
         setIsJoining(false);
-        Alert.alert('Clinic joined', `${selectedClinic.name} has been added to your clinics.`);
+        dialog.alert('Clinic joined', `${selectedClinic.name} has been added to your clinics.`);
     };
 
     return (
-        <ThemedView style={[styles.screen, { backgroundColor: colors.background }]}>
+        <View style={[styles.screen, { backgroundColor: colors.background }]}>
             <FlatList
                 data={clinics}
                 keyExtractor={(item) => item.id}
                 contentInsetAdjustmentBehavior="automatic"
-                contentContainerStyle={styles.listContent}
+                contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + spacing.lg }]}
                 refreshing={isRefreshing}
                 onRefresh={handleRefresh}
                 ListHeaderComponent={
-                    <ThemedView style={styles.headerWrap}>
+                    <View style={styles.headerWrap}>
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
                             {clinicFilters.map((item) => {
                                 const active = item.key === filter;
@@ -273,29 +264,32 @@ export default function ExploreClinicsScreen() {
                                     <Pressable
                                         key={item.key}
                                         onPress={() => setFilter(item.key)}
+                                        accessibilityRole="button"
+                                        accessibilityState={{ selected: active }}
                                         style={({ pressed }) => [
                                             styles.filterChip,
                                             {
                                                 borderColor: active ? colors.primary : colors.border,
                                                 backgroundColor: active ? colors.primary : colors.card,
+                                                borderRadius: radii.full,
                                                 opacity: pressed ? 0.75 : 1,
                                             },
                                         ]}
                                     >
-                                        <ThemedText style={[styles.filterChipText, { color: active ? '#fff' : colors.text }]}>{item.label}</ThemedText>
+                                        <ThemedText variant="smallBold" color={active ? 'onPrimary' : 'text'}>{item.label}</ThemedText>
                                     </Pressable>
                                 );
                             })}
                         </ScrollView>
-                    </ThemedView>
+                    </View>
                 }
                 ListEmptyComponent={
                     isLoading ? (
-                        <ThemedView style={styles.loadingStack}>
+                        <View style={styles.loadingStack}>
                             <SkeletonCard />
                             <SkeletonCard />
                             <SkeletonCard />
-                        </ThemedView>
+                        </View>
                     ) : (
                         <EmptyState
                             title="No clinics found"
@@ -310,46 +304,47 @@ export default function ExploreClinicsScreen() {
                     )
                 }
                 renderItem={({ item }) => (
-                    <ThemedView style={[styles.card, { borderColor: colors.border, backgroundColor: colors.card }]}>
+                    <View style={[styles.card, { borderColor: colors.border, backgroundColor: colors.card, borderRadius: radii.lg }]}>
                         <EntityMediaCardHeader
                             name={item.name}
                             logoUrl={item.logoUrl}
                             coverImageUrl={item.coverImageUrl}
                             badgeLabel={item.isJoined ? 'Joined' : item.isPublic ? 'Public' : 'Private'}
-                            badgeColor={item.isJoined ? '#10B981' : item.isPublic ? '#3B82F6' : '#F59E0B'}
+                            badgeColor={item.isJoined ? colors.success : item.isPublic ? colors.primary : colors.warning}
                         />
-                        <ThemedView style={styles.cardBody}>
-                            <ThemedText style={styles.cardTitle}>{item.name}</ThemedText>
-                            <ThemedText style={[styles.cardDescription, { color: colors.text }]}>{item.description}</ThemedText>
-                            <ThemedText style={[styles.metaText, { color: colors.text }]}>Address: {item.address}</ThemedText>
-                            <ThemedText style={[styles.metaText, { color: colors.text }]}>Appointments: {item.supportsAppointments ? 'Supported' : 'Not available'}</ThemedText>
+                        <View style={styles.cardBody}>
+                            <ThemedText variant="title">{item.name}</ThemedText>
+                            <ThemedText variant="body" color="textSecondary">{item.description}</ThemedText>
+                            <ThemedText variant="caption" color="textMuted">Address: {item.address}</ThemedText>
+                            <ThemedText variant="caption" color="textMuted">Appointments: {item.supportsAppointments ? 'Supported' : 'Not available'}</ThemedText>
 
-                            <ThemedView style={styles.cardActionsRow}>
+                            <View style={styles.cardActionsRow}>
                                 <Pressable
                                     onPress={() => navigation.navigate('Main', { screen: 'ClinicDetailsScreen', params: { clinicId: item.id } })}
                                     style={({ pressed }) => [
                                         styles.secondaryAction,
-                                        { borderColor: colors.border, opacity: pressed ? 0.75 : 1 },
+                                        { borderColor: colors.border, borderRadius: radii.md, opacity: pressed ? 0.75 : 1 },
                                     ]}
                                     accessibilityRole="button"
                                 >
-                                    <ThemedText style={styles.secondaryActionText}>Details</ThemedText>
+                                    <ThemedText variant="smallBold" color="text">Details</ThemedText>
                                 </Pressable>
                                 {!item.isJoined && item.membershipStatus !== 'pending' && (
                                     <Pressable
                                         onPress={() => openJoinModal(item)}
                                         style={({ pressed }) => [
                                             styles.primaryAction,
-                                            { backgroundColor: colors.primary, opacity: pressed ? 0.75 : 1 },
+                                            { backgroundColor: colors.primary, borderRadius: radii.md, opacity: pressed ? 0.75 : 1 },
                                         ]}
+                                        accessibilityRole="button"
                                     >
-                                        <ThemedText style={styles.primaryActionText}>Join Clinic</ThemedText>
+                                        <ThemedText variant="smallBold" color="onPrimary">Join Clinic</ThemedText>
                                     </Pressable>
                                 )}
                                 {item.membershipStatus === 'pending' && (
-                                    <ThemedView style={[styles.primaryAction, { backgroundColor: '#F59E0B', opacity: 0.8, justifyContent: 'center', alignItems: 'center' }]}>
-                                        <ThemedText style={styles.primaryActionText}>Requested</ThemedText>
-                                    </ThemedView>
+                                    <View style={[styles.primaryAction, { backgroundColor: colors.warning, borderRadius: radii.md, opacity: 0.85, justifyContent: 'center', alignItems: 'center' }]}>
+                                        <ThemedText variant="smallBold" color="onPrimary">Requested</ThemedText>
+                                    </View>
                                 )}
                                 <Pressable
                                     disabled={!item.supportsAppointments}
@@ -358,35 +353,37 @@ export default function ExploreClinicsScreen() {
                                         styles.secondaryAction,
                                         {
                                             borderColor: colors.border,
+                                            borderRadius: radii.md,
                                             opacity: !item.supportsAppointments || pressed ? 0.6 : 1,
                                         },
                                     ]}
+                                    accessibilityRole="button"
                                 >
-                                    <ThemedText style={styles.secondaryActionText}>Book Consultation</ThemedText>
+                                    <ThemedText variant="smallBold" color={item.supportsAppointments ? 'text' : 'textMuted'}>Book Consultation</ThemedText>
                                 </Pressable>
-                            </ThemedView>
-                        </ThemedView>
-                    </ThemedView>
+                            </View>
+                        </View>
+                    </View>
                 )}
             />
 
             <Modal visible={!!selectedClinic} animationType="slide" transparent onRequestClose={closeJoinModal}>
-                <ThemedView style={styles.modalOverlay}>
-                    <ThemedView style={[styles.modalContainer, { backgroundColor: colors.background, borderColor: colors.border }]}>
+                <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
+                    <View style={[styles.modalContainer, { backgroundColor: colors.background, borderColor: colors.border, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl }]}>
                         <ScrollView contentContainerStyle={styles.modalContent}>
-                            <ThemedText style={styles.modalTitle}>Join {selectedClinic?.name}</ThemedText>
-                            <ThemedText style={[styles.modalSubtitle, { color: colors.text }]}>Accept required consent before becoming a clinic patient.</ThemedText>
+                            <ThemedText variant="h2">{selectedClinic?.name ? `Join ${selectedClinic.name}` : 'Join Clinic'}</ThemedText>
+                            <ThemedText variant="body" color="textSecondary">Accept required consent before becoming a clinic patient.</ThemedText>
 
-                            <ThemedText style={styles.sectionLabel}>Required data fields</ThemedText>
-                            <ThemedView style={styles.requiredFieldsWrap}>
+                            <ThemedText variant="smallBold" color="text">Required data fields</ThemedText>
+                            <View style={styles.requiredFieldsWrap}>
                                 {selectedClinic?.requiredShareFields.map((field) => (
-                                    <ThemedView key={field} style={[styles.requiredFieldChip, { borderColor: colors.border }]}>
-                                        <ThemedText style={styles.requiredFieldText}>{getShareFieldLabel(field)}</ThemedText>
-                                    </ThemedView>
+                                    <View key={field} style={[styles.requiredFieldChip, { borderColor: colors.border, borderRadius: radii.full }]}>
+                                        <ThemedText variant="captionBold" color="textSecondary">{getShareFieldLabel(field)}</ThemedText>
+                                    </View>
                                 ))}
-                            </ThemedView>
+                            </View>
 
-                            <ThemedText style={styles.sectionLabel}>Consent</ThemedText>
+                            <ThemedText variant="smallBold" color="text">Consent</ThemedText>
                             <ConsentToggle
                                 label="I accept the clinic privacy policy"
                                 value={consent.acceptedPrivacyPolicy}
@@ -405,19 +402,20 @@ export default function ExploreClinicsScreen() {
                                 onPress={() => setConsent((prev) => ({ ...prev, acceptedDataSharing: !prev.acceptedDataSharing }))}
                             />
 
-                            <ThemedText style={[styles.linksText, { color: colors.text }]}>Privacy: {selectedClinic?.privacyPolicyUrl}</ThemedText>
-                            <ThemedText style={[styles.linksText, { color: colors.text }]}>Terms: {selectedClinic?.termsAndConditionsUrl}</ThemedText>
+                            <ThemedText variant="caption" color="textMuted">Privacy: {selectedClinic?.privacyPolicyUrl}</ThemedText>
+                            <ThemedText variant="caption" color="textMuted">Terms: {selectedClinic?.termsAndConditionsUrl}</ThemedText>
                         </ScrollView>
 
-                        <ThemedView style={[styles.modalActions, { borderTopColor: colors.border }]}>
+                        <View style={[styles.modalActions, { borderTopColor: colors.border }]}>
                             <Pressable
                                 onPress={closeJoinModal}
                                 style={({ pressed }) => [
                                     styles.secondaryAction,
-                                    { borderColor: colors.border, opacity: pressed ? 0.75 : 1 },
+                                    { borderColor: colors.border, borderRadius: radii.md, opacity: pressed ? 0.75 : 1 },
                                 ]}
+                                accessibilityRole="button"
                             >
-                                <ThemedText style={styles.secondaryActionText}>Cancel</ThemedText>
+                                <ThemedText variant="smallBold" color="text">Cancel</ThemedText>
                             </Pressable>
                             <Pressable
                                 disabled={!canSubmitJoin || isJoining}
@@ -426,17 +424,19 @@ export default function ExploreClinicsScreen() {
                                     styles.primaryAction,
                                     {
                                         backgroundColor: colors.primary,
+                                        borderRadius: radii.md,
                                         opacity: !canSubmitJoin || isJoining || pressed ? 0.65 : 1,
                                     },
                                 ]}
+                                accessibilityRole="button"
                             >
-                                <ThemedText style={styles.primaryActionText}>{isJoining ? 'Joining...' : 'Confirm Join'}</ThemedText>
+                                <ThemedText variant="smallBold" color="onPrimary">{isJoining ? 'Joining...' : 'Confirm Join'}</ThemedText>
                             </Pressable>
-                        </ThemedView>
-                    </ThemedView>
-                </ThemedView>
+                        </View>
+                    </View>
+                </View>
             </Modal>
-        </ThemedView>
+        </View>
     );
 }
 
@@ -447,30 +447,10 @@ const styles = StyleSheet.create({
     listContent: {
         padding: 16,
         gap: 12,
-        paddingBottom: 28,
     },
     headerWrap: {
         marginBottom: 6,
         gap: 12,
-    },
-    heading: {
-        fontSize: 24,
-        fontWeight: '700',
-    },
-    subheading: {
-        fontSize: 14,
-        opacity: 0.8,
-        lineHeight: 20,
-    },
-    searchContainer: {
-        borderWidth: StyleSheet.hairlineWidth,
-        borderRadius: 12,
-        paddingHorizontal: 12,
-        paddingVertical: 2,
-    },
-    searchInput: {
-        fontSize: 15,
-        minHeight: 42,
     },
     filterRow: {
         gap: 8,
@@ -478,23 +458,13 @@ const styles = StyleSheet.create({
     },
     filterChip: {
         borderWidth: StyleSheet.hairlineWidth,
-        borderRadius: 999,
         paddingHorizontal: 14,
         paddingVertical: 8,
-    },
-    filterChipText: {
-        fontSize: 13,
-        fontWeight: '600',
-    },
-    centerWrap: {
-        paddingVertical: 36,
-        alignItems: 'center',
     },
     loadingStack: {
         gap: 12,
     },
     card: {
-        borderRadius: 14,
         borderWidth: StyleSheet.hairlineWidth,
         overflow: 'hidden',
     },
@@ -503,63 +473,6 @@ const styles = StyleSheet.create({
         paddingTop: 10,
         gap: 8,
     },
-    cardTopRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 10,
-    },
-    cardTitle: {
-        flex: 1,
-        fontSize: 17,
-        fontWeight: '700',
-    },
-    cardDescription: {
-        fontSize: 14,
-        opacity: 0.85,
-        lineHeight: 20,
-    },
-    metaText: {
-        fontSize: 12,
-        opacity: 0.8,
-    },
-    providersRow: {
-        gap: 4,
-    },
-    providersLabel: {
-        fontSize: 12,
-        opacity: 0.7,
-        fontWeight: '600',
-    },
-    providersChips: {
-        gap: 8,
-        paddingVertical: 4,
-    },
-    providerChip: {
-        borderWidth: StyleSheet.hairlineWidth,
-        borderRadius: 10,
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-        minWidth: 100,
-    },
-    providerChipName: {
-        fontSize: 12,
-        fontWeight: '700',
-    },
-    providerChipSpec: {
-        fontSize: 11,
-        opacity: 0.7,
-    },
-    badge: {
-        borderRadius: 999,
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-    },
-    badgeText: {
-        color: '#fff',
-        fontSize: 11,
-        fontWeight: '700',
-    },
     cardActionsRow: {
         flexDirection: 'row',
         gap: 10,
@@ -567,38 +480,24 @@ const styles = StyleSheet.create({
     },
     primaryAction: {
         flex: 1,
-        borderRadius: 10,
         minHeight: 42,
         alignItems: 'center',
         justifyContent: 'center',
         paddingHorizontal: 12,
     },
-    primaryActionText: {
-        color: '#fff',
-        fontSize: 14,
-        fontWeight: '700',
-    },
     secondaryAction: {
         flex: 1,
-        borderRadius: 10,
         borderWidth: StyleSheet.hairlineWidth,
         minHeight: 42,
         alignItems: 'center',
         justifyContent: 'center',
         paddingHorizontal: 12,
     },
-    secondaryActionText: {
-        fontSize: 14,
-        fontWeight: '600',
-    },
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.45)',
         justifyContent: 'flex-end',
     },
     modalContainer: {
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
         borderWidth: StyleSheet.hairlineWidth,
         maxHeight: '90%',
     },
@@ -607,39 +506,17 @@ const styles = StyleSheet.create({
         gap: 10,
         paddingBottom: 24,
     },
-    modalTitle: {
-        fontSize: 21,
-        fontWeight: '700',
-    },
-    modalSubtitle: {
-        fontSize: 14,
-        opacity: 0.8,
-        lineHeight: 20,
-        marginBottom: 2,
-    },
-    sectionLabel: {
-        marginTop: 6,
-        fontSize: 13,
-        fontWeight: '700',
-        opacity: 0.9,
-    },
     requiredFieldsWrap: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         gap: 8,
     },
     requiredFieldChip: {
-        borderRadius: 999,
         borderWidth: StyleSheet.hairlineWidth,
         paddingHorizontal: 10,
         paddingVertical: 5,
     },
-    requiredFieldText: {
-        fontSize: 12,
-        fontWeight: '600',
-    },
     consentRow: {
-        borderRadius: 12,
         borderWidth: StyleSheet.hairlineWidth,
         paddingHorizontal: 12,
         paddingVertical: 10,
@@ -650,25 +527,12 @@ const styles = StyleSheet.create({
     checkbox: {
         width: 20,
         height: 20,
-        borderRadius: 6,
         borderWidth: StyleSheet.hairlineWidth,
         alignItems: 'center',
         justifyContent: 'center',
     },
-    checkboxMark: {
-        color: '#fff',
-        fontSize: 12,
-        fontWeight: '800',
-    },
     consentLabel: {
         flex: 1,
-        fontSize: 13,
-        lineHeight: 18,
-    },
-    linksText: {
-        fontSize: 12,
-        opacity: 0.78,
-        lineHeight: 17,
     },
     modalActions: {
         borderTopWidth: StyleSheet.hairlineWidth,

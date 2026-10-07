@@ -1,15 +1,6 @@
 import { useCallback, useLayoutEffect, useState } from 'react';
-import {
-  Alert,
-  Platform,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  SectionList,
-  StyleSheet,
-  View,
-} from 'react-native';
-import { MaterialSymbolProps, SFSymbolProps, useFocusEffect, useNavigation, useTheme } from '@react-navigation/native';
+import { Pressable, RefreshControl, ScrollView, SectionList, StyleSheet, View } from 'react-native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
@@ -17,31 +8,36 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
-import { SFSymbol, MaterialSymbol } from '@react-navigation/native';
 import { formatDistanceToNowStrict, isToday, isYesterday, format } from 'date-fns';
-import ThemedText from '@ui/ThemedText';
-import { useNotificationContext } from 'contexts/NotificationContext';
-import { usePatientId } from 'hooks/usePatientId';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import ThemedText from '../../components/ui/ThemedText';
+import { AppIcon, type IconName } from '../../components/ui/Icon';
+import { useAppTheme } from '../../contexts/ThemeContext';
+import { useNotificationContext } from '../../contexts/NotificationContext';
+import { usePatientId } from '../../hooks/usePatientId';
 import {
   getNotifications,
   markAllAsRead,
   deleteNotification,
   type NotificationFilter,
-} from 'services/notifications/notificationService';
-import type { NotificationCategory } from '@db/schema/notifications';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+} from '../../services/notifications/notificationService';
+import { dialog } from '../../utils/dialog';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
-const CATEGORY_META: Record<
-  string,
-  { color: string; iconAndroid: MaterialSymbolProps['name']; iconIos: SFSymbolProps['name'] }
-> = {
-  appointments: { color: '#3B82F6', iconAndroid: 'event', iconIos: 'calendar.circle.fill' },
-  reminders: { color: '#F59E0B', iconAndroid: 'alarm', iconIos: 'alarm.fill' },
-  clinic: { color: '#10B981', iconAndroid: 'local_hospital', iconIos: 'cross.case.fill' },
-  messages: { color: '#8B5CF6', iconAndroid: 'chat', iconIos: 'message.fill' },
-  system: { color: '#6B7280', iconAndroid: 'info', iconIos: 'info.circle.fill' },
+interface CategoryMeta {
+  color: 'primary' | 'warning' | 'success' | 'purple' | 'textSecondary';
+  bg: 'primaryLight' | 'warningBg' | 'successBg' | 'purpleBg' | 'surfaceSubtle';
+  border: 'primaryBorder' | 'warningBorder' | 'successBorder' | 'purpleBorder' | 'border';
+  icon: IconName;
+}
+
+const CATEGORY_META: Record<string, CategoryMeta> = {
+  appointments: { color: 'primary', bg: 'primaryLight', border: 'primaryBorder', icon: 'calendar' },
+  reminders: { color: 'warning', bg: 'warningBg', border: 'warningBorder', icon: 'clock' },
+  clinic: { color: 'success', bg: 'successBg', border: 'successBorder', icon: 'hospital' },
+  messages: { color: 'purple', bg: 'purpleBg', border: 'purpleBorder', icon: 'chat' },
+  system: { color: 'textSecondary', bg: 'surfaceSubtle', border: 'border', icon: 'info' },
 };
 
 const FILTERS: Array<{ key: NotificationFilter; label: string }> = [
@@ -98,7 +94,7 @@ interface NotificationItemProps {
 }
 
 function NotificationItem({ item, onPress, onDelete }: NotificationItemProps) {
-  const { colors } = useTheme();
+  const { colors, radii, sizes } = useAppTheme();
   const translateX = useSharedValue(0);
   const startX = useSharedValue(0);
   const meta = CATEGORY_META[item.category] ?? CATEGORY_META.system;
@@ -142,25 +138,34 @@ function NotificationItem({ item, onPress, onDelete }: NotificationItemProps) {
 
   const handleDelete = () => {
     close();
-    Alert.alert('Delete Notification', 'Remove this notification?', [
+    dialog.alert('Delete Notification', 'Remove this notification?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: () => onDelete(item.id) },
     ]);
   };
 
   return (
-    <View style={styles.itemWrapper}>
+    <View style={[styles.itemWrapper, { borderRadius: radii.lg }]}>
       {/* Swipe action panel */}
-      <View style={styles.deletePanel}>
+      <View
+        style={[
+          styles.deletePanel,
+          {
+            backgroundColor: colors.emergency,
+            borderRadius: radii.lg,
+          },
+        ]}
+      >
         <Pressable
           onPress={handleDelete}
           style={({ pressed }) => [styles.deleteBtn, pressed && { opacity: 0.7 }]}
+          accessibilityRole="button"
+          accessibilityLabel="Delete notification"
         >
-          {Platform.select({
-            ios: <SFSymbol name="trash.fill" size={18} color="#fff" />,
-            android: <MaterialSymbol name="delete" size={20} color="#fff" />,
-          })}
-          <ThemedText style={styles.deleteBtnText}>Delete</ThemedText>
+          <AppIcon name="trash" size={sizes.iconSm} color="textInverted" />
+          <ThemedText variant="captionBold" color="textInverted">
+            Delete
+          </ThemedText>
         </Pressable>
       </View>
 
@@ -173,9 +178,10 @@ function NotificationItem({ item, onPress, onDelete }: NotificationItemProps) {
             {
               backgroundColor: colors.card,
               borderColor: colors.border,
+              borderRadius: radii.lg,
             },
             !item.isRead && {
-              borderLeftColor: meta.color,
+              borderLeftColor: colors[meta.color],
               borderLeftWidth: 3,
             },
           ]}
@@ -183,40 +189,43 @@ function NotificationItem({ item, onPress, onDelete }: NotificationItemProps) {
           <Pressable onPress={handlePress} style={styles.cardInner}>
             {/* Category icon */}
             <View
-              style={[styles.iconCircle, { backgroundColor: meta.color + '22' }]}
+              style={[
+                styles.iconCircle,
+                {
+                  backgroundColor: colors[meta.bg],
+                  borderRadius: radii.full,
+                  width: sizes.controlMd,
+                  height: sizes.controlMd,
+                },
+              ]}
             >
-              {Platform.select({
-                ios: <SFSymbol name={meta.iconIos} size={18} color={meta.color} />,
-                android: (
-                  <MaterialSymbol name={meta.iconAndroid} size={20} color={meta.color} />
-                ),
-              })}
+              <AppIcon name={meta.icon} size={sizes.iconMd} color={meta.color} />
             </View>
 
             {/* Content */}
             <View style={styles.cardContent}>
               <View style={styles.cardTopRow}>
                 <ThemedText
-                  style={[
-                    styles.cardTitle,
-                    { color: colors.text },
-                    !item.isRead && styles.cardTitleBold,
-                  ]}
+                  variant={item.isRead ? 'body' : 'bodyBold'}
+                  color="text"
                   numberOfLines={1}
+                  style={styles.flex}
                 >
                   {item.title}
                 </ThemedText>
                 {!item.isRead && (
-                  <View style={[styles.unreadDot, { backgroundColor: meta.color }]} />
+                  <View
+                    style={[
+                      styles.unreadDot,
+                      { backgroundColor: colors[meta.color], borderRadius: radii.full },
+                    ]}
+                  />
                 )}
               </View>
-              <ThemedText
-                style={[styles.cardBody, { color: colors.text }]}
-                numberOfLines={2}
-              >
+              <ThemedText variant="small" color="textSecondary" numberOfLines={2}>
                 {item.body}
               </ThemedText>
-              <ThemedText style={[styles.cardTime, { color: colors.text }]}>
+              <ThemedText variant="caption" color="textMuted">
                 {relativeTime(d)}
               </ThemedText>
             </View>
@@ -230,33 +239,41 @@ function NotificationItem({ item, onPress, onDelete }: NotificationItemProps) {
 // ─── Permission Banner ─────────────────────────────────────────────────────────
 
 function PermissionBanner({ onPress }: { onPress: () => void }) {
-  const { colors } = useTheme();
+  const { colors, radii, sizes } = useAppTheme();
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
       style={({ pressed }) => [
         styles.permissionBanner,
-        { backgroundColor: '#3B82F615', borderColor: '#3B82F655' },
+        {
+          backgroundColor: colors.primarySubtle,
+          borderColor: colors.primaryBorder,
+          borderRadius: radii.lg,
+        },
         pressed && { opacity: 0.8 },
       ]}
     >
-      <View style={styles.permissionIconWrap}>
-        {Platform.select({
-          ios: <SFSymbol name="bell.badge.fill" size={22} color="#3B82F6" />,
-          android: (
-            <MaterialSymbol name="notifications_active" size={24} color="#3B82F6" />
-          ),
-        })}
+      <View
+        style={[
+          styles.permissionIconWrap,
+          {
+            backgroundColor: colors.primaryLight,
+            borderRadius: radii.full,
+            width: sizes.controlMd,
+            height: sizes.controlMd,
+          },
+        ]}
+      >
+        <AppIcon name="notificationsActive" size={sizes.iconMd} color="primary" />
       </View>
-      <View style={{ flex: 1 }}>
-        <ThemedText style={[styles.permissionTitle, { color: colors.text }]}>
-          Enable Push Notifications
-        </ThemedText>
-        <ThemedText style={[styles.permissionSub, { color: colors.text }]}>
+      <View style={styles.flex}>
+        <ThemedText variant="bodyBold">Enable Push Notifications</ThemedText>
+        <ThemedText variant="small" color="textSecondary">
           Get reminders for appointments, medications, and clinic updates.
         </ThemedText>
       </View>
-      <ThemedText style={{ color: '#3B82F6', fontSize: 13, fontWeight: '600' }}>
+      <ThemedText variant="smallBold" color="primary">
         Enable
       </ThemedText>
     </Pressable>
@@ -265,20 +282,15 @@ function PermissionBanner({ onPress }: { onPress: () => void }) {
 
 // ─── Empty State ───────────────────────────────────────────────────────────────
 
-function EmptyState({ filter }: { filter: NotificationFilter }) {
-  const { colors } = useTheme();
+function EmptyStateView({ filter }: { filter: NotificationFilter }) {
+  const { sizes } = useAppTheme();
   return (
     <View style={styles.emptyState}>
-      {Platform.select({
-        ios: <SFSymbol name="bell.slash.fill" size={40} color={colors.text} />,
-        android: (
-          <MaterialSymbol name="notifications_off" size={44} color={colors.text} />
-        ),
-      })}
-      <ThemedText style={[styles.emptyTitle, { color: colors.text }]}>
+      <AppIcon name="notificationsOff" size={sizes.iconXl} color="textMuted" />
+      <ThemedText variant="h3">
         {filter === 'all' ? 'No notifications yet' : `No ${filter} notifications`}
       </ThemedText>
-      <ThemedText style={[styles.emptySub, { color: colors.text }]}>
+      <ThemedText variant="body" color="textMuted" style={styles.textCenter}>
         {filter === 'all'
           ? 'Notifications from your clinics and reminders will appear here.'
           : `You don't have any ${filter} notifications right now.`}
@@ -290,7 +302,7 @@ function EmptyState({ filter }: { filter: NotificationFilter }) {
 // ─── Screen ────────────────────────────────────────────────────────────────────
 
 export default function NotificationScreen() {
-  const { colors } = useTheme();
+  const { colors, radii, spacing } = useAppTheme();
   const navigation = useNavigation();
   const patientId = usePatientId();
   const insets = useSafeAreaInsets();
@@ -308,21 +320,20 @@ export default function NotificationScreen() {
     refreshNotifications();
   }, [patientId, refreshNotifications]);
 
-  // Put "Mark all as read" in the navigation header when there are unread items
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerRight: unreadCount > 0
-        ? () => (
-          <ThemedText
-            onPress={handleMarkAllRead}
-            style={{ color: colors.primary, fontSize: 14, fontWeight: '600' }}
-          >
-            Mark all as read
-          </ThemedText>
-        )
-        : undefined,
+      headerRight:
+        unreadCount > 0
+          ? () => (
+              <Pressable onPress={handleMarkAllRead} accessibilityRole="button">
+                <ThemedText variant="bodyBold" color="primary">
+                  Mark all as read
+                </ThemedText>
+              </Pressable>
+            )
+          : undefined,
     });
-  }, [unreadCount, handleMarkAllRead, navigation, colors.primary]);
+  }, [unreadCount, handleMarkAllRead, navigation]);
 
   const loadData = useCallback(
     async (showRefresh = false) => {
@@ -347,7 +358,6 @@ export default function NotificationScreen() {
 
   const handleItemPress = useCallback(
     async (item: NotificationRow) => {
-      // Mark read optimistically before opening detail
       if (!item.isRead) {
         setItems((prev) =>
           prev.map((n) => (n.id === item.id ? { ...n, isRead: true } : n)),
@@ -379,7 +389,7 @@ export default function NotificationScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterRow}
+          contentContainerStyle={[styles.filterRow, { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.sm }]}
         >
           {FILTERS.map((f) => {
             const isActive = f.key === activeFilter;
@@ -387,24 +397,22 @@ export default function NotificationScreen() {
               <Pressable
                 key={f.key}
                 onPress={() => setActiveFilter(f.key)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: isActive }}
                 style={[
                   styles.filterChip,
-                  isActive
-                    ? { backgroundColor: colors.primary }
-                    : {
-                      backgroundColor: colors.card,
-                      borderColor: colors.border,
-                      borderWidth: StyleSheet.hairlineWidth,
-                    },
+                  {
+                    backgroundColor: isActive ? colors.primary : colors.card,
+                    borderColor: isActive ? colors.primary : colors.border,
+                    borderRadius: radii.full,
+                    paddingHorizontal: spacing.md,
+                    paddingVertical: spacing.sm,
+                  },
                 ]}
               >
                 <ThemedText
-                  style={[
-                    styles.filterChipText,
-                    isActive
-                      ? { color: '#fff', fontWeight: '700' }
-                      : { color: colors.text, opacity: 0.7 },
-                  ]}
+                  variant="smallBold"
+                  color={isActive ? 'onPrimary' : 'textSecondary'}
                 >
                   {f.label}
                   {f.key === 'unread' && unreadCount > 0 ? ` (${unreadCount})` : ''}
@@ -421,7 +429,7 @@ export default function NotificationScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={[
           styles.listContent,
-          { paddingBottom: insets.bottom + 16 },
+          { paddingHorizontal: spacing.lg, paddingBottom: insets.bottom + spacing.lg },
           sections.length === 0 && styles.listContentEmpty,
         ]}
         refreshControl={
@@ -436,10 +444,10 @@ export default function NotificationScreen() {
             <PermissionBanner onPress={requestPermissions} />
           ) : null
         }
-        ListEmptyComponent={isLoading ? null : <EmptyState filter={activeFilter} />}
+        ListEmptyComponent={isLoading ? null : <EmptyStateView filter={activeFilter} />}
         renderSectionHeader={({ section: { title } }) => (
           <View style={[styles.sectionHeader, { backgroundColor: colors.background }]}>
-            <ThemedText style={[styles.sectionTitle, { color: colors.text }]}>
+            <ThemedText variant="captionBold" color="textMuted" style={styles.sectionTitle}>
               {title}
             </ThemedText>
           </View>
@@ -456,22 +464,19 @@ export default function NotificationScreen() {
 // ─── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   root: { flex: 1 },
 
   filterRow: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    gap: 8,
+    flexDirection: 'row',
   },
   filterChip: {
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  filterChipText: { fontSize: 13 },
 
   listContent: {
-    padding: 16,
     gap: 8,
   },
   listContentEmpty: { flex: 1 },
@@ -481,17 +486,12 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   sectionTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.6,
     textTransform: 'uppercase',
-    opacity: 0.5,
   },
 
   // Card
   itemWrapper: {
     marginBottom: 8,
-    borderRadius: 14,
     overflow: 'hidden',
   },
   deletePanel: {
@@ -500,8 +500,6 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: SWIPE_THRESHOLD,
-    backgroundColor: '#EF4444',
-    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -509,13 +507,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 3,
   },
-  deleteBtnText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '600',
-  },
   card: {
-    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'visible',
   },
@@ -526,9 +518,6 @@ const styles = StyleSheet.create({
     gap: 11,
   },
   iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 1,
@@ -543,30 +532,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  cardTitle: { fontSize: 14, flex: 1 },
-  cardTitleBold: { fontWeight: '700' },
-  cardBody: {
-    fontSize: 13,
-    lineHeight: 18,
-    opacity: 0.7,
-  },
-  cardTime: {
-    fontSize: 11,
-    opacity: 0.45,
-    marginTop: 2,
-  },
   unreadDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
     flexShrink: 0,
-  },
-
-  markAllBtn: {
-    alignSelf: 'flex-end',
-    paddingVertical: 4,
-    paddingHorizontal: 2,
-    marginBottom: 6,
   },
 
   // Permission banner
@@ -574,28 +543,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
     padding: 14,
     marginBottom: 12,
   },
   permissionIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#3B82F620',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
-  },
-  permissionTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  permissionSub: {
-    fontSize: 12,
-    opacity: 0.7,
-    marginTop: 1,
   },
 
   // Empty state
@@ -607,15 +562,7 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
     paddingHorizontal: 32,
   },
-  emptyTitle: {
-    fontSize: 17,
-    fontWeight: '700',
+  textCenter: {
     textAlign: 'center',
-  },
-  emptySub: {
-    fontSize: 14,
-    textAlign: 'center',
-    opacity: 0.55,
-    lineHeight: 20,
   },
 });

@@ -6,7 +6,6 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { Platform } from 'react-native';
 import { getPatientByClerkId, createPatient } from '../services/api/patientApi';
 import { upsertPatientSummary } from '../db/hydrate';
-import CustomAlertModal from '../components/ui/CustomAlertModal';
 
 const PIN_KEY = 'app_pin';
 const HAS_PIN_KEY = 'has_pin';
@@ -14,6 +13,7 @@ const BIOMETRICS_ENABLED_KEY = 'biometrics_enabled';
 const LOCK_TIMEOUT_KEY = 'lock_timeout';
 const INTERNAL_PATIENT_ID_KEY = 'internal_patient_id';
 const DEFAULT_LOCK_TIMEOUT_MS = 30_000;
+const WEB_IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 min default idle timeout on web
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -111,8 +111,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (storedInternalId) {
         setInternalPatientId(storedInternalId);
       }
-      // Only lock if PIN is already set (returning user); fresh installs start unlocked
-      setIsLocked(pinSet);
+      // Only lock if PIN is already set (returning user); fresh installs start unlocked.
+      // On web, do not lock on page reload.
+      setIsLocked(Platform.OS === 'web' ? false : pinSet);
       setIsLoading(false);
     };
     hydrate();
@@ -178,7 +179,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   // Lock only after real background time. Native pickers can briefly move the app
   // through inactive/background while the user is still completing an in-app action.
+  // On web, do NOT lock on tab blur or backgrounding; web uses idle timeout policy below.
   useEffect(() => {
+    if (Platform.OS === 'web') return;
+
     const handleAppStateChange = (nextState: AppStateStatus) => {
       appStateRef.current = nextState;
 
@@ -195,6 +199,43 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       clearLockTimer();
     };
   }, [clearLockTimer, scheduleLock]);
+
+  // Web idle lock policy: locks after 15 min of no pointer/keyboard activity or on explicit lock.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    if (typeof window === 'undefined') return;
+
+    let webIdleTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const resetIdleTimer = () => {
+      if (webIdleTimer) {
+        clearTimeout(webIdleTimer);
+      }
+      if (!hasPIN || !isSignedIn) return;
+
+      webIdleTimer = setTimeout(() => {
+        setIsLocked(true);
+      }, WEB_IDLE_TIMEOUT_MS);
+    };
+
+    resetIdleTimer();
+
+    const activityEvents = ['pointerdown', 'keydown', 'mousemove', 'wheel', 'touchstart', 'scroll'];
+    const handleActivity = () => {
+      resetIdleTimer();
+    };
+
+    activityEvents.forEach((event) => {
+      window.addEventListener(event, handleActivity, { passive: true });
+    });
+
+    return () => {
+      if (webIdleTimer) clearTimeout(webIdleTimer);
+      activityEvents.forEach((event) => {
+        window.removeEventListener(event, handleActivity);
+      });
+    };
+  }, [hasPIN, isSignedIn]);
 
 
 

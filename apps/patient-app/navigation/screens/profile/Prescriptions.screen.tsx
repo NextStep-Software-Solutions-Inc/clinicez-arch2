@@ -1,18 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import {
-  FlatList,
-  StyleSheet,
-  View,
-  Pressable,
-  Modal,
-  ScrollView,
-  TextInput,
-  Image,
-  Alert,
-  Platform,
-} from 'react-native';
-import { useTheme } from '@react-navigation/native';
+import { FlatList, StyleSheet, View, Pressable, Modal, ScrollView, TextInput, Image, Platform } from 'react-native';
 import ThemedText from '@ui/ThemedText';
+import Badge from '@ui/Badge';
+import { AppIcon } from '@ui/Icon';
+import Screen from 'components/layout/Screen';
+import { useAppTheme } from 'contexts/ThemeContext';
+import { useBreakpoint } from 'hooks/useBreakpoint';
 import { db } from '@db/index';
 import { prescriptions } from '@db/schema/prescriptions';
 import { eq, desc } from 'drizzle-orm';
@@ -22,6 +15,7 @@ import { useClinicNameMap } from 'hooks/useClinicNameMap';
 import { usePatientId } from 'hooks/usePatientId';
 import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
+import { dialog } from '@utils/dialog';
 
 interface ExternalReceiptData {
   pharmacyName: string;
@@ -44,7 +38,8 @@ const COMMON_DRUGSTORES = [
 export default function PrescriptionsScreen() {
   const patientId = usePatientId();
   const { getClinicName } = useClinicNameMap();
-  const { colors, dark: isDark } = useTheme();
+  const { colors, radii, spacing } = useAppTheme();
+  const { isDesktop } = useBreakpoint();
 
   const [records, setRecords] = useState<any[]>([]);
   const [selectedRx, setSelectedRx] = useState<any | null>(null);
@@ -130,7 +125,7 @@ export default function PrescriptionsScreen() {
 
   const copyUpscToken = async (token: string) => {
     await Clipboard.setStringAsync(token);
-    Alert.alert('UPSC Copied', `Unique Prescription Security Code "${token}" copied to clipboard.`);
+    dialog.alert('UPSC Copied', `Unique Prescription Security Code "${token}" copied to clipboard.`);
   };
 
   const handleOpenSlip = (item: any) => {
@@ -148,7 +143,7 @@ export default function PrescriptionsScreen() {
   const handlePickPhoto = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Denied', 'Camera roll permissions are needed to attach pharmacy receipts.');
+      dialog.alert('Permission Denied', 'Camera roll permissions are needed to attach pharmacy receipts.');
       return;
     }
 
@@ -165,7 +160,7 @@ export default function PrescriptionsScreen() {
   const handleTakePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Denied', 'Camera permission is required to photograph your pharmacy receipt.');
+      dialog.alert('Permission Denied', 'Camera permission is required to photograph your pharmacy receipt.');
       return;
     }
 
@@ -182,7 +177,7 @@ export default function PrescriptionsScreen() {
   const handleSaveReceipt = () => {
     if (!selectedRx) return;
     if (!receiptNumber.trim()) {
-      Alert.alert('Required Field', 'Please enter the Official Receipt (OR) Number from your purchase.');
+      dialog.alert('Required Field', 'Please enter the Official Receipt (OR) Number from your purchase.');
       return;
     }
 
@@ -200,7 +195,7 @@ export default function PrescriptionsScreen() {
     }));
 
     setReceiptModalVisible(false);
-    Alert.alert(
+    dialog.alert(
       'Receipt Attached',
       `Official receipt from ${finalPharmacy} (OR #${receiptNumber.trim()}) attached to your digital health record.`
     );
@@ -209,63 +204,116 @@ export default function PrescriptionsScreen() {
   const copyVerificationLink = async (token: string) => {
     const portalUrl = (process.env.EXPO_PUBLIC_PORTAL_URL ?? '').replace(/\/+$/, '');
     if (!portalUrl) {
-      Alert.alert('Link Unavailable', 'The public verification portal is not configured for this app.');
+      dialog.alert('Link Unavailable', 'The public verification portal is not configured for this app.');
       return;
     }
     const url = `${portalUrl}/rx-verify/${token}`;
     await Clipboard.setStringAsync(url);
-    Alert.alert('Link Copied', 'Public pharmacy verification link copied to clipboard.');
+    dialog.alert('Link Copied', 'Public pharmacy verification link copied to clipboard.');
   };
 
   return (
-    <View style={{ flex: 1 }}>
+    <Screen width="content" scroll={false} padded={false}>
       <FlatList
+        key={isDesktop ? 'grid-2' : 'list-1'}
+        numColumns={isDesktop ? 2 : 1}
         data={records}
         keyExtractor={(item) => item.id}
         contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          { padding: spacing.lg, paddingBottom: spacing['4xl'], gap: spacing.md },
+        ]}
+        columnWrapperStyle={isDesktop ? { gap: spacing.md } : undefined}
         ListHeaderComponent={
-          <View style={{ gap: 12, marginBottom: 12 }}>
+          <View style={{ gap: spacing.md, marginBottom: spacing.sm }}>
             {/* PhilHealth GAMOT ₱20,000 Allocation Card */}
-            <View style={[styles.gamotHeaderCard, { backgroundColor: isDark ? '#1E293B' : '#F0FDF4', borderColor: '#10B981' }]}>
+            <View
+              style={[
+                styles.gamotHeaderCard,
+                {
+                  backgroundColor: colors.successBg,
+                  borderColor: colors.successBorder,
+                  borderRadius: radii.xl,
+                  padding: spacing.md,
+                  gap: spacing.md,
+                },
+              ]}
+            >
               <View style={styles.rowBetween}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <ThemedText style={{ fontSize: 20 }}>🇵🇭</ThemedText>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                  <AppIcon name="shield" color={colors.successText} size={22} />
                   <View>
-                    <ThemedText style={styles.gamotHeaderTitle}>PhilHealth GAMOT Benefit</ThemedText>
-                    <ThemedText style={styles.gamotHeaderSub}>Outpatient Drug Package (Circular 2026-0012)</ThemedText>
+                    <ThemedText variant="title" style={{ color: colors.successText, fontWeight: '700' }}>
+                      PhilHealth GAMOT Benefit
+                    </ThemedText>
+                    <ThemedText variant="caption" style={{ color: colors.textSecondary }}>
+                      Outpatient Drug Package (Circular 2026-0012)
+                    </ThemedText>
                   </View>
                 </View>
-                <View style={styles.gamotHeaderBadge}>
-                  <ThemedText style={styles.gamotHeaderBadgeText}>₱20,000.00 / yr</ThemedText>
-                </View>
+                <Badge tone="success" label="₱20,000.00 / yr" size="sm" />
               </View>
 
-              <View style={styles.gamotStatsRow}>
+              <View
+                style={[
+                  styles.gamotStatsRow,
+                  {
+                    backgroundColor: colors.surfaceSubtle,
+                    borderRadius: radii.md,
+                    paddingVertical: spacing.sm,
+                    paddingHorizontal: spacing.sm,
+                  },
+                ]}
+              >
                 <View style={styles.gamotStatItem}>
-                  <ThemedText style={styles.gamotStatLabel}>ANNUAL CEILING</ThemedText>
-                  <ThemedText style={styles.gamotStatVal}>₱20,000.00</ThemedText>
+                  <ThemedText variant="caption" style={{ color: colors.textMuted, letterSpacing: 0.5, fontWeight: '700' }}>
+                    ANNUAL CEILING
+                  </ThemedText>
+                  <ThemedText variant="bodyBold" style={{ color: colors.text }}>
+                    ₱20,000.00
+                  </ThemedText>
                 </View>
-                <View style={styles.gamotStatDivider} />
+                <View style={[styles.gamotStatDivider, { backgroundColor: colors.borderLight }]} />
                 <View style={styles.gamotStatItem}>
-                  <ThemedText style={styles.gamotStatLabel}>CLAIMED</ThemedText>
-                  <ThemedText style={[styles.gamotStatVal, { color: '#0284C7' }]}>
+                  <ThemedText variant="caption" style={{ color: colors.textMuted, letterSpacing: 0.5, fontWeight: '700' }}>
+                    CLAIMED
+                  </ThemedText>
+                  <ThemedText variant="bodyBold" style={{ color: colors.primary }}>
                     ₱{totalGamotClaimed.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </ThemedText>
                 </View>
-                <View style={styles.gamotStatDivider} />
+                <View style={[styles.gamotStatDivider, { backgroundColor: colors.borderLight }]} />
                 <View style={styles.gamotStatItem}>
-                  <ThemedText style={styles.gamotStatLabel}>AVAILABLE</ThemedText>
-                  <ThemedText style={[styles.gamotStatVal, { color: '#10B981' }]}>
+                  <ThemedText variant="caption" style={{ color: colors.textMuted, letterSpacing: 0.5, fontWeight: '700' }}>
+                    AVAILABLE
+                  </ThemedText>
+                  <ThemedText variant="bodyBold" style={{ color: colors.successText }}>
                     ₱{Math.max(0, 20000 - totalGamotClaimed).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </ThemedText>
                 </View>
               </View>
             </View>
 
-            <View style={styles.headerBanner}>
-              <ThemedText style={styles.bannerTitle}>Dual-Path Electronic Prescriptions</ThemedText>
-              <ThemedText style={styles.bannerSubtitle}>
+            <View
+              style={[
+                styles.headerBanner,
+                {
+                  backgroundColor: colors.primaryLight,
+                  borderColor: colors.primaryBorder,
+                  borderRadius: radii.lg,
+                  padding: spacing.md,
+                  gap: spacing.xs,
+                },
+              ]}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                <AppIcon name="pill" color={colors.primary} size={20} />
+                <ThemedText variant="title" style={{ color: colors.primaryText, fontWeight: '700' }}>
+                  Dual-Path Electronic Prescriptions
+                </ThemedText>
+              </View>
+              <ThemedText variant="caption" style={{ color: colors.textSecondary, lineHeight: 18 }}>
                 Your official Philippine e-Prescriptions (RA 6675 compliant). Pick up at ClinicEz partner pharmacies (Path A) or present the digital QR slip at Mercury Drug, Watsons, or Rose Pharmacy (Path B).
               </ThemedText>
             </View>
@@ -277,54 +325,66 @@ export default function PrescriptionsScreen() {
           const isDispensed = item.dispenseStatus === 'Dispensed';
           const isExternallyDispensed = !!receipt;
 
+          const statusTone = isDispensed ? 'success' : isExternallyDispensed ? 'warning' : 'info';
+          const statusIcon = isDispensed ? 'check' : isExternallyDispensed ? 'check' : 'clock';
+          const statusLabel = isDispensed
+            ? 'Dispensed (Partner)'
+            : isExternallyDispensed
+            ? `Dispensed (${receipt.pharmacyName})`
+            : 'In Partner Queue';
+
           return (
-            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View
+              style={[
+                styles.card,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  borderRadius: radii.lg,
+                  padding: spacing.md,
+                  gap: spacing.sm,
+                  flex: 1,
+                },
+              ]}
+            >
               {/* Header with Title & Status Badge */}
               <View style={styles.cardHeaderRow}>
-                <View style={{ flex: 1 }}>
-                  <ThemedText style={styles.drugNameText}>{item.drugName ?? 'Prescription'}</ThemedText>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <ThemedText variant="title" style={{ color: colors.text, fontWeight: '700' }}>
+                    {item.drugName ?? 'Prescription'}
+                  </ThemedText>
                   {item.genericName && (
-                    <ThemedText style={styles.genericSubText}>Generic: {item.genericName}</ThemedText>
+                    <ThemedText variant="caption" style={{ color: colors.primary, fontWeight: '500' }}>
+                      Generic: {item.genericName}
+                    </ThemedText>
                   )}
                 </View>
 
                 {/* Status Badge */}
-                <View
-                  style={[
-                    styles.statusPill,
-                    isDispensed
-                      ? styles.statusPillGreen
-                      : isExternallyDispensed
-                      ? styles.statusPillAmber
-                      : styles.statusPillBlue,
-                  ]}
-                >
-                  <ThemedText
-                    style={[
-                      styles.statusPillText,
-                      isDispensed
-                        ? styles.statusTextGreen
-                        : isExternallyDispensed
-                        ? styles.statusTextAmber
-                        : styles.statusTextBlue,
-                    ]}
-                  >
-                    {isDispensed
-                      ? '✓ Dispensed (Partner)'
-                      : isExternallyDispensed
-                      ? `✓ Dispensed (${receipt.pharmacyName})`
-                      : '● In Partner Queue'}
-                  </ThemedText>
-                </View>
+                <Badge tone={statusTone} label={statusLabel} icon={statusIcon} size="sm" />
               </View>
 
               {item.isPhilHealthGamot && (
-                <View style={styles.gamotPillBadge}>
-                  <ThemedText style={styles.gamotPillText}>
-                    🇵🇭 PhilHealth GAMOT (₱{(item.gamotCoverageAmount ?? 450).toFixed(2)} Covered)
-                  </ThemedText>
+                <View
+                  style={[
+                    styles.gamotPillBadge,
+                    {
+                      backgroundColor: colors.successBg,
+                      borderColor: colors.successBorder,
+                      borderRadius: radii.md,
+                      paddingHorizontal: spacing.sm,
+                      paddingVertical: spacing.xs,
+                    },
+                  ]}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                    <AppIcon name="shield" size={14} color={colors.successText} />
+                    <ThemedText variant="caption" style={{ color: colors.successText, fontWeight: '700' }}>
+                      PhilHealth GAMOT (₱{(item.gamotCoverageAmount ?? 450).toFixed(2)} Covered)
+                    </ThemedText>
+                  </View>
                   {item.philHealthDrugCode && (
-                    <ThemedText style={styles.gamotDrugCodeText}>
+                    <ThemedText variant="caption" style={{ color: colors.primary, fontWeight: '500' }}>
                       Code: {item.philHealthDrugCode}
                     </ThemedText>
                   )}
@@ -332,7 +392,7 @@ export default function PrescriptionsScreen() {
               )}
 
               {/* Prescription Details */}
-              <View style={styles.detailsGrid}>
+              <View style={{ gap: spacing.xs }}>
                 <ProfileReadOnlyField label="Dosage & Form" value={`${item.dosage ?? ''} ${item.dosageForm ?? ''}`.trim() || null} />
                 <ProfileReadOnlyField label="Directions (Sig)" value={item.frequency} />
                 <ProfileReadOnlyField label="Duration" value={item.duration} />
@@ -354,32 +414,70 @@ export default function PrescriptionsScreen() {
 
               {/* Receipt Attachment Banner if attached */}
               {receipt && (
-                <View style={styles.receiptAttachedBox}>
-                  <ThemedText style={styles.receiptAttachedTitle}>
-                    🧾 External Pharmacy Receipt Attached
-                  </ThemedText>
-                  <ThemedText style={styles.receiptAttachedSub}>
+                <View
+                  style={[
+                    styles.receiptAttachedBox,
+                    {
+                      backgroundColor: colors.warningBg,
+                      borderColor: colors.warningBorder,
+                      borderRadius: radii.md,
+                      padding: spacing.sm,
+                      gap: 2,
+                    },
+                  ]}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                    <AppIcon name="document" size={16} color={colors.warningText} />
+                    <ThemedText variant="caption" style={{ color: colors.warningText, fontWeight: '700' }}>
+                      External Pharmacy Receipt Attached
+                    </ThemedText>
+                  </View>
+                  <ThemedText variant="caption" style={{ color: colors.warningText, opacity: 0.9 }}>
                     Purchased at {receipt.pharmacyName} ({receipt.branchLocation}) • OR #{receipt.receiptNumber}
                   </ThemedText>
                 </View>
               )}
 
               {/* Action Buttons */}
-              <View style={styles.actionsRow}>
+              <View style={[styles.actionsRow, { borderTopColor: colors.borderLight, paddingTop: spacing.sm }]}>
                 <Pressable
-                  style={styles.viewSlipBtn}
+                  style={[
+                    styles.viewSlipBtn,
+                    {
+                      backgroundColor: colors.primary,
+                      borderRadius: radii.md,
+                      paddingVertical: spacing.sm,
+                      paddingHorizontal: spacing.md,
+                      gap: spacing.xs,
+                    },
+                  ]}
                   onPress={() => handleOpenSlip(item)}
                 >
-                  <ThemedText style={styles.viewSlipBtnText}>📄 View Digital Rx Slip (QR)</ThemedText>
+                  <AppIcon name="qrCode" color={colors.onPrimary} size={16} />
+                  <ThemedText variant="caption" style={{ color: colors.onPrimary, fontWeight: '700' }}>
+                    View Digital Rx Slip (QR)
+                  </ThemedText>
                 </Pressable>
 
                 {!isDispensed && (
                   <Pressable
-                    style={styles.attachReceiptBtn}
+                    style={[
+                      styles.attachReceiptBtn,
+                      {
+                        backgroundColor: colors.surfaceSubtle,
+                        borderColor: colors.border,
+                        borderWidth: 1,
+                        borderRadius: radii.md,
+                        paddingVertical: spacing.sm,
+                        paddingHorizontal: spacing.md,
+                        gap: spacing.xs,
+                      },
+                    ]}
                     onPress={() => handleOpenReceiptModal(item)}
                   >
-                    <ThemedText style={styles.attachReceiptBtnText}>
-                      {receipt ? '✏️ Edit Receipt' : '🏥 Attach Pharmacy Receipt'}
+                    <AppIcon name={receipt ? 'edit' : 'hospital'} color={colors.text} size={16} />
+                    <ThemedText variant="caption" style={{ color: colors.text, fontWeight: '700' }}>
+                      {receipt ? 'Edit Receipt' : 'Attach Pharmacy Receipt'}
                     </ThemedText>
                   </Pressable>
                 )}
@@ -391,59 +489,152 @@ export default function PrescriptionsScreen() {
 
       {/* View Digital E-Prescription Slip Modal */}
       <Modal visible={slipModalVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalTopBar}>
-              <ThemedText style={styles.modalTopBarTitle}>Philippine Electronic Prescription</ThemedText>
-              <Pressable onPress={() => setSlipModalVisible(false)} style={styles.closeModalBtn}>
-                <ThemedText style={styles.closeModalText}>✕</ThemedText>
+        <View style={[styles.modalOverlay, { backgroundColor: colors.overlay, padding: spacing.md }]}>
+          <View
+            style={[
+              styles.modalContainer,
+              {
+                backgroundColor: colors.card,
+                borderRadius: radii.xl,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.modalTopBar,
+                {
+                  paddingHorizontal: spacing.lg,
+                  paddingVertical: spacing.md,
+                  backgroundColor: colors.surfaceSubtle,
+                  borderBottomColor: colors.borderLight,
+                },
+              ]}
+            >
+              <ThemedText variant="title" style={{ color: colors.text, fontWeight: '700' }}>
+                Philippine Electronic Prescription
+              </ThemedText>
+              <Pressable onPress={() => setSlipModalVisible(false)} hitSlop={8} style={styles.closeModalBtn}>
+                <AppIcon name="close" color={colors.textSecondary} size={20} />
               </Pressable>
             </View>
 
-            <ScrollView contentContainerStyle={styles.slipScrollContent}>
+            <ScrollView
+              contentContainerStyle={[
+                styles.slipScrollContent,
+                { padding: spacing.lg, gap: spacing.md },
+              ]}
+            >
               {/* Rx Header */}
-              <View style={styles.slipHeader}>
-                <ThemedText style={styles.rxIcon}>℞</ThemedText>
-                <ThemedText style={styles.slipClinicName}>METRO HEALTH OUTPATIENT CLINIC</ThemedText>
-                <ThemedText style={styles.slipClinicMeta}>Unit 201 Medical Arts Bldg, San Pedro, Laguna</ThemedText>
-                <ThemedText style={styles.slipClinicMeta}>Tel: (02) 8123-4567 • DOH License: 04-2026-0012</ThemedText>
-                <View style={styles.divider} />
+              <View style={[styles.slipHeader, { borderBottomColor: colors.borderLight, paddingBottom: spacing.sm }]}>
+                <ThemedText variant="display" style={{ color: colors.primary, fontWeight: '800' }}>
+                  Rx
+                </ThemedText>
+                <ThemedText variant="title" style={{ color: colors.text, textAlign: 'center', fontWeight: '700' }}>
+                  METRO HEALTH OUTPATIENT CLINIC
+                </ThemedText>
+                <ThemedText variant="caption" style={{ color: colors.textSecondary, textAlign: 'center', marginTop: 2 }}>
+                  Unit 201 Medical Arts Bldg, San Pedro, Laguna
+                </ThemedText>
+                <ThemedText variant="caption" style={{ color: colors.textSecondary, textAlign: 'center' }}>
+                  Tel: (02) 8123-4567 • DOH License: 04-2026-0012
+                </ThemedText>
+                <View style={[styles.divider, { backgroundColor: colors.borderLight, marginVertical: spacing.sm }]} />
                 <View style={styles.rxNumberRow}>
-                  <ThemedText style={styles.rxNumberLabel}>
-                    Rx No: <ThemedText style={{ fontWeight: '800', color: '#0284C7' }}>{selectedRx?.prescriptionNumber || 'RX-20260930-0081'}</ThemedText>
+                  <ThemedText variant="caption" style={{ color: colors.textSecondary }}>
+                    Rx No:{' '}
+                    <ThemedText variant="caption" style={{ color: colors.primary, fontWeight: '700' }}>
+                      {selectedRx?.prescriptionNumber || 'RX-20260930-0081'}
+                    </ThemedText>
                   </ThemedText>
-                  <ThemedText style={styles.rxDateLabel}>Date: {selectedRx?.startDate || '2026-09-30'}</ThemedText>
+                  <ThemedText variant="caption" style={{ color: colors.textSecondary, fontWeight: '500' }}>
+                    Date: {selectedRx?.startDate || '2026-09-30'}
+                  </ThemedText>
                 </View>
               </View>
 
               {/* Physician Info */}
-              <View style={styles.slipBox}>
-                <ThemedText style={styles.slipBoxHeading}>Prescribing Physician</ThemedText>
-                <ThemedText style={styles.physicianName}>{selectedRx?.prescribingPhysician || 'Dr. Roberto Cruz, MD'}</ThemedText>
-                <ThemedText style={styles.physicianMeta}>Internal Medicine • PRC License No. 0149281</ThemedText>
-                <ThemedText style={styles.physicianMeta}>PTR No. 8921043 • S2 License: S2-9482014</ThemedText>
+              <View
+                style={[
+                  styles.slipBox,
+                  {
+                    backgroundColor: colors.surfaceSubtle,
+                    borderColor: colors.borderLight,
+                    borderRadius: radii.md,
+                    padding: spacing.md,
+                    gap: spacing.xs,
+                  },
+                ]}
+              >
+                <ThemedText variant="caption" style={{ color: colors.textMuted, textTransform: 'uppercase', fontWeight: '700' }}>
+                  Prescribing Physician
+                </ThemedText>
+                <ThemedText variant="title" style={{ color: colors.text, fontWeight: '700' }}>
+                  {selectedRx?.prescribingPhysician || 'Dr. Roberto Cruz, MD'}
+                </ThemedText>
+                <ThemedText variant="caption" style={{ color: colors.textSecondary }}>
+                  Internal Medicine • PRC License No. 0149281
+                </ThemedText>
+                <ThemedText variant="caption" style={{ color: colors.textSecondary }}>
+                  PTR No. 8921043 • S2 License: S2-9482014
+                </ThemedText>
               </View>
 
               {/* Medication Section (RA 6675 Compliant) */}
-              <View style={styles.slipBox}>
+              <View
+                style={[
+                  styles.slipBox,
+                  {
+                    backgroundColor: colors.surfaceSubtle,
+                    borderColor: colors.borderLight,
+                    borderRadius: radii.md,
+                    padding: spacing.md,
+                    gap: spacing.xs,
+                  },
+                ]}
+              >
                 <View style={styles.rowBetween}>
-                  <ThemedText style={styles.slipBoxHeading}>Prescribed Drug (RA 6675)</ThemedText>
-                  <ThemedText style={styles.genericsBadge}>Generics Act Compliant</ThemedText>
+                  <ThemedText variant="caption" style={{ color: colors.textMuted, textTransform: 'uppercase', fontWeight: '700' }}>
+                    Prescribed Drug (RA 6675)
+                  </ThemedText>
+                  <Badge tone="success" label="Generics Act Compliant" size="sm" />
                 </View>
-                <ThemedText style={styles.genericNameEmphasized}>
+                <ThemedText variant="title" style={{ color: colors.text, marginTop: 2, fontWeight: '700' }}>
                   {selectedRx?.genericName || selectedRx?.drugName}
                 </ThemedText>
                 {selectedRx?.genericName && (
-                  <ThemedText style={styles.brandNameParens}>({selectedRx.drugName})</ThemedText>
+                  <ThemedText variant="caption" style={{ color: colors.textSecondary, fontStyle: 'italic', fontWeight: '500' }}>
+                    ({selectedRx.drugName})
+                  </ThemedText>
                 )}
-                <ThemedText style={styles.dosageForm}>{selectedRx?.dosage} • {selectedRx?.dosageForm}</ThemedText>
-                <View style={styles.sigContainer}>
-                  <ThemedText style={styles.sigTitle}>Sig / Directions:</ThemedText>
-                  <ThemedText style={styles.sigValue}>{selectedRx?.frequency}</ThemedText>
+                <ThemedText variant="caption" style={{ color: colors.textSecondary, fontWeight: '500' }}>
+                  {selectedRx?.dosage} • {selectedRx?.dosageForm}
+                </ThemedText>
+                <View
+                  style={[
+                    styles.sigContainer,
+                    {
+                      backgroundColor: colors.card,
+                      borderRadius: radii.sm,
+                      borderLeftColor: colors.primary,
+                      padding: spacing.sm,
+                      marginTop: spacing.xs,
+                    },
+                  ]}
+                >
+                  <ThemedText variant="caption" style={{ color: colors.textMuted, fontWeight: '700' }}>
+                    Sig / Directions:
+                  </ThemedText>
+                  <ThemedText variant="bodyBold" style={{ color: colors.text, marginTop: 2 }}>
+                    {selectedRx?.frequency}
+                  </ThemedText>
                 </View>
-                <ThemedText style={styles.durationMeta}>Duration: {selectedRx?.duration} • Refills: {selectedRx?.refillsAllowed ?? 0}</ThemedText>
+                <ThemedText variant="caption" style={{ color: colors.textSecondary, marginTop: spacing.xs }}>
+                  Duration: {selectedRx?.duration} • Refills: {selectedRx?.refillsAllowed ?? 0}
+                </ThemedText>
                 {selectedRx?.specialInstructions && (
-                  <ThemedText style={styles.instructionMeta}>Note: {selectedRx.specialInstructions}</ThemedText>
+                  <ThemedText variant="caption" style={{ color: colors.textSecondary, fontStyle: 'italic' }}>
+                    Note: {selectedRx.specialInstructions}
+                  </ThemedText>
                 )}
               </View>
 
@@ -452,65 +643,127 @@ export default function PrescriptionsScreen() {
                 <View
                   style={[
                     styles.slipBox,
-                    styles.gamotSlipBox,
-                    { backgroundColor: isDark ? '#064E3B' : '#ECFDF5', borderColor: '#10B981' },
+                    {
+                      backgroundColor: colors.successBg,
+                      borderColor: colors.successBorder,
+                      borderRadius: radii.md,
+                      padding: spacing.md,
+                      gap: spacing.sm,
+                    },
                   ]}
                 >
                   <View style={styles.rowBetween}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      <ThemedText style={{ fontSize: 18 }}>🇵🇭</ThemedText>
-                      <ThemedText style={[styles.gamotBoxHeading, { color: isDark ? '#A7F3D0' : '#065F46' }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                      <AppIcon name="shield" size={18} color={colors.successText} />
+                      <ThemedText variant="title" style={{ color: colors.successText, fontWeight: '700' }}>
                         PhilHealth GAMOT Benefit
                       </ThemedText>
                     </View>
-                    <View style={styles.gamotCeilingBadge}>
-                      <ThemedText style={styles.gamotCeilingText}>₱20,000.00 / yr</ThemedText>
-                    </View>
+                    <Badge tone="success" label="₱20,000.00 / yr" size="sm" />
                   </View>
-                  <ThemedText style={[styles.gamotBoxSub, { color: isDark ? '#D1FAE5' : '#047857' }]}>
+                  <ThemedText variant="caption" style={{ color: colors.successText, opacity: 0.9 }}>
                     Outpatient drug benefit covered under PhilHealth Circular 2026-0012. Verified with Modulus-11 UPSC token.
                   </ThemedText>
 
-                  <View style={styles.gamotDetailRow}>
-                    <ThemedText style={styles.gamotDetailLabel}>PhilHealth Drug Code:</ThemedText>
-                    <ThemedText style={styles.gamotDetailValue}>
+                  <View style={styles.rowBetween}>
+                    <ThemedText variant="caption" style={{ color: colors.successText, fontWeight: '700' }}>
+                      PhilHealth Drug Code:
+                    </ThemedText>
+                    <ThemedText variant="caption" style={{ color: colors.text, fontWeight: '700' }}>
                       {selectedRx.philHealthDrugCode || 'PHIL-AMLO-5MG-001'}
                     </ThemedText>
                   </View>
 
-                  <View style={styles.gamotDetailRow}>
-                    <ThemedText style={styles.gamotDetailLabel}>Covered Amount:</ThemedText>
-                    <ThemedText style={[styles.gamotDetailValue, { color: '#10B981', fontWeight: '800' }]}>
+                  <View style={styles.rowBetween}>
+                    <ThemedText variant="caption" style={{ color: colors.successText, fontWeight: '700' }}>
+                      Covered Amount:
+                    </ThemedText>
+                    <ThemedText variant="caption" style={{ color: colors.successText, fontWeight: '700' }}>
                       ₱{(selectedRx.gamotCoverageAmount ?? 450).toFixed(2)}
                     </ThemedText>
                   </View>
 
-                  <View style={styles.upscContainer}>
-                    <ThemedText style={styles.upscLabel}>Unique Prescription Security Code (UPSC):</ThemedText>
-                    <View style={styles.upscCodeBox}>
-                      <ThemedText style={styles.upscCodeText}>
+                  <View style={{ gap: spacing.xs, marginTop: spacing.xs }}>
+                    <ThemedText variant="caption" style={{ color: colors.textMuted, textTransform: 'uppercase', fontWeight: '700' }}>
+                      Unique Prescription Security Code (UPSC):
+                    </ThemedText>
+                    <View
+                      style={[
+                        styles.upscCodeBox,
+                        {
+                          backgroundColor: colors.surfaceSubtle,
+                          borderColor: colors.borderLight,
+                          borderRadius: radii.md,
+                          paddingHorizontal: spacing.md,
+                          paddingVertical: spacing.sm,
+                        },
+                      ]}
+                    >
+                      <ThemedText
+                        variant="caption"
+                        style={{
+                          color: colors.primary,
+                          fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+                          letterSpacing: 0.5,
+                          fontWeight: '700',
+                        }}
+                      >
                         {selectedRx.uniquePrescriptionSecurityCode || 'UPSC-HCI990001-2026-000142'}
                       </ThemedText>
                       <Pressable
-                        style={styles.copyUpscBtn}
+                        style={[
+                          styles.copyUpscBtn,
+                          {
+                            backgroundColor: colors.primary,
+                            borderRadius: radii.sm,
+                            paddingHorizontal: spacing.sm,
+                            paddingVertical: spacing.xs,
+                          },
+                        ]}
                         onPress={() =>
                           copyUpscToken(selectedRx.uniquePrescriptionSecurityCode || 'UPSC-HCI990001-2026-000142')
                         }
                       >
-                        <ThemedText style={styles.copyUpscBtnText}>Copy</ThemedText>
+                        <AppIcon name="copy" color={colors.onPrimary} size={14} />
+                        <ThemedText variant="caption" style={{ color: colors.onPrimary, fontWeight: '700' }}>
+                          Copy
+                        </ThemedText>
                       </Pressable>
                     </View>
                   </View>
 
                   {/* Scannable UPSC QR Code Payload */}
-                  <View style={styles.qrCodeCard}>
-                    <View style={[styles.qrGraphic, { backgroundColor: '#0284C7' }]}>
-                      <ThemedText style={{ fontSize: 26 }}>🛡️</ThemedText>
-                      <ThemedText style={[styles.qrGraphicText, { color: '#fff' }]}>UPSC QR</ThemedText>
+                  <View
+                    style={[
+                      styles.qrCodeCard,
+                      {
+                        backgroundColor: colors.card,
+                        borderColor: colors.border,
+                        borderRadius: radii.md,
+                        padding: spacing.sm,
+                        gap: spacing.sm,
+                      },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.qrGraphic,
+                        {
+                          backgroundColor: colors.primary,
+                          borderRadius: radii.md,
+                        },
+                      ]}
+                    >
+                      <AppIcon name="shield" size={24} color={colors.onPrimary} />
+                      <ThemedText variant="caption" style={{ color: colors.onPrimary, marginTop: 2, fontWeight: '700' }}>
+                        UPSC QR
+                      </ThemedText>
                     </View>
-                    <View style={{ flex: 1, gap: 4 }}>
-                      <ThemedText style={styles.qrPayloadLabel}>PhilHealth UPSC QR Payload:</ThemedText>
-                      <ThemedText style={styles.qrPayloadText}>
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <ThemedText variant="caption" style={{ color: colors.textSecondary, fontWeight: '700' }}>
+                        PhilHealth UPSC QR Payload:
+                      </ThemedText>
+                      <ThemedText variant="caption" style={{ color: colors.text, fontFamily: 'monospace' }}>
                         PHILHEALTH:YAKAP:UPSC:{selectedRx.uniquePrescriptionSecurityCode || 'UPSC-HCI990001-2026-000142'}
                       </ThemedText>
                     </View>
@@ -519,37 +772,110 @@ export default function PrescriptionsScreen() {
               )}
 
               {/* Dual-Path Interoperability QR Code Section */}
-              <View style={[styles.slipBox, styles.qrContainerBox]}>
-                <ThemedText style={styles.qrSectionTitle}>Path B: External Pharmacy Verification</ThemedText>
-                <ThemedText style={styles.qrSectionSub}>
+              <View
+                style={[
+                  styles.slipBox,
+                  {
+                    backgroundColor: colors.primaryLight,
+                    borderColor: colors.primaryBorder,
+                    borderRadius: radii.md,
+                    padding: spacing.md,
+                    gap: spacing.xs,
+                  },
+                ]}
+              >
+                <ThemedText variant="title" style={{ color: colors.primaryText, fontWeight: '700' }}>
+                  Path B: External Pharmacy Verification
+                </ThemedText>
+                <ThemedText variant="caption" style={{ color: colors.textSecondary, lineHeight: 16 }}>
                   Present this QR code or link to external drugstores (Mercury Drug, Watsons, Rose Pharmacy). The pharmacist can verify authenticity on the ClinicEz public portal.
                 </ThemedText>
 
                 {/* QR Code Graphic Placeholder */}
-                <View style={styles.qrCodeCard}>
-                  <View style={styles.qrGraphic}>
-                    <ThemedText style={{ fontSize: 28 }}>📱</ThemedText>
-                    <ThemedText style={styles.qrGraphicText}>VERIFIED QR</ThemedText>
+                <View
+                  style={[
+                    styles.qrCodeCard,
+                    {
+                      backgroundColor: colors.card,
+                      borderColor: colors.border,
+                      borderRadius: radii.md,
+                      padding: spacing.sm,
+                      gap: spacing.sm,
+                      marginTop: spacing.xs,
+                    },
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.qrGraphic,
+                      {
+                        backgroundColor: colors.text,
+                        borderRadius: radii.md,
+                      },
+                    ]}
+                  >
+                    <AppIcon name="qrCode" size={24} color={colors.card} />
+                    <ThemedText variant="caption" style={{ color: colors.card, marginTop: 2, fontWeight: '700' }}>
+                      VERIFIED QR
+                    </ThemedText>
                   </View>
                   <View style={{ flex: 1, gap: 4 }}>
-                    <ThemedText style={styles.qrPayloadLabel}>Encrypted QR Payload:</ThemedText>
-                    <ThemedText style={styles.qrPayloadText}>
+                    <ThemedText variant="caption" style={{ color: colors.textSecondary, fontWeight: '700' }}>
+                      Encrypted QR Payload:
+                    </ThemedText>
+                    <ThemedText variant="caption" style={{ color: colors.text, fontFamily: 'monospace' }}>
                       CLINICEZ:RX:{selectedRx?.prescriptionNumber || 'RX-20260930-0081'}:{selectedRx?.verificationToken || 'rx-tok-98124a9c8b7e'}
                     </ThemedText>
                     <Pressable
-                      style={styles.copyLinkBtn}
+                      style={[
+                        styles.copyLinkBtn,
+                        {
+                          backgroundColor: colors.surfaceSubtle,
+                          borderColor: colors.border,
+                          borderWidth: 1,
+                          borderRadius: radii.sm,
+                          paddingVertical: spacing.xs,
+                          paddingHorizontal: spacing.sm,
+                          gap: 4,
+                        },
+                      ]}
                       onPress={() => copyVerificationLink(selectedRx?.verificationToken || 'rx-tok-98124a9c8b7e')}
                     >
-                      <ThemedText style={styles.copyLinkBtnText}>🔗 Copy Verification Web Link</ThemedText>
+                      <AppIcon name="copy" color={colors.primary} size={14} />
+                      <ThemedText variant="caption" style={{ color: colors.primary, fontWeight: '700' }}>
+                        Copy Verification Web Link
+                      </ThemedText>
                     </Pressable>
                   </View>
                 </View>
               </View>
             </ScrollView>
 
-            <View style={styles.modalFooter}>
-              <Pressable style={styles.closeFullBtn} onPress={() => setSlipModalVisible(false)}>
-                <ThemedText style={styles.closeFullBtnText}>Close Slip</ThemedText>
+            <View
+              style={[
+                styles.modalFooter,
+                {
+                  padding: spacing.md,
+                  backgroundColor: colors.surfaceSubtle,
+                  borderTopColor: colors.borderLight,
+                },
+              ]}
+            >
+              <Pressable
+                style={[
+                  styles.closeFullBtn,
+                  {
+                    backgroundColor: colors.primary,
+                    borderRadius: radii.md,
+                    paddingVertical: spacing.sm,
+                    paddingHorizontal: spacing.lg,
+                  },
+                ]}
+                onPress={() => setSlipModalVisible(false)}
+              >
+                <ThemedText variant="caption" style={{ color: colors.onPrimary, fontWeight: '700' }}>
+                  Close Slip
+                </ThemedText>
               </Pressable>
             </View>
           </View>
@@ -558,33 +884,75 @@ export default function PrescriptionsScreen() {
 
       {/* Attach Pharmacy Receipt Modal */}
       <Modal visible={receiptModalVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalTopBar}>
-              <ThemedText style={styles.modalTopBarTitle}>Attach External Pharmacy Receipt</ThemedText>
-              <Pressable onPress={() => setReceiptModalVisible(false)} style={styles.closeModalBtn}>
-                <ThemedText style={styles.closeModalText}>✕</ThemedText>
+        <View style={[styles.modalOverlay, { backgroundColor: colors.overlay, padding: spacing.md }]}>
+          <View
+            style={[
+              styles.modalContainer,
+              {
+                backgroundColor: colors.card,
+                borderRadius: radii.xl,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.modalTopBar,
+                {
+                  paddingHorizontal: spacing.lg,
+                  paddingVertical: spacing.md,
+                  backgroundColor: colors.surfaceSubtle,
+                  borderBottomColor: colors.borderLight,
+                },
+              ]}
+            >
+              <ThemedText variant="title" style={{ color: colors.text, fontWeight: '700' }}>
+                Attach External Pharmacy Receipt
+              </ThemedText>
+              <Pressable onPress={() => setReceiptModalVisible(false)} hitSlop={8} style={styles.closeModalBtn}>
+                <AppIcon name="close" color={colors.textSecondary} size={20} />
               </Pressable>
             </View>
 
-            <ScrollView contentContainerStyle={styles.slipScrollContent}>
-              <ThemedText style={styles.receiptModalIntro}>
+            <ScrollView
+              contentContainerStyle={[
+                styles.slipScrollContent,
+                { padding: spacing.lg, gap: spacing.md },
+              ]}
+            >
+              <ThemedText variant="caption" style={{ color: colors.textSecondary, lineHeight: 18 }}>
                 Bought your prescription at Mercury Drug, Watsons, or another external drugstore? Record the Official Receipt (OR) details and photograph your receipt to update your doctor’s EMR chart.
               </ThemedText>
 
               {/* Drugstore Chain */}
-              <View style={styles.formGroup}>
-                <ThemedText style={styles.formLabel}>Pharmacy Chain *</ThemedText>
+              <View style={{ gap: spacing.xs }}>
+                <ThemedText variant="caption" style={{ color: colors.textSecondary, fontWeight: '700' }}>
+                  Pharmacy Chain *
+                </ThemedText>
                 <View style={styles.chipRow}>
                   {COMMON_DRUGSTORES.map((pharmacy) => {
                     const isSelected = selectedPharmacy === pharmacy;
                     return (
                       <Pressable
                         key={pharmacy}
-                        style={[styles.pharmacyChip, isSelected && styles.pharmacyChipActive]}
+                        style={[
+                          styles.pharmacyChip,
+                          {
+                            backgroundColor: isSelected ? colors.primary : colors.surfaceSubtle,
+                            borderColor: isSelected ? colors.primary : colors.border,
+                            borderRadius: radii.md,
+                            paddingHorizontal: spacing.md,
+                            paddingVertical: spacing.sm,
+                          },
+                        ]}
                         onPress={() => setSelectedPharmacy(pharmacy)}
                       >
-                        <ThemedText style={[styles.pharmacyChipText, isSelected && styles.pharmacyChipTextActive]}>
+                        <ThemedText
+                          variant="caption"
+                          style={{
+                            color: isSelected ? colors.onPrimary : colors.text,
+                            fontWeight: isSelected ? '700' : '500',
+                          }}
+                        >
                           {pharmacy}
                         </ThemedText>
                       </Pressable>
@@ -594,9 +962,20 @@ export default function PrescriptionsScreen() {
 
                 {selectedPharmacy === 'Other' && (
                   <TextInput
-                    style={styles.inputField}
+                    style={[
+                      styles.inputField,
+                      {
+                        borderColor: colors.border,
+                        borderRadius: radii.md,
+                        paddingHorizontal: spacing.md,
+                        paddingVertical: spacing.sm,
+                        backgroundColor: colors.card,
+                        color: colors.text,
+                        marginTop: spacing.xs,
+                      },
+                    ]}
                     placeholder="Enter Drugstore Name"
-                    placeholderTextColor="#94A3B8"
+                    placeholderTextColor={colors.textLight}
                     value={customPharmacy}
                     onChangeText={setCustomPharmacy}
                   />
@@ -604,92 +983,172 @@ export default function PrescriptionsScreen() {
               </View>
 
               {/* Branch */}
-              <View style={styles.formGroup}>
-                <ThemedText style={styles.formLabel}>Branch Location</ThemedText>
+              <View style={{ gap: spacing.xs }}>
+                <ThemedText variant="caption" style={{ color: colors.textSecondary, fontWeight: '700' }}>
+                  Branch Location
+                </ThemedText>
                 <TextInput
-                  style={styles.inputField}
+                  style={[
+                    styles.inputField,
+                    {
+                      borderColor: colors.border,
+                      borderRadius: radii.md,
+                      paddingHorizontal: spacing.md,
+                      paddingVertical: spacing.sm,
+                      backgroundColor: colors.card,
+                      color: colors.text,
+                    },
+                  ]}
                   placeholder="e.g. Ayala Center Cebu, Makati Ave Branch"
-                  placeholderTextColor="#94A3B8"
+                  placeholderTextColor={colors.textLight}
                   value={branchLocation}
                   onChangeText={setBranchLocation}
                 />
               </View>
 
               {/* Official Receipt (OR) Number */}
-              <View style={styles.formGroup}>
-                <ThemedText style={styles.formLabel}>Official Receipt (OR) Number *</ThemedText>
+              <View style={{ gap: spacing.xs }}>
+                <ThemedText variant="caption" style={{ color: colors.textSecondary, fontWeight: '700' }}>
+                  Official Receipt (OR) Number *
+                </ThemedText>
                 <TextInput
-                  style={styles.inputField}
+                  style={[
+                    styles.inputField,
+                    {
+                      borderColor: colors.border,
+                      borderRadius: radii.md,
+                      paddingHorizontal: spacing.md,
+                      paddingVertical: spacing.sm,
+                      backgroundColor: colors.card,
+                      color: colors.text,
+                    },
+                  ]}
                   placeholder="e.g. OR-2026-981240"
-                  placeholderTextColor="#94A3B8"
+                  placeholderTextColor={colors.textLight}
                   value={receiptNumber}
                   onChangeText={setReceiptNumber}
                 />
               </View>
 
               {/* Photo Upload */}
-              <View style={styles.formGroup}>
-                <ThemedText style={styles.formLabel}>Receipt Photo / Image</ThemedText>
+              <View style={{ gap: spacing.xs }}>
+                <ThemedText variant="caption" style={{ color: colors.textSecondary, fontWeight: '700' }}>
+                  Receipt Photo / Image
+                </ThemedText>
                 <View style={styles.photoActionsRow}>
-                  <Pressable style={styles.photoActionBtn} onPress={handleTakePhoto}>
-                    <ThemedText style={styles.photoActionBtnText}>📷 Take Photo</ThemedText>
+                  <Pressable
+                    style={[
+                      styles.photoActionBtn,
+                      {
+                        backgroundColor: colors.surfaceSubtle,
+                        borderColor: colors.border,
+                        borderRadius: radii.md,
+                        paddingVertical: spacing.sm,
+                        paddingHorizontal: spacing.md,
+                        gap: spacing.xs,
+                      },
+                    ]}
+                    onPress={handleTakePhoto}
+                  >
+                    <AppIcon name="camera" color={colors.text} size={16} />
+                    <ThemedText variant="caption" style={{ color: colors.text, fontWeight: '700' }}>
+                      Take Photo
+                    </ThemedText>
                   </Pressable>
-                  <Pressable style={styles.photoActionBtn} onPress={handlePickPhoto}>
-                    <ThemedText style={styles.photoActionBtnText}>🖼️ Choose Gallery</ThemedText>
+                  <Pressable
+                    style={[
+                      styles.photoActionBtn,
+                      {
+                        backgroundColor: colors.surfaceSubtle,
+                        borderColor: colors.border,
+                        borderRadius: radii.md,
+                        paddingVertical: spacing.sm,
+                        paddingHorizontal: spacing.md,
+                        gap: spacing.xs,
+                      },
+                    ]}
+                    onPress={handlePickPhoto}
+                  >
+                    <AppIcon name="image" color={colors.text} size={16} />
+                    <ThemedText variant="caption" style={{ color: colors.text, fontWeight: '700' }}>
+                      Choose Gallery
+                    </ThemedText>
                   </Pressable>
                 </View>
 
                 {receiptPhotoUri && (
-                  <View style={styles.receiptPreviewContainer}>
-                    <Image source={{ uri: receiptPhotoUri }} style={styles.receiptPreviewImage} />
-                    <ThemedText style={styles.receiptPreviewLabel}>✓ Receipt photo ready</ThemedText>
+                  <View style={[styles.receiptPreviewContainer, { gap: spacing.xs, marginTop: spacing.sm }]}>
+                    <Image
+                      source={{ uri: receiptPhotoUri }}
+                      style={[styles.receiptPreviewImage, { borderRadius: radii.md, borderColor: colors.border }]}
+                    />
+                    <View style={styles.receiptPreviewLabelRow}>
+                      <AppIcon name="check" size={14} color={colors.successText} />
+                      <ThemedText variant="caption" style={{ color: colors.successText, marginLeft: 4, fontWeight: '700' }}>
+                        Receipt photo ready
+                      </ThemedText>
+                    </View>
                   </View>
                 )}
               </View>
             </ScrollView>
 
-            <View style={styles.modalFooter}>
-              <Pressable style={styles.cancelActionBtn} onPress={() => setReceiptModalVisible(false)}>
-                <ThemedText style={styles.cancelActionBtnText}>Cancel</ThemedText>
+            <View
+              style={[
+                styles.modalFooter,
+                {
+                  padding: spacing.md,
+                  backgroundColor: colors.surfaceSubtle,
+                  borderTopColor: colors.borderLight,
+                  gap: spacing.sm,
+                },
+              ]}
+            >
+              <Pressable
+                style={[
+                  styles.cancelActionBtn,
+                  {
+                    paddingVertical: spacing.sm,
+                    paddingHorizontal: spacing.md,
+                  },
+                ]}
+                onPress={() => setReceiptModalVisible(false)}
+              >
+                <ThemedText variant="caption" style={{ color: colors.textSecondary, fontWeight: '700' }}>
+                  Cancel
+                </ThemedText>
               </Pressable>
-              <Pressable style={styles.saveActionBtn} onPress={handleSaveReceipt}>
-                <ThemedText style={styles.saveActionBtnText}>Attach to Health Record</ThemedText>
+              <Pressable
+                style={[
+                  styles.saveActionBtn,
+                  {
+                    backgroundColor: colors.primary,
+                    borderRadius: radii.md,
+                    paddingVertical: spacing.sm,
+                    paddingHorizontal: spacing.lg,
+                  },
+                ]}
+                onPress={handleSaveReceipt}
+              >
+                <ThemedText variant="caption" style={{ color: colors.onPrimary, fontWeight: '700' }}>
+                  Attach to Health Record
+                </ThemedText>
               </Pressable>
             </View>
           </View>
         </View>
       </Modal>
-    </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 16, paddingBottom: 40 },
+  content: {},
   headerBanner: {
-    backgroundColor: '#F0F9FF',
-    borderColor: '#BAE6FD',
     borderWidth: 1,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 16,
-    gap: 4,
-  },
-  bannerTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#0284C7',
-  },
-  bannerSubtitle: {
-    fontSize: 12,
-    color: '#334155',
-    lineHeight: 18,
   },
   card: {
-    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    padding: 14,
-    marginBottom: 14,
-    gap: 10,
   },
   cardHeaderRow: {
     flexDirection: 'row',
@@ -697,105 +1156,35 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 8,
   },
-  drugNameText: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  genericSubText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#0284C7',
-    marginTop: 2,
-  },
-  statusPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  statusPillGreen: {
-    backgroundColor: '#DCFCE7',
-  },
-  statusPillAmber: {
-    backgroundColor: '#FEF3C7',
-  },
-  statusPillBlue: {
-    backgroundColor: '#E0F2FE',
-  },
-  statusPillText: {
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  statusTextGreen: { color: '#166534' },
-  statusTextAmber: { color: '#92400E' },
-  statusTextBlue: { color: '#0369A1' },
-  detailsGrid: {
-    gap: 6,
-  },
   receiptAttachedBox: {
-    backgroundColor: '#FEF3C7',
     borderWidth: 1,
-    borderColor: '#FDE68A',
-    borderRadius: 8,
-    padding: 10,
-    gap: 2,
-  },
-  receiptAttachedTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#92400E',
-  },
-  receiptAttachedSub: {
-    fontSize: 11,
-    color: '#78350F',
   },
   actionsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginTop: 6,
-    paddingTop: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#E2E8F0',
   },
   viewSlipBtn: {
-    backgroundColor: '#0284C7',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     flex: 1,
     minWidth: 140,
-    alignItems: 'center',
-  },
-  viewSlipBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#FFFFFF',
   },
   attachReceiptBtn: {
-    backgroundColor: '#0D9488',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     flex: 1,
     minWidth: 140,
-    alignItems: 'center',
-  },
-  attachReceiptBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#FFFFFF',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 16,
   },
   modalContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
     width: '100%',
     maxWidth: 500,
     maxHeight: '90%',
@@ -805,249 +1194,60 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#F8FAFC',
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-  },
-  modalTopBarTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#0F172A',
   },
   closeModalBtn: {
     padding: 4,
   },
-  closeModalText: {
-    fontSize: 16,
-    color: '#64748B',
-  },
-  slipScrollContent: {
-    padding: 16,
-    gap: 14,
-  },
+  slipScrollContent: {},
   slipHeader: {
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-    paddingBottom: 10,
-  },
-  rxIcon: {
-    fontSize: 30,
-    fontWeight: '900',
-    color: '#0284C7',
-  },
-  slipClinicName: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#0F172A',
-    textAlign: 'center',
-  },
-  slipClinicMeta: {
-    fontSize: 11,
-    color: '#64748B',
-    textAlign: 'center',
   },
   divider: {
     height: 1,
-    backgroundColor: '#E2E8F0',
     width: '100%',
-    marginVertical: 8,
   },
   rxNumberRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     width: '100%',
   },
-  rxNumberLabel: {
-    fontSize: 12,
-    color: '#334155',
-  },
-  rxDateLabel: {
-    fontSize: 12,
-    color: '#64748B',
-    fontWeight: '600',
-  },
   slipBox: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    padding: 12,
-    gap: 4,
-  },
-  slipBoxHeading: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#475569',
-    textTransform: 'uppercase',
-  },
-  physicianName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  physicianMeta: {
-    fontSize: 11,
-    color: '#64748B',
   },
   rowBetween: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  genericsBadge: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#166534',
-    backgroundColor: '#DCFCE7',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  genericNameEmphasized: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: '#0F172A',
-    marginTop: 2,
-  },
-  brandNameParens: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#475569',
-    fontStyle: 'italic',
-  },
-  dosageForm: {
-    fontSize: 12,
-    color: '#334155',
-    fontWeight: '600',
-    marginTop: 2,
-  },
   sigContainer: {
-    backgroundColor: '#FFFFFF',
-    padding: 8,
-    borderRadius: 6,
     borderLeftWidth: 3,
-    borderLeftColor: '#0284C7',
-    marginTop: 4,
-  },
-  sigTitle: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#64748B',
-  },
-  sigValue: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#0F172A',
-    marginTop: 2,
-  },
-  durationMeta: {
-    fontSize: 11,
-    color: '#64748B',
-    marginTop: 4,
-  },
-  instructionMeta: {
-    fontSize: 11,
-    color: '#64748B',
-    fontStyle: 'italic',
-  },
-  qrContainerBox: {
-    backgroundColor: '#F0F9FF',
-    borderColor: '#BAE6FD',
-  },
-  qrSectionTitle: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#0369A1',
-  },
-  qrSectionSub: {
-    fontSize: 11,
-    color: '#475569',
-    lineHeight: 16,
   },
   qrCodeCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    padding: 10,
-    gap: 10,
-    marginTop: 6,
     borderWidth: 1,
-    borderColor: '#CBD5E1',
   },
   qrGraphic: {
-    width: 64,
-    height: 64,
-    backgroundColor: '#0F172A',
-    borderRadius: 6,
+    width: 56,
+    height: 56,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  qrGraphicText: {
-    fontSize: 7,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginTop: 2,
-  },
-  qrPayloadLabel: {
-    fontSize: 10,
-    color: '#64748B',
-    fontWeight: '600',
-  },
-  qrPayloadText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#0F172A',
-    fontFamily: 'monospace',
-  },
   copyLinkBtn: {
-    backgroundColor: '#E0F2FE',
-    paddingVertical: 5,
-    paddingHorizontal: 8,
-    borderRadius: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
     alignSelf: 'flex-start',
-    marginTop: 4,
-  },
-  copyLinkBtnText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#0284C7',
   },
   modalFooter: {
-    padding: 12,
-    backgroundColor: '#F8FAFC',
     borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    gap: 8,
   },
   closeFullBtn: {
-    backgroundColor: '#0284C7',
-    paddingVertical: 8,
-    paddingHorizontal: 18,
-    borderRadius: 6,
-  },
-  closeFullBtnText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  receiptModalIntro: {
-    fontSize: 12,
-    color: '#475569',
-    lineHeight: 18,
-  },
-  formGroup: {
-    gap: 6,
-  },
-  formLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#334155',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   chipRow: {
     flexDirection: 'row',
@@ -1055,240 +1255,74 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   pharmacyChip: {
-    backgroundColor: '#F1F5F9',
-    borderColor: '#CBD5E1',
     borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  pharmacyChipActive: {
-    backgroundColor: '#0D9488',
-    borderColor: '#0F766E',
-  },
-  pharmacyChipText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#334155',
-  },
-  pharmacyChipTextActive: {
-    color: '#FFFFFF',
   },
   inputField: {
     borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontSize: 13,
-    color: '#0F172A',
-    backgroundColor: '#FFFFFF',
   },
   photoActionsRow: {
     flexDirection: 'row',
     gap: 10,
   },
   photoActionBtn: {
-    backgroundColor: '#F1F5F9',
     borderWidth: 1,
-    borderColor: '#CBD5E1',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
-  },
-  photoActionBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#334155',
+    justifyContent: 'center',
+    flex: 1,
   },
   receiptPreviewContainer: {
     alignItems: 'center',
-    gap: 6,
-    marginTop: 8,
   },
   receiptPreviewImage: {
     width: 120,
     height: 160,
-    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#CBD5E1',
   },
-  receiptPreviewLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#166534',
+  receiptPreviewLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   cancelActionBtn: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-  },
-  cancelActionBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#64748B',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   saveActionBtn: {
-    backgroundColor: '#0D9488',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 6,
-  },
-  saveActionBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   gamotHeaderCard: {
-    borderRadius: 16,
     borderWidth: 1.5,
-    padding: 14,
-    gap: 12,
-  },
-  gamotHeaderTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  gamotHeaderSub: {
-    fontSize: 11,
-    opacity: 0.7,
-  },
-  gamotHeaderBadge: {
-    backgroundColor: '#10B981',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  gamotHeaderBadgeText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '800',
   },
   gamotStatsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: 'rgba(0,0,0,0.03)',
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
   },
   gamotStatItem: {
     flex: 1,
     alignItems: 'center',
     gap: 2,
   },
-  gamotStatLabel: {
-    fontSize: 9,
-    fontWeight: '700',
-    opacity: 0.6,
-    letterSpacing: 0.5,
-  },
-  gamotStatVal: {
-    fontSize: 13,
-    fontWeight: '800',
-  },
   gamotStatDivider: {
     width: StyleSheet.hairlineWidth,
     height: 24,
-    backgroundColor: '#CBD5E1',
   },
   gamotPillBadge: {
-    marginTop: 8,
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
     borderWidth: 1,
-    borderColor: '#10B981',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  gamotPillText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#059669',
-  },
-  gamotDrugCodeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#0284C7',
-  },
-  gamotSlipBox: {
-    borderWidth: 1.5,
-    gap: 8,
-  },
-  gamotBoxHeading: {
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  gamotBoxSub: {
-    fontSize: 12,
-    lineHeight: 16,
-    marginBottom: 4,
-  },
-  gamotCeilingBadge: {
-    backgroundColor: '#10B981',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  gamotCeilingText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  gamotDetailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  gamotDetailLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    opacity: 0.8,
-  },
-  gamotDetailValue: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  upscContainer: {
-    gap: 4,
-    marginTop: 4,
-  },
-  upscLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    opacity: 0.7,
-    textTransform: 'uppercase',
   },
   upscCodeBox: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#0F172A',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  upscCodeText: {
-    color: '#38BDF8',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    borderWidth: 1,
   },
   copyUpscBtn: {
-    backgroundColor: '#0284C7',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  copyUpscBtnText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '700',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
 });

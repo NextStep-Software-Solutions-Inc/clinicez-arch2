@@ -1,6 +1,9 @@
-import { ScrollView, Linking, Alert } from 'react-native';
+import React from 'react';
+import { ScrollView, Linking } from 'react-native';
 import Constants from 'expo-constants';
+import { useAppTheme } from '../../../contexts/ThemeContext';
 import { SettingsRow, SettingsSection } from '@ui/SettingsItem';
+import { dialog } from '@utils/dialog';
 
 const APP_VERSION = Constants.expoConfig?.version ?? '—';
 const BUILD_NUMBER =
@@ -11,18 +14,24 @@ const openUrl = async (url: string) => {
   if (supported) {
     await Linking.openURL(url);
   } else {
-    Alert.alert('Unable to open link', url);
+    dialog.alert('Unable to open link', url);
   }
 };
 
-// Support mailbox for this deployment (configure via EXPO_PUBLIC_SUPPORT_EMAIL).
 const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL ?? '';
 
 export default function AboutSettingsScreen() {
+  const { colors, spacing, sizes } = useAppTheme();
+
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ padding: 16, gap: 0 }}
+      contentContainerStyle={{
+        padding: spacing.lg,
+        maxWidth: sizes.formMaxWidth,
+        alignSelf: 'center',
+        width: '100%',
+      }}
     >
       <SettingsSection title="App Info">
         <SettingsRow
@@ -39,14 +48,14 @@ export default function AboutSettingsScreen() {
         <SettingsRow
           title="Privacy Policy"
           icon={{ android: 'privacy_tip', ios: 'hand.raised.fill' }}
-          iconColor="#3B82F6"
+          iconColor={colors.primary}
           right={{ type: 'chevron' }}
           onPress={() => openUrl('https://Clinic EZ.app/privacy')}
         />
         <SettingsRow
           title="Terms of Service"
           icon={{ android: 'description', ios: 'doc.text.fill' }}
-          iconColor="#6B7280"
+          iconColor={colors.textMuted}
           right={{ type: 'chevron' }}
           onPress={() => openUrl('https://Clinic EZ.app/terms')}
         />
@@ -56,14 +65,14 @@ export default function AboutSettingsScreen() {
         <SettingsRow
           title="Contact Support"
           icon={{ android: 'support_agent', ios: 'person.fill.questionmark' }}
-          iconColor="#10B981"
+          iconColor={colors.success}
           right={{ type: 'chevron' }}
           onPress={() => SUPPORT_EMAIL && openUrl(`mailto:${SUPPORT_EMAIL}?subject=Clinic EZ%20Support`)}
         />
         <SettingsRow
           title="Report a Bug"
           icon={{ android: 'bug_report', ios: 'ant.fill' }}
-          iconColor="#EF4444"
+          iconColor={colors.emergency}
           right={{ type: 'chevron' }}
           onPress={() =>
             openUrl(

@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, TextInput, View, RefreshControl } from 'react-native';
-import { useNavigation, useRoute, useTheme } from '@react-navigation/native';
+import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View, RefreshControl } from 'react-native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useAuth as useClerkAuth } from '@clerk/expo';
 import NetInfo from '@react-native-community/netinfo';
 import ThemedText from '@ui/ThemedText';
-import ThemedView from '@ui/ThemedView';
+import { AppIcon } from '@ui/Icon';
 import EmptyState from '@ui/EmptyState';
 import { SkeletonCard } from '@ui/Skeleton';
 import EntityCoverHeader from '@ui/EntityCoverHeader';
+import { useAppTheme } from '../../contexts/ThemeContext';
+import { useContentInsets } from '../../hooks/useContentInsets';
 import { useOfflineAlert } from 'contexts/OfflineAlertContext';
 import { safeAwait } from '@shared/safe';
 import { usePatientId } from 'hooks/usePatientId';
@@ -19,9 +21,10 @@ import {
   refreshOrganizationsFromApi,
 } from '../../services/discovery/discoveryService';
 import { ConsentSelection, OrganizationDetail } from '../../services/discovery/types';
+import { dialog } from '@utils/dialog';
 
 function ConsentToggle({ label, value, onPress }: { label: string; value: boolean; onPress: () => void }) {
-  const { colors } = useTheme();
+  const { colors, radii, sizes } = useAppTheme();
 
   return (
     <Pressable
@@ -32,29 +35,32 @@ function ConsentToggle({ label, value, onPress }: { label: string; value: boolea
         styles.consentRow,
         {
           borderColor: value ? colors.primary : colors.border,
-          backgroundColor: value ? colors.card : 'transparent',
+          backgroundColor: value ? colors.card : colors.transparent,
+          borderRadius: radii.md,
           opacity: pressed ? 0.8 : 1,
         },
       ]}
     >
-      <ThemedView
+      <View
         style={[
           styles.checkbox,
           {
             borderColor: value ? colors.primary : colors.border,
-            backgroundColor: value ? colors.primary : 'transparent',
+            backgroundColor: value ? colors.primary : colors.transparent,
+            borderRadius: radii.xs,
           },
         ]}
       >
-        <ThemedText style={styles.checkboxMark}>{value ? '✓' : ''}</ThemedText>
-      </ThemedView>
-      <ThemedText style={styles.consentLabel}>{label}</ThemedText>
+        {value ? <AppIcon name="check" size={sizes.iconSm - 2} color="onPrimary" /> : null}
+      </View>
+      <ThemedText variant="small" style={styles.consentLabel}>{label}</ThemedText>
     </Pressable>
   );
 }
 
 export default function OrganizationDetailsScreen() {
-  const { colors } = useTheme();
+  const { colors, spacing, radii, sizes, typography } = useAppTheme();
+  const insets = useContentInsets();
   const navigation = useNavigation() as any;
   const route = useRoute() as any;
   const patientId = usePatientId();
@@ -87,7 +93,7 @@ export default function OrganizationDetailsScreen() {
       .then((detail) => mounted && setOrganization(detail))
       .catch((error: unknown) => {
         const message = error instanceof Error ? error.message : 'Unable to load organization details.';
-        Alert.alert('Error', message, [{ text: 'OK', onPress: () => navigation.goBack() }]);
+        dialog.alert('Error', message, [{ text: 'OK', onPress: () => navigation.goBack() }]);
       })
       .finally(() => mounted && setIsLoading(false));
 
@@ -136,7 +142,7 @@ export default function OrganizationDetailsScreen() {
         setShowJoinModal(false);
         showOfflineAlert();
       } else {
-        Alert.alert('Join failed', error.message);
+        dialog.alert('Join failed', error.message);
       }
       setIsJoining(false);
       return;
@@ -148,7 +154,7 @@ export default function OrganizationDetailsScreen() {
     }
     setShowJoinModal(false);
     setIsJoining(false);
-    Alert.alert('Request Submitted', `Your request to join ${organization.name} has been submitted for approval.`);
+    dialog.alert('Request Submitted', `Your request to join ${organization.name} has been submitted for approval.`);
   };
 
   const handleCancelRequest = async () => {
@@ -159,7 +165,7 @@ export default function OrganizationDetailsScreen() {
       if (error.message === 'OFFLINE_ERROR') {
         showOfflineAlert();
       } else {
-        Alert.alert('Cancel failed', error.message);
+        dialog.alert('Cancel failed', error.message);
       }
       setIsCancelling(false);
       return;
@@ -173,7 +179,7 @@ export default function OrganizationDetailsScreen() {
       navigation.goBack();
     }
     setIsCancelling(false);
-    Alert.alert('Request Cancelled', `Your request to join ${organization.name} has been cancelled.`);
+    dialog.alert('Request Cancelled', `Your request to join ${organization.name} has been cancelled.`);
   };
 
   if (isLoading) {
@@ -192,27 +198,42 @@ export default function OrganizationDetailsScreen() {
   return (
     <ScrollView 
       contentInsetAdjustmentBehavior="automatic" 
-      contentContainerStyle={styles.container}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + spacing.lg }]}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
     >
       <EntityCoverHeader
         name={organization.name}
         logoUrl={organization.logoUrl}
         coverImageUrl={organization.coverImageUrl}
         badgeLabel={organization.isJoined ? 'Joined' : organization.membershipStatus === 'pending' ? 'Pending Approval' : organization.isPublic ? 'Public' : 'Private'}
-        badgeColor={organization.isJoined ? '#10B981' : organization.membershipStatus === 'pending' ? '#F59E0B' : organization.isPublic ? '#3B82F6' : '#6B7280'}
+        badgeColor={organization.isJoined ? colors.success : organization.membershipStatus === 'pending' ? colors.warning : organization.isPublic ? colors.primary : colors.textMuted}
         style={styles.coverHeader}
       />
-      <ThemedView style={styles.titleBlock}>
-        <ThemedText style={styles.title}>{organization.name}</ThemedText>
-        <ThemedText style={[styles.subtitle, { color: colors.text }]}>{organization.description}</ThemedText>
-        <ThemedText style={[styles.meta, { color: colors.text }]}>{organization.isPublic ? 'Public organization' : 'Private organization'} · {organization.partneredClinicIds.length} partnered clinics · 👥 {organization.activeMemberCount.toLocaleString()} active members</ThemedText>
-      </ThemedView>
+      <View style={styles.titleBlock}>
+        <ThemedText variant="h1">{organization.name}</ThemedText>
+        <ThemedText variant="body" color="textSecondary">{organization.description}</ThemedText>
+        <View style={styles.metaRow}>
+          <ThemedText variant="caption" color="textMuted">
+            {organization.isPublic ? 'Public organization' : 'Private organization'} · {organization.partneredClinicIds.length} partnered clinics
+          </ThemedText>
+          <View style={styles.memberMetaRow}>
+            <AppIcon name="users" size={sizes.iconSm} color="primary" />
+            <ThemedText variant="captionBold" color="primary">
+              {organization.activeMemberCount.toLocaleString()} active members
+            </ThemedText>
+          </View>
+        </View>
+      </View>
 
-      <ThemedView style={[styles.section, { borderColor: colors.border, backgroundColor: colors.card }]}>
-        <ThemedText style={styles.sectionTitle}>Membership</ThemedText>
-        <ThemedText style={[styles.memberCount, { color: colors.primary }]}>👥 {organization.activeMemberCount.toLocaleString()} active members</ThemedText>
-        <ThemedText style={[styles.sectionCopy, { color: colors.text }]}>
+      <View style={[styles.section, { borderColor: colors.border, backgroundColor: colors.card, borderRadius: radii.xl }]}>
+        <ThemedText variant="title">Membership</ThemedText>
+        <View style={styles.memberMetaRow}>
+          <AppIcon name="users" size={sizes.iconSm} color="primary" />
+          <ThemedText variant="smallBold" color="primary">
+            {organization.activeMemberCount.toLocaleString()} active members
+          </ThemedText>
+        </View>
+        <ThemedText variant="body" color="textSecondary">
           {organization.isJoined
             ? `Joined as ${organization.membershipRoleName ?? 'member'}`
             : organization.membershipStatus === 'pending'
@@ -220,143 +241,136 @@ export default function OrganizationDetailsScreen() {
             : 'Join to unlock private clinics and member-only content.'}
         </ThemedText>
         {!organization.isJoined && organization.membershipStatus !== 'pending' ? (
-          <Pressable onPress={startJoin} style={({ pressed }) => [styles.primaryButton, { backgroundColor: colors.primary, opacity: pressed ? 0.8 : 1 }]} accessibilityRole="button">
-            <ThemedText style={styles.primaryButtonText}>Join organization</ThemedText>
+          <Pressable onPress={startJoin} style={({ pressed }) => [styles.primaryButton, { backgroundColor: colors.primary, borderRadius: radii.md, opacity: pressed ? 0.8 : 1 }]} accessibilityRole="button">
+            <ThemedText variant="smallBold" color="onPrimary">Join organization</ThemedText>
           </Pressable>
         ) : organization.membershipStatus === 'pending' ? (
-          <View style={{ gap: 8 }}>
-            <View style={[styles.primaryButton, { backgroundColor: '#F59E0B', opacity: 0.8, justifyContent: 'center', alignItems: 'center' }]}>
-              <ThemedText style={styles.primaryButtonText}>Request pending approval</ThemedText>
+          <View style={{ gap: spacing.sm }}>
+            <View style={[styles.primaryButton, { backgroundColor: colors.warning, borderRadius: radii.md, opacity: 0.85, justifyContent: 'center', alignItems: 'center' }]}>
+              <ThemedText variant="smallBold" color="onPrimary">Request pending approval</ThemedText>
             </View>
             <Pressable
               onPress={handleCancelRequest}
               disabled={isCancelling}
-              style={({ pressed }) => [styles.secondaryButton, { borderColor: '#EF4444', opacity: pressed || isCancelling ? 0.7 : 1 }]}
+              style={({ pressed }) => [styles.secondaryButton, { borderColor: colors.emergency, borderRadius: radii.md, opacity: pressed || isCancelling ? 0.7 : 1 }]}
               accessibilityRole="button"
             >
-              <ThemedText style={{ color: '#EF4444', fontWeight: '700', fontSize: 14 }}>
+              <ThemedText variant="smallBold" color="emergency">
                 {isCancelling ? 'Cancelling...' : 'Cancel join request'}
               </ThemedText>
             </Pressable>
           </View>
         ) : null}
-      </ThemedView>
+      </View>
 
-      <ThemedView style={[styles.section, { borderColor: colors.border, backgroundColor: colors.card }]}>
-        <ThemedText style={styles.sectionTitle}>Required sharing</ThemedText>
-        <ThemedView style={styles.requiredWrap}>
+      <View style={[styles.section, { borderColor: colors.border, backgroundColor: colors.card, borderRadius: radii.xl }]}>
+        <ThemedText variant="title">Required sharing</ThemedText>
+        <View style={styles.requiredWrap}>
           {organization.requiredShareFields.map((field) => (
-            <ThemedView key={field} style={[styles.requiredChip, { borderColor: colors.border }]}>
-              <ThemedText style={styles.requiredText}>{getShareFieldLabel(field)}</ThemedText>
-            </ThemedView>
+            <View key={field} style={[styles.requiredChip, { borderColor: colors.border, borderRadius: radii.full }]}>
+              <ThemedText variant="captionBold" color="textSecondary">{getShareFieldLabel(field)}</ThemedText>
+            </View>
           ))}
-        </ThemedView>
-      </ThemedView>
+        </View>
+      </View>
 
-      <ThemedView style={[styles.section, { borderColor: colors.border, backgroundColor: colors.card }]}>
-        <ThemedText style={styles.sectionTitle}>Partnered clinics</ThemedText>
-        <ThemedView style={{ gap: 12 }}>
+      <View style={[styles.section, { borderColor: colors.border, backgroundColor: colors.card, borderRadius: radii.xl }]}>
+        <ThemedText variant="title">Partnered clinics</ThemedText>
+        <View style={{ gap: spacing.md }}>
           {organization.linkedClinics.map((item, idx) => (
-            <ThemedView key={item.id}>
-              {idx > 0 && <ThemedView style={styles.divider} />}
+            <View key={item.id}>
+              {idx > 0 && <View style={[styles.divider, { backgroundColor: colors.border }]} />}
               <Pressable
                 onPress={() => navigation.navigate('Main', { screen: 'ClinicDetailsScreen', params: { clinicId: item.id } })}
                 accessibilityRole="button"
                 style={({ pressed }) => [styles.linkRow, { opacity: pressed ? 0.75 : 1 }]}
               >
-                <ThemedText style={styles.linkTitle}>{item.name}</ThemedText>
-                <ThemedText style={[styles.linkSubtitle, { color: colors.text }]} numberOfLines={1}>{item.description}</ThemedText>
+                <ThemedText variant="bodyBold" color="text">{item.name}</ThemedText>
+                <ThemedText variant="caption" color="textSecondary" numberOfLines={1}>{item.description}</ThemedText>
               </Pressable>
-            </ThemedView>
+            </View>
           ))}
-        </ThemedView>
-      </ThemedView>
+        </View>
+      </View>
 
-      <ThemedView style={[styles.section, { borderColor: colors.border, backgroundColor: colors.card }]}>
-        <ThemedText style={styles.sectionTitle}>Policy</ThemedText>
-        <ThemedText style={[styles.sectionCopy, { color: colors.text }]}>{organization.privacyPolicyUrl}</ThemedText>
-        <ThemedText style={[styles.sectionCopy, { color: colors.text }]}>{organization.termsAndConditionsUrl}</ThemedText>
-      </ThemedView>
+      <View style={[styles.section, { borderColor: colors.border, backgroundColor: colors.card, borderRadius: radii.xl }]}>
+        <ThemedText variant="title">Policy</ThemedText>
+        <ThemedText variant="caption" color="textMuted">{organization.privacyPolicyUrl}</ThemedText>
+        <ThemedText variant="caption" color="textMuted">{organization.termsAndConditionsUrl}</ThemedText>
+      </View>
 
       <Modal visible={showJoinModal} transparent animationType="slide" onRequestClose={() => setShowJoinModal(false)}>
-        <ThemedView style={styles.modalOverlay}>
-          <ThemedView style={[styles.modalCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
+        <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
+          <View style={[styles.modalCard, { backgroundColor: colors.background, borderColor: colors.border, borderTopLeftRadius: radii.xl, borderTopRightRadius: radii.xl }]}>
             <ScrollView contentContainerStyle={styles.modalContent}>
-              <ThemedText style={styles.modalTitle}>Join {organization.name}</ThemedText>
+              <ThemedText variant="h2">Join {organization.name}</ThemedText>
               {organization.roles.map((role) => (
                 <Pressable
                   key={role.id}
                   onPress={() => setSelectedRoleId(role.id)}
                   accessibilityRole="radio"
                   accessibilityState={{ selected: selectedRoleId === role.id }}
-                  style={({ pressed }) => [styles.roleCard, { borderColor: selectedRoleId === role.id ? colors.primary : colors.border, opacity: pressed ? 0.8 : 1 }]}
+                  style={({ pressed }) => [styles.roleCard, { borderColor: selectedRoleId === role.id ? colors.primary : colors.border, borderRadius: radii.md, opacity: pressed ? 0.8 : 1 }]}
                 >
-                  <ThemedText style={styles.roleTitle}>{role.name}</ThemedText>
-                  <ThemedText style={[styles.roleDescription, { color: colors.text }]}>{role.description}</ThemedText>
+                  <ThemedText variant="smallBold" color={selectedRoleId === role.id ? 'primary' : 'text'}>{role.name}</ThemedText>
+                  <ThemedText variant="caption" color="textSecondary">{role.description}</ThemedText>
                 </Pressable>
               ))}
 
               {!organization.isPublic ? (
-                <ThemedView>
-                  <ThemedText style={styles.sectionLabel}>Invite code</ThemedText>
-                  <TextInput value={inviteCode} onChangeText={setInviteCode} placeholder="Enter invite code" placeholderTextColor={colors.border} autoCapitalize="characters" style={[styles.input, { borderColor: colors.border, color: colors.text }]} />
-                </ThemedView>
+                <View style={{ gap: spacing.xs }}>
+                  <ThemedText variant="smallBold" color="text">Invite code</ThemedText>
+                  <TextInput
+                    value={inviteCode}
+                    onChangeText={setInviteCode}
+                    placeholder="Enter invite code"
+                    placeholderTextColor={colors.textMuted}
+                    autoCapitalize="characters"
+                    style={[typography.body, styles.input, { borderColor: colors.border, color: colors.text, borderRadius: radii.md }]}
+                  />
+                </View>
               ) : null}
 
               <ConsentToggle label="I accept the privacy policy" value={consent.acceptedPrivacyPolicy} onPress={() => setConsent((prev) => ({ ...prev, acceptedPrivacyPolicy: !prev.acceptedPrivacyPolicy }))} />
               <ConsentToggle label="I accept the terms and conditions" value={consent.acceptedTermsAndConditions} onPress={() => setConsent((prev) => ({ ...prev, acceptedTermsAndConditions: !prev.acceptedTermsAndConditions }))} />
               <ConsentToggle label="I agree to share my required information" value={consent.acceptedDataSharing} onPress={() => setConsent((prev) => ({ ...prev, acceptedDataSharing: !prev.acceptedDataSharing }))} />
             </ScrollView>
-            <ThemedView style={styles.modalActions}>
-              <Pressable onPress={() => setShowJoinModal(false)} style={styles.secondaryButton} accessibilityRole="button">
-                <ThemedText style={styles.secondaryButtonText}>Cancel</ThemedText>
+            <View style={[styles.modalActions, { borderTopColor: colors.border }]}>
+              <Pressable onPress={() => setShowJoinModal(false)} style={[styles.secondaryButton, { borderColor: colors.border, borderRadius: radii.md }]} accessibilityRole="button">
+                <ThemedText variant="smallBold" color="text">Cancel</ThemedText>
               </Pressable>
-              <Pressable disabled={!canJoin || isJoining} onPress={handleJoin} style={({ pressed }) => [styles.primaryButton, { backgroundColor: colors.primary, opacity: !canJoin || isJoining || pressed ? 0.7 : 1 }]} accessibilityRole="button">
-                <ThemedText style={styles.primaryButtonText}>{isJoining ? 'Joining...' : 'Confirm join'}</ThemedText>
+              <Pressable disabled={!canJoin || isJoining} onPress={handleJoin} style={({ pressed }) => [styles.primaryButton, { backgroundColor: colors.primary, borderRadius: radii.md, opacity: !canJoin || isJoining || pressed ? 0.7 : 1 }]} accessibilityRole="button">
+                <ThemedText variant="smallBold" color="onPrimary">{isJoining ? 'Joining...' : 'Confirm join'}</ThemedText>
               </Pressable>
-            </ThemedView>
-          </ThemedView>
-        </ThemedView>
+            </View>
+          </View>
+        </View>
       </Modal>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { paddingHorizontal: 16, paddingBottom: 28, gap: 16 },
+  container: { paddingHorizontal: 16, gap: 16 },
   loadingContainer: { padding: 16, gap: 16 },
   coverHeader: { marginHorizontal: -16 },
   titleBlock: { gap: 6, paddingTop: 4 },
-  title: { fontSize: 24, fontWeight: '800' },
-  subtitle: { fontSize: 14, lineHeight: 20, opacity: 0.85 },
-  meta: { fontSize: 12, opacity: 0.75 },
-  section: { borderRadius: 18, borderWidth: StyleSheet.hairlineWidth, padding: 16, gap: 12 },
-  sectionTitle: { fontSize: 16, fontWeight: '800' },
-  sectionCopy: { fontSize: 14, lineHeight: 20 },
-  memberCount: { fontSize: 15, fontWeight: '700', marginBottom: 4 },
+  metaRow: { gap: 4 },
+  memberMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  section: { borderWidth: StyleSheet.hairlineWidth, padding: 16, gap: 12 },
   requiredWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  requiredChip: { borderRadius: 999, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 10, paddingVertical: 6 },
-  requiredText: { fontSize: 12, fontWeight: '700' },
+  requiredChip: { borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 10, paddingVertical: 6 },
   linkRow: { gap: 4, paddingVertical: 10 },
-  linkTitle: { fontSize: 15, fontWeight: '700' },
-  linkSubtitle: { fontSize: 13, opacity: 0.8 },
-  divider: { height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(148, 163, 184, 0.3)' },
-  primaryButton: { borderRadius: 14, minHeight: 46, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
-  primaryButtonText: { color: '#fff', fontSize: 14, fontWeight: '800' },
-  secondaryButton: { borderRadius: 14, minHeight: 46, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, borderWidth: StyleSheet.hairlineWidth },
-  secondaryButtonText: { fontSize: 14, fontWeight: '700' },
-  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' },
-  modalCard: { borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: StyleSheet.hairlineWidth },
+  divider: { height: StyleSheet.hairlineWidth },
+  primaryButton: { minHeight: 46, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
+  secondaryButton: { minHeight: 46, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, borderWidth: StyleSheet.hairlineWidth },
+  modalOverlay: { flex: 1, justifyContent: 'flex-end' },
+  modalCard: { borderWidth: StyleSheet.hairlineWidth },
   modalContent: { padding: 16, gap: 10 },
-  modalTitle: { fontSize: 20, fontWeight: '800' },
-  roleCard: { borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, padding: 12, gap: 4 },
-  roleTitle: { fontSize: 15, fontWeight: '800' },
-  roleDescription: { fontSize: 13, opacity: 0.8 },
-  sectionLabel: { fontSize: 13, fontWeight: '800', marginBottom: 6 },
-  input: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, minHeight: 46, paddingHorizontal: 12, fontSize: 14 },
+  roleCard: { borderWidth: StyleSheet.hairlineWidth, padding: 12, gap: 4 },
+  input: { borderWidth: StyleSheet.hairlineWidth, minHeight: 46, paddingHorizontal: 12 },
   modalActions: { borderTopWidth: StyleSheet.hairlineWidth, padding: 14, flexDirection: 'row', gap: 10 },
-  consentRow: { borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  checkbox: { width: 20, height: 20, borderRadius: 6, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
-  checkboxMark: { color: '#fff', fontWeight: '800' },
-  consentLabel: { flex: 1, fontSize: 13, lineHeight: 18 },
+  consentRow: { borderWidth: StyleSheet.hairlineWidth, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  checkbox: { width: 20, height: 20, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
+  consentLabel: { flex: 1 },
 });

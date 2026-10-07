@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
-import { Modal, View, Pressable, StyleSheet, Alert } from 'react-native';
-import { useTheme } from '@react-navigation/native';
+﻿import React, { useState, useEffect } from 'react';
+import { Modal, View, StyleSheet, Platform } from 'react-native';
 import { useAuth } from 'contexts/AuthContext';
 import ThemedText from './ThemedText';
 import NumericKeypad from './NumericKeypad';
+import Button from './Button';
+import { dialog } from '@utils/dialog';
+import { useAppTheme } from '../../contexts/ThemeContext';
 
 const PIN_LENGTH = 4;
 const MAX_ATTEMPTS = 3;
@@ -16,8 +18,14 @@ interface PinModalProps {
   onDismiss: () => void;
 }
 
-export default function PinModal({ visible, title = 'Enter PIN', subtitle, onSuccess, onDismiss }: PinModalProps) {
-  const { colors } = useTheme();
+export default function PinModal({
+  visible,
+  title = 'Enter PIN',
+  subtitle,
+  onSuccess,
+  onDismiss,
+}: PinModalProps) {
+  const { colors, radii, spacing } = useAppTheme();
   const { verifyPin } = useAuth();
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
@@ -31,6 +39,19 @@ export default function PinModal({ visible, title = 'Enter PIN', subtitle, onSuc
       setAttempts(0);
     }
   }, [visible]);
+
+  // Web keyboard: Escape to dismiss
+  useEffect(() => {
+    if (!visible || Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onDismiss();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [visible, onDismiss]);
 
   const handleDigit = (digit: string) => {
     if (pin.length >= PIN_LENGTH) return;
@@ -57,24 +78,34 @@ export default function PinModal({ visible, title = 'Enter PIN', subtitle, onSuc
       setAttempts(newAttempts);
       setPin('');
       if (newAttempts >= MAX_ATTEMPTS) {
-        Alert.alert('Too many attempts', 'Please try again later.', [
+        dialog.alert('Too many attempts', 'Please try again later.', [
           { text: 'OK', onPress: onDismiss },
         ]);
       } else {
-        setError(`Incorrect PIN. ${MAX_ATTEMPTS - newAttempts} attempt${MAX_ATTEMPTS - newAttempts === 1 ? '' : 's'} remaining.`);
+        setError(
+          `Incorrect PIN. ${MAX_ATTEMPTS - newAttempts} attempt${MAX_ATTEMPTS - newAttempts === 1 ? '' : 's'} remaining.`
+        );
       }
     }
   };
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onDismiss}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onDismiss}
+    >
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-       
         {/* Title */}
         <View style={styles.titleSection}>
-          <ThemedText style={styles.title}>{title}</ThemedText>
+          <ThemedText variant="h2" style={styles.title}>
+            {title}
+          </ThemedText>
           {subtitle ? (
-            <ThemedText style={[styles.subtitle, { color: (colors.text as string) + '80' }]}>{subtitle}</ThemedText>
+            <ThemedText variant="body" color="textSecondary" style={styles.subtitle}>
+              {subtitle}
+            </ThemedText>
           ) : null}
         </View>
 
@@ -86,8 +117,9 @@ export default function PinModal({ visible, title = 'Enter PIN', subtitle, onSuc
               style={[
                 styles.dot,
                 {
+                  borderRadius: radii.full,
                   backgroundColor: i < pin.length ? colors.primary : 'transparent',
-                  borderColor: i < pin.length ? colors.primary : (colors.text as string) + '40',
+                  borderColor: i < pin.length ? colors.primary : colors.borderDark,
                 },
               ]}
             />
@@ -96,25 +128,23 @@ export default function PinModal({ visible, title = 'Enter PIN', subtitle, onSuc
 
         {/* Error message */}
         <View style={styles.errorContainer}>
-          {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
+          {error ? (
+            <ThemedText variant="smallBold" color="emergency" style={styles.errorText}>
+              {error}
+            </ThemedText>
+          ) : null}
         </View>
 
         {/* Keypad */}
         <NumericKeypad onPress={handleDigit} onDelete={handleDelete} />
-         <View style={styles.cancel}>
-          <Pressable onPress={onDismiss} accessibilityLabel="Cancel" style={{
-            padding: 12,
-            borderRadius: 16,
-            borderWidth: 1,
-            borderColor: colors.border,
-            backgroundColor: colors.border,
-            width: 200,
-            alignItems: 'center',
-            justifyContent: 'center',
-            
-          }}>
-            <ThemedText style={[styles.cancelText, { color: colors.text }]}>Cancel</ThemedText>
-          </Pressable>
+
+        <View style={[styles.cancel, { paddingTop: spacing['2xl'] }]}>
+          <Button
+            label="Cancel"
+            variant="outline"
+            onPress={onDismiss}
+            style={styles.cancelButton}
+          />
         </View>
       </View>
     </Modal>
@@ -133,25 +163,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 16,
-    position: 'relative',
-    paddingTop: 32,
   },
- 
-
-  cancelText: {
-    fontSize: 16,
+  cancelButton: {
+    width: 200,
   },
   titleSection: {
     alignItems: 'center',
     paddingHorizontal: 32,
   },
   title: {
-    fontSize: 22,
-    fontWeight: '600',
     textAlign: 'center',
   },
   subtitle: {
-    fontSize: 14,
     textAlign: 'center',
     marginTop: 6,
     lineHeight: 20,
@@ -165,7 +188,6 @@ const styles = StyleSheet.create({
   dot: {
     width: 16,
     height: 16,
-    borderRadius: 8,
     borderWidth: 2,
   },
   errorContainer: {
@@ -175,8 +197,6 @@ const styles = StyleSheet.create({
     marginTop: -8,
   },
   errorText: {
-    color: '#EF4444',
-    fontSize: 14,
     textAlign: 'center',
   },
 });

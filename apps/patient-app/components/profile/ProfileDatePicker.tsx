@@ -1,26 +1,40 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import {
-  View, Pressable, Modal, StyleSheet,
+  View,
+  Pressable,
+  Modal,
+  StyleSheet,
   ScrollView,
 } from 'react-native';
-import { useTheme } from '@react-navigation/native';
 import { format } from 'date-fns';
 import ThemedText from '@ui/ThemedText';
+import { AppIcon } from '@ui/Icon';
+import { useAppTheme } from '../../contexts/ThemeContext';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const ITEM_H = 46;
-const VISIBLE = 5;   // must be odd
-const PAD = 2;       // (VISIBLE - 1) / 2
+const VISIBLE = 5; // must be odd
+const PAD = 2; // (VISIBLE - 1) / 2
 
 // ─── Static option lists ──────────────────────────────────────────────────────
 const MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
 ];
 const YEAR_START = 1920;
 const YEAR_END = new Date().getFullYear() + 10;
 const ALL_YEARS = Array.from({ length: YEAR_END - YEAR_START + 1 }, (_, i) => String(YEAR_START + i));
-const HOURS_12 = Array.from({ length: 12 }, (_, i) => String(i + 1));          // '1'..'12'
+const HOURS_12 = Array.from({ length: 12 }, (_, i) => String(i + 1)); // '1'..'12'
 const MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0')); // '00'..'59'
 const AMPM_LIST = ['AM', 'PM'];
 
@@ -71,7 +85,7 @@ interface WheelPickerProps {
 }
 
 function WheelPicker({ items, selectedIndex, onSelect, flex = 1 }: WheelPickerProps) {
-  const { colors } = useTheme();
+  const { colors } = useAppTheme();
   const scrollRef = useRef<ScrollView>(null);
 
   const paddedData = [...Array(PAD).fill(''), ...items, ...Array(PAD).fill('')];
@@ -89,7 +103,7 @@ function WheelPicker({ items, selectedIndex, onSelect, flex = 1 }: WheelPickerPr
     <View style={{ flex, height: ITEM_H * VISIBLE, overflow: 'hidden' }}>
       <ScrollView
         ref={scrollRef}
-        style={{ flex: 1, width: '100%' }} // 🆕 CHANGED: Ensures hit area stretches horizontally
+        style={{ flex: 1, width: '100%' }}
         snapToInterval={ITEM_H}
         decelerationRate="fast"
         showsVerticalScrollIndicator={false}
@@ -102,6 +116,7 @@ function WheelPicker({ items, selectedIndex, onSelect, flex = 1 }: WheelPickerPr
             <View key={String(index)} style={[styles.wheelItem, { height: ITEM_H }]}>
               {item !== '' && (
                 <ThemedText
+                  variant={isSelected ? 'bodyBold' : 'body'}
                   style={[
                     styles.wheelText,
                     { color: colors.text },
@@ -117,8 +132,8 @@ function WheelPicker({ items, selectedIndex, onSelect, flex = 1 }: WheelPickerPr
         })}
       </ScrollView>
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, { justifyContent: 'space-between' }]}>
-        <View style={{ height: ITEM_H * PAD, backgroundColor: colors.card, opacity: 0.72 }} />
-        <View style={{ height: ITEM_H * PAD, backgroundColor: colors.card, opacity: 0.72 }} />
+        <View style={{ height: ITEM_H * PAD, backgroundColor: colors.surface, opacity: 0.72 }} />
+        <View style={{ height: ITEM_H * PAD, backgroundColor: colors.surface, opacity: 0.72 }} />
       </View>
       <View
         pointerEvents="none"
@@ -132,7 +147,7 @@ function WheelPicker({ items, selectedIndex, onSelect, flex = 1 }: WheelPickerPr
 function DatePickerWheels({ date, onChange }: { date: Date; onChange: (d: Date) => void }) {
   const month = date.getMonth();
   const year = date.getFullYear();
-  const day = date.getDate() - 1; 
+  const day = date.getDate() - 1;
   const yearIdx = Math.max(0, Math.min(year - YEAR_START, ALL_YEARS.length - 1));
   const numDays = numDaysInMonth(month, year);
   const DAYS = Array.from({ length: numDays }, (_, i) => String(i + 1));
@@ -183,7 +198,7 @@ export default function ProfileDatePicker({
   mode = 'date',
   required = false,
 }: ProfileDatePickerProps) {
-  const { colors } = useTheme();
+  const { colors, radii, sizes } = useAppTheme();
   const [show, setShow] = useState(false);
   const [tempDate, setTempDate] = useState<Date>(() =>
     mode === 'date' ? parseDate(value) : parseTime(value)
@@ -203,50 +218,73 @@ export default function ProfileDatePicker({
 
   return (
     <View style={styles.container}>
-      <ThemedText style={[styles.label, { color: colors.text }]}>
+      <ThemedText variant="smallBold" style={[styles.label, { color: colors.text }]}>
         {label}
-        {required && <ThemedText style={styles.required}> *</ThemedText>}
+        {required && <ThemedText variant="smallBold" color="emergency"> *</ThemedText>}
       </ThemedText>
       <Pressable
         onPress={handleOpen}
-        style={({ pressed }) => [
+        style={({ pressed, hovered }: any) => [
           styles.trigger,
-          { borderColor: colors.border, backgroundColor: colors.card },
+          {
+            borderColor: colors.border,
+            backgroundColor: colors.surface,
+            borderRadius: radii.md,
+          },
+          hovered && { backgroundColor: colors.surfaceSubtle },
           pressed && { opacity: 0.7 },
         ]}
       >
-        <ThemedText style={[styles.triggerText, { color: colors.text, opacity: value ? 1 : 0.5 }]}>
+        <ThemedText
+          variant="body"
+          style={{ color: colors.text, opacity: value ? 1 : 0.5 }}
+        >
           {formatDisplay(value, mode)}
         </ThemedText>
-        <ThemedText style={{ color: colors.text, opacity: 0.4, fontSize: 13 }}>
-          {mode === 'date' ? '📅' : '🕐'}
-        </ThemedText>
+        <AppIcon
+          name={mode === 'date' ? 'calendar' : 'clock'}
+          size={sizes.iconSm}
+          color="textMuted"
+        />
       </Pressable>
 
       {show && (
         <Modal visible transparent animationType="slide" onRequestClose={handleCancel} statusBarTranslucent>
-          {/* 🆕 CHANGED: Changed wrapper to View. Decoupled backdrop and sheet. */}
-          <View style={styles.backdrop}> 
-            
-            {/* 🆕 CHANGED: Background touch target placed absolutely behind the sheet */}
+          <View style={[styles.backdrop, { backgroundColor: colors.overlay }]}>
             <Pressable style={StyleSheet.absoluteFill} onPress={handleCancel} />
 
-            {/* 🆕 CHANGED: Sheet is now just a plain View. Removed onStartShouldSetResponder entirely. */}
-            <View style={[styles.sheet, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={[styles.toolbar, { borderBottomColor: colors.border }]}>
+            <View
+              style={[
+                styles.sheet,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  borderTopLeftRadius: radii.xl,
+                  borderTopRightRadius: radii.xl,
+                },
+              ]}
+            >
+              <View style={[styles.toolbar, { borderBottomColor: colors.borderLight }]}>
                 <Pressable onPress={handleCancel} style={styles.toolbarBtn} hitSlop={8}>
-                  <ThemedText style={{ color: '#EF4444', fontSize: 15 }}>Cancel</ThemedText>
+                  <ThemedText variant="body" color="emergency">
+                    Cancel
+                  </ThemedText>
                 </Pressable>
-                <ThemedText style={[styles.toolbarTitle, { color: colors.text }]}>{label}</ThemedText>
+                <ThemedText variant="bodyBold" style={{ color: colors.text }}>
+                  {label}
+                </ThemedText>
                 <Pressable onPress={handleDone} style={[styles.toolbarBtn, styles.toolbarBtnRight]} hitSlop={8}>
-                  <ThemedText style={{ color: '#3B82F6', fontSize: 15, fontWeight: '600' }}>Done</ThemedText>
+                  <ThemedText variant="bodyBold" color="primary">
+                    Done
+                  </ThemedText>
                 </Pressable>
               </View>
               <View style={styles.pickersContainer}>
-                {mode === 'date'
-                  ? <DatePickerWheels date={tempDate} onChange={setTempDate} />
-                  : <TimePickerWheels date={tempDate} onChange={setTempDate} />
-                }
+                {mode === 'date' ? (
+                  <DatePickerWheels date={tempDate} onChange={setTempDate} />
+                ) : (
+                  <TimePickerWheels date={tempDate} onChange={setTempDate} />
+                )}
               </View>
             </View>
           </View>
@@ -256,37 +294,73 @@ export default function ProfileDatePicker({
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: { marginBottom: 14 },
-  label: { fontSize: 12, fontWeight: '500', marginBottom: 5, opacity: 0.65 },
-  required: { color: '#EF4444' },
-  trigger: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    borderWidth: StyleSheet.hairlineWidth, borderRadius: 10,
-    paddingHorizontal: 12, paddingVertical: 11, minHeight: 44,
+  container: {
+    marginBottom: 14,
   },
-  triggerText: { fontSize: 15 },
-  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.35)' },
+  label: {
+    marginBottom: 5,
+    opacity: 0.65,
+  },
+  trigger: {
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  backdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
   sheet: {
-    borderTopLeftRadius: 18, borderTopRightRadius: 18,
-    borderTopWidth: StyleSheet.hairlineWidth, paddingBottom: 32,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingBottom: 32,
   },
   toolbar: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  toolbarBtn: { minWidth: 60 },
-  toolbarBtnRight: { alignItems: 'flex-end' },
-  toolbarTitle: { fontSize: 15, fontWeight: '600' },
-  pickersContainer: { paddingVertical: 8 },
-  wheelsRow: { flexDirection: 'row', paddingHorizontal: 8 },
-  wheelItem: { alignItems: 'center', justifyContent: 'center' },
-  wheelText: { fontSize: 16, textAlign: 'center' },
-  wheelTextSelected: { fontSize: 18, fontWeight: '600' },
-  wheelTextDim: { opacity: 0.35 },
+  toolbarBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  toolbarBtnRight: {
+    alignItems: 'flex-end',
+  },
+  pickersContainer: {
+    paddingVertical: 8,
+  },
+  wheelsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
+  wheelItem: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  wheelText: {
+    textAlign: 'center',
+  },
+  wheelTextSelected: {
+    opacity: 1,
+  },
+  wheelTextDim: {
+    opacity: 0.35,
+  },
   selectionRail: {
-    position: 'absolute', left: 4, right: 4,
-    borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth,
+    position: 'absolute',
+    left: 8,
+    right: 8,
+    borderTopWidth: 1.5,
+    borderBottomWidth: 1.5,
   },
 });

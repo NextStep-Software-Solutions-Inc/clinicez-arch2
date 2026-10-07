@@ -10,7 +10,7 @@
  * "pending" for re-upload.
  */
 
-import { originalDb } from './index';
+import { originalDb, flushDatabaseSnapshot } from './index';
 import {
   patients,
   patientAddresses,
@@ -88,6 +88,8 @@ export async function upsertPatientSummary(summary: PatientSummary): Promise<voi
     .insert(patients)
     .values(row)
     .onConflictDoUpdate({ target: patients.id, set: row });
+  // Web: hydration bypasses the sync interceptor; make sure it is written to IndexedDB now.
+  await flushDatabaseSnapshot();
 }
 
 /**
@@ -582,4 +584,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
       .values(row)
       .onConflictDoUpdate({ target: patientMentalHealthProfile.id, set: row });
   }
+
+  // Web: persist the whole hydrated record before returning so a reload keeps it.
+  await flushDatabaseSnapshot();
 }

@@ -1,18 +1,16 @@
-import React, { forwardRef, useCallback } from 'react';
+﻿import React, { forwardRef, useCallback } from 'react';
 import { BottomSheetBackdrop, BottomSheetModal, type BottomSheetModalProps } from '@gorhom/bottom-sheet';
-import { useTheme } from '@react-navigation/native';
+import { useAppTheme } from '../../contexts/ThemeContext';
 
 const ThemedBottomSheetModal = forwardRef<BottomSheetModal, BottomSheetModalProps>(
   (props, ref) => {
-    const { colors } = useTheme();
+    const { colors } = useAppTheme();
     const renderBackdrop = useCallback(
       (backdropProps: any) => (
         <BottomSheetBackdrop
           {...backdropProps}
           appearsOnIndex={0}
           disappearsOnIndex={-1}
-          // Optional: You can change the opacity or add custom styles here
-          // opacity={0.5} 
         />
       ),
       []
@@ -22,8 +20,8 @@ const ThemedBottomSheetModal = forwardRef<BottomSheetModal, BottomSheetModalProp
         {...props}
         ref={ref}
         backdropComponent={renderBackdrop}
-        backgroundStyle={[{ backgroundColor: colors.card }, props.backgroundStyle]}
-        handleIndicatorStyle={[{ backgroundColor: colors.text }, props.handleIndicatorStyle]}
+        backgroundStyle={[{ backgroundColor: colors.surface }, props.backgroundStyle]}
+        handleIndicatorStyle={[{ backgroundColor: colors.borderDark }, props.handleIndicatorStyle]}
       />
     );
   }

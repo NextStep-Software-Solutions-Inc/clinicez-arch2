@@ -1,9 +1,8 @@
-import React, { useMemo } from 'react';
-import { View, Pressable, ScrollView, TextInput, StyleSheet, ActivityIndicator } from 'react-native';
-import { useTheme, Theme } from '@react-navigation/native';
+import React from 'react';
+import { View, Pressable, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
 import ThemedText from '@ui/ThemedText';
-import ThemedView from '@ui/ThemedView';
-import { Icon } from './FileRow';
+import { AppIcon } from '@ui/Icon';
+import { useAppTheme } from '../../contexts/ThemeContext';
 import { FileFolder } from '@db/schema';
 
 export type BrowserContents = {
@@ -11,121 +10,175 @@ export type BrowserContents = {
   pendingSyncCount: number;
 };
 
-const BRAND = '#7C3AED';
-
 export function FilesHeader({
-  contents, folderId, isSyncing,
-  onCreateFolder, onOpenFolder, onOpenRoot, onOpenUpload, onSync,
+  contents,
+  folderId,
+  isSyncing,
+  onOpenFolder,
+  onOpenRoot,
+  onSync,
 }: {
   contents: BrowserContents | null;
   folderId?: string;
   isSyncing: boolean;
-  onCreateFolder: () => void;
+  onCreateFolder?: () => void;
   onOpenFolder: (id: string) => void;
   onOpenRoot: () => void;
-  onOpenUpload: () => void;
+  onOpenUpload?: () => void;
   onSync: () => void;
 }) {
-  const theme = useTheme();
-  const { colors, dark } = theme;
-  const styles = useMemo(() => createStyles(theme), [theme]);
+  const { colors, spacing, radii, sizes } = useAppTheme();
   const hasCrumbs = (contents?.breadcrumbs?.length ?? 0) > 0 || !!folderId;
+  const pendingCount = contents?.pendingSyncCount ?? 0;
 
   return (
-    <ThemedView style={styles.header}>
-      {(contents?.pendingSyncCount ?? 0) > 0 && (
+    <View style={[styles.header, { gap: spacing.md }]}>
+      {pendingCount > 0 && (
         <Pressable
           onPress={onSync}
           disabled={isSyncing}
-          style={({ pressed }) => [styles.syncBanner, { opacity: pressed ? 0.8 : 1 }]}
+          accessibilityRole="button"
+          accessibilityLabel={`${pendingCount} items waiting to back up. Tap to sync now.`}
+          style={({ pressed }) => [
+            styles.syncBanner,
+            {
+              borderRadius: radii.lg,
+              padding: spacing.md,
+              backgroundColor: colors.warningBg,
+              borderColor: colors.warningBorder,
+              borderWidth: sizes.borderWidth,
+              opacity: pressed ? 0.8 : 1,
+              gap: spacing.md,
+            },
+          ]}
         >
-          <ThemedView style={styles.syncIconWrap}>
-            {isSyncing
-              ? <ActivityIndicator size="small" color="#B45309" />
-              : Icon({ android: 'cloud_upload', ios: 'icloud.and.arrow.up', color: '#B45309', size: 17 })}
-          </ThemedView>
-          <ThemedView style={{ flex: 1 }}>
-            <ThemedText style={[styles.syncTitle, { color: dark ? '#FDE68A' : '#78350F' }]}>
-              {contents!.pendingSyncCount} item{contents!.pendingSyncCount === 1 ? '' : 's'} waiting to back up
+          <View
+            style={[
+              styles.syncIconWrap,
+              {
+                width: sizes.controlSm,
+                height: sizes.controlSm,
+                borderRadius: radii.md,
+                backgroundColor: colors.surfaceSubtle,
+              },
+            ]}
+          >
+            {isSyncing ? (
+              <ActivityIndicator size="small" color={colors.warningText} />
+            ) : (
+              <AppIcon name="upload" size={sizes.iconSm} color="warningText" />
+            )}
+          </View>
+          <View style={styles.syncContent}>
+            <ThemedText variant="smallBold" color="warningText">
+              {pendingCount} item{pendingCount === 1 ? '' : 's'} waiting to back up
             </ThemedText>
-            <ThemedText style={[styles.syncSub, { color: dark ? '#FCD34D' : '#92400E' }]}>Tap to sync now</ThemedText>
-          </ThemedView>
-          {Icon({ android: 'chevron_right', ios: 'chevron.right', color: '#B45309', size: 15 })}
+            <ThemedText variant="caption" color="warningText" style={{ opacity: 0.85 }}>
+              Tap to sync now
+            </ThemedText>
+          </View>
+          <AppIcon name="forward" size={sizes.iconSm} color="warningText" />
         </Pressable>
       )}
-
-
 
       {hasCrumbs && (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.crumbRow}
+          contentContainerStyle={[styles.crumbRow, { gap: spacing.sm, paddingVertical: spacing.xxs }]}
         >
           <Pressable
             onPress={onOpenRoot}
+            accessibilityRole="button"
+            accessibilityLabel="All files"
             style={[
               styles.crumb,
+              {
+                borderRadius: radii.full,
+                paddingHorizontal: spacing.md,
+                paddingVertical: spacing.sm,
+                gap: spacing.xs,
+              },
               !folderId
-                ? { backgroundColor: BRAND }
-                : { backgroundColor: dark ? '#1C1633' : '#fff', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+                ? { backgroundColor: colors.primary }
+                : {
+                    backgroundColor: colors.card,
+                    borderWidth: sizes.borderWidth,
+                    borderColor: colors.border,
+                  },
             ]}
           >
-            {Icon({ android: 'home', ios: 'house.fill', color: !folderId ? '#fff' : BRAND, size: 13 })}
-            <ThemedText style={[styles.crumbText, { color: !folderId ? '#fff' : colors.text }]}>All files</ThemedText>
-          </Pressable>
-          {(contents?.breadcrumbs ?? []).map((folder) => (
-            <Pressable
-              key={folder.id}
-              onPress={() => onOpenFolder(folder.id)}
-              style={[
-                styles.crumb,
-                folder.id === folderId
-                  ? { backgroundColor: BRAND }
-                  : { backgroundColor: dark ? '#1C1633' : '#fff', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
-              ]}
+            <AppIcon
+              name="home"
+              size={sizes.iconSm}
+              color={!folderId ? colors.onPrimary : colors.primary}
+            />
+            <ThemedText
+              variant="smallBold"
+              color={!folderId ? colors.onPrimary : colors.text}
             >
-              <ThemedText style={[styles.crumbText, { color: folder.id === folderId ? '#fff' : colors.text }]}>
-                {folder.name}
-              </ThemedText>
-            </Pressable>
-          ))}
+              All files
+            </ThemedText>
+          </Pressable>
+          {(contents?.breadcrumbs ?? []).map((folder) => {
+            const isActive = folder.id === folderId;
+            return (
+              <Pressable
+                key={folder.id}
+                onPress={() => onOpenFolder(folder.id)}
+                accessibilityRole="button"
+                accessibilityLabel={folder.name}
+                style={[
+                  styles.crumb,
+                  {
+                    borderRadius: radii.full,
+                    paddingHorizontal: spacing.md,
+                    paddingVertical: spacing.sm,
+                    gap: spacing.xs,
+                  },
+                  isActive
+                    ? { backgroundColor: colors.primary }
+                    : {
+                        backgroundColor: colors.card,
+                        borderWidth: sizes.borderWidth,
+                        borderColor: colors.border,
+                      },
+                ]}
+              >
+                <ThemedText
+                  variant="smallBold"
+                  color={isActive ? colors.onPrimary : colors.text}
+                >
+                  {folder.name}
+                </ThemedText>
+              </Pressable>
+            );
+          })}
         </ScrollView>
       )}
-    </ThemedView>
+    </View>
   );
 }
 
-const createStyles = (theme: Theme) =>
-  StyleSheet.create({
-    header: { gap: 12 },
-    syncBanner: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-      backgroundColor: 'rgba(245,158,11,0.12)',
-      borderRadius: 16,
-      padding: 14,
-    },
-    syncIconWrap: {
-      width: 36,
-      height: 36,
-      borderRadius: 10,
-      backgroundColor: 'rgba(245,158,11,0.18)',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    syncTitle: { fontSize: 13, fontWeight: '700' },
-    syncSub: { fontSize: 11, marginTop: 2, opacity: 0.85 },
-
-    crumbRow: { gap: 8, paddingVertical: 2 },
-    crumb: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 5,
-      borderRadius: 999,
-      paddingHorizontal: 12,
-      paddingVertical: 7,
-    },
-    crumbText: { fontSize: 13, fontWeight: '700' },
-  });
+const styles = StyleSheet.create({
+  header: {},
+  syncBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  syncIconWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  syncContent: {
+    flex: 1,
+  },
+  crumbRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  crumb: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+});
