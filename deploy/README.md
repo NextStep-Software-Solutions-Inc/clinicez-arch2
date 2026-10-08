@@ -11,7 +11,7 @@ Every `docker-compose` file in the repository lives here, one folder per stack. 
 | [`patient-api`](patient-api/docker-compose.yml) | Patient API (+ `docker-compose.local.yml`, `docker-compose.local-build.yml` for local runs) | `deploy-patient-api-dev.yml` |
 | [`portal-api`](portal-api/docker-compose.yml) | Portal API | `deploy-portal-api-dev.yml`, `deploy-portal-api-prod.yml` |
 | [`philhealth-proxy`](philhealth-proxy/docker-compose.yml) | PhilHealth proxy | `deploy-philhealth-proxy-dev.yml` |
-| [`rabbitmq`](rabbitmq/docker-compose.yml) | RabbitMQ (+ `deploy-rabbitmq.ps1`) | run manually |
+| [`rabbitmq`](rabbitmq/docker-compose.yml) | RabbitMQ broker (+ `.env.example`), for booting a new server | run manually |
 | [`clinic-web`](clinic-web/docker-compose.yml) | Clinic web app on nginx for a clinic's own LAN (+ `.env.example`) | run manually; image from `publish-clinic-web-image.yml` |
 
 ## How the API stacks are deployed

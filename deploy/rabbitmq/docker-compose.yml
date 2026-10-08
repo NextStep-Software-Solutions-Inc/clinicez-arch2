@@ -1,20 +1,41 @@
-version: '3.8'
+# RabbitMQ broker for a ClinicEz server (message bus shared by the API containers on this host).
+#
+# Use this when booting a NEW server. An existing server that already runs RabbitMQ does not need it.
+#
+#   1. docker network create data-network          (once; the API stacks join the same network)
+#   2. cp .env.example .env  and set RABBITMQ_PASSWORD
+#   3. docker compose -f deploy/rabbitmq/docker-compose.yml up -d
+#
+# The API containers reach it as host `rabbitmq` (the container name) on `data-network`, authenticating with
+# RABBITMQ_USERNAME / RABBITMQ_PASSWORD - the same two values their own stacks receive (RabbitMq__Username/Password).
+# No host port is published for AMQP. The management UI is bound to this server's loopback only; reach it with an
+# SSH tunnel (ssh -L 15672:127.0.0.1:15672 <server>) or put it behind your reverse proxy.
+#
+# The user and password are applied only when the data volume is first created. To change them later use
+# `docker exec rabbitmq rabbitmqctl change_password <user> <new password>`, then update the API stacks' secret.
+
+name: rabbitmq
 
 services:
   rabbitmq:
     image: rabbitmq:3-management
     container_name: ${RABBITMQ_CONTAINER_NAME:-rabbitmq}
-    ports:
-      - "5672:5672"     # AMQP protocol port
-      - "15672:15672"   # Management HTTP UI
+    restart: unless-stopped
     environment:
-      RABBITMQ_DEFAULT_USER: rabbitmq
-      RABBITMQ_DEFAULT_PASS: nextstep-rabbitmq-2o2G
-    networks:
-      - data-network
-      - default
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-rabbit_admin_node}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be set}
+    ports:
+      - "127.0.0.1:${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - data-network
 
 networks:
   data-network:
