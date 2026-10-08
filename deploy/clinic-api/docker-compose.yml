@@ -35,6 +35,7 @@ services:
       - Services__PharmacyApiKey=${PHARMACY_API_KEY:-}
       - Jwt__SigningKey=${CLINIC_JWT_SIGNING_KEY:-}
       - Jwt__KeyDirectory=/app/keys
+      - Cors__AllowedDomains=${CORS_ALLOWED_DOMAINS:-dev.clinicez.net,clinicez.net,dev.nextstep-software.com,nextstep-software.com}
     volumes:
       - clinic-api-keys:/app/keys
     restart: unless-stopped
@@ -45,5 +46,7 @@ volumes:
 networks:
   data-network:
     external: true
+    name: ${RABBITMQ_NETWORK:-data-network}
   npm-default:
     external: true
+    name: ${NPM_NETWORK:-npm-default}
