@@ -15,6 +15,24 @@ public sealed record PushSyncAckDto(
     int AlreadyProcessed,
     DateTime AcknowledgedAt);
 
+public sealed record SyncItemResultDto(
+    Guid IdempotencyKey,
+    string EntityType,
+    string Operation,
+    Guid? ClientId,
+    Guid? ServerId,
+    string Status,
+    string? ConflictDetail);
+
+public sealed record PushSyncResultDto(
+    int Accepted,
+    int Applied,
+    int Conflicts,
+    int Rejected,
+    int AlreadyProcessed,
+    DateTime AcknowledgedAt,
+    IReadOnlyList<SyncItemResultDto> Items);
+
 public sealed record SyncStatusItemDto(
     Guid IdempotencyKey,
     string EntityType,

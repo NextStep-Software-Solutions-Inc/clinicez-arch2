@@ -1,3 +1,5 @@
+using ClinicEz.Patient.Application.Features.Yakap.DTOs;
+
 namespace ClinicEz.Patient.Application.Common.DTOs;
 
 // ── Demographics (A1–A3) ─────────────────────────────────────────────────
@@ -190,4 +192,5 @@ public sealed record PatientFullRecordDto(
     PatientObstetricProfileDto? ObstetricProfile,
     PatientMaleReproductiveDto? MaleReproductive,
     PatientDentalVisionDto? DentalVision,
-    PatientMentalHealthProfileDto? MentalHealthProfile);
+    PatientMentalHealthProfileDto? MentalHealthProfile,
+    PatientNcdQuestionnaireDto? NcdQuestionnaire = null);

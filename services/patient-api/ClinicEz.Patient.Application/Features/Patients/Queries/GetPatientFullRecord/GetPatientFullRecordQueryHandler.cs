@@ -1,6 +1,7 @@
 using ClinicEz.Shared.Exceptions;
 using MediatR;
 using ClinicEz.Patient.Application.Common.DTOs;
+using ClinicEz.Patient.Application.Features.Yakap.DTOs;
 using ClinicEz.Patient.Domain.Interfaces;
 
 namespace ClinicEz.Patient.Application.Features.Patients.Queries.GetPatientFullRecord;
@@ -166,11 +167,29 @@ public sealed class GetPatientFullRecordQueryHandler
             p.MentalHealthProfile.SessionFrequency, p.MentalHealthProfile.Notes,
             p.MentalHealthProfile.UpdatedAt);
 
+        PatientNcdQuestionnaireDto? ncd = null;
+        if (p.NcdQuestionnaire is not null)
+        {
+            var n = p.NcdQuestionnaire;
+            ncd = new PatientNcdQuestionnaireDto(
+                n.PatientId,
+                n.Qid1Yn, n.Qid2Yn, n.Qid3Yn, n.Qid4Yn, n.Qid5Ynx,
+                n.Qid6Yn, n.Qid7Yn, n.Qid8Yn, n.Qid9Yn, n.Qid10Yn,
+                n.Qid11Yn, n.Qid12Yn, n.Qid13Yn, n.Qid14Yn, n.Qid15Yn,
+                n.Qid16Yn, n.Qid17Abcde, n.Qid18Yn, n.Qid19Yn,
+                n.Qid19FbsMgdl, n.Qid19FbsMmol, n.Qid19FbsDate?.ToString("yyyy-MM-dd"),
+                n.Qid20Yn, n.Qid20CholeVal, n.Qid20CholeDate?.ToString("yyyy-MM-dd"),
+                n.Qid21Yn, n.Qid21KetonVal, n.Qid21KetonDate?.ToString("yyyy-MM-dd"),
+                n.Qid22Yn, n.Qid22ProteinVal, n.Qid22ProteinDate?.ToString("yyyy-MM-dd"),
+                n.Qid23Yn, n.Qid24Yn, n.SyncedAt);
+        }
+
         return new PatientFullRecordDto(
             demographics,
             govIds, addresses, contacts, providers,
             allergies, medications, surgeries, illnesses, chronic,
             family, immunizations, disabilities, travel, contraceptives, pregnancies,
-            social, occupation, obstetric, maleRepro, dental, mental);
+            social, occupation, obstetric, maleRepro, dental, mental,
+            ncd);
     }
 }

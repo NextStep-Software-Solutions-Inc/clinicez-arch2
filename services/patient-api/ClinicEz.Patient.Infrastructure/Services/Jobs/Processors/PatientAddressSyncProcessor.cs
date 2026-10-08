@@ -31,8 +31,30 @@ internal sealed class PatientAddressSyncProcessor
     public override string EntityType => SyncableEntityTypes.PatientAddress;
 
     protected override async Task<PatientAddress?> FindExistingAsync(PatientAddressPayload p, Guid? id, CancellationToken ct)
-        => id.HasValue ? await Context.PatientAddresses.FindAsync([id.Value], ct)
-            : await Context.PatientAddresses.FirstOrDefaultAsync(e => e.ClientId == p.ClientId, ct);
+    {
+        if (id.HasValue)
+        {
+            var found = await Context.PatientAddresses.FindAsync([id.Value], ct);
+            if (found is not null) return found;
+        }
+
+        if (p.ClientId != Guid.Empty)
+        {
+            var foundByClient = await Context.PatientAddresses
+                .FirstOrDefaultAsync(e => e.PatientId == p.PatientId && e.ClientId == p.ClientId, ct);
+            if (foundByClient is not null) return foundByClient;
+        }
+
+        var isPrimary = string.Equals(p.Type, "primary", StringComparison.OrdinalIgnoreCase) || p.IsPrimary;
+        if (isPrimary)
+        {
+            var existingPrimary = await Context.PatientAddresses
+                .FirstOrDefaultAsync(e => e.PatientId == p.PatientId && e.IsPrimary, ct);
+            if (existingPrimary is not null) return existingPrimary;
+        }
+
+        return null;
+    }
 
     protected override PatientAddress CreateFromPayload(PatientAddressPayload p) => new()
     {

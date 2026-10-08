@@ -18,19 +18,18 @@ public sealed class PushSyncPayloadEndpoint : IEndpoint
                 ISender sender,
                 CancellationToken ct) =>
             {
-                var ack = await sender.Send(new PushSyncPayloadCommand(patientId, request.Items), ct);
+                var result = await sender.Send(new PushSyncPayloadCommand(patientId, request.Items), ct);
 
-                return Results.Accepted(
-                    (string?)null,
-                    ApiResponse<PushSyncAckDto>.Success(
-                        ack,
-                        $"Accepted {ack.Accepted} item(s). {ack.AlreadyProcessed} already processed."));
+                return Results.Ok(
+                    ApiResponse<PushSyncResultDto>.Success(
+                        result,
+                        $"Synced {result.Applied} item(s). {result.Conflicts} conflict(s). {result.AlreadyProcessed} already processed."));
             })
             .WithTags("Sync")
             .WithName("PushSyncPayload")
-            .WithSummary("Push a batch of offline changes to be queued and processed by the server")
-            .WithDescription("Pushes a batch of locally queued offline modifications from the mobile client to the server for asynchronous processing.")
-            .Produces<ApiResponse<PushSyncAckDto>>(StatusCodes.Status202Accepted)
+            .WithSummary("Push a batch of offline changes to be processed synchronously by the server with ID mappings returned")
+            .WithDescription("Pushes a batch of locally queued modifications from the client to the server, applies them with Last-Write-Wins conflict resolution, and returns canonical server IDs.")
+            .Produces<ApiResponse<PushSyncResultDto>>(StatusCodes.Status200OK)
             .Produces<ApiResponse<object>>(StatusCodes.Status404NotFound)
             .ProducesValidationProblem()
             .RequireAuthorization();

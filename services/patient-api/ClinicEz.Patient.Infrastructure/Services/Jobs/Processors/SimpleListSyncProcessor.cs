@@ -46,7 +46,13 @@ public abstract class SimpleListSyncProcessor<TEntity, TPayload> : ISyncEntityPr
 
         if (log.Operation == SyncOperation.Create)
         {
-            if (existing is not null) { log.EntityId = existing.Id; return SyncProcessResult.Success(); }
+            if (existing is not null)
+            {
+                ApplyUpdate(existing, payload);
+                Context.Set<TEntity>().Update(existing);
+                SetEntityId(log, existing);
+                return SyncProcessResult.Success();
+            }
             var entity = CreateFromPayload(payload);
             await Context.Set<TEntity>().AddAsync(entity, ct);
             SetEntityId(log, entity);

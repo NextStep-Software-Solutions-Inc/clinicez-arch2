@@ -38,5 +38,6 @@ public sealed class PatientRepository : BaseRepository<Patient>, IPatientReposit
             .Include(p => p.MaleReproductive)
             .Include(p => p.DentalVision)
             .Include(p => p.MentalHealthProfile)
+            .Include(p => p.NcdQuestionnaire)
             .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
 }

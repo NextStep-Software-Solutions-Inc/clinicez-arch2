@@ -29,7 +29,23 @@ export interface PatientSummary {
 // ── Sub-entity types ──────────────────────────────────────────────────────────
 
 export interface GovernmentIdItem { id: string; clientId: string; idType: string; idNumber: string; issuedAt: string | null; expiresAt: string | null; updatedAt: string | null }
-export interface AddressItem { id: string; clientId: string; type: string; street: string | null; barangay: string | null; city: string | null; province: string | null; zipCode: string | null; country: string | null; isPrimary: boolean; updatedAt: string | null }
+export interface AddressItem {
+    id: string;
+    clientId: string;
+    type: string;
+    street: string | null;
+    houseStreet?: string | null;
+    barangay: string | null;
+    city: string | null;
+    cityMunicipality?: string | null;
+    province: string | null;
+    region?: string | null;
+    zipCode: string | null;
+    postalCode?: string | null;
+    country: string | null;
+    isPrimary: boolean;
+    updatedAt: string | null;
+}
 export interface EmergencyContactItem { id: string; clientId: string; fullName: string; relationship: string | null; mobile: string | null; altPhone: string | null; isPrimary: boolean; updatedAt: string | null }
 export interface HealthcareProviderItem { id: string; clientId: string; providerType: string; name: string | null; specialty: string | null; clinicHospital: string | null; phone: string | null; updatedAt: string | null }
 export interface AllergyItem { id: string; clientId: string; allergenName: string; allergyType: string; severity: string; reaction: string | null; onsetDate: string | null; notes: string | null; updatedAt: string | null }
@@ -75,6 +91,7 @@ export interface PatientFullRecord {
     maleReproductive: MaleReproductiveItem | null;
     dentalVision: DentalVisionItem | null;
     mentalHealthProfile: MentalHealthProfileItem | null;
+    ncdQuestionnaire?: PatientNcdQuestionnaireDto | null;
 }
 
 // ── Sync types ────────────────────────────────────────────────────────────────
@@ -91,10 +108,24 @@ export interface SyncItemRequest {
     entityId?: string;
 }
 
+export interface SyncItemResult {
+    idempotencyKey: string;
+    entityType: string;
+    operation: string;
+    clientId?: string | null;
+    serverId?: string | null;
+    status: string;
+    conflictDetail?: string | null;
+}
+
 export interface PushSyncAck {
     accepted: number;
     alreadyProcessed: number;
+    applied?: number;
+    conflicts?: number;
+    rejected?: number;
     acknowledgedAt: string;
+    items?: SyncItemResult[];
 }
 
 // ── API functions ─────────────────────────────────────────────────────────────
@@ -332,4 +363,236 @@ export async function updateNcdQuestionnaire(
 ): Promise<PatientNcdQuestionnaireDto> {
     return api.put<PatientNcdQuestionnaireDto>(getToken, `/patients/${patientId}/yakap/ncd`, payload);
 }
+
+// ── Dedicated REST Profile Section Endpoints ─────────────────────────────────
+
+export interface UpdateGovernmentIdInput {
+    id?: string;
+    clientId?: string;
+    idType: string;
+    idNumber: string;
+    issuedAt?: string | null;
+    expiresAt?: string | null;
+}
+
+export async function getPatientGovernmentIds(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+): Promise<GovernmentIdItem[]> {
+    return api.get<GovernmentIdItem[]>(getToken, `/patients/${patientId}/government-ids`);
+}
+
+export async function updatePatientGovernmentIds(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    governmentIds: UpdateGovernmentIdInput[],
+): Promise<GovernmentIdItem[]> {
+    return api.put<GovernmentIdItem[]>(getToken, `/patients/${patientId}/government-ids`, { governmentIds });
+}
+
+export interface AddressInput {
+    type?: string;
+    houseStreet?: string | null;
+    barangay?: string | null;
+    cityMunicipality?: string | null;
+    province?: string | null;
+    region?: string | null;
+    zipCode?: string | null;
+    country?: string | null;
+    isPrimary?: boolean;
+}
+
+export async function getPatientAddresses(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+): Promise<AddressItem[]> {
+    return api.get<AddressItem[]>(getToken, `/patients/${patientId}/addresses`);
+}
+
+export async function createPatientAddress(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    payload: AddressInput,
+): Promise<AddressItem> {
+    return api.post<AddressItem>(getToken, `/patients/${patientId}/addresses`, payload);
+}
+
+export async function updatePatientAddress(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    addressId: string,
+    payload: AddressInput,
+): Promise<AddressItem> {
+    return api.put<AddressItem>(getToken, `/patients/${patientId}/addresses/${addressId}`, payload);
+}
+
+export async function deletePatientAddress(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    addressId: string,
+): Promise<void> {
+    return api.delete<void>(getToken, `/patients/${patientId}/addresses/${addressId}`);
+}
+
+export interface EmergencyContactInput {
+    fullName: string;
+    relationship?: string | null;
+    mobile?: string | null;
+    altPhone?: string | null;
+    isPrimary?: boolean;
+}
+
+export async function getPatientEmergencyContacts(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+): Promise<EmergencyContactItem[]> {
+    return api.get<EmergencyContactItem[]>(getToken, `/patients/${patientId}/emergency-contacts`);
+}
+
+export async function createPatientEmergencyContact(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    payload: EmergencyContactInput,
+): Promise<EmergencyContactItem> {
+    return api.post<EmergencyContactItem>(getToken, `/patients/${patientId}/emergency-contacts`, payload);
+}
+
+export async function updatePatientEmergencyContact(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    contactId: string,
+    payload: EmergencyContactInput,
+): Promise<EmergencyContactItem> {
+    return api.put<EmergencyContactItem>(getToken, `/patients/${patientId}/emergency-contacts/${contactId}`, payload);
+}
+
+export async function deletePatientEmergencyContact(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    contactId: string,
+): Promise<void> {
+    return api.delete<void>(getToken, `/patients/${patientId}/emergency-contacts/${contactId}`);
+}
+
+// 1:1 Profiles
+export async function getPatientSocialHistory(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+): Promise<SocialHistoryItem | null> {
+    try {
+        return await api.get<SocialHistoryItem>(getToken, `/patients/${patientId}/social-history`);
+    } catch (err) {
+        if (err instanceof ApiError && err.status === 404) return null;
+        throw err;
+    }
+}
+
+export async function updatePatientSocialHistory(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    payload: Partial<Omit<SocialHistoryItem, 'id' | 'clientId' | 'updatedAt'>>,
+): Promise<SocialHistoryItem> {
+    return api.put<SocialHistoryItem>(getToken, `/patients/${patientId}/social-history`, payload);
+}
+
+export async function getPatientOccupation(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+): Promise<OccupationItem | null> {
+    try {
+        return await api.get<OccupationItem>(getToken, `/patients/${patientId}/occupation`);
+    } catch (err) {
+        if (err instanceof ApiError && err.status === 404) return null;
+        throw err;
+    }
+}
+
+export async function updatePatientOccupation(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    payload: Partial<Omit<OccupationItem, 'id' | 'clientId' | 'updatedAt'>>,
+): Promise<OccupationItem> {
+    return api.put<OccupationItem>(getToken, `/patients/${patientId}/occupation`, payload);
+}
+
+export async function getPatientObstetricProfile(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+): Promise<ObstetricProfileItem | null> {
+    try {
+        return await api.get<ObstetricProfileItem>(getToken, `/patients/${patientId}/obstetric-profile`);
+    } catch (err) {
+        if (err instanceof ApiError && err.status === 404) return null;
+        throw err;
+    }
+}
+
+export async function updatePatientObstetricProfile(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    payload: Partial<Omit<ObstetricProfileItem, 'id' | 'clientId' | 'updatedAt'>>,
+): Promise<ObstetricProfileItem> {
+    return api.put<ObstetricProfileItem>(getToken, `/patients/${patientId}/obstetric-profile`, payload);
+}
+
+export async function getPatientMaleReproductive(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+): Promise<MaleReproductiveItem | null> {
+    try {
+        return await api.get<MaleReproductiveItem>(getToken, `/patients/${patientId}/male-reproductive`);
+    } catch (err) {
+        if (err instanceof ApiError && err.status === 404) return null;
+        throw err;
+    }
+}
+
+export async function updatePatientMaleReproductive(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    payload: Partial<Omit<MaleReproductiveItem, 'id' | 'clientId' | 'updatedAt'>>,
+): Promise<MaleReproductiveItem> {
+    return api.put<MaleReproductiveItem>(getToken, `/patients/${patientId}/male-reproductive`, payload);
+}
+
+export async function getPatientDentalVision(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+): Promise<DentalVisionItem | null> {
+    try {
+        return await api.get<DentalVisionItem>(getToken, `/patients/${patientId}/dental-vision`);
+    } catch (err) {
+        if (err instanceof ApiError && err.status === 404) return null;
+        throw err;
+    }
+}
+
+export async function updatePatientDentalVision(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    payload: Partial<Omit<DentalVisionItem, 'id' | 'clientId' | 'updatedAt'>>,
+): Promise<DentalVisionItem> {
+    return api.put<DentalVisionItem>(getToken, `/patients/${patientId}/dental-vision`, payload);
+}
+
+export async function getPatientMentalHealthProfile(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+): Promise<MentalHealthProfileItem | null> {
+    try {
+        return await api.get<MentalHealthProfileItem>(getToken, `/patients/${patientId}/mental-health`);
+    } catch (err) {
+        if (err instanceof ApiError && err.status === 404) return null;
+        throw err;
+    }
+}
+
+export async function updatePatientMentalHealthProfile(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    payload: Partial<Omit<MentalHealthProfileItem, 'id' | 'clientId' | 'updatedAt'>>,
+): Promise<MentalHealthProfileItem> {
+    return api.put<MentalHealthProfileItem>(getToken, `/patients/${patientId}/mental-health`, payload);
+}
+
 

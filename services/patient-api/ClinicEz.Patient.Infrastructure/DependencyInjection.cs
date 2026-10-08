@@ -169,7 +169,8 @@ public static class DependencyInjection
         services.AddScoped<ISyncEntityProcessor, FileFolderSyncProcessor>();
         services.AddScoped<ISyncEntityProcessor, FileRecordSyncProcessor>();
 
-        // ── Hangfire job implementation ────────────────────────────────────────
+        // ── Sync processing engine ───────────────────────────────────────────
+        services.AddScoped<ISyncPayloadProcessor, SyncPayloadProcessor>();
         services.AddScoped<ISyncPayloadJob, SyncPayloadJobProcessor>();
         services.AddScoped<IFileUploadReconciliationJob, FileUploadReconciliationJob>();
 

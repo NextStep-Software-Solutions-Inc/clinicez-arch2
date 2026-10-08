@@ -28,8 +28,29 @@ internal sealed class EmergencyContactSyncProcessor
     public override string EntityType => SyncableEntityTypes.EmergencyContact;
 
     protected override async Task<EmergencyContact?> FindExistingAsync(EmergencyContactPayload p, Guid? id, CancellationToken ct)
-        => id.HasValue ? await Context.EmergencyContacts.FindAsync([id.Value], ct)
-            : await Context.EmergencyContacts.FirstOrDefaultAsync(e => e.ClientId == p.ClientId, ct);
+    {
+        if (id.HasValue)
+        {
+            var found = await Context.EmergencyContacts.FindAsync([id.Value], ct);
+            if (found is not null) return found;
+        }
+
+        if (p.ClientId != Guid.Empty)
+        {
+            var foundByClient = await Context.EmergencyContacts
+                .FirstOrDefaultAsync(e => e.PatientId == p.PatientId && e.ClientId == p.ClientId, ct);
+            if (foundByClient is not null) return foundByClient;
+        }
+
+        if (!string.IsNullOrWhiteSpace(p.Phone))
+        {
+            var foundByPhone = await Context.EmergencyContacts
+                .FirstOrDefaultAsync(e => e.PatientId == p.PatientId && e.Mobile == p.Phone, ct);
+            if (foundByPhone is not null) return foundByPhone;
+        }
+
+        return null;
+    }
 
     protected override EmergencyContact CreateFromPayload(EmergencyContactPayload p) => new()
     {

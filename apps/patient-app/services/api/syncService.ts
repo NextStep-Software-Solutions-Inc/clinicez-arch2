@@ -153,6 +153,42 @@ async function executePushSync(
 
     // 4. Update syncedAt on corresponding local SQLite rows
     const syncTs = new Date();
+
+    // Remap client IDs to server IDs immediately if backend returned ID mappings
+    if (ack.items && Array.isArray(ack.items)) {
+      for (const res of ack.items) {
+        if (res.clientId && res.serverId && res.clientId !== res.serverId && res.status !== 'rejected') {
+          try {
+            const table = ENTITY_TYPE_TO_TABLE[res.entityType];
+            if (table && table.id) {
+              const existingServerRow = await originalDb
+                .select({ id: table.id })
+                .from(table)
+                .where(eq(table.id, res.serverId));
+
+              if (existingServerRow.length > 0) {
+                await originalDb.delete(table).where(eq(table.id, res.clientId));
+              } else {
+                const updateFields: any = {
+                  id: res.serverId,
+                  syncedAt: syncTs,
+                };
+                if (table.serverId) {
+                  updateFields.serverId = res.serverId;
+                }
+                await originalDb
+                  .update(table)
+                  .set(updateFields)
+                  .where(eq(table.id, res.clientId));
+              }
+            }
+          } catch (remapErr) {
+            console.warn(`[SyncService] Failed to remap clientId ${res.clientId} to serverId ${res.serverId} for ${res.entityType}:`, remapErr);
+          }
+        }
+      }
+    }
+
     for (const item of pendingItems) {
       if (item.operation === 'delete') continue;
       try {

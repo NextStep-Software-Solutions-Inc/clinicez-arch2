@@ -134,7 +134,7 @@ async function reconcileListEntity<TItem extends { id: string; clientId?: string
     }
 
     // If there is an existing local row that had the client-generated ID, remove it so it's not orphaned
-    if (item.clientId && item.clientId !== item.id) {
+    if (item.clientId && item.clientId !== '00000000-0000-0000-0000-000000000000' && item.clientId !== item.id) {
       await originalDb.delete(table).where(eq(table.id, item.clientId));
     }
 
@@ -271,12 +271,12 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
       id: addr.id,
       patientId,
       type: (['primary', 'secondary'].includes(addr.type) ? addr.type : 'primary') as 'primary' | 'secondary',
-      houseStreet: addr.street ?? null,
+      houseStreet: addr.houseStreet ?? addr.street ?? null,
       barangay: addr.barangay ?? null,
-      cityMunicipality: addr.city ?? null,
+      cityMunicipality: addr.cityMunicipality ?? addr.city ?? null,
       province: addr.province ?? null,
-      region: null,
-      zipCode: addr.zipCode ?? null,
+      region: addr.region ?? null,
+      zipCode: addr.zipCode ?? addr.postalCode ?? null,
       country: addr.country ?? 'Philippines',
       createdAt: ts,
       updatedAt: toDate(addr.updatedAt) ?? ts,
@@ -773,6 +773,11 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
       .insert(patientMentalHealthProfile)
       .values(row)
       .onConflictDoUpdate({ target: patientMentalHealthProfile.patientId, set: row });
+  }
+
+  // 23. NCD Questionnaire (PhilHealth Yakap)
+  if (record.ncdQuestionnaire && !pendingEntityIds.has(patientId)) {
+    await hydrateNcdQuestionnaire(patientId, record.ncdQuestionnaire);
   }
 
   // Web: persist the whole hydrated record before returning so a reload keeps it.

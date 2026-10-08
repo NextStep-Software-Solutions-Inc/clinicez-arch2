@@ -49,8 +49,41 @@ internal sealed class PatientGovernmentIdSyncProcessor
     public override string EntityType => SyncableEntityTypes.PatientGovernmentId;
 
     protected override async Task<PatientGovernmentId?> FindExistingAsync(GovernmentIdPayload p, Guid? id, CancellationToken ct)
-        => id.HasValue ? await Context.PatientGovernmentIds.FindAsync([id.Value], ct)
-            : await Context.PatientGovernmentIds.FirstOrDefaultAsync(e => e.ClientId == p.ClientId, ct);
+    {
+        if (id.HasValue)
+        {
+            var found = await Context.PatientGovernmentIds.FindAsync([id.Value], ct);
+            if (found is not null) return found;
+        }
+
+        if (p.ClientId != Guid.Empty)
+        {
+            var foundByClient = await Context.PatientGovernmentIds
+                .FirstOrDefaultAsync(e => e.PatientId == p.PatientId && e.ClientId == p.ClientId, ct);
+            if (foundByClient is not null) return foundByClient;
+        }
+
+        // De-duplicate: A patient has at most ONE record per GovernmentIdType
+        GovernmentIdType? targetType = null;
+        if (!string.IsNullOrWhiteSpace(p.IdType) && Enum.TryParse<GovernmentIdType>(p.IdType, true, out var parsedType))
+        {
+            targetType = parsedType;
+        }
+        else
+        {
+            var (resolvedType, _) = ResolveFirstId(p);
+            targetType = resolvedType;
+        }
+
+        if (targetType.HasValue)
+        {
+            var foundByType = await Context.PatientGovernmentIds
+                .FirstOrDefaultAsync(e => e.PatientId == p.PatientId && e.IdType == targetType.Value, ct);
+            if (foundByType is not null) return foundByType;
+        }
+
+        return null;
+    }
 
     protected override PatientGovernmentId CreateFromPayload(GovernmentIdPayload p)
     {
