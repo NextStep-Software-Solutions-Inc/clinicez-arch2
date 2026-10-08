@@ -18,7 +18,8 @@ import { usePatientId } from 'hooks/usePatientId';
 import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
-import { flushAndSyncProfile } from 'services/api/syncService';
+import { flushAndSyncProfile, deleteProfileListItem } from 'services/api/syncService';
+import { deletePatientPastIllness } from 'services/api/patientApi';
 import { useProfileSync } from 'hooks/useProfileSync';
 
 type Form = { id: string | null; diagnosis: string; duration: string; complications: string; };
@@ -56,7 +57,7 @@ export default function PastIllnessesScreen() {
     sheetRef.current?.present();
   };
 
-  const onDelete = async (id: string, diagnosisName?: string) => {
+  const onDelete = async (id: string, serverId?: string | null, diagnosisName?: string) => {
     const confirmed = await dialog.confirm({
       title: 'Delete Illness',
       message: `Are you sure you want to remove ${diagnosisName || 'this illness'}?`,
@@ -65,8 +66,15 @@ export default function PastIllnessesScreen() {
     });
     if (!confirmed) return;
     try {
-      await db.update(patientPastIllnesses).set({ deletedAt: new Date(), patientId }).where(eq(patientPastIllnesses.id, id));
-      await flushAndSyncProfile(patientId, getToken);
+      await deleteProfileListItem({
+        table: patientPastIllnesses,
+        entityType: 'patient_past_illnesses',
+        patientId,
+        id,
+        serverId,
+        getToken,
+        restDeleteFn: deletePatientPastIllness,
+      });
       load();
     } catch (err: any) {
       dialog.alert('Error', err?.message || 'Failed to delete illness.');
@@ -121,7 +129,7 @@ export default function PastIllnessesScreen() {
             title={item.diagnosis}
             subtitle={item.duration}
             onEdit={() => openEdit(item)}
-            onDelete={() => onDelete(item.id, item.diagnosis)}
+            onDelete={() => onDelete(item.id, item.serverId, item.diagnosis)}
           />
         ))}
         <ProfileAddButton label="Add Illness" onPress={() => { reset(EMPTY); sheetRef.current?.present(); }} />

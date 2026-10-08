@@ -595,4 +595,102 @@ export async function updatePatientMentalHealthProfile(
     return api.put<MentalHealthProfileItem>(getToken, `/patients/${patientId}/mental-health`, payload);
 }
 
+// ── Medical History Delete Endpoints ─────────────────────────────────────────
+
+export async function deletePatientAllergy(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    allergyId: string,
+): Promise<void> {
+    return api.delete<void>(getToken, `/patients/${patientId}/allergies/${allergyId}`);
+}
+
+export async function deletePatientMedication(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    medicationId: string,
+): Promise<void> {
+    return api.delete<void>(getToken, `/patients/${patientId}/medications/${medicationId}`);
+}
+
+export async function deletePatientSurgicalHistory(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    surgeryId: string,
+): Promise<void> {
+    return api.delete<void>(getToken, `/patients/${patientId}/surgical-histories/${surgeryId}`);
+}
+
+export async function deletePatientPastIllness(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    illnessId: string,
+): Promise<void> {
+    return api.delete<void>(getToken, `/patients/${patientId}/past-illnesses/${illnessId}`);
+}
+
+export async function deletePatientChronicCondition(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    conditionId: string,
+): Promise<void> {
+    return api.delete<void>(getToken, `/patients/${patientId}/chronic-conditions/${conditionId}`);
+}
+
+export async function deletePatientFamilyHistory(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    familyHistoryId: string,
+): Promise<void> {
+    return api.delete<void>(getToken, `/patients/${patientId}/family-histories/${familyHistoryId}`);
+}
+
+export async function deletePatientImmunization(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    immunizationId: string,
+): Promise<void> {
+    return api.delete<void>(getToken, `/patients/${patientId}/immunizations/${immunizationId}`);
+}
+
+export async function deletePatientDisability(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    disabilityId: string,
+): Promise<void> {
+    return api.delete<void>(getToken, `/patients/${patientId}/disabilities/${disabilityId}`);
+}
+
+export async function deletePatientTravelHistory(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    travelId: string,
+): Promise<void> {
+    return api.delete<void>(getToken, `/patients/${patientId}/travel-histories/${travelId}`);
+}
+
+export async function deletePatientContraceptiveHistory(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    contraceptiveId: string,
+): Promise<void> {
+    return api.delete<void>(getToken, `/patients/${patientId}/contraceptive-histories/${contraceptiveId}`);
+}
+
+export async function deletePatientPregnancy(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    pregnancyId: string,
+): Promise<void> {
+    return api.delete<void>(getToken, `/patients/${patientId}/pregnancies/${pregnancyId}`);
+}
+
+export async function deletePatientHealthcareProvider(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    providerId: string,
+): Promise<void> {
+    return api.delete<void>(getToken, `/patients/${patientId}/healthcare-providers/${providerId}`);
+}
+
 

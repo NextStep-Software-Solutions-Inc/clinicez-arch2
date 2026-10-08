@@ -25,7 +25,8 @@ import { usePatientId } from 'hooks/usePatientId';
 import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
-import { flushAndSyncProfile } from 'services/api/syncService';
+import { flushAndSyncProfile, deleteProfileListItem } from 'services/api/syncService';
+import { deletePatientPregnancy, deletePatientContraceptiveHistory } from 'services/api/patientApi';
 import { useProfileSync } from 'hooks/useProfileSync';
 
 // ── Obstetric Profile Form ──────────────────────────────────────────────────
@@ -268,7 +269,7 @@ export default function ObstetricProfileScreen() {
     }
   });
 
-  const onDeletePreg = async (id: string, label?: string) => {
+  const onDeletePreg = async (id: string, serverId?: string | null, label?: string) => {
     const confirmed = await dialog.confirm({
       title: 'Delete Pregnancy Record',
       message: `Are you sure you want to remove ${label || 'this record'}?`,
@@ -277,8 +278,15 @@ export default function ObstetricProfileScreen() {
     });
     if (!confirmed) return;
     try {
-      await db.update(patientPregnancies).set({ deletedAt: new Date(), patientId }).where(eq(patientPregnancies.id, id));
-      await flushAndSyncProfile(patientId, getToken);
+      await deleteProfileListItem({
+        table: patientPregnancies,
+        entityType: 'patient_pregnancies',
+        patientId,
+        id,
+        serverId,
+        getToken,
+        restDeleteFn: deletePatientPregnancy,
+      });
       loadPregnancies();
     } catch (err: any) {
       dialog.alert('Error', err?.message || 'Failed to delete pregnancy record.');
@@ -324,7 +332,7 @@ export default function ObstetricProfileScreen() {
     }
   });
 
-  const onDeleteContra = async (id: string, methodName?: string) => {
+  const onDeleteContra = async (id: string, serverId?: string | null, methodName?: string) => {
     const confirmed = await dialog.confirm({
       title: 'Delete Contraceptive Record',
       message: `Are you sure you want to remove ${methodName || 'this method'}?`,
@@ -333,8 +341,15 @@ export default function ObstetricProfileScreen() {
     });
     if (!confirmed) return;
     try {
-      await db.update(patientContraceptiveHistory).set({ deletedAt: new Date(), patientId }).where(eq(patientContraceptiveHistory.id, id));
-      await flushAndSyncProfile(patientId, getToken);
+      await deleteProfileListItem({
+        table: patientContraceptiveHistory,
+        entityType: 'patient_contraceptive_history',
+        patientId,
+        id,
+        serverId,
+        getToken,
+        restDeleteFn: deletePatientContraceptiveHistory,
+      });
       loadContra();
     } catch (err: any) {
       dialog.alert('Error', err?.message || 'Failed to delete contraceptive record.');
@@ -403,7 +418,7 @@ export default function ObstetricProfileScreen() {
                     });
                     pregSheetRef.current?.present();
                   }}
-                  onDelete={() => onDeletePreg(p.id, cardTitle)}
+                  onDelete={() => onDeletePreg(p.id, p.serverId, cardTitle)}
                 />
               );
             })}
@@ -434,7 +449,7 @@ export default function ObstetricProfileScreen() {
                     });
                     contraSheetRef.current?.present();
                   }}
-                  onDelete={() => onDeleteContra(c.id, methodLabel)}
+                  onDelete={() => onDeleteContra(c.id, c.serverId, methodLabel)}
                 />
               );
             })}

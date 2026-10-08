@@ -19,7 +19,8 @@ import { usePatientId } from 'hooks/usePatientId';
 import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
-import { flushAndSyncProfile } from 'services/api/syncService';
+import { flushAndSyncProfile, deleteProfileListItem } from 'services/api/syncService';
+import { deletePatientFamilyHistory } from 'services/api/patientApi';
 import { useProfileSync } from 'hooks/useProfileSync';
 import ThemedBottomSheetModal from '@ui/ThemedBottomSheetModal';
 
@@ -84,7 +85,7 @@ export default function FamilyHistoryScreen() {
     sheetRef.current?.present();
   };
 
-  const onDelete = async (id: string, conditionName?: string) => {
+  const onDelete = async (id: string, serverId?: string | null, conditionName?: string) => {
     const confirmed = await dialog.confirm({
       title: 'Delete Family Condition',
       message: `Are you sure you want to remove ${conditionName || 'this record'}?`,
@@ -93,8 +94,15 @@ export default function FamilyHistoryScreen() {
     });
     if (!confirmed) return;
     try {
-      await db.update(patientFamilyHistory).set({ deletedAt: new Date(), patientId }).where(eq(patientFamilyHistory.id, id));
-      await flushAndSyncProfile(patientId, getToken);
+      await deleteProfileListItem({
+        table: patientFamilyHistory,
+        entityType: 'patient_family_history',
+        patientId,
+        id,
+        serverId,
+        getToken,
+        restDeleteFn: deletePatientFamilyHistory,
+      });
       load();
     } catch (err: any) {
       dialog.alert('Error', err?.message || 'Failed to delete record.');
@@ -154,7 +162,7 @@ export default function FamilyHistoryScreen() {
             title={item.condition}
             subtitle={[item.affectedRelative, item.side].filter(Boolean).join(' · ')}
             onEdit={() => openEdit(item)}
-            onDelete={() => onDelete(item.id, item.condition)}
+            onDelete={() => onDelete(item.id, item.serverId, item.condition)}
           />
         ))}
         <ProfileAddButton label="Add Family Condition" onPress={() => { reset(EMPTY); sheetRef.current?.present(); }} />

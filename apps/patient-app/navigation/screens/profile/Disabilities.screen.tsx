@@ -19,7 +19,8 @@ import { usePatientId } from 'hooks/usePatientId';
 import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
-import { flushAndSyncProfile } from 'services/api/syncService';
+import { flushAndSyncProfile, deleteProfileListItem } from 'services/api/syncService';
+import { deletePatientDisability } from 'services/api/patientApi';
 import { useProfileSync } from 'hooks/useProfileSync';
 
 type Form = { id: string | null; bodyPart: string; classification: string; isPwdCertified: boolean; };
@@ -57,7 +58,7 @@ export default function DisabilitiesScreen() {
     sheetRef.current?.present();
   };
 
-  const onDelete = async (id: string, classificationName?: string) => {
+  const onDelete = async (id: string, serverId?: string | null, classificationName?: string) => {
     const confirmed = await dialog.confirm({
       title: 'Delete Disability',
       message: `Are you sure you want to remove ${classificationName || 'this record'}?`,
@@ -66,8 +67,15 @@ export default function DisabilitiesScreen() {
     });
     if (!confirmed) return;
     try {
-      await db.update(patientDisabilities).set({ deletedAt: new Date(), patientId }).where(eq(patientDisabilities.id, id));
-      await flushAndSyncProfile(patientId, getToken);
+      await deleteProfileListItem({
+        table: patientDisabilities,
+        entityType: 'patient_disabilities',
+        patientId,
+        id,
+        serverId,
+        getToken,
+        restDeleteFn: deletePatientDisability,
+      });
       load();
     } catch (err: any) {
       dialog.alert('Error', err?.message || 'Failed to delete disability record.');
@@ -123,7 +131,7 @@ export default function DisabilitiesScreen() {
             subtitle={item.bodyPart}
             badge={item.isPwdCertified ? 'PWD Certified' : undefined}
             onEdit={() => openEdit(item)}
-            onDelete={() => onDelete(item.id, item.classification)}
+            onDelete={() => onDelete(item.id, item.serverId, item.classification)}
           />
         ))}
         <ProfileAddButton label="Add Disability" onPress={() => { reset(EMPTY); sheetRef.current?.present(); }} />

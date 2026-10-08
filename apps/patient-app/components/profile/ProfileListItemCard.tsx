@@ -1,5 +1,5 @@
-﻿import React from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
+import React from 'react';
+import { View, Pressable, StyleSheet, Platform } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
@@ -9,7 +9,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import { AppIcon } from '@ui/Icon';
 import ThemedText from '@ui/ThemedText';
-import { dialog } from '@utils/dialog';
 import { useAppTheme } from '../../contexts/ThemeContext';
 
 const ACTION_W = 130; // total width of the revealed action panel
@@ -43,6 +42,7 @@ export default function ProfileListItemCard({
   };
 
   const pan = Gesture.Pan()
+    .enabled(Platform.OS !== 'web')
     .activeOffsetX([-8, 8])
     .onBegin(() => {
       startX.value = translateX.value;
@@ -64,10 +64,7 @@ export default function ProfileListItemCard({
 
   const handleDelete = () => {
     close();
-    dialog.alert('Delete Entry', deleteMessage, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: onDelete },
-    ]);
+    onDelete();
   };
 
   const handleEdit = () => {
@@ -77,43 +74,45 @@ export default function ProfileListItemCard({
 
   return (
     <View style={[styles.wrapper, { borderRadius: radii.md }]}>
-      {/* Action panel — hidden behind the card, revealed on swipe-left */}
-      <View style={[styles.actionsPanel, { backgroundColor: colors.surface }]}>
-        <Pressable
-          onPress={handleEdit}
-          style={({ pressed, hovered }: any) => [
-            styles.actionBtn,
-            hovered && { backgroundColor: colors.primarySubtle },
-            pressed && { opacity: 0.6 },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Edit"
-        >
-          <AppIcon name="edit" size={sizes.iconSm} color="primary" />
-          <ThemedText variant="captionBold" color="primary">
-            Edit
-          </ThemedText>
-        </Pressable>
-        <View style={[styles.actionDivider, { backgroundColor: colors.borderLight }]}>
+      {/* Action panel — hidden behind the card on mobile, revealed on swipe-left */}
+      {Platform.OS !== 'web' && (
+        <View style={[styles.actionsPanel, { backgroundColor: colors.surface }]}>
+          <Pressable
+            onPress={handleEdit}
+            style={({ pressed, hovered }: any) => [
+              styles.actionBtn,
+              hovered && { backgroundColor: colors.primarySubtle },
+              pressed && { opacity: 0.6 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Edit"
+          >
+            <AppIcon name="edit" size={sizes.iconSm} color="primary" />
+            <ThemedText variant="captionBold" color="primary">
+              Edit
+            </ThemedText>
+          </Pressable>
+          <View style={[styles.actionDivider, { backgroundColor: colors.borderLight }]}>
+          </View>
+          <Pressable
+            onPress={handleDelete}
+            style={({ pressed, hovered }: any) => [
+              styles.actionBtn,
+              hovered && { backgroundColor: colors.emergencyBg },
+              pressed && { opacity: 0.6 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Delete"
+          >
+            <AppIcon name="trash" size={sizes.iconSm} color="emergency" />
+            <ThemedText variant="captionBold" color="emergency">
+              Delete
+            </ThemedText>
+          </Pressable>
         </View>
-        <Pressable
-          onPress={handleDelete}
-          style={({ pressed, hovered }: any) => [
-            styles.actionBtn,
-            hovered && { backgroundColor: colors.emergencyBg },
-            pressed && { opacity: 0.6 },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Delete"
-        >
-          <AppIcon name="trash" size={sizes.iconSm} color="emergency" />
-          <ThemedText variant="captionBold" color="emergency">
-            Delete
-          </ThemedText>
-        </Pressable>
-      </View>
+      )}
 
-      {/* Card face — slides left to reveal action panel */}
+      {/* Card face — slides left to reveal action panel on mobile, stationary with buttons on web */}
       <GestureDetector gesture={pan}>
         <Animated.View
           style={[
@@ -150,6 +149,36 @@ export default function ProfileListItemCard({
                 <ThemedText variant="badge" color="primary">
                   {badge}
                 </ThemedText>
+              </View>
+            )}
+            {Platform.OS === 'web' && (
+              <View style={styles.webActions}>
+                <Pressable
+                  onPress={onEdit}
+                  style={({ pressed, hovered }: any) => [
+                    styles.webActionBtn,
+                    { borderRadius: radii.sm },
+                    hovered && { backgroundColor: colors.primarySubtle },
+                    pressed && { opacity: 0.6 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Edit"
+                >
+                  <AppIcon name="edit" size={sizes.iconSm} color="primary" />
+                </Pressable>
+                <Pressable
+                  onPress={onDelete}
+                  style={({ pressed, hovered }: any) => [
+                    styles.webActionBtn,
+                    { borderRadius: radii.sm },
+                    hovered && { backgroundColor: colors.emergencyBg },
+                    pressed && { opacity: 0.6 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Delete"
+                >
+                  <AppIcon name="trash" size={sizes.iconSm} color="emergency" />
+                </Pressable>
               </View>
             )}
           </View>
@@ -202,5 +231,16 @@ const styles = StyleSheet.create({
   },
   actionDivider: {
     width: StyleSheet.hairlineWidth,
+  },
+  webActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginLeft: 8,
+  },
+  webActionBtn: {
+    padding: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

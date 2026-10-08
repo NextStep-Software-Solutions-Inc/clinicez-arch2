@@ -19,7 +19,8 @@ import { usePatientId } from 'hooks/usePatientId';
 import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
-import { flushAndSyncProfile } from 'services/api/syncService';
+import { flushAndSyncProfile, deleteProfileListItem } from 'services/api/syncService';
+import { deletePatientHealthcareProvider } from 'services/api/patientApi';
 import { useProfileSync } from 'hooks/useProfileSync';
 
 type ProviderForm = {
@@ -80,7 +81,7 @@ export default function HealthcareProvidersScreen() {
     sheetRef.current?.present();
   };
 
-  const onDelete = async (id: string, name?: string) => {
+  const onDelete = async (id: string, serverId?: string | null, name?: string) => {
     const confirmed = await dialog.confirm({
       title: 'Delete Provider',
       message: `Are you sure you want to remove ${name || 'this provider'}?`,
@@ -89,8 +90,15 @@ export default function HealthcareProvidersScreen() {
     });
     if (!confirmed) return;
     try {
-      await db.update(patientHealthcareProviders).set({ deletedAt: new Date(), patientId }).where(eq(patientHealthcareProviders.id, id));
-      await flushAndSyncProfile(patientId, getToken);
+      await deleteProfileListItem({
+        table: patientHealthcareProviders,
+        entityType: 'patient_healthcare_providers',
+        patientId,
+        id,
+        serverId,
+        getToken,
+        restDeleteFn: deletePatientHealthcareProvider,
+      });
       load();
     } catch (err: any) {
       dialog.alert('Error', err?.message || 'Failed to delete provider.');
@@ -151,7 +159,7 @@ export default function HealthcareProvidersScreen() {
             subtitle={[p.specialty, p.clinicHospital].filter(Boolean).join(' · ')}
             badge={typeLabel(p.providerType)}
             onEdit={() => openEdit(p)}
-            onDelete={() => onDelete(p.id, p.name)}
+            onDelete={() => onDelete(p.id, p.serverId, p.name)}
           />
         ))}
         <ProfileAddButton label="Add Provider" onPress={openAdd} />

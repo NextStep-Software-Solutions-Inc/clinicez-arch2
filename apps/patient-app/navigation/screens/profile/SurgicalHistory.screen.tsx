@@ -19,7 +19,8 @@ import { usePatientId } from 'hooks/usePatientId';
 import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
-import { flushAndSyncProfile } from 'services/api/syncService';
+import { flushAndSyncProfile, deleteProfileListItem } from 'services/api/syncService';
+import { deletePatientSurgicalHistory } from 'services/api/patientApi';
 import { useProfileSync } from 'hooks/useProfileSync';
 
 type SurgForm = { id: string | null; procedure: string; surgeon: string; facility: string; date: string; anesthesiaType: string; complications: string; };
@@ -60,7 +61,7 @@ export default function SurgicalHistoryScreen() {
     sheetRef.current?.present();
   };
 
-  const onDelete = async (id: string, procedureName?: string) => {
+  const onDelete = async (id: string, serverId?: string | null, procedureName?: string) => {
     const confirmed = await dialog.confirm({
       title: 'Delete Procedure',
       message: `Are you sure you want to remove ${procedureName || 'this procedure'}?`,
@@ -69,8 +70,15 @@ export default function SurgicalHistoryScreen() {
     });
     if (!confirmed) return;
     try {
-      await db.update(patientSurgicalHistory).set({ deletedAt: new Date(), patientId }).where(eq(patientSurgicalHistory.id, id));
-      await flushAndSyncProfile(patientId, getToken);
+      await deleteProfileListItem({
+        table: patientSurgicalHistory,
+        entityType: 'patient_surgical_history',
+        patientId,
+        id,
+        serverId,
+        getToken,
+        restDeleteFn: deletePatientSurgicalHistory,
+      });
       load();
     } catch (err: any) {
       dialog.alert('Error', err?.message || 'Failed to delete procedure.');
@@ -128,7 +136,7 @@ export default function SurgicalHistoryScreen() {
             title={s.procedure}
             subtitle={[s.date, s.facility].filter(Boolean).join(' · ')}
             onEdit={() => openEdit(s)}
-            onDelete={() => onDelete(s.id, s.procedure)}
+            onDelete={() => onDelete(s.id, s.serverId, s.procedure)}
           />
         ))}
         <ProfileAddButton label="Add Procedure" onPress={() => { reset(EMPTY); sheetRef.current?.present(); }} />

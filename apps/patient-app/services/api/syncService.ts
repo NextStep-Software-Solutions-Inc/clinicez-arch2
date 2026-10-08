@@ -373,3 +373,100 @@ export async function syncPendingProfileWrites(
   return syncFullProfile(patientId, getToken);
 }
 
+// ── Standardized Delete Helper ───────────────────────────────────────────────
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export interface DeleteProfileListItemParams {
+  table: any;
+  entityType: string;
+  patientId: string;
+  id: string;
+  serverId?: string | null;
+  getToken?: () => Promise<string | null>;
+  restDeleteFn?: (getToken: () => Promise<string | null>, patientId: string, itemId: string) => Promise<any>;
+}
+
+/**
+ * Standardized delete helper for list items across all profile sections.
+ * 1. Fires a direct REST HTTP DELETE if online and restDeleteFn + getToken are provided.
+ * 2. Immediately removes the row from local SQLite by id and serverId.
+ * 3. Falls back to offline syncQueue if REST call fails or device is offline.
+ * 4. Flushes the local snapshot and notifies listeners.
+ */
+export async function deleteProfileListItem({
+  table,
+  entityType,
+  patientId,
+  id,
+  serverId,
+  getToken,
+  restDeleteFn,
+}: DeleteProfileListItemParams): Promise<{ success: boolean; error?: string }> {
+  let directRestSucceeded = false;
+  const targetServerId = (serverId && UUID_REGEX.test(serverId))
+    ? serverId
+    : (id && UUID_REGEX.test(id))
+      ? id
+      : null;
+
+  if (getToken && restDeleteFn && targetServerId) {
+    try {
+      const net = await NetInfo.fetch();
+      if (net.isConnected) {
+        await restDeleteFn(getToken, patientId, targetServerId);
+        directRestSucceeded = true;
+        console.log(`[DeleteProfileListItem] Direct REST delete succeeded for ${entityType} (${targetServerId})`);
+      }
+    } catch (apiErr: any) {
+      console.warn(`[DeleteProfileListItem] Direct REST delete failed for ${entityType}, falling back to sync queue:`, apiErr);
+    }
+  }
+
+  // Remove locally from SQLite immediately (both by id and serverId)
+  try {
+    await originalDb.delete(table).where(eq(table.id, id));
+    if (serverId && serverId !== id) {
+      await originalDb.delete(table).where(eq(table.id, serverId));
+    }
+  } catch (dbErr) {
+    console.warn(`[DeleteProfileListItem] Failed to delete from local table ${entityType}:`, dbErr);
+  }
+
+  // If direct REST did NOT succeed, queue for offline sync
+  if (!directRestSucceeded) {
+    const syncItem = {
+      id: randomUUID(),
+      entityType: entityType as any,
+      entityId: targetServerId || id,
+      operation: 'delete' as const,
+      payloadJson: '{}',
+      status: 'pending' as const,
+      retryCount: 0,
+      createdAt: new Date(),
+    };
+    await originalDb.insert(syncQueue).values(syncItem);
+  } else {
+    // Purge any stale syncQueue entries for this item
+    try {
+      await originalDb.delete(syncQueue).where(eq(syncQueue.entityId, id));
+      if (serverId && serverId !== id) {
+        await originalDb.delete(syncQueue).where(eq(syncQueue.entityId, serverId));
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // Persist DB snapshot & notify UI
+  await flushDatabaseSnapshot();
+  DeviceEventEmitter.emit('profile-synced', { patientId, timestamp: Date.now() });
+
+  if (!directRestSucceeded && getToken) {
+    syncFullProfile(patientId, getToken).catch(console.warn);
+  }
+
+  return { success: true };
+}
+
+

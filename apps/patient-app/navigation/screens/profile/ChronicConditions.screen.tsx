@@ -18,7 +18,8 @@ import { usePatientId } from 'hooks/usePatientId';
 import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
-import { flushAndSyncProfile } from 'services/api/syncService';
+import { flushAndSyncProfile, deleteProfileListItem } from 'services/api/syncService';
+import { deletePatientChronicCondition } from 'services/api/patientApi';
 import { useProfileSync } from 'hooks/useProfileSync';
 
 type Form = { id: string | null; diagnosis: string; controlStatus: string; monitoringFrequency: string; };
@@ -56,7 +57,7 @@ export default function ChronicConditionsScreen() {
     sheetRef.current?.present();
   };
 
-  const onDelete = async (id: string, diagnosisName?: string) => {
+  const onDelete = async (id: string, serverId?: string | null, diagnosisName?: string) => {
     const confirmed = await dialog.confirm({
       title: 'Delete Condition',
       message: `Are you sure you want to remove ${diagnosisName || 'this condition'}?`,
@@ -65,8 +66,15 @@ export default function ChronicConditionsScreen() {
     });
     if (!confirmed) return;
     try {
-      await db.update(patientChronicConditions).set({ deletedAt: new Date(), patientId }).where(eq(patientChronicConditions.id, id));
-      await flushAndSyncProfile(patientId, getToken);
+      await deleteProfileListItem({
+        table: patientChronicConditions,
+        entityType: 'patient_chronic_conditions',
+        patientId,
+        id,
+        serverId,
+        getToken,
+        restDeleteFn: deletePatientChronicCondition,
+      });
       load();
     } catch (err: any) {
       dialog.alert('Error', err?.message || 'Failed to delete condition.');
@@ -121,7 +129,7 @@ export default function ChronicConditionsScreen() {
             title={item.diagnosis}
             subtitle={[item.controlStatus, item.monitoringFrequency].filter(Boolean).join(' · ')}
             onEdit={() => openEdit(item)}
-            onDelete={() => onDelete(item.id, item.diagnosis)}
+            onDelete={() => onDelete(item.id, item.serverId, item.diagnosis)}
           />
         ))}
         <ProfileAddButton label="Add Condition" onPress={() => { reset(EMPTY); sheetRef.current?.present(); }} />

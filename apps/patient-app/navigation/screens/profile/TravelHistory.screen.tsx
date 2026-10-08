@@ -19,7 +19,8 @@ import { usePatientId } from 'hooks/usePatientId';
 import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
-import { flushAndSyncProfile } from 'services/api/syncService';
+import { flushAndSyncProfile, deleteProfileListItem } from 'services/api/syncService';
+import { deletePatientTravelHistory } from 'services/api/patientApi';
 import { useProfileSync } from 'hooks/useProfileSync';
 
 type Form = { id: string | null; destination: string; cityProvince: string; departureDate: string; returnDate: string; purpose: string; illnessDuringAfterTravel: string; };
@@ -60,7 +61,7 @@ export default function TravelHistoryScreen() {
     sheetRef.current?.present();
   };
 
-  const onDelete = async (id: string, destinationName?: string) => {
+  const onDelete = async (id: string, serverId?: string | null, destinationName?: string) => {
     const confirmed = await dialog.confirm({
       title: 'Delete Travel Record',
       message: `Are you sure you want to remove ${destinationName || 'this trip'}?`,
@@ -69,8 +70,15 @@ export default function TravelHistoryScreen() {
     });
     if (!confirmed) return;
     try {
-      await db.update(patientTravelHistory).set({ deletedAt: new Date(), patientId }).where(eq(patientTravelHistory.id, id));
-      await flushAndSyncProfile(patientId, getToken);
+      await deleteProfileListItem({
+        table: patientTravelHistory,
+        entityType: 'patient_travel_history',
+        patientId,
+        id,
+        serverId,
+        getToken,
+        restDeleteFn: deletePatientTravelHistory,
+      });
       load();
     } catch (err: any) {
       dialog.alert('Error', err?.message || 'Failed to delete travel record.');
@@ -128,7 +136,7 @@ export default function TravelHistoryScreen() {
             title={[item.destination, item.cityProvince].filter(Boolean).join(', ')}
             subtitle={[item.departureDate, item.returnDate].filter(Boolean).join(' – ')}
             onEdit={() => openEdit(item)}
-            onDelete={() => onDelete(item.id, item.destination)}
+            onDelete={() => onDelete(item.id, item.serverId, item.destination)}
           />
         ))}
         <ProfileAddButton label="Add Trip" onPress={() => { reset(EMPTY); sheetRef.current?.present(); }} />

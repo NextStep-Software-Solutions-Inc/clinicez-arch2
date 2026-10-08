@@ -20,7 +20,8 @@ import { usePatientId } from 'hooks/usePatientId';
 import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
-import { flushAndSyncProfile } from 'services/api/syncService';
+import { flushAndSyncProfile, deleteProfileListItem } from 'services/api/syncService';
+import { deletePatientMedication } from 'services/api/patientApi';
 import { useProfileSync } from 'hooks/useProfileSync';
 
 type MedForm = {
@@ -75,7 +76,7 @@ export default function MedicationsScreen() {
     sheetRef.current?.present();
   };
 
-  const onDelete = async (id: string, drugName?: string) => {
+  const onDelete = async (id: string, serverId?: string | null, drugName?: string) => {
     const confirmed = await dialog.confirm({
       title: 'Delete Medication',
       message: `Are you sure you want to remove ${drugName || 'this medication'}?`,
@@ -84,8 +85,15 @@ export default function MedicationsScreen() {
     });
     if (!confirmed) return;
     try {
-      await db.update(patientMedications).set({ deletedAt: new Date(), patientId }).where(eq(patientMedications.id, id));
-      await flushAndSyncProfile(patientId, getToken);
+      await deleteProfileListItem({
+        table: patientMedications,
+        entityType: 'patient_medications',
+        patientId,
+        id,
+        serverId,
+        getToken,
+        restDeleteFn: deletePatientMedication,
+      });
       load();
     } catch (err: any) {
       dialog.alert('Error', err?.message || 'Failed to delete medication.');
@@ -146,7 +154,7 @@ export default function MedicationsScreen() {
             subtitle={[m.dosage, m.frequency].filter(Boolean).join(' · ')}
             badge={m.isActive ? 'Active' : 'Past'}
             onEdit={() => openEdit(m)}
-            onDelete={() => onDelete(m.id, m.drugName)}
+            onDelete={() => onDelete(m.id, m.serverId, m.drugName)}
           />
         ))}
         <ProfileAddButton label="Add Medication" onPress={() => { reset(EMPTY); sheetRef.current?.present(); }} />

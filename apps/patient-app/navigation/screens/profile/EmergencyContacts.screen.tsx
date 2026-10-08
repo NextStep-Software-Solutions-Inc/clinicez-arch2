@@ -18,7 +18,8 @@ import { usePatientId } from 'hooks/usePatientId';
 import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
-import { flushAndSyncProfile } from 'services/api/syncService';
+import { flushAndSyncProfile, deleteProfileListItem } from 'services/api/syncService';
+import { deletePatientEmergencyContact } from 'services/api/patientApi';
 import { useProfileSync } from 'hooks/useProfileSync';
 
 const MAX_CONTACTS = 3;
@@ -72,7 +73,7 @@ export default function EmergencyContactsScreen() {
     sheetRef.current?.present();
   };
 
-  const onDelete = async (id: string, contactName?: string) => {
+  const onDelete = async (id: string, serverId?: string | null, contactName?: string) => {
     const confirmed = await dialog.confirm({
       title: 'Delete Contact',
       message: `Are you sure you want to remove ${contactName || 'this contact'} from emergency contacts?`,
@@ -81,8 +82,15 @@ export default function EmergencyContactsScreen() {
     });
     if (!confirmed) return;
     try {
-      await db.update(emergencyContacts).set({ deletedAt: new Date(), patientId }).where(eq(emergencyContacts.id, id));
-      await flushAndSyncProfile(patientId, getToken);
+      await deleteProfileListItem({
+        table: emergencyContacts,
+        entityType: 'emergency_contacts',
+        patientId,
+        id,
+        serverId,
+        getToken,
+        restDeleteFn: deletePatientEmergencyContact,
+      });
       load();
     } catch (err: any) {
       dialog.alert('Error', err?.message || 'Failed to delete contact.');
@@ -143,7 +151,7 @@ export default function EmergencyContactsScreen() {
             title={c.name}
             subtitle={[c.relationship, c.phone].filter(Boolean).join(' · ')}
             onEdit={() => openEdit(c)}
-            onDelete={() => onDelete(c.id, c.name)}
+            onDelete={() => onDelete(c.id, c.serverId, c.name)}
             deleteMessage={`Remove ${c.name} from emergency contacts?`}
           />
         ))}

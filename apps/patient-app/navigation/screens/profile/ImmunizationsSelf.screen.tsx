@@ -19,7 +19,8 @@ import { usePatientId } from 'hooks/usePatientId';
 import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
-import { flushAndSyncProfile } from 'services/api/syncService';
+import { flushAndSyncProfile, deleteProfileListItem } from 'services/api/syncService';
+import { deletePatientImmunization } from 'services/api/patientApi';
 import { useProfileSync } from 'hooks/useProfileSync';
 
 type Form = { id: string | null; vaccineName: string; doseNumber: string; lotNumber: string; date: string; administeredBy: string; };
@@ -59,7 +60,7 @@ export default function ImmunizationsSelfScreen() {
     sheetRef.current?.present();
   };
 
-  const onDelete = async (id: string, vaccineName?: string) => {
+  const onDelete = async (id: string, serverId?: string | null, vaccineName?: string) => {
     const confirmed = await dialog.confirm({
       title: 'Delete Immunization',
       message: `Are you sure you want to remove ${vaccineName || 'this record'}?`,
@@ -68,8 +69,15 @@ export default function ImmunizationsSelfScreen() {
     });
     if (!confirmed) return;
     try {
-      await db.update(patientImmunizationsSelf).set({ deletedAt: new Date(), patientId }).where(eq(patientImmunizationsSelf.id, id));
-      await flushAndSyncProfile(patientId, getToken);
+      await deleteProfileListItem({
+        table: patientImmunizationsSelf,
+        entityType: 'patient_immunizations_self',
+        patientId,
+        id,
+        serverId,
+        getToken,
+        restDeleteFn: deletePatientImmunization,
+      });
       load();
     } catch (err: any) {
       dialog.alert('Error', err?.message || 'Failed to delete immunization record.');
@@ -126,7 +134,7 @@ export default function ImmunizationsSelfScreen() {
             title={item.vaccineName}
             subtitle={[item.doseNumber ? `Dose ${item.doseNumber}` : '', item.date].filter(Boolean).join(' · ')}
             onEdit={() => openEdit(item)}
-            onDelete={() => onDelete(item.id, item.vaccineName)}
+            onDelete={() => onDelete(item.id, item.serverId, item.vaccineName)}
           />
         ))}
         <ProfileAddButton label="Add Vaccine" onPress={() => { reset(EMPTY); sheetRef.current?.present(); }} />

@@ -20,7 +20,8 @@ import { usePatientId } from 'hooks/usePatientId';
 import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
-import { flushAndSyncProfile } from 'services/api/syncService';
+import { flushAndSyncProfile, deleteProfileListItem } from 'services/api/syncService';
+import { deletePatientAddress } from 'services/api/patientApi';
 import { useProfileSync } from 'hooks/useProfileSync';
 
 type AddressForm = {
@@ -94,7 +95,7 @@ export default function AddressesScreen() {
     sheetRef.current?.present();
   };
 
-  const onDelete = async (id: string) => {
+  const onDelete = async (id: string, serverId?: string | null) => {
     const confirmed = await dialog.confirm({
       title: 'Delete Address',
       message: 'Are you sure you want to remove this address?',
@@ -103,8 +104,15 @@ export default function AddressesScreen() {
     });
     if (!confirmed) return;
     try {
-      await db.update(patientAddresses).set({ deletedAt: new Date(), patientId }).where(eq(patientAddresses.id, id));
-      await flushAndSyncProfile(patientId, getToken);
+      await deleteProfileListItem({
+        table: patientAddresses,
+        entityType: 'patient_addresses',
+        patientId,
+        id,
+        serverId,
+        getToken,
+        restDeleteFn: deletePatientAddress,
+      });
       load();
     } catch (err: any) {
       dialog.alert('Error', err?.message || 'Failed to delete address.');
@@ -166,7 +174,7 @@ export default function AddressesScreen() {
             subtitle={[a.cityMunicipality, a.province].filter(Boolean).join(', ')}
             badge={a.type === 'primary' ? 'Primary' : 'Secondary'}
             onEdit={() => openEdit(a)}
-            onDelete={() => onDelete(a.id)}
+            onDelete={() => onDelete(a.id, a.serverId)}
           />
         ))}
 

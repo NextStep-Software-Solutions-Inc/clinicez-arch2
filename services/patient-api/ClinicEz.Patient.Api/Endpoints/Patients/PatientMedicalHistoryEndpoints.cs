@@ -51,6 +51,15 @@ public sealed class PatientMedicalHistoryEndpoints : IEndpoint
                 rows.Select(s => new PatientSurgicalHistoryDto(s.Id, s.ClientId, s.ProcedureName, s.SurgeonName, s.Hospital, s.SurgeryDate, s.AnesthesiaType, s.Complications, s.Notes, s.UpdatedAt)).ToList().AsReadOnly()));
         }).WithName("GetPatientSurgicalHistories").RequireAuthorization();
 
+        group.MapDelete("/surgical-histories/{itemId:guid}", async (Guid id, Guid itemId, ApplicationDbContext db, CancellationToken ct) =>
+        {
+            var row = await db.PatientSurgicalHistories.FirstOrDefaultAsync(s => (s.Id == itemId || s.ClientId == itemId) && s.PatientId == id, ct);
+            if (row is null) return Results.NotFound(ApiResponse<object>.Fail("Surgical history item not found."));
+            db.PatientSurgicalHistories.Remove(row);
+            await db.SaveChangesAsync(ct);
+            return Results.NoContent();
+        }).WithName("DeletePatientSurgicalHistory").RequireAuthorization();
+
         // ── Past Illnesses ───────────────────────────────────────────────────
         group.MapGet("/past-illnesses", async (Guid id, ApplicationDbContext db, CancellationToken ct) =>
         {
@@ -58,6 +67,15 @@ public sealed class PatientMedicalHistoryEndpoints : IEndpoint
             return Results.Ok(ApiResponse<IReadOnlyList<PatientPastIllnessDto>>.Success(
                 rows.Select(p => new PatientPastIllnessDto(p.Id, p.ClientId, p.IllnessName, p.DiagnosedAt, p.ResolvedAt, p.TreatmentReceived, p.Notes, p.UpdatedAt)).ToList().AsReadOnly()));
         }).WithName("GetPatientPastIllnesses").RequireAuthorization();
+
+        group.MapDelete("/past-illnesses/{itemId:guid}", async (Guid id, Guid itemId, ApplicationDbContext db, CancellationToken ct) =>
+        {
+            var row = await db.PatientPastIllnesses.FirstOrDefaultAsync(p => (p.Id == itemId || p.ClientId == itemId) && p.PatientId == id, ct);
+            if (row is null) return Results.NotFound(ApiResponse<object>.Fail("Past illness item not found."));
+            db.PatientPastIllnesses.Remove(row);
+            await db.SaveChangesAsync(ct);
+            return Results.NoContent();
+        }).WithName("DeletePatientPastIllness").RequireAuthorization();
 
         // ── Chronic Conditions ───────────────────────────────────────────────
         group.MapGet("/chronic-conditions", async (Guid id, ApplicationDbContext db, CancellationToken ct) =>
@@ -67,6 +85,15 @@ public sealed class PatientMedicalHistoryEndpoints : IEndpoint
                 rows.Select(c => new PatientChronicConditionDto(c.Id, c.ClientId, c.ConditionName, c.DiagnosedAt, c.IsControlled, c.TreatmentNotes, c.CurrentMedications, c.UpdatedAt)).ToList().AsReadOnly()));
         }).WithName("GetPatientChronicConditions").RequireAuthorization();
 
+        group.MapDelete("/chronic-conditions/{itemId:guid}", async (Guid id, Guid itemId, ApplicationDbContext db, CancellationToken ct) =>
+        {
+            var row = await db.PatientChronicConditions.FirstOrDefaultAsync(c => (c.Id == itemId || c.ClientId == itemId) && c.PatientId == id, ct);
+            if (row is null) return Results.NotFound(ApiResponse<object>.Fail("Chronic condition item not found."));
+            db.PatientChronicConditions.Remove(row);
+            await db.SaveChangesAsync(ct);
+            return Results.NoContent();
+        }).WithName("DeletePatientChronicCondition").RequireAuthorization();
+
         // ── Family Histories ─────────────────────────────────────────────────
         group.MapGet("/family-histories", async (Guid id, ApplicationDbContext db, CancellationToken ct) =>
         {
@@ -74,6 +101,15 @@ public sealed class PatientMedicalHistoryEndpoints : IEndpoint
             return Results.Ok(ApiResponse<IReadOnlyList<PatientFamilyHistoryDto>>.Success(
                 rows.Select(f => new PatientFamilyHistoryDto(f.Id, f.ClientId, f.Relation.ToString(), f.ConditionName, f.AgeOfOnset, f.IsDeceased, f.Notes, f.UpdatedAt)).ToList().AsReadOnly()));
         }).WithName("GetPatientFamilyHistories").RequireAuthorization();
+
+        group.MapDelete("/family-histories/{itemId:guid}", async (Guid id, Guid itemId, ApplicationDbContext db, CancellationToken ct) =>
+        {
+            var row = await db.PatientFamilyHistories.FirstOrDefaultAsync(f => (f.Id == itemId || f.ClientId == itemId) && f.PatientId == id, ct);
+            if (row is null) return Results.NotFound(ApiResponse<object>.Fail("Family history item not found."));
+            db.PatientFamilyHistories.Remove(row);
+            await db.SaveChangesAsync(ct);
+            return Results.NoContent();
+        }).WithName("DeletePatientFamilyHistory").RequireAuthorization();
 
         // ── Immunizations Self ───────────────────────────────────────────────
         group.MapGet("/immunizations", async (Guid id, ApplicationDbContext db, CancellationToken ct) =>
@@ -83,6 +119,15 @@ public sealed class PatientMedicalHistoryEndpoints : IEndpoint
                 rows.Select(i => new PatientImmunizationSelfDto(i.Id, i.ClientId, i.ImmunizationCategory?.ToString(), i.VaccineName, i.DoseNumber, i.LotNumber, i.Date, i.AdministeredBy, i.UpdatedAt)).ToList().AsReadOnly()));
         }).WithName("GetPatientImmunizations").RequireAuthorization();
 
+        group.MapDelete("/immunizations/{itemId:guid}", async (Guid id, Guid itemId, ApplicationDbContext db, CancellationToken ct) =>
+        {
+            var row = await db.PatientImmunizationsSelf.FirstOrDefaultAsync(i => (i.Id == itemId || i.ClientId == itemId) && i.PatientId == id, ct);
+            if (row is null) return Results.NotFound(ApiResponse<object>.Fail("Immunization item not found."));
+            db.PatientImmunizationsSelf.Remove(row);
+            await db.SaveChangesAsync(ct);
+            return Results.NoContent();
+        }).WithName("DeletePatientImmunization").RequireAuthorization();
+
         // ── Disabilities ─────────────────────────────────────────────────────
         group.MapGet("/disabilities", async (Guid id, ApplicationDbContext db, CancellationToken ct) =>
         {
@@ -90,6 +135,15 @@ public sealed class PatientMedicalHistoryEndpoints : IEndpoint
             return Results.Ok(ApiResponse<IReadOnlyList<PatientDisabilityDto>>.Success(
                 rows.Select(d => new PatientDisabilityDto(d.Id, d.ClientId, d.BodyPart, d.Classification, d.IsPwdCertified, d.UpdatedAt)).ToList().AsReadOnly()));
         }).WithName("GetPatientDisabilities").RequireAuthorization();
+
+        group.MapDelete("/disabilities/{itemId:guid}", async (Guid id, Guid itemId, ApplicationDbContext db, CancellationToken ct) =>
+        {
+            var row = await db.PatientDisabilities.FirstOrDefaultAsync(d => (d.Id == itemId || d.ClientId == itemId) && d.PatientId == id, ct);
+            if (row is null) return Results.NotFound(ApiResponse<object>.Fail("Disability item not found."));
+            db.PatientDisabilities.Remove(row);
+            await db.SaveChangesAsync(ct);
+            return Results.NoContent();
+        }).WithName("DeletePatientDisability").RequireAuthorization();
 
         // ── Travel Histories ─────────────────────────────────────────────────
         group.MapGet("/travel-histories", async (Guid id, ApplicationDbContext db, CancellationToken ct) =>
@@ -99,6 +153,15 @@ public sealed class PatientMedicalHistoryEndpoints : IEndpoint
                 rows.Select(t => new PatientTravelHistoryDto(t.Id, t.ClientId, t.Destination, t.CityProvince, t.DepartureDate, t.ReturnDate, t.Purpose?.ToString(), t.IllnessDuringAfterTravel, t.UpdatedAt)).ToList().AsReadOnly()));
         }).WithName("GetPatientTravelHistories").RequireAuthorization();
 
+        group.MapDelete("/travel-histories/{itemId:guid}", async (Guid id, Guid itemId, ApplicationDbContext db, CancellationToken ct) =>
+        {
+            var row = await db.PatientTravelHistories.FirstOrDefaultAsync(t => (t.Id == itemId || t.ClientId == itemId) && t.PatientId == id, ct);
+            if (row is null) return Results.NotFound(ApiResponse<object>.Fail("Travel history item not found."));
+            db.PatientTravelHistories.Remove(row);
+            await db.SaveChangesAsync(ct);
+            return Results.NoContent();
+        }).WithName("DeletePatientTravelHistory").RequireAuthorization();
+
         // ── Contraceptive Histories ──────────────────────────────────────────
         group.MapGet("/contraceptive-histories", async (Guid id, ApplicationDbContext db, CancellationToken ct) =>
         {
@@ -106,6 +169,15 @@ public sealed class PatientMedicalHistoryEndpoints : IEndpoint
             return Results.Ok(ApiResponse<IReadOnlyList<PatientContraceptiveHistoryDto>>.Success(
                 rows.Select(c => new PatientContraceptiveHistoryDto(c.Id, c.ClientId, c.Method, c.IsCurrent, c.DateStarted, c.ReasonForStopping, c.UpdatedAt)).ToList().AsReadOnly()));
         }).WithName("GetPatientContraceptiveHistories").RequireAuthorization();
+
+        group.MapDelete("/contraceptive-histories/{itemId:guid}", async (Guid id, Guid itemId, ApplicationDbContext db, CancellationToken ct) =>
+        {
+            var row = await db.PatientContraceptiveHistories.FirstOrDefaultAsync(c => (c.Id == itemId || c.ClientId == itemId) && c.PatientId == id, ct);
+            if (row is null) return Results.NotFound(ApiResponse<object>.Fail("Contraceptive history item not found."));
+            db.PatientContraceptiveHistories.Remove(row);
+            await db.SaveChangesAsync(ct);
+            return Results.NoContent();
+        }).WithName("DeletePatientContraceptiveHistory").RequireAuthorization();
 
         // ── Pregnancies ──────────────────────────────────────────────────────
         group.MapGet("/pregnancies", async (Guid id, ApplicationDbContext db, CancellationToken ct) =>
@@ -115,6 +187,15 @@ public sealed class PatientMedicalHistoryEndpoints : IEndpoint
                 rows.Select(p => new PatientPregnancyDto(p.Id, p.ClientId, p.Year, p.Outcome, p.GestationalAgeWeeks, p.DeliveryType, p.BirthWeightKg, p.Complications, p.Facility, p.UpdatedAt)).ToList().AsReadOnly()));
         }).WithName("GetPatientPregnancies").RequireAuthorization();
 
+        group.MapDelete("/pregnancies/{itemId:guid}", async (Guid id, Guid itemId, ApplicationDbContext db, CancellationToken ct) =>
+        {
+            var row = await db.PatientPregnancies.FirstOrDefaultAsync(p => (p.Id == itemId || p.ClientId == itemId) && p.PatientId == id, ct);
+            if (row is null) return Results.NotFound(ApiResponse<object>.Fail("Pregnancy item not found."));
+            db.PatientPregnancies.Remove(row);
+            await db.SaveChangesAsync(ct);
+            return Results.NoContent();
+        }).WithName("DeletePatientPregnancy").RequireAuthorization();
+
         // ── Healthcare Providers ─────────────────────────────────────────────
         group.MapGet("/healthcare-providers", async (Guid id, ApplicationDbContext db, CancellationToken ct) =>
         {
@@ -122,6 +203,15 @@ public sealed class PatientMedicalHistoryEndpoints : IEndpoint
             return Results.Ok(ApiResponse<IReadOnlyList<PatientHealthcareProviderDto>>.Success(
                 rows.Select(h => new PatientHealthcareProviderDto(h.Id, h.ClientId, h.ProviderType.ToString(), h.Name, h.Specialty, h.ClinicHospital, h.Phone, h.UpdatedAt)).ToList().AsReadOnly()));
         }).WithName("GetPatientHealthcareProviders").RequireAuthorization();
+
+        group.MapDelete("/healthcare-providers/{itemId:guid}", async (Guid id, Guid itemId, ApplicationDbContext db, CancellationToken ct) =>
+        {
+            var row = await db.PatientHealthcareProviders.FirstOrDefaultAsync(h => (h.Id == itemId || h.ClientId == itemId) && h.PatientId == id, ct);
+            if (row is null) return Results.NotFound(ApiResponse<object>.Fail("Healthcare provider item not found."));
+            db.PatientHealthcareProviders.Remove(row);
+            await db.SaveChangesAsync(ct);
+            return Results.NoContent();
+        }).WithName("DeletePatientHealthcareProvider").RequireAuthorization();
     }
 
     // ── Allergies Handlers ───────────────────────────────────────────────────

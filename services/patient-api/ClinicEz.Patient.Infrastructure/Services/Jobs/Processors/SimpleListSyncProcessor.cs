@@ -32,6 +32,10 @@ public abstract class SimpleListSyncProcessor<TEntity, TPayload> : ISyncEntityPr
         {
             if (!log.EntityId.HasValue) return SyncProcessResult.Rejected("EntityId required for Delete.");
             var toDelete = await Context.Set<TEntity>().FindAsync([log.EntityId.Value], ct);
+            if (toDelete is null)
+            {
+                toDelete = await Context.Set<TEntity>().FirstOrDefaultAsync(e => e.ClientId == log.EntityId.Value, ct);
+            }
             if (toDelete is not null) Context.Set<TEntity>().Remove(toDelete);
             return SyncProcessResult.Success();
         }

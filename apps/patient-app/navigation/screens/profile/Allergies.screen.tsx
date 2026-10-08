@@ -19,7 +19,8 @@ import { usePatientId } from 'hooks/usePatientId';
 import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
-import { flushAndSyncProfile } from 'services/api/syncService';
+import { flushAndSyncProfile, deleteProfileListItem } from 'services/api/syncService';
+import { deletePatientAllergy } from 'services/api/patientApi';
 import { useProfileSync } from 'hooks/useProfileSync';
 import ThemedBottomSheetModal from '@ui/ThemedBottomSheetModal';
 
@@ -79,7 +80,7 @@ export default function AllergiesScreen() {
     sheetRef.current?.present();
   };
 
-  const onDelete = async (id: string, allergenName?: string) => {
+  const onDelete = async (id: string, serverId?: string | null, allergenName?: string) => {
     const confirmed = await dialog.confirm({
       title: 'Delete Allergy',
       message: `Are you sure you want to remove ${allergenName || 'this allergy'}?`,
@@ -88,8 +89,15 @@ export default function AllergiesScreen() {
     });
     if (!confirmed) return;
     try {
-      await db.update(patientAllergies).set({ deletedAt: new Date(), patientId }).where(eq(patientAllergies.id, id));
-      await flushAndSyncProfile(patientId, getToken);
+      await deleteProfileListItem({
+        table: patientAllergies,
+        entityType: 'patient_allergies',
+        patientId,
+        id,
+        serverId,
+        getToken,
+        restDeleteFn: deletePatientAllergy,
+      });
       load();
     } catch (err: any) {
       dialog.alert('Error', err?.message || 'Failed to delete allergy.');
@@ -151,7 +159,7 @@ export default function AllergiesScreen() {
             subtitle={[a.severity, a.reactionType].filter(Boolean).join(' · ')}
             badge={a.isActive ? 'Active' : 'Inactive'}
             onEdit={() => openEdit(a)}
-            onDelete={() => onDelete(a.id, a.allergen)}
+            onDelete={() => onDelete(a.id, a.serverId, a.allergen)}
           />
         ))}
         <ProfileAddButton label="Add Allergy" onPress={() => { reset(EMPTY); sheetRef.current?.present(); }} />
