@@ -6,6 +6,7 @@ on:
       - development
     paths:
       - 'services/laboratory-api/**'
+      - 'deploy/laboratory-api/**'
       - 'packages/shared-dotnet/**'
       - '.github/workflows/deploy-laboratory-api-dev.yml'
   pull_request:
@@ -13,6 +14,7 @@ on:
       - development
     paths:
       - 'services/laboratory-api/**'
+      - 'deploy/laboratory-api/**'
       - 'packages/shared-dotnet/**'
       - '.github/workflows/deploy-laboratory-api-dev.yml'
   workflow_dispatch:
@@ -92,7 +94,7 @@ jobs:
           exit 1
         fi
         for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING RABBITMQ_PASSWORD LAB_JWT_SIGNING_KEY IMAGE_NAME IMAGE_TAG BASE_DOMAIN; do
-          echo "$var=$(printenv $var)" >> services/laboratory-api/.env
+          echo "$var=$(printenv $var)" >> deploy/laboratory-api/.env
         done
 
     - name: Download Docker image artifact
@@ -126,7 +128,7 @@ jobs:
         username: ${{ secrets.SSH_USER }}
         key: ${{ secrets.SSH_KEY }}
         passphrase: ${{ secrets.SSH_PASSPHRASE }}
-        source: "services/laboratory-api/docker-compose.yml,services/laboratory-api/.env"
+        source: "deploy/laboratory-api/docker-compose.yml,deploy/laboratory-api/.env"
         target: ${{ vars.DEPLOY_DIR || env.DEPLOY_DIR }}
         strip_components: 2
 

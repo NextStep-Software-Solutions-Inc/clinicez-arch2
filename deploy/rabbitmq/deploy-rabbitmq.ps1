@@ -1,10 +1,10 @@
-# deploy-rabbitmq.ps1
+# deploy/rabbitmq/deploy-rabbitmq.ps1
 # Script to copy docker-compose.yml and run RabbitMQ on the DigitalOcean droplet in a single connection.
 
 $dropletName = "ubuntu-s-1vcpu-1gb-amd-sgp1-02"
 $dropletIp = "128.199.99.124"
 $remoteDir = "/root/rabbitmq"
-$localFile = "docker-compose.yml"
+$localFile = Join-Path $PSScriptRoot "docker-compose.yml"
 $sshKey = "$env:USERPROFILE\.ssh\id_rsa"
 
 Write-Host "=============================================" -ForegroundColor Cyan
@@ -13,7 +13,7 @@ Write-Host "Droplet: $dropletName ($dropletIp)" -ForegroundColor Cyan
 Write-Host "=============================================" -ForegroundColor Cyan
 
 if (-not (Test-Path $localFile)) {
-    Write-Error "Could not find $localFile in the current directory."
+    Write-Error "Could not find $localFile."
     exit 1
 }
 

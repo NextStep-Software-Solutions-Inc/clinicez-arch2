@@ -1,9 +1,9 @@
 # On-premise Clinic web: the app served by nginx next to the clinic's own API, reachable by every phone, tablet and
 # workstation on the LAN. Nothing here needs the internet.
 #
-#   1. Start the clinic API (services/clinic-api/docker-compose.yml) on a Docker network.
+#   1. Start the clinic API (deploy/clinic-api/docker-compose.yml) on a Docker network.
 #   2. Set CLINIC_NETWORK to that network's name and CLINIC_API_UPSTREAM to the API's address on it.
-#   3. docker compose -f apps/clinic-app/deploy/docker-compose.onprem.yml up -d
+#   3. cp .env.example .env, fill it in, then: docker compose -f deploy/clinic-web/docker-compose.yml up -d
 #
 # Native devices do not use this container: they connect straight to the API address entered at first launch.
 

@@ -1,7 +1,7 @@
-name: Publish Clinic Web Image (On-Prem)
+name: Publish Clinic Web Image
 
 # Builds the clinic web app into a self-contained nginx image for clinics that host everything on their own LAN
-# (deploy/docker-compose.onprem.yml). The image carries no environment-specific configuration: the API address and
+# (deploy/clinic-web/docker-compose.yml). The image carries no environment-specific configuration: the API address and
 # options are read from the container's environment at start.
 
 on:

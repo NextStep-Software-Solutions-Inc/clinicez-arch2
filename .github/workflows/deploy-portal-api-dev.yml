@@ -6,6 +6,7 @@ on:
       - development
     paths:
       - 'services/portal-api/**'
+      - 'deploy/portal-api/**'
       - 'packages/shared-dotnet/**'
       - '.github/workflows/deploy-portal-api-dev.yml'
   pull_request:
@@ -13,6 +14,7 @@ on:
       - development
     paths:
       - 'services/portal-api/**'
+      - 'deploy/portal-api/**'
       - 'packages/shared-dotnet/**'
       - '.github/workflows/deploy-portal-api-dev.yml'
   workflow_dispatch:
@@ -129,7 +131,7 @@ jobs:
           exit 1
         fi
         for var in ASPNETCORE_ENVIRONMENT ENVIRONMENT_LABEL CONNECTION_STRING CLERK_SECRET_KEY XENDIT_SECRET_KEY XENDIT_CALLBACK_TOKEN IMAGE_NAME IMAGE_TAG CONTAINER_NAME RABBITMQ_PASSWORD INTERNAL_API_KEY BASE_DOMAIN; do
-          echo "$var=$(printenv $var)" >> services/portal-api/.env
+          echo "$var=$(printenv $var)" >> deploy/portal-api/.env
         done
 
     - name: Download Docker image artifact
@@ -163,7 +165,7 @@ jobs:
         username: ${{ secrets.SSH_USER }}
         key: ${{ secrets.SSH_KEY }}
         passphrase: ${{ secrets.SSH_PASSPHRASE }}
-        source: "services/portal-api/docker-compose.yml,services/portal-api/.env"
+        source: "deploy/portal-api/docker-compose.yml,deploy/portal-api/.env"
         target: ${{ vars.DEPLOY_DIR || env.DEPLOY_DIR }}
         strip_components: 2
 

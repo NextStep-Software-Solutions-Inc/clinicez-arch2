@@ -6,6 +6,7 @@ on:
       - development
     paths:
       - 'services/patient-api/**'
+      - 'deploy/patient-api/**'
       - 'packages/shared-dotnet/**'
       - '.github/workflows/deploy-patient-api-dev.yml'
   pull_request:
@@ -13,6 +14,7 @@ on:
       - development
     paths:
       - 'services/patient-api/**'
+      - 'deploy/patient-api/**'
       - 'packages/shared-dotnet/**'
       - '.github/workflows/deploy-patient-api-dev.yml'
   workflow_dispatch:
@@ -102,7 +104,7 @@ jobs:
             exit 1
           fi
           for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING REDIS_CONNECTION_STRING CLERK_AUTHORITY CLERK_AUDIENCE CLERK_WEBHOOK_SECRET R2_ACCOUNT_ID R2_BUCKET_NAME R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_PUBLIC_URL HANGFIRE_DASHBOARD_PASSWORD FIREBASE_SERVICE_ACCOUNT_JSON IMAGE_NAME IMAGE_TAG RABBITMQ_PASSWORD BASE_DOMAIN; do
-            echo "$var=$(printenv $var)" >> services/patient-api/.env
+            echo "$var=$(printenv $var)" >> deploy/patient-api/.env
           done
 
       - name: Download Docker image artifact
@@ -136,7 +138,7 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           passphrase: ${{ secrets.SSH_PASSPHRASE }}
-          source: "services/patient-api/docker-compose.yml,services/patient-api/.env"
+          source: "deploy/patient-api/docker-compose.yml,deploy/patient-api/.env"
           target: ${{ vars.DEPLOY_DIR || env.DEPLOY_DIR }}
           strip_components: 2
 

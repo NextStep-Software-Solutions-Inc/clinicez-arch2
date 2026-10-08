@@ -6,6 +6,7 @@ on:
       - development
     paths:
       - 'services/philhealth-proxy/**'
+      - 'deploy/philhealth-proxy/**'
       - 'packages/shared-dotnet/**'
       - '.github/workflows/deploy-philhealth-proxy-dev.yml'
   pull_request:
@@ -13,6 +14,7 @@ on:
       - development
     paths:
       - 'services/philhealth-proxy/**'
+      - 'deploy/philhealth-proxy/**'
       - 'packages/shared-dotnet/**'
       - '.github/workflows/deploy-philhealth-proxy-dev.yml'
   workflow_dispatch:
@@ -84,7 +86,7 @@ jobs:
         IMAGE_TAG: ${{ env.IMAGE_TAG }}
       run: |
         for var in ASPNETCORE_ENVIRONMENT IMAGE_NAME IMAGE_TAG; do
-          echo "$var=$(printenv $var)" >> services/philhealth-proxy/.env
+          echo "$var=$(printenv $var)" >> deploy/philhealth-proxy/.env
         done
 
     - name: Download Docker image artifact
@@ -118,7 +120,7 @@ jobs:
         username: ${{ secrets.SSH_USER }}
         key: ${{ secrets.SSH_KEY }}
         passphrase: ${{ secrets.SSH_PASSPHRASE }}
-        source: "services/philhealth-proxy/docker-compose.yml,services/philhealth-proxy/.env"
+        source: "deploy/philhealth-proxy/docker-compose.yml,deploy/philhealth-proxy/.env"
         target: ${{ vars.DEPLOY_DIR || env.DEPLOY_DIR }}
         strip_components: 2
 

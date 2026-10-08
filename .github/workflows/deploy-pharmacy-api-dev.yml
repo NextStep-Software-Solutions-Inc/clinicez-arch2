@@ -6,6 +6,7 @@ on:
       - development
     paths:
       - 'services/pharmacy-api/**'
+      - 'deploy/pharmacy-api/**'
       - 'packages/shared-dotnet/**'
       - '.github/workflows/deploy-pharmacy-api-dev.yml'
   pull_request:
@@ -13,6 +14,7 @@ on:
       - development
     paths:
       - 'services/pharmacy-api/**'
+      - 'deploy/pharmacy-api/**'
       - 'packages/shared-dotnet/**'
       - '.github/workflows/deploy-pharmacy-api-dev.yml'
   workflow_dispatch:
@@ -94,7 +96,7 @@ jobs:
           exit 1
         fi
         for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING RABBITMQ_PASSWORD INTERNAL_API_KEY INTERNAL_API_KEY_PREVIOUS PHARMACY_JWT_SIGNING_KEY IMAGE_NAME IMAGE_TAG BASE_DOMAIN; do
-          echo "$var=$(printenv $var)" >> services/pharmacy-api/.env
+          echo "$var=$(printenv $var)" >> deploy/pharmacy-api/.env
         done
 
     - name: Download Docker image artifact
@@ -128,7 +130,7 @@ jobs:
         username: ${{ secrets.SSH_USER }}
         key: ${{ secrets.SSH_KEY }}
         passphrase: ${{ secrets.SSH_PASSPHRASE }}
-        source: "services/pharmacy-api/docker-compose.yml,services/pharmacy-api/.env"
+        source: "deploy/pharmacy-api/docker-compose.yml,deploy/pharmacy-api/.env"
         target: ${{ vars.DEPLOY_DIR || env.DEPLOY_DIR }}
         strip_components: 2
 

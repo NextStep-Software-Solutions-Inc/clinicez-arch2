@@ -111,7 +111,7 @@ bun run web
 ## 🐳 Deployment & Infrastructure
 
 - **Server Stacks**: Stored under `/opt/docker-stack/clinicez-<service>/` on the target VPS.
-- **Compose Files**: Each service uses a clean, standard `docker-compose.yml`.
+- **Compose Files**: All compose files live under [`deploy/`](deploy/README.md), one folder per stack, each a standard `docker-compose.yml`.
 - **Zero Exposed Host Ports**: Containers communicate through internal Docker networks:
   - `npm-default`: Incoming requests reverse-proxied by Nginx Proxy Manager (NPM).
   - `data-network`: Internal communication with PostgreSQL (`postgres:5432`), RabbitMQ (`rabbitmq:5672`), and Redis (`redis:6379`).

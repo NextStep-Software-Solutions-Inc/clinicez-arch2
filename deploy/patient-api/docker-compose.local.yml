@@ -3,8 +3,8 @@ services:
   # ─── Patient App API ──────────────────────────────────────────────────────────
   patientapp-api:
     build:
-      context: .
-      dockerfile: services/patient-api/Dockerfile
+      context: ../../services
+      dockerfile: PatientApp/Dockerfile
     container_name: patientapp-api
     ports:
       - "5100:8080"
@@ -14,6 +14,7 @@ services:
       - ConnectionStrings__Redis=redis:6379
       - Clerk__Authority=${CLERK_AUTHORITY:-https://amazing-mosquito-75.clerk.accounts.dev}
       - Clerk__Audience=${CLERK_AUDIENCE:-}
+      - Clerk__WebhookSecret=${CLERK_WEBHOOK_SECRET}
       - R2__AccountId=${R2_ACCOUNT_ID}
       - R2__BucketName=${R2_BUCKET_NAME}
       - R2__AccessKeyId=${R2_ACCESS_KEY_ID}

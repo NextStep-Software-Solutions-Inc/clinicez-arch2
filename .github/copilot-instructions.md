@@ -81,7 +81,7 @@ clinicez/
 ## 🐳 Containerization & Deployment Conventions
 
 - **Target Server Directory**: `/opt/docker-stack/clinicez-<service>/`.
-- **Compose Files**: Each service uses standard `docker-compose.yml` (no `.deploy.yml` suffix).
+- **Compose Files**: All compose files live under `deploy/<stack>/docker-compose.yml` (no `.deploy.yml` suffix); see `deploy/README.md`.
 - **Networks**: Services connect to two external networks:
   - `npm-default`: Ingress via Nginx Proxy Manager (routes to container port `8080` without host port exposure).
   - `data-network`: Internal access to `postgres`, `rabbitmq`, and `redis`.
