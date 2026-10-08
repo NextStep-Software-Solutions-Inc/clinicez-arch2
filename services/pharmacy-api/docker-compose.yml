@@ -26,6 +26,8 @@ services:
       - RabbitMq__Password=${RABBITMQ_PASSWORD}
       - Facility__BaseDomain=${BASE_DOMAIN:?BASE_DOMAIN must be set}
       - Internal__ApiKey=${INTERNAL_API_KEY:?INTERNAL_API_KEY must be set}
+      # Only set during a key rotation: the old key stays accepted until callers are switched, then remove it.
+      - Internal__PreviousApiKey=${INTERNAL_API_KEY_PREVIOUS:-}
       - Jwt__SigningKey=${PHARMACY_JWT_SIGNING_KEY:-}
       - Jwt__KeyDirectory=/app/keys
     volumes:

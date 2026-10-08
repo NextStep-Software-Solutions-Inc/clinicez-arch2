@@ -59,6 +59,7 @@ app.UseExceptionHandler(); // Use our global exception handler
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseInternalServiceGuard(); // internal-key principal is default-denied except on permission-guarded endpoints
 app.UseMiddleware<PharmacyScopeMiddleware>();
 app.UseHangfireDashboard(); // Add Hangfire Dashboard endpoint
 

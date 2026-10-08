@@ -26,6 +26,8 @@ services:
       - RabbitMq__Password=${RABBITMQ_PASSWORD}
       - Facility__BaseDomain=${BASE_DOMAIN:?BASE_DOMAIN must be set}
       - Internal__ApiKey=${INTERNAL_API_KEY:?INTERNAL_API_KEY must be set}
+      # Only set during a key rotation: the old key stays accepted until callers are switched, then remove it.
+      - Internal__PreviousApiKey=${INTERNAL_API_KEY_PREVIOUS:-}
       - Services__PharmacyApiUrl=${PHARMACY_API_URL:-http://pharmacy-api:8080}
       # Pairwise key for the pharmacy server's Internal__ApiKey. Empty falls back to Internal__ApiKey.
       - Services__PharmacyApiKey=${PHARMACY_API_KEY:-}

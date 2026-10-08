@@ -13,7 +13,7 @@ namespace ClinicEz.Laboratory.Api.Authorization;
 /// Authentication itself is enforced earlier by the secure-by-default fallback policy.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true)]
-public sealed class HasPermissionAttribute : Attribute, IAsyncActionFilter
+public sealed class HasPermissionAttribute : Attribute, IAsyncActionFilter, ClinicEz.Shared.LocalAuth.IPermissionGuarded
 {
     public string Permission { get; }
 

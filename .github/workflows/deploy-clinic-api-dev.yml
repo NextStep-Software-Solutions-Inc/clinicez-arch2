@@ -83,6 +83,7 @@ jobs:
         CONNECTION_STRING: ${{ secrets.CLINIC_DB_CONNECTION_STRING }}
         RABBITMQ_PASSWORD: ${{ secrets.RABBITMQ_PASSWORD }}
         INTERNAL_API_KEY: ${{ secrets.INTERNAL_API_KEY }}
+        INTERNAL_API_KEY_PREVIOUS: ${{ secrets.INTERNAL_API_KEY_PREVIOUS }}
         PHARMACY_API_URL: ${{ vars.PHARMACY_API_URL }}
         PHARMACY_API_KEY: ${{ secrets.PHARMACY_API_KEY }}
         CLINIC_JWT_SIGNING_KEY: ${{ secrets.CLINIC_JWT_SIGNING_KEY }}
@@ -94,7 +95,7 @@ jobs:
           echo "::error::BASE_DOMAIN is not configured. Set it as a GitHub secret or variable (Settings -> Secrets and variables -> Actions)."
           exit 1
         fi
-        for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING RABBITMQ_PASSWORD INTERNAL_API_KEY PHARMACY_API_URL PHARMACY_API_KEY CLINIC_JWT_SIGNING_KEY IMAGE_NAME IMAGE_TAG BASE_DOMAIN; do
+        for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING RABBITMQ_PASSWORD INTERNAL_API_KEY INTERNAL_API_KEY_PREVIOUS PHARMACY_API_URL PHARMACY_API_KEY CLINIC_JWT_SIGNING_KEY IMAGE_NAME IMAGE_TAG BASE_DOMAIN; do
           echo "$var=$(printenv $var)" >> services/clinic-api/.env
         done
 

@@ -45,4 +45,10 @@ public sealed class InternalKeyOptions
 
     /// <summary>Shared secret presented in the <c>X-Internal-Key</c> header by trusted internal services.</summary>
     public string? ApiKey { get; set; }
+
+    /// <summary>
+    /// Optional previous key accepted alongside <see cref="ApiKey"/> during a rotation window, so the receiver can be switched to the new key
+    /// before callers are, with no downtime. Leave empty outside a rotation.
+    /// </summary>
+    public string? PreviousApiKey { get; set; }
 }

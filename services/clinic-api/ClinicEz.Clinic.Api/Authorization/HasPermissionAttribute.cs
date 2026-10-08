@@ -9,7 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace ClinicEz.Clinic.Api.Authorization;
 
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true)]
-public sealed class HasPermissionAttribute : Attribute, IAsyncActionFilter
+public sealed class HasPermissionAttribute : Attribute, IAsyncActionFilter, ClinicEz.Shared.LocalAuth.IPermissionGuarded
 {
     public string Permission { get; }
 

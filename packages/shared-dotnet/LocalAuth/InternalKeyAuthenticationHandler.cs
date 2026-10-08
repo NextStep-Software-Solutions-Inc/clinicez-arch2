@@ -49,8 +49,13 @@ public sealed class InternalKeyAuthenticationHandler : AuthenticationHandler<Aut
         }
 
         var a = SHA256.HashData(Encoding.UTF8.GetBytes(provided.ToString()));
-        var b = SHA256.HashData(Encoding.UTF8.GetBytes(expected));
-        if (!CryptographicOperations.FixedTimeEquals(a, b))
+        var matches = FixedTimeMatch(a, expected);
+        if (!string.IsNullOrWhiteSpace(_internalOptions.PreviousApiKey))
+        {
+            matches |= FixedTimeMatch(a, _internalOptions.PreviousApiKey!);
+        }
+
+        if (!matches)
         {
             return Task.FromResult(AuthenticateResult.Fail("Invalid internal service key."));
         }
@@ -61,4 +66,7 @@ public sealed class InternalKeyAuthenticationHandler : AuthenticationHandler<Aut
         var ticket = new AuthenticationTicket(new ClaimsPrincipal(identity), FacilityAuthSchemes.Internal);
         return Task.FromResult(AuthenticateResult.Success(ticket));
     }
+
+    private static bool FixedTimeMatch(byte[] providedHash, string key) =>
+        CryptographicOperations.FixedTimeEquals(providedHash, SHA256.HashData(Encoding.UTF8.GetBytes(key)));
 }

@@ -14,7 +14,7 @@ namespace ClinicEz.Pharmacy.Api.Authorization;
 /// service principal only holds the GAMOT permission set (see <c>PharmacyPermissions.InternalService</c>).
 /// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true)]
-public sealed class HasPermissionAttribute : Attribute, IAsyncActionFilter
+public sealed class HasPermissionAttribute : Attribute, IAsyncActionFilter, ClinicEz.Shared.LocalAuth.IPermissionGuarded
 {
     public string Permission { get; }
 
