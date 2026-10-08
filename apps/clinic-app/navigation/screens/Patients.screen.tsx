@@ -35,6 +35,7 @@ import {
   ClinicCustomFieldDefinition,
 } from '../../services/clinicService';
 import { offlineSyncService } from '../../services/offlineSyncService';
+import { getSetting } from '../../services/runtimeConfig';
 import { shouldQueueOffline } from '../../services/outboxPolicy';
 
 const humanizeKey = (key: string) => {
@@ -394,7 +395,7 @@ export default function PatientsScreen() {
       externalLabName,
       documentType: externalFileType,
       notes: externalNotes,
-      documentUrl: [process.env.EXPO_PUBLIC_STORAGE_PUBLIC_URL, 'external-labs', 'lab-result.pdf'].filter(Boolean).join('/'),
+      documentUrl: [getSetting('EXPO_PUBLIC_STORAGE_PUBLIC_URL'), 'external-labs', 'lab-result.pdf'].filter(Boolean).join('/'),
       uploadedBy: currentName || undefined
     });
     setAttaching(false);

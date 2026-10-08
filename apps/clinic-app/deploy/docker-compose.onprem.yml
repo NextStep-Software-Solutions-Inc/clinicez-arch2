@@ -17,12 +17,17 @@ services:
     ports:
       - "${CLINIC_WEB_PORT:-8080}:80"
     environment:
+      # Where nginx forwards /api/ (infrastructure for this container; not an app setting).
       CLINIC_API_UPSTREAM: ${CLINIC_API_UPSTREAM:?CLINIC_API_UPSTREAM must be set, e.g. http://clinic-api:8080}
-      # CLINIC_* and the Vercel-style EXPO_PUBLIC_* names are interchangeable; an unset value falls back to the default ("/" and 12).
-      CLINIC_PUBLIC_API_URL: ${CLINIC_PUBLIC_API_URL:-}
+      # App settings: exactly the same EXPO_PUBLIC_* variables as the Vercel build. Only the ones you set are published.
+      # EXPO_PUBLIC_CLINIC_API_URL defaults to "/" here (same origin; nginx proxies /api).
       EXPO_PUBLIC_CLINIC_API_URL: ${EXPO_PUBLIC_CLINIC_API_URL:-}
-      CLINIC_WORKSPACE_REQUIRED: ${CLINIC_WORKSPACE_REQUIRED:-false}
-      CLINIC_OFFLINE_GRACE_HOURS: ${CLINIC_OFFLINE_GRACE_HOURS:-}
+      EXPO_PUBLIC_BASE_DOMAIN: ${EXPO_PUBLIC_BASE_DOMAIN:-}
+      EXPO_PUBLIC_SERVICE_SUBDOMAIN: ${EXPO_PUBLIC_SERVICE_SUBDOMAIN:-}
+      EXPO_PUBLIC_SERVICE_SUBDOMAINS: ${EXPO_PUBLIC_SERVICE_SUBDOMAINS:-}
+      EXPO_PUBLIC_API_URL_TEMPLATE: ${EXPO_PUBLIC_API_URL_TEMPLATE:-}
+      EXPO_PUBLIC_PORTAL_URL: ${EXPO_PUBLIC_PORTAL_URL:-}
+      EXPO_PUBLIC_STORAGE_PUBLIC_URL: ${EXPO_PUBLIC_STORAGE_PUBLIC_URL:-}
       EXPO_PUBLIC_OFFLINE_GRACE_HOURS: ${EXPO_PUBLIC_OFFLINE_GRACE_HOURS:-}
     networks:
       - clinic

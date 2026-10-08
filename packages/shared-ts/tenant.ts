@@ -45,7 +45,19 @@ declare const process: { env: Record<string, string | undefined> };
  * Configure via `EXPO_PUBLIC_SERVICE_SUBDOMAINS` (Expo apps) or `NEXT_PUBLIC_SERVICE_SUBDOMAINS` (Next.js).
  * Each read must stay a literal `process.env.NAME` expression so bundlers can inline the value.
  */
+let serviceSubdomainsOverride: string | null = null;
+
+/**
+ * Lets an app apply a value that is only known at run time (for example the on-premise web container's published
+ * configuration) ahead of the build-time EXPO_PUBLIC_SERVICE_SUBDOMAINS. Pass 
+ull to clear it.
+ */
+export function setServiceSubdomainsOverride(raw: string | null | undefined): void {
+  serviceSubdomainsOverride = raw && raw.trim() ? raw : null;
+}
+
 function readConfiguredServiceSubdomains(): string | undefined {
+  if (serviceSubdomainsOverride) return serviceSubdomainsOverride;
   let value: string | undefined;
   try {
     value = process.env.EXPO_PUBLIC_SERVICE_SUBDOMAINS;

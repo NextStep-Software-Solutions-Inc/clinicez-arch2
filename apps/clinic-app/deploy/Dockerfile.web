@@ -5,13 +5,11 @@
 # Build from the repository root (the app is a bun workspace member):
 #   docker build -f apps/clinic-app/deploy/Dockerfile.web -t clinic-web .
 #
-# Runtime configuration (environment):
-#   CLINIC_API_UPSTREAM        required  where nginx forwards /api/, e.g. http://clinic-api:8080
-#   CLINIC_PUBLIC_API_URL      optional  apiUrl published in config.json ("/" = same origin, the default);
-#                                        EXPO_PUBLIC_CLINIC_API_URL is accepted as an alias (same name as on Vercel)
-#   CLINIC_WORKSPACE_REQUIRED  optional  "true" only for multi-clinic hosting (default false)
-#   CLINIC_OFFLINE_GRACE_HOURS optional  offline grace period for native devices (default 12);
-#                                        EXPO_PUBLIC_OFFLINE_GRACE_HOURS is accepted as an alias
+# Runtime configuration (environment) - the SAME EXPO_PUBLIC_* variables as the Vercel build, published in /config.json:
+#   CLINIC_API_UPSTREAM             required  where nginx forwards /api/, e.g. http://clinic-api:8080 (infrastructure only)
+#   EXPO_PUBLIC_CLINIC_API_URL      optional  default "/" = same origin (nginx proxies /api)
+#   EXPO_PUBLIC_BASE_DOMAIN, EXPO_PUBLIC_SERVICE_SUBDOMAIN(S), EXPO_PUBLIC_API_URL_TEMPLATE, EXPO_PUBLIC_PORTAL_URL,
+#   EXPO_PUBLIC_STORAGE_PUBLIC_URL, EXPO_PUBLIC_OFFLINE_GRACE_HOURS   optional, exactly as in apps/clinic-app/.env.example
 
 FROM oven/bun:1 AS build
 WORKDIR /repo

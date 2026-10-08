@@ -14,7 +14,7 @@ import Input from '@ui/Input';
 import Badge, { BadgeVariant } from '@ui/Badge';
 import Icon from '@ui/Icon';
 import { clinicService, FacilityLicenseStatus } from '../services/clinicService';
-import { getOfflineGraceHours, isWorkspaceRequired } from '../services/runtimeConfig';
+import { getOfflineGraceHours, getServiceSubdomain, getSetting, isWorkspaceRequired } from '../services/runtimeConfig';
 import { getDeviceItem, setDeviceItem } from '../utils/deviceStorage';
 import {
   resolveTenantContext,
@@ -26,9 +26,6 @@ import {
   parseServiceHost,
   buildServiceHostRegex,
 } from '@shared/safe';
-
-// Subdomain this app is served from (e.g. <workspace>.<service>.<baseDomain>); configurable per deployment.
-const SERVICE_SUBDOMAIN = (process.env.EXPO_PUBLIC_SERVICE_SUBDOMAIN || 'clinic').trim().toLowerCase();
 
 /** Builds `<protocol>//<host>[:port]` keeping the current scheme and port (web only). */
 const buildHostUrl = (host: string): string => {
@@ -163,9 +160,9 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
     // If on web and on wildcard root domain, navigate to dedicated tenant subdomain
     if (typeof window !== 'undefined' && window.location) {
       const host = window.location.hostname.toLowerCase();
-      const rootParts = parseServiceHost(host, SERVICE_SUBDOMAIN);
+      const rootParts = parseServiceHost(host, getServiceSubdomain());
       if (rootParts && !rootParts.facility) {
-        window.location.href = buildHostUrl(`${trimmed}.${SERVICE_SUBDOMAIN}.${rootParts.baseDomain}`);
+        window.location.href = buildHostUrl(`${trimmed}.${getServiceSubdomain()}.${rootParts.baseDomain}`);
         return;
       }
     }
@@ -183,9 +180,9 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
     // If on a tenant subdomain on web, return to root domain
     if (typeof window !== 'undefined' && window.location) {
       const host = window.location.hostname.toLowerCase();
-      const tenantParts = parseServiceHost(host, SERVICE_SUBDOMAIN);
+      const tenantParts = parseServiceHost(host, getServiceSubdomain());
       if (tenantParts && tenantParts.facility) {
-        window.location.href = buildHostUrl(`${SERVICE_SUBDOMAIN}.${tenantParts.baseDomain}`);
+        window.location.href = buildHostUrl(`${getServiceSubdomain()}.${tenantParts.baseDomain}`);
         return;
       }
     }
@@ -296,8 +293,9 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
   // 3. Workspace Not Found (404) Screen
   if (isNotFound) {
     const resolvePortalUrl = () => {
-      if (process.env.EXPO_PUBLIC_PORTAL_URL) {
-        return process.env.EXPO_PUBLIC_PORTAL_URL;
+      const portalUrl = getSetting('EXPO_PUBLIC_PORTAL_URL');
+      if (portalUrl) {
+        return portalUrl;
       }
       if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.hostname) {
         const host = window.location.hostname;

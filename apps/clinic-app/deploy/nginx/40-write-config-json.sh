@@ -1,29 +1,35 @@
 #!/bin/sh
 # Writes /config.json from the container's environment so the same image works on any clinic LAN.
 # Runs automatically at start (nginx image runs /docker-entrypoint.d/*.sh).
+#
+# The settings are the SAME EXPO_PUBLIC_* variables used by the Vercel build (see apps/clinic-app/.env.example); the app
+# reads them from this file at run time instead of from the bundle. Only variables that are set are published.
+# This image proxies /api itself, so EXPO_PUBLIC_CLINIC_API_URL defaults to "/" (same origin).
 set -eu
 
-# The EXPO_PUBLIC_* names are the same ones used for the Vercel build, accepted here so both deployments share one set of variables.
-API_URL="${CLINIC_PUBLIC_API_URL:-${EXPO_PUBLIC_CLINIC_API_URL:-/}}"
-WORKSPACE_REQUIRED="${CLINIC_WORKSPACE_REQUIRED:-false}"
-GRACE_HOURS="${CLINIC_OFFLINE_GRACE_HOURS:-${EXPO_PUBLIC_OFFLINE_GRACE_HOURS:-12}}"
+EXPO_PUBLIC_CLINIC_API_URL="${EXPO_PUBLIC_CLINIC_API_URL:-/}"
 
-case "$WORKSPACE_REQUIRED" in
-  true|false) ;;
-  *) echo "CLINIC_WORKSPACE_REQUIRED must be true or false" >&2; exit 1 ;;
-esac
-case "$GRACE_HOURS" in
-  ''|*[!0-9]*) echo "CLINIC_OFFLINE_GRACE_HOURS must be a whole number" >&2; exit 1 ;;
-esac
-case "$API_URL" in
-  *'"'*|*'\'*) echo "CLINIC_PUBLIC_API_URL must not contain quotes or backslashes" >&2; exit 1 ;;
-esac
+NAMES="EXPO_PUBLIC_CLINIC_API_URL EXPO_PUBLIC_BASE_DOMAIN EXPO_PUBLIC_SERVICE_SUBDOMAIN EXPO_PUBLIC_SERVICE_SUBDOMAINS EXPO_PUBLIC_API_URL_TEMPLATE EXPO_PUBLIC_PORTAL_URL EXPO_PUBLIC_STORAGE_PUBLIC_URL EXPO_PUBLIC_OFFLINE_GRACE_HOURS"
 
-cat > /usr/share/nginx/html/config.json <<EOF
-{
-  "apiUrl": "${API_URL}",
-  "workspaceRequired": ${WORKSPACE_REQUIRED},
-  "offlineGraceHours": ${GRACE_HOURS}
-}
-EOF
-echo "clinic-web: wrote config.json (apiUrl=${API_URL})"
+body=""
+for name in $NAMES; do
+  eval "value=\${$name:-}"
+  [ -n "$value" ] || continue
+  case "$value" in
+    *'"'*|*'\'*) echo "$name must not contain quotes or backslashes" >&2; exit 1 ;;
+  esac
+  case "$value" in
+    *[![:print:]]*) echo "$name must not contain control characters" >&2; exit 1 ;;
+  esac
+  if [ "$name" = "EXPO_PUBLIC_OFFLINE_GRACE_HOURS" ]; then
+    case "$value" in
+      *[!0-9]*) echo "EXPO_PUBLIC_OFFLINE_GRACE_HOURS must be a whole number" >&2; exit 1 ;;
+    esac
+  fi
+  if [ -n "$body" ]; then body="$body,
+"; fi
+  body="$body  \"$name\": \"$value\""
+done
+
+printf '{\n%s\n}\n' "$body" > /usr/share/nginx/html/config.json
+echo "clinic-web: wrote config.json (EXPO_PUBLIC_CLINIC_API_URL=${EXPO_PUBLIC_CLINIC_API_URL})"
