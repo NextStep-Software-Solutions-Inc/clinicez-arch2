@@ -62,6 +62,7 @@ const BLOOD_TYPE_OPTIONS = [
   { label: 'B+', value: 'B+' }, { label: 'B-', value: 'B-' },
   { label: 'AB+', value: 'AB+' }, { label: 'AB-', value: 'AB-' },
   { label: 'O+', value: 'O+' }, { label: 'O-', value: 'O-' },
+  { label: 'Unknown', value: 'Unknown' },
 ];
 
 const EDUCATION_OPTIONS = [
@@ -110,9 +111,9 @@ export default function PersonalDemographicsScreen() {
       try {
         const row = await db.query.patients.findFirst({ where: eq(patients.id, patientId) });
         if (row && isMounted) {
-          const localFirst = (!row.firstName || row.firstName === 'Unknown' || row.firstName === 'Clinic') ? (user?.firstName || (row.firstName === 'Unknown' || row.firstName === 'Clinic' ? '' : row.firstName)) : row.firstName;
-          const localLast = (!row.lastName || row.lastName === 'Unknown' || row.lastName === 'User') ? (user?.lastName || (row.lastName === 'Unknown' || row.lastName === 'User' ? '' : row.lastName)) : row.lastName;
-          const rawBlood = row.bloodType === 'Unknown' ? '' : (row.bloodType ?? '');
+          const localFirst = row.firstName || user?.firstName || '';
+          const localLast = row.lastName || user?.lastName || '';
+          const rawBlood = fromBackendBloodType(row.bloodType) ?? (row.bloodType ?? '');
           reset({
             firstName: localFirst,
             middleName: row.middleName ?? '',
@@ -158,10 +159,9 @@ export default function PersonalDemographicsScreen() {
 
           // Update form if user has not started modifying it
           if (!isDirtyRef.current) {
-            const validFirst = (!serverData.firstName || serverData.firstName === 'Unknown' || serverData.firstName === 'Clinic') ? (user?.firstName || (serverData.firstName === 'Unknown' || serverData.firstName === 'Clinic' ? '' : serverData.firstName)) : serverData.firstName;
-            const validLast = (!serverData.lastName || serverData.lastName === 'Unknown' || serverData.lastName === 'User') ? (user?.lastName || (serverData.lastName === 'Unknown' || serverData.lastName === 'User' ? '' : serverData.lastName)) : serverData.lastName;
-            const parsedBlood = fromBackendBloodType(serverData.bloodType);
-            const bloodVal = (parsedBlood === 'Unknown' ? '' : (parsedBlood ?? ''));
+            const validFirst = serverData.firstName || user?.firstName || '';
+            const validLast = serverData.lastName || user?.lastName || '';
+            const bloodVal = fromBackendBloodType(serverData.bloodType) ?? '';
             reset({
               firstName: validFirst,
               middleName: serverData.middleName ?? '',

@@ -1,6 +1,7 @@
 import { syncQueue } from './schema/syncQueue';
 import { randomUUID } from 'expo-crypto';
 import { toBackendBloodType } from '../services/api/patientApi';
+import { getTableName } from 'drizzle-orm';
 
 export const TABLE_TO_ENTITY_TYPE: Record<string, string> = {
   patients: 'patient',
@@ -28,6 +29,26 @@ export const TABLE_TO_ENTITY_TYPE: Record<string, string> = {
   patient_ncd_questionnaire: 'patient_ncd_questionnaire',
 };
 
+export const SINGLETON_TABLES = new Set([
+  'patient_social_history',
+  'patient_occupation',
+  'patient_dental_vision',
+  'patient_mental_health_profile',
+  'patient_male_reproductive',
+  'patient_obstetric_profile',
+  'patient_ncd_questionnaire',
+]);
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isValidGuid(val: any): boolean {
+  return typeof val === 'string' && UUID_REGEX.test(val);
+}
+
+export function tableNameToDrizzleQueryKey(tableName: string): string {
+  return tableName.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+}
+
 let globalSyncTrigger: (() => void) | null = null;
 export function registerSyncTrigger(trigger: (() => void) | null) {
   globalSyncTrigger = trigger;
@@ -36,7 +57,7 @@ export function registerSyncTrigger(trigger: (() => void) | null) {
 function extractIdFromCondition(cond: any): string | null {
   if (!cond || !Array.isArray(cond.queryChunks)) return null;
   const paramChunk = cond.queryChunks.find((chunk: any) => chunk && chunk.constructor && chunk.constructor.name === 'Param');
-  if (paramChunk && paramChunk.value) {
+  if (paramChunk && paramChunk.value && typeof paramChunk.value === 'string') {
     return String(paramChunk.value);
   }
   for (const chunk of cond.queryChunks) {
@@ -57,42 +78,31 @@ async function handleInterceptWrite(
   const entityType = TABLE_TO_ENTITY_TYPE[tableName];
   if (!entityType) return;
 
-  let entityId = values?.id || values?.clientId;
+  const now = new Date();
+  const isSingleton = SINGLETON_TABLES.has(tableName);
 
-  if (!entityId && condition) {
-    entityId = extractIdFromCondition(condition);
-  }
-
-  if (!entityId) {
-    if (tableName === 'patients') {
-      entityId = values?.id || (condition ? extractIdFromCondition(condition) : null);
-    } else {
-      entityId = values?.patientId || (condition ? extractIdFromCondition(condition) : null);
+  // Extract patientId
+  let targetPatientId = values?.patientId;
+  if (!targetPatientId && condition) {
+    const condId = extractIdFromCondition(condition);
+    if (condId && (tableName.startsWith('patient_') || tableName === 'emergency_contacts')) {
+      targetPatientId = condId;
     }
   }
-
-  if (!entityId) {
-    console.warn(`[DB Interceptor] Could not extract entityId for table ${tableName}, operation ${operation}`);
-    return;
+  if (!targetPatientId && tableName === 'patients') {
+    targetPatientId = values?.id || (condition ? extractIdFromCondition(condition) : null);
   }
 
   try {
-    const now = new Date();
-    const effectiveOperation = values?.deletedAt ? 'delete' : operation;
-    const syncPayload: Record<string, any> = {
-      ...values,
-      clientId: entityId,
-      updatedAt: now.toISOString(),
-    };
-
+    // ── 1. patient_government_ids decomposition ──────────────────────────────
     if (tableName === 'patient_government_ids') {
-      const targetPatientId = values?.patientId || extractIdFromCondition(condition) || entityId;
+      const patientId = targetPatientId || values?.id;
       let idMap: Record<string, { id: string; clientId: string }> = {};
       try {
         let mapStr = values?.serverId;
         if (!mapStr && originalDb.query?.patientGovernmentIds?.findFirst) {
           const existingRow = await originalDb.query.patientGovernmentIds.findFirst({
-            where: (t: any, { eq }: any) => eq(t.patientId, targetPatientId),
+            where: (t: any, { eq }: any) => eq(t.patientId, patientId),
           });
           mapStr = existingRow?.serverId;
         }
@@ -137,12 +147,16 @@ async function handleInterceptWrite(
         const trimmedNumber = typeof def.idNumber === 'string' ? def.idNumber.trim() : (def.idNumber ? String(def.idNumber) : '');
 
         if (trimmedNumber) {
-          const isUpdate = Boolean(existingServer?.id);
+          const isUpdate = Boolean(existingServer?.id && isValidGuid(existingServer.id));
+          const clientUuid = (existingServer?.clientId && isValidGuid(existingServer.clientId))
+            ? existingServer.clientId
+            : randomUUID();
+
           const itemPayload = {
-            patientId: targetPatientId,
+            patientId,
             idType: def.idType,
             idNumber: trimmedNumber,
-            clientId: existingServer?.clientId || randomUUID(),
+            clientId: clientUuid,
             updatedAt: now.toISOString(),
             ...(def.extra || {}),
           };
@@ -150,7 +164,7 @@ async function handleInterceptWrite(
           const syncItem = {
             id: randomUUID(),
             entityType: 'patient_government_ids' as const,
-            entityId: existingServer?.id || itemPayload.clientId,
+            entityId: isUpdate ? existingServer!.id : undefined,
             operation: isUpdate ? ('update' as const) : ('create' as const),
             payloadJson: JSON.stringify(itemPayload),
             status: 'pending' as const,
@@ -159,7 +173,7 @@ async function handleInterceptWrite(
           };
           await originalDb.insert(syncQueue).values(syncItem);
           queuedCount++;
-        } else if (existingServer?.id) {
+        } else if (existingServer?.id && isValidGuid(existingServer.id)) {
           const syncItem = {
             id: randomUUID(),
             entityType: 'patient_government_ids' as const,
@@ -175,31 +189,171 @@ async function handleInterceptWrite(
         }
       }
 
-      console.log(`[DB Interceptor] Successfully queued ${queuedCount} typed items for patient_government_ids (${targetPatientId})`);
-      if (globalSyncTrigger) {
-        globalSyncTrigger();
-      }
+      console.log(`[DB Interceptor] Successfully queued ${queuedCount} typed items for patient_government_ids (${patientId})`);
+      if (globalSyncTrigger) globalSyncTrigger();
       return;
     }
 
+    // ── 2. SINGLETON TABLES ──────────────────────────────────────────────────
+    if (isSingleton) {
+      let existingLocalRow: any = null;
+      try {
+        const queryName = tableNameToDrizzleQueryKey(tableName);
+        if (originalDb.query?.[queryName]?.findFirst) {
+          existingLocalRow = await originalDb.query[queryName].findFirst({
+            where: (t: any, { eq }: any) => eq(t.patientId, targetPatientId),
+          });
+        }
+      } catch (err) {
+        console.warn(`[DB Interceptor] Failed to query existing row for ${tableName}:`, err);
+      }
+
+      const isSyncedOnServer = Boolean(
+        existingLocalRow?.syncedAt ||
+        (existingLocalRow?.id && isValidGuid(existingLocalRow.id) && existingLocalRow.id !== targetPatientId && !existingLocalRow.id.startsWith('demo:'))
+      );
+
+      let effectiveOperation: 'create' | 'update' | 'delete' = values?.deletedAt ? 'delete' : operation;
+      if (effectiveOperation === 'update' && !isSyncedOnServer) {
+        effectiveOperation = 'create';
+      }
+
+      const prevTs = existingLocalRow?.updatedAt ? new Date(existingLocalRow.updatedAt).getTime() : 0;
+      const safeUpdatedTime = Math.max(Date.now(), prevTs + 1000);
+
+      const clientUuid = (existingLocalRow?.clientId && isValidGuid(existingLocalRow.clientId))
+        ? existingLocalRow.clientId
+        : (existingLocalRow?.id && isValidGuid(existingLocalRow.id) && !existingLocalRow.id.startsWith('demo:'))
+          ? existingLocalRow.id
+          : randomUUID();
+
+      const syncPayload: Record<string, any> = {
+        ...values,
+        patientId: targetPatientId,
+        clientId: clientUuid,
+        updatedAt: new Date(safeUpdatedTime).toISOString(),
+      };
+      delete syncPayload.syncedAt;
+
+      let entityIdForSync: string | undefined = undefined;
+      if (
+        effectiveOperation === 'update' &&
+        isSyncedOnServer &&
+        existingLocalRow?.id &&
+        isValidGuid(existingLocalRow.id) &&
+        existingLocalRow.id !== targetPatientId &&
+        !existingLocalRow.id.startsWith('demo:')
+      ) {
+        entityIdForSync = existingLocalRow.id;
+      }
+
+      const syncItem = {
+        id: randomUUID(),
+        entityType: entityType as any,
+        entityId: entityIdForSync,
+        operation: effectiveOperation,
+        payloadJson: effectiveOperation === 'delete' ? null : JSON.stringify(syncPayload),
+        status: 'pending' as const,
+        retryCount: 0,
+        createdAt: now,
+      };
+
+      await originalDb.insert(syncQueue).values(syncItem);
+      console.log(`[DB Interceptor] Queued ${effectiveOperation} for singleton ${entityType} (patientId=${targetPatientId}, entityId=${entityIdForSync || 'null'})`);
+      if (globalSyncTrigger) globalSyncTrigger();
+      return;
+    }
+
+    // ── 3. patients table ───────────────────────────────────────────────────
     if (tableName === 'patients') {
+      const pId = targetPatientId || values?.id;
+      if (!pId) return;
+
+      const effectiveOperation: 'create' | 'update' | 'delete' = values?.deletedAt ? 'delete' : operation;
+      const syncPayload: Record<string, any> = {
+        ...values,
+        clientId: pId,
+        updatedAt: now.toISOString(),
+      };
       if (values?.dob !== undefined && syncPayload.dateOfBirth === undefined) {
         syncPayload.dateOfBirth = values.dob;
       }
       if (values?.bloodType !== undefined) {
         syncPayload.bloodType = toBackendBloodType(values.bloodType);
       }
-    } else {
-      const targetPatientId = values?.patientId || extractIdFromCondition(condition) || (tableName.startsWith('patient_') ? entityId : undefined);
-      if (targetPatientId) {
-        syncPayload.patientId = targetPatientId;
+      delete syncPayload.syncedAt;
+
+      const syncItem = {
+        id: randomUUID(),
+        entityType: 'patient' as const,
+        entityId: isValidGuid(pId) ? pId : undefined,
+        operation: effectiveOperation,
+        payloadJson: effectiveOperation === 'delete' ? null : JSON.stringify(syncPayload),
+        status: 'pending' as const,
+        retryCount: 0,
+        createdAt: now,
+      };
+
+      await originalDb.insert(syncQueue).values(syncItem);
+      console.log(`[DB Interceptor] Queued ${effectiveOperation} for patient (${pId})`);
+      if (globalSyncTrigger) globalSyncTrigger();
+      return;
+    }
+
+    // ── 4. LIST TABLES ──────────────────────────────────────────────────────
+    let rawEntityId = values?.id || values?.clientId;
+    if (!rawEntityId && condition) {
+      rawEntityId = extractIdFromCondition(condition);
+    }
+
+    let existingItem: any = null;
+    try {
+      const queryName = tableNameToDrizzleQueryKey(tableName);
+      if (rawEntityId && originalDb.query?.[queryName]?.findFirst) {
+        existingItem = await originalDb.query[queryName].findFirst({
+          where: (t: any, { eq }: any) => eq(t.id, rawEntityId),
+        });
       }
+    } catch (err) {
+      console.warn(`[DB Interceptor] Failed to query existing item for ${tableName}:`, err);
+    }
+
+    const isServerItem = Boolean(
+      existingItem?.syncedAt ||
+      (rawEntityId && isValidGuid(rawEntityId) && !rawEntityId.startsWith('demo:'))
+    );
+
+    let effectiveOperation: 'create' | 'update' | 'delete' = values?.deletedAt ? 'delete' : operation;
+    if (effectiveOperation === 'update' && !isServerItem) {
+      effectiveOperation = 'create';
+    }
+
+    const prevTs = existingItem?.updatedAt ? new Date(existingItem.updatedAt).getTime() : 0;
+    const safeUpdatedTime = Math.max(Date.now(), prevTs + 1000);
+
+    const clientUuid = (existingItem?.clientId && isValidGuid(existingItem.clientId))
+      ? existingItem.clientId
+      : (rawEntityId && isValidGuid(rawEntityId) && !rawEntityId.startsWith('demo:'))
+        ? rawEntityId
+        : randomUUID();
+
+    const syncPayload: Record<string, any> = {
+      ...values,
+      patientId: targetPatientId || existingItem?.patientId,
+      clientId: clientUuid,
+      updatedAt: new Date(safeUpdatedTime).toISOString(),
+    };
+    delete syncPayload.syncedAt;
+
+    let entityIdForSync: string | undefined = undefined;
+    if (isServerItem && rawEntityId && isValidGuid(rawEntityId) && !rawEntityId.startsWith('demo:')) {
+      entityIdForSync = rawEntityId;
     }
 
     const syncItem = {
       id: randomUUID(),
       entityType: entityType as any,
-      entityId,
+      entityId: entityIdForSync,
       operation: effectiveOperation,
       payloadJson: effectiveOperation === 'delete' ? null : JSON.stringify(syncPayload),
       status: 'pending' as const,
@@ -208,11 +362,8 @@ async function handleInterceptWrite(
     };
 
     await originalDb.insert(syncQueue).values(syncItem);
-    console.log(`[DB Interceptor] Successfully queued ${effectiveOperation} for ${entityType} (${entityId})`);
-
-    if (globalSyncTrigger) {
-      globalSyncTrigger();
-    }
+    console.log(`[DB Interceptor] Queued ${effectiveOperation} for list ${entityType} (entityId=${entityIdForSync || 'null'})`);
+    if (globalSyncTrigger) globalSyncTrigger();
   } catch (err) {
     console.error(`[DB Interceptor] Failed to queue write for ${entityType}:`, err);
   }
@@ -232,10 +383,15 @@ function createQueryProxy(
         return function (onfulfilled?: any, onrejected?: any) {
           return target.then(
             async (result: any) => {
-              const nameSymbol = Object.getOwnPropertySymbols(table).find(
-                (s) => s.description === 'drizzle:Name'
-              );
-              const tableName = nameSymbol ? table[nameSymbol] : null;
+              let tableName: string | null = null;
+              try {
+                tableName = getTableName(table);
+              } catch {
+                const nameSymbol = Object.getOwnPropertySymbols(table).find(
+                  (s) => s.description === 'drizzle:Name'
+                );
+                tableName = nameSymbol ? table[nameSymbol] : null;
+              }
               if (tableName && TABLE_TO_ENTITY_TYPE[tableName]) {
                 await handleInterceptWrite(originalDb, String(tableName), operation, values, condition);
               }
@@ -261,9 +417,6 @@ function createQueryProxy(
       if (typeof val === 'function') {
         return function (...args: any[]) {
           const result = val.apply(target, args);
-          // onConflictDoUpdate means the row already exists → this is an update,
-          // not a fresh create. Flip the operation so the sync queue sends the
-          // correct verb to the backend.
           const effectiveOperation = prop === 'onConflictDoUpdate' ? 'update' : operation;
           if (result && typeof result === 'object' && typeof result.then === 'function') {
             return createQueryProxy(originalDb, result, table, effectiveOperation, values, condition);

@@ -50,13 +50,10 @@ export default function ProfileCardWeb() {
 
   const avatarSource = previewUri ?? localUri ?? user?.imageUrl ?? null;
 
-  // Discard placeholder/stale values like 'Clinic', 'Unknown', 'Active', 'Demo'
-  const isPlaceholderName = !patientRecord?.firstName ||
-    ['Unknown', 'Clinic', 'Active', 'Demo'].includes(patientRecord.firstName);
-
-  const localDbName = !isPlaceholderName
-    ? [patientRecord?.firstName, patientRecord?.lastName].filter((p) => p && p !== 'Unknown' && p !== 'User').join(' ').trim()
-    : null;
+  const localDbName = [patientRecord?.firstName, patientRecord?.lastName]
+    .filter(Boolean)
+    .join(' ')
+    .trim() || null;
 
   const clerkName = user?.fullName || [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim();
 

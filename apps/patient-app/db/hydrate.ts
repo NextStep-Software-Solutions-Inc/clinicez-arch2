@@ -78,7 +78,7 @@ export async function upsertPatientSummary(
     suffix: summary.suffix ?? null,
     sex: (summary.sex as any) ?? null,
     dob: summary.dateOfBirth ?? null,
-    bloodType: fromBackendBloodType(summary.bloodType) === 'Unknown' ? null : ((fromBackendBloodType(summary.bloodType) as any) ?? null),
+    bloodType: (fromBackendBloodType(summary.bloodType) as any) ?? null,
     civilStatus: (summary.civilStatus as any) ?? null,
     nationality: summary.nationality ?? null,
     ethnicity: summary.ethnicity ?? null,
@@ -125,8 +125,10 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   // 2. government IDs: map the list of typed ID items into the singleton row
   if (!pendingEntityIds.has(patientId)) {
     const govIds = record.governmentIds || [];
-    const findItem = (type: string) =>
-      govIds.find((g) => g.idType?.toLowerCase() === type.toLowerCase());
+    const findItem = (type: string) => {
+      const matching = govIds.filter((g) => g.idType?.toLowerCase() === type.toLowerCase());
+      return matching.length > 0 ? matching[matching.length - 1] : undefined;
+    };
 
     const philhealth = findItem('philhealth');
     const sss = findItem('sss');
@@ -153,14 +155,14 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
       id: existingGov?.id || patientId,
       patientId,
       philhealthId: philhealth?.idNumber ?? existingGov?.philhealthId ?? null,
-      philhealthCategory: existingGov?.philhealthCategory ?? null,
-      sponsorPin: existingGov?.sponsorPin ?? null,
-      sponsorLastName: existingGov?.sponsorLastName ?? null,
-      sponsorFirstName: existingGov?.sponsorFirstName ?? null,
-      sponsorMiddleName: existingGov?.sponsorMiddleName ?? null,
-      sponsorSuffix: existingGov?.sponsorSuffix ?? null,
-      sponsorDob: existingGov?.sponsorDob ?? null,
-      sponsorRelationship: existingGov?.sponsorRelationship ?? null,
+      philhealthCategory: (philhealth as any)?.philhealthCategory ?? existingGov?.philhealthCategory ?? null,
+      sponsorPin: (philhealth as any)?.sponsorPin ?? existingGov?.sponsorPin ?? null,
+      sponsorLastName: (philhealth as any)?.sponsorLastName ?? existingGov?.sponsorLastName ?? null,
+      sponsorFirstName: (philhealth as any)?.sponsorFirstName ?? existingGov?.sponsorFirstName ?? null,
+      sponsorMiddleName: (philhealth as any)?.sponsorMiddleName ?? existingGov?.sponsorMiddleName ?? null,
+      sponsorSuffix: (philhealth as any)?.sponsorSuffix ?? existingGov?.sponsorSuffix ?? null,
+      sponsorDob: (philhealth as any)?.sponsorDob ?? existingGov?.sponsorDob ?? null,
+      sponsorRelationship: (philhealth as any)?.sponsorRelationship ?? existingGov?.sponsorRelationship ?? null,
       sssNumber: sss?.idNumber ?? existingGov?.sssNumber ?? null,
       gsisNumber: gsis?.idNumber ?? existingGov?.gsisNumber ?? null,
       pagibigId: pagibig?.idNumber ?? existingGov?.pagibigId ?? null,
@@ -422,10 +424,18 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   //     Local schema differs significantly — map best-effort
   if (record.socialHistory && !pendingEntityIds.has(patientId)) {
     const sh = record.socialHistory;
+    let mappedSmokingStatus: 'Never' | 'Former' | 'Current' | null = null;
+    if (sh.smokingStatus) {
+      const s = sh.smokingStatus.toLowerCase();
+      if (s.includes('never')) mappedSmokingStatus = 'Never';
+      else if (s.includes('former')) mappedSmokingStatus = 'Former';
+      else if (s.includes('current')) mappedSmokingStatus = 'Current';
+    }
+
     const row = {
       id: sh.id,
       patientId,
-      tobaccoStatus: (sh.smokingStatus as any) ?? null,
+      tobaccoStatus: mappedSmokingStatus,
       cigsPerDay: sh.cigsPerDay ?? null,
       packYears: sh.packYears ?? null,
       quitDate: sh.quitDate ?? null,
@@ -533,6 +543,21 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   //     Local schema uses: gravida, para, abortion, livingChildren, lmp, cycleLength, etc.
   if (record.obstetricProfile && !pendingEntityIds.has(patientId)) {
     const op = record.obstetricProfile;
+    let ageAtMenarche: number | null = null;
+    if (op.menarche) {
+      const parsed = parseInt(op.menarche, 10);
+      if (!isNaN(parsed)) {
+        if (parsed > 0 && parsed < 100) {
+          ageAtMenarche = parsed;
+        } else if (parsed >= 1900 && record.demographics?.dateOfBirth) {
+          const birthYear = new Date(record.demographics.dateOfBirth).getFullYear();
+          if (!isNaN(birthYear) && parsed >= birthYear) {
+            ageAtMenarche = parsed - birthYear;
+          }
+        }
+      }
+    }
+
     const row = {
       id: op.id,
       patientId,
@@ -541,7 +566,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
       abortion: op.abortusCount ?? null,
       livingChildren: op.livingChildren ?? null,
       lmp: op.lastMenstrualPeriod ?? null,
-      ageAtMenarche: null as number | null,
+      ageAtMenarche,
       cycleLength: op.menstrualCycleLengthDays ?? null,
       cycleDuration: null as number | null,
       regularity: null as ('Regular' | 'Irregular' | null),
@@ -659,14 +684,23 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   //     API DTO has more fields — map best-effort
   if (record.mentalHealthProfile && !pendingEntityIds.has(patientId)) {
     const mh = record.mentalHealthProfile;
+    const statusMap: Record<string, 'Active' | 'Inactive' | 'None'> = {
+      active: 'Active',
+      inactive: 'Inactive',
+      none: 'None',
+    };
+    const mappedPsychotherapyStatus = mh.sessionFrequency?.toLowerCase() && statusMap[mh.sessionFrequency.toLowerCase()]
+      ? statusMap[mh.sessionFrequency.toLowerCase()]
+      : mh.therapistName ? 'Active' : 'None';
+
     const row = {
       id: mh.id,
       patientId,
       hasPriorDiagnosis: mh.hasDiagnosis,
       providerName: mh.therapistName ?? null,
       providerSpecialty: mh.therapyType ?? null,
-      providerClinic: null as string | null,
-      psychotherapyStatus: mh.therapistName ? 'Active' as const : 'None' as const,
+      providerClinic: mh.notes ?? null,
+      psychotherapyStatus: mappedPsychotherapyStatus,
       createdAt: ts,
       updatedAt: toDate(mh.updatedAt) ?? ts,
       syncedAt: ts,

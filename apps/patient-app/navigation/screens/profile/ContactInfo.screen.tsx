@@ -102,14 +102,13 @@ export default function ContactInfoScreen() {
 
       const existing = await db.query.patients.findFirst({ where: eq(patients.id, patientId) });
 
-      // Clean name resolution: NEVER use placeholder fallbacks like 'Clinic', 'User', 'Unknown', 'Active', 'Demo'
-      const cleanServerFirst = serverDemo?.firstName && !['Unknown', 'Clinic', 'Active', 'Demo'].includes(serverDemo.firstName) ? serverDemo.firstName.trim() : null;
-      const cleanDbFirst = existing?.firstName && !['Unknown', 'Clinic', 'Active', 'Demo'].includes(existing.firstName) ? existing.firstName.trim() : null;
+      const cleanServerFirst = serverDemo?.firstName?.trim() || null;
+      const cleanDbFirst = existing?.firstName?.trim() || null;
       const cleanClerkFirst = user?.firstName?.trim() || null;
       const firstName = cleanServerFirst || cleanDbFirst || cleanClerkFirst || user?.fullName?.trim() || 'Patient';
 
-      const cleanServerLast = serverDemo?.lastName && !['Unknown', 'User'].includes(serverDemo.lastName) ? serverDemo.lastName.trim() : null;
-      const cleanDbLast = existing?.lastName && !['Unknown', 'User'].includes(existing.lastName) ? existing.lastName.trim() : null;
+      const cleanServerLast = serverDemo?.lastName?.trim() || null;
+      const cleanDbLast = existing?.lastName?.trim() || null;
       const cleanClerkLast = user?.lastName?.trim() || null;
       const lastName = cleanServerLast || cleanDbLast || cleanClerkLast || '';
 
