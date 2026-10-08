@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { db } from '@db/index';
@@ -19,8 +19,7 @@ import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
-import { getPatientFullRecord } from 'services/api/patientApi';
-import { hydrateFullRecord } from '@db/hydrate';
+import { useProfileSync } from 'hooks/useProfileSync';
 
 type Form = { id: string | null; diagnosis: string; controlStatus: string; monitoringFrequency: string; };
 const EMPTY: Form = { id: null, diagnosis: '', controlStatus: '', monitoringFrequency: '' };
@@ -34,29 +33,18 @@ export default function ChronicConditionsScreen() {
   const sheetRef = useRef<BottomSheetModalType>(null);
   const { control, handleSubmit, reset, formState: { isDirty } } = useForm<Form>({ defaultValues: EMPTY });
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
-      let rows = await db.select().from(patientChronicConditions).where(eq(patientChronicConditions.patientId, patientId));
-      let active = rows.filter((r) => !r.deletedAt);
-      if (active.length === 0 && getToken && patientId) {
-        try {
-          const fullRecord = await getPatientFullRecord(getToken, patientId);
-          if (fullRecord) {
-            await hydrateFullRecord(fullRecord);
-            rows = await db.select().from(patientChronicConditions).where(eq(patientChronicConditions.patientId, patientId));
-            active = rows.filter((r) => !r.deletedAt);
-          }
-        } catch (fetchErr) {
-          console.warn('[ChronicConditionsScreen] Could not hydrate from server:', fetchErr);
-        }
-      }
-      setItems(active);
+      const rows = await db.select().from(patientChronicConditions).where(eq(patientChronicConditions.patientId, patientId));
+      setItems(rows.filter((r) => !r.deletedAt));
     } catch (err) {
       console.warn('[ChronicConditionsScreen] Failed to load conditions:', err);
     }
-  };
+  }, [patientId]);
 
-  useEffect(() => { load(); }, [patientId, getToken]);
+  useEffect(() => { load(); }, [load]);
+
+  useProfileSync(load);
 
   const openEdit = (row: any) => {
     reset({

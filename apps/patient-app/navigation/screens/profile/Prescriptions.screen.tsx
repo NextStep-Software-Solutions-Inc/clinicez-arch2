@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { FlatList, StyleSheet, View, Pressable, Modal, ScrollView, TextInput, Image, Platform } from 'react-native';
 import ThemedText from '@ui/ThemedText';
 import Badge from '@ui/Badge';
@@ -16,6 +16,7 @@ import { usePatientId } from 'hooks/usePatientId';
 import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
 import { dialog } from '@utils/dialog';
+import { useProfileSync } from 'hooks/useProfileSync';
 
 interface ExternalReceiptData {
   pharmacyName: string;
@@ -58,7 +59,7 @@ export default function PrescriptionsScreen() {
     .filter((r) => r.isPhilHealthGamot)
     .reduce((sum, r) => sum + (r.gamotCoverageAmount ?? 0), 0);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     db.select()
       .from(prescriptions)
       .where(eq(prescriptions.patientId, patientId))
@@ -113,7 +114,7 @@ export default function PrescriptionsScreen() {
               prescriptionNumber: 'RX-20260928-0042',
               verificationToken: 'rx-tok-44b19280cd11',
               dispenseStatus: 'Dispensed',
-              dispensedPharmacy: 'ClinicEz Partner Pharmacy (Laguna Central)',
+              dispensedPharmacy: 'Clinic EZ Partner Pharmacy (Laguna Central)',
               dispensedAt: '2026-09-28 14:32',
               isDangerousDrug: false,
             },
@@ -122,6 +123,12 @@ export default function PrescriptionsScreen() {
       })
       .catch(console.error);
   }, [patientId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useProfileSync(load);
 
   const copyUpscToken = async (token: string) => {
     await Clipboard.setStringAsync(token);
@@ -314,7 +321,7 @@ export default function PrescriptionsScreen() {
                 </ThemedText>
               </View>
               <ThemedText variant="caption" style={{ color: colors.textSecondary, lineHeight: 18 }}>
-                Your official Philippine e-Prescriptions (RA 6675 compliant). Pick up at ClinicEz partner pharmacies (Path A) or present the digital QR slip at Mercury Drug, Watsons, or Rose Pharmacy (Path B).
+                Your official Philippine e-Prescriptions (RA 6675 compliant). Pick up at Clinic EZ partner pharmacies (Path A) or present the digital QR slip at Mercury Drug, Watsons, or Rose Pharmacy (Path B).
               </ThemedText>
             </View>
           </View>
@@ -788,7 +795,7 @@ export default function PrescriptionsScreen() {
                   Path B: External Pharmacy Verification
                 </ThemedText>
                 <ThemedText variant="caption" style={{ color: colors.textSecondary, lineHeight: 16 }}>
-                  Present this QR code or link to external drugstores (Mercury Drug, Watsons, Rose Pharmacy). The pharmacist can verify authenticity on the ClinicEz public portal.
+                  Present this QR code or link to external drugstores (Mercury Drug, Watsons, Rose Pharmacy). The pharmacist can verify authenticity on the Clinic EZ public portal.
                 </ThemedText>
 
                 {/* QR Code Graphic Placeholder */}

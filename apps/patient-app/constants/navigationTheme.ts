@@ -17,7 +17,7 @@ function face(weight: '400' | '500' | '600' | '700') {
 
 /**
  * React Navigation theme derived from the semantic tokens, so native headers, tab bars,
- * sheets and the web chrome all share the ClinicEz brand instead of platform defaults.
+ * sheets and the web chrome all share the Clinic EZ brand instead of platform defaults.
  */
 export function buildNavigationTheme(theme: AppTheme): Theme {
   const { colors } = theme;

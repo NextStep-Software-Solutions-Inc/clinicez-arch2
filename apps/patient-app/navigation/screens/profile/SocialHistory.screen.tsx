@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useForm, Controller } from 'react-hook-form';
@@ -17,8 +17,7 @@ import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
-import { getPatientFullRecord } from 'services/api/patientApi';
-import { hydrateFullRecord } from '@db/hydrate';
+import { useProfileSync } from 'hooks/useProfileSync';
 
 type TobaccoStatus = 'Never' | 'Former' | 'Current';
 type SleepQuality = 'Good' | 'Fair' | 'Poor';
@@ -87,84 +86,48 @@ export default function SocialHistoryScreen() {
 
   const [hasRecord, setHasRecord] = useState(false);
 
-  useEffect(() => {
-    let isMounted = true;
-    db.query.patientSocialHistory.findFirst({ where: eq(patientSocialHistory.patientId, patientId) })
-      .then(async (row) => {
-        if (!isMounted) return;
-        if (row) {
-          setHasRecord(true);
-          reset({
-            tobaccoStatus: row.tobaccoStatus ?? '',
-            cigsPerDay: row.cigsPerDay?.toString() ?? '',
-            quitDate: row.quitDate ?? '',
-            otherTobaccoProducts: row.otherTobaccoProducts ?? '',
-            alcoholUseLevel: row.alcoholUseLevel ?? '',
-            alcoholType: row.alcoholType ?? '',
-            alcoholFrequencyDaysPerWeek: row.alcoholFrequencyDaysPerWeek?.toString() ?? '',
-            alcoholQuantityPerOccasion: row.alcoholQuantityPerOccasion?.toString() ?? '',
-            substanceUse: row.substanceUse ?? false,
-            substanceName: row.substanceName ?? '',
-            substanceRoute: row.substanceRoute ?? '',
-            substanceFrequency: row.substanceFrequency ?? '',
-            activityLevel: row.activityLevel ?? '',
-            exerciseType: row.exerciseType ?? '',
-            exerciseFrequencyDaysPerWeek: row.exerciseFrequencyDaysPerWeek?.toString() ?? '',
-            dietPattern: row.dietPattern ?? '',
-            foodRestrictions: row.foodRestrictions ?? '',
-            sleepAvgHours: row.sleepAvgHours?.toString() ?? '',
-            sleepQuality: row.sleepQuality ?? '',
-            waterIntake: row.waterIntake ?? '',
-            caffeineUse: row.caffeineUse ?? '',
-            dailyScreenTime: row.dailyScreenTime ?? '',
-          });
-        } else if (getToken && patientId) {
-          try {
-            const fullRecord = await getPatientFullRecord(getToken, patientId);
-            if (fullRecord && isMounted) {
-              await hydrateFullRecord(fullRecord);
-              const hydratedRow = await db.query.patientSocialHistory.findFirst({
-                where: eq(patientSocialHistory.patientId, patientId),
-              });
-              if (hydratedRow && isMounted) {
-                setHasRecord(true);
-                reset({
-                  tobaccoStatus: hydratedRow.tobaccoStatus ?? '',
-                  cigsPerDay: hydratedRow.cigsPerDay?.toString() ?? '',
-                  quitDate: hydratedRow.quitDate ?? '',
-                  otherTobaccoProducts: hydratedRow.otherTobaccoProducts ?? '',
-                  alcoholUseLevel: hydratedRow.alcoholUseLevel ?? '',
-                  alcoholType: hydratedRow.alcoholType ?? '',
-                  alcoholFrequencyDaysPerWeek: hydratedRow.alcoholFrequencyDaysPerWeek?.toString() ?? '',
-                  alcoholQuantityPerOccasion: hydratedRow.alcoholQuantityPerOccasion?.toString() ?? '',
-                  substanceUse: hydratedRow.substanceUse ?? false,
-                  substanceName: hydratedRow.substanceName ?? '',
-                  substanceRoute: hydratedRow.substanceRoute ?? '',
-                  substanceFrequency: hydratedRow.substanceFrequency ?? '',
-                  activityLevel: hydratedRow.activityLevel ?? '',
-                  exerciseType: hydratedRow.exerciseType ?? '',
-                  exerciseFrequencyDaysPerWeek: hydratedRow.exerciseFrequencyDaysPerWeek?.toString() ?? '',
-                  dietPattern: hydratedRow.dietPattern ?? '',
-                  foodRestrictions: hydratedRow.foodRestrictions ?? '',
-                  sleepAvgHours: hydratedRow.sleepAvgHours?.toString() ?? '',
-                  sleepQuality: hydratedRow.sleepQuality ?? '',
-                  waterIntake: hydratedRow.waterIntake ?? '',
-                  caffeineUse: hydratedRow.caffeineUse ?? '',
-                  dailyScreenTime: hydratedRow.dailyScreenTime ?? '',
-                });
-              }
-            }
-          } catch (fetchErr) {
-            console.warn('[SocialHistory] Could not hydrate full record from server:', fetchErr);
-          }
-        }
-      })
-      .catch(console.error);
+  const load = useCallback(async () => {
+    try {
+      const row = await db.query.patientSocialHistory.findFirst({
+        where: eq(patientSocialHistory.patientId, patientId),
+      });
+      if (row) {
+        setHasRecord(true);
+        reset({
+          tobaccoStatus: row.tobaccoStatus ?? '',
+          cigsPerDay: row.cigsPerDay?.toString() ?? '',
+          quitDate: row.quitDate ?? '',
+          otherTobaccoProducts: row.otherTobaccoProducts ?? '',
+          alcoholUseLevel: row.alcoholUseLevel ?? '',
+          alcoholType: row.alcoholType ?? '',
+          alcoholFrequencyDaysPerWeek: row.alcoholFrequencyDaysPerWeek?.toString() ?? '',
+          alcoholQuantityPerOccasion: row.alcoholQuantityPerOccasion?.toString() ?? '',
+          substanceUse: row.substanceUse ?? false,
+          substanceName: row.substanceName ?? '',
+          substanceRoute: row.substanceRoute ?? '',
+          substanceFrequency: row.substanceFrequency ?? '',
+          activityLevel: row.activityLevel ?? '',
+          exerciseType: row.exerciseType ?? '',
+          exerciseFrequencyDaysPerWeek: row.exerciseFrequencyDaysPerWeek?.toString() ?? '',
+          dietPattern: row.dietPattern ?? '',
+          foodRestrictions: row.foodRestrictions ?? '',
+          sleepAvgHours: row.sleepAvgHours?.toString() ?? '',
+          sleepQuality: row.sleepQuality ?? '',
+          waterIntake: row.waterIntake ?? '',
+          caffeineUse: row.caffeineUse ?? '',
+          dailyScreenTime: row.dailyScreenTime ?? '',
+        });
+      }
+    } catch (err) {
+      console.warn('[SocialHistory] Failed to load from SQLite:', err);
+    }
+  }, [patientId, reset]);
 
-    return () => {
-      isMounted = false;
-    };
-  }, [patientId, reset, getToken]);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useProfileSync(load);
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);

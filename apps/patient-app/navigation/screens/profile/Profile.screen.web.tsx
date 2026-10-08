@@ -45,9 +45,8 @@ import { useBreakpoint } from 'hooks/useBreakpoint';
 import { useAuth } from 'contexts/AuthContext';
 import { useUser } from '@clerk/expo';
 import { useOfflineAlert } from 'contexts/OfflineAlertContext';
-import { getPatientFullRecord } from 'services/api/patientApi';
-import { hydrateFullRecord } from '@db/hydrate';
-import { syncPendingProfileWrites } from 'services/api/syncService';
+import { syncFullProfile } from 'services/api/syncService';
+import { useProfileSync } from 'hooks/useProfileSync';
 
 export type ProfileSectionGroup = 'personal' | 'medical' | 'clinical' | 'settings';
 
@@ -382,7 +381,7 @@ const CATEGORIES: ProfileCategoryItem[] = [
   },
   {
     id: 'settings-about',
-    title: 'About ClinicEz',
+    title: 'About Clinic EZ',
     subtitle: 'App version, licensing, legal information',
     icon: 'info',
     screen: 'AboutSettingsScreen',
@@ -496,19 +495,17 @@ export default function ProfileScreenWeb() {
 
   const fetchAndHydrateFullRecord = useCallback(async (): Promise<boolean> => {
     if (!internalPatientId) return false;
-    try {
-      await syncPendingProfileWrites(internalPatientId, getToken).catch((err) => {
-        console.warn('[ProfileScreenWeb] Sync pending writes before hydration failed:', err);
-      });
-      const record = await getPatientFullRecord(getToken, internalPatientId);
-      await hydrateFullRecord(record);
-      await loadPatientRecord();
-      return true;
-    } catch (err) {
-      console.warn('[ProfileScreenWeb] Failed to fetch full record:', err);
-      return false;
-    }
+    const res = await syncFullProfile(internalPatientId, getToken);
+    await loadPatientRecord();
+    return res.success;
   }, [internalPatientId, getToken, loadPatientRecord]);
+
+  useProfileSync(
+    useCallback(() => {
+      reloadCounts();
+      loadPatientRecord();
+    }, [reloadCounts, loadPatientRecord])
+  );
 
   useEffect(() => {
     reloadCounts();
@@ -525,14 +522,6 @@ export default function ProfileScreenWeb() {
         .catch(() => {});
     }
   }, [fetchAndHydrateFullRecord, reloadCounts, loadPatientRecord]);
-
-  useEffect(() => {
-    const unsub = navigation.addListener('focus', () => {
-      reloadCounts();
-      loadPatientRecord();
-    });
-    return unsub;
-  }, [navigation, reloadCounts, loadPatientRecord]);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);

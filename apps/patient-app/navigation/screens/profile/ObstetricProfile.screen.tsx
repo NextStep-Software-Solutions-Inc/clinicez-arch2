@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useForm, Controller } from 'react-hook-form';
@@ -26,8 +26,7 @@ import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
-import { getPatientFullRecord } from 'services/api/patientApi';
-import { hydrateFullRecord } from '@db/hydrate';
+import { useProfileSync } from 'hooks/useProfileSync';
 
 // ── Obstetric Profile Form ──────────────────────────────────────────────────
 
@@ -122,84 +121,60 @@ export default function ObstetricProfileScreen() {
     defaultValues: { id: null, method: '', isCurrent: false, startDate: '', stopReason: '' },
   });
 
-  const loadPregnancies = async () => {
+  const loadPregnancies = useCallback(async () => {
     try {
       const rows = await db.select().from(patientPregnancies).where(eq(patientPregnancies.patientId, patientId));
       setPregnancies(rows.filter((r) => !r.deletedAt));
     } catch (err) {
       console.warn('[ObstetricProfileScreen] Failed to load pregnancies:', err);
     }
-  };
+  }, [patientId]);
 
-  const loadContra = async () => {
+  const loadContra = useCallback(async () => {
     try {
       const rows = await db.select().from(patientContraceptiveHistory).where(eq(patientContraceptiveHistory.patientId, patientId));
       setContraItems(rows.filter((r) => !r.deletedAt));
     } catch (err) {
       console.warn('[ObstetricProfileScreen] Failed to load contraceptive history:', err);
     }
-  };
+  }, [patientId]);
 
   const [hasObsRecord, setHasObsRecord] = useState(false);
 
-  useEffect(() => {
-    let isMounted = true;
-    db.query.patientObstetricProfile.findFirst({ where: eq(patientObstetricProfile.patientId, patientId) })
-      .then(async (row) => {
-        if (!isMounted) return;
-        if (row) {
-          setHasObsRecord(true);
-          obsForm.reset({
-            menarche: row.ageAtMenarche?.toString() ?? '',
-            lastMenstrualPeriod: row.lmp ?? '',
-            cycleLength: row.cycleLength?.toString() ?? '',
-            cycleDuration: row.cycleDuration?.toString() ?? '',
-            dysmenorrhea: row.dysmenorrheaSeverity ?? '',
-            menopauseAge: row.ageAtMenopause?.toString() ?? '',
-            gravida: row.gravida?.toString() ?? '',
-            para: row.para?.toString() ?? '',
-            abortion: row.abortion?.toString() ?? '',
-            living: row.livingChildren?.toString() ?? '',
-          });
-        } else if (getToken && patientId) {
-          try {
-            const fullRecord = await getPatientFullRecord(getToken, patientId);
-            if (fullRecord && isMounted) {
-              await hydrateFullRecord(fullRecord);
-              const hydratedRow = await db.query.patientObstetricProfile.findFirst({
-                where: eq(patientObstetricProfile.patientId, patientId),
-              });
-              if (hydratedRow && isMounted) {
-                setHasObsRecord(true);
-                obsForm.reset({
-                  menarche: hydratedRow.ageAtMenarche?.toString() ?? '',
-                  lastMenstrualPeriod: hydratedRow.lmp ?? '',
-                  cycleLength: hydratedRow.cycleLength?.toString() ?? '',
-                  cycleDuration: hydratedRow.cycleDuration?.toString() ?? '',
-                  dysmenorrhea: hydratedRow.dysmenorrheaSeverity ?? '',
-                  menopauseAge: hydratedRow.ageAtMenopause?.toString() ?? '',
-                  gravida: hydratedRow.gravida?.toString() ?? '',
-                  para: hydratedRow.para?.toString() ?? '',
-                  abortion: hydratedRow.abortion?.toString() ?? '',
-                  living: hydratedRow.livingChildren?.toString() ?? '',
-                });
-              }
-              loadPregnancies();
-              loadContra();
-            }
-          } catch (fetchErr) {
-            console.warn('[ObstetricProfile] Could not hydrate full record from server:', fetchErr);
-          }
-        }
-      })
-      .catch(console.error);
-    loadPregnancies();
-    loadContra();
+  const loadObsProfile = useCallback(async () => {
+    try {
+      const row = await db.query.patientObstetricProfile.findFirst({
+        where: eq(patientObstetricProfile.patientId, patientId),
+      });
+      if (row) {
+        setHasObsRecord(true);
+        obsForm.reset({
+          menarche: row.ageAtMenarche?.toString() ?? '',
+          lastMenstrualPeriod: row.lmp ?? '',
+          cycleLength: row.cycleLength?.toString() ?? '',
+          cycleDuration: row.cycleDuration?.toString() ?? '',
+          dysmenorrhea: row.dysmenorrheaSeverity ?? '',
+          menopauseAge: row.ageAtMenopause?.toString() ?? '',
+          gravida: row.gravida?.toString() ?? '',
+          para: row.para?.toString() ?? '',
+          abortion: row.abortion?.toString() ?? '',
+          living: row.livingChildren?.toString() ?? '',
+        });
+      }
+    } catch (err) {
+      console.warn('[ObstetricProfileScreen] Failed to load obs profile:', err);
+    }
+  }, [patientId, obsForm]);
 
-    return () => {
-      isMounted = false;
-    };
-  }, [patientId, getToken]);
+  const load = useCallback(async () => {
+    await Promise.all([loadObsProfile(), loadPregnancies(), loadContra()]);
+  }, [loadObsProfile, loadPregnancies, loadContra]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useProfileSync(load);
 
   const onSaveObs = obsForm.handleSubmit(async (data) => {
     setSaving(true);

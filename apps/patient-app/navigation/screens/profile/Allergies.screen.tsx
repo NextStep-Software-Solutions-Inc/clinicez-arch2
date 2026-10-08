@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { db } from '@db/index';
@@ -20,8 +20,7 @@ import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
-import { getPatientFullRecord } from 'services/api/patientApi';
-import { hydrateFullRecord } from '@db/hydrate';
+import { useProfileSync } from 'hooks/useProfileSync';
 import ThemedBottomSheetModal from '@ui/ThemedBottomSheetModal';
 
 type AllergySeverity = 'Mild' | 'Moderate' | 'Severe' | 'LifeThreatening';
@@ -55,29 +54,18 @@ export default function AllergiesScreen() {
 
   const { control, handleSubmit, reset, formState: { isDirty } } = useForm<AllergyForm>({ defaultValues: EMPTY });
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
-      let rows = await db.select().from(patientAllergies).where(eq(patientAllergies.patientId, patientId));
-      let active = rows.filter((r) => !r.deletedAt);
-      if (active.length === 0 && getToken && patientId) {
-        try {
-          const fullRecord = await getPatientFullRecord(getToken, patientId);
-          if (fullRecord) {
-            await hydrateFullRecord(fullRecord);
-            rows = await db.select().from(patientAllergies).where(eq(patientAllergies.patientId, patientId));
-            active = rows.filter((r) => !r.deletedAt);
-          }
-        } catch (fetchErr) {
-          console.warn('[AllergiesScreen] Could not hydrate from server:', fetchErr);
-        }
-      }
-      setItems(active);
+      const rows = await db.select().from(patientAllergies).where(eq(patientAllergies.patientId, patientId));
+      setItems(rows.filter((r) => !r.deletedAt));
     } catch (err) {
       console.warn('[AllergiesScreen] Failed to load allergies:', err);
     }
-  };
+  }, [patientId]);
 
-  useEffect(() => { load(); }, [patientId, getToken]);
+  useEffect(() => { load(); }, [load]);
+
+  useProfileSync(load);
 
   const openEdit = (row: any) => {
     reset({

@@ -34,9 +34,8 @@ import { useContentInsets } from 'hooks/useContentInsets';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { useAuth } from 'contexts/AuthContext';
 import { useOfflineAlert } from 'contexts/OfflineAlertContext';
-import { getPatientFullRecord } from 'services/api/patientApi';
-import { hydrateFullRecord } from '@db/hydrate';
-import { syncPendingProfileWrites } from 'services/api/syncService';
+import { syncFullProfile } from 'services/api/syncService';
+import { useProfileSync } from 'hooks/useProfileSync';
 
 type Counts = {
   addresses: number;
@@ -147,18 +146,12 @@ export default function ProfileScreen() {
    */
   const fetchAndHydrateFullRecord = useCallback(async (): Promise<boolean> => {
     if (!internalPatientId) return false;
-    try {
-      await syncPendingProfileWrites(internalPatientId, getToken).catch((err) => {
-        console.warn('[ProfileScreen] Sync pending writes before hydration failed:', err);
-      });
-      const record = await getPatientFullRecord(getToken, internalPatientId);
-      await hydrateFullRecord(record);
-      return true;
-    } catch (err) {
-      console.warn('[ProfileScreen] Failed to fetch full record:', err);
-      return false;
-    }
+    const res = await syncFullProfile(internalPatientId, getToken);
+    return res.success;
   }, [internalPatientId, getToken]);
+
+  // Keep counts in sync on navigation focus and whenever a background sync completes
+  useProfileSync(reloadCounts);
 
   // ── initial mount: load local counts + background full-record fetch ───────
 
@@ -177,13 +170,6 @@ export default function ProfileScreen() {
       }).catch(() => { /* offline or error — silent */ });
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── reload counts when the screen comes back into focus ───────────────────
-
-  useEffect(() => {
-    const unsub = navigation.addListener('focus', reloadCounts);
-    return unsub;
-  }, [navigation, reloadCounts]);
 
   // ── pull-to-refresh ────────────────────────────────────────────────────────
 

@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useForm, Controller } from 'react-hook-form';
@@ -18,6 +18,7 @@ import { dialog } from '@utils/dialog';
 import { getPatientProfile, updatePatientDemographics, type PatientSummary } from 'services/api/patientApi';
 import { flushAndSyncProfile } from 'services/api/syncService';
 import { upsertPatientSummary } from '@db/hydrate';
+import { useProfileSync } from 'hooks/useProfileSync';
 
 type FormValues = {
   mobile: string;
@@ -41,6 +42,25 @@ export default function ContactInfoScreen() {
 
   const isDirtyRef = useRef(isDirty);
   isDirtyRef.current = isDirty;
+
+  const loadLocal = useCallback(async () => {
+    if (!patientId || isDirtyRef.current) return;
+    try {
+      const row = await db.query.patients.findFirst({ where: eq(patients.id, patientId) });
+      if (row && !isDirtyRef.current) {
+        reset({
+          mobile: row.mobile ?? '',
+          altPhone: row.altPhone ?? '',
+          email: row.email || accountEmail,
+          messengerHandle: row.messengerHandle ?? '',
+        });
+      }
+    } catch (err) {
+      console.warn('[ContactInfo] Failed to read from local DB:', err);
+    }
+  }, [patientId, reset, accountEmail]);
+
+  useProfileSync(loadLocal);
 
   useEffect(() => {
     let isMounted = true;

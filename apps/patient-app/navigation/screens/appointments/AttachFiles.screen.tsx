@@ -191,7 +191,7 @@ export default function AttachFilesScreen({ route }: Props) {
         <Card padding="lg" style={styles.emptyCard}>
           <EmptyState
             title="No files yet"
-            message="Upload files to your ClinicEZ storage first, then you can attach them to appointments."
+            message="Upload files to your Clinic EZ storage first, then you can attach them to appointments."
             actionLabel="Upload a File"
             onActionPress={handleUploadNew}
           />

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useForm, Controller } from 'react-hook-form';
@@ -17,8 +17,7 @@ import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
-import { getPatientFullRecord } from 'services/api/patientApi';
-import { hydrateFullRecord } from '@db/hydrate';
+import { useProfileSync } from 'hooks/useProfileSync';
 
 type FormValues = { hasVasectomy: boolean; vasectomyDate: string; conditions: string; };
 
@@ -35,46 +34,29 @@ export default function MaleReproductiveScreen() {
 
   const [hasRecord, setHasRecord] = useState(false);
 
-  useEffect(() => {
-    let isMounted = true;
-    db.query.patientMaleReproductive.findFirst({ where: eq(patientMaleReproductive.patientId, patientId) })
-      .then(async (row) => {
-        if (!isMounted) return;
-        if (row) {
-          setHasRecord(true);
-          reset({
-            hasVasectomy: row.hasVasectomy ?? false,
-            vasectomyDate: row.vasectomyDate ?? '',
-            conditions: row.conditions ?? '',
-          });
-        } else if (getToken && patientId) {
-          try {
-            const fullRecord = await getPatientFullRecord(getToken, patientId);
-            if (fullRecord && isMounted) {
-              await hydrateFullRecord(fullRecord);
-              const hydratedRow = await db.query.patientMaleReproductive.findFirst({
-                where: eq(patientMaleReproductive.patientId, patientId),
-              });
-              if (hydratedRow && isMounted) {
-                setHasRecord(true);
-                reset({
-                  hasVasectomy: hydratedRow.hasVasectomy ?? false,
-                  vasectomyDate: hydratedRow.vasectomyDate ?? '',
-                  conditions: hydratedRow.conditions ?? '',
-                });
-              }
-            }
-          } catch (fetchErr) {
-            console.warn('[MaleReproductive] Could not hydrate full record from server:', fetchErr);
-          }
-        }
-      })
-      .catch(console.error);
+  const load = useCallback(async () => {
+    try {
+      const row = await db.query.patientMaleReproductive.findFirst({
+        where: eq(patientMaleReproductive.patientId, patientId),
+      });
+      if (row) {
+        setHasRecord(true);
+        reset({
+          hasVasectomy: row.hasVasectomy ?? false,
+          vasectomyDate: row.vasectomyDate ?? '',
+          conditions: row.conditions ?? '',
+        });
+      }
+    } catch (err) {
+      console.warn('[MaleReproductive] Failed to load from SQLite:', err);
+    }
+  }, [patientId, reset]);
 
-    return () => {
-      isMounted = false;
-    };
-  }, [patientId, reset, getToken]);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useProfileSync(load);
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);

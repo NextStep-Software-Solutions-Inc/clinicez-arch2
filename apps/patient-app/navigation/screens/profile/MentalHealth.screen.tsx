@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useForm, Controller } from 'react-hook-form';
@@ -17,8 +17,7 @@ import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
-import { getPatientFullRecord } from 'services/api/patientApi';
-import { hydrateFullRecord } from '@db/hydrate';
+import { useProfileSync } from 'hooks/useProfileSync';
 
 type PsychotherapyStatus = 'Active' | 'Inactive' | 'None';
 
@@ -50,50 +49,31 @@ export default function MentalHealthScreen() {
 
   const [hasRecord, setHasRecord] = useState(false);
 
-  useEffect(() => {
-    let isMounted = true;
-    db.query.patientMentalHealthProfile.findFirst({ where: eq(patientMentalHealthProfile.patientId, patientId) })
-      .then(async (row) => {
-        if (!isMounted) return;
-        if (row) {
-          setHasRecord(true);
-          reset({
-            hasPriorDiagnosis: row.hasPriorDiagnosis ?? false,
-            providerName: row.providerName ?? '',
-            providerSpecialty: row.providerSpecialty ?? '',
-            providerClinic: row.providerClinic ?? '',
-            psychotherapyStatus: (row.psychotherapyStatus as PsychotherapyStatus) ?? '',
-          });
-        } else if (getToken && patientId) {
-          try {
-            const fullRecord = await getPatientFullRecord(getToken, patientId);
-            if (fullRecord && isMounted) {
-              await hydrateFullRecord(fullRecord);
-              const hydratedRow = await db.query.patientMentalHealthProfile.findFirst({
-                where: eq(patientMentalHealthProfile.patientId, patientId),
-              });
-              if (hydratedRow && isMounted) {
-                setHasRecord(true);
-                reset({
-                  hasPriorDiagnosis: hydratedRow.hasPriorDiagnosis ?? false,
-                  providerName: hydratedRow.providerName ?? '',
-                  providerSpecialty: hydratedRow.providerSpecialty ?? '',
-                  providerClinic: hydratedRow.providerClinic ?? '',
-                  psychotherapyStatus: (hydratedRow.psychotherapyStatus as PsychotherapyStatus) ?? '',
-                });
-              }
-            }
-          } catch (fetchErr) {
-            console.warn('[MentalHealth] Could not hydrate full record from server:', fetchErr);
-          }
-        }
-      })
-      .catch(console.error);
+  const load = useCallback(async () => {
+    try {
+      const row = await db.query.patientMentalHealthProfile.findFirst({
+        where: eq(patientMentalHealthProfile.patientId, patientId),
+      });
+      if (row) {
+        setHasRecord(true);
+        reset({
+          hasPriorDiagnosis: row.hasPriorDiagnosis ?? false,
+          providerName: row.providerName ?? '',
+          providerSpecialty: row.providerSpecialty ?? '',
+          providerClinic: row.providerClinic ?? '',
+          psychotherapyStatus: (row.psychotherapyStatus as PsychotherapyStatus) ?? '',
+        });
+      }
+    } catch (err) {
+      console.warn('[MentalHealth] Failed to load from SQLite:', err);
+    }
+  }, [patientId, reset]);
 
-    return () => {
-      isMounted = false;
-    };
-  }, [patientId, reset, getToken]);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useProfileSync(load);
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);

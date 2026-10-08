@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useForm, Controller } from 'react-hook-form';
@@ -16,8 +16,7 @@ import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
-import { getPatientFullRecord } from 'services/api/patientApi';
-import { hydrateFullRecord } from '@db/hydrate';
+import { useProfileSync } from 'hooks/useProfileSync';
 
 type WorkEnvironment = 'Office' | 'Field' | 'Factory' | 'Healthcare' | 'Agriculture' | 'Other';
 
@@ -50,52 +49,32 @@ export default function OccupationScreen() {
 
   const [hasRecord, setHasRecord] = useState(false);
 
-  useEffect(() => {
-    let isMounted = true;
-    db.query.patientOccupation.findFirst({ where: eq(patientOccupation.patientId, patientId) })
-      .then(async (row) => {
-        if (!isMounted) return;
-        if (row) {
-          setHasRecord(true);
-          reset({
-            occupation: row.occupation ?? '',
-            employer: row.employer ?? '',
-            industry: row.industry ?? '',
-            workEnvironment: (row.workEnvironment as WorkEnvironment) ?? '',
-            yearsInOccupation: row.yearsInOccupation?.toString() ?? '',
-            hazardExposure: row.hazardExposure ?? '',
-          });
-        } else if (getToken && patientId) {
-          try {
-            const fullRecord = await getPatientFullRecord(getToken, patientId);
-            if (fullRecord && isMounted) {
-              await hydrateFullRecord(fullRecord);
-              const hydratedRow = await db.query.patientOccupation.findFirst({
-                where: eq(patientOccupation.patientId, patientId),
-              });
-              if (hydratedRow && isMounted) {
-                setHasRecord(true);
-                reset({
-                  occupation: hydratedRow.occupation ?? '',
-                  employer: hydratedRow.employer ?? '',
-                  industry: hydratedRow.industry ?? '',
-                  workEnvironment: (hydratedRow.workEnvironment as WorkEnvironment) ?? '',
-                  yearsInOccupation: hydratedRow.yearsInOccupation?.toString() ?? '',
-                  hazardExposure: hydratedRow.hazardExposure ?? '',
-                });
-              }
-            }
-          } catch (fetchErr) {
-            console.warn('[Occupation] Could not hydrate full record from server:', fetchErr);
-          }
-        }
-      })
-      .catch(console.error);
+  const load = useCallback(async () => {
+    try {
+      const row = await db.query.patientOccupation.findFirst({
+        where: eq(patientOccupation.patientId, patientId),
+      });
+      if (row) {
+        setHasRecord(true);
+        reset({
+          occupation: row.occupation ?? '',
+          employer: row.employer ?? '',
+          industry: row.industry ?? '',
+          workEnvironment: (row.workEnvironment as WorkEnvironment) ?? '',
+          yearsInOccupation: row.yearsInOccupation?.toString() ?? '',
+          hazardExposure: row.hazardExposure ?? '',
+        });
+      }
+    } catch (err) {
+      console.warn('[Occupation] Failed to load from SQLite:', err);
+    }
+  }, [patientId, reset]);
 
-    return () => {
-      isMounted = false;
-    };
-  }, [patientId, reset, getToken]);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useProfileSync(load);
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);

@@ -174,7 +174,7 @@ export default function HomeScreenWeb() {
       {isCompact && (
         <View style={styles.compactHeaderRow}>
           <View>
-            <ThemedText variant="h2">ClinicEZ</ThemedText>
+            <ThemedText variant="h2">Clinic EZ</ThemedText>
             <ThemedText variant="small" color="textMuted">
               Patient Portal
             </ThemedText>

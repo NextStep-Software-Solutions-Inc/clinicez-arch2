@@ -1,5 +1,5 @@
-import { useEffect, useState, useRef } from 'react';
-import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform, DeviceEventEmitter } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useForm, Controller } from 'react-hook-form';
 import { db, flushDatabaseSnapshot } from '@db/index';
@@ -25,6 +25,7 @@ import {
   type PatientSummary,
 } from 'services/api/patientApi';
 import { upsertPatientSummary } from '@db/hydrate';
+import { useProfileSync } from 'hooks/useProfileSync';
 
 type FormValues = {
   firstName: string;
@@ -102,6 +103,38 @@ export default function PersonalDemographicsScreen() {
 
   const isDirtyRef = useRef(isDirty);
   isDirtyRef.current = isDirty;
+
+  const loadLocal = useCallback(async () => {
+    if (!patientId || isDirtyRef.current) return;
+    try {
+      const row = await db.query.patients.findFirst({ where: eq(patients.id, patientId) });
+      if (row && !isDirtyRef.current) {
+        const localFirst = row.firstName || user?.firstName || '';
+        const localLast = row.lastName || user?.lastName || '';
+        const rawBlood = fromBackendBloodType(row.bloodType) ?? (row.bloodType ?? '');
+        reset({
+          firstName: localFirst,
+          middleName: row.middleName ?? '',
+          lastName: localLast,
+          suffix: row.suffix ?? '',
+          sex: (row.sex as any) ?? '',
+          dob: row.dob ?? '',
+          placeOfBirth: row.placeOfBirth ?? '',
+          civilStatus: (row.civilStatus as any) ?? '',
+          bloodType: (rawBlood as any),
+          nationality: row.nationality ?? '',
+          ethnicity: row.ethnicity ?? '',
+          religion: row.religion ?? '',
+          primaryLanguage: row.primaryLanguage ?? '',
+          educationLevel: (row.educationLevel as any) ?? '',
+        });
+      }
+    } catch (err) {
+      console.warn('[PersonalDemographics] Failed to read from local DB:', err);
+    }
+  }, [patientId, reset, user?.firstName, user?.lastName]);
+
+  useProfileSync(loadLocal);
 
   useEffect(() => {
     let isMounted = true;
@@ -303,6 +336,7 @@ export default function PersonalDemographicsScreen() {
         }
 
         reset(data);
+        DeviceEventEmitter.emit('profile-synced');
         dialog.alert('Saved', 'Your personal demographics have been updated successfully.', [
           { text: 'OK', onPress: () => navigation.goBack() },
         ]);

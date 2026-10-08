@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { db } from '@db/index';
@@ -20,8 +20,7 @@ import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
-import { getPatientFullRecord } from 'services/api/patientApi';
-import { hydrateFullRecord } from '@db/hydrate';
+import { useProfileSync } from 'hooks/useProfileSync';
 import ThemedBottomSheetModal from '@ui/ThemedBottomSheetModal';
 
 type FamilySide = 'Paternal' | 'Maternal' | 'Both' | 'Unknown';
@@ -57,29 +56,18 @@ export default function FamilyHistoryScreen() {
   const { control, handleSubmit, reset, watch, formState: { isDirty } } = useForm<Form>({ defaultValues: EMPTY });
   const isDeceased = watch('isDeceased');
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
-      let rows = await db.select().from(patientFamilyHistory).where(eq(patientFamilyHistory.patientId, patientId));
-      let active = rows.filter((r) => !r.deletedAt);
-      if (active.length === 0 && getToken && patientId) {
-        try {
-          const fullRecord = await getPatientFullRecord(getToken, patientId);
-          if (fullRecord) {
-            await hydrateFullRecord(fullRecord);
-            rows = await db.select().from(patientFamilyHistory).where(eq(patientFamilyHistory.patientId, patientId));
-            active = rows.filter((r) => !r.deletedAt);
-          }
-        } catch (fetchErr) {
-          console.warn('[FamilyHistoryScreen] Could not hydrate from server:', fetchErr);
-        }
-      }
-      setItems(active);
+      const rows = await db.select().from(patientFamilyHistory).where(eq(patientFamilyHistory.patientId, patientId));
+      setItems(rows.filter((r) => !r.deletedAt));
     } catch (err) {
       console.warn('[FamilyHistoryScreen] Failed to load family history:', err);
     }
-  };
+  }, [patientId]);
 
-  useEffect(() => { load(); }, [patientId, getToken]);
+  useEffect(() => { load(); }, [load]);
+
+  useProfileSync(load);
 
   const openEdit = (row: any) => {
     reset({

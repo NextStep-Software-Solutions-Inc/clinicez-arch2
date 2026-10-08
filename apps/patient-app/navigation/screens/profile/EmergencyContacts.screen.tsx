@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { db } from '@db/index';
@@ -19,8 +19,7 @@ import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
-import { getPatientFullRecord } from 'services/api/patientApi';
-import { hydrateFullRecord } from '@db/hydrate';
+import { useProfileSync } from 'hooks/useProfileSync';
 
 const MAX_CONTACTS = 3;
 
@@ -48,33 +47,20 @@ export default function EmergencyContactsScreen() {
 
   const { control, handleSubmit, reset, formState: { isDirty } } = useForm<ContactForm>({ defaultValues: EMPTY });
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
-      // 1. Immediately render cached SQLite rows for instant offline-first display
-      const initialRows = await db.select().from(emergencyContacts).where(eq(emergencyContacts.patientId, patientId));
-      setContacts(initialRows.filter((r) => !r.deletedAt).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)));
-
-      // 2. If online and authenticated, fetch and hydrate latest server data in background
-      if (getToken && patientId) {
-        try {
-          const fullRecord = await getPatientFullRecord(getToken, patientId);
-          if (fullRecord) {
-            await hydrateFullRecord(fullRecord);
-            const freshRows = await db.select().from(emergencyContacts).where(eq(emergencyContacts.patientId, patientId));
-            setContacts(freshRows.filter((r) => !r.deletedAt).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)));
-          }
-        } catch (fetchErr) {
-          console.warn('[EmergencyContactsScreen] Could not hydrate from server:', fetchErr);
-        }
-      }
+      const rows = await db.select().from(emergencyContacts).where(eq(emergencyContacts.patientId, patientId));
+      setContacts(rows.filter((r) => !r.deletedAt).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)));
     } catch (err) {
       console.warn('[EmergencyContactsScreen] Failed to load contacts:', err);
     }
-  };
+  }, [patientId]);
 
   useEffect(() => {
     load();
-  }, [patientId, getToken]);
+  }, [load]);
+
+  useProfileSync(load);
 
   const openAdd = () => { reset(EMPTY); sheetRef.current?.present(); };
   const openEdit = (row: any) => {

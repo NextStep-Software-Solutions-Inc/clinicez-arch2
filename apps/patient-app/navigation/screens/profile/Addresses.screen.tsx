@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { db } from '@db/index';
@@ -21,8 +21,7 @@ import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
-import { getPatientFullRecord } from 'services/api/patientApi';
-import { hydrateFullRecord } from '@db/hydrate';
+import { useProfileSync } from 'hooks/useProfileSync';
 
 type AddressForm = {
   id: string | null;
@@ -59,35 +58,21 @@ export default function AddressesScreen() {
 
   const { control, handleSubmit, reset, formState: { isDirty } } = useForm<AddressForm>({ defaultValues: EMPTY_FORM });
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
-      // 1. Immediately render cached SQLite rows for instant offline-first display
-      const initialRows = await db.select().from(patientAddresses)
+      const rows = await db.select().from(patientAddresses)
         .where(eq(patientAddresses.patientId, patientId));
-      setAddresses(initialRows.filter((r) => !r.deletedAt));
-
-      // 2. If online and authenticated, fetch and hydrate latest server data in background
-      if (getToken && patientId) {
-        try {
-          const fullRecord = await getPatientFullRecord(getToken, patientId);
-          if (fullRecord) {
-            await hydrateFullRecord(fullRecord);
-            const freshRows = await db.select().from(patientAddresses)
-              .where(eq(patientAddresses.patientId, patientId));
-            setAddresses(freshRows.filter((r) => !r.deletedAt));
-          }
-        } catch (fetchErr) {
-          console.warn('[AddressesScreen] Could not hydrate from server:', fetchErr);
-        }
-      }
+      setAddresses(rows.filter((r) => !r.deletedAt));
     } catch (err) {
       console.warn('[AddressesScreen] Failed to load addresses:', err);
     }
-  };
+  }, [patientId]);
 
   useEffect(() => {
     load();
-  }, [patientId, getToken]);
+  }, [load]);
+
+  useProfileSync(load);
 
   const openAdd = () => {
     reset(EMPTY_FORM);

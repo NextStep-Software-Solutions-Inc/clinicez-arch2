@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { useBreakpoint } from 'hooks/useBreakpoint';
@@ -10,6 +10,7 @@ import ProfileReadOnlyField from 'components/profile/ProfileReadOnlyField';
 import ProfileSectionHeader from 'components/profile/ProfileSectionHeader';
 import { useClinicNameMap } from 'hooks/useClinicNameMap';
 import { usePatientId } from 'hooks/usePatientId';
+import { useProfileSync } from 'hooks/useProfileSync';
 
 
 function humanizeLabel(input: string): string {
@@ -81,10 +82,16 @@ export default function ClinicalAssessmentsScreen() {
   const { isDesktop } = useBreakpoint();
   const [records, setRecords] = useState<any[]>([]);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     db.select().from(clinicalAssessments).where(eq(clinicalAssessments.patientId, patientId)).orderBy(desc(clinicalAssessments.date))
       .then(setRecords).catch(console.error);
   }, [patientId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useProfileSync(load);
 
   return (
     <Screen width="content" scroll={false} padded={false}>

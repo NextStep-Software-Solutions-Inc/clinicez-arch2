@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { ScrollView, StyleSheet, View, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { db } from '@db/index';
@@ -17,8 +17,7 @@ import ProfileSaveBar from 'components/profile/ProfileSaveBar';
 import { usePatientId } from 'hooks/usePatientId';
 import { useAuth } from 'contexts/AuthContext';
 import { flushAndSyncProfile } from 'services/api/syncService';
-import { getNcdQuestionnaire, updateNcdQuestionnaire } from 'services/api/patientApi';
-import { hydrateNcdQuestionnaire } from '@db/hydrate';
+import { useProfileSync } from 'hooks/useProfileSync';
 import { randomUUID } from 'expo-crypto';
 import { dialog } from '@utils/dialog';
 
@@ -95,120 +94,62 @@ export default function NcdQuestionnaireScreen() {
     qid22ProteinDate: '' as string,
   });
 
-  // Load existing records from local SQLite (with Yakap endpoint fallback)
+  // Load existing records from local SQLite
+  const load = useCallback(async () => {
+    try {
+      const rows = await db
+        .select()
+        .from(patientNcdQuestionnaire)
+        .where(eq(patientNcdQuestionnaire.patientId, patientId));
+      if (rows && rows.length > 0) {
+        const row = rows[0];
+        setRecordId(row.id);
+        setForm({
+          qid1Yn: row.qid1Yn ?? null,
+          qid2Yn: row.qid2Yn ?? null,
+          qid3Yn: row.qid3Yn ?? null,
+          qid4Yn: row.qid4Yn ?? null,
+          qid5Ynx: row.qid5Ynx ?? null,
+          qid6Yn: row.qid6Yn ?? null,
+          qid7Yn: row.qid7Yn ?? null,
+          qid8Yn: row.qid8Yn ?? null,
+          qid9Yn: row.qid9Yn ?? null,
+          qid10Yn: row.qid10Yn ?? null,
+          qid11Yn: row.qid11Yn ?? null,
+          qid12Yn: row.qid12Yn ?? null,
+          qid13Yn: row.qid13Yn ?? null,
+          qid14Yn: row.qid14Yn ?? null,
+          qid15Yn: row.qid15Yn ?? null,
+          qid16Yn: row.qid16Yn ?? null,
+          qid17Abcde: row.qid17Abcde ?? null,
+          qid18Yn: row.qid18Yn ?? null,
+          qid23Yn: row.qid23Yn ?? null,
+          qid24Yn: row.qid24Yn ?? null,
+          qid19Yn: row.qid19Yn ?? null,
+          qid19FbsMgdl: row.qid19FbsMgdl !== null && row.qid19FbsMgdl !== undefined ? String(row.qid19FbsMgdl) : '',
+          qid19FbsMmol: row.qid19FbsMmol !== null && row.qid19FbsMmol !== undefined ? String(row.qid19FbsMmol) : '',
+          qid19FbsDate: row.qid19FbsDate ?? '',
+          qid20Yn: row.qid20Yn ?? null,
+          qid20CholeVal: row.qid20CholeVal !== null && row.qid20CholeVal !== undefined ? String(row.qid20CholeVal) : '',
+          qid20CholeDate: row.qid20CholeDate ?? '',
+          qid21Yn: row.qid21Yn ?? null,
+          qid21KetonVal: row.qid21KetonVal !== null && row.qid21KetonVal !== undefined ? String(row.qid21KetonVal) : '',
+          qid21KetonDate: row.qid21KetonDate ?? '',
+          qid22Yn: row.qid22Yn ?? null,
+          qid22ProteinVal: row.qid22ProteinVal !== null && row.qid22ProteinVal !== undefined ? String(row.qid22ProteinVal) : '',
+          qid22ProteinDate: row.qid22ProteinDate ?? '',
+        });
+      }
+    } catch (err) {
+      console.warn('[NcdQuestionnaire] Failed to load from SQLite:', err);
+    }
+  }, [patientId]);
+
   useEffect(() => {
-    let isMounted = true;
-    db.select()
-      .from(patientNcdQuestionnaire)
-      .where(eq(patientNcdQuestionnaire.patientId, patientId))
-      .then(async (rows) => {
-        if (!isMounted) return;
-        if (rows && rows.length > 0) {
-          const row = rows[0];
-          setRecordId(row.id);
-          setForm({
-            qid1Yn: row.qid1Yn ?? null,
-            qid2Yn: row.qid2Yn ?? null,
-            qid3Yn: row.qid3Yn ?? null,
-            qid4Yn: row.qid4Yn ?? null,
+    load();
+  }, [load]);
 
-            qid5Ynx: row.qid5Ynx ?? null,
-            qid6Yn: row.qid6Yn ?? null,
-            qid7Yn: row.qid7Yn ?? null,
-            qid8Yn: row.qid8Yn ?? null,
-
-            qid9Yn: row.qid9Yn ?? null,
-            qid10Yn: row.qid10Yn ?? null,
-            qid11Yn: row.qid11Yn ?? null,
-            qid12Yn: row.qid12Yn ?? null,
-
-            qid13Yn: row.qid13Yn ?? null,
-            qid14Yn: row.qid14Yn ?? null,
-            qid15Yn: row.qid15Yn ?? null,
-            qid16Yn: row.qid16Yn ?? null,
-
-            qid17Abcde: row.qid17Abcde ?? null,
-            qid18Yn: row.qid18Yn ?? null,
-            qid23Yn: row.qid23Yn ?? null,
-            qid24Yn: row.qid24Yn ?? null,
-
-            qid19Yn: row.qid19Yn ?? null,
-            qid19FbsMgdl: row.qid19FbsMgdl !== null && row.qid19FbsMgdl !== undefined ? String(row.qid19FbsMgdl) : '',
-            qid19FbsMmol: row.qid19FbsMmol !== null && row.qid19FbsMmol !== undefined ? String(row.qid19FbsMmol) : '',
-            qid19FbsDate: row.qid19FbsDate ?? '',
-
-            qid20Yn: row.qid20Yn ?? null,
-            qid20CholeVal: row.qid20CholeVal !== null && row.qid20CholeVal !== undefined ? String(row.qid20CholeVal) : '',
-            qid20CholeDate: row.qid20CholeDate ?? '',
-
-            qid21Yn: row.qid21Yn ?? null,
-            qid21KetonVal: row.qid21KetonVal !== null && row.qid21KetonVal !== undefined ? String(row.qid21KetonVal) : '',
-            qid21KetonDate: row.qid21KetonDate ?? '',
-
-            qid22Yn: row.qid22Yn ?? null,
-            qid22ProteinVal: row.qid22ProteinVal !== null && row.qid22ProteinVal !== undefined ? String(row.qid22ProteinVal) : '',
-            qid22ProteinDate: row.qid22ProteinDate ?? '',
-          });
-        } else if (getToken && patientId) {
-          try {
-            const remoteNcd = await getNcdQuestionnaire(getToken, patientId);
-            if (remoteNcd && isMounted) {
-              await hydrateNcdQuestionnaire(patientId, remoteNcd);
-              const hydratedRows = await db
-                .select()
-                .from(patientNcdQuestionnaire)
-                .where(eq(patientNcdQuestionnaire.patientId, patientId));
-              if (hydratedRows && hydratedRows.length > 0 && isMounted) {
-                const row = hydratedRows[0];
-                setRecordId(row.id);
-                setForm({
-                  qid1Yn: row.qid1Yn ?? null,
-                  qid2Yn: row.qid2Yn ?? null,
-                  qid3Yn: row.qid3Yn ?? null,
-                  qid4Yn: row.qid4Yn ?? null,
-                  qid5Ynx: row.qid5Ynx ?? null,
-                  qid6Yn: row.qid6Yn ?? null,
-                  qid7Yn: row.qid7Yn ?? null,
-                  qid8Yn: row.qid8Yn ?? null,
-                  qid9Yn: row.qid9Yn ?? null,
-                  qid10Yn: row.qid10Yn ?? null,
-                  qid11Yn: row.qid11Yn ?? null,
-                  qid12Yn: row.qid12Yn ?? null,
-                  qid13Yn: row.qid13Yn ?? null,
-                  qid14Yn: row.qid14Yn ?? null,
-                  qid15Yn: row.qid15Yn ?? null,
-                  qid16Yn: row.qid16Yn ?? null,
-                  qid17Abcde: row.qid17Abcde ?? null,
-                  qid18Yn: row.qid18Yn ?? null,
-                  qid23Yn: row.qid23Yn ?? null,
-                  qid24Yn: row.qid24Yn ?? null,
-                  qid19Yn: row.qid19Yn ?? null,
-                  qid19FbsMgdl: row.qid19FbsMgdl !== null && row.qid19FbsMgdl !== undefined ? String(row.qid19FbsMgdl) : '',
-                  qid19FbsMmol: row.qid19FbsMmol !== null && row.qid19FbsMmol !== undefined ? String(row.qid19FbsMmol) : '',
-                  qid19FbsDate: row.qid19FbsDate ?? '',
-                  qid20Yn: row.qid20Yn ?? null,
-                  qid20CholeVal: row.qid20CholeVal !== null && row.qid20CholeVal !== undefined ? String(row.qid20CholeVal) : '',
-                  qid20CholeDate: row.qid20CholeDate ?? '',
-                  qid21Yn: row.qid21Yn ?? null,
-                  qid21KetonVal: row.qid21KetonVal !== null && row.qid21KetonVal !== undefined ? String(row.qid21KetonVal) : '',
-                  qid21KetonDate: row.qid21KetonDate ?? '',
-                  qid22Yn: row.qid22Yn ?? null,
-                  qid22ProteinVal: row.qid22ProteinVal !== null && row.qid22ProteinVal !== undefined ? String(row.qid22ProteinVal) : '',
-                  qid22ProteinDate: row.qid22ProteinDate ?? '',
-                });
-              }
-            }
-          } catch (fetchErr) {
-            console.warn('[NcdQuestionnaire] Could not fetch NCD data from Yakap API:', fetchErr);
-          }
-        }
-      })
-      .catch(console.error);
-
-    return () => {
-      isMounted = false;
-    };
-  }, [patientId, getToken]);
+  useProfileSync(load);
 
   const updateField = (key: keyof typeof form, val: any) => {
     setForm((prev) => ({ ...prev, [key]: val }));

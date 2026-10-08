@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { FlatList, StyleSheet, View, Pressable, Modal, ScrollView } from 'react-native';
 import ThemedText from '@ui/ThemedText';
 import Badge from '@ui/Badge';
@@ -15,6 +15,7 @@ import { useClinicNameMap } from 'hooks/useClinicNameMap';
 import { usePatientId } from 'hooks/usePatientId';
 import * as Sharing from 'expo-sharing';
 import { dialog } from '@utils/dialog';
+import { useProfileSync } from 'hooks/useProfileSync';
 
 export default function LabResultsScreen() {
   const patientId = usePatientId();
@@ -26,7 +27,7 @@ export default function LabResultsScreen() {
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
   const [reportModalVisible, setReportModalVisible] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     db.select()
       .from(labResults)
       .where(eq(labResults.patientId, patientId))
@@ -49,7 +50,7 @@ export default function LabResultsScreen() {
               unit: 'g/dL',
               referenceRange: '13.5 - 17.5 g/dL',
               flag: 'Normal',
-              laboratory: 'Metro Health Diagnostic Lab (ClinicEz Partner)',
+              laboratory: 'Metro Health Diagnostic Lab (Clinic EZ Partner)',
               orderingPhysician: 'Dr. Roberto Cruz, MD',
               pathologist: 'Dr. Evelyn Lim, MD, FPSP (PRC-0078912)',
               medtech: 'Mark Joshua Bautista, RMT (PRC-0091823)',
@@ -75,7 +76,7 @@ export default function LabResultsScreen() {
               unit: 'mg/dL',
               referenceRange: '70.0 - 99.0 mg/dL',
               flag: 'Abnormal High',
-              laboratory: 'Metro Health Diagnostic Lab (ClinicEz Partner)',
+              laboratory: 'Metro Health Diagnostic Lab (Clinic EZ Partner)',
               orderingPhysician: 'Dr. Roberto Cruz, MD',
               pathologist: 'Dr. Evelyn Lim, MD, FPSP (PRC-0078912)',
               medtech: 'Mark Joshua Bautista, RMT (PRC-0091823)',
@@ -89,6 +90,12 @@ export default function LabResultsScreen() {
       })
       .catch(console.error);
   }, [patientId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useProfileSync(load);
 
   const handleOpenReport = (item: any) => {
     setSelectedReport(item);

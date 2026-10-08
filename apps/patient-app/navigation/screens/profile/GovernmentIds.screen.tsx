@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useForm, Controller } from 'react-hook-form';
@@ -20,8 +20,7 @@ import { randomUUID } from 'expo-crypto';
 import { usePatientId } from 'hooks/usePatientId';
 import { useAuth } from 'contexts/AuthContext';
 import { flushAndSyncProfile } from 'services/api/syncService';
-import { getPatientFullRecord } from 'services/api/patientApi';
-import { hydrateFullRecord } from '@db/hydrate';
+import { useProfileSync } from 'hooks/useProfileSync';
 import { dialog } from '@utils/dialog';
 
 type PhilhealthCategory = 'MM' | 'DD';
@@ -182,85 +181,48 @@ export default function GovernmentIdsScreen() {
 
   const [hasRecord, setHasRecord] = useState(false);
 
-  useEffect(() => {
-    let isMounted = true;
-    db.query.patientGovernmentIds
-      .findFirst({ where: eq(patientGovernmentIds.patientId, patientId) })
-      .then(async (row) => {
-        if (!isMounted) return;
-        if (row) {
-          setHasRecord(true);
-          reset({
-            philhealthId: row.philhealthId ?? '',
-            philhealthCategory: row.philhealthCategory ?? '',
-            sponsorPin: row.sponsorPin ?? '',
-            sponsorLastName: row.sponsorLastName ?? '',
-            sponsorFirstName: row.sponsorFirstName ?? '',
-            sponsorMiddleName: row.sponsorMiddleName ?? '',
-            sponsorSuffix: row.sponsorSuffix ?? '',
-            sponsorDob: row.sponsorDob ?? '',
-            sponsorRelationship: (row.sponsorRelationship as any) ?? '',
-            sssNumber: row.sssNumber ?? '',
-            gsisNumber: row.gsisNumber ?? '',
-            pagIbigNumber: row.pagibigId ?? '',
-            tinNumber: row.tin ?? '',
-            seniorCitizenId: row.seniorCitizenId ?? '',
-            isPwd: row.isPwd ?? false,
-            pwdIdNumber: row.pwdIdNumber ?? '',
-            disabilityType: row.disabilityType ?? '',
-            hmoProvider: row.hmoProvider ?? '',
-            hmoPolicyNumber: row.hmoPolicyNumber ?? '',
-            hmoPlanType: row.hmoPlanType ?? '',
-            hmoCoverageStart: row.hmoCoverageStart ?? '',
-            hmoCoverageEnd: row.hmoCoverageEnd ?? '',
-          });
-        } else if (getToken && patientId) {
-          try {
-            const fullRecord = await getPatientFullRecord(getToken, patientId);
-            if (fullRecord && isMounted) {
-              await hydrateFullRecord(fullRecord);
-              const hydratedRow = await db.query.patientGovernmentIds.findFirst({
-                where: eq(patientGovernmentIds.patientId, patientId),
-              });
-              if (hydratedRow && isMounted) {
-                setHasRecord(true);
-                reset({
-                  philhealthId: hydratedRow.philhealthId ?? '',
-                  philhealthCategory: hydratedRow.philhealthCategory ?? '',
-                  sponsorPin: hydratedRow.sponsorPin ?? '',
-                  sponsorLastName: hydratedRow.sponsorLastName ?? '',
-                  sponsorFirstName: hydratedRow.sponsorFirstName ?? '',
-                  sponsorMiddleName: hydratedRow.sponsorMiddleName ?? '',
-                  sponsorSuffix: hydratedRow.sponsorSuffix ?? '',
-                  sponsorDob: hydratedRow.sponsorDob ?? '',
-                  sponsorRelationship: (hydratedRow.sponsorRelationship as any) ?? '',
-                  sssNumber: hydratedRow.sssNumber ?? '',
-                  gsisNumber: hydratedRow.gsisNumber ?? '',
-                  pagIbigNumber: hydratedRow.pagibigId ?? '',
-                  tinNumber: hydratedRow.tin ?? '',
-                  seniorCitizenId: hydratedRow.seniorCitizenId ?? '',
-                  isPwd: hydratedRow.isPwd ?? false,
-                  pwdIdNumber: hydratedRow.pwdIdNumber ?? '',
-                  disabilityType: hydratedRow.disabilityType ?? '',
-                  hmoProvider: hydratedRow.hmoProvider ?? '',
-                  hmoPolicyNumber: hydratedRow.hmoPolicyNumber ?? '',
-                  hmoPlanType: hydratedRow.hmoPlanType ?? '',
-                  hmoCoverageStart: hydratedRow.hmoCoverageStart ?? '',
-                  hmoCoverageEnd: hydratedRow.hmoCoverageEnd ?? '',
-                });
-              }
-            }
-          } catch (fetchErr) {
-            console.warn('[GovernmentIds] Could not hydrate full record from server:', fetchErr);
-          }
-        }
-      })
-      .catch(console.error);
+  const load = useCallback(async () => {
+    try {
+      const row = await db.query.patientGovernmentIds.findFirst({
+        where: eq(patientGovernmentIds.patientId, patientId),
+      });
+      if (row) {
+        setHasRecord(true);
+        reset({
+          philhealthId: row.philhealthId ?? '',
+          philhealthCategory: row.philhealthCategory ?? '',
+          sponsorPin: row.sponsorPin ?? '',
+          sponsorLastName: row.sponsorLastName ?? '',
+          sponsorFirstName: row.sponsorFirstName ?? '',
+          sponsorMiddleName: row.sponsorMiddleName ?? '',
+          sponsorSuffix: row.sponsorSuffix ?? '',
+          sponsorDob: row.sponsorDob ?? '',
+          sponsorRelationship: (row.sponsorRelationship as any) ?? '',
+          sssNumber: row.sssNumber ?? '',
+          gsisNumber: row.gsisNumber ?? '',
+          pagIbigNumber: row.pagibigId ?? '',
+          tinNumber: row.tin ?? '',
+          seniorCitizenId: row.seniorCitizenId ?? '',
+          isPwd: row.isPwd ?? false,
+          pwdIdNumber: row.pwdIdNumber ?? '',
+          disabilityType: row.disabilityType ?? '',
+          hmoProvider: row.hmoProvider ?? '',
+          hmoPolicyNumber: row.hmoPolicyNumber ?? '',
+          hmoPlanType: row.hmoPlanType ?? '',
+          hmoCoverageStart: row.hmoCoverageStart ?? '',
+          hmoCoverageEnd: row.hmoCoverageEnd ?? '',
+        });
+      }
+    } catch (err) {
+      console.warn('[GovernmentIds] Failed to load from SQLite:', err);
+    }
+  }, [patientId, reset]);
 
-    return () => {
-      isMounted = false;
-    };
-  }, [patientId, reset, getToken]);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useProfileSync(load);
 
   const onSave = handleSubmit(async (data) => {
     if (data.philhealthCategory === 'DD') {

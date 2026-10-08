@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { ScrollView, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useForm, Controller } from 'react-hook-form';
@@ -16,8 +16,7 @@ import { useAuth } from 'contexts/AuthContext';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { dialog } from '@utils/dialog';
 import { flushAndSyncProfile } from 'services/api/syncService';
-import { getPatientFullRecord } from 'services/api/patientApi';
-import { hydrateFullRecord } from '@db/hydrate';
+import { useProfileSync } from 'hooks/useProfileSync';
 
 type CorrectiveLenses = 'None' | 'Glasses' | 'Contacts' | 'Both';
 
@@ -50,50 +49,31 @@ export default function DentalVisionScreen() {
 
   const [hasRecord, setHasRecord] = useState(false);
 
-  useEffect(() => {
-    let isMounted = true;
-    db.query.patientDentalVision.findFirst({ where: eq(patientDentalVision.patientId, patientId) })
-      .then(async (row) => {
-        if (!isMounted) return;
-        if (row) {
-          setHasRecord(true);
-          reset({
-            dentistName: row.dentistName ?? '',
-            dentistClinic: row.dentistClinic ?? '',
-            orthodonticDevice: row.orthodonticDevice ?? '',
-            eyeDoctorName: row.eyeDoctorName ?? '',
-            correctiveLenses: (row.correctiveLenses as CorrectiveLenses) ?? '',
-          });
-        } else if (getToken && patientId) {
-          try {
-            const fullRecord = await getPatientFullRecord(getToken, patientId);
-            if (fullRecord && isMounted) {
-              await hydrateFullRecord(fullRecord);
-              const hydratedRow = await db.query.patientDentalVision.findFirst({
-                where: eq(patientDentalVision.patientId, patientId),
-              });
-              if (hydratedRow && isMounted) {
-                setHasRecord(true);
-                reset({
-                  dentistName: hydratedRow.dentistName ?? '',
-                  dentistClinic: hydratedRow.dentistClinic ?? '',
-                  orthodonticDevice: hydratedRow.orthodonticDevice ?? '',
-                  eyeDoctorName: hydratedRow.eyeDoctorName ?? '',
-                  correctiveLenses: (hydratedRow.correctiveLenses as CorrectiveLenses) ?? '',
-                });
-              }
-            }
-          } catch (fetchErr) {
-            console.warn('[DentalVision] Could not hydrate full record from server:', fetchErr);
-          }
-        }
-      })
-      .catch(console.error);
+  const load = useCallback(async () => {
+    try {
+      const row = await db.query.patientDentalVision.findFirst({
+        where: eq(patientDentalVision.patientId, patientId),
+      });
+      if (row) {
+        setHasRecord(true);
+        reset({
+          dentistName: row.dentistName ?? '',
+          dentistClinic: row.dentistClinic ?? '',
+          orthodonticDevice: row.orthodonticDevice ?? '',
+          eyeDoctorName: row.eyeDoctorName ?? '',
+          correctiveLenses: (row.correctiveLenses as CorrectiveLenses) ?? '',
+        });
+      }
+    } catch (err) {
+      console.warn('[DentalVision] Failed to load from SQLite:', err);
+    }
+  }, [patientId, reset]);
 
-    return () => {
-      isMounted = false;
-    };
-  }, [patientId, reset, getToken]);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useProfileSync(load);
 
   const onSave = handleSubmit(async (data) => {
     setSaving(true);
