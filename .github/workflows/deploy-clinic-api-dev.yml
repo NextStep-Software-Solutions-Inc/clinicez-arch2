@@ -82,7 +82,7 @@ jobs:
     - name: Create .env file
       env:
         ASPNETCORE_ENVIRONMENT: ${{ env.ENVIRONMENT }}
-        CONNECTION_STRING: ${{ secrets.CLINIC_DB_CONNECTION_STRING }}
+        CONNECTION_STRING: ${{ secrets.CLINIC_DB_CONNECTION_STRING || secrets.CLINICAPP_DB_CONNECTION_STRING }}
         RABBITMQ_PASSWORD: ${{ secrets.RABBITMQ_PASSWORD }}
         HANGFIRE_DASHBOARD_PASSWORD: ${{ secrets.CLINICAPP_HANGFIRE_PASSWORD || secrets.CLINIC_HANGFIRE_PASSWORD || secrets.HANGFIRE_PASSWORD }}
         INTERNAL_API_KEY: ${{ secrets.INTERNAL_API_KEY }}
@@ -97,6 +97,10 @@ jobs:
         RABBITMQ_NETWORK: ${{ vars.RABBITMQ_NETWORK || 'data-network' }}
         NPM_NETWORK: ${{ vars.NPM_NETWORK || 'npm-default' }}
       run: |
+        if [ -z "$CONNECTION_STRING" ]; then
+          echo "::error::CLINIC_DB_CONNECTION_STRING is not configured. Set it as a GitHub secret (Settings -> Secrets and variables -> Actions)."
+          exit 1
+        fi
         if [ -z "$BASE_DOMAIN" ]; then
           echo "::error::BASE_DOMAIN is not configured. Set it as a GitHub secret or variable (Settings -> Secrets and variables -> Actions)."
           exit 1
@@ -152,11 +156,10 @@ jobs:
           cd "${{ vars.DEPLOY_DIR || env.DEPLOY_DIR }}"
 
           echo "==> Ensuring networks exist..."
-          set -a; [ -f .env ] && . .env; set +a
-          RABBIT_NET="${RABBITMQ_NETWORK:-data-network}"
-          PROXY_NET="${NPM_NETWORK:-npm-default}"
-          docker network inspect "$RABBIT_NET" >/dev/null 2>&1 || docker network create "$RABBIT_NET"
-          docker network inspect "$PROXY_NET" >/dev/null 2>&1 || docker network create "$PROXY_NET"
+          RABBIT_NET=$(grep -E '^RABBITMQ_NETWORK=' .env 2>/dev/null | cut -d= -f2- | tr -d '\r"')
+          PROXY_NET=$(grep -E '^NPM_NETWORK=' .env 2>/dev/null | cut -d= -f2- | tr -d '\r"')
+          docker network inspect "${RABBIT_NET:-data-network}" >/dev/null 2>&1 || docker network create "${RABBIT_NET:-data-network}"
+          docker network inspect "${PROXY_NET:-npm-default}" >/dev/null 2>&1 || docker network create "${PROXY_NET:-npm-default}"
 
           echo "==> Loading Docker image..."
           docker load < clinic-api.tar.gz
