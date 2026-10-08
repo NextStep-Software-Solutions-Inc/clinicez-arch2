@@ -26,6 +26,7 @@ services:
       - RabbitMq__Password=${RABBITMQ_PASSWORD}
       - Facility__BaseDomain=${BASE_DOMAIN:?BASE_DOMAIN must be set}
       - Internal__ApiKey=${INTERNAL_API_KEY:?INTERNAL_API_KEY must be set}
+      - Jwt__SigningKey=${PHARMACY_JWT_SIGNING_KEY:-}
       - Jwt__KeyDirectory=/app/keys
     volumes:
       - pharmacy-api-keys:/app/keys
