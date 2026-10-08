@@ -87,11 +87,11 @@ jobs:
           CLERK_AUTHORITY: ${{ secrets.PATIENT_CLERK_AUTHORITY || 'https://amazing-mosquito-75.clerk.accounts.dev' }}
           CLERK_AUDIENCE: ${{ secrets.PATIENT_CLERK_AUDIENCE || '' }}
           CLERK_WEBHOOK_SECRET: ${{ secrets.PATIENT_CLERK_WEBHOOK_SECRET }}
-          R2_ACCOUNT_ID: ${{ secrets.PATIENT_R2_ACCOUNT_ID }}
-          R2_BUCKET_NAME: ${{ secrets.PATIENT_R2_BUCKET_NAME }}
-          R2_ACCESS_KEY_ID: ${{ secrets.PATIENT_R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.PATIENT_R2_SECRET_ACCESS_KEY }}
-          R2_PUBLIC_URL: ${{ secrets.PATIENT_R2_PUBLIC_URL }}
+          R2_ACCOUNT_ID: ${{ secrets.PATIENT_R2_ACCOUNT_ID || secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET_NAME: ${{ secrets.PATIENT_R2_BUCKET_NAME || secrets.R2_BUCKET_NAME }}
+          R2_ACCESS_KEY_ID: ${{ secrets.PATIENT_R2_ACCESS_KEY_ID || secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.PATIENT_R2_SECRET_ACCESS_KEY || secrets.R2_SECRET_ACCESS_KEY }}
+          R2_PUBLIC_URL: ${{ secrets.PATIENT_R2_PUBLIC_URL || secrets.R2_PUBLIC_URL }}
           HANGFIRE_DASHBOARD_PASSWORD: ${{ secrets.PATIENTAPP_HANGFIRE_PASSWORD || secrets.PATIENT_HANGFIRE_PASSWORD || secrets.HANGFIRE_PASSWORD }}
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.PATIENT_FIREBASE_JSON }}
           IMAGE_NAME: ${{ env.IMAGE_NAME }}

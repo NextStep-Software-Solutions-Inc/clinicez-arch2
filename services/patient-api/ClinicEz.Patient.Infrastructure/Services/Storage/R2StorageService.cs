@@ -9,7 +9,7 @@ namespace ClinicEz.Patient.Infrastructure.Services.Storage;
 
 public sealed class R2StorageService : IStorageService, IAsyncDisposable
 {
-    private readonly IAmazonS3 _s3Client;
+    private readonly Lazy<IAmazonS3> _lazyS3Client;
     private readonly string _bucketName;
     private readonly string _publicUrl;
 
@@ -17,18 +17,28 @@ public sealed class R2StorageService : IStorageService, IAsyncDisposable
     {
         var opts = options.Value;
         _bucketName = opts.BucketName;
-        _publicUrl = opts.PublicUrl.TrimEnd('/');
+        _publicUrl = opts.PublicUrl?.TrimEnd('/') ?? string.Empty;
 
-        var credentials = new BasicAWSCredentials(opts.AccessKeyId, opts.SecretAccessKey);
-        var config = new AmazonS3Config
+        _lazyS3Client = new Lazy<IAmazonS3>(() =>
         {
-            ServiceURL = $"https://{opts.AccountId}.r2.cloudflarestorage.com",
-            ForcePathStyle = true,
-            AuthenticationRegion = "auto",
-        };
+            if (string.IsNullOrWhiteSpace(opts.AccountId))
+            {
+                throw new InvalidOperationException("Cloudflare R2 AccountId is not configured. Please ensure R2:AccountId is set.");
+            }
 
-        _s3Client = new AmazonS3Client(credentials, config);
+            var credentials = new BasicAWSCredentials(opts.AccessKeyId, opts.SecretAccessKey);
+            var config = new AmazonS3Config
+            {
+                ServiceURL = $"https://{opts.AccountId}.r2.cloudflarestorage.com",
+                ForcePathStyle = true,
+                AuthenticationRegion = "auto",
+            };
+
+            return new AmazonS3Client(credentials, config);
+        });
     }
+
+    private IAmazonS3 S3Client => _lazyS3Client.Value;
 
     public async Task<string> UploadAsync(
         Stream stream,
@@ -45,7 +55,7 @@ public sealed class R2StorageService : IStorageService, IAsyncDisposable
             AutoCloseStream = false,
         };
 
-        await _s3Client.PutObjectAsync(request, cancellationToken);
+        await S3Client.PutObjectAsync(request, cancellationToken);
         return key;
     }
 
@@ -57,7 +67,7 @@ public sealed class R2StorageService : IStorageService, IAsyncDisposable
             Key = key,
         };
 
-        await _s3Client.DeleteObjectAsync(request, cancellationToken);
+        await S3Client.DeleteObjectAsync(request, cancellationToken);
     }
 
     public string GetPublicUrl(string key) => $"{_publicUrl}/{key}";
@@ -73,7 +83,7 @@ public sealed class R2StorageService : IStorageService, IAsyncDisposable
             ContentType = contentType
         };
 
-        return Task.FromResult(_s3Client.GetPreSignedURL(request));
+        return Task.FromResult(S3Client.GetPreSignedURL(request));
     }
 
     public Task<string> GeneratePresignedDownloadUrlAsync(string key, TimeSpan expiresIn, CancellationToken cancellationToken = default)
@@ -86,7 +96,7 @@ public sealed class R2StorageService : IStorageService, IAsyncDisposable
             Expires = DateTime.UtcNow.Add(expiresIn)
         };
 
-        return Task.FromResult(_s3Client.GetPreSignedURL(request));
+        return Task.FromResult(S3Client.GetPreSignedURL(request));
     }
 
     public async Task<bool> ObjectExistsAsync(string key, CancellationToken cancellationToken = default)
@@ -98,7 +108,7 @@ public sealed class R2StorageService : IStorageService, IAsyncDisposable
                 BucketName = _bucketName,
                 Key = key
             };
-            await _s3Client.GetObjectMetadataAsync(request, cancellationToken);
+            await S3Client.GetObjectMetadataAsync(request, cancellationToken);
             return true;
         }
         catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -109,7 +119,10 @@ public sealed class R2StorageService : IStorageService, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        _s3Client.Dispose();
+        if (_lazyS3Client.IsValueCreated)
+        {
+            _lazyS3Client.Value.Dispose();
+        }
         await ValueTask.CompletedTask;
     }
 }

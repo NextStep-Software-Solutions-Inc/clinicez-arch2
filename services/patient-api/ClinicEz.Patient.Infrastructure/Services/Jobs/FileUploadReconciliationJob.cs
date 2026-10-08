@@ -30,6 +30,11 @@ public class FileUploadReconciliationJob : IFileUploadReconciliationJob
             .Where(f => f.SyncStatus == FileSyncStatus.Syncing && f.UploadedAt < oneHourAgo)
             .ToListAsync(cancellationToken);
 
+        if (pendingFiles.Count == 0)
+        {
+            return;
+        }
+
         foreach (var file in pendingFiles)
         {
             var exists = await _storageService.ObjectExistsAsync(file.StorageKey, cancellationToken);
