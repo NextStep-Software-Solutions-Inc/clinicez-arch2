@@ -296,19 +296,31 @@ export function resolveTenantContext(): TenantContext {
   const hostname = location?.hostname || '';
   const isRoot = location ? isRootHostname(hostname) : false;
 
-  // 1. Subdomain Check (Only if not a recognized root domain)
   if (location && !isRoot) {
     const cleanHost = hostname.toLowerCase().split(':')[0].trim();
     const serviceMatch = cleanHost.match(buildServiceHostRegex());
     const facilitySlug = serviceMatch && isValidTenantSlug(serviceMatch[1]) ? serviceMatch[1] : null;
 
+    // 1a. Nested service subdomain: <facilitySlug>.<service>.<baseDomain>
+    // The slug here is strictly a FACILITY (clinic/lab/pharmacy) slug, NEVER a tenant slug.
+    if (serviceMatch && facilitySlug) {
+      const cachedClinic = readStorage(`${STORAGE_KEY_CLINIC}_${facilitySlug}`);
+      return {
+        tenantSlug: null,
+        facilitySlug,
+        clinicId: cachedClinic || null,
+        source: 'subdomain',
+        isRoot: false,
+      };
+    }
+
+    // 1b. Tenant subdomain (Portal / Org entry point): <tenantSlug>.<baseDomain>
     const subdomainTenant = extractTenantFromHostname(hostname);
     if (subdomainTenant && isValidTenantSlug(subdomainTenant)) {
-      const cachedClinic =
-        readStorage(`${STORAGE_KEY_CLINIC}_${subdomainTenant}`) || readStorage(STORAGE_KEY_CLINIC);
+      const cachedClinic = readStorage(`${STORAGE_KEY_CLINIC}_${subdomainTenant}`);
       return {
         tenantSlug: subdomainTenant,
-        facilitySlug: facilitySlug || undefined,
+        facilitySlug: undefined,
         clinicId: cachedClinic || null,
         source: 'subdomain',
         isRoot: false,
@@ -351,7 +363,7 @@ export function resolveTenantContext(): TenantContext {
     if (isValidTenantSlug(storedTenant)) {
       if (!isRoot) {
         const storedClinic =
-          readStorage(`${STORAGE_KEY_CLINIC}_${storedTenant}`) || readStorage(STORAGE_KEY_CLINIC);
+          readStorage(`${STORAGE_KEY_CLINIC}_${storedTenant}`);
         return {
           tenantSlug: storedTenant,
           clinicId: storedClinic,
@@ -374,15 +386,15 @@ export function setActiveTenantContext(tenantSlug: string, clinicId?: string): v
     writeStorage(STORAGE_KEY_TENANT, cleanTenant);
     if (clinicId) {
       writeStorage(`${STORAGE_KEY_CLINIC}_${cleanTenant}`, clinicId);
-      writeStorage(STORAGE_KEY_CLINIC, clinicId);
     }
   }
 }
 
 export function setActiveClinicId(clinicId: string, tenantSlug?: string): void {
-  writeStorage(STORAGE_KEY_CLINIC, clinicId);
   if (tenantSlug && isValidTenantSlug(tenantSlug)) {
     writeStorage(`${STORAGE_KEY_CLINIC}_${tenantSlug.trim().toLowerCase()}`, clinicId);
+  } else {
+    writeStorage(STORAGE_KEY_CLINIC, clinicId);
   }
 }
 

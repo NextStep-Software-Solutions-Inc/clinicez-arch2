@@ -46,11 +46,21 @@ public sealed class ClinicScopeMiddleware
                 }
             }
 
-            if (isInternal && !hasHeader &&
-                context.Request.Headers.TryGetValue("X-Tenant-Id", out var tenantHeader) &&
-                !string.IsNullOrWhiteSpace(tenantHeader))
+            if (isInternal && !hasHeader)
             {
-                var resolved = await workspaces.ResolveAsync(tenantHeader.ToString(), context.RequestAborted);
+                var hasFacilitySlug = context.Request.Headers.TryGetValue("X-Facility-Slug", out var facHeader) && !string.IsNullOrWhiteSpace(facHeader);
+                var hasTenantSlug = context.Request.Headers.TryGetValue("X-Tenant-Id", out var tenantHeader) && !string.IsNullOrWhiteSpace(tenantHeader);
+
+                ResolvedWorkspace? resolved = null;
+                if (hasFacilitySlug)
+                {
+                    resolved = await workspaces.ResolveFacilityAsync(facHeader.ToString(), context.RequestAborted);
+                }
+                else if (hasTenantSlug)
+                {
+                    resolved = await workspaces.ResolveTenantAsync(tenantHeader.ToString(), context.RequestAborted);
+                }
+
                 if (resolved is not null)
                 {
                     context.Items[ClinicContext.InternalTenantItemKey] = resolved.TenantId;
@@ -66,8 +76,23 @@ public sealed class ClinicScopeMiddleware
                                 Guid.TryParse(anonClinic.ToString(), out _);
             if (!hasClinicHint)
             {
-                context.Request.Headers.TryGetValue("X-Tenant-Id", out var anonTenant);
-                var resolved = await workspaces.ResolveAsync(anonTenant.ToString(), context.RequestAborted);
+                var hasFacilitySlug = context.Request.Headers.TryGetValue("X-Facility-Slug", out var anonFacility) && !string.IsNullOrWhiteSpace(anonFacility);
+                var hasTenantSlug = context.Request.Headers.TryGetValue("X-Tenant-Id", out var anonTenant) && !string.IsNullOrWhiteSpace(anonTenant);
+
+                ResolvedWorkspace? resolved = null;
+                if (hasFacilitySlug)
+                {
+                    resolved = await workspaces.ResolveFacilityAsync(anonFacility.ToString(), context.RequestAborted);
+                }
+                else if (hasTenantSlug)
+                {
+                    resolved = await workspaces.ResolveTenantAsync(anonTenant.ToString(), context.RequestAborted);
+                }
+                else
+                {
+                    resolved = await workspaces.ResolveAsync(null, context.RequestAborted);
+                }
+
                 if (resolved is not null)
                 {
                     context.Items[ClinicContext.InternalTenantItemKey] = resolved.TenantId;

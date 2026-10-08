@@ -209,4 +209,58 @@ describe('native-safe workspace storage (no window.location, no localStorage)', 
     setTenantStorage(null);
     expect(resolveTenantContext()).toEqual({ tenantSlug: null, clinicId: null, source: 'none', isRoot: false });
   });
+
+  it('strictly distinguishes facility slug from tenant slug on service subdomains', () => {
+    globals.window = {
+      location: {
+        hostname: 'clinic-a.clinic.dev.clinicez.net',
+        search: '',
+      },
+    };
+    setTenantStorage(memoryStorage());
+
+    const context = resolveTenantContext();
+    expect(context.facilitySlug).toBe('clinic-a');
+    expect(context.tenantSlug).toBe(null);
+    expect(context.source).toBe('subdomain');
+  });
+
+  it('extracts tenant slug on portal tenant subdomains without setting facility slug', () => {
+    globals.window = {
+      location: {
+        hostname: 'metro-health.dev.clinicez.net',
+        search: '',
+      },
+    };
+    setTenantStorage(memoryStorage());
+
+    const context = resolveTenantContext();
+    expect(context.tenantSlug).toBe('metro-health');
+    expect(context.facilitySlug).toBeUndefined();
+    expect(context.source).toBe('subdomain');
+  });
+
+  it('isolates cached clinic IDs between different facilities', () => {
+    const storage = memoryStorage();
+    setTenantStorage(storage);
+
+    setActiveClinicId('11111111-aaaa-aaaa-aaaa-111111111111', 'clinic-a');
+    setActiveClinicId('22222222-bbbb-bbbb-bbbb-222222222222', 'clinic-b');
+
+    globals.window = {
+      location: {
+        hostname: 'clinic-a.clinic.dev.clinicez.net',
+        search: '',
+      },
+    };
+    expect(resolveTenantContext().clinicId).toBe('11111111-aaaa-aaaa-aaaa-111111111111');
+
+    globals.window = {
+      location: {
+        hostname: 'clinic-b.clinic.dev.clinicez.net',
+        search: '',
+      },
+    };
+    expect(resolveTenantContext().clinicId).toBe('22222222-bbbb-bbbb-bbbb-222222222222');
+  });
 });

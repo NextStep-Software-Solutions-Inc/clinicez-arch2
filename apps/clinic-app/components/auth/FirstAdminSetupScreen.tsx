@@ -8,6 +8,7 @@ import { theme } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
 import { useFacilityLicense } from '../FacilityActivationGate';
 import { clinicService } from '../../services/clinicService';
+import { resolveTenantContext } from '@shared/safe';
 import { isValidEmail, validatePasswordPolicy } from '../../services/passwordPolicy';
 import { AuthScreen, ErrorNotice, InfoNotice, authStyles } from './AuthScreen';
 
@@ -21,7 +22,7 @@ type SetupStep = 'verifyLicense' | 'createAccount';
  */
 export default function FirstAdminSetupScreen() {
   const { bootstrap } = useAuth();
-  const { license } = useFacilityLicense();
+  const { license, activeTenant } = useFacilityLicense();
   const [step, setStep] = useState<SetupStep>('verifyLicense');
   const [licenseToken, setLicenseToken] = useState('');
   const [verifiedFacilityName, setVerifiedFacilityName] = useState<string | null>(null);
@@ -71,7 +72,14 @@ export default function FirstAdminSetupScreen() {
 
     setBusy(true);
     setError(null);
-    const failure = await bootstrap({ licenseToken: licenseToken.trim(), email, password, fullName });
+    const currentWorkspace = activeTenant || resolveTenantContext().facilitySlug || resolveTenantContext().tenantSlug;
+    const failure = await bootstrap({
+      licenseToken: licenseToken.trim(),
+      email,
+      password,
+      fullName,
+      workspace: currentWorkspace || undefined,
+    });
     if (failure) {
       setError(failure);
       setBusy(false);

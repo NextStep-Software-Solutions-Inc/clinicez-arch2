@@ -26,8 +26,14 @@ public sealed class AuthController : ControllerBase
 
     public AuthController(IClinicAuthService auth) => _auth = auth;
 
+    private string? FacilityHeader =>
+        Request.Headers.TryGetValue("X-Facility-Slug", out var f) && !string.IsNullOrWhiteSpace(f) ? f.ToString().Trim() : null;
+
+    private string? TenantHeader =>
+        Request.Headers.TryGetValue("X-Tenant-Id", out var v) && !string.IsNullOrWhiteSpace(v) ? v.ToString().Trim() : null;
+
     private string? WorkspaceHeader =>
-        Request.Headers.TryGetValue("X-Tenant-Id", out var v) && !string.IsNullOrWhiteSpace(v) ? v.ToString() : null;
+        FacilityHeader ?? TenantHeader;
 
     [HttpGet("status")]
     [AllowAnonymous]

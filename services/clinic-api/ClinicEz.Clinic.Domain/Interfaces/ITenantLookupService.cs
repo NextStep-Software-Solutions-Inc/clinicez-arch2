@@ -9,4 +9,6 @@ public record TenantLookupDto(Guid Id, string Slug, string Name, Guid? FacilityI
 public interface ITenantLookupService
 {
     Task<TenantLookupDto?> LookupAsync(string identifier, CancellationToken ct = default);
+    Task<TenantLookupDto?> LookupFacilityAsync(string facilityIdentifier, CancellationToken ct = default);
+    Task<TenantLookupDto?> LookupTenantAsync(string tenantIdentifier, CancellationToken ct = default);
 }

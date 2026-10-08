@@ -41,15 +41,17 @@ interface CachedLicense {
 }
 
 /** Remembers the last verified Active license so a device that is offline can keep working within the grace window. */
-function cacheLicense(license: FacilityLicenseStatus) {
+function cacheLicense(license: FacilityLicenseStatus, tenant?: string | null) {
   if (license.status !== 'Active') return;
   const entry: CachedLicense = { license, cachedAt: Date.now() };
-  setDeviceItem(LICENSE_CACHE_KEY, JSON.stringify(entry));
+  const key = tenant ? `${LICENSE_CACHE_KEY}_${tenant.toLowerCase()}` : LICENSE_CACHE_KEY;
+  setDeviceItem(key, JSON.stringify(entry));
 }
 
-function readCachedLicense(): FacilityLicenseStatus | null {
+function readCachedLicense(tenant?: string | null): FacilityLicenseStatus | null {
   try {
-    const raw = getDeviceItem(LICENSE_CACHE_KEY);
+    const key = tenant ? `${LICENSE_CACHE_KEY}_${tenant.toLowerCase()}` : LICENSE_CACHE_KEY;
+    const raw = getDeviceItem(key);
     if (!raw) return null;
     const entry = JSON.parse(raw) as CachedLicense;
     const graceMs = getOfflineGraceHours() * 60 * 60 * 1000;
@@ -90,10 +92,12 @@ interface FacilityActivationGateProps {
 
 export function FacilityActivationGate({ children }: FacilityActivationGateProps) {
   const workspaceRequired = isWorkspaceRequired();
-  const [activeTenant, setActiveTenant] = useState<string | null>(() => resolveTenantContext().tenantSlug);
+  const initialContext = resolveTenantContext();
+  const initialWorkspace = initialContext.facilitySlug || initialContext.tenantSlug;
+  const [activeWorkspace, setActiveWorkspace] = useState<string | null>(() => initialWorkspace);
   const [workspaceInput, setWorkspaceInput] = useState(() => getStoredTenantSlug() || '');
   const [license, setLicense] = useState<FacilityLicenseStatus | null>(null);
-  const [isLoading, setIsLoading] = useState(() => !workspaceRequired || !!resolveTenantContext().tenantSlug);
+  const [isLoading, setIsLoading] = useState(() => !workspaceRequired || !!initialWorkspace);
   const [isNotFound, setIsNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tokenInput, setTokenInput] = useState('');
@@ -102,9 +106,10 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
   const [modalVisible, setModalVisible] = useState(false);
 
   const fetchStatus = useCallback(async () => {
-    const currentTenant = activeTenant || resolveTenantContext().tenantSlug;
+    const currentCtx = resolveTenantContext();
+    const currentWorkspace = activeWorkspace || currentCtx.facilitySlug || currentCtx.tenantSlug;
     // Cloud hosts need a workspace; an on-prem server or a native device pointed at a clinic server does not.
-    if (workspaceRequired && (!currentTenant || !isValidTenantSlug(currentTenant))) {
+    if (workspaceRequired && (!currentWorkspace || !isValidTenantSlug(currentWorkspace))) {
       setIsLoading(false);
       return;
     }
@@ -117,18 +122,18 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
       if (err) {
         if (err.status === 404) {
           setIsNotFound(true);
-          setError(`Workspace "${currentTenant}" was not found or has no active facilities registered.`);
-        } else if (err.status === 0 && readCachedLicense()) {
+          setError(`Workspace "${currentWorkspace}" was not found or has no active facilities registered.`);
+        } else if (err.status === 0 && readCachedLicense(currentWorkspace)) {
           // Server unreachable: continue on the last verified license until the offline grace window ends.
-          setLicense(readCachedLicense());
+          setLicense(readCachedLicense(currentWorkspace));
         } else {
           setError(err.message || 'Unable to communicate with clinic service.');
         }
       } else if (res) {
         if (res.clinicId) {
-          setActiveClinicId(String(res.clinicId), currentTenant ?? undefined);
+          setActiveClinicId(String(res.clinicId), currentWorkspace ?? undefined);
         }
-        cacheLicense(res);
+        cacheLicense(res, currentWorkspace);
         setLicense(res);
       }
     } catch (e: any) {
@@ -136,13 +141,13 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
     } finally {
       setIsLoading(false);
     }
-  }, [activeTenant, workspaceRequired]);
+  }, [activeWorkspace, workspaceRequired]);
 
   useEffect(() => {
-    if (activeTenant || !workspaceRequired) {
+    if (activeWorkspace || !workspaceRequired) {
       fetchStatus();
     }
-  }, [activeTenant, workspaceRequired, fetchStatus]);
+  }, [activeWorkspace, workspaceRequired, fetchStatus]);
 
   const handleSelectWorkspace = () => {
     const trimmed = workspaceInput.trim().toLowerCase();
@@ -151,7 +156,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
       return;
     }
     setActiveTenantContext(trimmed);
-    setActiveTenant(trimmed);
+    setActiveWorkspace(trimmed);
     setError(null);
     setSubmitError(null);
     setLicense(null);
@@ -170,7 +175,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
 
   const handleSwitchWorkspace = () => {
     clearActiveTenantContext();
-    setActiveTenant(null);
+    setActiveWorkspace(null);
     setLicense(null);
     setError(null);
     setSubmitError(null);
@@ -204,9 +209,9 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
         setSubmitError(err.message || 'License verification failed.');
       } else if (res) {
         if (res.clinicId) {
-          setActiveClinicId(String(res.clinicId), activeTenant || undefined);
+          setActiveClinicId(String(res.clinicId), activeWorkspace || undefined);
         }
-        cacheLicense(res);
+        cacheLicense(res, activeWorkspace);
         setLicense(res);
         setTokenInput('');
         setModalVisible(false);
@@ -222,7 +227,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
     license,
     isLoading,
     error,
-    activeTenant,
+    activeTenant: activeWorkspace,
     refreshLicense: fetchStatus,
     openActivationModal: () => {
       setSubmitError(null);
@@ -242,8 +247,8 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
             Clinic EZ
           </ThemedText>
           <ThemedText variant="body" color={theme.colors.textSecondary} style={styles.centerText}>
-            {activeTenant
-              ? `Checking the license for workspace "${activeTenant}"...`
+            {activeWorkspace
+              ? `Checking the license for workspace "${activeWorkspace}"...`
               : 'Loading your workspace...'}
           </ThemedText>
           <ActivityIndicator size="large" color={theme.colors.primary} style={styles.spinner} />
@@ -253,7 +258,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
   }
 
   // 2. Prompt for Workspace Slug if none could be resolved (bare root access)
-  if (workspaceRequired && !activeTenant) {
+  if (workspaceRequired && !activeWorkspace) {
     return (
       <FacilityLicenseContext.Provider value={contextValue}>
         <ScrollView
@@ -325,7 +330,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
               <ThemedText variant="h1">Workspace not found</ThemedText>
               <ThemedText variant="body" color={theme.colors.textSecondary}>
                 We couldn't find a workspace named{' '}
-                <ThemedText variant="bodyBold">"{activeTenant}"</ThemedText>. Check the name and try
+                <ThemedText variant="bodyBold">"{activeWorkspace}"</ThemedText>. Check the name and try
                 again, or ask your administrator to confirm it is registered in Clinic EZ.
               </ThemedText>
             </View>
@@ -405,12 +410,12 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
             <View style={styles.headerGroup}>
               <View style={styles.badgeRow}>
                 <Badge label={badgeLabel} variant={badgeVariant} />
-                {activeTenant ? (
+                {activeWorkspace ? (
                   <View style={styles.workspaceChip}>
                     <ThemedText variant="caption" color={theme.colors.textMuted}>
                       Workspace
                     </ThemedText>
-                    <ThemedText variant="code">{activeTenant}</ThemedText>
+                    <ThemedText variant="code">{activeWorkspace}</ThemedText>
                   </View>
                 ) : null}
               </View>
@@ -474,9 +479,9 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
             <View style={styles.headerGroup}>
               <ThemedText variant="h2">Update facility license</ThemedText>
               <View style={styles.summaryRow}>
-                {activeTenant ? (
+                {activeWorkspace ? (
                   <ThemedText variant="small" color={theme.colors.textSecondary}>
-                    Workspace: <ThemedText variant="smallBold">{activeTenant}</ThemedText>
+                    Workspace: <ThemedText variant="smallBold">{activeWorkspace}</ThemedText>
                   </ThemedText>
                 ) : null}
                 <ThemedText variant="small" color={theme.colors.textSecondary}>

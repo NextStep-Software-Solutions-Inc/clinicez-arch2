@@ -45,6 +45,8 @@ public interface IClinicAuthService
 /// </summary>
 public sealed class ClinicAuthService : IClinicAuthService
 {
+    private static readonly Guid LegacyDefaultClinicId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+
     // Pre-computed hash used to equalise timing for unknown accounts.
     private readonly string _dummyHash;
 
@@ -200,27 +202,107 @@ public sealed class ClinicAuthService : IClinicAuthService
         var problems = _hasher.ValidateStrength(request.Password, Options.MinPasswordLength);
         if (problems.Count > 0) return AuthOutcome.Fail(AuthFailure.WeakPassword, problems[0], problems);
 
-        var resolved = await _workspaces.ResolveAsync(request.Workspace, ct);
-        if (resolved is null)
-            return AuthOutcome.Fail(AuthFailure.WorkspaceNotFound, "Workspace was not found. Activate the facility license first.");
-
-        // Possession of the activated license key is the proof of ownership (verified offline).
         var presented = request.LicenseToken.Trim();
-        var installed = resolved.Settings.LicenseToken ?? string.Empty;
-        if (!FixedTimeEquals(presented, installed))
-            return AuthOutcome.Fail(AuthFailure.InvalidCredentials, "The license key does not match this facility.");
 
-        var validation = _license.Validate(installed, resolved.ClinicId, resolved.TenantId);
+        // 1. Possession of a valid, untampered facility license token proves ownership (verified offline).
+        var validation = _license.Validate(presented, Guid.Empty, null);
         if (validation.IsMissing) return AuthOutcome.Fail(AuthFailure.ActivationRequired, "Facility activation required.");
         if (validation.IsTampered) return AuthOutcome.Fail(AuthFailure.LicenseTampered, "The facility license failed verification.");
+        if (validation.IsExpired) return AuthOutcome.Fail(AuthFailure.ActivationRequired, "The facility license has expired.");
+
+        var payload = validation.Payload;
+        var tokenClinicId = payload?.FacilityId ?? Guid.Empty;
+
+        // 2. Resolve the target facility: prefer direct binding to the token's FacilityId, fallback to workspace hint.
+        ResolvedWorkspace? resolved = null;
+        if (tokenClinicId != Guid.Empty)
+        {
+            resolved = await ResolveByClinicAsync(tokenClinicId, ct);
+        }
+
+        if (resolved is null)
+        {
+            resolved = await _workspaces.ResolveAsync(request.Workspace, ct);
+        }
+
+        if (resolved is null)
+        {
+            return AuthOutcome.Fail(AuthFailure.WorkspaceNotFound, "Workspace was not found. Activate the facility license first.");
+        }
+
+        // 4. Verify facility/tenant binding
+        var isDummyPlaceholder = resolved.ClinicId == Guid.Empty ||
+                                 resolved.ClinicId == LegacyDefaultClinicId ||
+                                 string.Equals(resolved.TenantId, "tenant_default", StringComparison.OrdinalIgnoreCase);
+
+        var expectedClinicId = isDummyPlaceholder ? Guid.Empty : resolved.ClinicId;
+        var expectedTenantId = isDummyPlaceholder ? null : resolved.TenantId;
+
+        var facilityValidation = _license.Validate(presented, expectedClinicId, expectedTenantId);
+        if (!facilityValidation.IsValid)
+        {
+            var installed = resolved.Settings.LicenseToken ?? string.Empty;
+            if (!FixedTimeEquals(presented, installed))
+            {
+                return AuthOutcome.Fail(AuthFailure.InvalidCredentials, "The license key does not match this facility.");
+            }
+        }
+
+        // 5. Ensure settings has the validated license token stored and facility IDs synchronized
+        var dbSettings = await _db.ClinicSettings.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(s => s.ClinicId == resolved.ClinicId && !s.IsDeleted, ct);
+        if (dbSettings != null)
+        {
+            bool modified = false;
+            if (dbSettings.LicenseToken != presented)
+            {
+                dbSettings.LicenseToken = presented;
+                modified = true;
+            }
+            if (tokenClinicId != Guid.Empty && dbSettings.ClinicId != tokenClinicId)
+            {
+                dbSettings.ClinicId = tokenClinicId;
+                modified = true;
+            }
+            if (!string.IsNullOrWhiteSpace(payload?.TenantId) && dbSettings.TenantId != payload.TenantId)
+            {
+                dbSettings.TenantId = payload.TenantId;
+                modified = true;
+            }
+            if (!string.IsNullOrWhiteSpace(payload?.FacilityName) && dbSettings.ClinicName != payload.FacilityName)
+            {
+                dbSettings.ClinicName = payload.FacilityName;
+                modified = true;
+            }
+            if (!string.IsNullOrWhiteSpace(payload?.PlanTier) && dbSettings.PlanTier != payload.PlanTier)
+            {
+                dbSettings.PlanTier = payload.PlanTier;
+                modified = true;
+            }
+            if (payload?.Limits?.MaxStaff is int maxStaff && maxStaff > 0 && dbSettings.MaxStaffLimit != maxStaff)
+            {
+                dbSettings.MaxStaffLimit = maxStaff;
+                modified = true;
+            }
+            if (payload?.ExpiresAtUtc != dbSettings.LicenseExpiresAt)
+            {
+                dbSettings.LicenseExpiresAt = payload?.ExpiresAtUtc;
+                modified = true;
+            }
+            if (modified)
+            {
+                dbSettings.UpdatedAt = DateTime.UtcNow;
+                await _db.SaveChangesAsync(ct);
+                resolved = new ResolvedWorkspace(dbSettings, dbSettings.TenantId, dbSettings.ClinicId);
+            }
+        }
 
         var alreadyBootstrapped = await _db.StaffMembers.IgnoreQueryFilters()
             .AnyAsync(s => s.ClinicId == resolved.ClinicId && !s.IsDeleted && s.PasswordHash != null, ct);
         if (alreadyBootstrapped)
             return AuthOutcome.Fail(AuthFailure.AlreadyBootstrapped, "This facility already has an administrator. Sign in instead.");
 
-        var payload = validation.Payload;
-        var email = NormalizeEmail(payload?.OwnerEmail) ?? NormalizeEmail(request.Email);
+        var email = NormalizeEmail(request.Email) ?? NormalizeEmail(payload?.OwnerEmail);
         if (email is null)
             return AuthOutcome.Fail(AuthFailure.InvalidRequest, "An administrator email is required.");
 
@@ -234,7 +316,8 @@ public sealed class ClinicAuthService : IClinicAuthService
 
         if (staff is null)
         {
-            var (first, last) = SplitName(payload?.OwnerName ?? request.FullName);
+            var rawName = !string.IsNullOrWhiteSpace(request.FullName) ? request.FullName : payload?.OwnerName;
+            var (first, last) = SplitName(rawName);
             staff = new StaffMember
             {
                 Id = Guid.NewGuid(),

@@ -198,6 +198,7 @@ export interface BootstrapInput {
   email: string;
   password: string;
   fullName: string;
+  workspace?: string;
 }
 
 /** Creates the first administrator of a freshly activated facility (proof of license possession required). */
@@ -207,6 +208,7 @@ export async function bootstrapAdmin(input: BootstrapInput): Promise<AuthResult<
     email: input.email.trim(),
     password: input.password,
     fullName: input.fullName.trim(),
+    workspace: input.workspace || undefined,
   });
   if (error || !tokens) return [null, error ?? new ApiError('Setup failed.', 0)];
   await persist(tokens);

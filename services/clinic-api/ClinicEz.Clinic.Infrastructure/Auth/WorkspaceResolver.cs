@@ -17,11 +17,8 @@ public sealed record ResolvedWorkspace(ClinicSettings Settings, string TenantId,
 
 public interface IWorkspaceResolver
 {
-    /// <summary>
-    /// Resolves the activated clinic for a workspace identifier (tenant slug/id or facility slug/id).
-    /// With no identifier (single-clinic / on-prem installs) it resolves the configured or only activated clinic.
-    /// Works with no internet: the portal HTTP lookup is only a best-effort enhancement for SaaS.
-    /// </summary>
+    Task<ResolvedWorkspace?> ResolveFacilityAsync(string facilitySlug, CancellationToken ct = default);
+    Task<ResolvedWorkspace?> ResolveTenantAsync(string tenantSlug, CancellationToken ct = default);
     Task<ResolvedWorkspace?> ResolveAsync(string? workspace, CancellationToken ct = default);
 }
 
@@ -46,47 +43,76 @@ public sealed class WorkspaceResolver : IWorkspaceResolver
         _logger = logger;
     }
 
+    public async Task<ResolvedWorkspace?> ResolveFacilityAsync(string facilitySlug, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(facilitySlug)) return null;
+        var clean = facilitySlug.Trim().ToLowerInvariant();
+        var all = _db.ClinicSettings.IgnoreQueryFilters().AsNoTracking().Where(s => !s.IsDeleted);
+
+        var isGuid = Guid.TryParse(facilitySlug, out var facGuid);
+        if (isGuid && facGuid != Guid.Empty && facGuid != LegacyDefaultClinicId)
+        {
+            var byGuid = await all.FirstOrDefaultAsync(s => s.ClinicId == facGuid, ct);
+            if (byGuid != null) return new ResolvedWorkspace(byGuid, byGuid.TenantId, byGuid.ClinicId);
+        }
+
+        TenantLookupDto? facility = null;
+        try
+        {
+            facility = await _tenantLookup.LookupFacilityAsync(clean, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "[Workspace] Facility lookup unavailable for '{Slug}'; using local settings.", clean);
+        }
+
+        if (facility?.FacilityId is { } facilityId && facilityId != Guid.Empty)
+        {
+            var settings = await all.FirstOrDefaultAsync(s => s.ClinicId == facilityId, ct);
+            if (settings != null) return new ResolvedWorkspace(settings, settings.TenantId, settings.ClinicId);
+        }
+
+        return null;
+    }
+
+    public async Task<ResolvedWorkspace?> ResolveTenantAsync(string tenantSlug, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(tenantSlug) || string.Equals(tenantSlug, "tenant_default", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var clean = tenantSlug.Trim().ToLowerInvariant();
+        var all = _db.ClinicSettings.IgnoreQueryFilters().AsNoTracking().Where(s => !s.IsDeleted);
+
+        TenantLookupDto? tenant = null;
+        try
+        {
+            tenant = await _tenantLookup.LookupTenantAsync(clean, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "[Workspace] Tenant lookup unavailable for '{Slug}'; using local settings.", clean);
+        }
+
+        var tenantGuid = tenant?.Id.ToString().ToLowerInvariant();
+        var tSlug = tenant?.Slug?.ToLowerInvariant();
+
+        var matches = await all
+            .Where(s => s.TenantId.ToLower() == clean
+                        || (tenantGuid != null && s.TenantId.ToLower() == tenantGuid)
+                        || (tSlug != null && s.TenantId.ToLower() == tSlug))
+            .Take(2)
+            .ToListAsync(ct);
+
+        var settings = matches.Count == 1 ? matches[0] : null;
+        return settings != null ? new ResolvedWorkspace(settings, settings.TenantId, settings.ClinicId) : null;
+    }
+
     public async Task<ResolvedWorkspace?> ResolveAsync(string? workspace, CancellationToken ct = default)
     {
-        var all = _db.ClinicSettings.IgnoreQueryFilters().AsNoTracking().Where(s => !s.IsDeleted);
-        ClinicSettings? settings = null;
-        var ws = workspace?.Trim();
-
-        if (!string.IsNullOrEmpty(ws) && !string.Equals(ws, "tenant_default", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(workspace) || string.Equals(workspace, "tenant_default", StringComparison.OrdinalIgnoreCase))
         {
-            TenantLookupDto? tenant = null;
-            try
-            {
-                tenant = await _tenantLookup.LookupAsync(ws, ct);
-            }
-            catch (Exception ex)
-            {
-                // Offline/LAN: the shared portal tables and portal-api are not reachable. Fall back to local settings only.
-                _logger.LogDebug(ex, "[Workspace] Tenant lookup unavailable for '{Workspace}'; using local settings.", ws);
-            }
-
-            var lower = ws.ToLowerInvariant();
-            if (tenant?.FacilityId is { } facilityId)
-            {
-                settings = await all.FirstOrDefaultAsync(s => s.ClinicId == facilityId, ct);
-            }
-
-            if (settings is null)
-            {
-                var tenantGuid = tenant?.Id.ToString().ToLowerInvariant();
-                var tenantSlug = tenant?.Slug?.ToLowerInvariant();
-                var matches = await all
-                    .Where(s => s.TenantId.ToLower() == lower
-                                || (tenantGuid != null && s.TenantId.ToLower() == tenantGuid)
-                                || (tenantSlug != null && s.TenantId.ToLower() == tenantSlug))
-                    .Take(2)
-                    .ToListAsync(ct);
-                // Ambiguous (a tenant with several clinics and no facility slug) is treated as not found.
-                settings = matches.Count == 1 ? matches[0] : null;
-            }
-        }
-        else
-        {
+            var all = _db.ClinicSettings.IgnoreQueryFilters().AsNoTracking().Where(s => !s.IsDeleted);
+            ClinicSettings? settings = null;
             if (Guid.TryParse(_configuration["ClinicSettings:ClinicId"], out var configured) &&
                 configured != Guid.Empty && configured != LegacyDefaultClinicId)
             {
@@ -98,8 +124,10 @@ public sealed class WorkspaceResolver : IWorkspaceResolver
                 var only = await all.Take(2).ToListAsync(ct);
                 settings = only.Count == 1 ? only[0] : null;
             }
+
+            return settings is null ? null : new ResolvedWorkspace(settings, settings.TenantId, settings.ClinicId);
         }
 
-        return settings is null ? null : new ResolvedWorkspace(settings, settings.TenantId, settings.ClinicId);
+        return await ResolveFacilityAsync(workspace, ct) ?? await ResolveTenantAsync(workspace, ct);
     }
 }

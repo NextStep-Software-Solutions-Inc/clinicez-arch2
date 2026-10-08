@@ -203,4 +203,107 @@ public class LicenseControllerTests
         Assert.Equal(facilityId, apiResponse.Data.ClinicId);
         Assert.Equal("Clinic B", apiResponse.Data.ClinicName);
     }
+
+    [Fact]
+    public async Task GetLicenseStatus_WhenRequestingClinicA_AndClinicBAlreadyActivated_DoesNotResolveClinicB()
+    {
+        var tenantGuid = Guid.NewGuid();
+        var clinicAId = Guid.NewGuid();
+        var clinicBId = Guid.NewGuid();
+
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.TenantId.Returns("tenant_default");
+        clinicContext.ClinicId.Returns(Guid.Empty);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var settingsRepo = new Repository<ClinicSettings>(context, sieve);
+        var staffRepo = new Repository<StaffMember>(context, sieve);
+
+        // Seed Clinic B into DB as already activated
+        var tokenB = _signer.SignLicense(new FacilityLicensePayload
+        {
+            TenantId = tenantGuid.ToString(),
+            FacilityId = clinicBId,
+            FacilityName = "Clinic B",
+            PlanTier = "Standard",
+            IssuedAtUtc = DateTime.UtcNow,
+            ExpiresAtUtc = DateTime.UtcNow.AddYears(1)
+        });
+
+        await settingsRepo.AddAsync(new ClinicSettings
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantGuid.ToString(),
+            ClinicId = clinicBId,
+            ClinicName = "Clinic B",
+            LicenseToken = tokenB,
+            PlanTier = "Standard",
+            MaxStaffLimit = 15,
+            LicenseExpiresAt = DateTime.UtcNow.AddYears(1)
+        });
+        await context.SaveChangesAsync();
+
+        var tenantLookup = Substitute.For<ITenantLookupService>();
+        tenantLookup.LookupFacilityAsync("clinic-a", Arg.Any<CancellationToken>())
+            .Returns(new TenantLookupDto(tenantGuid, "apex-health-center", "Clinic A", clinicAId, "clinic-a"));
+
+        var controller = new LicenseController(settingsRepo, staffRepo, _validator, clinicContext, uow, tenantLookup);
+        var httpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        httpContext.Request.Headers["X-Facility-Slug"] = "clinic-a";
+        controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
+
+        var result = await controller.GetLicenseStatus(CancellationToken.None);
+
+        var okResult = Assert.IsType<OkObjectResult>(result.Result);
+        var apiResponse = Assert.IsType<ClinicEz.Shared.Common.ApiResponse<FacilityLicenseStatusDto>>(okResult.Value);
+        Assert.True(apiResponse.Succeeded);
+        Assert.NotNull(apiResponse.Data);
+        // Clinic A is not activated yet, so it MUST return ActivationRequired for Clinic A, NOT Clinic B's active status!
+        Assert.Equal("ActivationRequired", apiResponse.Data.Status);
+        Assert.Equal(clinicAId, apiResponse.Data.ClinicId);
+        Assert.Equal("Clinic A", apiResponse.Data.ClinicName);
+    }
+
+    [Fact]
+    public async Task ApplyLicense_WhenRequestingClinicA_RejectsLicenseIssuedForClinicB()
+    {
+        var tenantGuid = Guid.NewGuid();
+        var clinicAId = Guid.NewGuid();
+        var clinicBId = Guid.NewGuid();
+
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.TenantId.Returns("tenant_default");
+        clinicContext.ClinicId.Returns(Guid.Empty);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var settingsRepo = new Repository<ClinicSettings>(context, sieve);
+        var staffRepo = new Repository<StaffMember>(context, sieve);
+
+        // Sign token for Clinic B
+        var tokenB = _signer.SignLicense(new FacilityLicensePayload
+        {
+            TenantId = tenantGuid.ToString(),
+            FacilityId = clinicBId,
+            FacilityName = "Clinic B",
+            PlanTier = "Standard",
+            IssuedAtUtc = DateTime.UtcNow,
+            ExpiresAtUtc = DateTime.UtcNow.AddYears(1)
+        });
+
+        var tenantLookup = Substitute.For<ITenantLookupService>();
+        tenantLookup.LookupFacilityAsync("clinic-a", Arg.Any<CancellationToken>())
+            .Returns(new TenantLookupDto(tenantGuid, "apex-health-center", "Clinic A", clinicAId, "clinic-a"));
+
+        var controller = new LicenseController(settingsRepo, staffRepo, _validator, clinicContext, uow, tenantLookup);
+        var httpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        httpContext.Request.Headers["X-Facility-Slug"] = "clinic-a";
+        controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
+
+        var result = await controller.ApplyLicense(new ApplyLicenseRequest(tokenB), CancellationToken.None);
+
+        var badRequestResult = Assert.IsType<BadRequestObjectResult>(result.Result);
+        var apiResponse = Assert.IsType<ClinicEz.Shared.Common.ApiResponse<FacilityLicenseStatusDto>>(badRequestResult.Value);
+        Assert.False(apiResponse.Succeeded);
+        Assert.Contains("License facility mismatch", apiResponse.Message);
+    }
 }
