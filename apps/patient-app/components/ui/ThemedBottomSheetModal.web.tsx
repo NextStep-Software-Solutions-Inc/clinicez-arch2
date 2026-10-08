@@ -1,4 +1,4 @@
-﻿import React, { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -62,6 +62,7 @@ const ThemedBottomSheetModal = forwardRef<WebBottomSheetModalRef, ThemedBottomSh
       const onKeyDown = (e: KeyboardEvent) => {
         if (e.key === 'Escape') {
           e.preventDefault();
+          e.stopPropagation();
           handleDismiss();
         }
       };

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Modal, View, StyleSheet, Platform } from 'react-native';
 import { useAuth } from 'contexts/AuthContext';
 import ThemedText from './ThemedText';
@@ -30,6 +30,7 @@ export default function PinModal({
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [attempts, setAttempts] = useState(0);
+  const containerRef = useRef<View>(null);
 
   // Reset state when modal opens/closes
   useEffect(() => {
@@ -40,17 +41,40 @@ export default function PinModal({
     }
   }, [visible]);
 
+  // Elevate container z-index on web
+  useEffect(() => {
+    if (!visible || Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const el = containerRef.current as unknown as HTMLElement | null;
+    if (!el) return;
+
+    const elementsToRestore: Array<{ el: HTMLElement; prevZIndex: string }> = [];
+    let curr: HTMLElement | null = el.parentElement;
+    while (curr && curr !== document.body) {
+      elementsToRestore.push({ el: curr, prevZIndex: curr.style.zIndex });
+      curr.style.zIndex = '150000';
+      curr = curr.parentElement;
+    }
+
+    return () => {
+      for (const item of elementsToRestore) {
+        item.el.style.zIndex = item.prevZIndex;
+      }
+    };
+  }, [visible]);
+
   // Web keyboard: Escape to dismiss
   useEffect(() => {
     if (!visible || Platform.OS !== 'web' || typeof window === 'undefined') return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
         onDismiss();
       }
     };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [visible, onDismiss]);
 
   const handleDigit = (digit: string) => {
@@ -89,6 +113,8 @@ export default function PinModal({
     }
   };
 
+  if (!visible) return null;
+
   return (
     <Modal
       visible={visible}
@@ -96,7 +122,7 @@ export default function PinModal({
       presentationStyle="pageSheet"
       onRequestClose={onDismiss}
     >
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View ref={containerRef} style={[styles.container, { backgroundColor: colors.background }]}>
         {/* Title */}
         <View style={styles.titleSection}>
           <ThemedText variant="h2" style={styles.title}>

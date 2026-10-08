@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useAppTheme } from '../../contexts/ThemeContext';
 import { resolveDialog, subscribeDialogs } from '../../utils/dialogQueue';
@@ -35,6 +35,7 @@ export function DialogView({ request }: { request: DialogRequest }) {
   const theme = useAppTheme();
   const { buttons, options, tone } = request;
   const cancelButton = buttons.find((b) => b.style === 'cancel');
+  const overlayRef = useRef<View>(null);
 
   const close = (button?: DialogButton) => {
     resolveDialog(request.id);
@@ -50,15 +51,41 @@ export function DialogView({ request }: { request: DialogRequest }) {
     void triggerHaptic(tone);
   }, [request.id, tone]);
 
-  // Esc dismisses on web (as cancel when a cancel button exists).
+  // Esc dismisses on web (as cancel when a cancel button exists)
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close(cancelButton);
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        close(cancelButton);
+      }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [request.id]);
+
+  // Elevate container z-index on web so alerts/confirms always sit on top of modals & sheets
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const el = overlayRef.current as unknown as HTMLElement | null;
+    if (!el) return;
+
+    const elementsToRestore: Array<{ el: HTMLElement; prevZIndex: string }> = [];
+    let curr: HTMLElement | null = el.parentElement;
+    while (curr && curr !== document.body) {
+      elementsToRestore.push({ el: curr, prevZIndex: curr.style.zIndex });
+      curr.style.zIndex = '200000';
+      curr = curr.parentElement;
+    }
+
+    return () => {
+      for (const item of elementsToRestore) {
+        item.el.style.zIndex = item.prevZIndex;
+      }
+    };
   }, [request.id]);
 
   const borderColors: Record<DialogTone, string> = {
@@ -98,7 +125,7 @@ export function DialogView({ request }: { request: DialogRequest }) {
 
   return (
     <Modal transparent animationType="fade" visible onRequestClose={() => close(cancelButton)}>
-      <View style={[styles.overlay, { backgroundColor: theme.colors.overlay }]}>
+      <View ref={overlayRef} style={[styles.overlay, { backgroundColor: theme.colors.overlay }]}>
         <Pressable
           style={StyleSheet.absoluteFill}
           accessibilityLabel="Dismiss dialog"

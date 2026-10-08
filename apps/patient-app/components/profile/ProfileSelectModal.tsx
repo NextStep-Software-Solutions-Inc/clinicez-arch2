@@ -35,8 +35,9 @@ export default function ProfileSelectModal({
   onClose,
 }: ProfileSelectModalProps) {
   const { colors, radii, sizes, shadows } = useAppTheme();
-  const scale = useRef(new Animated.Value(visible ? 1 : 0.88)).current;
-  const opacity = useRef(new Animated.Value(visible ? 1 : 0)).current;
+  const rootRef = useRef<View>(null);
+  const scale = useRef(new Animated.Value(0.92)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (visible) {
@@ -56,7 +57,7 @@ export default function ProfileSelectModal({
     } else {
       Animated.parallel([
         Animated.spring(scale, {
-          toValue: 0.88,
+          toValue: 0.92,
           useNativeDriver: Platform.OS !== 'web',
           damping: 20,
           stiffness: 240,
@@ -70,23 +71,48 @@ export default function ProfileSelectModal({
     }
   }, [visible, opacity, scale]);
 
-  // Esc key closes on web
+  // Elevate container z-index on web so select dialog sits on top of parent dialogs/bottom sheets
+  useEffect(() => {
+    if (!visible || Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const el = rootRef.current as unknown as HTMLElement | null;
+    if (!el) return;
+
+    const elementsToRestore: Array<{ el: HTMLElement; prevZIndex: string }> = [];
+    let curr: HTMLElement | null = el.parentElement;
+    while (curr && curr !== document.body) {
+      elementsToRestore.push({ el: curr, prevZIndex: curr.style.zIndex });
+      curr.style.zIndex = '100000';
+      curr = curr.parentElement;
+    }
+
+    return () => {
+      for (const item of elementsToRestore) {
+        item.el.style.zIndex = item.prevZIndex;
+      }
+    };
+  }, [visible]);
+
+  // Esc key closes on web (capture phase with stopImmediatePropagation so underlying dialog stays open)
   useEffect(() => {
     if (!visible || Platform.OS !== 'web' || typeof window === 'undefined') return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
         onClose();
       }
     };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [visible, onClose]);
 
   const handleSelect = (value: string) => {
     onSelect(value);
     onClose();
   };
+
+  if (!visible) return null;
 
   return (
     <Modal
@@ -96,7 +122,7 @@ export default function ProfileSelectModal({
       statusBarTranslucent
       onRequestClose={onClose}
     >
-      <View style={[styles.root, { backgroundColor: colors.overlay }]}>
+      <View ref={rootRef} style={[styles.root, { backgroundColor: colors.overlay }]}>
         <Pressable
           style={styles.backdrop}
           onPress={onClose}

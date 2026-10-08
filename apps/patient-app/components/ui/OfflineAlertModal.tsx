@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { Modal, View, StyleSheet, Dimensions } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Modal, View, StyleSheet, Dimensions, Platform } from 'react-native';
 import ThemedText from './ThemedText';
 import ThemedView from './ThemedView';
 import { AppIcon, type IconName } from './Icon';
@@ -29,6 +29,7 @@ export default function OfflineAlertModal({
   buttonText = 'Got it',
 }: OfflineAlertModalProps) {
   const { colors, radii, spacing, sizes, shadows } = useAppTheme();
+  const overlayRef = useRef<View>(null);
 
   useEffect(() => {
     if (visible) {
@@ -36,8 +37,46 @@ export default function OfflineAlertModal({
     }
   }, [visible]);
 
+  // Elevate container z-index on web so offline alert sits on top of modals & sheets
+  useEffect(() => {
+    if (!visible || Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const el = overlayRef.current as unknown as HTMLElement | null;
+    if (!el) return;
+
+    const elementsToRestore: Array<{ el: HTMLElement; prevZIndex: string }> = [];
+    let curr: HTMLElement | null = el.parentElement;
+    while (curr && curr !== document.body) {
+      elementsToRestore.push({ el: curr, prevZIndex: curr.style.zIndex });
+      curr.style.zIndex = '200000';
+      curr = curr.parentElement;
+    }
+
+    return () => {
+      for (const item of elementsToRestore) {
+        item.el.style.zIndex = item.prevZIndex;
+      }
+    };
+  }, [visible]);
+
+  // Esc key dismiss on web
+  useEffect(() => {
+    if (!visible || Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [visible, onClose]);
+
   const resolvedIconName: IconName = iconName ?? 'wifiOff';
   const showCustomIconString = !!icon && !iconName;
+
+  if (!visible) return null;
 
   return (
     <Modal
@@ -46,7 +85,7 @@ export default function OfflineAlertModal({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <View style={[styles.overlay, { backgroundColor: colors.overlay }]}>
+      <View ref={overlayRef} style={[styles.overlay, { backgroundColor: colors.overlay }]}>
         <ThemedView
           style={[
             styles.dialog,

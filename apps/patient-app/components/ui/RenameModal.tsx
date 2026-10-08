@@ -1,5 +1,5 @@
-﻿import React, { useState, useEffect } from 'react';
-import { Modal, View, StyleSheet, Dimensions, TextInput } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { Modal, View, StyleSheet, Dimensions, TextInput, Platform } from 'react-native';
 import ThemedText from './ThemedText';
 import ThemedView from './ThemedView';
 import Button from './Button';
@@ -24,12 +24,49 @@ export default function RenameModal({
 }: RenameModalProps) {
   const { colors, radii, spacing, shadows } = useAppTheme();
   const [name, setName] = useState(initialName);
+  const overlayRef = useRef<View>(null);
 
   useEffect(() => {
     if (visible) {
       setName(initialName);
     }
   }, [visible, initialName]);
+
+  // Elevate container z-index on web
+  useEffect(() => {
+    if (!visible || Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const el = overlayRef.current as unknown as HTMLElement | null;
+    if (!el) return;
+
+    const elementsToRestore: Array<{ el: HTMLElement; prevZIndex: string }> = [];
+    let curr: HTMLElement | null = el.parentElement;
+    while (curr && curr !== document.body) {
+      elementsToRestore.push({ el: curr, prevZIndex: curr.style.zIndex });
+      curr.style.zIndex = '100000';
+      curr = curr.parentElement;
+    }
+
+    return () => {
+      for (const item of elementsToRestore) {
+        item.el.style.zIndex = item.prevZIndex;
+      }
+    };
+  }, [visible]);
+
+  // Esc key dismiss on web
+  useEffect(() => {
+    if (!visible || Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [visible, onClose]);
 
   const canSave = !!name.trim() && name !== initialName;
 
@@ -39,6 +76,8 @@ export default function RenameModal({
     }
   };
 
+  if (!visible) return null;
+
   return (
     <Modal
       visible={visible}
@@ -46,7 +85,7 @@ export default function RenameModal({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <View style={[styles.overlay, { backgroundColor: colors.overlay }]}>
+      <View ref={overlayRef} style={[styles.overlay, { backgroundColor: colors.overlay }]}>
         <ThemedView
           style={[
             styles.dialog,
