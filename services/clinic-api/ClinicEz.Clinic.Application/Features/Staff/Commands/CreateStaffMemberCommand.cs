@@ -127,6 +127,7 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
                 StaffRole.Nurse => "Triage Nurse",
                 StaffRole.Receptionist => "Front Desk Receptionist",
                 StaffRole.Admin => "Clinic Administrator",
+                StaffRole.Cashier => "Clinic Cashier / Billing Officer",
                 _ => null
             };
 

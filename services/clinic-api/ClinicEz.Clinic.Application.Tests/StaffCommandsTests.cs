@@ -207,4 +207,99 @@ public class StaffCommandsTests
         await act.Should().ThrowAsync<ClinicEz.Shared.Exceptions.ValidationException>()
             .WithMessage("*Tampered facility license detected*");
     }
+
+    [Fact]
+    public async Task CreateCashier_AutoAssigns_ClinicCashierBillingOfficerRole()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+
+        var cashierRole = new ClinicRole
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            Name = "Clinic Cashier / Billing Officer",
+            IsSystem = true
+        };
+        await context.ClinicRoles.AddAsync(cashierRole);
+
+        var settings = new ClinicSettings
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = clinicId,
+            TenantId = tenantId,
+            ClinicName = "Test Clinic",
+            LicenseToken = "mock.valid.token"
+        };
+        await context.ClinicSettings.AddAsync(settings);
+        await context.SaveChangesAsync();
+
+        var licenseValidator = Substitute.For<ClinicEz.Shared.Licensing.IFacilityLicenseValidator>();
+        licenseValidator.Validate(Arg.Any<string?>(), clinicId, tenantId)
+            .Returns(ClinicEz.Shared.Licensing.LicenseValidationResult.Success(new ClinicEz.Shared.Licensing.FacilityLicensePayload
+            {
+                FacilityId = clinicId,
+                TenantId = tenantId,
+                Limits = new ClinicEz.Shared.Licensing.FacilityLimits { MaxStaff = 10 }
+            }));
+
+        var handler = new CreateStaffMemberCommandHandler(staffRepo, roleRepo, settingsRepo, licenseValidator, uow, clinicContext);
+
+        var command = new CreateStaffMemberCommand(
+            "Maria",
+            "Clara",
+            null,
+            null,
+            StaffRole.Cashier,
+            null,
+            "cashier@clinic.com",
+            "09170001122",
+            null,
+            null,
+            null,
+            null
+        );
+
+        // Act
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Role.Should().Be(StaffRole.Cashier);
+        result.RoleName.Should().Be("Clinic Cashier / Billing Officer");
+        result.ClinicRoleId.Should().Be(cashierRole.Id);
+    }
+
+    [Theory]
+    [InlineData("Doctor", StaffRole.Doctor)]
+    [InlineData("Nurse", StaffRole.Nurse)]
+    [InlineData("Receptionist", StaffRole.Receptionist)]
+    [InlineData("Admin", StaffRole.Admin)]
+    [InlineData("Cashier", StaffRole.Cashier)]
+    public void StaffRole_DeserializesFromJsonString(string roleString, StaffRole expectedRole)
+    {
+        var json = $$"""
+        {
+            "firstName": "Juan",
+            "lastName": "Dela Cruz",
+            "role": "{{roleString}}"
+        }
+        """;
+
+        var command = System.Text.Json.JsonSerializer.Deserialize<CreateStaffMemberCommand>(
+            json,
+            new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+        command.Should().NotBeNull();
+        command!.Role.Should().Be(expectedRole);
+    }
 }

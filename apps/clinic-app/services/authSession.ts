@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { Platform } from 'react-native';
-import { ApiError, ensureApiPrefix, resolveTenantContext, type ApiResponse } from '@shared/safe';
+import { ApiError, extractApiError, ensureApiPrefix, resolveTenantContext, type ApiResponse } from '@shared/safe';
 import { deleteSecureItem, getSecureItem, setSecureItem } from './secureStorage';
 import { getApiBaseUrl, getOfflineGraceHours } from './runtimeConfig';
 
@@ -110,19 +110,7 @@ function tenantHeaders(): Record<string, string> {
 }
 
 function toApiError(error: unknown): ApiError {
-  if (error instanceof ApiError) return error;
-  const axiosErr = error as {
-    message?: string;
-    response?: { status?: number; data?: ApiResponse<unknown> };
-  };
-  const status = axiosErr.response?.status ?? 0;
-  const payload = axiosErr.response?.data;
-  const message =
-    payload?.message ??
-    (status === 0
-      ? 'Cannot reach the clinic server. Check your connection and the server address.'
-      : (axiosErr.message ?? 'Request failed.'));
-  return new ApiError(message, status, payload?.errors);
+  return extractApiError(error);
 }
 
 async function post<T>(path: string, body: unknown, authorized = false): Promise<AuthResult<T>> {

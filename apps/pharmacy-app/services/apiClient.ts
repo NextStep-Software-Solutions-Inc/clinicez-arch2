@@ -1,5 +1,5 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
-import { safeAwait, ApiResponse, ApiError, ensureApiPrefix } from '@shared/safe';
+import { safeAwait, ApiResponse, ApiError, extractApiError, ensureApiPrefix } from '@shared/safe';
 
 const resolveDefaultPharmacyBaseUrl = (fallbackPort: number = 5245): string => {
   if (typeof window !== 'undefined' && window.location?.hostname) {
@@ -43,10 +43,7 @@ export class PharmacyApiClient {
   async get<T>(url: string, config?: AxiosRequestConfig): Promise<[T | null, ApiError | null]> {
     const [response, error] = await safeAwait(this.client.get<ApiResponse<T>>(url, config));
     if (error) {
-      const axiosErr = error as any;
-      const status = axiosErr.response?.status ?? 0;
-      const payload = axiosErr.response?.data as ApiResponse<T> | undefined;
-      return [null, new ApiError(payload?.message ?? axiosErr.message, status, payload?.errors)];
+      return [null, extractApiError(error)];
     }
     return [response?.data?.data ?? null, null];
   }
@@ -54,10 +51,7 @@ export class PharmacyApiClient {
   async post<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<[T | null, ApiError | null]> {
     const [response, error] = await safeAwait(this.client.post<ApiResponse<T>>(url, data, config));
     if (error) {
-      const axiosErr = error as any;
-      const status = axiosErr.response?.status ?? 0;
-      const payload = axiosErr.response?.data as ApiResponse<T> | undefined;
-      return [null, new ApiError(payload?.message ?? axiosErr.message, status, payload?.errors)];
+      return [null, extractApiError(error)];
     }
     return [response?.data?.data ?? null, null];
   }
@@ -65,10 +59,7 @@ export class PharmacyApiClient {
   async put<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<[T | null, ApiError | null]> {
     const [response, error] = await safeAwait(this.client.put<ApiResponse<T>>(url, data, config));
     if (error) {
-      const axiosErr = error as any;
-      const status = axiosErr.response?.status ?? 0;
-      const payload = axiosErr.response?.data as ApiResponse<T> | undefined;
-      return [null, new ApiError(payload?.message ?? axiosErr.message, status, payload?.errors)];
+      return [null, extractApiError(error)];
     }
     return [response?.data?.data ?? null, null];
   }
@@ -76,10 +67,7 @@ export class PharmacyApiClient {
   async delete<T>(url: string, config?: AxiosRequestConfig): Promise<[T | null, ApiError | null]> {
     const [response, error] = await safeAwait(this.client.delete<ApiResponse<T>>(url, config));
     if (error) {
-      const axiosErr = error as any;
-      const status = axiosErr.response?.status ?? 0;
-      const payload = axiosErr.response?.data as ApiResponse<T> | undefined;
-      return [null, new ApiError(payload?.message ?? axiosErr.message, status, payload?.errors)];
+      return [null, extractApiError(error)];
     }
     return [response?.data?.data ?? null, null];
   }

@@ -329,6 +329,11 @@ export default function SettingsScreen() {
       return;
     }
 
+    if (newStaffRole === 'Doctor' && !newStaffPrc.trim()) {
+      setStaffError('PRC License Number is mandatory for Doctors.');
+      return;
+    }
+
     setAddingStaff(true);
     setStaffError(null);
 
@@ -1127,6 +1132,7 @@ export default function SettingsScreen() {
 
         <Input
           label="PRC license number"
+          required={newStaffRole === 'Doctor'}
           value={newStaffPrc}
           onChangeText={setNewStaffPrc}
           placeholder="PRC license number"

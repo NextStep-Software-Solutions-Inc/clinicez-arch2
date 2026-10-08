@@ -3,6 +3,7 @@ import {
   safeAwait,
   ApiResponse,
   ApiError,
+  extractApiError,
   resolveTenantContext,
   ensureApiPrefix,
   joinApiUrl,
@@ -77,12 +78,8 @@ export class ClinicApiClient {
     }
   }
 
-  private static toError<T>(error: unknown): ApiError {
-    if (error instanceof ApiError) return error;
-    const axiosErr = error as any;
-    const status = axiosErr?.response?.status ?? 0;
-    const payload = axiosErr?.response?.data as ApiResponse<T> | undefined;
-    return new ApiError(payload?.message ?? axiosErr?.message ?? 'Request failed.', status, payload?.errors);
+  private static toError<_T = unknown>(error: unknown): ApiError {
+    return extractApiError(error);
   }
 
   async get<T>(url: string, config?: AxiosRequestConfig): Promise<[T | null, ApiError | null]> {
