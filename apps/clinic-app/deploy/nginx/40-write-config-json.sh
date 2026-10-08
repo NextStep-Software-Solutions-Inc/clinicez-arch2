@@ -3,9 +3,10 @@
 # Runs automatically at start (nginx image runs /docker-entrypoint.d/*.sh).
 set -eu
 
-API_URL="${CLINIC_PUBLIC_API_URL:-/}"
+# The EXPO_PUBLIC_* names are the same ones used for the Vercel build, accepted here so both deployments share one set of variables.
+API_URL="${CLINIC_PUBLIC_API_URL:-${EXPO_PUBLIC_CLINIC_API_URL:-/}}"
 WORKSPACE_REQUIRED="${CLINIC_WORKSPACE_REQUIRED:-false}"
-GRACE_HOURS="${CLINIC_OFFLINE_GRACE_HOURS:-12}"
+GRACE_HOURS="${CLINIC_OFFLINE_GRACE_HOURS:-${EXPO_PUBLIC_OFFLINE_GRACE_HOURS:-12}}"
 
 case "$WORKSPACE_REQUIRED" in
   true|false) ;;

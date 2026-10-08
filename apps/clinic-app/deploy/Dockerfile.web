@@ -7,9 +7,11 @@
 #
 # Runtime configuration (environment):
 #   CLINIC_API_UPSTREAM        required  where nginx forwards /api/, e.g. http://clinic-api:8080
-#   CLINIC_PUBLIC_API_URL      optional  apiUrl published in config.json ("/" = same origin, the default)
+#   CLINIC_PUBLIC_API_URL      optional  apiUrl published in config.json ("/" = same origin, the default);
+#                                        EXPO_PUBLIC_CLINIC_API_URL is accepted as an alias (same name as on Vercel)
 #   CLINIC_WORKSPACE_REQUIRED  optional  "true" only for multi-clinic hosting (default false)
-#   CLINIC_OFFLINE_GRACE_HOURS optional  offline grace period for native devices (default 12)
+#   CLINIC_OFFLINE_GRACE_HOURS optional  offline grace period for native devices (default 12);
+#                                        EXPO_PUBLIC_OFFLINE_GRACE_HOURS is accepted as an alias
 
 FROM oven/bun:1 AS build
 WORKDIR /repo
