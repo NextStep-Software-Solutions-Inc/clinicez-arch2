@@ -1,11 +1,12 @@
 import React from 'react';
 import { ColorValue } from 'react-native';
-import { BottomTabBar, createBottomTabNavigator, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import { createBottomTabNavigator, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { createStaticNavigation, DefaultTheme, type StaticParamList } from '@react-navigation/native';
 import Icon, { IconName } from '../components/ui/Icon';
 import { applyFontFamily } from '../constants/fonts';
 import { theme } from '../constants/theme';
 import { useBreakpoint } from '../utils/useBreakpoint';
+import MobileBottomTabBar from '../components/layout/MobileBottomTabBar';
 import DashboardScreen from './screens/Dashboard.screen';
 import PatientsScreen from './screens/Patients.screen';
 import ConsultationsScreen from './screens/Consultations.screen';
@@ -22,7 +23,7 @@ import SettingsScreen from './screens/Settings.screen';
 function ResponsiveTabBar(props: BottomTabBarProps) {
   const { isWorkstation } = useBreakpoint();
   if (isWorkstation) return null;
-  return <BottomTabBar {...props} />;
+  return <MobileBottomTabBar {...props} />;
 }
 
 const tabIcon = (name: IconName) => ({ color }: { focused: boolean; color: ColorValue; size: number }) => (
@@ -69,6 +70,7 @@ const Tab = createBottomTabNavigator({
       linking: 'consultations',
       options: {
         title: 'Consultations',
+        tabBarLabel: 'Consults',
         tabBarIcon: tabIcon('consultations'),
       },
     },
@@ -77,6 +79,7 @@ const Tab = createBottomTabNavigator({
       linking: 'appointments',
       options: {
         title: 'Appointments',
+        tabBarLabel: 'Appts',
         tabBarIcon: tabIcon('appointments'),
       },
     },
@@ -85,6 +88,7 @@ const Tab = createBottomTabNavigator({
       linking: 'billing',
       options: {
         title: 'Billing',
+        tabBarLabel: 'Billing',
         tabBarIcon: tabIcon('billing'),
       },
     },
@@ -93,6 +97,7 @@ const Tab = createBottomTabNavigator({
       linking: 'yakap',
       options: {
         title: 'PhilHealth Yakap',
+        tabBarLabel: 'PhilHealth',
         tabBarIcon: tabIcon('yakap'),
       },
     },
