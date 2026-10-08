@@ -42,7 +42,7 @@ export default function SetPinScreen({ onDone, onSkip }: { onDone: () => void; o
   return (
     <AuthScreen
       title="Work offline securely"
-      subtitle="Set a PIN so you can open ClinicEz on this device when the clinic network is down."
+      subtitle="Set a PIN so you can open Clinic EZ on this device when the clinic network is down."
     >
       <View style={authStyles.form}>
         <InfoNotice message="The PIN only unlocks this device offline. Your password is still needed whenever you are online." />

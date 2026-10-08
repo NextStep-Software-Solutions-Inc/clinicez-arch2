@@ -1,4 +1,4 @@
-# RabbitMQ broker for a ClinicEz server (message bus shared by the API containers on this host).
+# RabbitMQ broker for a Clinic EZ server (message bus shared by the API containers on this host).
 #
 # Use this when booting a NEW server. An existing server that already runs RabbitMQ does not need it.
 #

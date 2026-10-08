@@ -167,7 +167,7 @@ async function clearSession(notify: boolean) {
 }
 
 function deviceLabel(): string {
-  return `ClinicEz ${Platform.OS}`;
+  return `Clinic EZ ${Platform.OS}`;
 }
 
 export async function getAuthStatus(): Promise<AuthResult<AuthStatus>> {

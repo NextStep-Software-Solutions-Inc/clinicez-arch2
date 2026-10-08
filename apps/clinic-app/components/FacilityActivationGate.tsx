@@ -239,7 +239,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
         <View style={[styles.card, styles.loadingCard]}>
           <BrandMark />
           <ThemedText variant="h2" style={styles.centerText}>
-            ClinicEz
+            Clinic EZ
           </ThemedText>
           <ThemedText variant="body" color={theme.colors.textSecondary} style={styles.centerText}>
             {activeTenant
@@ -267,7 +267,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
             <View style={styles.headerGroup}>
               <ThemedText variant="h1">Choose your workspace</ThemedText>
               <ThemedText variant="body" color={theme.colors.textSecondary}>
-                Enter your workspace name to sign in, or open ClinicEz from the Portal.
+                Enter your workspace name to sign in, or open Clinic EZ from the Portal.
               </ThemedText>
             </View>
 
@@ -326,7 +326,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
               <ThemedText variant="body" color={theme.colors.textSecondary}>
                 We couldn't find a workspace named{' '}
                 <ThemedText variant="bodyBold">"{activeTenant}"</ThemedText>. Check the name and try
-                again, or ask your administrator to confirm it is registered in ClinicEz.
+                again, or ask your administrator to confirm it is registered in Clinic EZ.
               </ThemedText>
             </View>
 
@@ -335,7 +335,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
 
               {Platform.OS === 'web' && typeof window !== 'undefined' && (
                 <Button
-                  title="Open ClinicEz Portal"
+                  title="Open Clinic EZ Portal"
                   variant="secondary"
                   size="lg"
                   onPress={() => {
@@ -363,7 +363,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
 
     let bannerTitle = 'Activate this facility';
     let bannerSubtitle =
-      'This facility needs a license key before it can be used. Copy the key from your workspace in the ClinicEz Portal and paste it below.';
+      'This facility needs a license key before it can be used. Copy the key from your workspace in the Clinic EZ Portal and paste it below.';
     let badgeLabel = 'Activation required';
     let badgeVariant: BadgeVariant = 'primary';
 
@@ -376,7 +376,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
     } else if (isExpired) {
       bannerTitle = 'Facility license expired';
       bannerSubtitle =
-        'This facility\'s license has passed its expiry date. Paste a renewed license key from your Portal workspace to keep using ClinicEz.';
+        'This facility\'s license has passed its expiry date. Paste a renewed license key from your Portal workspace to keep using Clinic EZ.';
       badgeLabel = 'License expired';
       badgeVariant = 'warning';
     }

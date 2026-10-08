@@ -48,7 +48,7 @@ export default function WorkstationSidebar({
         </View>
         <View style={styles.brandText}>
           <ThemedText variant="title" style={styles.brandTitle}>
-            ClinicEz
+            Clinic EZ
           </ThemedText>
           <ThemedText variant="caption" color={theme.colors.textMuted} numberOfLines={1}>
             {facilityName || 'Clinic workstation'}

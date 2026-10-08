@@ -129,7 +129,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
 
     let bannerTitle = 'Laboratory Activation Required';
     let bannerSubtitle =
-      'This clinical diagnostic laboratory instance requires an authentic, cryptographically signed license key generated from the ClinicEz Portal to operate on-premise.';
+      'This clinical diagnostic laboratory instance requires an authentic, cryptographically signed license key generated from the Clinic EZ Portal to operate on-premise.';
     let badgeColor = '#0D9488';
     let badgeBg = '#CCFBF1';
 

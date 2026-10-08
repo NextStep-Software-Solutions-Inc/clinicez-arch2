@@ -9,7 +9,7 @@ interface PageProps {
 export async function generateMetadata({ params }: PageProps) {
   const { token } = await params;
   return {
-    title: `Verify Medical Document (${token}) - ClinicEz Public Registry`,
+    title: `Verify Medical Document (${token}) - Clinic EZ Public Registry`,
     description: `Official Philippine healthcare document cryptographic verification portal.`,
   };
 }
@@ -56,7 +56,7 @@ export default async function DocumentVerifyPage({ params }: PageProps) {
       status: 'Officially Valid & Cryptographically Intact',
       securityDigest: token.startsWith('SEC-') ? token : `SEC-SHA256-${token.replace(/[^A-Za-z0-9]/g, '').slice(0, 16).toUpperCase()}`,
       verificationMessage:
-        'This clinical record was signed by a registered Philippine medical practitioner and its cryptographic hash matches the immutable ClinicEz healthcare registry.',
+        'This clinical record was signed by a registered Philippine medical practitioner and its cryptographic hash matches the immutable Clinic EZ healthcare registry.',
       notes: isMedCert
         ? 'Fitness Status: Fit to resume normal duties • 3 days rest period certified'
         : isReferral

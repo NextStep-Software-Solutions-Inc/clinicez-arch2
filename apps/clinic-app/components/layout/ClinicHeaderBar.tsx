@@ -40,7 +40,7 @@ export default function ClinicHeaderBar({
       <View style={styles.leftSection}>
         <View style={styles.titleBlock}>
           <ThemedText variant={isCompact ? 'title' : 'h2'} numberOfLines={1}>
-            {title || facilityName || 'ClinicEz'}
+            {title || facilityName || 'Clinic EZ'}
           </ThemedText>
           {resolvedSubtitle && title ? (
             <ThemedText variant="small" color={theme.colors.textMuted} numberOfLines={1}>

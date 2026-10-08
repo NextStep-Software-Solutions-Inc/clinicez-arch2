@@ -9,7 +9,7 @@ interface PageProps {
 export async function generateMetadata({ params }: PageProps) {
   const { token } = await params;
   return {
-    title: `Verify Prescription - ClinicEz Interop Portal`,
+    title: `Verify Prescription - Clinic EZ Interop Portal`,
     description: `Official Philippine electronic prescription verification for external pharmacists. Token: ${token}`,
   };
 }

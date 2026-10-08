@@ -549,7 +549,7 @@ export default function LabUploadClient({ token }: { token: string }) {
             <div className="pt-4 border-t border-border/70 flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                 <IconShieldCheck className="h-4 w-4 text-primary shrink-0" />
-                <span>Protected by ClinicEZ Philippine Interoperability Protocol</span>
+                <span>Protected by Clinic EZ Philippine Interoperability Protocol</span>
               </div>
 
               <Button

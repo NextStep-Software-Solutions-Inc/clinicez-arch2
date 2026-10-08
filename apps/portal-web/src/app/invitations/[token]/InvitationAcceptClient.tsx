@@ -79,7 +79,7 @@ export default function InvitationAcceptClient({ token }: { token: string }) {
             <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-primary/15 blur-[120px] pointer-events-none -z-10" />
             <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-accent/40 blur-[120px] pointer-events-none -z-10" />
 
-            {/* ClinicEZ Branded Top Header */}
+            {/* Clinic EZ Branded Top Header */}
             <header className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-4 sm:py-6 flex items-center justify-between z-10">
                 <Link href="/" className="flex items-center gap-2.5 group shrink-0">
                     <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary transition-all group-hover:bg-primary group-hover:text-primary-foreground shadow-sm shrink-0">
@@ -172,7 +172,7 @@ export default function InvitationAcceptClient({ token }: { token: string }) {
 
     return renderShell(
         <Card className="w-full max-w-lg rounded-2xl sm:rounded-3xl border border-border shadow-xl shadow-primary/5 bg-card/90 backdrop-blur-xl overflow-hidden">
-            {/* Clean ClinicEZ Branded Card Header */}
+            {/* Clean Clinic EZ Branded Card Header */}
             <div className="p-6 sm:p-8 text-center border-b border-border/60 bg-gradient-to-b from-primary/5 via-primary/[0.02] to-transparent">
                 <div className="flex items-center justify-center gap-3 mb-4">
                     <div className="size-12 rounded-2xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center shadow-xs">
@@ -322,7 +322,7 @@ export default function InvitationAcceptClient({ token }: { token: string }) {
             <CardFooter className="p-4 sm:p-5 bg-muted/30 border-t border-border/60 flex justify-between items-center text-[11px] text-muted-foreground">
                 <span className="flex items-center gap-1.5">
                     <IconShieldCheck className="h-3.5 w-3.5 text-primary" />
-                    <span>Protected by ClinicEZ Security</span>
+                    <span>Protected by Clinic EZ Security</span>
                 </span>
                 <span>
                     {invite.expiresAt ? (

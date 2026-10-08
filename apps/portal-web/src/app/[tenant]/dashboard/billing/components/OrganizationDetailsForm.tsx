@@ -87,7 +87,7 @@ export default function OrganizationDetailsForm({
                 id="orgTradingName"
                 value={formData.tradingName}
                 onChange={(e) => setFormData({ ...formData, tradingName: e.target.value })}
-                placeholder="e.g. ClinicEZ Manila Branch"
+                placeholder="e.g. Clinic EZ Manila Branch"
                 className="rounded-lg"
               />
               <p className="text-[10px] text-muted-foreground mt-0.5">If provided, this brand name will reflect on your invoices and receipts. Otherwise, the clinic name is used.</p>

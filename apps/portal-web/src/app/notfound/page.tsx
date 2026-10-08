@@ -64,14 +64,14 @@ export default async function NotFoundWorkspacePage({
           <Link href="/">
             <Button variant="outline" className="w-full h-11 rounded-xl font-semibold text-sm flex items-center justify-center gap-2">
               <IconArrowLeft className="w-4 h-4" />
-              Return to ClinicEz Home
+              Return to Clinic EZ Home
             </Button>
           </Link>
         </div>
       </div>
 
       <div className="mt-8 text-center text-xs text-slate-400 dark:text-slate-500">
-        © 2026 ClinicEz Healthcare Network • Unified Multi-Tenant Cloud
+        © 2026 Clinic EZ Healthcare Network • Unified Multi-Tenant Cloud
       </div>
     </div>
   );

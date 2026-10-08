@@ -9,7 +9,7 @@ interface PageProps {
 export async function generateMetadata({ params }: PageProps) {
   const { token } = await params;
   return {
-    title: `Upload Diagnostic Results - ClinicEz Portal`,
+    title: `Upload Diagnostic Results - Clinic EZ Portal`,
     description: `Official Philippine clinical laboratory report upload for non-partner diagnostic centers. Requisition Token: ${token}`,
   };
 }

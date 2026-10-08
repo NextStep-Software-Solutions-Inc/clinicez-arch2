@@ -133,7 +133,7 @@ export default function WorklistScreen() {
                 {item.patientName} ({item.patientAge}y • {item.patientGender})
               </ThemedText>
               <ThemedText style={styles.facilityText}>
-                🏥 {item.orderingFacilityName || 'ClinicEz Partner Clinic'}
+                🏥 {item.orderingFacilityName || 'Clinic EZ Partner Clinic'}
               </ThemedText>
               <ThemedText style={styles.doctor}>Ordered by: {item.orderingDoctorName}</ThemedText>
               

@@ -1258,7 +1258,7 @@ export default function PatientsScreen() {
                           {/* Dual-Path Verification Results */}
                           {order.status === 'CompletedWithExternalReport' && (
                             <View style={styles.externalResultBanner}>
-                              <ThemedText style={styles.externalResultTitle}>External Lab Report ({order.externalLabName || 'Non-ClinicEz Lab'})
+                              <ThemedText style={styles.externalResultTitle}>External Lab Report ({order.externalLabName || 'Non-Clinic EZ Lab'})
                               </ThemedText>
                               <ThemedText style={styles.externalResultMeta}>
                                 Ingested via {order.uploadedBy || 'Portal Dropzone'} • Document Verified
@@ -1465,7 +1465,7 @@ export default function PatientsScreen() {
               <View style={styles.slipQrBox}>
                 <ThemedText style={styles.slipQrTitle}>Universal Patient Choice (Dual-Path)</ThemedText>
                 <ThemedText style={styles.slipQrHelp}>
-                  Present this digital slip to ANY laboratory (whether or not it uses ClinicEz).
+                  Present this digital slip to ANY laboratory (whether or not it uses Clinic EZ).
                 </ThemedText>
                 <View style={styles.qrPlaceholder}>
                   <ThemedText style={styles.qrCodeText}>[ VERIFIABLE QR CODE ]</ThemedText>

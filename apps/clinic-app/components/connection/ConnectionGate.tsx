@@ -150,7 +150,7 @@ function ServerSetupScreen({
   return (
     <AuthScreen
       title="Connect to your clinic"
-      subtitle="Enter the address of the ClinicEz server your clinic runs. Ask your administrator if you are not sure."
+      subtitle="Enter the address of the Clinic EZ server your clinic runs. Ask your administrator if you are not sure."
     >
       <View style={authStyles.form}>
         <InfoNotice message="This device must be on the same Wi-Fi network as the clinic server. No internet connection is needed." />

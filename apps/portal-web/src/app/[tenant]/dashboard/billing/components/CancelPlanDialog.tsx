@@ -36,7 +36,7 @@ export default function CancelPlanDialog({
           <DialogDescription className="text-sm text-muted-foreground leading-normal" asChild>
             <div className="space-y-3">
               <p className="mt-2 text-foreground/90">
-                Are you sure you want to cancel your ClinicEZ plan subscription?
+                Are you sure you want to cancel your Clinic EZ plan subscription?
               </p>
               <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4 text-xs text-red-900 dark:text-red-300 flex gap-2">
                 <Clock className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />

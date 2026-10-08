@@ -93,7 +93,7 @@ export async function authenticateBiometric(): Promise<boolean> {
   if (!(await isBiometricEnabled()) || !(await biometricAvailable())) return false;
   try {
     const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: 'Unlock ClinicEz',
+      promptMessage: 'Unlock Clinic EZ',
       cancelLabel: 'Use PIN',
       disableDeviceFallback: true,
     });

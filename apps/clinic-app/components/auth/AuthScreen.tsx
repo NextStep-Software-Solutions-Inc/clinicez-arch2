@@ -4,7 +4,7 @@ import { theme } from '../../constants/theme';
 import ThemedText from '../ui/ThemedText';
 import Icon from '../ui/Icon';
 
-/** Shared chrome for sign-in, setup and unlock screens: centered card with the ClinicEz brand mark. */
+/** Shared chrome for sign-in, setup and unlock screens: centered card with the Clinic EZ brand mark. */
 export function AuthScreen({
   title,
   subtitle,

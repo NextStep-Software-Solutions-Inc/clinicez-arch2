@@ -168,7 +168,7 @@ export default function RxVerifyClient({ token, initialData }: RxVerifyClientPro
             </div>
             <div>
               <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
-                ClinicEz e-Prescription Verification Portal
+                Clinic EZ e-Prescription Verification Portal
               </h1>
               <p className="text-xs text-slate-500 font-medium">
                 Philippine Digital Health Interoperability Network • RA 6675 & RA 9165 Verified

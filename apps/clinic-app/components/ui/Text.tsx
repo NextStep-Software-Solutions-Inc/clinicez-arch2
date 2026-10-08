@@ -9,7 +9,7 @@ import { applyFontFamily } from '../../constants/fonts';
 
 /**
  * Drop-in replacements for react-native's `Text` / `TextInput` that render in the
- * ClinicEz typeface (Geist). Use these - or `ThemedText` / `Input` - instead of the
+ * Clinic EZ typeface (Geist). Use these - or `ThemedText` / `Input` - instead of the
  * raw react-native versions, otherwise text falls back to the system font.
  */
 export function Text({ style, ...rest }: TextProps) {

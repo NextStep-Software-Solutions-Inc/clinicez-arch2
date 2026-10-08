@@ -236,7 +236,7 @@ export default function PrescriptionsScreen() {
                   <View style={styles.rowBetween}>
                     <View style={styles.rxBadgeContainer}>
                       <ThemedText style={styles.rxBadge}>{order.prescriptionNumber}</ThemedText>
-                      <ThemedText style={styles.facilityText}>{order.orderingFacilityName || 'ClinicEz Partner'}</ThemedText>
+                      <ThemedText style={styles.facilityText}>{order.orderingFacilityName || 'Clinic EZ Partner'}</ThemedText>
                     </View>
                     <ThemedText
                       style={[

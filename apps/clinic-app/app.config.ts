@@ -14,10 +14,10 @@ const EAS_PROJECT_ID = process.env.EAS_PROJECT_ID ?? "031bb39b-fac2-413c-8e6b-a7
 const ALLOW_CLEARTEXT_LAN = (process.env.ALLOW_CLEARTEXT_LAN ?? 'true') !== 'false';
 
 const appNames: Record<string, string> = {
-  development: 'ClinicEz Clinic Dev',
-  preview: 'ClinicEz Clinic Preview',
-  staging: 'ClinicEz Clinic Staging',
-  production: 'ClinicEz Clinic',
+  development: 'Clinic EZ Clinic Dev',
+  preview: 'Clinic EZ Clinic Preview',
+  staging: 'Clinic EZ Clinic Staging',
+  production: 'Clinic EZ Clinic',
 };
 
 const idSuffix: Record<string, string> = {
@@ -31,7 +31,7 @@ const BUNDLE_ID = `com.nextstepsoftware.clinicez.clinic${idSuffix[APP_VARIANT] ?
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
-  name: appNames[APP_VARIANT] ?? 'ClinicEz Clinic',
+  name: appNames[APP_VARIANT] ?? 'Clinic EZ Clinic',
   slug: 'clinicez-clinic-app',
   owner: 'nextstep-software',
   version: '1.0.0',
@@ -44,7 +44,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     supportsTablet: true,
     bundleIdentifier: BUNDLE_ID,
     infoPlist: {
-      NSFaceIDUsageDescription: 'ClinicEz uses Face ID to unlock this device when the clinic server is unreachable.',
+      NSFaceIDUsageDescription: 'Clinic EZ uses Face ID to unlock this device when the clinic server is unreachable.',
       ITSAppUsesNonExemptEncryption: false,
       ...(ALLOW_CLEARTEXT_LAN
         ? { NSAppTransportSecurity: { NSAllowsLocalNetworking: true } }
@@ -63,8 +63,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   web: {
     bundler: 'metro',
     output: 'single',
-    name: 'ClinicEz Clinical Workstation',
-    shortName: 'ClinicEz',
+    name: 'Clinic EZ Clinical Workstation',
+    shortName: 'Clinic EZ',
     favicon: './assets/favicon.png',
     backgroundColor: '#F8FAFC',
     themeColor: '#0D6963',
@@ -78,7 +78,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ],
     [
       'expo-local-authentication',
-      { faceIDPermission: 'ClinicEz uses Face ID to unlock this device when the clinic server is unreachable.' },
+      { faceIDPermission: 'Clinic EZ uses Face ID to unlock this device when the clinic server is unreachable.' },
     ],
     ['expo-build-properties', { android: { usesCleartextTraffic: ALLOW_CLEARTEXT_LAN } }],
   ],

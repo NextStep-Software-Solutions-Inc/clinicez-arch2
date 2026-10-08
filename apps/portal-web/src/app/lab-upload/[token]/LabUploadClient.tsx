@@ -141,7 +141,7 @@ export default function LabUploadClient({ token, initialData }: LabUploadClientP
             </div>
             <div>
               <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
-                ClinicEz Diagnostic Laboratory Result Portal
+                Clinic EZ Diagnostic Laboratory Result Portal
               </h1>
               <p className="text-xs text-slate-500 font-medium">
                 Non-Partner Laboratory Interoperability • Direct Electronic Report Submission
@@ -456,7 +456,7 @@ export default function LabUploadClient({ token, initialData }: LabUploadClientP
         )}
 
         <footer className="text-center text-xs text-slate-400 py-4 border-t border-slate-200">
-          ClinicEz Diagnostic Interoperability Network • Authorized for accredited clinical laboratories under DOH Administrative Order No. 2020-0014.
+          Clinic EZ Diagnostic Interoperability Network • Authorized for accredited clinical laboratories under DOH Administrative Order No. 2020-0014.
         </footer>
       </div>
     </div>

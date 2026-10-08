@@ -315,10 +315,10 @@ export default function PrescriptionSlipModal({
             {/* Path A */}
             <View style={styles.pathCard}>
               <ThemedText variant="smallBold" color={theme.colors.primary}>
-                Option A: ClinicEz partner pharmacy
+                Option A: Clinic EZ partner pharmacy
               </ThemedText>
               <ThemedText variant="caption" color={theme.colors.textSecondary}>
-                The electronic order is sent to the ClinicEz partner pharmacy automatically, which can fill it from its own
+                The electronic order is sent to the Clinic EZ partner pharmacy automatically, which can fill it from its own
                 stock.
               </ThemedText>
             </View>

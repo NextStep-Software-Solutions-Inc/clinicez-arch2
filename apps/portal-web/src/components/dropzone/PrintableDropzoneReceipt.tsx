@@ -83,7 +83,7 @@ export default function PrintableDropzoneReceipt({
         <div className="absolute right-6 top-8 opacity-[0.06] dark:opacity-[0.08] pointer-events-none select-none">
           <div className="size-48 rounded-full border-8 border-dashed border-primary flex items-center justify-center rotate-12">
             <span className="text-xl font-black uppercase tracking-widest text-center">
-              CLINICEZ<br />VERIFIED
+              CLINIC EZ<br />VERIFIED
             </span>
           </div>
         </div>

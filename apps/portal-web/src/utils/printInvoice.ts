@@ -183,7 +183,7 @@ export const printInvoice = (invoice: BillingInvoice, billingInfo: BillingInfo |
             <div>
               <div class="logo">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="color: #2563eb; margin-right: 8px;"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-                ClinicEZ
+                Clinic EZ
               </div>
               <p style="margin: 8px 0 0 0; font-size: 12px; color: #64748b;">NextStep Software Corporation<br/>Pasig City, Metro Manila, Philippines</p>
             </div>
@@ -228,7 +228,7 @@ export const printInvoice = (invoice: BillingInvoice, billingInfo: BillingInfo |
               <tr>
                 <td>
                   <strong>${planName} Subscription</strong><br/>
-                  <span style="font-size: 12px; color: #64748b;">Full access to ClinicEZ ${planName} features.</span>
+                  <span style="font-size: 12px; color: #64748b;">Full access to Clinic EZ ${planName} features.</span>
                 </td>
                 <td>${cycleLabel}</td>
                 <td>${coverageStart} - ${coverageEnd}</td>
@@ -253,7 +253,7 @@ export const printInvoice = (invoice: BillingInvoice, billingInfo: BillingInfo |
           </div>
 
           <div class="footer">
-            <p>Thank you for subscribing to ClinicEZ!${siteEmails.billing ? ` For billing support, email ${siteEmails.billing}.` : ""}</p>
+            <p>Thank you for subscribing to Clinic EZ!${siteEmails.billing ? ` For billing support, email ${siteEmails.billing}.` : ""}</p>
             <p style="margin-top: 8px;">&copy; ${new Date().getFullYear()} NextStep Software Corporation. All rights reserved.</p>
           </div>
         </div>

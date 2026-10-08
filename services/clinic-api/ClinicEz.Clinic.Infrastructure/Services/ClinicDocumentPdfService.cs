@@ -749,7 +749,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                 "a5" => DocumentPaperSize.A5,
                 _ => DocumentPaperSize.Letter
             },
-            CustomDisclaimerText = settings.LetterheadFooter ?? "Valid Philippine Medical Certificate & Prescription. Digitally issued via ClinicEZ in compliance with RA 8792 & RA 10173."
+            CustomDisclaimerText = settings.LetterheadFooter ?? "Valid Philippine Medical Certificate & Prescription. Digitally issued via Clinic EZ in compliance with RA 8792 & RA 10173."
         };
     }
 }

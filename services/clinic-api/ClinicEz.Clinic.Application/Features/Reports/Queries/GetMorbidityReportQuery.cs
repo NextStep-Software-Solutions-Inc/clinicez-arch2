@@ -130,7 +130,7 @@ public class GetMorbidityReportQueryHandler : IRequestHandler<GetMorbidityReport
             end.AddDays(-1),
             _clinicContext.TenantId,
             _clinicContext.ClinicId,
-            "ClinicEZ Primary Care Clinic",
+            "Clinic EZ Primary Care Clinic",
             encounters.Count,
             totalDiagnoses,
             diseaseRows

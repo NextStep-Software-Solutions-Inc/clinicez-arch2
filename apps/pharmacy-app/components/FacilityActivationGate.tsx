@@ -129,7 +129,7 @@ export function FacilityActivationGate({ children }: FacilityActivationGateProps
 
     let bannerTitle = 'Pharmacy Activation Required';
     let bannerSubtitle =
-      'This pharmacy facility instance requires an authentic, cryptographically signed license key generated from the ClinicEz Portal to dispense medications and track inventory.';
+      'This pharmacy facility instance requires an authentic, cryptographically signed license key generated from the Clinic EZ Portal to dispense medications and track inventory.';
     let badgeColor = '#059669';
     let badgeBg = '#D1FAE5';
 

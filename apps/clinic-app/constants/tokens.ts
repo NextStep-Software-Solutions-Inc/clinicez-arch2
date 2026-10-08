@@ -1,12 +1,12 @@
 /**
  * Primitive design tokens.
  *
- * These are the raw values of the ClinicEz design system. Screens and components
+ * These are the raw values of the Clinic EZ design system. Screens and components
  * must NOT import from this file - they consume the semantic layer in `theme.ts`
  * (`theme.colors.surface`, `theme.typography.body`, ...). That indirection is what
  * lets us re-skin the product (or add dark mode) by changing one file.
  *
- * Brand is aligned with the ClinicEz Portal: teal #0D6963 primary, #D9FAF1 accent.
+ * Brand is aligned with the Clinic EZ Portal: teal #0D6963 primary, #D9FAF1 accent.
  */
 
 export const palette = {

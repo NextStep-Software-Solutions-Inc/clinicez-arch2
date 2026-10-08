@@ -126,7 +126,7 @@ export const linkingOptions = {
   ],
 };
 
-/** Navigation container theme so React Navigation chrome matches the ClinicEz tokens. */
+/** Navigation container theme so React Navigation chrome matches the Clinic EZ tokens. */
 export const navigationTheme = {
   ...DefaultTheme,
   colors: {

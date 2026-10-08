@@ -60,7 +60,7 @@ export default function VerifyClient({ token, data }: VerifyClientProps) {
               Ez
             </div>
             <div>
-              <h1 className="text-xl font-bold text-slate-900">ClinicEz Document Registry</h1>
+              <h1 className="text-xl font-bold text-slate-900">Clinic EZ Document Registry</h1>
               <p className="text-xs text-slate-500">Official Philippine Healthcare Document Verification</p>
             </div>
           </div>

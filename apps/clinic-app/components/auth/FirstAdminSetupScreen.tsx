@@ -38,7 +38,7 @@ export default function FirstAdminSetupScreen() {
   const handleVerifyLicense = async () => {
     const trimmed = licenseToken.trim();
     if (!trimmed) {
-      setError('Paste the facility license key from your ClinicEz Portal workspace.');
+      setError('Paste the facility license key from your Clinic EZ Portal workspace.');
       return;
     }
     setBusy(true);
@@ -85,14 +85,14 @@ export default function FirstAdminSetupScreen() {
         subtitle={`${facilityName} has no administrator yet. Enter your facility license key to prove you are the authorized owner.`}
       >
         <View style={authStyles.form}>
-          <InfoNotice message="Step 1 of 2: Authenticate with the cryptographic license key generated in your ClinicEz Portal workspace." />
+          <InfoNotice message="Step 1 of 2: Authenticate with the cryptographic license key generated in your Clinic EZ Portal workspace." />
           {error ? <ErrorNotice message={error} /> : null}
 
           <Input
             label="Facility license key"
             value={licenseToken}
             onChangeText={setLicenseToken}
-            placeholder="Paste the key from your ClinicEz Portal workspace"
+            placeholder="Paste the key from your Clinic EZ Portal workspace"
             autoCapitalize="none"
             autoCorrect={false}
             multiline

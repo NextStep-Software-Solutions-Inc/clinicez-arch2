@@ -1,9 +1,9 @@
 /**
- * Primitive ClinicEz design tokens (raw values).
+ * Primitive Clinic EZ design tokens (raw values).
  *
  * Apps must NOT consume these directly in screens/components - they consume the
  * semantic layer (`lightColors` / `darkColors` in ./semantic). Values match the
- * ClinicEz Portal brand (teal #0D6963 primary, #D9FAF1 accent) and the clinic app.
+ * Clinic EZ Portal brand (teal #0D6963 primary, #D9FAF1 accent) and the clinic app.
  */
 export const palette = {
   teal: {

@@ -90,7 +90,7 @@ function UnreachableScreen() {
   return (
     <AuthScreen
       title="Can’t reach the clinic server"
-      subtitle={`ClinicEz could not connect to ${serverLabel || 'the server'}. Check that this device is on the clinic network and that the server is running.`}
+      subtitle={`Clinic EZ could not connect to ${serverLabel || 'the server'}. Check that this device is on the clinic network and that the server is running.`}
     >
       <View style={authStyles.actions}>
         <Button title="Try again" size="lg" icon="refresh" onPress={retry} />

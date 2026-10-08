@@ -56,7 +56,7 @@ export default function OfflineUnlockScreen() {
 
   return (
     <AuthScreen
-      title="Unlock ClinicEz"
+      title="Unlock Clinic EZ"
       subtitle={user ? `${user.name} · working offline` : 'Working offline'}
     >
       <View style={authStyles.form}>

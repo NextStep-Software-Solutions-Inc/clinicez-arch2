@@ -605,7 +605,7 @@ export default function ResultsScreen() {
 
             <ScrollView style={{ maxHeight: 420 }}>
               <View style={styles.dohLetterheadPreview}>
-                <ThemedText style={styles.dohLabTitle}>CLINICEZ DIAGNOSTIC LABORATORY</ThemedText>
+                <ThemedText style={styles.dohLabTitle}>CLINIC EZ DIAGNOSTIC LABORATORY</ThemedText>
                 <ThemedText style={styles.dohLabSub}>DOH LTO: DOH-LTO-2026-004412-CL • PhilHealth: PHIC-LAB-992140</ThemedText>
                 <ThemedText style={styles.dohLabAddress}>124 Medical Plaza, Taft Avenue, Manila, Philippines</ThemedText>
 

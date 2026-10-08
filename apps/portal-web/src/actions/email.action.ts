@@ -66,7 +66,7 @@ export const sendMail = async (payload: SendMailPayload): Promise<boolean> => {
 };
 
 export const sendStaffInvitationMail = async (payload: StaffInvitationEmailPayload): Promise<boolean> => {
-  const subject = `You've been invited to join ${payload.workspaceName} on ClinicEZ`;
+  const subject = `You've been invited to join ${payload.workspaceName} on Clinic EZ`;
   const facilityNote = payload.facilityName ? `<p style="margin: 4px 0; color: #475569; font-size: 14px;"><strong>Branch Assignment:</strong> ${payload.facilityName}</p>` : "";
 
   const html = `
@@ -82,7 +82,7 @@ export const sendStaffInvitationMail = async (payload: StaffInvitationEmailPaylo
     <!-- Header -->
     <tr>
       <td style="padding: 32px 32px 20px 32px; background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); text-align: center;">
-        <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">ClinicEZ</h1>
+        <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">Clinic EZ</h1>
         <p style="color: #e0e7ff; margin: 6px 0 0 0; font-size: 13px; font-weight: 500;">Clinical Operations & Healthcare Platform</p>
       </td>
     </tr>
@@ -94,7 +94,7 @@ export const sendStaffInvitationMail = async (payload: StaffInvitationEmailPaylo
           Hello ${payload.inviteeName},
         </h2>
         <p style="font-size: 15px; line-height: 24px; color: #334155; margin: 0 0 20px 0;">
-          You have been invited by the administration of <strong>${payload.workspaceName}</strong> to join their workspace team on ClinicEZ.
+          You have been invited by the administration of <strong>${payload.workspaceName}</strong> to join their workspace team on Clinic EZ.
         </p>
 
         <!-- Details Card -->
@@ -150,7 +150,7 @@ export const sendStaffInvitationMail = async (payload: StaffInvitationEmailPaylo
   const text = `
 Hello ${payload.inviteeName},
 
-You have been invited by ${payload.workspaceName} to join their clinical team on ClinicEZ as a ${payload.role}.
+You have been invited by ${payload.workspaceName} to join their clinical team on Clinic EZ as a ${payload.role}.
 
 Accept your invitation by visiting:
 ${payload.inviteUrl}
