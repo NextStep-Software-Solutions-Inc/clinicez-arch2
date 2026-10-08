@@ -341,6 +341,7 @@ export default function SettingsScreen() {
           <StaffManagementTab
             staff={staff}
             setStaff={setStaff}
+            roles={roles}
             staffLoadError={staffLoadError}
             showSkeletons={showSkeletons}
             activeStaffCount={activeStaffCount}

@@ -72,7 +72,7 @@ public static class DependencyInjection
         // Register Clinic API Typed HTTP Client with Resilience
         services.AddHttpClient<ClinicEz.Portal.Application.Interfaces.IClinicApiClient, ClinicEz.Portal.Infrastructure.Clinic.ClinicApiClient>((sp, client) =>
         {
-            var clinicUrl = configuration["Services:ClinicApiUrl"] ?? configuration["ClinicSettings:ClinicApiUrl"] ?? "http://localhost:5245";
+            var clinicUrl = configuration["Services:ClinicApiUrl"] ?? configuration["ClinicSettings:ClinicApiUrl"] ?? "http://clinic-api:8080";
             client.BaseAddress = new Uri(clinicUrl.EndsWith('/') ? clinicUrl : $"{clinicUrl}/");
             client.Timeout = TimeSpan.FromSeconds(60);
             // Trusted service-to-service credential: clinic-api rejects unauthenticated calls.

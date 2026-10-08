@@ -101,6 +101,7 @@ public sealed class RecordsController : ControllerBase
     }
 
     [HttpPost("intake/patient-shared-file")]
+    [HasPermission(ClinicPermissions.RecordsUpload)]
     public async Task<ActionResult<ApiResponse<ClinicRecordAttachmentDto>>> IntakePatientSharedFile(
         [FromForm] IntakePatientSharedFileForm form,
         CancellationToken ct)

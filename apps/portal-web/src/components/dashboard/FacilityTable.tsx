@@ -11,6 +11,7 @@ import {
     IconCircleCheck, 
     IconClockPlay, 
     IconAlertCircle, 
+    IconAlertTriangle,
     IconExternalLink, 
     IconPlus, 
     IconEdit, 
@@ -72,6 +73,8 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
 
     // Delete Modal state
     const [deletingFacility, setDeletingFacility] = useState<Facility | null>(null);
+    const [deleteConfirmationText, setDeleteConfirmationText] = useState("");
+    const [deleteAcknowledged, setDeleteAcknowledged] = useState(false);
     const [savingDelete, setSavingDelete] = useState(false);
 
     const handleActivateFacility = async (fac: Facility) => {
@@ -199,12 +202,18 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
 
     const handleConfirmDelete = async () => {
         if (!deletingFacility) return;
+        if (deleteConfirmationText.trim() !== deletingFacility.name.trim() || !deleteAcknowledged) {
+            toast.error("Please type the exact facility name and acknowledge the operational impact to confirm.");
+            return;
+        }
 
         setSavingDelete(true);
         try {
             await apiClient.delete(`/facilities/${deletingFacility.id}?tenantSlug=${tenantSlug}`);
-            toast.success(`Removed "${deletingFacility.name}" from workspace`);
+            toast.success(`"${deletingFacility.name}" archived successfully`);
             setDeletingFacility(null);
+            setDeleteConfirmationText("");
+            setDeleteAcknowledged(false);
             fetchFacilities();
         } catch (err: any) {
             toast.error(err.response?.data?.message || err.message || "Failed to delete facility");
@@ -610,24 +619,77 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                 </DialogContent>
             </Dialog>
 
-            {/* Archive / Delete Facility Dialog */}
-            <Dialog open={!!deletingFacility} onOpenChange={(open) => !open && setDeletingFacility(null)}>
-                <DialogContent className="sm:max-w-md rounded-2xl">
+            {/* Hardened Intentional Archive / Delete Facility Dialog */}
+            <Dialog open={!!deletingFacility} onOpenChange={(open) => {
+                if (!open) {
+                    setDeletingFacility(null);
+                    setDeleteConfirmationText("");
+                    setDeleteAcknowledged(false);
+                }
+            }}>
+                <DialogContent className="w-[96vw] max-w-[96vw] sm:max-w-lg rounded-2xl sm:rounded-3xl p-5 sm:p-6 border border-slate-200 dark:border-slate-800 shadow-2xl bg-white dark:bg-slate-950">
                     <DialogHeader>
-                        <DialogTitle className="text-base font-bold text-rose-600 dark:text-rose-400">
-                            Archive {facilityType}
+                        <DialogTitle className="text-base sm:text-lg font-bold text-rose-600 dark:text-rose-400 flex items-center gap-2">
+                            <IconAlertTriangle className="h-5 w-5 text-rose-600 shrink-0" />
+                            <span>Archive &amp; Decommission {facilityType}</span>
                         </DialogTitle>
-                        <DialogDescription className="text-xs text-slate-500">
-                            Are you sure you want to remove <strong className="text-slate-800 dark:text-slate-200">{deletingFacility?.name}</strong>? This action will unlink the clinical facility from your workspace.
+                        <DialogDescription className="text-xs text-slate-500 leading-relaxed mt-1">
+                            This action immediately revokes access, unlinks custom domains, and halts all terminal operations.
                         </DialogDescription>
                     </DialogHeader>
+
+                    {/* Operational Impact Warning Callout */}
+                    <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 space-y-2 text-xs text-rose-900 dark:text-rose-200">
+                        <div className="font-bold flex items-center gap-1.5">
+                            <IconAlertCircle className="h-4 w-4 text-rose-600 shrink-0" />
+                            <span>Immediate Operational Impact:</span>
+                        </div>
+                        <ul className="list-disc list-inside space-y-1 text-[11px] text-rose-800 dark:text-rose-300">
+                            <li>The domain <strong className="font-mono">{deletingFacility ? getFacilityDomain(deletingFacility, tenantSlug) : ""}</strong> will stop resolving.</li>
+                            <li>Active workstation logins, doctor consultation queues, and cashier sessions will be disconnected.</li>
+                            <li>Cryptographic license token will be deactivated on the root licensing ledger.</li>
+                            <li>Patient audit trails are securely retained in compliance with Philippine health records retention law.</li>
+                        </ul>
+                    </div>
+
+                    {/* Exact Name Verification Input */}
+                    <div className="space-y-1.5 pt-1">
+                        <Label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                            To confirm deactivation, please type <span className="font-bold select-all font-mono text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-1.5 py-0.5 rounded border border-rose-200/60 dark:border-rose-900/40">{deletingFacility?.name}</span> below:
+                        </Label>
+                        <Input
+                            value={deleteConfirmationText}
+                            onChange={(e) => setDeleteConfirmationText(e.target.value)}
+                            placeholder={deletingFacility?.name}
+                            className="h-9 text-xs rounded-xl font-medium focus-visible:ring-rose-500"
+                            autoComplete="off"
+                        />
+                    </div>
+
+                    {/* Intentional Checkbox Gate */}
+                    <label className="flex items-start gap-2.5 pt-1 cursor-pointer select-none">
+                        <input
+                            type="checkbox"
+                            checked={deleteAcknowledged}
+                            onChange={(e) => setDeleteAcknowledged(e.target.checked)}
+                            className="mt-0.5 rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                        />
+                        <span className="text-xs text-slate-600 dark:text-slate-400 font-medium leading-tight">
+                            I understand that archiving <strong className="text-slate-900 dark:text-slate-100">{deletingFacility?.name}</strong> will immediately halt clinical operations and cannot be undone with a single click.
+                        </span>
+                    </label>
+
                     <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 pt-2 sm:justify-end">
                         <Button 
                             type="button" 
                             variant="outline" 
-                            onClick={() => setDeletingFacility(null)} 
+                            onClick={() => {
+                                setDeletingFacility(null);
+                                setDeleteConfirmationText("");
+                                setDeleteAcknowledged(false);
+                            }} 
                             disabled={savingDelete}
-                            className="w-full sm:w-auto rounded-xl text-xs"
+                            className="w-full sm:w-auto rounded-xl text-xs font-semibold"
                         >
                             Cancel
                         </Button>
@@ -635,11 +697,15 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                             type="button" 
                             variant="destructive" 
                             onClick={handleConfirmDelete} 
-                            disabled={savingDelete}
-                            className="w-full sm:w-auto rounded-xl text-xs font-semibold gap-1.5"
+                            disabled={
+                                savingDelete || 
+                                deleteConfirmationText.trim() !== deletingFacility?.name.trim() || 
+                                !deleteAcknowledged
+                            }
+                            className="w-full sm:w-auto rounded-xl text-xs font-semibold gap-1.5 bg-rose-600 hover:bg-rose-700 text-white disabled:opacity-50 disabled:pointer-events-none"
                         >
                             {savingDelete && <IconLoader className="h-3.5 w-3.5 animate-spin" />}
-                            <span>Confirm &amp; Archive</span>
+                            <span>Permanently Archive Facility</span>
                         </Button>
                     </DialogFooter>
                 </DialogContent>

@@ -107,6 +107,7 @@ public sealed class YakapTransmittalsController : ControllerBase
     /// Retrieves unencrypted raw Konsulta XML document for an encounter batch transmittal.
     /// </summary>
     [HttpGet("transmittals/{id:guid}/raw-xml")]
+    [HttpGet("transmittals/{id:guid}/xml")]
     [HasPermission(ClinicPermissions.YakapRead)]
     public async Task<ActionResult<ApiResponse<string>>> GetTransmittalRawXml(
         Guid id,

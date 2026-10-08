@@ -12,12 +12,13 @@ import { Card, CardContent, CardHeader } from '../ui/Card';
 import Icon from '../ui/Icon';
 import { theme } from '../../constants/theme';
 import { notify } from '../../utils/feedback';
-import { clinicService, StaffMember, StaffRole, ResetStaffPasswordResult } from '../../services/clinicService';
+import { clinicService, StaffMember, StaffRole, ResetStaffPasswordResult, ClinicRole } from '../../services/clinicService';
 import { Chip, FieldGroup } from './common';
 
 interface StaffManagementTabProps {
   staff: StaffMember[];
   setStaff: React.Dispatch<React.SetStateAction<StaffMember[]>>;
+  roles?: ClinicRole[];
   staffLoadError: string | null;
   showSkeletons: boolean;
   activeStaffCount: number;
@@ -31,6 +32,7 @@ interface StaffManagementTabProps {
 export default function StaffManagementTab({
   staff,
   setStaff,
+  roles = [],
   staffLoadError,
   showSkeletons,
   activeStaffCount,
@@ -45,8 +47,12 @@ export default function StaffManagementTab({
   const [lastName, setLastName] = useState('');
   const [title, setTitle] = useState('');
   const [role, setRole] = useState<StaffRole>('Doctor');
+  const [selectedClinicRoleId, setSelectedClinicRoleId] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [prc, setPrc] = useState('');
+  const [ptr, setPtr] = useState('');
+  const [s2, setS2] = useState('');
+  const [stampModalStaff, setStampModalStaff] = useState<StaffMember | null>(null);
   const [specialty, setSpecialty] = useState('');
   const [provisionLogin, setProvisionLogin] = useState(true);
   const [temporaryPassword, setTemporaryPassword] = useState('');
@@ -82,8 +88,11 @@ export default function StaffManagementTab({
     setLastName('');
     setTitle('');
     setRole('Doctor');
+    setSelectedClinicRoleId(null);
     setEmail('');
     setPrc('');
+    setPtr('');
+    setS2('');
     setSpecialty('');
     setProvisionLogin(true);
     setTemporaryPassword(generateRandomPassword());
@@ -121,8 +130,11 @@ export default function StaffManagementTab({
       lastName: lastName.trim(),
       title: title.trim() || undefined,
       role,
+      clinicRoleId: selectedClinicRoleId || undefined,
       email: email.trim() || undefined,
       prcLicenseNumber: prc.trim() || undefined,
+      ptrNumber: ptr.trim() || undefined,
+      s2LicenseNumber: s2.trim() || undefined,
       specialty: specialty.trim() || undefined,
       initialPassword: provisionLogin ? temporaryPassword : undefined,
       sendInviteEmail: false,
@@ -254,6 +266,9 @@ export default function StaffManagementTab({
                       <View style={styles.staffNameRow}>
                         <ThemedText variant="bodyBold">{fullName}</ThemedText>
                         <Badge label={s.role} variant={s.role === 'Doctor' ? 'primary' : 'neutral'} size="sm" />
+                        {s.roleName && s.roleName !== s.role ? (
+                          <Badge label={s.roleName} variant="purple" size="sm" />
+                        ) : null}
                         {!s.isActive ? (
                           <Badge label="Inactive" variant="emergency" size="sm" />
                         ) : s.hasCredentials ? (
@@ -272,6 +287,8 @@ export default function StaffManagementTab({
                           s.roleName,
                           s.email ? s.email : 'No email',
                           s.prcLicenseNumber ? `PRC ${s.prcLicenseNumber}` : null,
+                          s.ptrNumber ? `PTR ${s.ptrNumber}` : null,
+                          s.s2LicenseNumber ? `S2 ${s.s2LicenseNumber}` : null,
                           s.specialty,
                         ]
                           .filter(Boolean)
@@ -280,6 +297,14 @@ export default function StaffManagementTab({
                     </View>
 
                     <View style={styles.staffActionsCol}>
+                      {s.role === 'Doctor' ? (
+                        <Button
+                          title="View Stamp"
+                          variant="outline"
+                          size="sm"
+                          onPress={() => setStampModalStaff(s)}
+                        />
+                      ) : null}
                       <Button
                         title="Reset Password"
                         icon="key"
@@ -348,6 +373,28 @@ export default function StaffManagementTab({
           </FieldGroup>
         </View>
 
+        {roles && roles.length > 0 ? (
+          <View style={styles.formRow}>
+            <FieldGroup label="Assigned RBAC Permission Role (Optional)">
+              <View style={styles.chipRow}>
+                <Chip
+                  label="Default System Permissions"
+                  active={!selectedClinicRoleId}
+                  onPress={() => setSelectedClinicRoleId(null)}
+                />
+                {roles.map((r) => (
+                  <Chip
+                    key={r.id}
+                    label={`${r.name}${!r.isSystem ? ' (Custom)' : ''}`}
+                    active={selectedClinicRoleId === r.id}
+                    onPress={() => setSelectedClinicRoleId(r.id)}
+                  />
+                ))}
+              </View>
+            </FieldGroup>
+          </View>
+        ) : null}
+
         <View style={styles.formRow}>
           <Input
             containerStyle={styles.flexWide}
@@ -367,13 +414,62 @@ export default function StaffManagementTab({
           />
         </View>
 
-        <Input
-          label="PRC license number"
-          required={role === 'Doctor'}
-          value={prc}
-          onChangeText={setPrc}
-          placeholder="PRC license number (mandatory for doctors)"
-        />
+        {role === 'Doctor' ? (
+          <>
+            <Input
+              label="PRC license number"
+              required
+              value={prc}
+              onChangeText={setPrc}
+              placeholder="e.g. 0108924 (Mandatory for doctors)"
+            />
+            <View style={styles.formRow}>
+              <Input
+                containerStyle={styles.flexWide}
+                label="Professional Tax Receipt (PTR)"
+                value={ptr}
+                onChangeText={setPtr}
+                placeholder="e.g. PTR No. 8941203 / Taguig City"
+              />
+              <Input
+                containerStyle={styles.flexWide}
+                label="PDEA S2 dangerous drug license"
+                value={s2}
+                onChangeText={setS2}
+                placeholder="e.g. S2 No. 0918-99214-A1 (Optional)"
+              />
+            </View>
+
+            {/* Official Doctor Stamp Live Specimen */}
+            <View style={styles.stampPreviewCard}>
+              <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                Official Doctor Stamp Live Preview
+              </ThemedText>
+              <View style={styles.stampBox}>
+                <ThemedText variant="smallBold" color={theme.colors.primary} style={styles.stampName}>
+                  {`${title ? `${title} ` : 'DR. '}${firstName || 'First'} ${lastName || 'Last'}`.toUpperCase()}
+                </ThemedText>
+                <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                  {specialty || 'General / Primary Care Medicine'}
+                </ThemedText>
+                <View style={styles.stampDivider} />
+                <ThemedText variant="caption" color={theme.colors.text}>
+                  {prc ? `PRC No. ${prc}` : 'PRC No. [Required for Prescriptions]'}
+                </ThemedText>
+                {ptr ? (
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    {ptr}
+                  </ThemedText>
+                ) : null}
+                {s2 ? (
+                  <ThemedText variant="captionBold" color={theme.colors.emergency}>
+                    {s2}
+                  </ThemedText>
+                ) : null}
+              </View>
+            </View>
+          </>
+        ) : null}
 
         <Input
           label="Specialty or clinical designation"
@@ -544,6 +640,51 @@ export default function StaffManagementTab({
           />
         </Modal>
       ) : null}
+
+      {/* Doctor Stamp Preview Modal */}
+      {stampModalStaff ? (
+        <Modal
+          visible
+          onClose={() => setStampModalStaff(null)}
+          title="Physician Stamp & Credentials"
+          subtitle={`Official Philippine medical stamp for ${stampModalStaff.firstName} ${stampModalStaff.lastName}`}
+          maxWidth={460}
+          footer={
+            <View style={styles.modalFooter}>
+              <Button title="Close" variant="ghost" onPress={() => setStampModalStaff(null)} />
+            </View>
+          }
+        >
+          <View style={styles.stampModalContent}>
+            <View style={styles.stampBoxLarge}>
+              <ThemedText variant="bodyBold" color={theme.colors.primary} style={styles.stampNameLarge}>
+                {`${stampModalStaff.title ? `${stampModalStaff.title} ` : 'DR. '}${stampModalStaff.firstName} ${stampModalStaff.lastName}`.toUpperCase()}
+              </ThemedText>
+              <ThemedText variant="small" color={theme.colors.textSecondary}>
+                {stampModalStaff.specialty || 'General / Outpatient Medicine'}
+              </ThemedText>
+              <View style={styles.stampDivider} />
+              <ThemedText variant="smallBold" color={theme.colors.text}>
+                {stampModalStaff.prcLicenseNumber ? `PRC No. ${stampModalStaff.prcLicenseNumber}` : 'PRC: Not configured'}
+              </ThemedText>
+              {stampModalStaff.ptrNumber ? (
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  {stampModalStaff.ptrNumber}
+                </ThemedText>
+              ) : null}
+              {stampModalStaff.s2LicenseNumber ? (
+                <ThemedText variant="captionBold" color={theme.colors.emergency}>
+                  {stampModalStaff.s2LicenseNumber}
+                </ThemedText>
+              ) : null}
+            </View>
+
+            <ThemedText variant="caption" color={theme.colors.textMuted} style={styles.stampNotice}>
+              This official statutory stamp is applied to digital consultation slips, e-prescriptions, laboratory orders, and official medical certificates.
+            </ThemedText>
+          </View>
+        </Modal>
+      ) : null}
     </View>
   );
 }
@@ -650,5 +791,54 @@ const styles = StyleSheet.create({
   },
   credRow: {
     gap: 2,
+  },
+  stampPreviewCard: {
+    padding: theme.spacing.sm,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderRadius: theme.radii.md,
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.xs,
+  },
+  stampBox: {
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: theme.colors.primary,
+    borderRadius: theme.radii.sm,
+    padding: theme.spacing.sm,
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+  },
+  stampBoxLarge: {
+    borderWidth: 2,
+    borderColor: theme.colors.primary,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.lg,
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+    gap: 4,
+    width: '100%',
+  },
+  stampName: {
+    textAlign: 'center',
+    letterSpacing: 0.5,
+  },
+  stampNameLarge: {
+    textAlign: 'center',
+    letterSpacing: 1,
+  },
+  stampDivider: {
+    width: '80%',
+    height: 1,
+    backgroundColor: theme.colors.border,
+    marginVertical: 4,
+  },
+  stampModalContent: {
+    gap: theme.spacing.md,
+    alignItems: 'center',
+    paddingVertical: theme.spacing.sm,
+  },
+  stampNotice: {
+    textAlign: 'center',
+    paddingHorizontal: theme.spacing.md,
   },
 });

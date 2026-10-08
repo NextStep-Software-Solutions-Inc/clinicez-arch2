@@ -77,4 +77,79 @@ public class PermissionPolicyTests
         context.HasPermission(ClinicPermissions.TriageWrite).Should().BeTrue();
         context.HasPermission(ClinicPermissions.ConsultationsSign).Should().BeFalse();
     }
+
+    [Fact]
+    public void CreateClinicRoleCommandValidator_Rejects_InvalidPermissions()
+    {
+        var validator = new CreateClinicRoleCommandValidator();
+        var command = new CreateClinicRoleCommand(
+            "Test Role",
+            "Description",
+            new List<string> { ClinicPermissions.QueueRead, "invalid:permission:hack" });
+
+        var result = validator.Validate(command);
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.ErrorMessage.Contains("invalid:permission:hack"));
+    }
+
+    [Fact]
+    public void CreateClinicRoleCommandValidator_Accepts_AllValidPermissions()
+    {
+        var validator = new CreateClinicRoleCommandValidator();
+        var command = new CreateClinicRoleCommand(
+            "Super Custom Role",
+            "Description",
+            new List<string>(ClinicPermissions.All));
+
+        var result = validator.Validate(command);
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public void UpdateClinicRoleCommandValidator_Rejects_InvalidPermissions()
+    {
+        var validator = new UpdateClinicRoleCommandValidator();
+        var command = new UpdateClinicRoleCommand(
+            Guid.NewGuid(),
+            "Updated Role",
+            "Description",
+            new List<string> { "nonexistent:permission" });
+
+        var result = validator.Validate(command);
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.ErrorMessage.Contains("nonexistent:permission"));
+    }
+
+    [Fact]
+    public async Task UpdateClinicRoleCommandHandler_ThrowsBadRequest_WhenRoleIsSystem()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+
+        var systemRole = new ClinicRole
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            Name = "System Doctor",
+            IsSystem = true,
+            Permissions = new List<string> { ClinicPermissions.ConsultationsRead }
+        };
+        await context.ClinicRoles.AddAsync(systemRole);
+        await context.SaveChangesAsync();
+
+        var handler = new UpdateClinicRoleCommandHandler(roleRepo, staffRepo, uow, clinicContext);
+        var command = new UpdateClinicRoleCommand(systemRole.Id, "Hacked Doctor", null, new List<string> { ClinicPermissions.ConsultationsRead });
+
+        var act = () => handler.Handle(command, CancellationToken.None);
+        await act.Should().ThrowAsync<ClinicEz.Shared.Exceptions.BadRequestException>()
+            .WithMessage("*Default system roles cannot be modified*");
+    }
 }

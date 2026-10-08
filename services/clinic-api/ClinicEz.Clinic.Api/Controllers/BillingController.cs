@@ -55,7 +55,8 @@ public sealed class BillingController : ControllerBase
             request.DiscountIdNumber,
             request.CustomDiscountPercentage,
             request.Notes,
-            request.LineItems
+            request.LineItems,
+            request.AllowDuplicate
         );
 
         var result = await _sender.Send(command, ct);

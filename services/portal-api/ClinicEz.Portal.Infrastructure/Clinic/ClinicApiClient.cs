@@ -34,6 +34,46 @@ public sealed class ClinicApiClient : IClinicApiClient
         return request;
     }
 
+    private async Task<ApiResponse<T>> SendAsync<T>(
+        HttpRequestMessage request,
+        string operationDescription,
+        CancellationToken ct)
+    {
+        try
+        {
+            using var response = await _httpClient.SendAsync(request, ct);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var err = await response.Content.ReadAsStringAsync(ct);
+                _logger.LogError("Failed to {Operation} from clinic-api. Status: {Status}, Content: {Error}",
+                    operationDescription, response.StatusCode, err);
+                return ApiResponse<T>.Fail($"Clinic API returned {(int)response.StatusCode} ({response.StatusCode}): {err}");
+            }
+
+            var result = await response.Content.ReadFromJsonAsync<ApiResponse<T>>(_jsonOptions, ct);
+            return result ?? ApiResponse<T>.Fail("Invalid JSON response from Clinic API");
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Network error communicating with Clinic API at {BaseAddress} during {Operation}",
+                _httpClient.BaseAddress, operationDescription);
+            return ApiResponse<T>.Fail($"Unable to connect to Clinic API at {_httpClient.BaseAddress} ({ex.Message}). Please check if the Clinic API service is running and properly configured.");
+        }
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            _logger.LogError(ex, "Timeout communicating with Clinic API at {BaseAddress} during {Operation}",
+                _httpClient.BaseAddress, operationDescription);
+            return ApiResponse<T>.Fail($"Request to Clinic API timed out at {_httpClient.BaseAddress}.");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Unexpected error communicating with Clinic API at {BaseAddress} during {Operation}",
+                _httpClient.BaseAddress, operationDescription);
+            return ApiResponse<T>.Fail($"Unexpected error calling Clinic API: {ex.Message}");
+        }
+    }
+
     public async Task<ApiResponse<List<PortalEligibleYakapEncounterDto>>> GetEligibleEncountersAsync(
         string tenantId,
         Guid branchId,
@@ -47,17 +87,7 @@ public sealed class ClinicApiClient : IClinicApiClient
         if (endDate.HasValue) url += $"&endDate={endDate.Value:O}";
 
         using var request = CreateRequest(HttpMethod.Get, url, tenantId, branchId);
-        using var response = await _httpClient.SendAsync(request, ct);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var err = await response.Content.ReadAsStringAsync(ct);
-            _logger.LogError("Failed to get eligible encounters from clinic-api. Status: {Status}, Content: {Error}", response.StatusCode, err);
-            return ApiResponse<List<PortalEligibleYakapEncounterDto>>.Fail($"Clinic API returned {response.StatusCode}: {err}");
-        }
-
-        var result = await response.Content.ReadFromJsonAsync<ApiResponse<List<PortalEligibleYakapEncounterDto>>>(_jsonOptions, ct);
-        return result ?? ApiResponse<List<PortalEligibleYakapEncounterDto>>.Fail("Invalid JSON response from Clinic API");
+        return await SendAsync<List<PortalEligibleYakapEncounterDto>>(request, "get eligible encounters", ct);
     }
 
     public async Task<ApiResponse<IReadOnlyList<PortalYakapTransmittalDto>>> GetTransmittalsAsync(
@@ -72,17 +102,7 @@ public sealed class ClinicApiClient : IClinicApiClient
         if (!string.IsNullOrWhiteSpace(reportTagging)) url += $"&reportTagging={Uri.EscapeDataString(reportTagging)}";
 
         using var request = CreateRequest(HttpMethod.Get, url, tenantId, branchId);
-        using var response = await _httpClient.SendAsync(request, ct);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var err = await response.Content.ReadAsStringAsync(ct);
-            _logger.LogError("Failed to get transmittals from clinic-api. Status: {Status}, Content: {Error}", response.StatusCode, err);
-            return ApiResponse<IReadOnlyList<PortalYakapTransmittalDto>>.Fail($"Clinic API returned {response.StatusCode}: {err}");
-        }
-
-        var result = await response.Content.ReadFromJsonAsync<ApiResponse<IReadOnlyList<PortalYakapTransmittalDto>>>(_jsonOptions, ct);
-        return result ?? ApiResponse<IReadOnlyList<PortalYakapTransmittalDto>>.Fail("Invalid JSON response from Clinic API");
+        return await SendAsync<IReadOnlyList<PortalYakapTransmittalDto>>(request, "get transmittals", ct);
     }
 
     public async Task<ApiResponse<PortalYakapTransmittalDto>> GetTransmittalByIdAsync(
@@ -91,16 +111,7 @@ public sealed class ClinicApiClient : IClinicApiClient
         CancellationToken ct = default)
     {
         using var request = CreateRequest(HttpMethod.Get, $"api/v1/yakap/transmittals/{id}", tenantId);
-        using var response = await _httpClient.SendAsync(request, ct);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var err = await response.Content.ReadAsStringAsync(ct);
-            return ApiResponse<PortalYakapTransmittalDto>.Fail($"Clinic API returned {response.StatusCode}: {err}");
-        }
-
-        var result = await response.Content.ReadFromJsonAsync<ApiResponse<PortalYakapTransmittalDto>>(_jsonOptions, ct);
-        return result ?? ApiResponse<PortalYakapTransmittalDto>.Fail("Invalid JSON response from Clinic API");
+        return await SendAsync<PortalYakapTransmittalDto>(request, $"get transmittal {id}", ct);
     }
 
     public async Task<ApiResponse<string>> GetTransmittalRawXmlAsync(
@@ -109,16 +120,7 @@ public sealed class ClinicApiClient : IClinicApiClient
         CancellationToken ct = default)
     {
         using var request = CreateRequest(HttpMethod.Get, $"api/v1/yakap/transmittals/{id}/xml", tenantId);
-        using var response = await _httpClient.SendAsync(request, ct);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var err = await response.Content.ReadAsStringAsync(ct);
-            return ApiResponse<string>.Fail($"Clinic API returned {response.StatusCode}: {err}");
-        }
-
-        var result = await response.Content.ReadFromJsonAsync<ApiResponse<string>>(_jsonOptions, ct);
-        return result ?? ApiResponse<string>.Fail("Invalid JSON response from Clinic API");
+        return await SendAsync<string>(request, $"get transmittal XML {id}", ct);
     }
 
     public async Task<ApiResponse<PortalYakapTransmittalDto>> CreateTransmittalAsync(
@@ -136,17 +138,7 @@ public sealed class ClinicApiClient : IClinicApiClient
             BranchId = branchId
         });
 
-        using var response = await _httpClient.SendAsync(request, ct);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var err = await response.Content.ReadAsStringAsync(ct);
-            _logger.LogError("Failed to create transmittal in clinic-api. Status: {Status}, Content: {Error}", response.StatusCode, err);
-            return ApiResponse<PortalYakapTransmittalDto>.Fail($"Clinic API returned {response.StatusCode}: {err}");
-        }
-
-        var result = await response.Content.ReadFromJsonAsync<ApiResponse<PortalYakapTransmittalDto>>(_jsonOptions, ct);
-        return result ?? ApiResponse<PortalYakapTransmittalDto>.Fail("Invalid JSON response from Clinic API");
+        return await SendAsync<PortalYakapTransmittalDto>(request, "create transmittal", ct);
     }
 
     public async Task<ApiResponse<PortalYakapValidationResultDto>> ValidateTransmittalAsync(
@@ -155,16 +147,7 @@ public sealed class ClinicApiClient : IClinicApiClient
         CancellationToken ct = default)
     {
         using var request = CreateRequest(HttpMethod.Post, $"api/v1/yakap/transmittals/{id}/validate", tenantId);
-        using var response = await _httpClient.SendAsync(request, ct);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var err = await response.Content.ReadAsStringAsync(ct);
-            return ApiResponse<PortalYakapValidationResultDto>.Fail($"Clinic API returned {response.StatusCode}: {err}");
-        }
-
-        var result = await response.Content.ReadFromJsonAsync<ApiResponse<PortalYakapValidationResultDto>>(_jsonOptions, ct);
-        return result ?? ApiResponse<PortalYakapValidationResultDto>.Fail("Invalid JSON response from Clinic API");
+        return await SendAsync<PortalYakapValidationResultDto>(request, $"validate transmittal {id}", ct);
     }
 
     public async Task<ApiResponse<PortalYakapSubmissionResultDto>> SubmitTransmittalAsync(
@@ -174,15 +157,6 @@ public sealed class ClinicApiClient : IClinicApiClient
         CancellationToken ct = default)
     {
         using var request = CreateRequest(HttpMethod.Post, $"api/v1/yakap/transmittals/{id}/submit", tenantId, branchId);
-        using var response = await _httpClient.SendAsync(request, ct);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            var err = await response.Content.ReadAsStringAsync(ct);
-            return ApiResponse<PortalYakapSubmissionResultDto>.Fail($"Clinic API returned {response.StatusCode}: {err}");
-        }
-
-        var result = await response.Content.ReadFromJsonAsync<ApiResponse<PortalYakapSubmissionResultDto>>(_jsonOptions, ct);
-        return result ?? ApiResponse<PortalYakapSubmissionResultDto>.Fail("Invalid JSON response from Clinic API");
+        return await SendAsync<PortalYakapSubmissionResultDto>(request, $"submit transmittal {id}", ct);
     }
 }

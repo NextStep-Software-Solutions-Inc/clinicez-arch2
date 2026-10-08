@@ -1,14 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, StyleSheet, Pressable } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
 import Icon from '../ui/Icon';
+import Modal from '../ui/Modal';
 import { SkeletonList } from '../ui/Skeleton';
 import ErrorState from '../ui/ErrorState';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { theme } from '../../constants/theme';
+import { notify } from '../../utils/feedback';
 import { clinicService, ClinicRole } from '../../services/clinicService';
+import RoleFormModal from './RoleFormModal';
 
 interface AccessControlTabProps {
   roles: ClinicRole[];
@@ -18,15 +21,19 @@ interface AccessControlTabProps {
 
 export default function AccessControlTab({ roles, onRefreshRoles, loading }: AccessControlTabProps) {
   const [availablePermissions, setAvailablePermissions] = useState<string[]>([]);
-  const [permError, setPermError] = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState<ClinicRole | null>(null);
+
+  // Modal states
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingRole, setEditingRole] = useState<ClinicRole | null>(null);
+  const [templateRole, setTemplateRole] = useState<ClinicRole | null>(null);
+  const [deleteModalRole, setDeleteModalRole] = useState<ClinicRole | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     clinicService.getPermissions().then(([perms, err]) => {
-      if (err) {
-        setPermError(err.message);
-      } else {
-        setAvailablePermissions(perms || []);
+      if (!err && perms) {
+        setAvailablePermissions(perms);
       }
     });
   }, []);
@@ -37,7 +44,7 @@ export default function AccessControlTab({ roles, onRefreshRoles, loading }: Acc
   const groupPermissions = (perms: string[]) => {
     const groups: Record<string, string[]> = {};
     for (const p of perms) {
-      const prefix = p.includes(':') ? p.split(':')[0] : 'General';
+      const prefix = p.includes(':') ? p.split(':')[0] : p.includes('.') ? p.split('.')[0] : 'General';
       const label = prefix.charAt(0).toUpperCase() + prefix.slice(1);
       if (!groups[label]) groups[label] = [];
       groups[label].push(p);
@@ -47,13 +54,66 @@ export default function AccessControlTab({ roles, onRefreshRoles, loading }: Acc
 
   const rolePermGroups = activeRole ? groupPermissions(activeRole.permissions) : {};
 
+  const handleCreateRole = async (payload: { name: string; description?: string; permissions: string[] }) => {
+    const [created, err] = await clinicService.createRole(payload);
+    if (err || !created) {
+      throw new Error(err?.message || 'Could not create role.');
+    }
+    notify.success(`Custom role "${created.name}" created successfully.`);
+    await onRefreshRoles();
+    setSelectedRole(created);
+  };
+
+  const handleUpdateRole = async (payload: { name: string; description?: string; permissions: string[] }) => {
+    if (!editingRole) return;
+    const [updated, err] = await clinicService.updateRole(editingRole.id, payload);
+    if (err || !updated) {
+      throw new Error(err?.message || 'Could not update role.');
+    }
+    notify.success(`Role "${updated.name}" updated successfully.`);
+    await onRefreshRoles();
+    setSelectedRole(updated);
+  };
+
+  const handleDeleteRole = async () => {
+    if (!deleteModalRole) return;
+    setDeleting(true);
+    const [ok, err] = await clinicService.deleteRole(deleteModalRole.id);
+    setDeleting(false);
+
+    if (err) {
+      notify.error(err.message || 'Failed to delete role.');
+      return;
+    }
+
+    notify.success(`Custom role "${deleteModalRole.name}" deleted.`);
+    setDeleteModalRole(null);
+    if (activeRole?.id === deleteModalRole.id) {
+      setSelectedRole(null);
+    }
+    await onRefreshRoles();
+  };
+
   return (
     <View style={styles.container}>
       <Card>
         <CardHeader
           title="Role-Based Access Control (RBAC)"
-          subtitle="Configured workstation permissions and operational authority by staff role"
-          rightAction={<Button title="Refresh" icon="refresh" variant="ghost" size="sm" onPress={onRefreshRoles} />}
+          subtitle="Configure workstation permissions, create custom roles, and assign operational authority"
+          rightAction={
+            <View style={styles.headerActions}>
+              <Button
+                title="Create Custom Role"
+                icon="plus"
+                size="sm"
+                onPress={() => {
+                  setTemplateRole(null);
+                  setShowCreateModal(true);
+                }}
+              />
+              <Button title="Refresh" icon="refresh" variant="ghost" size="sm" onPress={onRefreshRoles} />
+            </View>
+          }
         />
         <CardContent>
           {loading ? (
@@ -64,9 +124,15 @@ export default function AccessControlTab({ roles, onRefreshRoles, loading }: Acc
             <View style={styles.layout}>
               {/* Left Column: Roles list */}
               <View style={styles.rolesColumn}>
-                <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.colHeader}>
-                  System Roles ({roles.length})
-                </ThemedText>
+                <View style={styles.colHeaderRow}>
+                  <ThemedText variant="captionBold" color={theme.colors.textMuted} style={styles.colHeader}>
+                    Configured Roles ({roles.length})
+                  </ThemedText>
+                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                    {roles.filter((r) => !r.isSystem).length} custom
+                  </ThemedText>
+                </View>
+
                 <View style={styles.roleList}>
                   {roles.map((r) => {
                     const isSelected = activeRole?.id === r.id;
@@ -86,7 +152,7 @@ export default function AccessControlTab({ roles, onRefreshRoles, loading }: Acc
                           </ThemedText>
                           <Badge
                             label={r.isSystem ? 'System' : 'Custom'}
-                            variant={r.isSystem ? 'primary' : 'neutral'}
+                            variant={r.isSystem ? 'primary' : 'success'}
                             size="sm"
                           />
                         </View>
@@ -114,27 +180,86 @@ export default function AccessControlTab({ roles, onRefreshRoles, loading }: Acc
                 {activeRole ? (
                   <View style={styles.activeRoleHeader}>
                     <View style={styles.activeRoleTitleRow}>
-                      <ThemedText variant="title">{activeRole.name}</ThemedText>
+                      <View style={styles.activeRoleTitleText}>
+                        <View style={styles.titleWithBadge}>
+                          <ThemedText variant="title">{activeRole.name}</ThemedText>
+                          <Badge
+                            label={activeRole.isSystem ? 'Protected System Role' : 'Custom Role'}
+                            variant={activeRole.isSystem ? 'primary' : 'success'}
+                            size="sm"
+                          />
+                        </View>
+                        <ThemedText variant="body" color={theme.colors.textSecondary}>
+                          {activeRole.description || 'Custom facility role'}
+                        </ThemedText>
+                      </View>
+
+                      {/* Role Actions */}
+                      <View style={styles.roleActionBar}>
+                        {activeRole.isSystem ? (
+                          <Button
+                            title="Clone as Custom Role"
+                            icon="plus"
+                            variant="outline"
+                            size="sm"
+                            onPress={() => {
+                              setTemplateRole(activeRole);
+                              setShowCreateModal(true);
+                            }}
+                          />
+                        ) : (
+                          <>
+                            <Button
+                              title="Edit Role"
+                              icon="edit"
+                              variant="outline"
+                              size="sm"
+                              onPress={() => setEditingRole(activeRole)}
+                            />
+                            <Button
+                              title="Delete"
+                              icon="trash"
+                              variant="ghost"
+                              size="sm"
+                              onPress={() => setDeleteModalRole(activeRole)}
+                            />
+                          </>
+                        )}
+                      </View>
+                    </View>
+
+                    {activeRole.isSystem ? (
+                      <View style={styles.systemNotice}>
+                        <Icon name="shield" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                        <ThemedText variant="caption" color={theme.colors.textSecondary} style={{ flex: 1 }}>
+                          System roles are core to clinic standard operating procedures. Use "Clone as Custom Role" to create a modified version.
+                        </ThemedText>
+                      </View>
+                    ) : null}
+
+                    {/* Permissions Summary Badge */}
+                    <View style={styles.permCountBanner}>
+                      <ThemedText variant="smallBold" color={theme.colors.text}>
+                        Active Permissions:
+                      </ThemedText>
                       <Badge
-                        label={`${activeRole.permissions.length} Enabled Permissions`}
-                        variant="success"
+                        label={`${activeRole.permissions.length} of ${availablePermissions.length || 37} granted`}
+                        variant="primary"
                         size="md"
                       />
                     </View>
-                    <ThemedText variant="body" color={theme.colors.textSecondary}>
-                      {activeRole.description}
-                    </ThemedText>
 
+                    {/* Permission Category Groups */}
                     <View style={styles.groupsContainer}>
                       {Object.entries(rolePermGroups).map(([groupName, perms]) => (
                         <View key={groupName} style={styles.permGroup}>
                           <ThemedText variant="smallBold" color={theme.colors.textSecondary}>
-                            {groupName}
+                            {groupName} ({perms.length})
                           </ThemedText>
                           <View style={styles.permChipRow}>
                             {perms.map((p) => (
                               <View key={p} style={styles.permChip}>
-                                <Icon name="check" size={theme.sizes.iconSm} color={theme.colors.success} />
+                                <Icon name="check" size={12} color={theme.colors.success} />
                                 <ThemedText variant="caption" color={theme.colors.text}>
                                   {p}
                                 </ThemedText>
@@ -151,6 +276,84 @@ export default function AccessControlTab({ roles, onRefreshRoles, loading }: Acc
           )}
         </CardContent>
       </Card>
+
+      {/* Create Custom Role Modal */}
+      {showCreateModal ? (
+        <RoleFormModal
+          visible
+          mode="create"
+          initialRole={
+            templateRole
+              ? {
+                  ...templateRole,
+                  name: `${templateRole.name} (Copy)`,
+                }
+              : null
+          }
+          availablePermissions={availablePermissions}
+          onClose={() => {
+            setShowCreateModal(false);
+            setTemplateRole(null);
+          }}
+          onSave={handleCreateRole}
+        />
+      ) : null}
+
+      {/* Edit Custom Role Modal */}
+      {editingRole ? (
+        <RoleFormModal
+          visible
+          mode="edit"
+          initialRole={editingRole}
+          availablePermissions={availablePermissions}
+          onClose={() => setEditingRole(null)}
+          onSave={handleUpdateRole}
+        />
+      ) : null}
+
+      {/* Delete Confirmation Modal */}
+      {deleteModalRole ? (
+        <Modal
+          visible
+          onClose={() => setDeleteModalRole(null)}
+          title="Delete Custom Role"
+          subtitle={`Are you sure you want to delete "${deleteModalRole.name}"?`}
+          maxWidth={480}
+          footer={
+            <View style={styles.modalFooter}>
+              <Button title="Cancel" variant="ghost" onPress={() => setDeleteModalRole(null)} disabled={deleting} />
+              <Button
+                title="Delete Role"
+                icon="trash"
+                variant="danger"
+                onPress={handleDeleteRole}
+                loading={deleting}
+                disabled={deleteModalRole.staffCount > 0}
+              />
+            </View>
+          }
+        >
+          <View style={styles.deleteModalContent}>
+            {deleteModalRole.staffCount > 0 ? (
+              <View style={styles.warningBox}>
+                <Icon name="alertCircle" size={theme.sizes.iconMd} color={theme.colors.emergency} />
+                <View style={{ flex: 1, gap: 4 }}>
+                  <ThemedText variant="smallBold" color={theme.colors.emergency}>
+                    Cannot delete this role
+                  </ThemedText>
+                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                    {deleteModalRole.staffCount} staff member(s) are currently assigned to this role. Please reassign them to another role before deleting.
+                  </ThemedText>
+                </View>
+              </View>
+            ) : (
+              <ThemedText variant="body" color={theme.colors.textSecondary}>
+                This action is permanent and will remove the custom role and its permission configuration from the clinic workstation.
+              </ThemedText>
+            )}
+          </View>
+        </Modal>
+      ) : null}
     </View>
   );
 }
@@ -158,6 +361,11 @@ export default function AccessControlTab({ roles, onRefreshRoles, loading }: Acc
 const styles = StyleSheet.create({
   container: {
     gap: theme.spacing.lg,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
   },
   layout: {
     flexDirection: 'row',
@@ -176,8 +384,13 @@ const styles = StyleSheet.create({
     borderLeftWidth: theme.sizes.borderWidth,
     borderLeftColor: theme.colors.border,
   },
-  colHeader: {
+  colHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: theme.spacing.xs,
+  },
+  colHeader: {
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -215,14 +428,46 @@ const styles = StyleSheet.create({
   },
   activeRoleTitleRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     flexWrap: 'wrap',
+    gap: theme.spacing.md,
+  },
+  activeRoleTitleText: {
+    flex: 1,
+    gap: 4,
+    minWidth: 240,
+  },
+  titleWithBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: theme.spacing.sm,
+    flexWrap: 'wrap',
+  },
+  roleActionBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  systemNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    padding: theme.spacing.sm,
+    backgroundColor: theme.colors.primaryLight,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primary,
+  },
+  permCountBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingVertical: 4,
   },
   groupsContainer: {
     gap: theme.spacing.md,
-    marginTop: theme.spacing.sm,
+    marginTop: theme.spacing.xs,
   },
   permGroup: {
     gap: theme.spacing.xs,
@@ -242,5 +487,23 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surfaceSubtle,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.border,
+  },
+  deleteModalContent: {
+    paddingVertical: theme.spacing.sm,
+  },
+  warningBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
+    backgroundColor: theme.colors.emergencySubtle,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.emergency,
+    borderRadius: theme.radii.md,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: theme.spacing.sm,
   },
 });

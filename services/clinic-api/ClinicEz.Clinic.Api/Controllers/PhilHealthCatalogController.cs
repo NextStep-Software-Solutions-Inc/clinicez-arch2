@@ -29,11 +29,13 @@ public sealed class PhilHealthCatalogController : ControllerBase
 
     /// <summary>Loaded libraries with their kit version and content hash (clients use it to refresh their offline copy).</summary>
     [HttpGet("versions")]
+    [HasPermission(ClinicPermissions.ServicesRead)]
     public async Task<IActionResult> Versions(CancellationToken ct) =>
         Ok(ApiResponse<IReadOnlyList<PhilHealthCatalogLibrarySummary>>.Success(await _query.GetLibrariesAsync(ct)));
 
     /// <summary>Rows of one library. <paramref name="q"/> searches code and description.</summary>
     [HttpGet("{library}")]
+    [HasPermission(ClinicPermissions.ServicesRead)]
     public async Task<IActionResult> Items(
         string library,
         [FromQuery] string? q,

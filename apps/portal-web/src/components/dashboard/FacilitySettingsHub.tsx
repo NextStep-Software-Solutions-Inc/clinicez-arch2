@@ -17,19 +17,17 @@ import {
   IconFileCertificate,
   IconPalette,
   IconBell,
-  IconMapPin,
-  IconPhone,
-  IconMail,
   IconSparkles,
-  IconUpload,
-  IconAlertCircle,
-  IconExternalLink,
   IconKey,
   IconCopy,
   IconShieldCheck,
-  IconServer
+  IconServer,
+  IconMapPin,
+  IconPhone,
+  IconMail,
+  IconX,
+  IconFileText
 } from "@tabler/icons-react";
-import { Stethoscope, Stamp as IconStamp } from "lucide-react";
 
 export interface FacilityData {
   id: string;
@@ -58,10 +56,6 @@ export interface FacilityData {
   letterheadAddress?: string | null;
   letterheadContact?: string | null;
   letterheadFooter?: string | null;
-  stampPhysicianName?: string | null;
-  stampPrcLicense?: string | null;
-  stampPtrNumber?: string | null;
-  stampS2License?: string | null;
   notificationPreferencesJson?: string | null;
 }
 
@@ -82,7 +76,7 @@ export default function FacilitySettingsHub({
   const tenantSlug = params?.tenant as string;
 
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState("letterhead");
+  const [activeTab, setActiveTab] = useState("profile");
 
   // Cryptographic Facility License State
   const [licenseData, setLicenseData] = useState<{
@@ -131,14 +125,14 @@ export default function FacilitySettingsHub({
     setTimeout(() => setCopiedKey(false), 2500);
   };
 
-  // Profile & Statutory State
+  // Profile & Statutory State (No falsey defaults)
   const [name, setName] = useState(facility?.name || "");
   const [status, setStatus] = useState<FacilityData["status"]>(facility?.status || "Active");
   const [classification, setClassification] = useState(facility?.classification || "");
   const [licenseToOperate, setLicenseToOperate] = useState(facility?.licenseToOperate || "");
   const [philHealthAccreditationNumber, setPhilHealthAccreditationNumber] = useState(facility?.philHealthAccreditationNumber || "");
   const [taxIdentificationNumber, setTaxIdentificationNumber] = useState(facility?.taxIdentificationNumber || "");
-  const [operatingHours, setOperatingHours] = useState(facility?.operatingHours || "Mon-Sat 8:00 AM - 5:00 PM");
+  const [operatingHours, setOperatingHours] = useState(facility?.operatingHours || "");
   const [streetAddress, setStreetAddress] = useState(facility?.streetAddress || "");
   const [city, setCity] = useState(facility?.city || "");
   const [province, setProvince] = useState(facility?.province || "");
@@ -146,21 +140,21 @@ export default function FacilitySettingsHub({
   const [contactNumber, setContactNumber] = useState(facility?.contactNumber || "");
   const [contactEmail, setContactEmail] = useState(facility?.contactEmail || "");
 
-  // Letterhead Branding State
+  // Letterhead Branding State (No falsey defaults)
   const [logoUrl, setLogoUrl] = useState(facility?.logoUrl || "");
-  const [letterheadHeader, setLetterheadHeader] = useState(facility?.letterheadHeader || facility?.name?.toUpperCase() || "METRO HEALTH INTEGRATED CLINIC");
-  const [letterheadSubHeader, setLetterheadSubHeader] = useState(facility?.letterheadSubHeader || "Center for Ambulatory Medicine & Diagnostic Excellence");
-  const [letterheadAddress, setLetterheadAddress] = useState(facility?.letterheadAddress || "Unit 402, High Street South Corporate Plaza, BGC, Taguig City");
-  const [letterheadContact, setLetterheadContact] = useState(facility?.letterheadContact || "Tel: +63 (2) 8876-5432 | Email: clinic@example.com");
-  const [letterheadFooter, setLetterheadFooter] = useState(
-    facility?.letterheadFooter || "This medical document and electronic prescription is digitally generated in compliance with Philippine FDA Circular 2020-004 and RA 10173 (Data Privacy Act of 2012)."
+  const [letterheadHeader, setLetterheadHeader] = useState(facility?.letterheadHeader || facility?.name?.toUpperCase() || "");
+  const [letterheadSubHeader, setLetterheadSubHeader] = useState(facility?.letterheadSubHeader || "");
+  const [letterheadAddress, setLetterheadAddress] = useState(
+    facility?.letterheadAddress ||
+    [facility?.streetAddress, facility?.city, facility?.province].filter(Boolean).join(", ") ||
+    ""
   );
-
-  // Medical Stamp State
-  const [stampPhysicianName, setStampPhysicianName] = useState(facility?.stampPhysicianName || "DR. MARIA KRISTINA SANTOS, MD, FPCP");
-  const [stampPrcLicense, setStampPrcLicense] = useState(facility?.stampPrcLicense || "PRC No. 0108924");
-  const [stampPtrNumber, setStampPtrNumber] = useState(facility?.stampPtrNumber || "PTR No. 8941203 / Taguig City");
-  const [stampS2License, setStampS2License] = useState(facility?.stampS2License || "S2 No. 0918-99214-A1");
+  const [letterheadContact, setLetterheadContact] = useState(
+    facility?.letterheadContact ||
+    [facility?.contactNumber, facility?.contactEmail].filter(Boolean).join(" | ") ||
+    ""
+  );
+  const [letterheadFooter, setLetterheadFooter] = useState(facility?.letterheadFooter || "");
 
   // Notification Preferences State
   const initialPrefs = (() => {
@@ -194,7 +188,7 @@ export default function FacilitySettingsHub({
       setLicenseToOperate(facility.licenseToOperate || "");
       setPhilHealthAccreditationNumber(facility.philHealthAccreditationNumber || "");
       setTaxIdentificationNumber(facility.taxIdentificationNumber || "");
-      setOperatingHours(facility.operatingHours || "Mon-Sat 8:00 AM - 5:00 PM");
+      setOperatingHours(facility.operatingHours || "");
       setStreetAddress(facility.streetAddress || "");
       setCity(facility.city || "");
       setProvince(facility.province || "");
@@ -203,23 +197,19 @@ export default function FacilitySettingsHub({
       setContactEmail(facility.contactEmail || "");
 
       setLogoUrl(facility.logoUrl || "");
-      setLetterheadHeader(facility.letterheadHeader || facility.name?.toUpperCase() || "METRO HEALTH INTEGRATED CLINIC");
-      setLetterheadSubHeader(facility.letterheadSubHeader || "Center for Ambulatory Medicine & Diagnostic Excellence");
+      setLetterheadHeader(facility.letterheadHeader || facility.name?.toUpperCase() || "");
+      setLetterheadSubHeader(facility.letterheadSubHeader || "");
       setLetterheadAddress(
         facility.letterheadAddress ||
         [facility.streetAddress, facility.city, facility.province].filter(Boolean).join(", ") ||
-        "Unit 402, High Street South Corporate Plaza, BGC, Taguig City"
+        ""
       );
-      setLetterheadContact(facility.letterheadContact || facility.contactNumber || "Tel: +63 (2) 8876-5432 | Email: clinic@example.com");
-      setLetterheadFooter(
-        facility.letterheadFooter ||
-        "This medical document and electronic prescription is digitally generated in compliance with Philippine FDA Circular 2020-004 and RA 10173 (Data Privacy Act of 2012)."
+      setLetterheadContact(
+        facility.letterheadContact ||
+        [facility.contactNumber, facility.contactEmail].filter(Boolean).join(" | ") ||
+        ""
       );
-
-      setStampPhysicianName(facility.stampPhysicianName || "DR. MARIA KRISTINA SANTOS, MD, FPCP");
-      setStampPrcLicense(facility.stampPrcLicense || "PRC No. 0108924");
-      setStampPtrNumber(facility.stampPtrNumber || "PTR No. 8941203 / Taguig City");
-      setStampS2License(facility.stampS2License || "S2 No. 0918-99214-A1");
+      setLetterheadFooter(facility.letterheadFooter || "");
 
       try {
         if (facility.notificationPreferencesJson) {
@@ -230,6 +220,12 @@ export default function FacilitySettingsHub({
       }
     }
   }, [facility]);
+
+  const handleApplyStandardFooter = () => {
+    setLetterheadFooter(
+      "This medical document and official record is digitally generated in compliance with Philippine DOH standards and RA 10173 (Data Privacy Act of 2012)."
+    );
+  };
 
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -258,15 +254,11 @@ export default function FacilitySettingsHub({
         letterheadAddress: letterheadAddress.trim() || undefined,
         letterheadContact: letterheadContact.trim() || undefined,
         letterheadFooter: letterheadFooter.trim() || undefined,
-        stampPhysicianName: stampPhysicianName.trim() || undefined,
-        stampPrcLicense: stampPrcLicense.trim() || undefined,
-        stampPtrNumber: stampPtrNumber.trim() || undefined,
-        stampS2License: stampS2License.trim() || undefined,
         notificationPreferencesJson: JSON.stringify(notifications),
       };
 
       await apiClient.put(`/facilities/${facility.id}/settings`, payload);
-      toast.success("Facility settings, digital letterhead, and stamp updated successfully!");
+      toast.success("Facility profile, regulatory settings, and letterhead updated successfully!");
       onOpenChange(false);
       if (onSaved) onSaved();
     } catch (err: any) {
@@ -280,68 +272,61 @@ export default function FacilitySettingsHub({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-4xl max-h-[92vh] flex flex-col rounded-3xl p-0 overflow-hidden border border-slate-200 dark:border-slate-800 shadow-2xl bg-white dark:bg-slate-950">
+      <DialogContent className="w-[96vw] max-w-[96vw] sm:max-w-4xl max-h-[92vh] flex flex-col rounded-2xl sm:rounded-3xl p-0 overflow-hidden border border-slate-200 dark:border-slate-800 shadow-2xl bg-white dark:bg-slate-950">
         {/* Header */}
-        <div className="p-6 pb-4 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/30 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-primary/10 text-primary">
-              <IconBuildingHospital className="h-6 w-6" />
+        <div className="p-4 sm:p-6 pb-4 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="p-2 sm:p-2.5 rounded-2xl bg-primary/10 text-primary shrink-0">
+              <IconBuildingHospital className="h-5 w-5 sm:h-6 sm:w-6" />
             </div>
-            <div>
-              <DialogTitle className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                <span>{facility.name}</span>
-                <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-wider">
+            <div className="min-w-0 flex-1">
+              <DialogTitle className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2 flex-wrap">
+                <span className="truncate max-w-[280px] sm:max-w-md">{name || facility.name}</span>
+                <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-wider shrink-0">
                   {facility.facilityType}
                 </Badge>
               </DialogTitle>
-              <DialogDescription className="text-xs text-slate-500">
-                Configure official letterhead, regulatory stamp, contact details, and notification alerts
+              <DialogDescription className="text-xs text-slate-500 truncate">
+                Configure facility profile, official letterhead, regulatory IDs, and notifications
               </DialogDescription>
             </div>
           </div>
 
-          <div className="hidden sm:flex items-center gap-2">
+          <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
             <Badge variant="outline" className="text-xs font-semibold px-2.5 py-1 bg-background border-slate-200 dark:border-slate-800">
               Status: <span className="font-bold text-emerald-600 dark:text-emerald-400 ml-1">{status}</span>
             </Badge>
           </div>
         </div>
 
-        {/* Tabs */}
+        {/* Responsive Horizontal Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-          <div className="px-6 pt-3 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/20 dark:bg-slate-900/10">
-            <TabsList className="bg-transparent p-0 h-10 gap-2 border-b-0">
-              <TabsTrigger
-                value="letterhead"
-                className="rounded-t-xl rounded-b-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs font-bold gap-1.5 px-3.5"
-              >
-                <IconPalette className="h-4 w-4" />
-                <span>Digital Letterhead</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="stamp"
-                className="rounded-t-xl rounded-b-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs font-bold gap-1.5 px-3.5"
-              >
-                <IconStamp className="h-4 w-4" />
-                <span>Medical Stamp Preview</span>
-              </TabsTrigger>
+          <div className="px-4 sm:px-6 pt-2 sm:pt-3 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/20 dark:bg-slate-900/10 overflow-x-auto scrollbar-none">
+            <TabsList className="bg-transparent p-0 h-10 gap-1 sm:gap-2 border-b-0 inline-flex min-w-full sm:min-w-0 flex-nowrap">
               <TabsTrigger
                 value="profile"
-                className="rounded-t-xl rounded-b-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs font-bold gap-1.5 px-3.5"
+                className="rounded-t-xl rounded-b-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs font-bold gap-1.5 px-3 shrink-0 whitespace-nowrap"
               >
                 <IconFileCertificate className="h-4 w-4" />
                 <span>Regulatory &amp; Statutory</span>
               </TabsTrigger>
               <TabsTrigger
+                value="letterhead"
+                className="rounded-t-xl rounded-b-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs font-bold gap-1.5 px-3 shrink-0 whitespace-nowrap"
+              >
+                <IconPalette className="h-4 w-4" />
+                <span>Digital Letterhead</span>
+              </TabsTrigger>
+              <TabsTrigger
                 value="notifications"
-                className="rounded-t-xl rounded-b-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs font-bold gap-1.5 px-3.5"
+                className="rounded-t-xl rounded-b-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs font-bold gap-1.5 px-3 shrink-0 whitespace-nowrap"
               >
                 <IconBell className="h-4 w-4" />
                 <span>Notifications</span>
               </TabsTrigger>
               <TabsTrigger
                 value="license"
-                className="rounded-t-xl rounded-b-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs font-bold gap-1.5 px-3.5"
+                className="rounded-t-xl rounded-b-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs font-bold gap-1.5 px-3 shrink-0 whitespace-nowrap"
               >
                 <IconKey className="h-4 w-4" />
                 <span>License &amp; Hard Limits</span>
@@ -349,298 +334,16 @@ export default function FacilitySettingsHub({
             </TabsList>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-6">
-            {/* TAB 1: DIGITAL LETTERHEAD CUSTOMIZER */}
-            <TabsContent value="letterhead" className="m-0 space-y-6">
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                {/* Form Controls (Left Col) */}
-                <div className="lg:col-span-6 space-y-4">
-                  <div className="p-3.5 rounded-2xl bg-primary/5 border border-primary/10 flex items-start gap-2.5">
-                    <IconSparkles className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                      Custom letterhead printed automatically atop e-prescriptions, diagnostic orders, and clinical receipts. Changes reflect live on the right.
-                    </p>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                      Clinic Logo URL or Image Asset
-                    </Label>
-                    <div className="flex gap-2">
-                      <Input
-                        value={logoUrl}
-                        onChange={(e) => setLogoUrl(e.target.value)}
-                        placeholder="https://example.com/logo.png"
-                        className="h-9 text-xs rounded-xl"
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setLogoUrl("https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=120&q=80")}
-                        className="rounded-xl text-xs shrink-0"
-                      >
-                        Sample Logo
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                      Primary Institutional Header
-                    </Label>
-                    <Input
-                      value={letterheadHeader}
-                      onChange={(e) => setLetterheadHeader(e.target.value)}
-                      placeholder="e.g. METRO HEALTH INTEGRATED CLINIC"
-                      className="h-9 text-xs font-bold rounded-xl"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                      Department / Clinical Specialty Subheader
-                    </Label>
-                    <Input
-                      value={letterheadSubHeader}
-                      onChange={(e) => setLetterheadSubHeader(e.target.value)}
-                      placeholder="e.g. Center for Outpatient Medicine &amp; Diagnostic Excellence"
-                      className="h-9 text-xs rounded-xl"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                      Printed Address Line
-                    </Label>
-                    <Input
-                      value={letterheadAddress}
-                      onChange={(e) => setLetterheadAddress(e.target.value)}
-                      placeholder="e.g. Unit 402, High Street South Corporate Plaza, BGC, Taguig City"
-                      className="h-9 text-xs rounded-xl"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                      Printed Contact Line (Phone, Mobile, Email)
-                    </Label>
-                    <Input
-                      value={letterheadContact}
-                      onChange={(e) => setLetterheadContact(e.target.value)}
-                      placeholder="e.g. Tel: +63 (2) 8876-5432 | Mobile: 0917-123-4567 | info@example.com"
-                      className="h-9 text-xs rounded-xl"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                      Compliance Legal Footer Notice
-                    </Label>
-                    <textarea
-                      value={letterheadFooter}
-                      onChange={(e) => setLetterheadFooter(e.target.value)}
-                      rows={3}
-                      className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-background p-2.5 font-medium text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    />
-                  </div>
-                </div>
-
-                {/* WYSIWYG Preview (Right Col) */}
-                <div className="lg:col-span-6 space-y-2">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Live Prescription Pad &amp; Order Slip Preview
-                  </span>
-
-                  <div className="rounded-2xl border-2 border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-900 p-6 shadow-md min-h-[460px] flex flex-col justify-between text-slate-800 dark:text-slate-200 font-sans">
-                    {/* Letterhead Top */}
-                    <div>
-                      <div className="flex items-start justify-between gap-4 pb-4 border-b-2 border-primary/20">
-                        <div className="space-y-1 min-w-0">
-                          <h2 className="text-base sm:text-lg font-black tracking-tight text-primary uppercase">
-                            {letterheadHeader || "CLINIC LETTERHEAD"}
-                          </h2>
-                          <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                            {letterheadSubHeader}
-                          </div>
-                          <div className="text-[10px] text-slate-400 dark:text-slate-500 leading-tight">
-                            {letterheadAddress}
-                          </div>
-                          <div className="text-[10px] font-semibold text-primary/80">
-                            {letterheadContact}
-                          </div>
-                        </div>
-
-                        {/* Logo box */}
-                        <div className="size-14 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden bg-slate-50 dark:bg-slate-800 flex items-center justify-center shrink-0">
-                          {logoUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={logoUrl} alt="Clinic Logo" className="size-full object-cover" />
-                          ) : (
-                            <Stethoscope className="h-6 w-6 text-primary/60" />
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Mock Requisition / Rx Content */}
-                      <div className="py-6 space-y-4">
-                        <div className="flex justify-between items-center text-[11px] border-b pb-2 text-slate-400">
-                          <span>Patient: <strong>J*** D***</strong> (34 / M)</span>
-                          <span>Date: <strong>{new Date().toLocaleDateString("en-PH")}</strong></span>
-                        </div>
-
-                        <div className="space-y-2 py-2">
-                          <div className="text-xl font-serif italic text-primary/70">Rx</div>
-                          <div className="text-xs space-y-1 font-mono pl-3 border-l-2 border-primary/30">
-                            <div className="font-bold text-slate-900 dark:text-slate-100">Amoxicillin + Clavulanic Acid 625mg Tablet</div>
-                            <div className="text-[11px] text-slate-500">Sig: Take 1 tablet every 12 hours after meals for 7 days. #14 tabs</div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Bottom Signature & Stamp */}
-                    <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-end justify-between gap-4">
-                      <div className="text-[9px] text-slate-400 max-w-xs leading-tight">
-                        {letterheadFooter}
-                      </div>
-
-                      <div className="text-right shrink-0">
-                        <div className="h-8 border-b border-slate-400 border-dashed w-36 mb-1" />
-                        <div className="text-[10px] font-bold text-slate-800 dark:text-slate-200 truncate">
-                          {stampPhysicianName}
-                        </div>
-                        <div className="text-[9px] font-mono text-slate-500">
-                          {stampPrcLicense}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
+            {/* TAB 1: REGULATORY & STATUTORY PROFILE */}
+            <TabsContent value="profile" className="m-0 space-y-5">
+              <div className="p-3.5 rounded-2xl bg-primary/5 border border-primary/10 flex items-start gap-2.5">
+                <IconFileCertificate className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  Official operating credentials, government statutory IDs, and facility operating schedule.
+                </p>
               </div>
-            </TabsContent>
 
-            {/* TAB 2: MEDICAL STAMP PREVIEW */}
-            <TabsContent value="stamp" className="m-0 space-y-6">
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                {/* Stamp Inputs */}
-                <div className="lg:col-span-6 space-y-4">
-                  <div className="p-3.5 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-start gap-2.5">
-                    <IconStamp className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-                    <p className="text-xs text-blue-900 dark:text-blue-300 leading-relaxed">
-                      Philippine Professional Regulation Commission (PRC) &amp; PDEA statutory stamp. Validates official prescriptions, lab test orders, and medical clearances.
-                    </p>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                      Practitioner / Medical Director Name
-                    </Label>
-                    <Input
-                      value={stampPhysicianName}
-                      onChange={(e) => setStampPhysicianName(e.target.value)}
-                      placeholder="e.g. DR. MARIA KRISTINA SANTOS, MD, FPCP"
-                      className="h-9 text-xs font-bold rounded-xl"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                      PRC License Number
-                    </Label>
-                    <Input
-                      value={stampPrcLicense}
-                      onChange={(e) => setStampPrcLicense(e.target.value)}
-                      placeholder="e.g. PRC No. 0108924"
-                      className="h-9 text-xs font-mono rounded-xl"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                      Professional Tax Receipt (PTR) Number &amp; Place
-                    </Label>
-                    <Input
-                      value={stampPtrNumber}
-                      onChange={(e) => setStampPtrNumber(e.target.value)}
-                      placeholder="e.g. PTR No. 8941203 / Taguig City"
-                      className="h-9 text-xs font-mono rounded-xl"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                      PDEA S2 Dangerous Drug License (Optional)
-                    </Label>
-                    <Input
-                      value={stampS2License}
-                      onChange={(e) => setStampS2License(e.target.value)}
-                      placeholder="e.g. S2 No. 0918-99214-A1"
-                      className="h-9 text-xs font-mono rounded-xl"
-                    />
-                    <p className="text-[10px] text-slate-400">Required for prescribing Yellow-pad or Schedule II controlled analgesics.</p>
-                  </div>
-                </div>
-
-                {/* Stamp Visual Renderings */}
-                <div className="lg:col-span-6 space-y-4">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Live Rubber Stamp Renderings (Philippine Standards)
-                  </span>
-
-                  {/* Stamp 1: Rectangular Professional Doctor Stamp */}
-                  <div className="p-6 rounded-2xl border-2 border-dashed border-blue-500/40 bg-blue-50/20 dark:bg-blue-950/10 flex flex-col items-center justify-center text-center">
-                    <div className="border-2 border-blue-700 dark:border-blue-400 rounded-lg p-3.5 max-w-xs w-full bg-white dark:bg-slate-900 shadow-sm transform -rotate-1">
-                      <div className="text-xs font-black text-blue-800 dark:text-blue-300 uppercase tracking-tight">
-                        {stampPhysicianName}
-                      </div>
-                      <div className="text-[10px] font-bold text-blue-700 dark:text-blue-400 mt-0.5">
-                        Internal Medicine &amp; Outpatient Care
-                      </div>
-                      <div className="border-t border-blue-300 dark:border-blue-800 my-1.5" />
-                      <div className="text-[10px] font-mono text-blue-900 dark:text-blue-200">
-                        {stampPrcLicense}
-                      </div>
-                      <div className="text-[9px] font-mono text-blue-800 dark:text-blue-300">
-                        {stampPtrNumber}
-                      </div>
-                      {stampS2License && (
-                        <div className="text-[9px] font-mono text-rose-700 dark:text-rose-400 font-bold mt-0.5">
-                          {stampS2License}
-                        </div>
-                      )}
-                    </div>
-                    <span className="text-[10px] font-semibold text-slate-400 mt-2">
-                      Rectangular Official Practitioner Stamp
-                    </span>
-                  </div>
-
-                  {/* Stamp 2: Circular Institution / Laboratory Seal */}
-                  <div className="p-6 rounded-2xl border-2 border-dashed border-emerald-500/40 bg-emerald-50/20 dark:bg-emerald-950/10 flex flex-col items-center justify-center text-center">
-                    <div className="size-36 rounded-full border-2 border-double border-emerald-700 dark:border-emerald-400 p-2 flex flex-col items-center justify-center bg-white dark:bg-slate-900 shadow-sm transform rotate-2">
-                      <div className="text-[8px] font-black uppercase text-emerald-800 dark:text-emerald-300 tracking-wider">
-                        {facility.name}
-                      </div>
-                      <div className="text-[7px] text-emerald-600 dark:text-emerald-400">
-                        ★ ACCREDITED FACILITY ★
-                      </div>
-                      <div className="text-[9px] font-bold text-emerald-700 dark:text-emerald-300 uppercase mt-1">
-                        VERIFIED
-                      </div>
-                      <div className="text-[7px] font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
-                        {licenseToOperate || "DOH-LTO VALID"}
-                      </div>
-                    </div>
-                    <span className="text-[10px] font-semibold text-slate-400 mt-2">
-                      Circular Institutional Certification Seal
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </TabsContent>
-
-            {/* TAB 3: REGULATORY & STATUTORY */}
-            <TabsContent value="profile" className="m-0 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
@@ -649,6 +352,7 @@ export default function FacilitySettingsHub({
                   <Input
                     value={name}
                     onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. St. Jude Family Medical Clinic"
                     className="h-9 text-xs rounded-xl font-semibold"
                     required
                   />
@@ -671,7 +375,7 @@ export default function FacilitySettingsHub({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                     DOH License to Operate (LTO)
@@ -709,7 +413,7 @@ export default function FacilitySettingsHub({
                 </div>
               </div>
 
-              <div className="space-y-1.5 pt-1">
+              <div className="space-y-1.5">
                 <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                   Official Operating Hours Schedule
                 </Label>
@@ -721,7 +425,57 @@ export default function FacilitySettingsHub({
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+              {/* Physical Location Address */}
+              <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-800 dark:text-slate-200">
+                  <IconMapPin className="h-4 w-4 text-primary" />
+                  <span>Physical Facility Address</span>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-slate-600 dark:text-slate-400">Street Address / Building</Label>
+                  <Input
+                    value={streetAddress}
+                    onChange={(e) => setStreetAddress(e.target.value)}
+                    placeholder="e.g. Unit 402, High Street South Corporate Plaza"
+                    className="h-9 text-xs rounded-xl"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium text-slate-600 dark:text-slate-400">City / Municipality</Label>
+                    <Input
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      placeholder="e.g. Makati City"
+                      className="h-9 text-xs rounded-xl"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium text-slate-600 dark:text-slate-400">Province / Region</Label>
+                    <Input
+                      value={province}
+                      onChange={(e) => setProvince(e.target.value)}
+                      placeholder="e.g. Metro Manila"
+                      className="h-9 text-xs rounded-xl"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium text-slate-600 dark:text-slate-400">Zip Code</Label>
+                    <Input
+                      value={zipCode}
+                      onChange={(e) => setZipCode(e.target.value)}
+                      placeholder="e.g. 1634"
+                      className="h-9 text-xs font-mono rounded-xl"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800">
                 <div className="space-y-1.5">
                   <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                     Facility Contact Hotline
@@ -742,14 +496,238 @@ export default function FacilitySettingsHub({
                     value={contactEmail}
                     onChange={(e) => setContactEmail(e.target.value)}
                     type="email"
-                    placeholder="e.g. clinic@example.com"
+                    placeholder="e.g. info@clinic.ph"
                     className="h-9 text-xs rounded-xl"
                   />
                 </div>
               </div>
             </TabsContent>
 
-            {/* TAB 4: NOTIFICATION PREFERENCES */}
+            {/* TAB 2: DIGITAL LETTERHEAD BRANDING */}
+            <TabsContent value="letterhead" className="m-0 space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* Form Controls (Left Col) */}
+                <div className="lg:col-span-6 space-y-4">
+                  <div className="p-3.5 rounded-2xl bg-primary/5 border border-primary/10 flex items-start gap-2.5">
+                    <IconSparkles className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                      Custom letterhead printed automatically atop consultations, diagnostic orders, and official receipts. Changes reflect live in the preview.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Clinic Logo Image URL
+                    </Label>
+                    <div className="flex gap-2">
+                      <Input
+                        value={logoUrl}
+                        onChange={(e) => setLogoUrl(e.target.value)}
+                        placeholder="https://example.com/logo.png"
+                        className="h-9 text-xs rounded-xl"
+                      />
+                      {logoUrl && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setLogoUrl("")}
+                          className="rounded-xl text-xs shrink-0 text-slate-500 hover:text-rose-600"
+                          title="Clear logo"
+                        >
+                          <IconX className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Primary Institutional Header
+                    </Label>
+                    <Input
+                      value={letterheadHeader}
+                      onChange={(e) => setLetterheadHeader(e.target.value)}
+                      placeholder={name ? name.toUpperCase() : "e.g. CITY HEALTH INTEGRATED CLINIC"}
+                      className="h-9 text-xs font-bold rounded-xl"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Department / Clinical Specialty Subheader
+                    </Label>
+                    <Input
+                      value={letterheadSubHeader}
+                      onChange={(e) => setLetterheadSubHeader(e.target.value)}
+                      placeholder="e.g. Center for Outpatient Medicine & Diagnostic Excellence"
+                      className="h-9 text-xs rounded-xl"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                        Printed Address Line
+                      </Label>
+                      {(!letterheadAddress && (streetAddress || city)) && (
+                        <button
+                          type="button"
+                          onClick={() => setLetterheadAddress([streetAddress, city, province].filter(Boolean).join(", "))}
+                          className="text-[10px] text-primary hover:underline font-semibold"
+                        >
+                          Use physical address
+                        </button>
+                      )}
+                    </div>
+                    <Input
+                      value={letterheadAddress}
+                      onChange={(e) => setLetterheadAddress(e.target.value)}
+                      placeholder="e.g. 124 Rizal Avenue, San Pedro, Laguna, Philippines"
+                      className="h-9 text-xs rounded-xl"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                        Printed Contact Line (Phone, Mobile, Email)
+                      </Label>
+                      {(!letterheadContact && (contactNumber || contactEmail)) && (
+                        <button
+                          type="button"
+                          onClick={() => setLetterheadContact([contactNumber, contactEmail].filter(Boolean).join(" | "))}
+                          className="text-[10px] text-primary hover:underline font-semibold"
+                        >
+                          Use facility contact
+                        </button>
+                      )}
+                    </div>
+                    <Input
+                      value={letterheadContact}
+                      onChange={(e) => setLetterheadContact(e.target.value)}
+                      placeholder="e.g. Tel: +63 (2) 8876-5432 | Email: clinic@example.ph"
+                      className="h-9 text-xs rounded-xl"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                        Compliance Legal Footer Notice
+                      </Label>
+                      {!letterheadFooter && (
+                        <button
+                          type="button"
+                          onClick={handleApplyStandardFooter}
+                          className="text-[10px] text-primary hover:underline font-semibold"
+                        >
+                          Insert standard notice
+                        </button>
+                      )}
+                    </div>
+                    <textarea
+                      value={letterheadFooter}
+                      onChange={(e) => setLetterheadFooter(e.target.value)}
+                      placeholder="e.g. Valid clinical documentation. Digitally archived under RA 10173 (Data Privacy Act) and DOH standards."
+                      rows={3}
+                      className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-background p-2.5 font-medium text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    />
+                  </div>
+                </div>
+
+                {/* Official Letterhead Preview (Right Col) */}
+                <div className="lg:col-span-6 space-y-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Official Document &amp; Letterhead Preview
+                  </span>
+
+                  <div className="rounded-2xl border-2 border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-md min-h-[380px] flex flex-col justify-between text-slate-800 dark:text-slate-200 font-sans">
+                    {/* Official Letterhead Header */}
+                    <div>
+                      <div className="flex items-start justify-between gap-3 pb-3 border-b-2 border-primary/25">
+                        <div className="space-y-1 min-w-0 flex-1">
+                          <h2 className="text-sm sm:text-base font-black tracking-tight text-primary uppercase break-words">
+                            {letterheadHeader || name.toUpperCase() || "OFFICIAL CLINIC LETTERHEAD"}
+                          </h2>
+                          {letterheadSubHeader ? (
+                            <div className="text-[11px] font-medium text-slate-600 dark:text-slate-300">
+                              {letterheadSubHeader}
+                            </div>
+                          ) : null}
+                          {letterheadAddress ? (
+                            <div className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
+                              {letterheadAddress}
+                            </div>
+                          ) : null}
+                          {letterheadContact ? (
+                            <div className="text-[10px] font-semibold text-primary/80">
+                              {letterheadContact}
+                            </div>
+                          ) : null}
+                        </div>
+
+                        {/* Logo box */}
+                        <div className="size-12 sm:size-14 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden bg-slate-50 dark:bg-slate-800 flex items-center justify-center shrink-0">
+                          {logoUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={logoUrl} alt="Clinic Logo" className="size-full object-cover" />
+                          ) : (
+                            <IconBuildingHospital className="h-6 w-6 text-primary/60" />
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Mock Official Document Body */}
+                      <div className="py-4 space-y-3">
+                        <div className="flex items-center justify-between text-[10px] text-slate-400 border-b border-dashed pb-2">
+                          <span className="font-semibold text-slate-500 uppercase tracking-wider">Official Clinical Document</span>
+                          <span className="font-mono">REF: #{facility.id.slice(0, 8).toUpperCase()}</span>
+                        </div>
+
+                        <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-[11px] space-y-1.5 text-slate-600 dark:text-slate-300">
+                          <div className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                            <IconFileText className="h-3.5 w-3.5 text-primary" />
+                            <span>Clinical Letterhead Specimen</span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 leading-relaxed">
+                            This header is placed on e-prescriptions, diagnostic orders, laboratory result summaries, and PhilHealth Konsulta claim attachments generated across all terminals in this facility.
+                          </p>
+                        </div>
+
+                        {/* Optional Institutional Seal Display */}
+                        {(licenseToOperate || philHealthAccreditationNumber) && (
+                          <div className="flex items-center gap-2 pt-1">
+                            {licenseToOperate && (
+                              <Badge variant="outline" className="text-[9px] font-mono border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/20">
+                                DOH-LTO: {licenseToOperate}
+                              </Badge>
+                            )}
+                            {philHealthAccreditationNumber && (
+                              <Badge variant="outline" className="text-[9px] font-mono border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-950/20">
+                                PHIC: {philHealthAccreditationNumber}
+                              </Badge>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Official Document Footer Notice */}
+                    <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 text-[9px] text-slate-400">
+                      <div className="leading-tight flex-1">
+                        {letterheadFooter || "Official medical documentation. Validated under Philippine healthcare compliance standards."}
+                      </div>
+                      <Badge variant="secondary" className="text-[9px] shrink-0 font-medium">
+                        Verified Facility
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
+
+            {/* TAB 3: NOTIFICATION PREFERENCES */}
             <TabsContent value="notifications" className="m-0 space-y-4">
               <div className="p-3.5 rounded-2xl bg-primary/5 border border-primary/10 flex items-start gap-2.5">
                 <IconBell className="h-5 w-5 text-primary shrink-0 mt-0.5" />
@@ -817,7 +795,7 @@ export default function FacilitySettingsHub({
               </div>
             </TabsContent>
 
-            {/* TAB 5: CRYPTOGRAPHIC LICENSE & HARD LIMITS */}
+            {/* TAB 4: CRYPTOGRAPHIC LICENSE & HARD LIMITS */}
             <TabsContent value="license" className="m-0 space-y-6">
               <div className="space-y-6">
                 {/* Security Guarantee Banner */}
@@ -829,7 +807,7 @@ export default function FacilitySettingsHub({
                     </div>
                     <p className="text-xs text-emerald-700 dark:text-emerald-300/90 leading-relaxed">
                       This facility operates with autonomous operational authority. Resource hard limits are sealed digitally into the license key. 
-                      Direct modifications to local databases (<code className="px-1 py-0.5 rounded bg-emerald-500/20 text-[11px]">psql / pgAdmin</code>) will invalidate the signature and prevent unmetered staff creation.
+                      Direct modifications to local databases will invalidate the signature and prevent unmetered staff creation.
                     </p>
                   </div>
                 </div>
@@ -853,8 +831,8 @@ export default function FacilitySettingsHub({
                         </Badge>
                       </div>
 
-                      <div className="p-3.5 rounded-2xl bg-slate-900 text-slate-100 font-mono text-[11px] break-all border border-slate-800 shadow-inner flex items-center justify-between gap-3">
-                        <span className="truncate max-w-[550px]">{licenseData.licenseToken}</span>
+                      <div className="p-3 sm:p-3.5 rounded-2xl bg-slate-900 text-slate-100 font-mono text-[11px] break-all border border-slate-800 shadow-inner flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                        <span className="truncate max-w-full sm:max-w-[500px]">{licenseData.licenseToken}</span>
                         <Button
                           type="button"
                           size="sm"
@@ -876,42 +854,42 @@ export default function FacilitySettingsHub({
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                         <div className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-card space-y-1">
                           <div className="text-[11px] font-semibold text-slate-500">Max Active Staff</div>
-                          <div className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                          <div className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100">
                             {licenseData.limits.maxStaff} <span className="text-xs font-normal text-slate-400">members</span>
                           </div>
                         </div>
 
                         <div className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-card space-y-1">
                           <div className="text-[11px] font-semibold text-slate-500">Max Beds</div>
-                          <div className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                          <div className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100">
                             {licenseData.limits.maxBeds} <span className="text-xs font-normal text-slate-400">beds</span>
                           </div>
                         </div>
 
                         <div className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-card space-y-1">
                           <div className="text-[11px] font-semibold text-slate-500">Max Analyzers</div>
-                          <div className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                          <div className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100">
                             {licenseData.limits.maxAnalyzers} <span className="text-xs font-normal text-slate-400">LIS units</span>
                           </div>
                         </div>
 
                         <div className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-card space-y-1">
                           <div className="text-[11px] font-semibold text-slate-500">Monthly Consultations</div>
-                          <div className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                          <div className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100">
                             {licenseData.limits.maxMonthlyConsultations.toLocaleString()} <span className="text-xs font-normal text-slate-400">/ mo</span>
                           </div>
                         </div>
 
                         <div className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-card space-y-1">
                           <div className="text-[11px] font-semibold text-slate-500">Encrypted Storage</div>
-                          <div className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                          <div className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100">
                             {(licenseData.limits.maxStorageMb / 1024).toFixed(0)} <span className="text-xs font-normal text-slate-400">GB</span>
                           </div>
                         </div>
 
                         <div className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-card space-y-1">
                           <div className="text-[11px] font-semibold text-slate-500">Terminals</div>
-                          <div className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                          <div className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100">
                             {licenseData.limits.concurrentTerminals} <span className="text-xs font-normal text-slate-400">concurrent</span>
                           </div>
                         </div>
@@ -927,7 +905,7 @@ export default function FacilitySettingsHub({
                       <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
                         For facilities operating entirely offline or in low-connectivity rural health units, apply this license key directly to the local facility instance:
                       </p>
-                      <pre className="p-3 rounded-xl bg-slate-950 text-slate-200 font-mono text-[11px] overflow-x-auto border border-slate-800">
+                      <pre className="p-3 rounded-xl bg-slate-950 text-slate-200 font-mono text-[10px] sm:text-[11px] overflow-x-auto border border-slate-800">
                         {`POST http://localhost:5000/api/v1/${facility.facilityType.toLowerCase()}/license/apply\nContent-Type: application/json\n\n{\n  "licenseToken": "${licenseData.licenseToken.slice(0, 32)}..."\n}`}
                       </pre>
                     </div>
@@ -945,14 +923,14 @@ export default function FacilitySettingsHub({
           </div>
         </Tabs>
 
-        {/* Footer */}
-        <div className="p-4 sm:p-5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 bg-slate-50/50 dark:bg-slate-900/30">
+        {/* Responsive Footer */}
+        <div className="p-3.5 sm:p-5 border-t border-slate-100 dark:border-slate-800 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3 bg-slate-50/50 dark:bg-slate-900/30">
           <Button
             type="button"
             variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={saving}
-            className="rounded-xl text-xs font-semibold"
+            className="w-full sm:w-auto rounded-xl text-xs font-semibold h-9"
           >
             Cancel
           </Button>
@@ -961,7 +939,7 @@ export default function FacilitySettingsHub({
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="rounded-xl text-xs font-bold px-6 h-9 bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5 shadow-md"
+            className="w-full sm:w-auto rounded-xl text-xs font-bold px-6 h-9 bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5 shadow-md"
           >
             {saving ? (
               <>

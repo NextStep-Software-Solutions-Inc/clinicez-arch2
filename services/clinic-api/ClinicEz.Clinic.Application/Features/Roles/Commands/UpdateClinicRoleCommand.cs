@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Features.Roles.DTOs;
+using ClinicEz.Clinic.Domain.Constants;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Exceptions;
@@ -27,6 +28,9 @@ public sealed class UpdateClinicRoleCommandValidator : AbstractValidator<UpdateC
         RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
         RuleFor(x => x.Description).MaximumLength(255);
         RuleFor(x => x.Permissions).NotNull();
+        RuleForEach(x => x.Permissions)
+            .Must(p => ClinicPermissions.All.Contains(p))
+            .WithMessage("Permission '{PropertyValue}' is not a recognized system permission.");
     }
 }
 

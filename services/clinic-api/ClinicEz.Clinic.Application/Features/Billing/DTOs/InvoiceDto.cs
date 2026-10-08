@@ -75,7 +75,8 @@ public record CreateInvoiceRequest(
     string? DiscountIdNumber,
     decimal? CustomDiscountPercentage,
     string? Notes,
-    List<CreateInvoiceLineItemRequest> LineItems
+    List<CreateInvoiceLineItemRequest> LineItems,
+    bool AllowDuplicate = false
 );
 
 public record RecordPaymentRequest(

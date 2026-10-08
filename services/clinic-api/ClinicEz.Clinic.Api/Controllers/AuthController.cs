@@ -70,6 +70,7 @@ public sealed class AuthController : ControllerBase
         ToResult(await _auth.BootstrapAsync(request with { Workspace = request.Workspace ?? WorkspaceHeader }, ct));
 
     [HttpPost("change-password")]
+    [Authorize]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request, CancellationToken ct)
     {
         if (!TryGetStaffId(out var staffId)) return Unauthorized();
@@ -77,6 +78,7 @@ public sealed class AuthController : ControllerBase
     }
 
     [HttpGet("me")]
+    [Authorize]
     public async Task<IActionResult> Me(CancellationToken ct)
     {
         if (!TryGetStaffId(out var staffId)) return Unauthorized();
