@@ -31,6 +31,13 @@ import LicenseSystemTab from '../../components/settings/LicenseSystemTab';
 import { SettingsTabItem, SettingsTabKey } from '../../components/settings/types';
 import { formatPeso } from '../../components/settings/common';
 
+const sanitizeLegacyDefault = (val?: string | null): string => {
+  if (!val) return '';
+  const trimmed = val.trim();
+  if (trimmed === 'Mon-Sat 8:00 AM - 5:00 PM') return '';
+  return trimmed;
+};
+
 export default function SettingsScreen() {
   const { license, openActivationModal, refreshLicense } = useFacilityLicense();
   const { refresh: refreshClinic } = useClinic();
@@ -102,7 +109,7 @@ export default function SettingsScreen() {
       setSettings(settingsData);
       setClinicName(settingsData.clinicName ?? '');
       setAccreditationNumber(settingsData.accreditationNumber ?? '');
-      setOperatingHours(settingsData.operatingHours ?? '');
+      setOperatingHours(sanitizeLegacyDefault(settingsData.operatingHours));
       setSlotDuration(
         settingsData.defaultSlotDurationMinutes != null ? String(settingsData.defaultSlotDurationMinutes) : ''
       );

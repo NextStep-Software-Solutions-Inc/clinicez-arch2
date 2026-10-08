@@ -67,7 +67,7 @@ public sealed class UpdateClinicSettingsCommandHandler : IRequestHandler<UpdateC
         settings.ClinicName = request.ClinicName.Trim();
         settings.TaxIdentificationNumber = request.TaxIdentificationNumber?.Trim();
         settings.AccreditationNumber = request.AccreditationNumber?.Trim();
-        settings.OperatingHours = string.IsNullOrWhiteSpace(request.OperatingHours) ? "Mon-Sat 8:00 AM - 5:00 PM" : request.OperatingHours.Trim();
+        settings.OperatingHours = string.IsNullOrWhiteSpace(request.OperatingHours) ? string.Empty : request.OperatingHours.Trim();
         settings.DefaultSlotDurationMinutes = request.DefaultSlotDurationMinutes > 0 ? request.DefaultSlotDurationMinutes : 30;
         settings.QueuePrefix = string.IsNullOrWhiteSpace(request.QueuePrefix) ? "Q" : request.QueuePrefix.Trim();
         settings.InvoicePrefix = string.IsNullOrWhiteSpace(request.InvoicePrefix) ? "INV" : request.InvoicePrefix.Trim();

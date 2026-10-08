@@ -106,7 +106,8 @@ export default function GeneralSettingsTab({
                   label="Operating hours"
                   value={operatingHours}
                   onChangeText={setOperatingHours}
-                  placeholder="e.g. Mon-Sat 8:00 AM - 5:00 PM"
+                  placeholder="e.g. Mon-Fri 8:00 AM - 5:00 PM, Sat 8:00 AM - 12:00 PM"
+                  helperText={!operatingHours ? 'Not configured yet — please specify clinic schedule' : undefined}
                 />
                 <Input
                   containerStyle={styles.flexNarrow}

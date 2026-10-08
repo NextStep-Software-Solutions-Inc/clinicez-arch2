@@ -36,7 +36,7 @@ public class Facility : BaseEntity
     public string? LicenseToOperate { get; set; } // DOH LTO Number
     public string? PhilHealthAccreditationNumber { get; set; }
     public string? TaxIdentificationNumber { get; set; } // BIR TIN
-    public string? OperatingHours { get; set; } = "Mon-Sat 8:00 AM - 5:00 PM";
+    public string? OperatingHours { get; set; }
 
     // Geolocation & Philippine Standard Address
     public string? Region { get; set; }

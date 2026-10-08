@@ -85,24 +85,24 @@ export default function FacilityOnboardingWizard({
   const [licenseToOperate, setLicenseToOperate] = useState("");
   const [philHealthAccreditationNumber, setPhilHealthAccreditationNumber] = useState("");
   const [taxIdentificationNumber, setTaxIdentificationNumber] = useState("");
-  const [operatingHours, setOperatingHours] = useState("Mon-Sat 8:00 AM - 5:00 PM");
+  const [operatingHours, setOperatingHours] = useState("");
 
-  // Step 3: Geolocation & Address
-  const [selectedRegionCode, setSelectedRegionCode] = useState("NCR");
-  const [selectedProvinceName, setSelectedProvinceName] = useState("Metro Manila");
-  const [selectedCityName, setSelectedCityName] = useState("Makati City");
-  const [selectedBarangay, setSelectedBarangay] = useState("Bel-Air");
-  const [zipCode, setZipCode] = useState("1200");
+  // Step 3: Geolocation & Address (No falsey assumptions - prompt user to select)
+  const [selectedRegionCode, setSelectedRegionCode] = useState("");
+  const [selectedProvinceName, setSelectedProvinceName] = useState("");
+  const [selectedCityName, setSelectedCityName] = useState("");
+  const [selectedBarangay, setSelectedBarangay] = useState("");
+  const [zipCode, setZipCode] = useState("");
   const [streetAddress, setStreetAddress] = useState("");
   const [contactNumber, setContactNumber] = useState("");
   const [contactEmail, setContactEmail] = useState("");
 
   // Address Cascading Lookups
-  const activeRegion: PhilippineRegion | undefined = PHILIPPINE_REGIONS.find((r) => r.code === selectedRegionCode) || PHILIPPINE_REGIONS[0];
+  const activeRegion: PhilippineRegion | undefined = PHILIPPINE_REGIONS.find((r) => r.code === selectedRegionCode);
   const provinceOptions: PhilippineProvince[] = activeRegion?.provinces || [];
-  const activeProvince: PhilippineProvince | undefined = provinceOptions.find((p) => p.name === selectedProvinceName) || provinceOptions[0];
+  const activeProvince: PhilippineProvince | undefined = provinceOptions.find((p) => p.name === selectedProvinceName);
   const cityOptions: PhilippineCity[] = activeProvince?.cities || [];
-  const activeCity: PhilippineCity | undefined = cityOptions.find((c) => c.name === selectedCityName) || cityOptions[0];
+  const activeCity: PhilippineCity | undefined = cityOptions.find((c) => c.name === selectedCityName);
   const barangayOptions: string[] = activeCity?.barangays || [];
 
   // Existing facilities for unique name and slug validation
@@ -212,36 +212,31 @@ export default function FacilityOnboardingWizard({
 
   const handleRegionChange = (newCode: string) => {
     setSelectedRegionCode(newCode);
+    setSelectedProvinceName("");
+    setSelectedCityName("");
+    setSelectedBarangay("");
+    setZipCode("");
     const reg = PHILIPPINE_REGIONS.find((r) => r.code === newCode);
-    if (reg && reg.provinces.length > 0) {
-      const firstProv = reg.provinces[0];
-      setSelectedProvinceName(firstProv.name);
-      if (firstProv.cities.length > 0) {
-        const firstCity = firstProv.cities[0];
-        setSelectedCityName(firstCity.name);
-        setZipCode(firstCity.zipCode);
-        setSelectedBarangay(firstCity.barangays[0] || "");
-      }
+    if (reg && reg.provinces.length === 1) {
+      setSelectedProvinceName(reg.provinces[0].name);
     }
   };
 
   const handleProvinceChange = (newProv: string) => {
     setSelectedProvinceName(newProv);
-    const prov = provinceOptions.find((p) => p.name === newProv);
-    if (prov && prov.cities.length > 0) {
-      const firstCity = prov.cities[0];
-      setSelectedCityName(firstCity.name);
-      setZipCode(firstCity.zipCode);
-      setSelectedBarangay(firstCity.barangays[0] || "");
-    }
+    setSelectedCityName("");
+    setSelectedBarangay("");
+    setZipCode("");
   };
 
   const handleCityChange = (newCity: string) => {
     setSelectedCityName(newCity);
+    setSelectedBarangay("");
     const city = cityOptions.find((c) => c.name === newCity);
     if (city) {
       setZipCode(city.zipCode);
-      setSelectedBarangay(city.barangays[0] || "");
+    } else {
+      setZipCode("");
     }
   };
 
@@ -298,6 +293,22 @@ export default function FacilityOnboardingWizard({
       }
     }
     if (currentStep === 3) {
+      if (!selectedRegionCode) {
+        toast.error("Please select an Administrative Region.");
+        return;
+      }
+      if (!selectedProvinceName) {
+        toast.error("Please select a Province.");
+        return;
+      }
+      if (!selectedCityName) {
+        toast.error("Please select a City or Municipality.");
+        return;
+      }
+      if (!selectedBarangay) {
+        toast.error("Please select a Barangay.");
+        return;
+      }
       if (!streetAddress.trim()) {
         toast.error("Please enter the street address / unit number.");
         return;
@@ -594,17 +605,24 @@ export default function FacilityOnboardingWizard({
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="operating-hours" className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    Official Operating Hours
-                  </Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="operating-hours" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Official Operating Hours
+                    </Label>
+                    {!operatingHours && (
+                      <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                        Not specified yet
+                      </span>
+                    )}
+                  </div>
                   <Input
                     id="operating-hours"
-                    placeholder="e.g. Mon-Sat 8:00 AM - 5:00 PM"
+                    placeholder="e.g. Mon-Fri 8:00 AM - 5:00 PM, Sat 8:00 AM - 12:00 PM"
                     value={operatingHours}
                     onChange={(e) => setOperatingHours(e.target.value)}
                     className="h-9 text-xs rounded-xl"
                   />
-                  <p className="text-[10px] text-slate-400">Displayed to patients on appointment booking portals</p>
+                  <p className="text-[10px] text-slate-400">Specifies consultation and dispensing hours for patient scheduling</p>
                 </div>
               </div>
             </div>
@@ -631,6 +649,7 @@ export default function FacilityOnboardingWizard({
                     onChange={(e) => handleRegionChange(e.target.value)}
                     className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20"
                   >
+                    <option value="">-- Select Administrative Region --</option>
                     {PHILIPPINE_REGIONS.map((r) => (
                       <option key={r.code} value={r.code}>
                         {r.name}
@@ -647,8 +666,10 @@ export default function FacilityOnboardingWizard({
                     id="prov-select"
                     value={selectedProvinceName}
                     onChange={(e) => handleProvinceChange(e.target.value)}
-                    className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    disabled={!selectedRegionCode}
+                    className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
                   >
+                    <option value="">{selectedRegionCode ? "-- Select Province --" : "-- Select Region First --"}</option>
                     {provinceOptions.map((p) => (
                       <option key={p.name} value={p.name}>
                         {p.name}
@@ -667,8 +688,10 @@ export default function FacilityOnboardingWizard({
                     id="city-select"
                     value={selectedCityName}
                     onChange={(e) => handleCityChange(e.target.value)}
-                    className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    disabled={!selectedProvinceName}
+                    className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
                   >
+                    <option value="">{selectedProvinceName ? "-- Select City / Municipality --" : "-- Select Province First --"}</option>
                     {cityOptions.map((c) => (
                       <option key={c.name} value={c.name}>
                         {c.name}
@@ -685,8 +708,10 @@ export default function FacilityOnboardingWizard({
                     id="brgy-select"
                     value={selectedBarangay}
                     onChange={(e) => setSelectedBarangay(e.target.value)}
-                    className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    disabled={!selectedCityName}
+                    className="w-full h-9 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
                   >
+                    <option value="">{selectedCityName ? "-- Select Barangay --" : "-- Select City First --"}</option>
                     {barangayOptions.map((b) => (
                       <option key={b} value={b}>
                         {b}

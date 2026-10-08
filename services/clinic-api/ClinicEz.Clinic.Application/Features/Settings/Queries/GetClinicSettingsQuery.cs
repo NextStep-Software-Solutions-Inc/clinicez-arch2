@@ -42,7 +42,7 @@ public sealed class GetClinicSettingsQueryHandler : IRequestHandler<GetClinicSet
                 TenantId = _clinicContext.TenantId,
                 ClinicId = _clinicContext.ClinicId,
                 ClinicName = "Clinic Facility",
-                OperatingHours = "Mon-Sat 8:00 AM - 5:00 PM",
+                OperatingHours = string.Empty,
                 DefaultSlotDurationMinutes = 30,
                 QueuePrefix = "Q",
                 InvoicePrefix = "INV",

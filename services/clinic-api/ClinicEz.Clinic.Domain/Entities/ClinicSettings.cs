@@ -25,7 +25,7 @@ public sealed class ClinicSettings : BaseEntity
     /// <summary>
     /// JSON encoded schedule, e.g. "Mon-Fri 8:00 AM - 5:00 PM, Sat 8:00 AM - 12:00 PM"
     /// </summary>
-    public string OperatingHours { get; set; } = "Mon-Sat 8:00 AM - 5:00 PM";
+    public string OperatingHours { get; set; } = string.Empty;
 
     public int DefaultSlotDurationMinutes { get; set; } = 30;
 

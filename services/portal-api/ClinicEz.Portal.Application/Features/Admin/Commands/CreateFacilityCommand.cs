@@ -139,7 +139,7 @@ public class CreateFacilityCommandHandler(
             LicenseToOperate = request.LicenseToOperate,
             PhilHealthAccreditationNumber = request.PhilHealthAccreditationNumber,
             TaxIdentificationNumber = request.TaxIdentificationNumber,
-            OperatingHours = string.IsNullOrWhiteSpace(request.OperatingHours) ? "Mon-Sat 8:00 AM - 5:00 PM" : request.OperatingHours,
+            OperatingHours = string.IsNullOrWhiteSpace(request.OperatingHours) ? null : request.OperatingHours.Trim(),
             Region = request.Region,
             Province = request.Province,
             City = request.City,

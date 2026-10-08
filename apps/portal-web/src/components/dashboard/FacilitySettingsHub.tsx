@@ -28,6 +28,15 @@ import {
   IconX,
   IconFileText
 } from "@tabler/icons-react";
+import { cn } from "@/lib/utils";
+
+// Prevent legacy hardcoded dummy strings from being assumed as authentic user configurations
+const sanitizeLegacyDefault = (val?: string | null): string => {
+  if (!val) return "";
+  const trimmed = val.trim();
+  if (trimmed === "Mon-Sat 8:00 AM - 5:00 PM") return "";
+  return trimmed;
+};
 
 export interface FacilityData {
   id: string;
@@ -132,7 +141,7 @@ export default function FacilitySettingsHub({
   const [licenseToOperate, setLicenseToOperate] = useState(facility?.licenseToOperate || "");
   const [philHealthAccreditationNumber, setPhilHealthAccreditationNumber] = useState(facility?.philHealthAccreditationNumber || "");
   const [taxIdentificationNumber, setTaxIdentificationNumber] = useState(facility?.taxIdentificationNumber || "");
-  const [operatingHours, setOperatingHours] = useState(facility?.operatingHours || "");
+  const [operatingHours, setOperatingHours] = useState(sanitizeLegacyDefault(facility?.operatingHours));
   const [streetAddress, setStreetAddress] = useState(facility?.streetAddress || "");
   const [city, setCity] = useState(facility?.city || "");
   const [province, setProvince] = useState(facility?.province || "");
@@ -188,7 +197,7 @@ export default function FacilitySettingsHub({
       setLicenseToOperate(facility.licenseToOperate || "");
       setPhilHealthAccreditationNumber(facility.philHealthAccreditationNumber || "");
       setTaxIdentificationNumber(facility.taxIdentificationNumber || "");
-      setOperatingHours(facility.operatingHours || "");
+      setOperatingHours(sanitizeLegacyDefault(facility.operatingHours));
       setStreetAddress(facility.streetAddress || "");
       setCity(facility.city || "");
       setProvince(facility.province || "");
@@ -272,9 +281,9 @@ export default function FacilitySettingsHub({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[96vw] max-w-[96vw] sm:max-w-4xl max-h-[92vh] flex flex-col rounded-2xl sm:rounded-3xl p-0 overflow-hidden border border-slate-200 dark:border-slate-800 shadow-2xl bg-white dark:bg-slate-950">
+      <DialogContent className="w-[96vw] max-w-[96vw] sm:max-w-4xl h-[92dvh] sm:h-auto sm:max-h-[90vh] flex flex-col gap-0 rounded-2xl sm:rounded-3xl p-0 overflow-hidden border border-slate-200 dark:border-slate-800 shadow-2xl bg-white dark:bg-slate-950">
         {/* Header */}
-        <div className="p-4 sm:p-6 pb-4 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="p-4 sm:p-6 pb-4 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <div className="p-2 sm:p-2.5 rounded-2xl bg-primary/10 text-primary shrink-0">
               <IconBuildingHospital className="h-5 w-5 sm:h-6 sm:w-6" />
@@ -300,41 +309,41 @@ export default function FacilitySettingsHub({
         </div>
 
         {/* Responsive Horizontal Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-          <div className="px-4 sm:px-6 pt-2 sm:pt-3 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/20 dark:bg-slate-900/10 overflow-x-auto scrollbar-none">
-            <TabsList className="bg-transparent p-0 h-10 gap-1 sm:gap-2 border-b-0 inline-flex min-w-full sm:min-w-0 flex-nowrap">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0 gap-0">
+          <div className="shrink-0 z-20 px-3 sm:px-6 py-2.5 border-b border-slate-100 dark:border-slate-800/80 bg-white/95 dark:bg-slate-950/95 backdrop-blur-sm overflow-x-auto scrollbar-none">
+            <TabsList className="bg-slate-100 dark:bg-slate-900 p-1 h-auto gap-1 rounded-xl inline-flex min-w-max flex-nowrap border border-slate-200/80 dark:border-slate-800">
               <TabsTrigger
                 value="profile"
-                className="rounded-t-xl rounded-b-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs font-bold gap-1.5 px-3 shrink-0 whitespace-nowrap"
+                className="rounded-lg px-3 py-1.5 text-xs font-semibold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-primary data-[state=active]:shadow-xs gap-1.5 shrink-0 whitespace-nowrap text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-all"
               >
-                <IconFileCertificate className="h-4 w-4" />
+                <IconFileCertificate className="h-3.5 w-3.5" />
                 <span>Regulatory &amp; Statutory</span>
               </TabsTrigger>
               <TabsTrigger
                 value="letterhead"
-                className="rounded-t-xl rounded-b-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs font-bold gap-1.5 px-3 shrink-0 whitespace-nowrap"
+                className="rounded-lg px-3 py-1.5 text-xs font-semibold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-primary data-[state=active]:shadow-xs gap-1.5 shrink-0 whitespace-nowrap text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-all"
               >
-                <IconPalette className="h-4 w-4" />
+                <IconPalette className="h-3.5 w-3.5" />
                 <span>Digital Letterhead</span>
               </TabsTrigger>
               <TabsTrigger
                 value="notifications"
-                className="rounded-t-xl rounded-b-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs font-bold gap-1.5 px-3 shrink-0 whitespace-nowrap"
+                className="rounded-lg px-3 py-1.5 text-xs font-semibold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-primary data-[state=active]:shadow-xs gap-1.5 shrink-0 whitespace-nowrap text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-all"
               >
-                <IconBell className="h-4 w-4" />
+                <IconBell className="h-3.5 w-3.5" />
                 <span>Notifications</span>
               </TabsTrigger>
               <TabsTrigger
                 value="license"
-                className="rounded-t-xl rounded-b-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent text-xs font-bold gap-1.5 px-3 shrink-0 whitespace-nowrap"
+                className="rounded-lg px-3 py-1.5 text-xs font-semibold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-primary data-[state=active]:shadow-xs gap-1.5 shrink-0 whitespace-nowrap text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-all"
               >
-                <IconKey className="h-4 w-4" />
+                <IconKey className="h-3.5 w-3.5" />
                 <span>License &amp; Hard Limits</span>
               </TabsTrigger>
             </TabsList>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
+          <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6 overscroll-contain">
             {/* TAB 1: REGULATORY & STATUTORY PROFILE */}
             <TabsContent value="profile" className="m-0 space-y-5">
               <div className="p-3.5 rounded-2xl bg-primary/5 border border-primary/10 flex items-start gap-2.5">
@@ -414,22 +423,41 @@ export default function FacilitySettingsHub({
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Official Operating Hours Schedule
-                </Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Official Operating Hours Schedule
+                  </Label>
+                  {!operatingHours && (
+                    <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                      Not set yet — please enter schedule
+                    </span>
+                  )}
+                </div>
                 <Input
                   value={operatingHours}
                   onChange={(e) => setOperatingHours(e.target.value)}
-                  placeholder="e.g. Mon-Sat 8:00 AM - 5:00 PM"
-                  className="h-9 text-xs rounded-xl"
+                  placeholder="e.g. Mon-Fri 8:00 AM - 5:00 PM, Sat 8:00 AM - 12:00 PM"
+                  className={cn("h-9 text-xs rounded-xl", !operatingHours && "border-amber-300 dark:border-amber-800/60")}
                 />
+                {!operatingHours && (
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400 leading-tight">
+                    Schedule is empty. Specify the operating hours to display on official records and patient scheduling.
+                  </p>
+                )}
               </div>
 
               {/* Physical Location Address */}
               <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
-                <div className="flex items-center gap-2 text-xs font-bold text-slate-800 dark:text-slate-200">
-                  <IconMapPin className="h-4 w-4 text-primary" />
-                  <span>Physical Facility Address</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-xs font-bold text-slate-800 dark:text-slate-200">
+                    <IconMapPin className="h-4 w-4 text-primary" />
+                    <span>Physical Facility Address</span>
+                  </div>
+                  {!streetAddress && (
+                    <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                      Address not configured yet
+                    </span>
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
@@ -477,9 +505,16 @@ export default function FacilitySettingsHub({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800">
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    Facility Contact Hotline
-                  </Label>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Facility Contact Hotline
+                    </Label>
+                    {!contactNumber && (
+                      <span className="text-[10px] text-slate-400 font-normal">
+                        Optional
+                      </span>
+                    )}
+                  </div>
                   <Input
                     value={contactNumber}
                     onChange={(e) => setContactNumber(e.target.value)}
@@ -489,9 +524,16 @@ export default function FacilitySettingsHub({
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    Official Facility Email
-                  </Label>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Official Facility Email
+                    </Label>
+                    {!contactEmail && (
+                      <span className="text-[10px] text-slate-400 font-normal">
+                        Optional
+                      </span>
+                    )}
+                  </div>
                   <Input
                     value={contactEmail}
                     onChange={(e) => setContactEmail(e.target.value)}
@@ -924,7 +966,7 @@ export default function FacilitySettingsHub({
         </Tabs>
 
         {/* Responsive Footer */}
-        <div className="p-3.5 sm:p-5 border-t border-slate-100 dark:border-slate-800 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3 bg-slate-50/50 dark:bg-slate-900/30">
+        <div className="p-3.5 sm:p-5 border-t border-slate-100 dark:border-slate-800 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3 bg-slate-50/50 dark:bg-slate-900/30 shrink-0 z-20">
           <Button
             type="button"
             variant="outline"
