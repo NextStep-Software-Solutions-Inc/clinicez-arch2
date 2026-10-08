@@ -302,4 +302,120 @@ public class StaffCommandsTests
         command.Should().NotBeNull();
         command!.Role.Should().Be(expectedRole);
     }
+
+    [Fact]
+    public async Task CreateStaff_WithInitialPassword_HashesPasswordAndEnforcesChangeOnFirstLogin()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+
+        var settings = new ClinicSettings
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = clinicId,
+            TenantId = tenantId,
+            ClinicName = "Test Clinic",
+            LicenseToken = "mock.valid.token"
+        };
+        await context.ClinicSettings.AddAsync(settings);
+        await context.SaveChangesAsync();
+
+        var licenseValidator = Substitute.For<ClinicEz.Shared.Licensing.IFacilityLicenseValidator>();
+        licenseValidator.Validate(Arg.Any<string?>(), clinicId, tenantId)
+            .Returns(ClinicEz.Shared.Licensing.LicenseValidationResult.Success(new ClinicEz.Shared.Licensing.FacilityLicensePayload
+            {
+                FacilityId = clinicId,
+                TenantId = tenantId,
+                Limits = new ClinicEz.Shared.Licensing.FacilityLimits { MaxStaff = 10 }
+            }));
+
+        var hasher = new ClinicEz.Shared.LocalAuth.FacilityPasswordHasher();
+        var handler = new CreateStaffMemberCommandHandler(staffRepo, roleRepo, settingsRepo, licenseValidator, uow, clinicContext, hasher);
+
+        var command = new CreateStaffMemberCommand(
+            "Elena",
+            "Reyes",
+            null,
+            null,
+            StaffRole.Receptionist,
+            null,
+            "elena@clinic.com",
+            "09171239876",
+            null,
+            null,
+            null,
+            null,
+            InitialPassword: "TemporaryPass#123",
+            SendInviteEmail: false
+        );
+
+        // Act
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.HasCredentials.Should().BeTrue();
+        result.MustChangePassword.Should().BeTrue();
+        result.TemporaryPassword.Should().Be("TemporaryPass#123");
+
+        var saved = await context.StaffMembers.FirstOrDefaultAsync(s => s.Id == result.Id);
+        saved.Should().NotBeNull();
+        saved!.PasswordHash.Should().NotBeNullOrWhiteSpace();
+        saved.MustChangePassword.Should().BeTrue();
+        hasher.Verify(saved.PasswordHash!, "TemporaryPass#123").Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ResetStaffPassword_GeneratesTemporaryPasswordAndIncrementsTokenVersion()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+
+        var staff = new StaffMember
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = clinicId,
+            TenantId = tenantId,
+            FirstName = "Carlos",
+            LastName = "Mendoza",
+            Email = "carlos@clinic.com",
+            Role = StaffRole.Nurse,
+            TokenVersion = 1,
+            IsActive = true
+        };
+        await context.StaffMembers.AddAsync(staff);
+        await context.SaveChangesAsync();
+
+        var hasher = new ClinicEz.Shared.LocalAuth.FacilityPasswordHasher();
+        var handler = new ResetStaffPasswordCommandHandler(staffRepo, uow, clinicContext, hasher);
+
+        // Act
+        var result = await handler.Handle(new ResetStaffPasswordCommand(staff.Id), CancellationToken.None);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Email.Should().Be("carlos@clinic.com");
+        result.TemporaryPassword.Should().NotBeNullOrWhiteSpace();
+        result.TemporaryPassword.Length.Should().BeGreaterThanOrEqualTo(8);
+
+        var updated = await context.StaffMembers.FirstOrDefaultAsync(s => s.Id == staff.Id);
+        updated.Should().NotBeNull();
+        updated!.MustChangePassword.Should().BeTrue();
+        updated.TokenVersion.Should().Be(2);
+        hasher.Verify(updated.PasswordHash!, result.TemporaryPassword).Should().BeTrue();
+    }
 }

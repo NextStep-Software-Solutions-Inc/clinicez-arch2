@@ -12,6 +12,7 @@ using Microsoft.EntityFrameworkCore;
 using ValidationException = ClinicEz.Shared.Exceptions.ValidationException;
 
 using ClinicEz.Shared.Licensing;
+using ClinicEz.Shared.LocalAuth;
 
 namespace ClinicEz.Clinic.Application.Features.Staff.Commands;
 
@@ -27,7 +28,9 @@ public sealed record CreateStaffMemberCommand(
     string? PrcLicenseNumber,
     string? PtrNumber,
     string? S2LicenseNumber,
-    string? Specialty) : IRequest<StaffMemberDto>;
+    string? Specialty,
+    string? InitialPassword = null,
+    bool SendInviteEmail = false) : IRequest<StaffMemberDto>;
 
 public sealed class CreateStaffMemberCommandValidator : AbstractValidator<CreateStaffMemberCommand>
 {
@@ -44,6 +47,17 @@ public sealed class CreateStaffMemberCommandValidator : AbstractValidator<Create
                 .NotEmpty()
                 .WithMessage("PRC License Number is mandatory for Doctors.");
         });
+
+        When(x => !string.IsNullOrEmpty(x.InitialPassword), () =>
+        {
+            RuleFor(x => x.Email)
+                .NotEmpty()
+                .EmailAddress()
+                .WithMessage("A valid email address is required when provisioning login credentials.");
+            RuleFor(x => x.InitialPassword)
+                .MinimumLength(8)
+                .WithMessage("Temporary password must be at least 8 characters.");
+        });
     }
 }
 
@@ -55,6 +69,7 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
     private readonly IFacilityLicenseValidator _licenseValidator;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
+    private readonly IFacilityPasswordHasher _passwordHasher;
 
     public CreateStaffMemberCommandHandler(
         IRepository<StaffMember> staffRepository,
@@ -62,7 +77,8 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
         IRepository<ClinicSettings> settingsRepository,
         IFacilityLicenseValidator licenseValidator,
         IUnitOfWork unitOfWork,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IFacilityPasswordHasher? passwordHasher = null)
     {
         _staffRepository = staffRepository;
         _roleRepository = roleRepository;
@@ -70,6 +86,7 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
         _licenseValidator = licenseValidator;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _passwordHasher = passwordHasher ?? new FacilityPasswordHasher();
     }
 
     public async Task<StaffMemberDto> Handle(CreateStaffMemberCommand request, CancellationToken cancellationToken)
@@ -146,6 +163,41 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
             }
         }
 
+        string? passwordHash = null;
+        bool mustChangePassword = false;
+        string? returnedTempPassword = null;
+
+        if (!string.IsNullOrWhiteSpace(request.InitialPassword))
+        {
+            if (string.IsNullOrWhiteSpace(request.Email))
+            {
+                throw new ValidationException("An email address is required when provisioning login credentials for a staff member.");
+            }
+
+            var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+            var duplicateEmail = await _staffRepository.Query(s =>
+                s.ClinicId == _clinicContext.ClinicId &&
+                s.Email != null &&
+                s.Email.ToLower() == normalizedEmail &&
+                s.PasswordHash != null)
+                .AnyAsync(cancellationToken);
+
+            if (duplicateEmail)
+            {
+                throw new ValidationException($"Another staff member with email '{request.Email.Trim()}' already has login credentials.");
+            }
+
+            var problems = _passwordHasher.ValidateStrength(request.InitialPassword, 8);
+            if (problems.Count > 0)
+            {
+                throw new ValidationException($"Initial password does not meet security requirements: {string.Join(" ", problems)}");
+            }
+
+            passwordHash = _passwordHasher.Hash(request.InitialPassword);
+            mustChangePassword = true;
+            returnedTempPassword = request.InitialPassword;
+        }
+
         var staff = new StaffMember
         {
             Id = Guid.NewGuid(),
@@ -164,6 +216,9 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
             S2LicenseNumber = request.S2LicenseNumber?.Trim(),
             Specialty = request.Specialty?.Trim(),
             IsActive = true,
+            PasswordHash = passwordHash,
+            MustChangePassword = mustChangePassword,
+            TokenVersion = passwordHash != null ? 1 : 0,
             CreatedAt = DateTime.UtcNow,
             CreatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicAdmin"
         };
@@ -189,6 +244,9 @@ public sealed class CreateStaffMemberCommandHandler : IRequestHandler<CreateStaf
             staff.S2LicenseNumber,
             staff.Specialty,
             staff.IsActive,
-            staff.CreatedAt);
+            staff.CreatedAt,
+            HasCredentials: passwordHash != null,
+            MustChangePassword: mustChangePassword,
+            TemporaryPassword: returnedTempPassword);
     }
 }

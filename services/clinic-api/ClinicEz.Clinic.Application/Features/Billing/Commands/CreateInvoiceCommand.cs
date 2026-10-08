@@ -25,7 +25,8 @@ public record CreateInvoiceCommand(
     string? DiscountIdNumber = null,
     decimal? CustomDiscountPercentage = null,
     string? Notes = null,
-    List<CreateInvoiceLineItemRequest>? LineItems = null
+    List<CreateInvoiceLineItemRequest>? LineItems = null,
+    bool AllowDuplicate = false
 ) : IRequest<InvoiceDto>;
 
 public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand, InvoiceDto>
@@ -49,6 +50,41 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
         if (request.PatientId == Guid.Empty || string.IsNullOrWhiteSpace(request.PatientName))
         {
             throw new BadRequestException("PatientId and PatientName are required to generate an invoice.");
+        }
+
+        // Duplicate billing prevention guard
+        if (!request.AllowDuplicate)
+        {
+            if (request.QueueItemId.HasValue)
+            {
+                var existingQueueInvoice = await _invoiceRepo.Query(i =>
+                    i.ClinicId == _clinicContext.ClinicId &&
+                    i.QueueItemId == request.QueueItemId.Value &&
+                    i.Status != InvoiceStatus.Voided)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                if (existingQueueInvoice != null)
+                {
+                    throw new ConflictException(
+                        $"An active invoice ({existingQueueInvoice.InvoiceNumber}) has already been generated for this queue encounter. " +
+                        $"Status: {existingQueueInvoice.Status}, Net Amount: ₱{existingQueueInvoice.NetAmount:F2}.");
+                }
+            }
+
+            if (request.ConsultationId.HasValue)
+            {
+                var existingConsultationInvoice = await _invoiceRepo.Query(i =>
+                    i.ClinicId == _clinicContext.ClinicId &&
+                    i.ConsultationId == request.ConsultationId.Value &&
+                    i.Status != InvoiceStatus.Voided)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                if (existingConsultationInvoice != null)
+                {
+                    throw new ConflictException(
+                        $"An active invoice ({existingConsultationInvoice.InvoiceNumber}) has already been generated for this consultation encounter.");
+                }
+            }
         }
 
         var today = DateTime.UtcNow.Date;

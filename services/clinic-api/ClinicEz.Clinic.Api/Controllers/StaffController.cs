@@ -80,7 +80,20 @@ public sealed class StaffController : ControllerBase
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<StaffMemberDto>.Success(result));
     }
+
+    [HttpPost("{id:guid}/reset-password")]
+    [HasPermission(ClinicPermissions.StaffManage)]
+    public async Task<ActionResult<ApiResponse<ResetStaffPasswordResult>>> ResetPassword(
+        Guid id,
+        [FromBody] ResetStaffPasswordRequest? request,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new ResetStaffPasswordCommand(id, request?.TemporaryPassword), ct);
+        return Ok(ApiResponse<ResetStaffPasswordResult>.Success(result, "Staff password reset successfully."));
+    }
 }
+
+public sealed record ResetStaffPasswordRequest(string? TemporaryPassword);
 
 public sealed record UpdateStaffMemberRequest(
     string FirstName,

@@ -1,12 +1,12 @@
 import React from 'react';
-import { View, StyleSheet, ViewStyle } from 'react-native';
+import { View, StyleSheet, ViewStyle, StyleProp } from 'react-native';
 import ThemedText from './ThemedText';
 import { IconSlot, resolveIconName } from './Icon';
 import { theme } from '../../constants/theme';
 
 export interface CardProps {
   children: React.ReactNode;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   variant?: 'default' | 'elevated' | 'outlined' | 'subtle';
 }
 

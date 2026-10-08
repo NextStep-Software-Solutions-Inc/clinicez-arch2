@@ -55,6 +55,8 @@ interface BillingPatient {
   queueNumber?: string;
   doctorId?: string;
   doctorName?: string;
+  isAlreadyBilled?: boolean;
+  existingInvoiceNumber?: string;
 }
 
 interface Remittance {
@@ -98,7 +100,8 @@ function formatPeso(value: number): string {
   return `₱${value.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function toBillingPatient(item: PatientQueueItem): BillingPatient {
+function toBillingPatient(item: PatientQueueItem, billedMap?: Map<string, string>): BillingPatient {
+  const invNum = billedMap?.get(item.id);
   return {
     key: item.id,
     patientId: item.patientId,
@@ -107,6 +110,8 @@ function toBillingPatient(item: PatientQueueItem): BillingPatient {
     queueNumber: item.queueNumber,
     doctorId: item.doctorId,
     doctorName: item.doctorName,
+    isAlreadyBilled: Boolean(invNum),
+    existingInvoiceNumber: invNum,
   };
 }
 
@@ -122,6 +127,7 @@ export default function BillingScreen() {
   const [services, setServices] = useState<ClinicServiceItem[]>([]);
   const [patients, setPatients] = useState<BillingPatient[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<BillingPatient | null>(null);
+  const [allowDuplicate, setAllowDuplicate] = useState(false);
   const [remittance, setRemittance] = useState<Remittance | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadErrors, setLoadErrors] = useState<LoadErrors>({});
@@ -144,10 +150,12 @@ export default function BillingScreen() {
   const [lastReceipt, setLastReceipt] = useState<ReceiptSummary | null>(null);
 
   const loadInitialData = useCallback(async () => {
-    const [[servicesData, svcErr], [queueData, qErr], [eodData, eodErr]] = await Promise.all([
+    const todayStr = new Date().toISOString().split('T')[0];
+    const [[servicesData, svcErr], [queueData, qErr], [eodData, eodErr], [invoicesData]] = await Promise.all([
       clinicService.getServices(),
       clinicService.getQueue(),
       clinicService.getDailyEodReport(),
+      clinicService.getInvoices(todayStr),
     ]);
 
     const errors: LoadErrors = {};
@@ -158,10 +166,19 @@ export default function BillingScreen() {
       setServices(servicesData ?? []);
     }
 
+    const billedMap = new Map<string, string>();
+    if (invoicesData) {
+      for (const inv of invoicesData) {
+        if (inv.status !== 'Voided' && inv.queueItemId) {
+          billedMap.set(inv.queueItemId, inv.invoiceNumber);
+        }
+      }
+    }
+
     if (qErr) {
       errors.queue = qErr.message || 'Unable to load today\'s queue.';
     } else {
-      setPatients((queueData ?? []).map(toBillingPatient));
+      setPatients((queueData ?? []).map((item) => toBillingPatient(item, billedMap)));
     }
 
     if (eodErr || !eodData) {
@@ -300,6 +317,14 @@ export default function BillingScreen() {
       return;
     }
 
+    if (selectedPatient.isAlreadyBilled && !allowDuplicate) {
+      Alert.alert(
+        'Duplicate invoice blocked',
+        `Invoice #${selectedPatient.existingInvoiceNumber} has already been issued for this queue visit. To bill additional services, check 'Authorize additional / duplicate invoice' below.`,
+      );
+      return;
+    }
+
     setIsProcessing(true);
 
     const invoicePayload = {
@@ -311,6 +336,7 @@ export default function BillingScreen() {
       discountType,
       discountIdNumber: discountId,
       notes: `Settled via ${paymentMethod}`,
+      allowDuplicate,
       lineItems: lineItems.map(l => ({
         serviceItemId: undefined,
         itemCode: l.code,
@@ -379,6 +405,16 @@ export default function BillingScreen() {
     );
 
     notify.success(`Payment recorded. Official receipt #${orNumber} issued.`);
+
+    // Reset billing form to prevent accidental duplicate submission
+    setSelectedPatient(null);
+    setLineItems([]);
+    setCashTendered('');
+    setReferenceNumber('');
+    setDiscountId('');
+    setDiscountType('None');
+    setAllowDuplicate(false);
+    await loadInitialData();
   };
 
   const renderTotals = () => (
@@ -445,11 +481,15 @@ export default function BillingScreen() {
               <Button
                 key={p.key}
                 size="sm"
-                variant={isSelected ? 'primary' : 'secondary'}
-                title={p.queueNumber ? `${p.queueNumber} · ${p.patientName}` : p.patientName}
+                variant={isSelected ? 'primary' : p.isAlreadyBilled ? 'outline' : 'secondary'}
+                title={
+                  (p.queueNumber ? `${p.queueNumber} · ${p.patientName}` : p.patientName) +
+                  (p.isAlreadyBilled ? ' (Billed)' : '')
+                }
                 onPress={() => {
                   setSelectedPatient(p);
                   setLastReceipt(null);
+                  setAllowDuplicate(false);
                 }}
               />
             );
@@ -659,13 +699,36 @@ export default function BillingScreen() {
           {formatPeso(netAmount)}
         </ThemedText>
       </View>
+
+      {selectedPatient?.isAlreadyBilled && (
+        <View style={styles.duplicateWarningBox}>
+          <Icon name="alertCircle" size={theme.sizes.iconMd} color={theme.colors.emergencyText} />
+          <View style={styles.flexFill}>
+            <ThemedText variant="bodyBold" color={theme.colors.emergencyText}>
+              Patient Already Billed
+            </ThemedText>
+            <ThemedText variant="caption" color={theme.colors.emergencyText}>
+              Invoice #{selectedPatient.existingInvoiceNumber} was already issued for this encounter today.
+            </ThemedText>
+            <Pressable
+              onPress={() => setAllowDuplicate((prev) => !prev)}
+              style={styles.overrideCheck}
+            >
+              <ThemedText variant="captionBold" color={allowDuplicate ? theme.colors.emergencyText : theme.colors.primary}>
+                {allowDuplicate ? '✓ Duplicate billing permitted' : 'Authorize additional / duplicate invoice'}
+              </ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
       <Button
         variant="success"
         size="lg"
         icon="check"
         title={`Collect ${formatPeso(netAmount)} and issue receipt`}
         loading={isProcessing}
-        disabled={!selectedPatient || lineItems.length === 0}
+        disabled={!selectedPatient || lineItems.length === 0 || (Boolean(selectedPatient.isAlreadyBilled) && !allowDuplicate)}
         onPress={handleSettlePayment}
       />
     </Card>
@@ -775,5 +838,20 @@ const styles = StyleSheet.create({
     borderTopWidth: theme.sizes.borderWidth,
     borderTopColor: theme.colors.border,
     paddingTop: theme.spacing.md,
+  },
+  duplicateWarningBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.emergencySubtle,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.emergencyBorder,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+  },
+  overrideCheck: {
+    marginTop: theme.spacing.xs,
+    paddingVertical: theme.spacing.xs,
   },
 });

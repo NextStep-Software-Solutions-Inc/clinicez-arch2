@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, StyleSheet, Pressable, ScrollView, PressableStateCallbackType } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Badge from '../ui/Badge';
@@ -6,22 +6,26 @@ import Icon, { IconName } from '../ui/Icon';
 import UserMenu from './UserMenu';
 import { theme } from '../../constants/theme';
 import { useClinic } from '../../context/ClinicContext';
+import { useAuth } from '../../context/AuthContext';
+import { PERMISSIONS } from '../../constants/permissions';
 
 export interface NavItem {
   key: string;
   label: string;
   icon: IconName;
   badge?: string | number;
+  permission?: string;
+  roles?: string[];
 }
 
 export const WORKSTATION_NAV_ITEMS: NavItem[] = [
   { key: 'Dashboard', label: 'Dashboard', icon: 'dashboard' },
-  { key: 'Patients', label: 'Patients', icon: 'patients' },
-  { key: 'Consultations', label: 'Consultations', icon: 'consultations' },
-  { key: 'Appointments', label: 'Appointments', icon: 'appointments' },
-  { key: 'Billing', label: 'Billing', icon: 'billing' },
-  { key: 'Yakap', label: 'PhilHealth Yakap', icon: 'yakap' },
-  { key: 'Settings', label: 'Settings', icon: 'settings' },
+  { key: 'Patients', label: 'Patients', icon: 'patients', permission: PERMISSIONS.patientsRead, roles: ['Doctor', 'Nurse', 'Receptionist', 'Admin'] },
+  { key: 'Consultations', label: 'Consultations', icon: 'consultations', permission: PERMISSIONS.consultationsRead, roles: ['Doctor', 'Nurse', 'Admin'] },
+  { key: 'Appointments', label: 'Appointments', icon: 'appointments', permission: PERMISSIONS.appointmentsRead, roles: ['Doctor', 'Nurse', 'Receptionist', 'Admin'] },
+  { key: 'Billing', label: 'Billing', icon: 'billing', permission: PERMISSIONS.billingRead, roles: ['Cashier', 'Receptionist', 'Admin'] },
+  { key: 'Yakap', label: 'PhilHealth Yakap', icon: 'yakap', permission: PERMISSIONS.yakapRead, roles: ['Doctor', 'Admin'] },
+  { key: 'Settings', label: 'Settings', icon: 'settings', permission: PERMISSIONS.settingsRead, roles: ['Admin'] },
 ];
 
 export interface WorkstationSidebarProps {
@@ -38,6 +42,17 @@ export default function WorkstationSidebar({
   width = theme.sizes.sidebarWidth,
 }: WorkstationSidebarProps) {
   const { facilityName, planTier, accreditationNumber } = useClinic();
+  const { user, can } = useAuth();
+
+  const visibleNavItems = useMemo(() => {
+    return WORKSTATION_NAV_ITEMS.filter((item) => {
+      if (!user) return true;
+      if (user.role === 'Admin') return true;
+      if (item.permission && can(item.permission)) return true;
+      if (item.roles && item.roles.includes(user.role)) return true;
+      return !item.permission && !item.roles;
+    });
+  }, [user, can]);
 
   return (
     <View style={[styles.container, { width }]}>
@@ -58,7 +73,7 @@ export default function WorkstationSidebar({
 
       {/* Nav */}
       <ScrollView style={styles.navList} contentContainerStyle={styles.navContent}>
-        {WORKSTATION_NAV_ITEMS.map((item) => {
+        {visibleNavItems.map((item) => {
           const isActive = currentRoute === item.key;
           return (
             <Pressable

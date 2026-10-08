@@ -43,6 +43,9 @@ export interface StaffMember {
   specialty?: string;
   isActive: boolean;
   createdAt: string;
+  hasCredentials?: boolean;
+  mustChangePassword?: boolean;
+  temporaryPassword?: string | null;
 }
 
 export interface CreateStaffPayload {
@@ -51,12 +54,23 @@ export interface CreateStaffPayload {
   middleName?: string;
   title?: string;
   role: StaffRole;
+  clinicRoleId?: string;
   email?: string;
   phoneNumber?: string;
   prcLicenseNumber?: string;
   ptrNumber?: string;
   s2LicenseNumber?: string;
   specialty?: string;
+  initialPassword?: string;
+  sendInviteEmail?: boolean;
+}
+
+export interface ResetStaffPasswordResult {
+  staffId: string;
+  staffName: string;
+  email: string;
+  temporaryPassword: string;
+  message: string;
 }
 
 export interface FacilityLimits {
@@ -854,6 +868,7 @@ export interface CreateInvoiceRequest {
   discountIdNumber?: string;
   customDiscountPercentage?: number;
   notes?: string;
+  allowDuplicate?: boolean;
   lineItems: Array<{
     serviceItemId?: string;
     itemCode?: string;
@@ -1198,9 +1213,16 @@ export const clinicService = {
     return clinicApiClient.delete(`/staff/${id}`);
   },
 
+  /** Sets or auto-generates a temporary password; the staff member must change it at next sign-in. Requires `staff:manage`. */
+  async resetStaffPassword(id: string, temporaryPassword?: string) {
+    return clinicApiClient.post<ResetStaffPasswordResult>(`/staff/${id}/reset-password`, {
+      temporaryPassword: temporaryPassword || undefined,
+    });
+  },
+
   /** Sets a temporary password; the staff member must change it at next sign-in. Requires `staff:manage`. */
   async setStaffTemporaryPassword(id: string, temporaryPassword: string) {
-    return clinicApiClient.post(`/staff/${id}/credentials`, { temporaryPassword });
+    return this.resetStaffPassword(id, temporaryPassword);
   },
 
   /** Signs the staff member out of every device. Requires `staff:manage`. */
@@ -1218,6 +1240,22 @@ export const clinicService = {
 
   async getRoles() {
     return clinicApiClient.get<ClinicRole[]>('/roles');
+  },
+
+  async getPermissions() {
+    return clinicApiClient.get<string[]>('/roles/permissions');
+  },
+
+  async createRole(payload: { name: string; description?: string; permissions: string[] }) {
+    return clinicApiClient.post<ClinicRole>('/roles', payload);
+  },
+
+  async updateRole(id: string, payload: { name: string; description?: string; permissions: string[] }) {
+    return clinicApiClient.put<ClinicRole>(`/roles/${id}`, payload);
+  },
+
+  async deleteRole(id: string) {
+    return clinicApiClient.delete<boolean>(`/roles/${id}`);
   },
 
   // Patients Directory & Master Patient Index

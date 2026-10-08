@@ -21,4 +21,7 @@ public sealed record StaffMemberDto(
     string? S2LicenseNumber,
     string? Specialty,
     bool IsActive,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    bool HasCredentials = false,
+    bool MustChangePassword = false,
+    string? TemporaryPassword = null);
