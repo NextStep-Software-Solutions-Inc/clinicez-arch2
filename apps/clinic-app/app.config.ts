@@ -10,7 +10,7 @@ import type { ExpoConfig, ConfigContext } from 'expo/config';
  * server without a certificate; set `ALLOW_CLEARTEXT_LAN=false` for builds that must only talk HTTPS.
  */
 const APP_VARIANT = process.env.APP_VARIANT ?? 'production';
-const EAS_PROJECT_ID = process.env.EAS_PROJECT_ID;
+const EAS_PROJECT_ID = process.env.EAS_PROJECT_ID ?? "031bb39b-fac2-413c-8e6b-a777f9acabdf";
 const ALLOW_CLEARTEXT_LAN = (process.env.ALLOW_CLEARTEXT_LAN ?? 'true') !== 'false';
 
 const appNames: Record<string, string> = {
