@@ -2,11 +2,12 @@
 #
 # Use this when booting a NEW server. An existing server that already runs RabbitMQ does not need it.
 #
-#   1. docker network create data-network          (once; the API stacks join the same network)
+#   1. Make sure the Docker network the API stacks use exists (default name: data-network; set RABBITMQ_NETWORK if yours differs):
+#        docker network create data-network
 #   2. cp .env.example .env  and set RABBITMQ_PASSWORD
 #   3. docker compose -f deploy/rabbitmq/docker-compose.yml up -d
 #
-# The API containers reach it as host `rabbitmq` (the container name) on `data-network`, authenticating with
+# The API containers reach it as host `rabbitmq` (the container name) on the shared network (RABBITMQ_NETWORK), authenticating with
 # RABBITMQ_USERNAME / RABBITMQ_PASSWORD - the same two values their own stacks receive (RabbitMq__Username/Password).
 # No host port is published for AMQP. The management UI is bound to this server's loopback only; reach it with an
 # SSH tunnel (ssh -L 15672:127.0.0.1:15672 <server>) or put it behind your reverse proxy.
@@ -35,10 +36,12 @@ services:
       retries: 5
       start_period: 30s
     networks:
-      - data-network
+      - broker
 
 networks:
-  data-network:
+  broker:
+    # An existing network shared with the API stacks; its real name comes from RABBITMQ_NETWORK.
+    name: ${RABBITMQ_NETWORK:-data-network}
     external: true
 
 volumes:
