@@ -50,21 +50,23 @@ export default function EmergencyContactsScreen() {
 
   const load = async () => {
     try {
-      let rows = await db.select().from(emergencyContacts).where(eq(emergencyContacts.patientId, patientId));
-      let active = rows.filter((r) => !r.deletedAt).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
-      if (active.length === 0 && getToken && patientId) {
+      // 1. Immediately render cached SQLite rows for instant offline-first display
+      const initialRows = await db.select().from(emergencyContacts).where(eq(emergencyContacts.patientId, patientId));
+      setContacts(initialRows.filter((r) => !r.deletedAt).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)));
+
+      // 2. If online and authenticated, fetch and hydrate latest server data in background
+      if (getToken && patientId) {
         try {
           const fullRecord = await getPatientFullRecord(getToken, patientId);
           if (fullRecord) {
             await hydrateFullRecord(fullRecord);
-            rows = await db.select().from(emergencyContacts).where(eq(emergencyContacts.patientId, patientId));
-            active = rows.filter((r) => !r.deletedAt).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+            const freshRows = await db.select().from(emergencyContacts).where(eq(emergencyContacts.patientId, patientId));
+            setContacts(freshRows.filter((r) => !r.deletedAt).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)));
           }
         } catch (fetchErr) {
           console.warn('[EmergencyContactsScreen] Could not hydrate from server:', fetchErr);
         }
       }
-      setContacts(active);
     } catch (err) {
       console.warn('[EmergencyContactsScreen] Failed to load contacts:', err);
     }

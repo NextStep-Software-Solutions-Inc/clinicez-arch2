@@ -319,8 +319,8 @@ async function handleInterceptWrite(
     }
 
     const isServerItem = Boolean(
-      existingItem?.syncedAt ||
-      (rawEntityId && isValidGuid(rawEntityId) && !rawEntityId.startsWith('demo:'))
+      existingItem?.serverId ||
+      existingItem?.syncedAt
     );
 
     let effectiveOperation: 'create' | 'update' | 'delete' = values?.deletedAt ? 'delete' : operation;
@@ -333,9 +333,11 @@ async function handleInterceptWrite(
 
     const clientUuid = (existingItem?.clientId && isValidGuid(existingItem.clientId))
       ? existingItem.clientId
-      : (rawEntityId && isValidGuid(rawEntityId) && !rawEntityId.startsWith('demo:'))
-        ? rawEntityId
-        : randomUUID();
+      : (existingItem?.id && !isServerItem && isValidGuid(existingItem.id) && !existingItem.id.startsWith('demo:'))
+        ? existingItem.id
+        : (rawEntityId && !isServerItem && isValidGuid(rawEntityId) && !rawEntityId.startsWith('demo:'))
+          ? rawEntityId
+          : randomUUID();
 
     const syncPayload: Record<string, any> = {
       ...values,
@@ -344,16 +346,17 @@ async function handleInterceptWrite(
       updatedAt: new Date(safeUpdatedTime).toISOString(),
     };
     delete syncPayload.syncedAt;
+    delete syncPayload.serverId;
 
     let entityIdForSync: string | undefined = undefined;
-    if (isServerItem && rawEntityId && isValidGuid(rawEntityId) && !rawEntityId.startsWith('demo:')) {
-      entityIdForSync = rawEntityId;
+    if (effectiveOperation !== 'create' && isServerItem) {
+      entityIdForSync = existingItem?.serverId || (isValidGuid(rawEntityId) && !rawEntityId.startsWith('demo:') ? rawEntityId : undefined);
     }
 
     const syncItem = {
       id: randomUUID(),
       entityType: entityType as any,
-      entityId: entityIdForSync,
+      entityId: entityIdForSync || clientUuid,
       operation: effectiveOperation,
       payloadJson: effectiveOperation === 'delete' ? null : JSON.stringify(syncPayload),
       status: 'pending' as const,

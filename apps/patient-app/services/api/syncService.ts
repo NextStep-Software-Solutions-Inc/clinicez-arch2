@@ -158,7 +158,7 @@ export async function syncPendingProfileWrites(
       operation: item.operation,
       clientTimestamp: item.createdAt.toISOString(),
       payloadJson: item.operation === 'delete' ? null : item.payloadJson,
-      entityId: item.entityId ?? undefined,
+      entityId: item.operation === 'create' ? undefined : (item.entityId ?? undefined),
     }));
 
     try {

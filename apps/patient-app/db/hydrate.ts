@@ -11,6 +11,7 @@
  */
 
 import { originalDb, flushDatabaseSnapshot, ensureDatabaseReady } from './index';
+import { eq } from 'drizzle-orm';
 import {
   patients,
   patientGovernmentIds,
@@ -105,17 +106,89 @@ export async function upsertPatientSummary(
 }
 
 /**
+ * Generic reconciler for list entities (addresses, emergency contacts, allergies, etc.).
+ *
+ * Prevents duplicates when client-created items receive a new server GUID on the backend:
+ * 1. Checks if a local pending edit/addition exists in syncQueue (if so, leaves it intact).
+ * 2. If the server item has a clientId that differs from id, deletes the local draft row with id=clientId.
+ * 3. Inserts or updates the canonical server row (with serverId=item.id).
+ * 4. Removes any stale local rows for this patient that are not on the server and not pending in syncQueue.
+ */
+async function reconcileListEntity<TItem extends { id: string; clientId?: string | null }>(
+  table: any,
+  patientId: string,
+  serverItems: TItem[] | undefined | null,
+  pendingEntityIds: Set<string>,
+  mapRow: (item: TItem, index: number) => any,
+): Promise<void> {
+  const items = serverItems || [];
+  const serverIds = new Set<string>();
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    serverIds.add(item.id);
+
+    // If local offline write is pending for this item (by id or clientId), keep local version
+    if (pendingEntityIds.has(item.id) || (item.clientId && pendingEntityIds.has(item.clientId))) {
+      continue;
+    }
+
+    // If there is an existing local row that had the client-generated ID, remove it so it's not orphaned
+    if (item.clientId && item.clientId !== item.id) {
+      await originalDb.delete(table).where(eq(table.id, item.clientId));
+    }
+
+    const row = {
+      ...mapRow(item, i),
+      serverId: item.id,
+    };
+    await originalDb
+      .insert(table)
+      .values(row)
+      .onConflictDoUpdate({ target: table.id, set: row });
+  }
+
+  // Remove stale local rows that are no longer on the server and are not pending in the sync queue
+  const localRows = await originalDb
+    .select({ id: table.id, serverId: table.serverId })
+    .from(table)
+    .where(eq(table.patientId, patientId));
+
+  for (const local of localRows) {
+    const isServerKnown = serverIds.has(local.id) || (local.serverId && serverIds.has(local.serverId));
+    const isPending = pendingEntityIds.has(local.id) || (local.serverId && pendingEntityIds.has(local.serverId));
+    if (!isServerKnown && !isPending) {
+      await originalDb.delete(table).where(eq(table.id, local.id));
+    }
+  }
+}
+
+/**
  * Hydrates all 22 ISyncable entity categories from a full-record API response
- * into local SQLite.  Existing rows are upserted; items not present in the
- * server response are left untouched (they may be locally queued additions).
+ * into local SQLite. Existing rows are reconciled; pending offline writes
+ * in the sync queue are preserved.
  */
 export async function hydrateFullRecord(record: PatientFullRecord): Promise<void> {
   await ensureDatabaseReady();
   const ts = now();
   const patientId = record.demographics.id;
 
-  const pendingQueue = await originalDb.select({ entityId: syncQueue.entityId }).from(syncQueue);
-  const pendingEntityIds = new Set(pendingQueue.map((q) => q.entityId));
+  const pendingQueue = await originalDb
+    .select({ entityId: syncQueue.entityId, payloadJson: syncQueue.payloadJson })
+    .from(syncQueue);
+  const pendingEntityIds = new Set<string>();
+  for (const q of pendingQueue) {
+    if (q.entityId) pendingEntityIds.add(q.entityId);
+    if (q.payloadJson) {
+      try {
+        const payload = JSON.parse(q.payloadJson);
+        if (payload.id) pendingEntityIds.add(payload.id);
+        if (payload.clientId) pendingEntityIds.add(payload.clientId);
+      } catch {
+        // ignore parse error
+      }
+    }
+  }
 
   // 1. demographics
   if (!pendingEntityIds.has(patientId)) {
@@ -189,9 +262,12 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   }
 
   // 3. addresses
-  for (const addr of record.addresses) {
-    if (pendingEntityIds.has(addr.id)) continue;
-    const row = {
+  await reconcileListEntity(
+    patientAddresses,
+    patientId,
+    record.addresses,
+    pendingEntityIds,
+    (addr) => ({
       id: addr.id,
       patientId,
       type: (['primary', 'secondary'].includes(addr.type) ? addr.type : 'primary') as 'primary' | 'secondary',
@@ -206,18 +282,16 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
       updatedAt: toDate(addr.updatedAt) ?? ts,
       syncedAt: ts,
       deletedAt: null,
-    };
-    await originalDb
-      .insert(patientAddresses)
-      .values(row)
-      .onConflictDoUpdate({ target: patientAddresses.id, set: row });
-  }
+    }),
+  );
 
   // 4. emergency contacts
-  for (let i = 0; i < record.emergencyContacts.length; i++) {
-    const ec = record.emergencyContacts[i];
-    if (pendingEntityIds.has(ec.id)) continue;
-    const row = {
+  await reconcileListEntity(
+    emergencyContacts,
+    patientId,
+    record.emergencyContacts,
+    pendingEntityIds,
+    (ec, i) => ({
       id: ec.id,
       patientId,
       sortOrder: ec.isPrimary ? 1 : i + 2,
@@ -231,46 +305,44 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
       updatedAt: toDate(ec.updatedAt) ?? ts,
       syncedAt: ts,
       deletedAt: null,
-    };
-    await originalDb
-      .insert(emergencyContacts)
-      .values(row)
-      .onConflictDoUpdate({ target: emergencyContacts.id, set: row });
-  }
+    }),
+  );
 
   // 5. healthcare providers
-  //    Local schema has providerType enum: 'primary_care' | 'specialist_1' | 'specialist_2'
   const providerTypeMap: Record<string, string> = {
     PrimaryCare: 'primary_care',
     Specialist: 'specialist_1',
   };
-  for (let i = 0; i < record.healthcareProviders.length; i++) {
-    const hp = record.healthcareProviders[i];
-    if (pendingEntityIds.has(hp.id)) continue;
-    const typeKey = i === 0 ? 'primary_care' : i === 1 ? 'specialist_1' : 'specialist_2';
-    const row = {
-      id: hp.id,
-      patientId,
-      providerType: (providerTypeMap[hp.providerType] ?? typeKey) as 'primary_care' | 'specialist_1' | 'specialist_2',
-      name: hp.name ?? null,
-      specialty: hp.specialty ?? null,
-      clinicHospital: hp.clinicHospital ?? null,
-      phone: hp.phone ?? null,
-      createdAt: ts,
-      updatedAt: toDate(hp.updatedAt) ?? ts,
-      syncedAt: ts,
-      deletedAt: null,
-    };
-    await originalDb
-      .insert(patientHealthcareProviders)
-      .values(row)
-      .onConflictDoUpdate({ target: patientHealthcareProviders.id, set: row });
-  }
+  await reconcileListEntity(
+    patientHealthcareProviders,
+    patientId,
+    record.healthcareProviders,
+    pendingEntityIds,
+    (hp, i) => {
+      const typeKey = i === 0 ? 'primary_care' : i === 1 ? 'specialist_1' : 'specialist_2';
+      return {
+        id: hp.id,
+        patientId,
+        providerType: (providerTypeMap[hp.providerType] ?? typeKey) as 'primary_care' | 'specialist_1' | 'specialist_2',
+        name: hp.name ?? null,
+        specialty: hp.specialty ?? null,
+        clinicHospital: hp.clinicHospital ?? null,
+        phone: hp.phone ?? null,
+        createdAt: ts,
+        updatedAt: toDate(hp.updatedAt) ?? ts,
+        syncedAt: ts,
+        deletedAt: null,
+      };
+    },
+  );
 
   // 6. allergies
-  for (const al of record.allergies) {
-    if (pendingEntityIds.has(al.id)) continue;
-    const row = {
+  await reconcileListEntity(
+    patientAllergies,
+    patientId,
+    record.allergies,
+    pendingEntityIds,
+    (al) => ({
       id: al.id,
       patientId,
       allergen: al.allergenName,
@@ -282,17 +354,16 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
       updatedAt: toDate(al.updatedAt) ?? ts,
       syncedAt: ts,
       deletedAt: null,
-    };
-    await originalDb
-      .insert(patientAllergies)
-      .values(row)
-      .onConflictDoUpdate({ target: patientAllergies.id, set: row });
-  }
+    }),
+  );
 
   // 7. medications  (local: drugName, dosage, dosageForm, frequency, prescribingPhysician, startDate, indication, isActive)
-  for (const med of record.medications) {
-    if (pendingEntityIds.has(med.id)) continue;
-    const row = {
+  await reconcileListEntity(
+    patientMedications,
+    patientId,
+    record.medications,
+    pendingEntityIds,
+    (med) => ({
       id: med.id,
       patientId,
       drugName: med.medicationName,
@@ -307,17 +378,16 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
       updatedAt: toDate(med.updatedAt) ?? ts,
       syncedAt: ts,
       deletedAt: null,
-    };
-    await originalDb
-      .insert(patientMedications)
-      .values(row)
-      .onConflictDoUpdate({ target: patientMedications.id, set: row });
-  }
+    }),
+  );
 
   // 8. surgical history  (local: procedure, surgeon, facility, date, anesthesiaType, complications)
-  for (const sh of record.surgicalHistories) {
-    if (pendingEntityIds.has(sh.id)) continue;
-    const row = {
+  await reconcileListEntity(
+    patientSurgicalHistory,
+    patientId,
+    record.surgicalHistories,
+    pendingEntityIds,
+    (sh) => ({
       id: sh.id,
       patientId,
       procedure: sh.procedureName,
@@ -330,17 +400,16 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
       updatedAt: toDate(sh.updatedAt) ?? ts,
       syncedAt: ts,
       deletedAt: null,
-    };
-    await originalDb
-      .insert(patientSurgicalHistory)
-      .values(row)
-      .onConflictDoUpdate({ target: patientSurgicalHistory.id, set: row });
-  }
+    }),
+  );
 
   // 9. past illnesses  (local: diagnosis, duration, complications)
-  for (const pi of record.pastIllnesses) {
-    if (pendingEntityIds.has(pi.id)) continue;
-    const row = {
+  await reconcileListEntity(
+    patientPastIllnesses,
+    patientId,
+    record.pastIllnesses,
+    pendingEntityIds,
+    (pi) => ({
       id: pi.id,
       patientId,
       diagnosis: pi.illnessName,
@@ -350,17 +419,16 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
       updatedAt: toDate(pi.updatedAt) ?? ts,
       syncedAt: ts,
       deletedAt: null,
-    };
-    await originalDb
-      .insert(patientPastIllnesses)
-      .values(row)
-      .onConflictDoUpdate({ target: patientPastIllnesses.id, set: row });
-  }
+    }),
+  );
 
   // 10. chronic conditions  (local: diagnosis, controlStatus, monitoringFrequency)
-  for (const cc of record.chronicConditions) {
-    if (pendingEntityIds.has(cc.id)) continue;
-    const row = {
+  await reconcileListEntity(
+    patientChronicConditions,
+    patientId,
+    record.chronicConditions,
+    pendingEntityIds,
+    (cc) => ({
       id: cc.id,
       patientId,
       diagnosis: cc.conditionName,
@@ -370,17 +438,16 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
       updatedAt: toDate(cc.updatedAt) ?? ts,
       syncedAt: ts,
       deletedAt: null,
-    };
-    await originalDb
-      .insert(patientChronicConditions)
-      .values(row)
-      .onConflictDoUpdate({ target: patientChronicConditions.id, set: row });
-  }
+    }),
+  );
 
   // 11. disabilities  (local: bodyPart, classification, isPwdCertified)
-  for (const dis of record.disabilities) {
-    if (pendingEntityIds.has(dis.id)) continue;
-    const row = {
+  await reconcileListEntity(
+    patientDisabilities,
+    patientId,
+    record.disabilities,
+    pendingEntityIds,
+    (dis) => ({
       id: dis.id,
       patientId,
       bodyPart: dis.bodyPart ?? null,
@@ -390,17 +457,16 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
       updatedAt: toDate(dis.updatedAt) ?? ts,
       syncedAt: ts,
       deletedAt: null,
-    };
-    await originalDb
-      .insert(patientDisabilities)
-      .values(row)
-      .onConflictDoUpdate({ target: patientDisabilities.id, set: row });
-  }
+    }),
+  );
 
   // 12. immunizations self  (local: immunizationCategory, vaccineName, doseNumber, lotNumber, date, administeredBy)
-  for (const imm of record.immunizationsSelf) {
-    if (pendingEntityIds.has(imm.id)) continue;
-    const row = {
+  await reconcileListEntity(
+    patientImmunizationsSelf,
+    patientId,
+    record.immunizationsSelf,
+    pendingEntityIds,
+    (imm) => ({
       id: imm.id,
       patientId,
       immunizationCategory: (imm.immunizationCategory as any) ?? null,
@@ -413,12 +479,8 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
       updatedAt: toDate(imm.updatedAt) ?? ts,
       syncedAt: ts,
       deletedAt: null,
-    };
-    await originalDb
-      .insert(patientImmunizationsSelf)
-      .values(row)
-      .onConflictDoUpdate({ target: patientImmunizationsSelf.id, set: row });
-  }
+    }),
+  );
 
   // 13. social history (singleton)
   //     Local schema differs significantly — map best-effort
@@ -462,6 +524,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
       createdAt: ts,
       updatedAt: toDate(sh.updatedAt) ?? ts,
       syncedAt: ts,
+      serverId: sh.id,
     };
     await originalDb
       .insert(patientSocialHistory)
@@ -470,9 +533,12 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   }
 
   // 14. family history  (local: condition, affectedRelative, side, ageOfOnset, isDeceased, ageAtDeath, causeOfDeath, notes)
-  for (const fh of record.familyHistories) {
-    if (pendingEntityIds.has(fh.id)) continue;
-    const row = {
+  await reconcileListEntity(
+    patientFamilyHistory,
+    patientId,
+    record.familyHistories,
+    pendingEntityIds,
+    (fh) => ({
       id: fh.id,
       patientId,
       condition: fh.conditionName,
@@ -487,12 +553,8 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
       updatedAt: toDate(fh.updatedAt) ?? ts,
       syncedAt: ts,
       deletedAt: null,
-    };
-    await originalDb
-      .insert(patientFamilyHistory)
-      .values(row)
-      .onConflictDoUpdate({ target: patientFamilyHistory.id, set: row });
-  }
+    }),
+  );
 
   // 15. occupation (singleton)  (local: occupation, employer, industry, workEnvironment, yearsInOccupation, hazardExposure)
   if (record.occupation && !pendingEntityIds.has(patientId)) {
@@ -509,6 +571,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
       createdAt: ts,
       updatedAt: toDate(occ.updatedAt) ?? ts,
       syncedAt: ts,
+      serverId: occ.id,
     };
     await originalDb
       .insert(patientOccupation)
@@ -517,9 +580,12 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   }
 
   // 16. travel history  (local: destination, cityProvince, departureDate, returnDate, purpose, illnessDuringAfterTravel)
-  for (const th of record.travelHistories) {
-    if (pendingEntityIds.has(th.id)) continue;
-    const row = {
+  await reconcileListEntity(
+    patientTravelHistory,
+    patientId,
+    record.travelHistories,
+    pendingEntityIds,
+    (th) => ({
       id: th.id,
       patientId,
       destination: th.destination,
@@ -532,12 +598,8 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
       updatedAt: toDate(th.updatedAt) ?? ts,
       syncedAt: ts,
       deletedAt: null,
-    };
-    await originalDb
-      .insert(patientTravelHistory)
-      .values(row)
-      .onConflictDoUpdate({ target: patientTravelHistory.id, set: row });
-  }
+    }),
+  );
 
   // 17. obstetric profile (singleton)
   //     Local schema uses: gravida, para, abortion, livingChildren, lmp, cycleLength, etc.
@@ -587,6 +649,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
       createdAt: ts,
       updatedAt: toDate(op.updatedAt) ?? ts,
       syncedAt: ts,
+      serverId: op.id,
     };
     await originalDb
       .insert(patientObstetricProfile)
@@ -595,9 +658,12 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
   }
 
   // 18. pregnancies  (local: year, outcome, gestationalAgeWeeks, deliveryType, birthWeightKg, complications, facility)
-  for (const preg of record.pregnancies) {
-    if (pendingEntityIds.has(preg.id)) continue;
-    const row = {
+  await reconcileListEntity(
+    patientPregnancies,
+    patientId,
+    record.pregnancies,
+    pendingEntityIds,
+    (preg) => ({
       id: preg.id,
       patientId,
       year: preg.year ?? null,
@@ -611,17 +677,16 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
       updatedAt: toDate(preg.updatedAt) ?? ts,
       syncedAt: ts,
       deletedAt: null,
-    };
-    await originalDb
-      .insert(patientPregnancies)
-      .values(row)
-      .onConflictDoUpdate({ target: patientPregnancies.id, set: row });
-  }
+    }),
+  );
 
   // 19. contraceptive history  (local: method, isCurrent, dateStarted, reasonForStopping)
-  for (const ch of record.contraceptiveHistories) {
-    if (pendingEntityIds.has(ch.id)) continue;
-    const row = {
+  await reconcileListEntity(
+    patientContraceptiveHistory,
+    patientId,
+    record.contraceptiveHistories,
+    pendingEntityIds,
+    (ch) => ({
       id: ch.id,
       patientId,
       method: ch.method,
@@ -632,12 +697,8 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
       updatedAt: toDate(ch.updatedAt) ?? ts,
       syncedAt: ts,
       deletedAt: null,
-    };
-    await originalDb
-      .insert(patientContraceptiveHistory)
-      .values(row)
-      .onConflictDoUpdate({ target: patientContraceptiveHistory.id, set: row });
-  }
+    }),
+  );
 
   // 20. male reproductive (singleton)  (local: hasVasectomy, vasectomyDate, conditions)
   if (record.maleReproductive && !pendingEntityIds.has(patientId)) {
@@ -651,6 +712,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
       createdAt: ts,
       updatedAt: toDate(mr.updatedAt) ?? ts,
       syncedAt: ts,
+      serverId: mr.id,
     };
     await originalDb
       .insert(patientMaleReproductive)
@@ -672,6 +734,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
       createdAt: ts,
       updatedAt: toDate(dv.updatedAt) ?? ts,
       syncedAt: ts,
+      serverId: dv.id,
     };
     await originalDb
       .insert(patientDentalVision)
@@ -704,6 +767,7 @@ export async function hydrateFullRecord(record: PatientFullRecord): Promise<void
       createdAt: ts,
       updatedAt: toDate(mh.updatedAt) ?? ts,
       syncedAt: ts,
+      serverId: mh.id,
     };
     await originalDb
       .insert(patientMentalHealthProfile)

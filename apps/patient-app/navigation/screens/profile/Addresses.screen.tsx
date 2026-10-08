@@ -61,23 +61,25 @@ export default function AddressesScreen() {
 
   const load = async () => {
     try {
-      let rows = await db.select().from(patientAddresses)
+      // 1. Immediately render cached SQLite rows for instant offline-first display
+      const initialRows = await db.select().from(patientAddresses)
         .where(eq(patientAddresses.patientId, patientId));
-      let active = rows.filter((r) => !r.deletedAt);
-      if (active.length === 0 && getToken && patientId) {
+      setAddresses(initialRows.filter((r) => !r.deletedAt));
+
+      // 2. If online and authenticated, fetch and hydrate latest server data in background
+      if (getToken && patientId) {
         try {
           const fullRecord = await getPatientFullRecord(getToken, patientId);
           if (fullRecord) {
             await hydrateFullRecord(fullRecord);
-            rows = await db.select().from(patientAddresses)
+            const freshRows = await db.select().from(patientAddresses)
               .where(eq(patientAddresses.patientId, patientId));
-            active = rows.filter((r) => !r.deletedAt);
+            setAddresses(freshRows.filter((r) => !r.deletedAt));
           }
         } catch (fetchErr) {
           console.warn('[AddressesScreen] Could not hydrate from server:', fetchErr);
         }
       }
-      setAddresses(active);
     } catch (err) {
       console.warn('[AddressesScreen] Failed to load addresses:', err);
     }
