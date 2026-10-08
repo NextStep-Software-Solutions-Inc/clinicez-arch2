@@ -30,6 +30,7 @@ import {
   Circle,
   ClipboardList,
   Clock,
+  Copy,
   CreditCard,
   Download,
   Droplet,
@@ -99,6 +100,7 @@ export const ICONS = {
   patients: Users,
   patient: User,
   patientVerified: UserCheck,
+  staff: Users,
   appointments: CalendarDays,
   calendar: Calendar,
   consultations: Stethoscope,
@@ -118,6 +120,7 @@ export const ICONS = {
   checkCircle: CheckCircle2,
   edit: Pencil,
   save: Save,
+  copy: Copy,
   trash: Trash2,
   print: Printer,
   download: Download,
@@ -233,7 +236,7 @@ export default function Icon({
   color = theme.colors.text,
   strokeWidth = 2,
 }: IconProps) {
-  const Glyph = ICONS[name];
+  const Glyph = ICONS[name] ?? Circle;
   return <Glyph size={size} color={color} strokeWidth={strokeWidth} />;
 }
 

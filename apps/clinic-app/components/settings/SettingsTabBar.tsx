@@ -2,7 +2,7 @@ import React from 'react';
 import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Badge from '../ui/Badge';
-import Icon, { IconName } from '../ui/Icon';
+import Icon, { IconName, resolveIconName } from '../ui/Icon';
 import { theme } from '../../constants/theme';
 import { SettingsTabItem, SettingsTabKey } from './types';
 
@@ -36,7 +36,7 @@ export default function SettingsTabBar({ tabs, activeTab, onSelectTab }: Setting
               ]}
             >
               <Icon
-                name={tab.icon as IconName}
+                name={(resolveIconName(tab.icon) ?? 'settings') as IconName}
                 size={theme.sizes.iconSm}
                 color={isActive ? theme.colors.primary : theme.colors.textMuted}
               />
