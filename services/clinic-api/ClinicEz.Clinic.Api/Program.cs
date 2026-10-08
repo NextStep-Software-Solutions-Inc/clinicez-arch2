@@ -63,7 +63,7 @@ app.UseAuthorization();
 app.UseInternalServiceGuard(); // internal-key principal is default-denied except on permission-guarded endpoints
 app.UseMiddleware<ClinicScopeMiddleware>();
 app.UseMiddleware<ClinicEz.Clinic.Infrastructure.Idempotency.IdempotencyMiddleware>();
-app.UseHangfireDashboard(); // Add Hangfire Dashboard endpoint
+app.UseHangfireDashboard("/hangfire", new DashboardOptions { Authorization = [new HangfireDashboardAuthFilter(app.Configuration)] }); // Basic Auth; denied when no password is configured
 
 // 5. Tell the app to use controllers
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" })).AllowAnonymous();

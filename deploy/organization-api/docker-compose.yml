@@ -24,6 +24,8 @@ services:
       - RabbitMq__Host=${RABBITMQ_HOST:-rabbitmq}
       - RabbitMq__Username=${RABBITMQ_USERNAME:-rabbit_admin_node}
       - RabbitMq__Password=${RABBITMQ_PASSWORD}
+      # Hangfire dashboard Basic Auth password. Empty denies the dashboard to everyone (there is no default).
+      - Hangfire__DashboardPassword=${HANGFIRE_DASHBOARD_PASSWORD:-}
       - Facility__BaseDomain=${BASE_DOMAIN:?BASE_DOMAIN must be set}
     restart: unless-stopped
 

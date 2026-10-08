@@ -34,7 +34,7 @@ services:
       - R2__AccessKeyId=${R2_ACCESS_KEY_ID}
       - R2__SecretAccessKey=${R2_SECRET_ACCESS_KEY}
       - R2__PublicUrl=${R2_PUBLIC_URL}
-      - Hangfire__DashboardPassword=${HANGFIRE_DASHBOARD_PASSWORD:-changeme}
+      - Hangfire__DashboardPassword=${HANGFIRE_DASHBOARD_PASSWORD:-}
       - Firebase__ServiceAccountJson=${FIREBASE_SERVICE_ACCOUNT_JSON}
       - RabbitMq__Host=${RABBITMQ_HOST:-rabbitmq}
       - RabbitMq__Username=${RABBITMQ_USERNAME:-rabbit_admin_node}

@@ -1,4 +1,4 @@
-using System.Text;
+using ClinicEz.Shared.Security;
 using Hangfire.AspNetCore;
 using Hangfire.Dashboard;
 
@@ -8,48 +8,26 @@ namespace ClinicEz.Patient.Api.Infrastructure;
 /// HTTP Basic Auth guard for the Hangfire dashboard.
 /// Credentials are read from Hangfire:DashboardUsername / Hangfire:DashboardPassword
 /// in configuration (user-secrets in dev, environment variables in production).
-/// Never hard-coded.
+/// Never hard-coded. With no password configured the dashboard is denied to everyone.
 /// </summary>
 public sealed class HangfireDashboardBasicAuthFilter : IDashboardAuthorizationFilter
 {
     private readonly string _username;
-    private readonly string _password;
+    private readonly string? _password;
 
     public HangfireDashboardBasicAuthFilter(IConfiguration configuration)
     {
-        _username = configuration["Hangfire:DashboardUsername"]
-            ?? throw new InvalidOperationException("Hangfire:DashboardUsername is not configured.");
-        _password = configuration["Hangfire:DashboardPassword"]
-            ?? throw new InvalidOperationException("Hangfire:DashboardPassword is not configured.");
+        var username = configuration["Hangfire:DashboardUsername"];
+        _username = string.IsNullOrWhiteSpace(username) ? "admin" : username;
+        _password = configuration["Hangfire:DashboardPassword"];
     }
 
     public bool Authorize(DashboardContext context)
     {
         var httpContext = context.GetHttpContext();
-        var authHeader = httpContext.Request.Headers["Authorization"].ToString();
-
-        if (!authHeader.StartsWith("Basic ", StringComparison.OrdinalIgnoreCase))
+        if (BasicAuth.Matches(httpContext.Request.Headers["Authorization"].ToString(), _username, _password))
         {
-            Challenge(httpContext);
-            return false;
-        }
-
-        try
-        {
-            var encoded = authHeader["Basic ".Length..].Trim();
-            var decoded = Encoding.UTF8.GetString(Convert.FromBase64String(encoded));
-            var colonIndex = decoded.IndexOf(':');
-
-            if (colonIndex > 0
-                && decoded[..colonIndex] == _username
-                && decoded[(colonIndex + 1)..] == _password)
-            {
-                return true;
-            }
-        }
-        catch
-        {
-            // Malformed base64 — fall through to challenge
+            return true;
         }
 
         Challenge(httpContext);

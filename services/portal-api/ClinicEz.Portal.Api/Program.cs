@@ -188,7 +188,7 @@ app.UseForwardedHeaders();
 app.UseCors(isDevelopment ? "development" : "production");
 app.UseHttpsRedirection();
 app.UseExceptionHandler(); // Use our global exception handler
-app.UseHangfireDashboard(); // Add Hangfire Dashboard endpoint
+app.UseHangfireDashboard("/hangfire", new DashboardOptions { Authorization = [new HangfireDashboardAuthFilter(app.Configuration)] }); // Basic Auth; denied when no password is configured
 
 // Recurring background reconciliation job for pending/stuck facilities
 RecurringJob.AddOrUpdate<ClinicEz.Portal.Infrastructure.Services.IFacilityProvisioningReconciliationJob>(

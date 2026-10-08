@@ -31,7 +31,7 @@ if (app.Environment.IsDevelopment())
 app.UseCors();
 app.UseHttpsRedirection();
 app.UseExceptionHandler(); // Use our global exception handler
-app.UseHangfireDashboard(); // Add Hangfire Dashboard endpoint
+app.UseHangfireDashboard("/hangfire", new DashboardOptions { Authorization = [new HangfireDashboardAuthFilter(app.Configuration)] }); // Basic Auth; denied when no password is configured
 
 // 5. Tell the app to use controllers
 app.MapControllers();
