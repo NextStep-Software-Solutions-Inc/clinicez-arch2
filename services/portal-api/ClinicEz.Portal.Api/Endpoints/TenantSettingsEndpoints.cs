@@ -21,6 +21,9 @@ public record UpdateWorkspaceGeneralRequest(
     string DateFormat,
     string CurrencyCode);
 
+/// <summary>Body of PUT /tenants/{slug}/settings/branding. The whole section is replaced.</summary>
+public record UpdateWorkspaceBrandingRequest(string? BrandName, string? LogoUrl, string? AccentColorHex);
+
 /// <summary>Workspace (tenant-wide) settings. Facility-specific configuration is owned by each facility service.</summary>
 public class TenantSettingsEndpoints : IEndpoint
 {
@@ -73,6 +76,29 @@ public class TenantSettingsEndpoints : IEndpoint
         })
         .WithName("UpdateWorkspaceGeneralSettings")
         .WithDescription("Replaces the general section: workspace name, representative, contact email/phone and locale defaults.");
+
+        group.MapPut("/branding", async (
+            string tenantSlug,
+            UpdateWorkspaceBrandingRequest body,
+            HttpContext httpContext,
+            IWorkspaceAccessService access,
+            ISender sender,
+            CancellationToken ct) =>
+        {
+            var denied = await Authorize(access, httpContext, tenantSlug, WorkspaceRole.Admin, ct);
+            if (denied.Result != null) return denied.Result;
+
+            var result = await sender.Send(new UpdateWorkspaceBrandingCommand(
+                denied.Access!.Tenant.TenantSlug,
+                Actor(httpContext, denied.Access),
+                body.BrandName,
+                body.LogoUrl,
+                body.AccentColorHex), ct);
+
+            return Results.Ok(result);
+        })
+        .WithName("UpdateWorkspaceBrandingSettings")
+        .WithDescription("Replaces the brand identity (display name, https logo URL, accent color) that facilities inherit.");
     }
 
     internal readonly record struct AuthResult(IResult? Result, WorkspaceAccess? Access);

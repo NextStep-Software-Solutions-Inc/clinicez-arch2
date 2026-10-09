@@ -31,11 +31,32 @@ export interface WorkspaceGeneral {
   currencyCode: string;
 }
 
+/** Brand identity override (mirrors `WorkspaceBrandingDto`). Null = not customised, inherit defaults. */
+export interface WorkspaceBranding {
+  brandName?: string | null;
+  logoUrl?: string | null;
+  accentColorHex?: string | null;
+}
+
 /** Mirrors `WorkspaceSettingsDto`; later sections are added as new properties. */
 export interface WorkspaceSettingsDto {
   tenantSlug: string;
   tenantType: string;
   general: WorkspaceGeneral;
+  branding: WorkspaceBranding;
+}
+
+/** Anonymous facility-facing projection of the workspace identity (mirrors `WorkspaceProfileDto`). */
+export interface WorkspaceProfile {
+  tenantSlug: string;
+  version: number;
+  displayName: string;
+  logoUrl?: string | null;
+  accentColorHex?: string | null;
+  timeZoneId: string;
+  locale: string;
+  dateFormat: string;
+  currencyCode: string;
 }
 
 export interface TenantDto {
@@ -126,5 +147,31 @@ export const tenantService = {
       payload,
     );
     return response.data;
+  },
+
+  /**
+   * Replaces the Branding section (display name, https logo URL, accent color).
+   */
+  updateBranding: async (tenantSlug: string, payload: WorkspaceBranding): Promise<WorkspaceBranding> => {
+    const response = await apiClient.put<WorkspaceBranding>(
+      `/tenants/${encodeURIComponent(tenantSlug)}/settings/branding`,
+      payload,
+    );
+    return response.data;
+  },
+
+  /**
+   * Public workspace identity (brand + regional defaults). Needs no token; returns null when the call
+   * fails, so branding can never block the dashboard from rendering.
+   */
+  getWorkspaceProfile: async (tenantSlug: string): Promise<WorkspaceProfile | null> => {
+    try {
+      const response = await apiClient.get<WorkspaceProfile>(
+        `/tenants/${encodeURIComponent(tenantSlug)}/workspace-profile`,
+      );
+      return response.data;
+    } catch {
+      return null;
+    }
   },
 };

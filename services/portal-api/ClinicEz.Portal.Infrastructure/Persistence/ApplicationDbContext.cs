@@ -180,6 +180,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
             entity.Property(e => e.TimeZoneId).HasMaxLength(64);
             entity.Property(e => e.Locale).HasMaxLength(16);
+            entity.Property(e => e.BrandName).HasMaxLength(120);
+            entity.Property(e => e.LogoUrl).HasMaxLength(2048);
+            entity.Property(e => e.AccentColorHex).HasMaxLength(7);
             entity.Property(e => e.DateFormat).HasMaxLength(32);
             entity.Property(e => e.CurrencyCode).HasMaxLength(3);
         });

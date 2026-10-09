@@ -32,11 +32,13 @@ import { NavSecondary } from "./nav-secondary"
 export function AppSidebar({ 
   name, 
   clinicName = "Clinic EZ", 
+  logoUrl,
   user, 
   ...props 
 }: { 
   name?: string; 
   clinicName?: string; 
+  logoUrl?: string;
   user?: any 
 } & React.ComponentProps<typeof Sidebar>) {
   const params = useParams();
@@ -121,7 +123,12 @@ export function AppSidebar({
               className="data-[slot=sidebar-menu-button]:!p-1.5"
             >
               <a href={`/${tenant}/dashboard`}>
-                <IconInnerShadowTop className="!size-5 text-primary" />
+                {logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={logoUrl} alt="" className="!size-5 rounded object-contain" referrerPolicy="no-referrer" />
+                ) : (
+                  <IconInnerShadowTop className="!size-5 text-primary" />
+                )}
                 <span className="text-base font-bold text-foreground truncate">{displayName} | Workspace</span>
               </a>
             </SidebarMenuButton>

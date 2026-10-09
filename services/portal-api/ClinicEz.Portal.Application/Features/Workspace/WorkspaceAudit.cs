@@ -29,6 +29,9 @@ public static class WorkspaceSettingsStore
         context.WorkspaceSettings.Add(settings);
         return settings;
     }
+
+    /// <summary>Call whenever a change affects what facilities read from the workspace profile.</summary>
+    public static void BumpProfileVersion(WorkspaceSettings settings) => settings.ProfileVersion++;
 }
 
 /// <summary>

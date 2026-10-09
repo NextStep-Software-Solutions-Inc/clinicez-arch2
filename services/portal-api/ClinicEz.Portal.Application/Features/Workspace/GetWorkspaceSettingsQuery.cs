@@ -21,14 +21,18 @@ public record WorkspaceGeneralDto(
     string CurrencyCode
 );
 
+/// <summary>Brand identity override. Null values mean "not customised" (inherit defaults).</summary>
+public record WorkspaceBrandingDto(string? BrandName, string? LogoUrl, string? AccentColorHex);
+
 /// <summary>
-/// Full workspace settings, grouped by section so later sections (branding, security, ...) are added
+/// Full workspace settings, grouped by section so later sections (security, ...) are added
 /// as new properties without reshaping existing ones.
 /// </summary>
 public record WorkspaceSettingsDto(
     string TenantSlug,
     string TenantType,
-    WorkspaceGeneralDto General
+    WorkspaceGeneralDto General,
+    WorkspaceBrandingDto Branding
 );
 
 public record GetWorkspaceSettingsQuery(string TenantSlug) : IRequest<WorkspaceSettingsDto?>;
@@ -60,7 +64,11 @@ internal static class WorkspaceSettingsMapper
     public static WorkspaceSettingsDto ToDto(Tenant tenant, WorkspaceSettings settings) => new(
         tenant.TenantSlug,
         tenant.TenantType,
-        ToGeneral(tenant, settings));
+        ToGeneral(tenant, settings),
+        ToBranding(settings));
+
+    public static WorkspaceBrandingDto ToBranding(WorkspaceSettings settings) =>
+        new(settings.BrandName, settings.LogoUrl, settings.AccentColorHex);
 
     public static WorkspaceGeneralDto ToGeneral(Tenant tenant, WorkspaceSettings settings)
     {

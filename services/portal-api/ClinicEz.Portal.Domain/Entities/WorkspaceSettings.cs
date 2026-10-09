@@ -32,4 +32,13 @@ public class WorkspaceSettings : BaseEntity
     public string Locale { get; set; } = DefaultLocale;
     public string DateFormat { get; set; } = DefaultDateFormat;
     public string CurrencyCode { get; set; } = DefaultCurrencyCode;
+
+    // Brand identity: the workspace default that facilities inherit. Null = not customised
+    // (display name falls back to Tenant.Name, logo to none, accent to the product theme).
+    public string? BrandName { get; set; }
+    public string? LogoUrl { get; set; } // https only
+    public string? AccentColorHex { get; set; } // #RRGGBB
+
+    /// <summary>Monotonic version of everything exposed by the workspace profile; drives ETag/cache invalidation.</summary>
+    public long ProfileVersion { get; set; } = 1;
 }

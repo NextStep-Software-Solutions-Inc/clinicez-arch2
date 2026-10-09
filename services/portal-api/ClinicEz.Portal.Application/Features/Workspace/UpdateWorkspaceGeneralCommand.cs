@@ -144,6 +144,7 @@ public class UpdateWorkspaceGeneralCommandHandler(IApplicationDbContext context)
         if (changes.HasChanges)
         {
             tenant.UpdatedAt = DateTime.UtcNow;
+            WorkspaceSettingsStore.BumpProfileVersion(settings);
             changes.Stage(context, tenant.Id, request.Actor, section: "general");
         }
 

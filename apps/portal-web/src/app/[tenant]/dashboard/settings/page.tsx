@@ -1,11 +1,12 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { IconSettings } from "@tabler/icons-react";
+import { IconPalette, IconSettings } from "@tabler/icons-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useWorkspaceSettings } from "@/hooks/useWorkspaceSettings";
 import { GeneralTab } from "./_components/GeneralTab";
+import { BrandingTab } from "./_components/BrandingTab";
 
 export default function SettingsPage() {
     const params = useParams();
@@ -48,11 +49,25 @@ export default function SettingsPage() {
                                 <IconSettings className="h-3.5 w-3.5 shrink-0" />
                                 General
                             </TabsTrigger>
+                            <TabsTrigger value="branding" className="px-4 sm:px-6 py-2 text-xs font-semibold flex items-center gap-1.5 shrink-0 whitespace-nowrap">
+                                <IconPalette className="h-3.5 w-3.5 shrink-0" />
+                                Branding
+                            </TabsTrigger>
                         </TabsList>
                     </div>
 
                     <TabsContent value="general" className="outline-none">
                         <GeneralTab key={JSON.stringify(settings.general)} tenantSlug={tenantSlug} general={settings.general} onSaved={() => mutate()} />
+                    </TabsContent>
+
+                    <TabsContent value="branding" className="outline-none">
+                        <BrandingTab
+                            key={JSON.stringify(settings.branding)}
+                            tenantSlug={tenantSlug}
+                            workspaceName={settings.general.name}
+                            branding={settings.branding}
+                            onSaved={() => mutate()}
+                        />
                     </TabsContent>
                 </Tabs>
             )}

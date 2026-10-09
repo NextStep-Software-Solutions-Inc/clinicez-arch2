@@ -1,4 +1,5 @@
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
+import { BrandTheme } from "@/components/dashboard/BrandTheme";
 import CreateResourceDialog from "@/components/dashboard/CreateResourceDialog";
 import TrialCountdownBanner from "@/components/dashboard/TrialCountdownBanner";
 import NavigationProgressBar from "@/components/dashboard/NavigationProgressBar";
@@ -69,8 +70,13 @@ export default async function TenantDashboardLayout({
 
     const workplaceName = tenant.name || tenant.clinicName || "Workspace";
 
+    // Brand identity is cosmetic: a failed lookup falls back to the product defaults.
+    const profile = await tenantService.getWorkspaceProfile(routeTenantSlug);
+    const brandName = profile?.displayName || workplaceName;
+
     return (
         <>
+            <BrandTheme accentColorHex={profile?.accentColorHex} />
             <SidebarProvider
                 style={
                     {
@@ -79,7 +85,7 @@ export default async function TenantDashboardLayout({
                     } as React.CSSProperties
                 }
             >
-                <AppSidebar variant="inset" name={workplaceName} user={userDetails} />
+                <AppSidebar variant="inset" name={brandName} logoUrl={profile?.logoUrl ?? undefined} user={userDetails} />
                 <SidebarInset className="overflow-auto">
                     <NavigationProgressBar />
                     <SiteHeader />
