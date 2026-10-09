@@ -5,6 +5,29 @@
     "": {
       "name": "clinicez-monorepo",
     },
+    "apps/cashier-app": {
+      "name": "@clinicez/cashier-app",
+      "version": "1.0.0",
+      "dependencies": {
+        "@react-navigation/bottom-tabs": "^8.0.0-alpha.33",
+        "@react-navigation/core": "8.0.0-alpha.26",
+        "@react-navigation/native": "^8.0.0-alpha.28",
+        "@shared/safe": "workspace:*",
+        "axios": "^1.18.0",
+        "expo": "~56.0.8",
+        "expo-status-bar": "~56.0.4",
+        "react": "19.2.3",
+        "react-dom": "19.2.3",
+        "react-native": "0.85.3",
+        "react-native-safe-area-context": "~5.7.0",
+        "react-native-screens": "4.25.2",
+      },
+      "devDependencies": {
+        "@types/node": "^22.20.2",
+        "@types/react": "~19.2.3",
+        "typescript": "~6.0.3",
+      },
+    },
     "apps/clinic-app": {
       "name": "@clinicez/clinic-app",
       "version": "1.0.0",
@@ -401,6 +424,8 @@
     "@clerk/shared": ["@clerk/shared@4.25.2", "", { "dependencies": { "@tanstack/query-core": "^5.100.6", "dequal": "2.0.3", "glob-to-regexp": "0.4.1", "js-cookie": "3.0.7" }, "peerDependencies": { "react": "^18.0.0 || ~19.0.3 || ~19.1.4 || ~19.2.3 || ~19.3.0-0", "react-dom": "^18.0.0 || ~19.0.3 || ~19.1.4 || ~19.2.3 || ~19.3.0-0" }, "optionalPeers": ["react", "react-dom"] }, "sha512-v7zgDh0eVLl3KzRHbKYTsPQ+4Xcx8A2oiU5iZ9WhME024WudwkjjPJRK12RycY0VA1Sj8i4Pi5zEpecqB/gp1Q=="],
 
     "@clerk/types": ["@clerk/types@4.101.26", "", { "dependencies": { "@clerk/shared": "^3.47.8" } }, "sha512-tUeiElAZoXu9Dxom9t6IjkEfsfP7aWSVf5x5mCoHnSr2w+wV4EtEwoLl9vexT5LL0di4qidROSfcrOnorzczIQ=="],
+
+    "@clinicez/cashier-app": ["@clinicez/cashier-app@workspace:apps/cashier-app"],
 
     "@clinicez/clinic-app": ["@clinicez/clinic-app@workspace:apps/clinic-app"],
 

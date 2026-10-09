@@ -16,7 +16,8 @@
     "lint:clinic": "bun --filter @clinicez/clinic-app lint:tokens && bun --filter @clinicez/clinic-app lint:hosts",
     "typecheck:lab": "bun --filter @clinicez/laboratory-app typecheck",
     "typecheck:pharmacy": "bun --filter @clinicez/pharmacy-app typecheck",
-    "typecheck:all": "bun run typecheck:patient && bun run typecheck:clinic && bun run typecheck:lab && bun run typecheck:pharmacy",
+    "typecheck:cashier": "bun --filter @clinicez/cashier-app typecheck",
+    "typecheck:all": "bun run typecheck:patient && bun run typecheck:clinic && bun run typecheck:lab && bun run typecheck:pharmacy && bun run typecheck:cashier",
     "build:portal": "bun --filter @clinicez/portal-web build",
     "build:patient-web": "bun --filter @clinicez/patient-app build:web",
     "build:clinic-web": "bun --filter @clinicez/clinic-app build:web"

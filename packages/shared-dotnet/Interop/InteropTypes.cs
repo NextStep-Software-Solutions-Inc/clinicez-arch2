@@ -17,6 +17,8 @@ public static class InteropTypes
     public const string WorkspaceProfileUpdated = "workspace.profile.updated";
     /// <summary>Portal -> facility. Payload: <c>EntitlementsChangedEvent</c> (re-minted license).</summary>
     public const string EntitlementsChanged = "entitlements.changed";
+    /// <summary>Facility -> portal. Payload: <c>FacilityHeartbeatPayload</c> (liveness, app version, license expiry). Only accepted from the facility it describes.</summary>
+    public const string FacilityHeartbeat = "facility.heartbeat";
 
     // Hub directory feed (portal -> hub). Handled by the hub itself.
     public const string DirectoryCellUpserted = "directory.cell.upserted";
@@ -63,6 +65,8 @@ public static class InteropTypes
     public const string BillingInvoiceRequested = "billing.invoice.requested";
     public const string BillingPaymentConfirmed = "billing.payment.confirmed";
     public const string BillingInvoicePaid = "billing.invoice.paid";
+    /// <summary>Billing -> requesting facility and portal. Payload: <c>BillingInvoiceVoidedPayload</c> (void of an unpaid invoice, or refund of a paid one).</summary>
+    public const string BillingInvoiceVoided = "billing.invoice.voided";
 
     // Notifications (any facility -> portal mail)
     public const string NotificationEmailRequested = "notification.email.requested";
