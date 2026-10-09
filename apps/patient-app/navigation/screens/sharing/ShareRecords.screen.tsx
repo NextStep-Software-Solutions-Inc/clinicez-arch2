@@ -13,13 +13,13 @@ import RotatingQr from 'components/sharing/RotatingQr';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { usePatientId } from 'hooks/usePatientId';
 import { useShareQr } from 'hooks/useShareQr';
+import type { SharingScope } from 'services/api/wireEnums';
 import {
   SHARING_SCOPES,
   countSelectedScopes,
   defaultScopeSelection,
   toApiScopes,
   type ScopeSelection,
-  type SharingScope,
 } from 'services/sharing/scopes';
 
 export default function ShareRecordsScreen() {

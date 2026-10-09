@@ -14,6 +14,7 @@ using ClinicEz.Shared.Interop.Transport;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using NSubstitute;
 
 namespace ClinicEz.Patient.Application.Tests.Interop;
@@ -52,6 +53,7 @@ internal sealed class PatientInteropHarness : IDisposable
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton<IConfiguration>(config);
+        services.AddSingleton(DevelopmentEnvironment());
         services.AddDbContext<ApplicationDbContext>(o => o.UseInMemoryDatabase(dbName));
         services.AddScoped<IAppointmentRepository, AppointmentRepository>();
         services.AddScoped<IClinicRepository, ClinicRepository>();
@@ -71,6 +73,13 @@ internal sealed class PatientInteropHarness : IDisposable
     }
 
     public static Party Portal => Party.Portal;
+
+    private static IHostEnvironment DevelopmentEnvironment()
+    {
+        var environment = Substitute.For<IHostEnvironment>();
+        environment.EnvironmentName.Returns(Environments.Development);
+        return environment;
+    }
 
     public static Party Clinic(Guid clinicId, string tenantId = TenantA) =>
         Party.ForFacility(tenantId, clinicId.ToString(), FacilityType.Clinic);

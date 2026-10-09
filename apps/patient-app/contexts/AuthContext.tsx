@@ -23,6 +23,7 @@ interface AuthContextType {
   lockTimeout: number;
   isLoading: boolean;
   internalPatientId: string | null;
+  clerkSessionId: string | null;
   getToken: () => Promise<string | null>;
   logout: () => Promise<void>;
   lock: () => void;
@@ -43,7 +44,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const { isSignedIn, userId, getToken } = useClerkAuth();
+  const { isSignedIn, userId, sessionId, getToken } = useClerkAuth();
   const { user } = useUser();
   const { signOut } = useClerk();
   const [hasPIN, setHasPIN] = useState(false);
@@ -336,6 +337,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         lockTimeout,
         isLoading: isLoading || isVerifying,
         internalPatientId,
+        clerkSessionId: sessionId ?? null,
         getToken,
         logout,
         lock,

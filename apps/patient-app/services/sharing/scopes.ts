@@ -1,20 +1,9 @@
 /**
  * Sharing scopes: the eight categories of data a patient can release to a facility.
- * `key` is the camelCase wire name used by patient-api (`SharingScopes`).
+ * `key` is the PascalCase wire name used by patient-api (`AccessScopes`).
  */
 
-export const SHARING_SCOPE_KEYS = [
-  'demographics',
-  'allergies',
-  'medications',
-  'conditions',
-  'immunizations',
-  'labResults',
-  'prescriptions',
-  'vitals',
-] as const;
-
-export type SharingScope = (typeof SHARING_SCOPE_KEYS)[number];
+import { SHARING_SCOPE_KEYS, type SharingScope } from '../api/wireEnums';
 
 export type ScopeSelection = Record<SharingScope, boolean>;
 
@@ -28,49 +17,49 @@ export interface SharingScopeInfo {
 
 export const SHARING_SCOPES: readonly SharingScopeInfo[] = [
   {
-    key: 'demographics',
+    key: 'Demographics',
     label: 'Personal details',
     description: 'Name, date of birth, sex, contact details and address, used to match you to a chart.',
     defaultEnabled: true,
   },
   {
-    key: 'allergies',
+    key: 'Allergies',
     label: 'Allergies',
     description: 'Known allergens, reactions and severity, so staff can avoid harmful treatments.',
     defaultEnabled: true,
   },
   {
-    key: 'medications',
+    key: 'Medications',
     label: 'Current medications',
     description: 'Medicines you take, with dosage and frequency, to prevent drug interactions.',
     defaultEnabled: true,
   },
   {
-    key: 'conditions',
+    key: 'Conditions',
     label: 'Medical conditions',
     description: 'Chronic conditions and past illnesses that affect your care.',
     defaultEnabled: true,
   },
   {
-    key: 'immunizations',
+    key: 'Immunizations',
     label: 'Immunizations',
     description: 'Vaccines you have received and their dates.',
     defaultEnabled: false,
   },
   {
-    key: 'labResults',
+    key: 'LabResults',
     label: 'Lab results',
     description: 'Laboratory results and findings from past tests.',
     defaultEnabled: false,
   },
   {
-    key: 'prescriptions',
+    key: 'Prescriptions',
     label: 'Prescriptions',
     description: 'Prescriptions issued to you and their dispensing history.',
     defaultEnabled: false,
   },
   {
-    key: 'vitals',
+    key: 'Vitals',
     label: 'Vital signs',
     description: 'Blood pressure, heart rate, temperature, weight and other measurements.',
     defaultEnabled: false,

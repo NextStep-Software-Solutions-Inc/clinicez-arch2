@@ -22,6 +22,11 @@ public sealed class DomainContractParityTests
     [Fact]
     public void Result_verification_matches_the_shared_verification_state() =>
         Enum.GetNames<ResultVerification>().Should().Equal(Enum.GetNames<VerificationState>());
+
+    [Fact]
+    public void Access_scopes_match_the_shared_sharing_scopes_name_for_name_and_value() =>
+        Enum.GetValues<AccessScopes>().ToDictionary(v => v.ToString(), v => (int)v)
+            .Should().BeEquivalentTo(Enum.GetValues<SharingScopes>().ToDictionary(v => v.ToString(), v => (int)v));
 }
 
 public sealed class ClinicEzIdGeneratorTests

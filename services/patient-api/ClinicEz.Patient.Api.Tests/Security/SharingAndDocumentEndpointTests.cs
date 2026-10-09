@@ -55,7 +55,7 @@ public sealed class SharingAndDocumentEndpointTests : IAsyncLifetime
     private static HttpContent EmptyContentFor(string method, string route) =>
         route switch
         {
-            "share-tokens" => JsonContent.Create(new { scopes = new[] { "allergies" } }),
+            "share-tokens" => JsonContent.Create(new { scopes = new[] { "Allergies" } }),
             _ when method == "POST" => new MultipartFormDataContent { { new StringContent("x"), "notes" } },
             _ => null!
         };
@@ -83,13 +83,13 @@ public sealed class SharingAndDocumentEndpointTests : IAsyncLifetime
     [Fact]
     public async Task The_owner_creating_a_share_token_reaches_the_command_with_the_requested_scopes()
     {
-        var content = JsonContent.Create(new { scopes = new[] { "allergies", "vitals" }, purpose = "Consultation" });
+        var content = JsonContent.Create(new { scopes = new[] { "Allergies", "Vitals" }, purpose = "Consultation" });
 
         var response = await _host.Client.SendAsync(Build("POST", "share-tokens", Owner, content));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         await _host.Sender.Received(1).Send(
-            Arg.Is<CreateShareTokenCommand>(c => c.PatientId == _patientId && c.Scopes.SequenceEqual(new[] { "allergies", "vitals" })),
+            Arg.Is<CreateShareTokenCommand>(c => c.PatientId == _patientId && c.Scopes.SequenceEqual(new[] { "Allergies", "Vitals" })),
             Arg.Any<CancellationToken>());
     }
 

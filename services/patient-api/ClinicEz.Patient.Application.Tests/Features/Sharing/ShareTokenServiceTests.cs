@@ -114,7 +114,7 @@ public sealed class ShareTokenServiceTests
     {
         SharingScopeMap.TryParse(["demographics", "labResults", "LABRESULTS"], out var scopes).Should().BeTrue();
         scopes.Should().Be(SharingScopes.Demographics | SharingScopes.LabResults);
-        SharingScopeMap.ToNames(scopes).Should().Equal("demographics", "labResults");
+        SharingScopeMap.ToNames(scopes).Should().Equal("Demographics", "LabResults");
 
         SharingScopeMap.TryParse(["demographics", "bank-account"], out _).Should().BeFalse();
         SharingScopeMap.TryParse([], out _).Should().BeFalse();

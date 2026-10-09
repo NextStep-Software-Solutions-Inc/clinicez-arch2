@@ -11,7 +11,7 @@ import {
   remainingSeconds,
   type QrSession,
 } from 'services/sharing/qrRefresh';
-import type { SharingScope } from 'services/sharing/scopes';
+import type { SharingScope } from 'services/api/wireEnums';
 
 const SCOPE_CHANGE_DEBOUNCE_MS = 400;
 const TICK_MS = 1000;

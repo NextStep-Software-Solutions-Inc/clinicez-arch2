@@ -30,11 +30,11 @@ function labRequest(overrides: Partial<LabRequestDto> = {}): LabRequestDto {
     title: 'CBC and lipid panel',
     urgency: null,
     items: [{ code: 'CBC', name: 'Complete blood count', category: 'Hematology' }],
-    stage: 'issued',
+    stage: 'Issued',
     quotedAmount: null,
     currency: null,
     paymentRequired: false,
-    paymentStatus: 'none',
+    paymentStatus: 'None',
     laboratoryName: null,
     claimToken: 'claim-1',
     reason: null,
@@ -67,7 +67,7 @@ function prescription(overrides: Partial<PrescriptionDto> = {}): PrescriptionDto
         remarks: null,
       },
     ],
-    stage: 'issued',
+    stage: 'Issued',
     quotedAmount: null,
     pharmacyName: null,
     claimToken: 'claim-rx',
@@ -87,8 +87,8 @@ function labResult(overrides: Partial<LabResultDto> = {}): LabResultDto {
     requisitionId: 'req-1',
     laboratoryName: 'ClinicEZ Lab',
     title: 'CBC',
-    source: 'clinicEzLab',
-    verification: 'verified',
+    source: 'ClinicEzLab',
+    verification: 'Verified',
     reviewedByName: null,
     reviewedAt: null,
     remarks: null,
@@ -265,18 +265,18 @@ describe('pullAllChanges cursor handling', () => {
 describe('upsert by id', () => {
   test('re-delivering a row replaces it instead of duplicating', async () => {
     const harness = createHarness([
-      page({ cursor: 'c1', hasMore: true, labRequests: [labRequest({ stage: 'issued' })] }),
+      page({ cursor: 'c1', hasMore: true, labRequests: [labRequest({ stage: 'Issued' })] }),
       page({
         cursor: 'c2',
-        labRequests: [labRequest({ stage: 'awaitingPayment', paymentStatus: 'pending', quotedAmount: 250 })],
+        labRequests: [labRequest({ stage: 'AwaitingPayment', paymentStatus: 'Pending', quotedAmount: 250 })],
       }),
     ]);
     await pullAllChanges(harness.deps);
 
     expect(harness.inbox.labRequests.size).toBe(1);
     const row = harness.inbox.labRequests.get('lr-1');
-    expect(row?.stage).toBe('awaitingPayment');
-    expect(row?.paymentStatus).toBe('pending');
+    expect(row?.stage).toBe('AwaitingPayment');
+    expect(row?.paymentStatus).toBe('Pending');
     expect(row?.quotedAmount).toBe(250);
   });
 
@@ -301,13 +301,13 @@ describe('upsert by id', () => {
 
   test('a result moving from pending review to verified updates in place', async () => {
     const inbox = createFakeInbox();
-    await inbox.apply(page({ labResults: [labResult({ verification: 'unverified', source: 'patientUploaded' })] }));
+    await inbox.apply(page({ labResults: [labResult({ verification: 'Unverified', source: 'PatientUploaded' })] }));
     await inbox.apply(
-      page({ labResults: [labResult({ verification: 'verified', source: 'patientUploaded', reviewedByName: 'Dr. Reyes' })] }),
+      page({ labResults: [labResult({ verification: 'Verified', source: 'PatientUploaded', reviewedByName: 'Dr. Reyes' })] }),
     );
 
     expect(inbox.labResults.size).toBe(1);
-    expect(inbox.labResults.get('res-1')?.verification).toBe('verified');
+    expect(inbox.labResults.get('res-1')?.verification).toBe('Verified');
     expect(inbox.labResults.get('res-1')?.reviewedByName).toBe('Dr. Reyes');
   });
 });
@@ -325,7 +325,7 @@ describe('pageHasDocumentChanges', () => {
           notifications: [
             {
               id: 'n1',
-              type: 'labResult',
+              type: 'LabResult',
               title: 'Result ready',
               body: '',
               isRead: false,
@@ -358,17 +358,17 @@ describe('document mappers', () => {
     expect(toPrescriptionRow(PATIENT, prescription()).dispensedAt).toBeNull();
     const dispensed = toPrescriptionRow(
       PATIENT,
-      prescription({ stage: 'externalDispensed', dispensedAt: '2026-01-05T10:00:00.000Z', externalPharmacyName: 'Mercury' }),
+      prescription({ stage: 'ExternalDispensed', dispensedAt: '2026-01-05T10:00:00.000Z', externalPharmacyName: 'Mercury' }),
     );
     expect(dispensed.dispensedAt).toEqual(new Date('2026-01-05T10:00:00.000Z'));
     expect(parsePrescriptionItems(dispensed.itemsJson)[0].genericName).toBe('Amoxicillin');
   });
 
   test('lab result row keeps provenance, verification and observations', () => {
-    const row = toLabResultRow(PATIENT, labResult({ source: 'externalLab', verification: 'rejected', remarks: 'Illegible' }));
+    const row = toLabResultRow(PATIENT, labResult({ source: 'ExternalLab', verification: 'Rejected', remarks: 'Illegible' }));
 
-    expect(row.source).toBe('externalLab');
-    expect(row.verification).toBe('rejected');
+    expect(row.source).toBe('ExternalLab');
+    expect(row.verification).toBe('Rejected');
     expect(row.remarks).toBe('Illegible');
     expect(parseObservations(row.observationsJson)[0].name).toBe('Hemoglobin');
   });

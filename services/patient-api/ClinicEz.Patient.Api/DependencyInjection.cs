@@ -9,9 +9,12 @@ namespace ClinicEz.Patient.Api;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddApiServices(this IServiceCollection services)
+    public static IServiceCollection AddApiServices(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        IWebHostEnvironment environment)
     {
-        services.AddCors();
+        services.AddClinicEzCors(configuration, environment);
         services.AddOpenApi();
 
         services.AddExceptionHandler<GlobalExceptionHandler>();

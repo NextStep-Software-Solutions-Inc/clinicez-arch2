@@ -5,3 +5,10 @@ public sealed record RegisterDeviceSessionResponse(
     string DeviceId,
     string DeviceLabel,
     DateTime IssuedAt);
+
+public sealed record DeviceSessionDto(
+    Guid Id,
+    string DeviceId,
+    string DeviceLabel,
+    DateTime CreatedAt,
+    DateTime LastActiveAt);

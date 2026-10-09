@@ -91,7 +91,6 @@ public sealed class DeviceSessionConfiguration : IEntityTypeConfiguration<Device
         builder.Property(d => d.DeviceId).HasMaxLength(128).IsRequired();
         builder.Property(d => d.DeviceLabel).HasMaxLength(200).IsRequired();
         builder.Property(d => d.ClerkSessionId).HasMaxLength(256).IsRequired();
-        builder.Property(d => d.RedisKey).HasMaxLength(256).IsRequired();
         builder.Property(d => d.CreatedBy).HasMaxLength(128).IsRequired();
         builder.Property(d => d.UpdatedBy).HasMaxLength(128);
 
@@ -100,8 +99,8 @@ public sealed class DeviceSessionConfiguration : IEntityTypeConfiguration<Device
             .HasForeignKey(d => d.PatientId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        // Only one active session per patient at a time
-        builder.HasIndex(d => d.PatientId)
+        // A patient may be signed in on several devices, but only once per device
+        builder.HasIndex(d => new { d.PatientId, d.DeviceId })
             .HasFilter("is_revoked = false")
             .IsUnique();
     }

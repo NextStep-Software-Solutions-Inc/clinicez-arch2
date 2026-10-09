@@ -24,8 +24,7 @@ public sealed class PatientDocumentMapper
 
     public PatientDocumentMapper(IStorageService storage) => _storage = storage;
 
-    public static string Name<TEnum>(TEnum value) where TEnum : struct, Enum =>
-        JsonNamingPolicy.CamelCase.ConvertName(value.ToString());
+    public static string Name<TEnum>(TEnum value) where TEnum : struct, Enum => value.ToString();
 
     public static LabRequestDto ToDto(LabRequestSlip slip) => new(
         slip.Id,
@@ -124,7 +123,7 @@ public sealed class PatientDocumentMapper
     }
 
     private static string PaymentStatusOf(LabRequestSlip slip) =>
-        !slip.PaymentRequired ? "none" : PaidStages.Contains(slip.Stage) ? "paid" : "pending";
+        (!slip.PaymentRequired ? LabPaymentStatus.None : PaidStages.Contains(slip.Stage) ? LabPaymentStatus.Paid : LabPaymentStatus.Pending).ToString();
 
     private static IReadOnlyList<LabRequestItemDto> ParseItems(string itemsJson)
     {

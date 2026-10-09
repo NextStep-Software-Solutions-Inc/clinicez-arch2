@@ -216,6 +216,7 @@ import {
   markAllNotificationsReadOnBackend,
   type SyncNotificationDto,
 } from '../api/notificationsApi';
+import { localNotificationCategory, localNotificationType } from './wireMapping';
 
 /**
  * Upserts backend notifications into the local SQLite table. Rows the user deleted
@@ -231,8 +232,8 @@ export async function upsertRemoteNotifications(
       .values({
         id: n.id,
         patientId,
-        type: (n.type as NotificationType) ?? 'system',
-        category: (n.category as NotificationCategory) ?? 'system',
+        type: localNotificationType(n.type),
+        category: n.category ? localNotificationCategory(n.category) : 'system',
         title: n.title,
         body: n.body,
         data: n.payload,

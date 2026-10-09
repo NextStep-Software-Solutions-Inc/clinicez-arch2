@@ -17,11 +17,10 @@ import {
 } from 'services/notifications/notificationService';
 import { navigationRef } from 'navigation/Navigation';
 import { mutate } from 'swr';
-import { registerDeviceSessionOnBackend } from 'services/api/notificationsApi';
-import * as SecureStore from 'expo-secure-store';
-import { DeviceEventEmitter, Platform } from 'react-native';
+import { registerDeviceSessionOnBackend } from 'services/api/sessionsApi';
+import { getDeviceLabel, getOrCreateDeviceId } from 'services/devices/deviceIdentity';
+import { DeviceEventEmitter } from 'react-native';
 import { DOCUMENTS_SYNCED_EVENT } from 'services/sync/documentsSyncService';
-import { randomUUID } from 'expo-crypto';
 
 export interface NotificationContextValue {
   unreadCount: number;
@@ -61,7 +60,9 @@ interface NotificationProviderProps {
 }
 
 export function NotificationProvider({ children }: NotificationProviderProps) {
-  const { internalPatientId: patientId, getToken } = useAuth();
+  const { internalPatientId: patientId, clerkSessionId, getToken } = useAuth();
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
 
   const [unreadCount, setUnreadCount] = useState(3);
   const [pushToken, setPushToken] = useState<string | null>(null);
@@ -81,49 +82,51 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
     } catch (_) { }
   }, [patientId]);
 
+  const registerSession = useCallback(async (token: string | undefined) => {
+    if (!patientId || !clerkSessionId) return;
+    try {
+      const deviceId = await getOrCreateDeviceId();
+      await registerDeviceSessionOnBackend(getTokenRef.current, patientId, {
+        deviceId,
+        deviceLabel: getDeviceLabel(),
+        clerkSessionId,
+        pushToken: token,
+      });
+    } catch (err) {
+      console.warn('Failed to register device session', err);
+    }
+  }, [patientId, clerkSessionId]);
+
   const requestPermissions = useCallback(async (): Promise<boolean> => {
     if (!patientId) return false;
     const { token, status } = await registerForPushNotifications(patientId);
     setPermissionStatus(status);
     if (token) {
       setPushToken(token);
-      let deviceId = await SecureStore.getItemAsync('DEVICE_ID');
-      if (!deviceId) {
-        deviceId = randomUUID();
-        await SecureStore.setItemAsync('DEVICE_ID', deviceId);
-      }
-      try {
-        await registerDeviceSessionOnBackend(getToken, patientId, deviceId, Platform.OS, token);
-      } catch (err) {
-        console.warn('Failed to register device session', err);
-      }
+      await registerSession(token);
     }
     return status === 'granted';
-  }, [patientId, getToken]);
+  }, [patientId, registerSession]);
 
   useEffect(() => {
-    // Check current permission status without prompting
+    // Check current permission status without prompting; the device session is registered
+    // whether or not push is granted, so the device always shows up in "My devices".
     ExpoNotifications.getPermissionsAsync().then(async ({ status }) => {
       setPermissionStatus(status);
-      if (status === 'granted' && patientId) {
-        // Silently fetch/verify token and register session on startup
-        const { token } = await registerForPushNotifications(patientId);
-        if (token) {
-          setPushToken(token);
-          let deviceId = await SecureStore.getItemAsync('DEVICE_ID');
-          if (!deviceId) {
-            deviceId = randomUUID();
-            await SecureStore.setItemAsync('DEVICE_ID', deviceId);
-          }
-          try {
-            await registerDeviceSessionOnBackend(getToken, patientId, deviceId, Platform.OS, token);
-          } catch (err) {
-            console.warn('Failed to register device session on startup', err);
-          }
+      if (!patientId) return;
+      let token: string | undefined;
+      if (status === 'granted') {
+        const registration = await registerForPushNotifications(patientId);
+        if (registration.token) {
+          setPushToken(registration.token);
+          token = registration.token;
         }
       }
+      await registerSession(token);
     });
+  }, [patientId, registerSession]);
 
+  useEffect(() => {
     // Initial unread count (or zero when not signed in)
     refresh();
 

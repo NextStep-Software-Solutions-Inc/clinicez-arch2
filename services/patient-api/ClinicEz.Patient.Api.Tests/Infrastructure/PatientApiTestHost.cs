@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using ClinicEz.Patient.Api.Extensions;
+using ClinicEz.Patient.Api.Infrastructure;
 using ClinicEz.Patient.Api.Middleware;
 using ClinicEz.Patient.Domain.Interfaces;
 using ClinicEz.Patient.Infrastructure.Persistence;
@@ -54,7 +55,9 @@ public sealed class PatientApiTestHost : IAsyncDisposable
 
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
-        builder.Services.AddApiServices();
+        builder.Configuration["Cors:AllowedOrigins:0"] = "https://app.test";
+        builder.Services.AddApiServices(builder.Configuration, builder.Environment);
+        builder.Services.ConfigureHttpJsonOptions(o => ApiJson.Configure(o.SerializerOptions));
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
         builder.Services.AddSingleton(sender);

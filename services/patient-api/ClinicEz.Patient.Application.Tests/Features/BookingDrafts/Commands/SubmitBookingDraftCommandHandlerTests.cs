@@ -304,7 +304,7 @@ public sealed class SubmitBookingDraftCommandHandlerTests
         grant.FacilityId.Should().Be(_clinicId);
         grant.Source.Should().Be(AccessGrantSource.Booking);
         grant.DraftId.Should().Be(_draftId);
-        grant.ScopesMask.Should().Be((int)SharingScopes.Demographics);
+        grant.Scopes.Should().Be(AccessScopes.Demographics);
         grant.ExpiresAt.Should().BeCloseTo(DateTime.UtcNow.AddDays(30), TimeSpan.FromMinutes(1));
         log.Should().NotBeNull();
         log!.GrantId.Should().Be(grant.Id);

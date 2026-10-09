@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import { SHARING_SCOPE_KEYS } from '../services/api/wireEnums';
 import {
   SHARING_SCOPES,
-  SHARING_SCOPE_KEYS,
   countSelectedScopes,
   defaultScopeSelection,
   fromApiScopes,
@@ -11,16 +11,16 @@ import {
 } from '../services/sharing/scopes';
 
 describe('sharing scopes', () => {
-  test('exposes the eight camelCase API scopes', () => {
+  test('exposes the eight PascalCase API scopes', () => {
     expect([...SHARING_SCOPE_KEYS]).toEqual([
-      'demographics',
-      'allergies',
-      'medications',
-      'conditions',
-      'immunizations',
-      'labResults',
-      'prescriptions',
-      'vitals',
+      'Demographics',
+      'Allergies',
+      'Medications',
+      'Conditions',
+      'Immunizations',
+      'LabResults',
+      'Prescriptions',
+      'Vitals',
     ]);
     expect(SHARING_SCOPES.map((scope) => scope.key)).toEqual([...SHARING_SCOPE_KEYS]);
   });
@@ -34,22 +34,22 @@ describe('sharing scopes', () => {
 
   test('defaults enable the core safety scopes only', () => {
     expect(toApiScopes(defaultScopeSelection())).toEqual([
-      'demographics',
-      'allergies',
-      'medications',
-      'conditions',
+      'Demographics',
+      'Allergies',
+      'Medications',
+      'Conditions',
     ]);
   });
 
   test('toApiScopes returns selected scopes in canonical order', () => {
-    const selection = fromApiScopes(['vitals', 'labResults']);
-    expect(toApiScopes(selection)).toEqual(['labResults', 'vitals']);
+    const selection = fromApiScopes(['Vitals', 'LabResults']);
+    expect(toApiScopes(selection)).toEqual(['LabResults', 'Vitals']);
     expect(countSelectedScopes(selection)).toBe(2);
   });
 
   test('fromApiScopes ignores unknown names and round-trips known ones', () => {
-    const selection = fromApiScopes(['allergies', 'billing', 'ALLERGIES']);
-    expect(toApiScopes(selection)).toEqual(['allergies']);
+    const selection = fromApiScopes(['Allergies', 'billing', 'allergies']);
+    expect(toApiScopes(selection)).toEqual(['Allergies']);
     expect(toApiScopes(fromApiScopes([...SHARING_SCOPE_KEYS]))).toEqual([...SHARING_SCOPE_KEYS]);
   });
 
@@ -58,9 +58,9 @@ describe('sharing scopes', () => {
   });
 
   test('isSharingScope and scopeLabel handle unknown values', () => {
-    expect(isSharingScope('vitals')).toBe(true);
+    expect(isSharingScope('Vitals')).toBe(true);
     expect(isSharingScope('billing')).toBe(false);
     expect(scopeLabel('billing')).toBe('billing');
-    expect(scopeLabel('labResults')).toBe('Lab results');
+    expect(scopeLabel('LabResults')).toBe('Lab results');
   });
 });

@@ -28,7 +28,7 @@ public sealed class GetClinicDetailQueryHandler
         {
             var membership = await _membershipRepo.GetByPatientAndClinicAsync(
                 request.ForPatientId.Value, request.ClinicId, cancellationToken);
-            membershipStatus = membership?.Status.ToString().ToLowerInvariant();
+            membershipStatus = membership?.Status.ToString();
         }
 
         var linkedOrgs = clinic.OrganizationLinks

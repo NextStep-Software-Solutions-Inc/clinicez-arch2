@@ -40,7 +40,7 @@ public sealed class SearchClinicsQueryHandler
                 return new ClinicSummaryDto(
                     c.Id, c.Name, c.Description, c.Address, c.IsPublic, c.SupportsAppointments,
                     c.LogoUrl, c.CoverImageUrl, c.SpecialtiesJson, c.RequiredShareFieldsJson, c.FeaturedScore, c.ActiveMemberCount,
-                    membership?.Status.ToString().ToLower()
+                    membership?.Status.ToString()
                 );
             }).ToList().AsReadOnly(), total, request.Skip, request.Take);
     }

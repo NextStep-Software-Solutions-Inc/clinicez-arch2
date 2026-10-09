@@ -1,4 +1,11 @@
 import type { IconName } from '../../components/ui/iconNames';
+import type {
+  LabRequestStage,
+  LabResultSource,
+  LabResultVerification,
+  PaymentStatus,
+  PrescriptionStage,
+} from '../api/wireEnums';
 
 /** Presentation mapping for synced documents. Pure so it can be unit tested. */
 
@@ -10,17 +17,14 @@ export interface Chip {
   icon?: IconName;
 }
 
-export function provenanceBadge(source: string): Chip {
-  switch (source) {
-    case 'clinicEzLab':
-      return { label: 'ClinicEZ lab', tone: 'success', icon: 'lab' };
-    case 'externalLab':
-      return { label: 'External lab', tone: 'info', icon: 'building' };
-    case 'patientUploaded':
-      return { label: 'Uploaded by me', tone: 'neutral', icon: 'upload' };
-    default:
-      return { label: 'Unknown source', tone: 'neutral' };
-  }
+const PROVENANCE_BADGES: Record<LabResultSource, Chip> = {
+  ClinicEzLab: { label: 'ClinicEZ lab', tone: 'success', icon: 'lab' },
+  ExternalLab: { label: 'External lab', tone: 'info', icon: 'building' },
+  PatientUploaded: { label: 'Uploaded by me', tone: 'neutral', icon: 'upload' },
+};
+
+export function provenanceBadge(source: LabResultSource): Chip {
+  return PROVENANCE_BADGES[source];
 }
 
 export interface VerificationBadge extends Chip {
@@ -28,40 +32,38 @@ export interface VerificationBadge extends Chip {
   detail: string | null;
 }
 
-export function verificationBadge(verification: string, remarks?: string | null): VerificationBadge {
+export function verificationBadge(
+  verification: LabResultVerification,
+  remarks?: string | null,
+): VerificationBadge {
   switch (verification) {
-    case 'verified':
+    case 'Verified':
       return { label: 'Verified', tone: 'success', icon: 'checkCircle', detail: null };
-    case 'rejected':
+    case 'Rejected':
       return {
         label: 'Rejected',
         tone: 'danger',
         icon: 'alert',
         detail: remarks?.trim() ? remarks.trim() : 'The reviewing doctor did not accept this result.',
       };
-    case 'unverified':
+    case 'Unverified':
       return {
         label: 'Pending doctor review',
         tone: 'warning',
         icon: 'clock',
         detail: 'Your ordering doctor has not reviewed this result yet.',
       };
-    default:
-      return { label: 'Unknown status', tone: 'neutral', detail: null };
   }
 }
 
-export function paymentChip(status: string): Chip {
-  switch (status) {
-    case 'paid':
-      return { label: 'Paid', tone: 'success', icon: 'checkCircle' };
-    case 'pending':
-      return { label: 'Payment pending', tone: 'warning', icon: 'clock' };
-    case 'none':
-      return { label: 'No payment due', tone: 'neutral' };
-    default:
-      return { label: status, tone: 'neutral' };
-  }
+const PAYMENT_CHIPS: Record<PaymentStatus, Chip> = {
+  Paid: { label: 'Paid', tone: 'success', icon: 'checkCircle' },
+  Pending: { label: 'Payment pending', tone: 'warning', icon: 'clock' },
+  None: { label: 'No payment due', tone: 'neutral' },
+};
+
+export function paymentChip(status: PaymentStatus): Chip {
+  return PAYMENT_CHIPS[status];
 }
 
 export function formatAmount(amount: number | null, currency: string | null): string | null {
@@ -71,59 +73,55 @@ export function formatAmount(amount: number | null, currency: string | null): st
 
 // ── Lab request stages ────────────────────────────────────────────────────────
 
-export const LAB_STAGE_LABELS: Record<string, string> = {
-  issued: 'Issued',
-  routed: 'Sent to lab',
-  claimed: 'Claimed at lab',
-  awaitingPayment: 'Awaiting payment',
-  paid: 'Paid',
-  specimenCollected: 'Specimen collected',
-  inProcess: 'Being processed',
-  resultFinalized: 'Result ready',
-  externalSubmitted: 'Result uploaded',
-  reviewed: 'Reviewed by doctor',
-  rejected: 'Rejected',
-  cancelled: 'Cancelled',
+export const LAB_STAGE_LABELS: Record<LabRequestStage, string> = {
+  Issued: 'Issued',
+  Routed: 'Sent to lab',
+  Claimed: 'Claimed at lab',
+  AwaitingPayment: 'Awaiting payment',
+  Paid: 'Paid',
+  SpecimenCollected: 'Specimen collected',
+  InProcess: 'Being processed',
+  ResultFinalized: 'Result ready',
+  ExternalSubmitted: 'Result uploaded',
+  Reviewed: 'Reviewed by doctor',
+  Rejected: 'Rejected',
+  Cancelled: 'Cancelled',
 };
 
-const LAB_FLOW: readonly string[] = [
-  'issued',
-  'routed',
-  'claimed',
-  'awaitingPayment',
-  'paid',
-  'specimenCollected',
-  'inProcess',
-  'resultFinalized',
-  'reviewed',
+const LAB_FLOW: readonly LabRequestStage[] = [
+  'Issued',
+  'Routed',
+  'Claimed',
+  'AwaitingPayment',
+  'Paid',
+  'SpecimenCollected',
+  'InProcess',
+  'ResultFinalized',
+  'Reviewed',
 ];
 
-const PAYMENT_STAGES: readonly string[] = ['awaitingPayment', 'paid'];
-const EXTERNAL_FLOW: readonly string[] = ['issued', 'externalSubmitted', 'reviewed'];
-const FAILED_STAGES: readonly string[] = ['rejected', 'cancelled'];
+const PAYMENT_STAGES: readonly LabRequestStage[] = ['AwaitingPayment', 'Paid'];
+const EXTERNAL_FLOW: readonly LabRequestStage[] = ['Issued', 'ExternalSubmitted', 'Reviewed'];
+const FAILED_STAGES: readonly LabRequestStage[] = ['Rejected', 'Cancelled'];
 
 export type TimelineState = 'done' | 'current' | 'upcoming' | 'failed';
 
 export interface TimelineStep {
-  stage: string;
+  stage: LabRequestStage;
   label: string;
   state: TimelineState;
 }
 
-function stageLabel(stage: string): string {
-  return LAB_STAGE_LABELS[stage] ?? stage;
-}
-
 /** Ordered progress steps for a lab request slip; payment steps only appear when payment is required. */
-export function labTimeline(stage: string, paymentRequired: boolean): TimelineStep[] {
+export function labTimeline(stage: LabRequestStage, paymentRequired: boolean): TimelineStep[] {
   if (FAILED_STAGES.includes(stage)) {
     return [
-      { stage: 'issued', label: stageLabel('issued'), state: 'done' },
-      { stage, label: stageLabel(stage), state: 'failed' },
+      { stage: 'Issued', label: LAB_STAGE_LABELS.Issued, state: 'done' },
+      { stage, label: LAB_STAGE_LABELS[stage], state: 'failed' },
     ];
   }
 
-  const flow = stage === 'externalSubmitted'
+  const flow = stage === 'ExternalSubmitted'
     ? EXTERNAL_FLOW
     : LAB_FLOW.filter((step) => paymentRequired || !PAYMENT_STAGES.includes(step));
 
@@ -133,7 +131,7 @@ export function labTimeline(stage: string, paymentRequired: boolean): TimelineSt
 
   return flow.map((step, index) => ({
     stage: step,
-    label: stageLabel(step),
+    label: LAB_STAGE_LABELS[step],
     state:
       index < activeIndex || (isLast && index === activeIndex)
         ? 'done'
@@ -143,58 +141,58 @@ export function labTimeline(stage: string, paymentRequired: boolean): TimelineSt
   }));
 }
 
-export function labStageChip(stage: string): Chip {
-  if (stage === 'reviewed' || stage === 'resultFinalized') {
-    return { label: stageLabel(stage), tone: 'success', icon: 'checkCircle' };
+export function labStageChip(stage: LabRequestStage): Chip {
+  const label = LAB_STAGE_LABELS[stage];
+  if (stage === 'Reviewed' || stage === 'ResultFinalized') {
+    return { label, tone: 'success', icon: 'checkCircle' };
   }
-  if (FAILED_STAGES.includes(stage)) return { label: stageLabel(stage), tone: 'danger', icon: 'alert' };
-  if (stage === 'issued') return { label: stageLabel(stage), tone: 'info', icon: 'clipboard' };
-  return { label: stageLabel(stage), tone: 'primary', icon: 'clock' };
+  if (FAILED_STAGES.includes(stage)) return { label, tone: 'danger', icon: 'alert' };
+  if (stage === 'Issued') return { label, tone: 'info', icon: 'clipboard' };
+  return { label, tone: 'primary', icon: 'clock' };
 }
 
-export function canUploadLabResult(stage: string): boolean {
-  return stage !== 'cancelled' && stage !== 'reviewed';
+export function canUploadLabResult(stage: LabRequestStage): boolean {
+  return stage !== 'Cancelled' && stage !== 'Reviewed';
 }
 
-export function showLabClaimQr(stage: string, claimToken: string | null): boolean {
-  return claimToken !== null && !FAILED_STAGES.includes(stage) && stage !== 'reviewed';
+export function showLabClaimQr(stage: LabRequestStage, claimToken: string | null): boolean {
+  return claimToken !== null && !FAILED_STAGES.includes(stage) && stage !== 'Reviewed';
 }
 
 // ── Prescription stages ───────────────────────────────────────────────────────
 
-export const PRESCRIPTION_STAGE_LABELS: Record<string, string> = {
-  issued: 'Issued',
-  accepted: 'Accepted by pharmacy',
-  partiallyAccepted: 'Partially accepted',
-  rejected: 'Rejected',
-  dispensed: 'Dispensed',
-  externalDispensed: 'Dispensed elsewhere',
+export const PRESCRIPTION_STAGE_LABELS: Record<PrescriptionStage, string> = {
+  Issued: 'Issued',
+  Accepted: 'Accepted by pharmacy',
+  PartiallyAccepted: 'Partially accepted',
+  Rejected: 'Rejected',
+  Dispensed: 'Dispensed',
+  ExternalDispensed: 'Dispensed elsewhere',
 };
 
-export function prescriptionStageChip(stage: string): Chip {
-  const label = PRESCRIPTION_STAGE_LABELS[stage] ?? stage;
+export function prescriptionStageChip(stage: PrescriptionStage): Chip {
+  const label = PRESCRIPTION_STAGE_LABELS[stage];
   switch (stage) {
-    case 'dispensed':
-    case 'externalDispensed':
+    case 'Dispensed':
+    case 'ExternalDispensed':
       return { label, tone: 'success', icon: 'checkCircle' };
-    case 'rejected':
+    case 'Rejected':
       return { label, tone: 'danger', icon: 'alert' };
-    case 'accepted':
-    case 'partiallyAccepted':
+    case 'Accepted':
+    case 'PartiallyAccepted':
       return { label, tone: 'primary', icon: 'clock' };
-    default:
+    case 'Issued':
       return { label, tone: 'info', icon: 'pill' };
   }
 }
 
-export function canDispenseElsewhere(stage: string): boolean {
-  return stage !== 'dispensed' && stage !== 'externalDispensed';
+export function canDispenseElsewhere(stage: PrescriptionStage): boolean {
+  return stage !== 'Dispensed' && stage !== 'ExternalDispensed';
 }
 
-export function showPrescriptionClaimQr(stage: string, claimToken: string | null): boolean {
-  return claimToken !== null && canDispenseElsewhere(stage) && stage !== 'rejected';
+export function showPrescriptionClaimQr(stage: PrescriptionStage, claimToken: string | null): boolean {
+  return claimToken !== null && canDispenseElsewhere(stage) && stage !== 'Rejected';
 }
-
 // ── Lab result files & observations ───────────────────────────────────────────
 
 export type ResultFileKind = 'image' | 'pdf' | 'other';

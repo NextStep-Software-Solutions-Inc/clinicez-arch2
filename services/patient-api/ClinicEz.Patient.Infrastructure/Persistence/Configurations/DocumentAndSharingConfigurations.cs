@@ -23,6 +23,7 @@ public sealed class PatientAccessGrantConfiguration : IEntityTypeConfiguration<P
         builder.ConfigureAudit();
         builder.Property(g => g.TenantId).HasMaxLength(100).IsRequired();
         builder.Property(g => g.Purpose).HasMaxLength(200).IsRequired();
+        builder.Property(g => g.Scopes).HasConversion<string>().HasMaxLength(200);
         builder.Property(g => g.Source).HasConversion<string>().HasMaxLength(20);
 
         builder.HasOne(g => g.Patient)

@@ -64,16 +64,21 @@ Non-field errors (404, 409, 503 …) — `field` is `null`:
 
 ## Enum serialisation
 
-All enum values are serialised as **camelCase lowercase strings** — matching the mobile app's
-expectations. Examples:
+Enums travel as **the C# member name, exactly as written (PascalCase), always as a string**; property names stay
+camelCase. The API never emits and never accepts a number for an enum: `{"stage": 3}` is a `400`, and so is an unknown
+name. (Names are matched case-insensitively on input, but only the PascalCase form is ever produced.)
+
+The same rule holds in the database: every enum column is `varchar` holding the member name (a `[Flags]` enum such as
+the sharing scopes is stored as `"Allergies, Vitals"`, all bits as `"All"`).
 
 | C# enum | JSON wire value |
 |---|---|
-| `SexType.Male` | `"male"` |
-| `BloodType.ABPositive` | `"aBPositive"` |
-| `AppointmentStatus.ActionRequired` | `"actionRequired"` |
-| `NotificationCategory.Appointments` | `"appointments"` |
-| `SyncStatus.ConflictResolved` | `"conflictResolved"` |
+| `SexType.Male` | `"Male"` |
+| `BloodType.ABPositive` | `"ABPositive"` |
+| `AppointmentStatus.ActionRequired` | `"ActionRequired"` |
+| `NotificationCategory.Appointments` | `"Appointments"` |
+| `SyncStatus.ConflictResolved` | `"ConflictResolved"` |
+| `LabSlipStage.AwaitingPayment` | `"AwaitingPayment"` |
 
 ---
 
@@ -93,7 +98,7 @@ all subsequent look-ups.
   "middleName": null,
   "lastName": "Dela Cruz",
   "suffix": null,
-  "sex": "male",
+  "sex": "Male",
   "dateOfBirth": "1990-05-15",
   "nationality": "Filipino"
 }
@@ -135,16 +140,16 @@ use that signal to start the onboarding flow.
     "middleName": null,
     "lastName": "Dela Cruz",
     "suffix": null,
-    "sex": "male",
+    "sex": "Male",
     "dateOfBirth": "1990-05-15",
     "placeOfBirth": "Manila",
-    "bloodType": "oPositive",
-    "civilStatus": "single",
+    "bloodType": "OPositive",
+    "civilStatus": "Single",
     "nationality": "Filipino",
     "ethnicity": null,
     "religion": "Roman Catholic",
     "primaryLanguage": "Filipino",
-    "educationLevel": "college",
+    "educationLevel": "College",
     "mobile": "+639171234567",
     "altPhone": null,
     "email": "juan@example.com",
@@ -175,11 +180,11 @@ Returns demographics + addresses + emergency contacts. Suitable for dashboards a
       "firstName": "Juan",
       "middleName": null,
       "lastName": "Dela Cruz",
-      "sex": "male",
+      "sex": "Male",
       "dateOfBirth": "1990-05-15",
       "placeOfBirth": "Manila",
-      "bloodType": "oPositive",
-      "civilStatus": "married",
+      "bloodType": "OPositive",
+      "civilStatus": "Married",
       "nationality": "Filipino",
       "mobile": "+639171234567",
       "email": "juan@example.com",
@@ -238,15 +243,15 @@ After the initial hydration, use `POST /sync` for all subsequent writes.
       "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
       "firstName": "Juan",
       "lastName": "Dela Cruz",
-      "sex": "male",
+      "sex": "Male",
       "dateOfBirth": "1990-05-15",
       "placeOfBirth": "Manila",
-      "bloodType": "oPositive",
-      "civilStatus": "single",
+      "bloodType": "OPositive",
+      "civilStatus": "Single",
       "nationality": "Filipino",
       "religion": "Roman Catholic",
       "primaryLanguage": "Filipino",
-      "educationLevel": "college",
+      "educationLevel": "College",
       "mobile": "+639171234567",
       "email": "juan@example.com",
       "consentToShareInfo": true
@@ -566,16 +571,16 @@ After the initial hydration, use `POST /sync` for all subsequent writes.
   "middleName": null,
   "lastName": "Dela Cruz",
   "suffix": null,
-  "sex": "male",
+  "sex": "Male",
   "dateOfBirth": "1990-05-15",
   "placeOfBirth": "Manila",
-  "civilStatus": "married",
-  "bloodType": "oPositive",
+  "civilStatus": "Married",
+  "bloodType": "OPositive",
   "nationality": "Filipino",
   "ethnicity": null,
   "religion": "Roman Catholic",
   "primaryLanguage": "Filipino",
-  "educationLevel": "college",
+  "educationLevel": "College",
   "mobile": "+639171234567",
   "altPhone": null,
   "email": "juan@example.com",
@@ -737,10 +742,15 @@ Returns recent sync log entries. Use for debugging stuck or failed items.
 
 ## Device Sessions
 
-### `POST /api/v1/patients/{patientId}/sessions` — Register device
+A patient can be signed in on **any number of devices at once**. Signing in on a new device never signs another device
+out; a session ends only when it is revoked explicitly (one device, or all). Sessions are stored in the database only
+(patient-api no longer uses Redis).
 
-Registers this device as the only active session. Any existing session on another device is
-revoked synchronously; that device receives `SessionRevoked` via SignalR.
+### `POST /api/v1/patients/{patientId}/sessions` — Register this device
+
+Registers (or refreshes) the calling device: one active session per `deviceId`. Registering a device that is already
+active updates its label, Clerk session and push token and keeps the same `sessionId`; registering a new device adds a
+session. Call it on every sign-in and whenever the push token changes.
 
 **Request body**
 
@@ -748,7 +758,8 @@ revoked synchronously; that device receives `SessionRevoked` via SignalR.
 {
   "deviceId": "expo-device-id-or-uuid",
   "deviceLabel": "iPhone 15 Pro",
-  "clerkSessionId": "sess_2xyz789"
+  "clerkSessionId": "sess_2xyz789",
+  "pushToken": "ExponentPushToken[...]"
 }
 ```
 
@@ -757,7 +768,7 @@ revoked synchronously; that device receives `SessionRevoked` via SignalR.
 ```json
 {
   "succeeded": true,
-  "message": "Device session registered. Any previous session has been revoked.",
+  "message": "Device session registered.",
   "data": {
     "sessionId": "srv-session-uuid",
     "deviceId": "expo-device-id-or-uuid",
@@ -768,14 +779,55 @@ revoked synchronously; that device receives `SessionRevoked` via SignalR.
 }
 ```
 
+`issuedAt` is when the session was first created. `404` if the patient does not exist; `400` for a missing or too-long
+field.
+
 ---
 
-### `DELETE /api/v1/patients/{patientId}/sessions` — Logout
+### `GET /api/v1/patients/{patientId}/sessions` — My devices
 
-Revokes the active session in both Redis and the database. The connected device receives
-`SessionRevoked` via SignalR.
+Every active device of the patient, most recently active first. The app marks the current device by comparing
+`deviceId` with its own.
+
+```json
+{ "succeeded": true, "data": [
+  { "id": "srv-session-uuid", "deviceId": "expo-device-id-or-uuid", "deviceLabel": "iPhone 15 Pro",
+    "createdAt": "2026-06-17T08:00:00.000Z", "lastActiveAt": "2026-06-20T09:12:00.000Z" }
+], "errors": [] }
+```
+
+---
+
+### `DELETE /api/v1/patients/{patientId}/sessions/{sessionId}` — Sign one device out
+
+Revokes that one session. Only that device receives `SessionRevoked` (SignalR group
+`sync:device:{patientId}:{deviceId}`); the patient's other devices stay signed in.
+
+**204 No Content** · **404** the session is not an active session of this patient (including one that is already
+revoked).
+
+---
+
+### `DELETE /api/v1/patients/{patientId}/sessions` — Sign out everywhere
+
+Revokes every active session of the patient; all connected devices receive `SessionRevoked`.
 
 **204 No Content**
+
+---
+
+### Syncing from several devices
+
+Push and pull are per patient, not per device, so any device can be used at any time:
+
+- **Idempotency** — every pushed item carries an `idempotencyKey`; a key the server has already seen is skipped and
+  counted in `alreadyProcessed`, whichever device sends it. A device may therefore retry a batch safely, and two
+  devices can never apply the same change twice.
+- **Conflicts** — for records with a version (such as the profile), Last-Write-Wins applies across devices: an update
+  older than the server's current version is not applied and is reported as a `ConflictResolved` item (counted in
+  `conflicts`), and the server version stays. Pull `full-record` / `sync/changes` to converge.
+- **Notifications** — when a push is applied, every connected device gets `SyncCompleted` (SignalR) and every
+  registered push token receives a `sync_ready` push, so the other device refreshes.
 
 ---
 
@@ -1000,7 +1052,7 @@ Validates the invite code, resolves `roleId` against the org's `rolesJson`, and 
     "organizationName": "Metro Manila Senior Care Network",
     "roleId": "member",
     "roleName": "Member",
-    "status": "active",
+    "status": "Active",
     "consentDataSharing": true,
     "consentedAt": "2026-06-17T08:00:00.000Z",
     "createdAt": "2026-06-17T08:00:00.000Z"
@@ -1092,13 +1144,13 @@ Returns full clinic info, linked organisations, and the requesting patient's mem
         "activeMemberCount": 87
       }
     ],
-    "membershipStatus": "active"
+    "membershipStatus": "Active"
   },
   "errors": []
 }
 ```
 
-`membershipStatus`: `"pending"` | `"active"` | `null` (not joined)
+`membershipStatus`: `"Pending"` | `"Active"` | `null` (not joined)
 
 **404** — clinic not found.
 
@@ -1222,7 +1274,7 @@ No clinic is contacted at request time.
         "serviceType": "Annual Physical Exam",
         "scheduledAt": "2026-07-15T01:00:00.000Z",
         "durationMinutes": 30,
-        "status": "confirmed",
+        "status": "Confirmed",
         "notes": null
       }
     ],
@@ -1232,7 +1284,7 @@ No clinic is contacted at request time.
 }
 ```
 
-**Appointment statuses:** `pending` | `confirmed` | `cancelled` | `completed` | `noShow` | `actionRequired`
+**Appointment statuses:** `Pending` | `Confirmed` | `Cancelled` | `Completed` | `NoShow` | `ActionRequired`
 
 ---
 
@@ -1242,15 +1294,15 @@ The patient decides who sees their record. Sharing is pull-based and scoped: the
 the categories they tick, a facility redeems it over the Interop hub, and patient-api answers with a snapshot containing
 **only** those categories.
 
-**Scopes** (wire names): `demographics`, `allergies`, `medications`, `conditions`, `immunizations`, `labResults`,
-`prescriptions`, `vitals`.
+**Scopes** (wire names): `Demographics`, `Allergies`, `Medications`, `Conditions`, `Immunizations`, `LabResults`,
+`Prescriptions`, `Vitals`.
 
 Every patient has a stable `clinicEzId` (e.g. `CE-7K2M-9QX4`), returned on the profile DTOs and by `share-tokens`.
 
 ### `POST /api/v1/patients/{patientId}/share-tokens` — Create a share token
 
 ```json
-{ "scopes": ["allergies", "vitals"], "purpose": "Consultation" }
+{ "scopes": ["Allergies", "Vitals"], "purpose": "Consultation" }
 ```
 
 **200** — `data: { token, expiresAt, ttlSeconds, clinicEzId, scopes, purpose }`. `token` is the QR content: an opaque,
@@ -1261,10 +1313,10 @@ HMAC-signed, single-use string valid for `ttlSeconds` (default 120). Request a n
 
 Newest first, including expired and revoked grants.
 
-`AccessGrantDto { id, tenantId, facilityId, facilityName, scopes[], purpose, source: qr|booking|manual, status: active|expired|revoked, expiresAt, revokedAt, createdAt }`
+`AccessGrantDto { id, tenantId, facilityId, facilityName, scopes[], purpose, source: Qr|Booking|Manual, status: Active|Expired|Revoked, expiresAt, revokedAt, createdAt }`
 
-A QR redemption creates a grant valid for `Sharing:QrGrantHours`; submitting a booking creates a `booking` grant
-(`demographics` scope) valid for `Sharing:BookingGrantDays`.
+A QR redemption creates a grant valid for `Sharing:QrGrantHours`; submitting a booking creates a `Booking` grant
+(`Demographics` scope) valid for `Sharing:BookingGrantDays`.
 
 ### `DELETE /api/v1/patients/{patientId}/access-grants/{grantId}` — Revoke
 
@@ -1310,12 +1362,12 @@ Omit `since` for the first full pull. `take` is capped at 500.
 Persist `cursor` and send it back as `since`; keep calling while `hasMore` is `true`. Only rows that changed after the
 cursor are returned. **400** when `since` is not a cursor previously returned.
 
-- `LabRequestDto { id, requisitionId, orderingTenantId, orderingFacilityId, orderingFacilityName, accessionNumber, title, urgency, items[{code,name,category}], stage, quotedAmount, currency, paymentRequired, paymentStatus: none|pending|paid, laboratoryName, claimToken, reason, issuedAt, updatedAt }` —
-  `stage`: `issued routed claimed awaitingPayment paid specimenCollected inProcess resultFinalized externalSubmitted reviewed rejected cancelled`.
+- `LabRequestDto { id, requisitionId, orderingTenantId, orderingFacilityId, orderingFacilityName, accessionNumber, title, urgency, items[{code,name,category}], stage, quotedAmount, currency, paymentRequired, paymentStatus: None|Pending|Paid, laboratoryName, claimToken, reason, issuedAt, updatedAt }` —
+  `stage`: `Issued Routed Claimed AwaitingPayment Paid SpecimenCollected InProcess ResultFinalized ExternalSubmitted Reviewed Rejected Cancelled`.
   `claimToken` is the QR content shown at any ClinicEZ laboratory.
 - `PrescriptionDto { id, prescriptionNumber, orderingTenantId, orderingFacilityId, orderingFacilityName, prescriberName, prescriberPrcLicense, diagnosis, instructions, items[{genericName,brandName,dosage,form,sig,quantity,durationDays,remarks}], stage, quotedAmount, pharmacyName, claimToken, verificationUrl, receiptNumber, dispensedAt, externalPharmacyName, issuedAt, updatedAt }` —
-  `stage`: `issued accepted partiallyAccepted rejected dispensed externalDispensed`.
-- `LabResultDto { id, requisitionId, laboratoryName, title, source: clinicEzLab|externalLab|patientUploaded, verification: verified|unverified|rejected, reviewedByName, reviewedAt, remarks, impression, isCritical, resultedAt, fileUrl, observations[{panel,name,value,unit,referenceRange,flag}], updatedAt }` —
+  `stage`: `Issued Accepted PartiallyAccepted Rejected Dispensed ExternalDispensed`.
+- `LabResultDto { id, requisitionId, laboratoryName, title, source: ClinicEzLab|ExternalLab|PatientUploaded, verification: Verified|Unverified|Rejected, reviewedByName, reviewedAt, remarks, impression, isCritical, resultedAt, fileUrl, observations[{panel,name,value,unit,referenceRange,flag}], updatedAt }` —
   `fileUrl` is a short-lived download URL. ClinicEZ-lab results arrive `verified`; external and patient-uploaded results stay `unverified` until the ordering doctor reviews them.
 - `MedicalCertificateDto { id, certificateNumber, issuerName, doctorName, doctorPrcLicense, purpose, diagnosis, remarks, restDays, validFrom, validTo, verificationUrl, issuedAt, updatedAt }`
 - `notifications` use the existing notification shape; document notifications carry `payload` JSON `{ "kind": "labRequest|labResult|prescription|medicalCertificate", "documentId": "…" }`.
@@ -1327,9 +1379,9 @@ when the document arrives; a status older than the recorded one never overwrites
 
 `multipart/form-data`: `file` (required; PDF, JPEG, PNG or HEIC, at most 10 MB) and `notes` (optional).
 
-**202** — `data: { resultId, verification: "unverified", source: "patientUploaded" }`. The file is stored by patient-api and
+**202** — `data: { resultId, verification: "Unverified", source: "PatientUploaded" }`. The file is stored by patient-api and
 the ordering clinic is sent a download link (`lab.result.external.submitted`), valid for 7 days. The ordering doctor's
-verdict returns through `sync/changes` (`verification` becomes `verified` or `rejected`).  
+verdict returns through `sync/changes` (`verification` becomes `Verified` or `Rejected`).  
 **400** no or empty file · **404** the lab request is not the patient's · **409** the request is closed, or the ordering
 clinic is not known yet · **413** over 10 MB · **415** type not allowed.
 
@@ -1338,7 +1390,7 @@ clinic is not known yet · **413** over 10 MB · **415** type not allowed.
 `multipart/form-data`: `pharmacyName` (required), `branchLocation`, `pharmacistName`, `receiptNumber`, `notes` and an
 optional `receipt` file (same limits as above).
 
-**202** — `data: { prescriptionId, stage: "externalDispensed" }`. The issuing clinic is told (`rx.external.dispensed`) with a
+**202** — `data: { prescriptionId, stage: "ExternalDispensed" }`. The issuing clinic is told (`rx.external.dispensed`) with a
 7-day link to the receipt photo, if one was attached.  
 **404** not the patient's prescription · **409** already dispensed · **413** / **415** as above.
 
@@ -1388,7 +1440,8 @@ metadata is sent.
 
 **Hub URL:** `ws://localhost:5154/hubs/sync`  
 **Auth:** Pass the Clerk JWT via `accessTokenFactory`. The server joins the client to
-`sync:patient:{patientId}` automatically on connect.
+`sync:patient:{patientId}` automatically on connect. Add `?deviceId={deviceId}` to the hub URL to also join
+`sync:device:{patientId}:{deviceId}`, the group that receives a single-device `SessionRevoked`.
 
 ### Events pushed by the server
 
@@ -1402,10 +1455,11 @@ metadata is sent.
 - `conflicts` — items skipped because the server version was newer (Last-Write-Wins).
   Call `GET /sync/status` to surface details for the conflicted items.
 
-**`SessionRevoked`** — fired when another device registers or the user logs out remotely.
+**`SessionRevoked`** — fired when this device was signed out from another device (sent to its device group only) or
+when the patient signed out everywhere (sent to every connected device). Signing in on another device never fires it.
 
 ```json
-{ "reason": "A new device has signed in to your account. This session has been revoked." }
+{ "reason": "This device has been signed out from another device." }
 ```
 
 Mobile action: clear local session, navigate to the sign-in screen.
@@ -1416,7 +1470,7 @@ Mobile action: clear local session, navigate to the sign-in screen.
 import * as signalR from '@microsoft/signalr';
 
 const connection = new signalR.HubConnectionBuilder()
-  .withUrl('http://localhost:5154/hubs/sync', {
+  .withUrl(`http://localhost:5154/hubs/sync?deviceId=${encodeURIComponent(deviceId)}`, {
     accessTokenFactory: async () => getToken(),
   })
   .withAutomaticReconnect()
@@ -1443,7 +1497,7 @@ await connection.start();
 ## Hangfire Dashboard
 
 **URL:** `http://localhost:5154/hangfire`  
-**Auth:** HTTP Basic (`Hangfire:DashboardUsername` / `Hangfire:DashboardPassword` from user-secrets).  
+**Auth:** HTTP Basic (`Hangfire:DashboardUsername` / `Hangfire:DashboardPassword` from user-secrets or environment). There is no default password: with none configured the dashboard is denied to everyone.  
 **Mode:** Read-only in Production; full control in Development.
 
 Use the dashboard to inspect queued / failed sync jobs and trigger manual retries.
@@ -1475,8 +1529,39 @@ in and out for full debuggability with Scalar, curl, and React Native dev tools.
 ```bash
 # Generate a production key (run once, store securely)
 openssl rand -base64 32
-# → set as: ENCRYPTION__BASE64KEY environment variable
+# → set as: ENCRYPTION__BASE64KEY environment variable (deploy: PATIENT_ENCRYPTION_KEY)
 ```
+
+There is no built-in or fallback key. With `Encryption:Enabled=true` (the default outside Development) the service
+**refuses to start** unless `Encryption:Base64Key` is base64 of exactly 32 bytes.
+
+**Rotating the key.** The key is shared with the mobile app, which encrypts every request with it, so a rotation is a
+coordinated release: (1) generate a new key; (2) ship an app build that uses it; (3) set the new `ENCRYPTION__BASE64KEY`
+and restart the service. Requests from clients still on the old key fail to decrypt (`400`) until they update, so force
+the app update first or schedule a short maintenance window. The key only protects transport payloads: nothing stored
+at rest is encrypted with it, so no data migration is needed. The same applies to `Sharing:SigningKey` (below):
+changing it only invalidates share tokens that are currently displayed (they live 120 seconds).
+
+---
+
+## Required configuration
+
+patient-api has **no default secrets**. The connection string, `Clerk__Authority`, `Encryption__Base64Key` and `Sharing__SigningKey` are validated at start-up (the service refuses to start without them); the others are required for the feature they serve:
+
+| Key (env var) | Purpose |
+|---|---|
+| `ConnectionStrings__DefaultConnection` | PostgreSQL (also used by Hangfire) |
+| `Clerk__Authority` | Clerk JWT issuer (`Clerk__Audience` optional) |
+| `Encryption__Base64Key` | Payload encryption key, 32 random bytes in base64 (see above) |
+| `Sharing__SigningKey` | HMAC key (≥ 32 characters) for share tokens |
+| `Facility__BaseDomain` and/or `Cors__AllowedDomains__0…`, `Cors__AllowedOrigins__0…` | Browser origins trusted for CORS. **Required outside Development** — the service refuses to start without at least one, and `Cors__AllowAnyOrigin=true` is refused. Native mobile clients do not use CORS. Development allows any origin. |
+| `Messaging__HubUrl`, `Messaging__ClientId`, `Messaging__ClientSecret` | Interop hub client credentials |
+| `Messaging__SigningKey` | This service's envelope-signing private key; required wherever the hub enforces signatures (the default outside Development, see `docs/architecture/interop-hub.md`) |
+| `R2__AccountId`, `R2__BucketName`, `R2__AccessKeyId`, `R2__SecretAccessKey`, `R2__PublicUrl` | Cloudflare R2 object storage |
+| `Hangfire__DashboardPassword` | Dashboard Basic-Auth password (empty = dashboard disabled for everyone) |
+
+Development-only placeholders live in `appsettings.Development.json`; `appsettings.json` carries no secret values.
+Redis is not required by patient-api.
 
 ---
 

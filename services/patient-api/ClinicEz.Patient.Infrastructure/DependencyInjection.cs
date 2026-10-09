@@ -15,6 +15,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using ClinicEz.Patient.Application.Common.Interfaces;
 using ClinicEz.Patient.Domain.Interfaces;
@@ -25,11 +26,9 @@ using ClinicEz.Patient.Infrastructure.Services;
 using ClinicEz.Patient.Infrastructure.Services.Auth;
 using ClinicEz.Patient.Infrastructure.Services.Jobs;
 using ClinicEz.Patient.Infrastructure.Services.Jobs.Processors;
-using ClinicEz.Patient.Infrastructure.Services.Session;
 using ClinicEz.Patient.Infrastructure.Services.Storage;
 using ClinicEz.Patient.Infrastructure.Services.Notifications;
 using ClinicEz.Patient.Infrastructure.Interop;
-using StackExchange.Redis;
 
 namespace ClinicEz.Patient.Infrastructure;
 
@@ -43,13 +42,14 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is not configured.");
 
-        var redisConnection = configuration.GetConnectionString("Redis")
-            ?? throw new InvalidOperationException("Connection string 'Redis' is not configured.");
 
         // ── Options ──────────────────────────────────────────────────────────
         services.Configure<R2Options>(configuration.GetSection("R2"));
         services.Configure<ClerkOptions>(configuration.GetSection("Clerk"));
-        services.Configure<EncryptionOptions>(configuration.GetSection("Encryption"));
+        services.AddOptions<EncryptionOptions>()
+            .Bind(configuration.GetSection("Encryption"))
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<EncryptionOptions>, EncryptionOptionsValidator>();
         services.AddOptions<SharingOptions>()
             .Bind(configuration.GetSection(SharingOptions.SectionName))
             .Validate(
@@ -65,9 +65,6 @@ public static class DependencyInjection
                 .UseSnakeCaseNamingConvention()
                 .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
 
-        // ── Redis ─────────────────────────────────────────────────────────────
-        services.AddSingleton<IConnectionMultiplexer>(
-            ConnectionMultiplexer.Connect(redisConnection));
 
         services.AddHangfire(config => config
             .UseSimpleAssemblyNameTypeSerializer()
@@ -101,7 +98,6 @@ public static class DependencyInjection
 
         // ── Application Services ──────────────────────────────────────────────
         services.AddSingleton<IStorageService, R2StorageService>();
-        services.AddScoped<ISessionService, RedisSessionService>();
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<IBackgroundJobEnqueuer, HangfireJobEnqueuer>();

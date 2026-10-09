@@ -220,7 +220,7 @@ public sealed class SubmitBookingDraftCommandHandler : IRequestHandler<SubmitBoo
             PatientId = patientId,
             TenantId = tenantId,
             FacilityId = draft.ClinicId,
-            ScopesMask = (int)SharingScopes.Demographics,
+            Scopes = AccessScopes.Demographics,
             Purpose = "Appointment booking",
             ExpiresAt = DateTime.UtcNow.AddDays(_sharingOptions.BookingGrantDays),
             Source = AccessGrantSource.Booking,

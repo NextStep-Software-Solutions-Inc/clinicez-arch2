@@ -93,8 +93,8 @@ public sealed class DocumentCommandsTests
 
         var accepted = await UploadAsync(h, patientId, requisitionId, "../my result.pdf");
 
-        accepted.Verification.Should().Be("unverified");
-        accepted.Source.Should().Be("patientUploaded");
+        accepted.Verification.Should().Be("Unverified");
+        accepted.Source.Should().Be("PatientUploaded");
         var report = await h.WithDbAsync(db => db.LabResultReports.AsNoTracking().SingleAsync());
         report.Source.Should().Be(ResultProvenance.PatientUploaded);
         report.Verification.Should().Be(ResultVerification.Unverified);
@@ -216,7 +216,7 @@ public sealed class DocumentCommandsTests
 
         var accepted = await DispenseAsync(h, patientId, prescriptionId, "  Watsons  ", withReceipt: true);
 
-        accepted.Stage.Should().Be("externalDispensed");
+        accepted.Stage.Should().Be("ExternalDispensed");
         var rx = await h.WithDbAsync(db => db.PrescriptionDocuments.AsNoTracking().SingleAsync());
         rx.Stage.Should().Be(PrescriptionStage.ExternalDispensed);
         rx.ExternalPharmacyName.Should().Be("Watsons");
@@ -341,7 +341,7 @@ public sealed class DocumentCommandsTests
         var next = await ChangesAsync(h, patientId, first.Cursor);
 
         next.LabRequests.Should().ContainSingle().Which.RequisitionId.Should().Be(requisitionId);
-        next.LabRequests[0].Stage.Should().Be("paid");
+        next.LabRequests[0].Stage.Should().Be("Paid");
     }
 
     [Fact]

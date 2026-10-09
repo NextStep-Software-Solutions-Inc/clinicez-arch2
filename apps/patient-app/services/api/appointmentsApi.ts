@@ -1,38 +1,43 @@
+import { z } from 'zod';
 import { api } from './apiClient';
+import { appointmentStatusSchema } from './wireEnums';
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// ── Schemas ───────────────────────────────────────────────────────────────────
 
-export interface ClinicProviderSnapshot {
-    id: string;
-    name: string;
-    specialty: string | null;
-    avatarUrl: string | null;
-}
+const clinicProviderSnapshotSchema = z.object({
+    id: z.string(),
+    name: z.string(),
+    specialty: z.string().nullable(),
+    avatarUrl: z.string().nullable(),
+});
+export type ClinicProviderSnapshot = z.infer<typeof clinicProviderSnapshotSchema>;
 
-export interface RemoteAppointment {
-    id: string;
-    clinicId: string;
-    clinicName: string;
-    provider: ClinicProviderSnapshot;
-    serviceType: string | null;
+export const remoteAppointmentSchema = z.object({
+    id: z.string(),
+    clinicId: z.string(),
+    clinicName: z.string(),
+    provider: clinicProviderSnapshotSchema,
+    serviceType: z.string().nullable(),
     /** ISO-8601 UTC */
-    scheduledAt: string;
-    durationMinutes: number;
-    /** "pending" | "confirmed" | "cancelled" | "completed" | "noShow" | "actionRequired" */
-    status: string;
-    notes: string | null;
-    subject?: string | null;
-    chiefComplaint?: string | null;
-    clinicalAssessment?: string | null;
-    doctorPlan?: string | null;
-    prescriptionsSummary?: string | null;
-    prescriptionPublicVerificationUrl?: string | null;
-}
+    scheduledAt: z.string(),
+    durationMinutes: z.number(),
+    /** PascalCase member name: Pending | Confirmed | Cancelled | Completed | NoShow | ActionRequired */
+    status: appointmentStatusSchema,
+    notes: z.string().nullable(),
+    subject: z.string().nullish(),
+    chiefComplaint: z.string().nullish(),
+    clinicalAssessment: z.string().nullish(),
+    doctorPlan: z.string().nullish(),
+    prescriptionsSummary: z.string().nullish(),
+    prescriptionPublicVerificationUrl: z.string().nullish(),
+});
+export type RemoteAppointment = z.infer<typeof remoteAppointmentSchema>;
 
-export interface ClinicAppointmentsResult {
-    items: RemoteAppointment[];
-    totalCount: number;
-}
+export const clinicAppointmentsResultSchema = z.object({
+    items: z.array(remoteAppointmentSchema),
+    totalCount: z.number(),
+});
+export type ClinicAppointmentsResult = z.infer<typeof clinicAppointmentsResultSchema>;
 
 // ── API function ──────────────────────────────────────────────────────────────
 
@@ -43,12 +48,9 @@ export async function fetchAppointmentsLive(
     getToken: () => Promise<string | null>,
     patientId: string,
 ): Promise<ClinicAppointmentsResult> {
-    return api.get<ClinicAppointmentsResult>(
-        getToken,
-        `/patients/${patientId}/appointments`,
-    );
+    const data = await api.get<unknown>(getToken, `/patients/${patientId}/appointments`);
+    return clinicAppointmentsResultSchema.parse(data);
 }
-
 export interface LiveAvailableSlot {
     id: string;
     time: string;

@@ -3,6 +3,9 @@ using ClinicEz.Patient.Application.Features.Sharing;
 
 namespace ClinicEz.Patient.Application.Features.Documents;
 
+/// <summary>Whether the patient still has to pay for a lab request; serialised by member name in <see cref="LabRequestDto.PaymentStatus"/>.</summary>
+public enum LabPaymentStatus { None, Pending, Paid }
+
 public sealed record LabRequestItemDto(string Code, string Name, string Category);
 
 public sealed record LabRequestDto(

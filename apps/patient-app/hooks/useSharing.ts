@@ -2,6 +2,8 @@ import useSWR from 'swr';
 import { useAuth } from 'contexts/AuthContext';
 import { swrFetcher, swrKey, type ApiError } from 'services/api/apiClient';
 import {
+  accessGrantListSchema,
+  accessLogPageSchema,
   type AccessGrantDto,
   type AccessLogPage,
 } from 'services/api/sharingApi';
@@ -19,7 +21,7 @@ export function useAccessGrants(patientId: string) {
   const { getToken } = useAuth();
   return useSWR<AccessGrantDto[], ApiError, FetchKey>(
     [swrKey(`/patients/${patientId}/access-grants`), getToken],
-    ([path, tokenFn]) => swrFetcher<AccessGrantDto[]>(path, tokenFn),
+    async ([path, tokenFn]) => accessGrantListSchema.parse(await swrFetcher<unknown>(path, tokenFn)),
     SWR_OPTIONS,
   );
 }
@@ -35,7 +37,7 @@ export function useAccessLog(patientId: string, grantId?: string) {
   });
   return useSWR<AccessLogPage, ApiError, FetchKey>(
     [path, getToken],
-    ([url, tokenFn]) => swrFetcher<AccessLogPage>(url, tokenFn),
+    async ([url, tokenFn]) => accessLogPageSchema.parse(await swrFetcher<unknown>(url, tokenFn)),
     SWR_OPTIONS,
   );
 }

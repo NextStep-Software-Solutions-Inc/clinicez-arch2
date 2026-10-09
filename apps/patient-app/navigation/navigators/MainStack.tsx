@@ -63,6 +63,7 @@ import NcdQuestionnaireScreen from '../screens/profile/NcdQuestionnaire.screen';
 import ShareRecordsScreen from '../screens/sharing/ShareRecords.screen';
 import AccessGrantsScreen from '../screens/sharing/AccessGrants.screen';
 import AccessLogScreen from '../screens/sharing/AccessLog.screen';
+import MyDevicesScreen from '../screens/settings/MyDevices.screen';
 
 // Document inbox
 import DocumentsScreen from '../screens/documents/Documents.screen';
@@ -334,6 +335,11 @@ const MainStack = createNativeStackNavigator({
     AccessLogScreen: createNativeStackScreen({
       screen: AccessLogScreen,
       options: { title: 'Access activity' },
+    }),
+    // ── Devices ───────────────────────────────────────────────────────────────
+    MyDevicesScreen: createNativeStackScreen({
+      screen: MyDevicesScreen,
+      options: { title: 'My devices' },
     }),
     // ── Document inbox ────────────────────────────────────────────────────────
     DocumentsScreen: createNativeStackScreen({

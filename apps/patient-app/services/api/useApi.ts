@@ -21,7 +21,12 @@ import type {
     ClinicSummary,
     ClinicDetail,
 } from './discoveryApi';
-import type { NotificationListResult, RemoteNotificationPreference } from './notificationsApi';
+import {
+    notificationListResultSchema,
+    remoteNotificationPreferenceListSchema,
+    type NotificationListResult,
+    type RemoteNotificationPreference,
+} from './notificationsApi';
 
 // ── Shared options ────────────────────────────────────────────────────────────
 
@@ -151,7 +156,7 @@ export function useNotifications(
         : null;
     return useSWR<NotificationListResult>(
         key ? [key, getToken] : null,
-        ([k, gt]: [string, any]) => swrFetcher<NotificationListResult>(k, gt),
+        async ([k, gt]: [string, any]) => notificationListResultSchema.parse(await swrFetcher<unknown>(k, gt)),
         OFFLINE_OPTS,
     );
 }
@@ -165,7 +170,7 @@ export function useNotificationPreferences(
         : null;
     return useSWR<RemoteNotificationPreference[]>(
         key ? [key, getToken] : null,
-        ([k, gt]: [string, any]) => swrFetcher<RemoteNotificationPreference[]>(k, gt),
+        async ([k, gt]: [string, any]) => remoteNotificationPreferenceListSchema.parse(await swrFetcher<unknown>(k, gt)),
         OFFLINE_OPTS,
     );
 }

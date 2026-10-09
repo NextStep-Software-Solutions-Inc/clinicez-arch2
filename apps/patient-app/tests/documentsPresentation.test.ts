@@ -30,53 +30,45 @@ import {
 
 describe('provenanceBadge', () => {
   test('maps each source to its label', () => {
-    expect(provenanceBadge('clinicEzLab').label).toBe('ClinicEZ lab');
-    expect(provenanceBadge('externalLab').label).toBe('External lab');
-    expect(provenanceBadge('patientUploaded').label).toBe('Uploaded by me');
-  });
-
-  test('unknown sources degrade to a neutral badge', () => {
-    expect(provenanceBadge('somethingNew')).toEqual({ label: 'Unknown source', tone: 'neutral' });
+    expect(provenanceBadge('ClinicEzLab').label).toBe('ClinicEZ lab');
+    expect(provenanceBadge('ExternalLab').label).toBe('External lab');
+    expect(provenanceBadge('PatientUploaded').label).toBe('Uploaded by me');
   });
 });
 
 describe('verificationBadge', () => {
   test('verified is a success badge without extra detail', () => {
-    const badge = verificationBadge('verified');
+    const badge = verificationBadge('Verified');
     expect(badge.label).toBe('Verified');
     expect(badge.tone).toBe('success');
     expect(badge.detail).toBeNull();
   });
 
   test('unverified reads as pending doctor review', () => {
-    const badge = verificationBadge('unverified');
+    const badge = verificationBadge('Unverified');
     expect(badge.label).toBe('Pending doctor review');
     expect(badge.tone).toBe('warning');
     expect(badge.detail).not.toBeNull();
   });
 
   test('rejected surfaces the doctor remarks, trimmed', () => {
-    const badge = verificationBadge('rejected', '  Image is too blurry  ');
+    const badge = verificationBadge('Rejected', '  Image is too blurry  ');
     expect(badge.label).toBe('Rejected');
     expect(badge.tone).toBe('danger');
     expect(badge.detail).toBe('Image is too blurry');
   });
 
   test('rejected without remarks falls back to a generic explanation', () => {
-    expect(verificationBadge('rejected', null).detail).toContain('did not accept');
-    expect(verificationBadge('rejected', '   ').detail).toContain('did not accept');
-  });
-
-  test('unknown status is neutral', () => {
-    expect(verificationBadge('mystery').tone).toBe('neutral');
+    expect(verificationBadge('Rejected', null).detail).toContain('did not accept');
+    expect(verificationBadge('Rejected', '   ').detail).toContain('did not accept');
   });
 });
 
 describe('payment chip and amount', () => {
   test('maps none, pending and paid', () => {
-    expect(paymentChip('none').label).toBe('No payment due');
-    expect(paymentChip('pending')).toMatchObject({ label: 'Payment pending', tone: 'warning' });
-    expect(paymentChip('paid')).toMatchObject({ label: 'Paid', tone: 'success' });
+    expect(paymentChip('None').label).toBe('No payment due');
+    expect(paymentChip('Pending')).toMatchObject({ label: 'Payment pending', tone: 'warning' });
+    expect(paymentChip('Paid')).toMatchObject({ label: 'Paid', tone: 'success' });
   });
 
   test('formatAmount renders currency with two decimals and tolerates nulls', () => {
@@ -90,90 +82,85 @@ describe('labTimeline', () => {
   const stages = (steps: ReturnType<typeof labTimeline>) => steps.map((step) => step.stage);
 
   test('includes payment steps only when payment is required', () => {
-    expect(stages(labTimeline('issued', true))).toContain('awaitingPayment');
-    expect(stages(labTimeline('issued', true))).toContain('paid');
-    expect(stages(labTimeline('issued', false))).not.toContain('awaitingPayment');
-    expect(stages(labTimeline('issued', false))).not.toContain('paid');
+    expect(stages(labTimeline('Issued', true))).toContain('AwaitingPayment');
+    expect(stages(labTimeline('Issued', true))).toContain('Paid');
+    expect(stages(labTimeline('Issued', false))).not.toContain('AwaitingPayment');
+    expect(stages(labTimeline('Issued', false))).not.toContain('Paid');
   });
 
   test('marks earlier steps done, the active one current and later ones upcoming', () => {
-    const steps = labTimeline('claimed', true);
+    const steps = labTimeline('Claimed', true);
     const states = Object.fromEntries(steps.map((step) => [step.stage, step.state]));
-    expect(states.issued).toBe('done');
-    expect(states.routed).toBe('done');
-    expect(states.claimed).toBe('current');
-    expect(states.awaitingPayment).toBe('upcoming');
-    expect(states.reviewed).toBe('upcoming');
+    expect(states.Issued).toBe('done');
+    expect(states.Routed).toBe('done');
+    expect(states.Claimed).toBe('current');
+    expect(states.AwaitingPayment).toBe('upcoming');
+    expect(states.Reviewed).toBe('upcoming');
   });
 
   test('the final stage shows as completed rather than current', () => {
-    const steps = labTimeline('reviewed', false);
+    const steps = labTimeline('Reviewed', false);
     expect(steps.every((step) => step.state === 'done')).toBe(true);
   });
 
   test('external submission uses the short issued -> uploaded -> reviewed flow', () => {
-    const steps = labTimeline('externalSubmitted', true);
-    expect(stages(steps)).toEqual(['issued', 'externalSubmitted', 'reviewed']);
+    const steps = labTimeline('ExternalSubmitted', true);
+    expect(stages(steps)).toEqual(['Issued', 'ExternalSubmitted', 'Reviewed']);
     expect(steps[1].state).toBe('current');
   });
 
   test('rejected and cancelled end in a failed step', () => {
-    const rejected = labTimeline('rejected', true);
+    const rejected = labTimeline('Rejected', true);
     expect(rejected).toHaveLength(2);
-    expect(rejected[1]).toMatchObject({ stage: 'rejected', state: 'failed' });
-    expect(labTimeline('cancelled', false)[1].state).toBe('failed');
-  });
-
-  test('an unknown stage starts at the first step instead of crashing', () => {
-    const steps = labTimeline('brandNewStage', false);
-    expect(steps[0].state).toBe('current');
+    expect(rejected[1]).toMatchObject({ stage: 'Rejected', state: 'failed' });
+    expect(labTimeline('Cancelled', false)[1].state).toBe('failed');
   });
 });
 
 describe('lab request actions', () => {
   test('stage chips reflect progress, completion and failure', () => {
-    expect(labStageChip('reviewed').tone).toBe('success');
-    expect(labStageChip('rejected').tone).toBe('danger');
-    expect(labStageChip('issued').tone).toBe('info');
-    expect(labStageChip('inProcess').tone).toBe('primary');
+    expect(labStageChip('Reviewed').tone).toBe('success');
+    expect(labStageChip('Rejected').tone).toBe('danger');
+    expect(labStageChip('Issued').tone).toBe('info');
+    expect(labStageChip('InProcess').tone).toBe('primary');
   });
 
   test('upload is offered until the request is cancelled or reviewed', () => {
-    expect(canUploadLabResult('issued')).toBe(true);
-    expect(canUploadLabResult('externalSubmitted')).toBe(true);
-    expect(canUploadLabResult('cancelled')).toBe(false);
-    expect(canUploadLabResult('reviewed')).toBe(false);
+    expect(canUploadLabResult('Issued')).toBe(true);
+    expect(canUploadLabResult('ExternalSubmitted')).toBe(true);
+    expect(canUploadLabResult('Cancelled')).toBe(false);
+    expect(canUploadLabResult('Reviewed')).toBe(false);
   });
 
   test('claim QR needs a token and an open request', () => {
-    expect(showLabClaimQr('issued', 'token')).toBe(true);
-    expect(showLabClaimQr('issued', null)).toBe(false);
-    expect(showLabClaimQr('cancelled', 'token')).toBe(false);
-    expect(showLabClaimQr('reviewed', 'token')).toBe(false);
+    expect(showLabClaimQr('Issued', 'token')).toBe(true);
+    expect(showLabClaimQr('Issued', null)).toBe(false);
+    expect(showLabClaimQr('Cancelled', 'token')).toBe(false);
+    expect(showLabClaimQr('Reviewed', 'token')).toBe(false);
   });
 });
 
 describe('prescription actions', () => {
   test('stage chips', () => {
-    expect(prescriptionStageChip('dispensed').tone).toBe('success');
-    expect(prescriptionStageChip('externalDispensed').label).toBe('Dispensed elsewhere');
-    expect(prescriptionStageChip('rejected').tone).toBe('danger');
-    expect(prescriptionStageChip('accepted').tone).toBe('primary');
-    expect(prescriptionStageChip('issued').tone).toBe('info');
+    expect(prescriptionStageChip('Dispensed').tone).toBe('success');
+    expect(prescriptionStageChip('ExternalDispensed').label).toBe('Dispensed elsewhere');
+    expect(prescriptionStageChip('Rejected').tone).toBe('danger');
+    expect(prescriptionStageChip('Accepted').tone).toBe('primary');
+    expect(prescriptionStageChip('Issued').tone).toBe('info');
   });
 
   test('dispensed elsewhere is only offered while not yet dispensed', () => {
-    expect(canDispenseElsewhere('issued')).toBe(true);
-    expect(canDispenseElsewhere('accepted')).toBe(true);
-    expect(canDispenseElsewhere('dispensed')).toBe(false);
-    expect(canDispenseElsewhere('externalDispensed')).toBe(false);
+    expect(canDispenseElsewhere('Issued')).toBe(true);
+    expect(canDispenseElsewhere('Accepted')).toBe(true);
+    expect(canDispenseElsewhere('Dispensed')).toBe(false);
+    expect(canDispenseElsewhere('ExternalDispensed')).toBe(false);
   });
 
   test('claim QR is hidden once dispensed or rejected', () => {
-    expect(showPrescriptionClaimQr('issued', 'token')).toBe(true);
-    expect(showPrescriptionClaimQr('issued', null)).toBe(false);
-    expect(showPrescriptionClaimQr('dispensed', 'token')).toBe(false);
-    expect(showPrescriptionClaimQr('rejected', 'token')).toBe(false);
+    expect(showPrescriptionClaimQr('Issued', 'token')).toBe(true);
+    expect(showPrescriptionClaimQr('Issued', null)).toBe(false);
+    expect(showPrescriptionClaimQr('Dispensed', 'token')).toBe(false);
+    expect(showPrescriptionClaimQr('Rejected', 'token')).toBe(false);
   });
 });
 
@@ -238,21 +225,21 @@ describe('upload rules', () => {
 
 describe('access grant presentation', () => {
   test('status chips for active, expired and revoked', () => {
-    expect(grantStatusChip('active')).toMatchObject({ label: 'Active', tone: 'success' });
-    expect(grantStatusChip('expired')).toMatchObject({ label: 'Expired', tone: 'neutral' });
-    expect(grantStatusChip('revoked')).toMatchObject({ label: 'Revoked', tone: 'danger' });
+    expect(grantStatusChip('Active')).toMatchObject({ label: 'Active', tone: 'success' });
+    expect(grantStatusChip('Expired')).toMatchObject({ label: 'Expired', tone: 'neutral' });
+    expect(grantStatusChip('Revoked')).toMatchObject({ label: 'Revoked', tone: 'danger' });
   });
 
   test('source labels', () => {
-    expect(grantSourceLabel('qr')).toBe('Shared by QR code');
-    expect(grantSourceLabel('booking')).toBe('Shared with a booking');
-    expect(grantSourceLabel('manual')).toBe('Added manually');
+    expect(grantSourceLabel('Qr')).toBe('Shared by QR code');
+    expect(grantSourceLabel('Booking')).toBe('Shared with a booking');
+    expect(grantSourceLabel('Manual')).toBe('Added manually');
   });
 
   test('only active grants can be revoked', () => {
-    expect(canRevokeGrant('active')).toBe(true);
-    expect(canRevokeGrant('expired')).toBe(false);
-    expect(canRevokeGrant('revoked')).toBe(false);
+    expect(canRevokeGrant('Active')).toBe(true);
+    expect(canRevokeGrant('Expired')).toBe(false);
+    expect(canRevokeGrant('Revoked')).toBe(false);
   });
 
   test('revoke confirmation explains that imported data stays', () => {

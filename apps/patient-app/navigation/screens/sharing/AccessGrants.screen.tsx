@@ -34,7 +34,7 @@ function describeError(err: unknown, fallback: string): string {
 function grantDates(grant: AccessGrantDto): string {
   const granted = `Granted ${format(new Date(grant.createdAt), DATE_FORMAT)}`;
   if (grant.revokedAt) return `${granted} · Revoked ${format(new Date(grant.revokedAt), DATE_FORMAT)}`;
-  const verb = grant.status === 'expired' ? 'Expired' : 'Expires';
+  const verb = grant.status === 'Expired' ? 'Expired' : 'Expires';
   return `${granted} · ${verb} ${format(new Date(grant.expiresAt), DATE_FORMAT)}`;
 }
 

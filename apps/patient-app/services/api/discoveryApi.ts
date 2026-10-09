@@ -1,71 +1,87 @@
+import { z } from 'zod';
 import { api, ApiError } from './apiClient';
+import { membershipStatusSchema } from './wireEnums';
 
-// ── Types mirroring DiscoveryDtos + MembershipDtos ────────────────────────────
+// ── Schemas mirroring DiscoveryDtos + MembershipDtos ──────────────────────────
+// `membershipStatus` is the PascalCase member name ("Pending" | "Active") or null when not joined.
 
-export interface OrganizationSummary {
-    id: string;
-    slug: string;
-    name: string;
-    description: string;
-    isPublic: boolean;
-    logoUrl: string | null;
-    coverImageUrl: string | null;
-    addressHint: string | null;
-    featuredScore: number;
-    activeMemberCount: number;
-    requiredShareFieldsJson: string;
-    rolesJson: string;
-    membershipStatus?: 'pending' | 'active' | null;
+const organizationSummarySchema = z.object({
+    id: z.string(),
+    slug: z.string(),
+    name: z.string(),
+    description: z.string(),
+    isPublic: z.boolean(),
+    logoUrl: z.string().nullable(),
+    coverImageUrl: z.string().nullable(),
+    addressHint: z.string().nullable(),
+    featuredScore: z.number(),
+    activeMemberCount: z.number(),
+    requiredShareFieldsJson: z.string(),
+    rolesJson: z.string(),
+    membershipStatus: membershipStatusSchema.nullish(),
+});
+export type OrganizationSummary = z.infer<typeof organizationSummarySchema>;
+
+const clinicSummarySchema = z.object({
+    id: z.string(),
+    name: z.string(),
+    description: z.string().nullable(),
+    address: z.string().nullable(),
+    isPublic: z.boolean(),
+    supportsAppointments: z.boolean(),
+    logoUrl: z.string().nullable(),
+    coverImageUrl: z.string().nullable(),
+    specialtiesJson: z.string(),
+    requiredShareFieldsJson: z.string(),
+    featuredScore: z.number(),
+    activeMemberCount: z.number(),
+    membershipStatus: membershipStatusSchema.nullish(),
+});
+export type ClinicSummary = z.infer<typeof clinicSummarySchema>;
+
+const organizationDetailSchema = organizationSummarySchema.extend({
+    privacyPolicyUrl: z.string().nullable(),
+    termsAndConditionsUrl: z.string().nullable(),
+    linkedClinics: z.array(clinicSummarySchema),
+});
+export type OrganizationDetail = z.infer<typeof organizationDetailSchema>;
+
+const clinicProviderSchema = z.object({
+    id: z.string(),
+    name: z.string(),
+    specialty: z.string(),
+    avatarUrl: z.string().nullable(),
+    professionalLicenseNo: z.string().nullable(),
+});
+export type ClinicProviderDto = z.infer<typeof clinicProviderSchema>;
+
+const clinicServiceSchema = z.object({
+    id: z.string(),
+    name: z.string(),
+    description: z.string().nullable(),
+    durationMinutes: z.number().nullable(),
+    price: z.number().nullable(),
+});
+export type ClinicServiceDto = z.infer<typeof clinicServiceSchema>;
+
+const clinicDetailSchema = clinicSummarySchema.extend({
+    privacyPolicyUrl: z.string().nullable(),
+    termsAndConditionsUrl: z.string().nullable(),
+    linkedOrganizations: z.array(organizationSummarySchema),
+    membershipStatus: membershipStatusSchema.nullable(),
+    healthcareProviders: z.array(clinicProviderSchema),
+    services: z.array(clinicServiceSchema),
+});
+export type ClinicDetail = z.infer<typeof clinicDetailSchema>;
+
+function pagedSchema<T extends z.ZodType>(item: T) {
+    return z.object({
+        items: z.array(item),
+        totalCount: z.number(),
+        skip: z.number(),
+        take: z.number(),
+    });
 }
-
-export interface OrganizationDetail extends OrganizationSummary {
-    privacyPolicyUrl: string | null;
-    termsAndConditionsUrl: string | null;
-    linkedClinics: ClinicSummary[];
-}
-
-export interface ClinicSummary {
-    id: string;
-    name: string;
-    description: string | null;
-    address: string | null;
-    isPublic: boolean;
-    supportsAppointments: boolean;
-    logoUrl: string | null;
-    coverImageUrl: string | null;
-    specialtiesJson: string;
-    requiredShareFieldsJson: string;
-    featuredScore: number;
-    activeMemberCount: number;
-    membershipStatus?: 'pending' | 'active' | null;
-}
-
-export interface ClinicProviderDto {
-    id: string;
-    name: string;
-    specialty: string;
-    avatarUrl: string | null;
-    professionalLicenseNo: string | null;
-}
-
-export interface ClinicServiceDto {
-    id: string;
-    name: string;
-    description: string | null;
-    durationMinutes: number | null;
-    price: number | null;
-}
-
-export interface ClinicDetail extends ClinicSummary {
-    privacyPolicyUrl: string | null;
-    termsAndConditionsUrl: string | null;
-    linkedOrganizations: OrganizationSummary[];
-    /** "pending" | "active" | null if not joined */
-    membershipStatus: 'pending' | 'active' | null;
-    healthcareProviders: ClinicProviderDto[];
-    services: ClinicServiceDto[];
-}
-
 export interface PagedResult<T> {
     items: T[];
     totalCount: number;
@@ -73,18 +89,18 @@ export interface PagedResult<T> {
     take: number;
 }
 
-export interface OrganizationMembershipResult {
-    id: string;
-    organizationId: string;
-    organizationName: string;
-    roleId: string;
-    roleName: string;
-    status: string;
-    consentDataSharing: boolean;
-    consentedAt: string | null;
-    createdAt: string;
-}
-
+const organizationMembershipResultSchema = z.object({
+    id: z.string(),
+    organizationId: z.string(),
+    organizationName: z.string(),
+    roleId: z.string(),
+    roleName: z.string(),
+    status: membershipStatusSchema,
+    consentDataSharing: z.boolean(),
+    consentedAt: z.string().nullable(),
+    createdAt: z.string(),
+});
+export type OrganizationMembershipResult = z.infer<typeof organizationMembershipResultSchema>;
 export interface JoinConsentInput {
     consentPrivacyPolicy: boolean;
     consentTermsAndConditions: boolean;
@@ -114,7 +130,8 @@ export async function searchOrganizations(
     });
     if (query?.trim()) params.set('q', query.trim());
     if (forPatientId) params.append('forPatientId', forPatientId);
-    return api.get<PagedResult<OrganizationSummary>>(getToken, `/organizations?${params}`);
+    const data = await api.get<unknown>(getToken, `/organizations?${params}`);
+    return pagedSchema(organizationSummarySchema).parse(data);
 }
 
 /**
@@ -136,10 +153,11 @@ export async function getOrganizationByInviteCode(
     inviteCode: string,
 ): Promise<OrganizationDetail | null> {
     try {
-        return await api.get<OrganizationDetail>(
+        const data = await api.get<unknown>(
             getToken,
             `/organizations/by-invite/${encodeURIComponent(inviteCode.trim())}`,
         );
+        return organizationDetailSchema.parse(data);
     } catch (err) {
         if (err instanceof ApiError && err.status === 404) return null;
         throw err;
@@ -161,7 +179,8 @@ export async function searchClinics(
     if (query?.trim()) params.set('q', query.trim());
     if (organizationId) params.set('organizationId', organizationId);
     if (forPatientId) params.append('forPatientId', forPatientId);
-    return api.get<PagedResult<ClinicSummary>>(getToken, `/clinics?${params}`);
+    const data = await api.get<unknown>(getToken, `/clinics?${params}`);
+    return pagedSchema(clinicSummarySchema).parse(data);
 }
 
 /**
@@ -175,7 +194,8 @@ export async function getClinicDetail(
 ): Promise<ClinicDetail | null> {
     try {
         const params = forPatientId ? `?forPatientId=${forPatientId}` : '';
-        return await api.get<ClinicDetail>(getToken, `/clinics/${clinicId}${params}`);
+        const data = await api.get<unknown>(getToken, `/clinics/${clinicId}${params}`);
+        return clinicDetailSchema.parse(data);
     } catch (err) {
         if (err instanceof ApiError && err.status === 404) return null;
         throw err;
@@ -196,11 +216,12 @@ export async function joinOrganization(
     roleId: string,
     consent: JoinConsentInput,
 ): Promise<OrganizationMembershipResult> {
-    return api.post<OrganizationMembershipResult>(
+    const data = await api.post<unknown>(
         getToken,
         `/patients/${patientId}/organization-memberships`,
         { organizationId, inviteCode, roleId, ...consent },
     );
+    return organizationMembershipResultSchema.parse(data);
 }
 
 /**

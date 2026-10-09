@@ -27,6 +27,7 @@ import {
 } from '../api/discoveryApi';
 import { createBookingDraft as apiCreateDraft, submitBookingDraft as apiSubmitDraft } from '../api/bookingApi';
 import { ApiError } from '../api/apiClient';
+import { localMembershipStatus } from './membershipStatus';
 
 import {
     AppointmentLineupItem,
@@ -126,11 +127,7 @@ function now(): Date {
 }
 
 function parseMembershipStatus(status?: string | null): 'pending' | 'active' | undefined {
-    if (!status) return undefined;
-    const lower = status.toLowerCase();
-    if (lower === 'active') return 'active';
-    if (lower === 'pending') return 'pending';
-    return undefined;
+    return status === 'active' || status === 'pending' ? status : undefined;
 }
 
 function getId(prefix: string, index: number): string {
@@ -704,7 +701,7 @@ async function updateOrganizationCache(patientId: string, remoteOrgs: RemoteOrgS
                 id: getMembershipId('org-membership', patientId, org.id),
                 patientId,
                 organizationId: org.id,
-                status: parseMembershipStatus(org.membershipStatus) ?? 'pending',
+                status: localMembershipStatus(org.membershipStatus) ?? 'pending',
                 roleId: 'member',
                 roleName: 'Member',
                 consentPrivacyPolicy: true,
@@ -718,7 +715,7 @@ async function updateOrganizationCache(patientId: string, remoteOrgs: RemoteOrgS
             await db.insert(organizationMemberships).values(membershipRow).onConflictDoUpdate({
                 target: organizationMemberships.id,
                 set: {
-                    status: parseMembershipStatus(org.membershipStatus) ?? 'pending',
+                    status: localMembershipStatus(org.membershipStatus) ?? 'pending',
                     updatedAt: now(),
                     syncedAt: now(),
                 },
@@ -817,7 +814,7 @@ async function updateClinicCache(patientId: string, remoteClinics: RemoteClinicS
                 id: getMembershipId('clinic-membership', patientId, clinic.id),
                 patientId,
                 clinicId: clinic.id,
-                status: parseMembershipStatus(clinic.membershipStatus) ?? 'pending',
+                status: localMembershipStatus(clinic.membershipStatus) ?? 'pending',
                 consentPrivacyPolicy: true,
                 consentTermsAndConditions: true,
                 consentDataSharing: true,
@@ -829,7 +826,7 @@ async function updateClinicCache(patientId: string, remoteClinics: RemoteClinicS
             await db.insert(clinicMemberships).values(membershipRow).onConflictDoUpdate({
                 target: clinicMemberships.id,
                 set: {
-                    status: parseMembershipStatus(clinic.membershipStatus) ?? 'pending',
+                    status: localMembershipStatus(clinic.membershipStatus) ?? 'pending',
                     updatedAt: now(),
                     syncedAt: now(),
                 },
@@ -1494,10 +1491,10 @@ export async function getClinicDetailOnline(
         specialties: parseJsonArray<string>(remote.specialtiesJson, []),
         featuredScore: remote.featuredScore ?? 0,
         activeMemberCount: remote.activeMemberCount ?? 0,
-        isJoined: remote.membershipStatus?.toString().toLowerCase() === 'active',
-        isVisible: remote.isPublic || remote.membershipStatus?.toString().toLowerCase() === 'active' || (remote.membershipStatus !== null && remote.membershipStatus !== undefined),
+        isJoined: remote.membershipStatus === 'Active',
+        isVisible: remote.isPublic || Boolean(remote.membershipStatus),
         unlockedByOrganizationIds: [],
-        membershipStatus: remote.membershipStatus ? String(remote.membershipStatus).toLowerCase() as any : undefined,
+        membershipStatus: localMembershipStatus(remote.membershipStatus),
         linkedOrganizations: (remote.linkedOrganizations ?? []).map((org) => ({
             id: org.id,
             slug: org.slug,

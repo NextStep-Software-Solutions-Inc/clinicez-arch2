@@ -111,6 +111,7 @@ export const linking: LinkingOptions<RootParamList> = {
           ShareRecordsScreen: 'share',
           AccessGrantsScreen: 'share/grants',
           AccessLogScreen: 'share/log',
+          MyDevicesScreen: 'settings/devices',
 
           // Document inbox
           DocumentsScreen: 'documents',

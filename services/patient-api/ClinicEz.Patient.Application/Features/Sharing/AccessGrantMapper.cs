@@ -1,4 +1,3 @@
-using System.Text.Json;
 using ClinicEz.Patient.Domain.Entities;
 using ClinicEz.Shared.Interoperability;
 
@@ -11,14 +10,14 @@ public static class AccessGrantMapper
         grant.TenantId,
         grant.FacilityId,
         facilityName,
-        SharingScopeMap.ToNames((SharingScopes)grant.ScopesMask),
+        SharingScopeMap.ToNames((SharingScopes)(int)grant.Scopes),
         grant.Purpose,
-        JsonNamingPolicy.CamelCase.ConvertName(grant.Source.ToString()),
+        grant.Source.ToString(),
         StatusOf(grant, utcNow),
         grant.ExpiresAt,
         grant.RevokedAt,
         grant.CreatedAt);
 
     public static string StatusOf(PatientAccessGrant grant, DateTime utcNow) =>
-        grant.RevokedAt is not null ? "revoked" : grant.ExpiresAt <= utcNow ? "expired" : "active";
+        (grant.RevokedAt is not null ? AccessGrantStatus.Revoked : grant.ExpiresAt <= utcNow ? AccessGrantStatus.Expired : AccessGrantStatus.Active).ToString();
 }

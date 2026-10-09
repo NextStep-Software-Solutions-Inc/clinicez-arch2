@@ -843,12 +843,6 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("push_token");
 
-                    b.Property<string>("RedisKey")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
-                        .HasColumnName("redis_key");
-
                     b.Property<DateTime?>("RevokedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("revoked_at");
@@ -871,9 +865,9 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("pk_device_sessions");
 
-                    b.HasIndex("PatientId")
+                    b.HasIndex("PatientId", "DeviceId")
                         .IsUnique()
-                        .HasDatabaseName("ix_device_sessions_patient_id")
+                        .HasDatabaseName("ix_device_sessions_patient_id_device_id")
                         .HasFilter("is_revoked = false");
 
                     b.ToTable("device_sessions", (string)null);
@@ -2718,9 +2712,11 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("revoked_at");
 
-                    b.Property<int>("ScopesMask")
-                        .HasColumnType("integer")
-                        .HasColumnName("scopes_mask");
+                    b.Property<string>("Scopes")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("scopes");
 
                     b.Property<string>("Source")
                         .IsRequired()
@@ -5562,8 +5558,10 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("created_by");
 
-                    b.Property<int>("DayOfWeek")
-                        .HasColumnType("integer")
+                    b.Property<string>("DayOfWeek")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
                         .HasColumnName("day_of_week");
 
                     b.Property<DateTime?>("DeletedAt")

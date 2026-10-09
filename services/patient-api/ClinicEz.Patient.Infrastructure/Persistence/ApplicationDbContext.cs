@@ -101,6 +101,11 @@ public sealed class ApplicationDbContext : DbContext, IInteropDbContext
     public DbSet<InteropOutboxMessage> InteropOutbox => Set<InteropOutboxMessage>();
     public DbSet<InteropInboxMessage> InteropInbox => Set<InteropInboxMessage>();
 
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        configurationBuilder.Properties<Enum>().HaveConversion<string>().HaveMaxLength(64);
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ApplicationDbContext).Assembly);

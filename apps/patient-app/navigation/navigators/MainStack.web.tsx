@@ -56,6 +56,7 @@ import NcdQuestionnaireScreen from '../screens/profile/NcdQuestionnaire.screen';
 import ShareRecordsScreen from '../screens/sharing/ShareRecords.screen';
 import AccessGrantsScreen from '../screens/sharing/AccessGrants.screen';
 import AccessLogScreen from '../screens/sharing/AccessLog.screen';
+import MyDevicesScreen from '../screens/settings/MyDevices.screen';
 import DocumentsScreen from '../screens/documents/Documents.screen';
 import LabRequestDetailScreen from '../screens/documents/LabRequestDetail.screen';
 import UploadLabResultScreen from '../screens/documents/UploadLabResult.screen';
@@ -125,6 +126,7 @@ const SCREENS: [name: string, component: ComponentType<any>, title: string][] = 
   ['ShareRecordsScreen', ShareRecordsScreen, 'Share my records'],
   ['AccessGrantsScreen', AccessGrantsScreen, 'Who has access'],
   ['AccessLogScreen', AccessLogScreen, 'Access activity'],
+  ['MyDevicesScreen', MyDevicesScreen, 'My devices'],
   ['DocumentsScreen', DocumentsScreen, 'Documents'],
   ['LabRequestDetailScreen', LabRequestDetailScreen, 'Lab request'],
   ['UploadLabResultScreen', UploadLabResultScreen, 'Upload result'],

@@ -121,7 +121,7 @@ export default function ExternalDispenseScreen({ route }: Props) {
   }
 
   if (submitted) {
-    const stage = prescriptionStageChip('externalDispensed');
+    const stage = prescriptionStageChip('ExternalDispensed');
     return (
       <Screen width="form" contentContainerStyle={{ gap: spacing.md }}>
         <Card style={{ gap: spacing.sm }}>

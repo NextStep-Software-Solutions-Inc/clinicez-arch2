@@ -1,35 +1,30 @@
+import type { AccessGrantSource, AccessGrantStatus } from '../api/wireEnums';
 import type { Chip } from '../documents/presentation';
 
 /** Presentation mapping for access grants. Pure so it can be unit tested. */
 
-export function grantStatusChip(status: string): Chip {
-  switch (status) {
-    case 'active':
-      return { label: 'Active', tone: 'success', icon: 'checkCircle' };
-    case 'revoked':
-      return { label: 'Revoked', tone: 'danger', icon: 'lock' };
-    case 'expired':
-      return { label: 'Expired', tone: 'neutral', icon: 'clock' };
-    default:
-      return { label: status, tone: 'neutral' };
-  }
+const GRANT_STATUS_CHIPS: Record<AccessGrantStatus, Chip> = {
+  Active: { label: 'Active', tone: 'success', icon: 'checkCircle' },
+  Revoked: { label: 'Revoked', tone: 'danger', icon: 'lock' },
+  Expired: { label: 'Expired', tone: 'neutral', icon: 'clock' },
+};
+
+const GRANT_SOURCE_LABELS: Record<AccessGrantSource, string> = {
+  Qr: 'Shared by QR code',
+  Booking: 'Shared with a booking',
+  Manual: 'Added manually',
+};
+
+export function grantStatusChip(status: AccessGrantStatus): Chip {
+  return GRANT_STATUS_CHIPS[status];
 }
 
-export function grantSourceLabel(source: string): string {
-  switch (source) {
-    case 'qr':
-      return 'Shared by QR code';
-    case 'booking':
-      return 'Shared with a booking';
-    case 'manual':
-      return 'Added manually';
-    default:
-      return source;
-  }
+export function grantSourceLabel(source: AccessGrantSource): string {
+  return GRANT_SOURCE_LABELS[source];
 }
 
-export function canRevokeGrant(status: string): boolean {
-  return status === 'active';
+export function canRevokeGrant(status: AccessGrantStatus): boolean {
+  return status === 'Active';
 }
 
 export function revokeConfirmationMessage(facilityName: string | null): string {

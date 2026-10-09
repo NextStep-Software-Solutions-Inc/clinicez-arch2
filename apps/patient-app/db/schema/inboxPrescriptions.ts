@@ -1,4 +1,5 @@
 import { index, integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { PRESCRIPTION_STAGES } from '../../services/api/wireEnums';
 
 // Document inbox — prescriptions issued by facilities (read-only, upserted from sync/changes).
 // Distinct from the legacy `prescriptions` table used by the clinical profile section.
@@ -17,7 +18,7 @@ export const inboxPrescriptions = sqliteTable(
     instructions: text('instructions'),
     /** JSON-encoded prescription line items */
     itemsJson: text('items_json').notNull().default('[]'),
-    stage: text('stage').notNull(),
+    stage: text('stage', { enum: PRESCRIPTION_STAGES }).notNull(),
     quotedAmount: real('quoted_amount'),
     pharmacyName: text('pharmacy_name'),
     claimToken: text('claim_token'),

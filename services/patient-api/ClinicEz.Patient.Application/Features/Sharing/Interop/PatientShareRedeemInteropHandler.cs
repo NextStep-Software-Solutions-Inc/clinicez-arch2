@@ -99,7 +99,7 @@ public sealed class PatientShareRedeemInteropHandler : IInteropHandler<PatientSh
             PatientId = patient.Id,
             TenantId = requester.TenantId!,
             FacilityId = facilityId,
-            ScopesMask = (int)claims.Scopes,
+            Scopes = (AccessScopes)(int)claims.Scopes,
             Purpose = claims.Purpose,
             ExpiresAt = now.AddHours(_options.QrGrantHours),
             Source = AccessGrantSource.Qr

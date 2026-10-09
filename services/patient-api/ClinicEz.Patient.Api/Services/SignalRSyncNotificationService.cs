@@ -42,17 +42,19 @@ public sealed class SignalRSyncNotificationService : ISyncNotificationService
 
         using var scope = _serviceProvider.CreateScope();
         var deviceSessionRepository = scope.ServiceProvider.GetRequiredService<IDeviceSessionRepository>();
-        
-        var session = await deviceSessionRepository.GetActiveByPatientIdAsync(patientId, cancellationToken);
-        var title = "Sync Complete";
-        var body = "New data has arrived!";
-        
-        if (session != null && !string.IsNullOrWhiteSpace(session.PushToken))
+
+        var sessions = await deviceSessionRepository.GetActiveByPatientIdAsync(patientId, cancellationToken);
+        var pushTokens = sessions
+            .Select(s => s.PushToken)
+            .Where(token => !string.IsNullOrWhiteSpace(token))
+            .Distinct();
+
+        foreach (var pushToken in pushTokens)
         {
             await _pushNotificationService.SendPushNotificationAsync(
-                session.PushToken,
-                title,
-                body,
+                pushToken!,
+                "Sync Complete",
+                "New data has arrived!",
                 "sync_ready",
                 cancellationToken);
         }
@@ -61,11 +63,18 @@ public sealed class SignalRSyncNotificationService : ISyncNotificationService
     public Task NotifySessionRevokedAsync(
         Guid patientId,
         string reason,
+        string? deviceId = null,
         CancellationToken cancellationToken = default)
-        => _hubContext.Clients
-            .Group(SyncHub.PatientGroup(patientId))
+    {
+        var group = deviceId is null
+            ? SyncHub.PatientGroup(patientId)
+            : SyncHub.DeviceGroup(patientId, deviceId);
+
+        return _hubContext.Clients
+            .Group(group)
             .SendAsync(
                 "SessionRevoked",
                 new { Reason = reason },
                 cancellationToken);
+    }
 }

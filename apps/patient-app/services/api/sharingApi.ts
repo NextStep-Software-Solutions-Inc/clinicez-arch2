@@ -1,68 +1,79 @@
-import type { SharingScope } from '../sharing/scopes';
+import { z } from 'zod';
 import { api } from './apiClient';
+import {
+    grantSourceSchema,
+    grantStatusSchema,
+    sharingScopeSchema,
+    type SharingScope,
+} from './wireEnums';
 
-// ── Types mirroring the patient-api sharing contract ──────────────────────────
+// ── Schemas mirroring the patient-api sharing contract ────────────────────────
 
-export interface ShareTokenResponse {
-    token: string;
-    expiresAt: string;
-    ttlSeconds: number;
-    clinicEzId: string;
-    scopes: string[];
-    purpose: string;
-}
+export const shareTokenResponseSchema = z.object({
+    token: z.string(),
+    expiresAt: z.string(),
+    ttlSeconds: z.number(),
+    clinicEzId: z.string(),
+    scopes: z.array(sharingScopeSchema),
+    purpose: z.string(),
+});
+export type ShareTokenResponse = z.infer<typeof shareTokenResponseSchema>;
 
-export type AccessGrantSource = 'qr' | 'booking' | 'manual';
-export type AccessGrantStatus = 'active' | 'expired' | 'revoked';
+export const accessGrantSchema = z.object({
+    id: z.string(),
+    tenantId: z.string(),
+    facilityId: z.string(),
+    facilityName: z.string().nullable(),
+    scopes: z.array(sharingScopeSchema),
+    purpose: z.string(),
+    source: grantSourceSchema,
+    status: grantStatusSchema,
+    expiresAt: z.string(),
+    revokedAt: z.string().nullable(),
+    createdAt: z.string(),
+});
+export type AccessGrantDto = z.infer<typeof accessGrantSchema>;
 
-export interface AccessGrantDto {
-    id: string;
-    tenantId: string;
-    facilityId: string;
-    facilityName: string | null;
-    scopes: string[];
-    purpose: string;
-    source: AccessGrantSource;
-    status: AccessGrantStatus;
-    expiresAt: string;
-    revokedAt: string | null;
-    createdAt: string;
-}
+export const accessGrantListSchema = z.array(accessGrantSchema);
 
-export interface AccessLogDto {
-    id: string;
-    grantId: string;
-    facilityName: string | null;
-    actor: string;
-    action: string;
-    detail: string | null;
-    at: string;
-}
+export const accessLogSchema = z.object({
+    id: z.string(),
+    grantId: z.string(),
+    facilityName: z.string().nullable(),
+    actor: z.string(),
+    action: z.string(),
+    detail: z.string().nullable(),
+    at: z.string(),
+});
+export type AccessLogDto = z.infer<typeof accessLogSchema>;
 
-export interface AccessLogPage {
-    items: AccessLogDto[];
-    totalCount: number;
-}
+export const accessLogPageSchema = z.object({
+    items: z.array(accessLogSchema),
+    totalCount: z.number(),
+});
+export type AccessLogPage = z.infer<typeof accessLogPageSchema>;
 
 // ── Sharing API ───────────────────────────────────────────────────────────────
 
-export function createShareToken(
+export async function createShareToken(
     getToken: () => Promise<string | null>,
     patientId: string,
     scopes: SharingScope[],
     purpose?: string,
 ): Promise<ShareTokenResponse> {
-    return api.post<ShareTokenResponse>(getToken, `/patients/${patientId}/share-tokens`, {
+    const data = await api.post<unknown>(getToken, `/patients/${patientId}/share-tokens`, {
         scopes,
         ...(purpose ? { purpose } : {}),
     });
+    return shareTokenResponseSchema.parse(data);
 }
 
-export function fetchAccessGrants(
+export async function fetchAccessGrants(
     getToken: () => Promise<string | null>,
     patientId: string,
 ): Promise<AccessGrantDto[]> {
-    return api.get<AccessGrantDto[]>(getToken, `/patients/${patientId}/access-grants`);
+    const data = await api.get<unknown>(getToken, `/patients/${patientId}/access-grants`);
+    return accessGrantListSchema.parse(data);
 }
 
 export function revokeAccessGrant(
@@ -73,7 +84,7 @@ export function revokeAccessGrant(
     return api.delete<void>(getToken, `/patients/${patientId}/access-grants/${grantId}`);
 }
 
-export function fetchAccessLog(
+export async function fetchAccessLog(
     getToken: () => Promise<string | null>,
     patientId: string,
     opts: { grantId?: string; skip?: number; take?: number } = {},
@@ -83,7 +94,8 @@ export function fetchAccessLog(
         take: String(opts.take ?? 50),
     });
     if (opts.grantId) params.set('grantId', opts.grantId);
-    return api.get<AccessLogPage>(getToken, `/patients/${patientId}/access-log?${params}`);
+    const data = await api.get<unknown>(getToken, `/patients/${patientId}/access-log?${params}`);
+    return accessLogPageSchema.parse(data);
 }
 
 /** Raw JSON document (not wrapped in the ApiResponse envelope). */

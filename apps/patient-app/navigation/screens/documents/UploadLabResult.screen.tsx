@@ -107,7 +107,7 @@ export default function UploadLabResultScreen({ route }: Props) {
   }
 
   if (submitted) {
-    const pending = verificationBadge('unverified');
+    const pending = verificationBadge('Unverified');
     return (
       <Screen width="form" contentContainerStyle={{ gap: spacing.md }}>
         <Card style={{ gap: spacing.sm }}>

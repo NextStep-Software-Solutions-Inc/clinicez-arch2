@@ -9,15 +9,34 @@ public sealed class DeviceSessionRepository : BaseRepository<DeviceSession>, IDe
 {
     public DeviceSessionRepository(ApplicationDbContext context) : base(context) { }
 
-    public Task<DeviceSession?> GetActiveByPatientIdAsync(
+    public async Task<IReadOnlyList<DeviceSession>> GetActiveByPatientIdAsync(
         Guid patientId,
         CancellationToken cancellationToken = default)
-        => DbSet
-            .FirstOrDefaultAsync(d => d.PatientId == patientId && !d.IsRevoked, cancellationToken);
+        => await DbSet
+            .Where(d => d.PatientId == patientId && !d.IsRevoked)
+            .OrderByDescending(d => d.LastActiveAt)
+            .ToListAsync(cancellationToken);
 
-    public async Task RevokeAllForPatientAsync(
+    public Task<DeviceSession?> GetActiveByDeviceAsync(
         Guid patientId,
-        string revokedBy,
+        string deviceId,
+        CancellationToken cancellationToken = default)
+        => DbSet
+            .FirstOrDefaultAsync(
+                d => d.PatientId == patientId && d.DeviceId == deviceId && !d.IsRevoked,
+                cancellationToken);
+
+    public Task<DeviceSession?> GetActiveByIdAsync(
+        Guid patientId,
+        Guid sessionId,
+        CancellationToken cancellationToken = default)
+        => DbSet
+            .FirstOrDefaultAsync(
+                d => d.Id == sessionId && d.PatientId == patientId && !d.IsRevoked,
+                cancellationToken);
+
+    public async Task<IReadOnlyList<DeviceSession>> RevokeAllForPatientAsync(
+        Guid patientId,
         CancellationToken cancellationToken = default)
     {
         var activeSessions = await DbSet
@@ -26,10 +45,8 @@ public sealed class DeviceSessionRepository : BaseRepository<DeviceSession>, IDe
 
         var now = DateTime.UtcNow;
         foreach (var session in activeSessions)
-        {
-            session.IsRevoked = true;
-            session.RevokedAt = now;
-            session.UpdatedBy = revokedBy;
-        }
+            session.Revoke(now);
+
+        return activeSessions;
     }
 }

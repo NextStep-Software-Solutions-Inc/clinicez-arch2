@@ -90,11 +90,11 @@ public sealed class PatientSharingFlowTests
         grant.TenantId.Should().Be(PatientInteropHarness.TenantA);
         grant.FacilityId.Should().Be(clinicId);
         grant.Source.Should().Be(AccessGrantSource.Qr);
-        grant.ScopesMask.Should().Be((int)(SharingScopes.Demographics | SharingScopes.Allergies));
+        grant.Scopes.Should().Be(AccessScopes.Demographics | AccessScopes.Allergies);
         grant.ExpiresAt.Should().BeCloseTo(DateTime.UtcNow.AddHours(24), TimeSpan.FromMinutes(1));
         snapshot.ExpiresAtUtc.Should().Be(grant.ExpiresAt);
         (await h.WithDbAsync(db => db.PatientAccessLogs.AsNoTracking().SingleAsync())).Should()
-            .Match<PatientAccessLog>(l => l.GrantId == grant.Id && l.Action == "Redeemed" && l.Detail!.Contains("allergies"));
+            .Match<PatientAccessLog>(l => l.GrantId == grant.Id && l.Action == "Redeemed" && l.Detail!.Contains("Allergies"));
     }
 
     [Fact]
@@ -265,12 +265,12 @@ public sealed class PatientSharingFlowTests
         using var scope = h.Provider.CreateScope();
         var sender = scope.ServiceProvider.GetRequiredService<ISender>();
 
-        var issued = await sender.Send(new CreateShareTokenCommand(patientId, ["allergies", "labResults"], null));
+        var issued = await sender.Send(new CreateShareTokenCommand(patientId, ["Allergies", "LabResults"], null));
         var valid = scope.ServiceProvider.GetRequiredService<IShareTokenService>().Validate(issued.Token);
         var empty = () => sender.Send(new CreateShareTokenCommand(patientId, [], null));
         var unknown = () => sender.Send(new CreateShareTokenCommand(patientId, ["allergies", "bank"], null));
 
-        issued.Scopes.Should().Equal("allergies", "labResults");
+        issued.Scopes.Should().Equal("Allergies", "LabResults");
         issued.TtlSeconds.Should().Be(120);
         issued.ClinicEzId.Should().MatchRegex("^CE-");
         issued.Purpose.Should().Be("Consultation");
@@ -298,7 +298,7 @@ public sealed class PatientSharingFlowTests
         await sender.Send(new RevokeAccessGrantCommand(patientId, grantId));
 
         var grants = await sender.Send(new GetAccessGrantsQuery(patientId));
-        grants.Should().ContainSingle().Which.Should().Match<AccessGrantDto>(g => g.Status == "revoked" && g.RevokedAt != null && g.Source == "qr");
+        grants.Should().ContainSingle().Which.Should().Match<AccessGrantDto>(g => g.Status == "Revoked" && g.RevokedAt != null && g.Source == "Qr");
         var log = await sender.Send(new GetAccessLogQuery(patientId, grantId, 0, 50));
         log.Items.Select(i => i.Action).Should().BeEquivalentTo("Redeemed", RevokeAccessGrantCommandHandler.RevokedAction);
         (await sender.Send(new GetAccessLogQuery(intruderId, null, 0, 50))).TotalCount.Should().Be(0);
@@ -321,6 +321,6 @@ public sealed class PatientSharingFlowTests
         var grants = await scope.ServiceProvider.GetRequiredService<ISender>().Send(new GetAccessGrantsQuery(patientId));
 
         grants.Should().ContainSingle().Which.Should().Match<AccessGrantDto>(g =>
-            g.FacilityName == "City Health" && g.Status == "active" && g.Scopes.Count == 1 && g.Scopes[0] == "allergies");
+            g.FacilityName == "City Health" && g.Status == "Active" && g.Scopes.Count == 1 && g.Scopes[0] == "Allergies");
     }
 }

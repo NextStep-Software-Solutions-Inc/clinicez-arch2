@@ -1,4 +1,5 @@
 import { index, integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { LAB_REQUEST_STAGES, PAYMENT_STATUSES } from '../../services/api/wireEnums';
 
 // Document inbox — lab request slips issued by facilities (read-only, upserted from sync/changes)
 export const inboxLabRequests = sqliteTable(
@@ -15,11 +16,11 @@ export const inboxLabRequests = sqliteTable(
     urgency: text('urgency'),
     /** JSON-encoded `{ code, name, category }[]` */
     itemsJson: text('items_json').notNull().default('[]'),
-    stage: text('stage').notNull(),
+    stage: text('stage', { enum: LAB_REQUEST_STAGES }).notNull(),
     quotedAmount: real('quoted_amount'),
     currency: text('currency'),
     paymentRequired: integer('payment_required', { mode: 'boolean' }).notNull().default(false),
-    paymentStatus: text('payment_status').notNull().default('none'),
+    paymentStatus: text('payment_status', { enum: PAYMENT_STATUSES }).notNull().default('None'),
     laboratoryName: text('laboratory_name'),
     claimToken: text('claim_token'),
     reason: text('reason'),

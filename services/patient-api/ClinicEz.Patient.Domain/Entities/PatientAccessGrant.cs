@@ -15,8 +15,8 @@ public sealed class PatientAccessGrant : BaseEntity
     public string TenantId { get; set; } = string.Empty;
     public Guid FacilityId { get; set; }
 
-    /// <summary>Bit mask of the shared scopes (the contract's <c>SharingScopes</c> flags).</summary>
-    public int ScopesMask { get; set; }
+    /// <summary>The categories of the record the facility may see.</summary>
+    public AccessScopes Scopes { get; set; }
     public string Purpose { get; set; } = string.Empty;
     public DateTime ExpiresAt { get; set; }
     public DateTime? RevokedAt { get; set; }

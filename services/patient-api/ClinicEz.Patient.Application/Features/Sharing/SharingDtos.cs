@@ -8,6 +8,9 @@ public sealed record ShareTokenDto(
     IReadOnlyList<string> Scopes,
     string Purpose);
 
+/// <summary>Lifecycle of an access grant; serialised by member name in <see cref="AccessGrantDto.Status"/>.</summary>
+public enum AccessGrantStatus { Active, Expired, Revoked }
+
 public sealed record AccessGrantDto(
     Guid Id,
     string TenantId,

@@ -37,7 +37,7 @@ public sealed class SearchOrganizationsQueryHandler
                     o.LogoUrl, o.CoverImageUrl, o.AddressHint,
                     o.FeaturedScore, o.ActiveMemberCount,
                     o.RequiredShareFieldsJson, o.RolesJson,
-                    membership?.Status.ToString().ToLower()
+                    membership?.Status.ToString()
                 );
             }).ToList().AsReadOnly(),
             total, request.Skip, request.Take);
