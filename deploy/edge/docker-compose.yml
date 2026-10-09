@@ -191,6 +191,8 @@ services:
       Clinic__PublicUploadBaseUrl: ${CLINIC_PUBLIC_UPLOAD_BASE_URL:-}
       # Encrypted scanned records / attachments (LocalClinicStorageService). Default would be inside the container.
       Storage__BasePath: /app/storage/records
+      # Wraps the per-file keys of those records. Generated once by the installer; never change it.
+      ClinicEncryption__MasterSecret: ${CLINIC_ENCRYPTION_MASTER_SECRET:?CLINIC_ENCRYPTION_MASTER_SECRET must be set}
       Services__PharmacyApiUrl: http://pharmacy-api:8080
       # Pairwise key for the pharmacy server's Internal__ApiKey. Empty falls back to Internal__ApiKey (same key here).
       Services__PharmacyApiKey: ${PHARMACY_API_KEY:-}

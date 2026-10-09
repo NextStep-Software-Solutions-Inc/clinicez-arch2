@@ -183,85 +183,14 @@ A new type adds its own limit property and feature key constants there and check
 8. **Hub client:** cloud cell: operations create a `CloudService` client with `Service=<name>` in cell `cloud`; on-prem: the portal creates the `EdgeCell` client automatically when it creates the facility (check `HubOnboardingService.CreateClientAsync` resolves your service name).
 9. **Billing integration (optional):** send `billing.invoice.requested` with `To.Service = "billing"` and wait for `billing.payment.confirmed` (see [billing.md](billing.md); the billing service is still a work in progress).
 10. **Tests:** handler tests on the `InProcess` transport, a cross-tenant isolation test (two tenants, same external id), license validator tests, and the portal-side test that creating the facility stages the license and directory messages.
-11. **Docs and guard:** list the new types in the catalog below; `scripts/check-no-broker.ps1` (run from `backend-ci.yml`) keeps broker or MassTransit references out of the repo.
+11. **Docs and guard:** list the new types in the [message matrix](message-matrix.md); `scripts/check-no-broker.ps1` (run from `backend-ci.yml`) keeps broker or MassTransit references out of the repo.
 
 ---
 
 ## Message type catalog
 
-Every constant in [`InteropTypes`](../../packages/shared-dotnet/Interop/InteropTypes.cs). Derived from code usage (publishers calling `Enqueue` and `.Handle<...>(InteropTypes.X)` registrations) on this branch; `(no producer yet)` / `(no handler yet)` means nothing in `services/**` does it today. Payload files are under `packages/shared-dotnet/`.
+Every `InteropTypes` constant, with its sender, receiver, payload record, addressing and correlation, and the gaps where a message is sent but nobody handles it, is in [`message-matrix.md`](message-matrix.md). It replaces the catalog that used to live here, which went stale as producers and handlers landed.
 
-Abbreviations: **C** = [`Common/`](../../packages/shared-dotnet/Common), **I** = [`Interoperability/`](../../packages/shared-dotnet/Interoperability), **W** = [`Interoperability/ClinicalWorkflowContracts.cs`](../../packages/shared-dotnet/Interoperability/ClinicalWorkflowContracts.cs), **D** = [`Interop/Contracts/DirectoryContracts.cs`](../../packages/shared-dotnet/Interop/Contracts/DirectoryContracts.cs).
-
-### Provisioning and control plane
-
-| Type string | Payload record (file) | Sender | Receiver | CorrelationId | Notes |
-|---|---|---|---|---|---|
-| `facility.license.issued` | `FacilityCreatedEvent` (C/FacilityCreatedEvent.cs) | portal-api (`FacilityProvisioningPublisher`) | The facility's own service: clinic, laboratory, pharmacy, organization handlers | Facility id (`ResourceId`) | Carries the license token. Handlers check `From` is the control plane and `To` is this facility. Delivered only to the facility mailbox. |
-| `facility.provisioned` | `FacilityProvisionedEvent` (C/FacilityProvisionedEvent.cs) | clinic, laboratory, pharmacy, organization (after provisioning) | portal-api (`FacilityProvisionedHandler`) | Copied from the license message (= facility id) | Ack. A reconciliation job in the portal stays. |
-| `facility.directory.updated` | `FacilityCreatedEvent` with `LicenseToken` and `Limits` nulled | portal-api | patient-api (`FacilityDirectoryUpdatedInteropHandler`: patient-facing clinic/organization catalogue) | Facility id | The portal addresses it to `Party{ControlPlane, Service="patient"}`, which the hub routes to the cloud `patient` mailbox. |
-| `workspace.profile.updated` | `WorkspaceProfileUpdatedEvent` (C/WorkspaceProfileUpdatedEvent.cs) | portal-api (`WorkspaceProfilePublisher`) to **every routable facility** of the tenant | clinic-api (`WorkspaceProfileUpdatedHandler`) | Tenant id | Cache invalidation only. **Gap:** lab, pharmacy and organization register no handler, so their copies are redelivered and dead-lettered. |
-| `entitlements.changed` | none (docs name `EntitlementsChangedEvent`, which does not exist) | (no producer yet) | (no handler yet) | n/a | Planned re-mint of licenses on subscription change. |
-
-### Hub directory feed (portal to hub; applied by the hub, never stored in a mailbox)
-
-| Type string | Payload record | Sender | Receiver | CorrelationId | Notes |
-|---|---|---|---|---|---|
-| `directory.cell.upserted` | `DirectoryCellUpsertedPayload` (D) | portal-api (`DirectoryFeedWriter`) | the hub (`To = Party.Hub`) | Random Guid | Cloud cell and one `edge-{tenantId}` cell per on-prem tenant. |
-| `directory.facility.upserted` | `DirectoryFacilityUpsertedPayload` (D) | portal-api | the hub | Facility id | `Active=false` removes a facility from routing and the directory. |
-| `directory.link.upserted` | `DirectoryLinkUpsertedPayload` (D) | portal-api | the hub | Link id (stable hash of source and target facility ids) | Only automatic same-tenant same-branch links are produced today. Only a `ControlPlane` client may send directory messages; a Local hub rejects them. |
-
-### Patient and clinic
-
-| Type string | Payload record | Sender | Receiver | CorrelationId | Notes |
-|---|---|---|---|---|---|
-| `patient.appointment.booked` | `AppointmentBookedEvent` (C/AppointmentBookedEvent.cs) | patient-api (`SubmitBookingDraftCommand`), as `Party.ForPatient` | clinic-api (`AppointmentBookedHandler`) | Booking draft id | Payload is filtered by the patient's sharing scope in the booking command. |
-| `clinic.appointment.updated` | `ClinicAppointmentUpdatedEvent` (I/ClinicAppointmentUpdatedEvent.cs) | clinic-api (`AppointmentBookedHandler` confirms a booking; `PatientAppointmentPublisher` for later changes) | patient-api (`ClinicAppointmentUpdatedInteropHandler`) | Draft id for the booking confirmation; first appointment id (or a random id) for status pushes | Addressed `Party.ForPatient`. Skipped when the clinic patient has no patient-app account. |
-| `clinic.record.verified` | `ClinicRecordVerifiedEvent` (C/ClinicRecordVerifiedEvent.cs) | clinic-api (`ClinicRecordEventPublisher`) | patient-api (`ClinicRecordVerifiedInteropHandler`) | Attachment id | Addressed `Party.ForPatient`. |
-| `patient.record.shared` | none (doc: "blob reference") | (no producer yet) | (no handler yet) | n/a | Patient-shared attachment to a clinic. |
-| `patient.share.redeem` | `PatientShareRedeemPayload` (W) | (no producer yet; contract: clinic to patient-api) | (no handler yet) | Chosen by the clinic; the reply copies it | Walk-in share-token redemption. |
-| `patient.share.snapshot` | `PatientShareSnapshotPayload` (W) | (no producer yet; contract: patient-api reply to the same facility) | (no handler yet) | Copied from the request | Scoped snapshot plus grant id. |
-| `patient.document.issued` | `PatientDocumentIssuedPayload` (W) (+ `MedicalCertificateIssuedPayload` as `Body` for certificates) | pharmacy-api (`PrescriptionDispensedPublisher`, kind `DispenseReceipt`, only when the order has a patient-app account); other issuers (clinic Rx / lab request, lab result, medcert) have no producer yet | **(no handler yet in patient-api)** | The order's correlation id | Intended: patient-api keeps a copy of documents issued to the patient. Without a handler the hub redelivers and finally dead-letters the message. |
-
-### Laboratory
-
-| Type string | Payload record | Sender | Receiver | CorrelationId | Notes |
-|---|---|---|---|---|---|
-| `lab.order.issued` | `LabRequisitionIssuedEvent` (I/LabRequisitionIssuedEvent.cs) | clinic-api (`LabRequisitionPublisher`) | laboratory-api (`LabOrderIssuedHandler`); target tenant/facility chosen by the clinic | `RequisitionId` | Same-tenant, or cross-tenant with an Active link carrying `LabOrder`, or via a claim. |
-| `lab.order.claimed` | none defined (`LabOrderStage.Claimed` exists in W) | (no producer yet) | (no handler yet) | `RequisitionId` | Redeemer tells the issuer it took a claimed order. |
-| `lab.order.accepted` | none defined | (no producer yet) | (no handler yet) | `RequisitionId` | |
-| `lab.order.rejected` | none defined (`LabOrderStage.Rejected` exists in W) | (no producer yet) | (no handler yet) | `RequisitionId` | |
-| `lab.order.status.changed` | `LabOrderStatusChangedPayload` (W) | laboratory-api (`LabOrderLifecycle`): to the ordering clinic, and to `Party.ForPatient` when the order's patient is a ClinicEZ patient | **(no handler yet** in clinic-api or patient-api; they would be redelivered and dead-lettered) | The clinic's requisition id (`ClinicRequisitionId`) | Stage enum `LabOrderStage`; carries `PaymentRequired`, quote and reason. |
-| `lab.order.payment.confirmed` | none defined | (no producer yet) | (no handler yet) | `RequisitionId` | Lab payment gate, planned to follow `billing.payment.confirmed`. |
-| `lab.result.finalized` | `DiagnosticReportFinalizedEvent` (I/DiagnosticReportFinalizedEvent.cs) | laboratory-api (`DiagnosticReportPublisher`) | The ordering clinic: clinic-api (`DiagnosticReportFinalizedHandler`) | `RequisitionId` | Cross-tenant: allowed as a reply on the order's conversation or via a link with `Result`. |
-| `lab.result.panic` | `LabPanicResultAlertEvent` (I/LabPanicResultAlertEvent.cs) | laboratory-api (`PanicAlertPublisher`) | The ordering clinic: clinic-api (`LabPanicResultAlertHandler`) | `RequisitionId` | STAT alert. |
-| `lab.result.external.submitted` | `ExternalLabResultUploadedEvent` (I/ExternalLabResultUploadedEvent.cs; mapping by name, not wired in code) | (no producer yet) | (no handler yet) | `RequisitionId` | External-lab or patient upload awaiting doctor review. |
-| `lab.result.reviewed` | `LabResultReviewedPayload` (W) | (no producer yet) | (no handler yet) | `RequisitionId` | Doctor accepts or rejects an unverified result. |
-
-### Pharmacy
-
-| Type string | Payload record | Sender | Receiver | CorrelationId | Notes |
-|---|---|---|---|---|---|
-| `rx.issued` | `PrescriptionIssuedEvent` (I/PrescriptionIssuedEvent.cs) | clinic-api (`PrescriptionPublisher`) | pharmacy-api (`PrescriptionIssuedHandler`) | `PrescriptionId` | Target pharmacy chosen by the clinic. |
-| `rx.status.changed` | `RxStatusChangedPayload` (W) | pharmacy-api (`RxStatusPublisher`): to the ordering clinic, and to the patient when the order has a patient-app account | **(no handler yet** in clinic-api or patient-api) | The order's correlation id | `RxStage`: Accepted, Partial, Rejected, ... |
-| `rx.dispensed` | `PrescriptionDispensedEvent` (I/PrescriptionDispensedEvent.cs) | pharmacy-api (`PrescriptionDispensedPublisher`) | The ordering clinic: clinic-api (`PrescriptionDispensedHandler`) | The order's `CorrelationId`, else its `ExternalPrescriptionId` | Throws if the order has no ordering clinic recorded. |
-| `rx.external.dispensed` | `ExternalPrescriptionDispensedEvent` (I/ExternalPrescriptionDispensedEvent.cs) | (no producer yet) | (no handler yet) | `PrescriptionId` | Outside-pharmacy receipt. |
-
-### Medical certificate, billing, notifications
-
-| Type string | Payload record | Sender | Receiver | CorrelationId | Notes |
-|---|---|---|---|---|---|
-| `medcert.issued` | `MedicalCertificateIssuedPayload` (W) | (no producer yet) | (no handler yet) | Not specified | Planned to patient inbox. |
-| `billing.invoice.requested` | `BillingInvoiceRequestedPayload` (W) | laboratory-api (`LabOrderBilling`, unless `PaymentPolicy.None`), pharmacy-api (`PharmacyBillingPublisher`, on accepting an order unless policy `None`); to the same facility's `billing` mailbox (`To.Service="billing"`). Clinic-api has no producer | billing-api `InvoiceRequestedHandler` exists, but **billing-api's Infrastructure (DI/`AddInterop` registration) is not present yet**, so nothing is wired to receive it | `InvoiceRequestId` (lab requisition id / pharmacy order id) | See [billing.md](billing.md). |
-| `billing.payment.confirmed` | `BillingPaymentConfirmedPayload` (W) | billing-api (`BillingMessages`), from the facility's billing party to the facility; sent on every payment, partial included | laboratory-api and pharmacy-api (`BillingPaymentConfirmedHandler`; accepted only from their own `billing` mailbox) | `InvoiceRequestId` | Drives the lab and pharmacy payment gates. |
-| `billing.invoice.paid` | `BillingInvoicePaidPayload` (W) | billing-api, to `Party.Portal`, when an invoice becomes fully paid (skipped for zero totals) | **(no handler yet** in portal-api; the `FinanceDailySummary` rollup entities exist) | `InvoiceId` | Workspace finance rollup. No PHI. |
-| `billing.invoice.voided` | `BillingInvoiceVoidedPayload` (I/BillingVoidContracts.cs) | billing-api: to the requesting facility (Requested-origin invoices) and to `Party.Portal` when a fully paid invoice is refunded | **(no handler yet** in the facilities or in portal-api) | `InvoiceRequestId` to the facility, `InvoiceId` to the portal | `Kind` = `Void` or `Refund`; `AmountReversed` is what the rollup subtracts. No patient data. |
-| `notification.email.requested` | `NotificationEmailRequestedPayload` (I/NotificationContracts.cs) | (no producer yet; contract: any service) | portal-api (`NotificationEmailRequestedHandler`) | Not specified | Registered templates only; sender must be the control plane or an existing facility. |
-
-`InteropTypes.IsHubInternal(type)` is true for the `directory.*` family; the hub applies those itself.
-
-### Coverage notes
-
-- 23 of the 35 constants have a producer or a handler in code today (counting billing types whose consumer is not registered yet); the rest are contracts or reserved names. Several types are produced but have **no consumer**, so they would be redelivered and dead-lettered: `lab.order.status.changed`, `rx.status.changed`, `patient.document.issued`, `billing.invoice.paid`, `billing.invoice.voided`, and `workspace.profile.updated` for lab/pharmacy/organization. Wire a handler (or stop sending) before relying on them. This catalog is a snapshot: other work on the branch keeps adding producers and handlers, so re-check `git grep` on `InteropTypes.` before trusting a row.
+- `InteropTypes.IsHubInternal(type)` is true for the `directory.*` family; the hub applies those itself.
 - Payload records live in two folders: `Common/` (older events, some still named `...Event`) and `Interoperability/` (newer contracts). They are plain JSON records serialised with `InteropJson` (camelCase, string enums, nulls omitted).
 - Envelope `SchemaVersion` defaults to 1 and nothing branches on it yet; add a new type or bump it deliberately when a payload breaks.

@@ -22,6 +22,10 @@ services:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Production}
       - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}
       - Clerk__SecretKey=${CLERK_SECRET_KEY}
+      # Clerk issuer the API validates tokens against (JWKS). Required outside Development.
+      - Clerk__Authority=${CLERK_AUTHORITY:?CLERK_AUTHORITY must be set}
+      # Extra trusted token origins (comma separated). https://<BASE_DOMAIN> and https://*.<BASE_DOMAIN> are added automatically.
+      - Clerk__AuthorizedParties=${CLERK_AUTHORIZED_PARTIES:-}
       - Xendit__SecretKey=${XENDIT_SECRET_KEY}
       - Xendit__CallbackToken=${XENDIT_CALLBACK_TOKEN}
       # Interop hub (the cell hub this service's outbox ships to and its inbox polls). No built-in fallback credentials.
@@ -36,6 +40,8 @@ services:
       - Internal__ApiKey=${INTERNAL_API_KEY:?INTERNAL_API_KEY must be set}
       # Public base URL of the cloud hub, handed to on-premise sites with their credentials (Hub:PublicUrl).
       - Hub__PublicUrl=${HUB_PUBLIC_URL:?HUB_PUBLIC_URL must be set}
+      # Cell hosting every shared-cloud facility. Must equal the cloud hub's Hub__CloudCellId.
+      - Hub__CloudCellId=${HUB_CLOUD_CELL_ID:-cloud}
       # Outgoing mail (the host fails to start without Host and FromEmail). Empty User means no authentication.
       - Smtp__Host=${SMTP_HOST:?SMTP_HOST must be set}
       - Smtp__Port=${SMTP_PORT:-587}
@@ -44,10 +50,26 @@ services:
       - Smtp__Password=${SMTP_PASSWORD:-}
       - Smtp__FromEmail=${SMTP_FROM_EMAIL:?SMTP_FROM_EMAIL must be set}
       - Smtp__FromName=${SMTP_FROM_NAME:-Clinic EZ}
+      - Smtp__ReplyTo=${SMTP_REPLY_TO:-}
       # Recipient of the public contact form. Empty disables it.
       - Notifications__ContactInbox=${NOTIFICATIONS_CONTACT_INBOX:-}
       # Web portal base URL (billing redirects when the request carries no Origin/Referer).
       - FrontendBaseUrl=${FRONTEND_BASE_URL:-}
+      # Clinic API the portal calls with the internal key (provisioning, workspace-level reads).
+      - Services__ClinicApiUrl=${SERVICES_CLINIC_API_URL:-http://clinic-api:8080}
+      # Workspaces one user may own.
+      - Workspace__MaxOwnedPerUser=${WORKSPACE_MAX_OWNED_PER_USER:-1}
+      # Public lab-result upload relay limits (allowed content types stay at the code default: pdf, jpeg, png).
+      - LabUploads__MaxFileBytes=${LAB_UPLOAD_MAX_FILE_BYTES:-5242880}
+      - LabUploads__RateLimitPermits=${LAB_UPLOAD_RATE_LIMIT_PERMITS:-20}
+      - LabUploads__RateLimitWindowMinutes=${LAB_UPLOAD_RATE_LIMIT_WINDOW_MINUTES:-10}
+      # Facility license lifetime, read-only grace after expiry and renewal lead time (days).
+      - Licensing__TtlDays=${LICENSING_TTL_DAYS:-30}
+      - Licensing__GraceDays=${LICENSING_GRACE_DAYS:-14}
+      - Licensing__RenewBeforeDays=${LICENSING_RENEW_BEFORE_DAYS:-10}
+      # Plan catalog (limits, features, prices) stays in appsettings; these select the default plan and trial length.
+      - Billing__DefaultPlanSlug=${BILLING_DEFAULT_PLAN_SLUG:-starter}
+      - Billing__TrialDays=${BILLING_TRIAL_DAYS:-14}
     restart: unless-stopped
 
 networks:

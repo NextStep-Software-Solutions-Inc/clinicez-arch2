@@ -11,7 +11,7 @@ name: clinic-web
 
 services:
   clinic-web:
-    image: ${CLINIC_WEB_IMAGE:?CLINIC_WEB_IMAGE must be set (the image built from deploy/Dockerfile.web)}
+    image: ${CLINIC_WEB_IMAGE:?CLINIC_WEB_IMAGE must be set (published by publish-images.yml from apps/clinic-app/deploy/Dockerfile.web)}
     container_name: ${CONTAINER_NAME:-clinic-web}
     restart: unless-stopped
     ports:

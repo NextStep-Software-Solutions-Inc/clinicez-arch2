@@ -44,6 +44,9 @@ services:
       - Messaging__ClientSecret=${MESSAGING_CLIENT_SECRET:?MESSAGING_CLIENT_SECRET must be set}
       - Facility__BaseDomain=${BASE_DOMAIN:?BASE_DOMAIN must be set}
       # Signs the share tokens patients hand to facilities (at least 32 characters; the service refuses to start without it).
+      # Payload encryption key (base64 of 32 random bytes). Encryption is on outside Development (appsettings), and the API
+      # refuses requests without a key then. Ignored in Development.
+      - Encryption__Base64Key=${PATIENT_ENCRYPTION_KEY:-}
       - Sharing__SigningKey=${SHARING_SIGNING_KEY:?SHARING_SIGNING_KEY must be set (at least 32 characters)}
     restart: unless-stopped
 
