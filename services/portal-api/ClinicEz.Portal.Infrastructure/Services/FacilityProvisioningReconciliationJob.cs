@@ -70,7 +70,7 @@ public class FacilityProvisioningReconciliationJob(
                 var consoleUrl = GetFacilitiesQueryHandler.ResolveConsoleUrl(configuration, facility.FacilityType, facility.Status, facility.Id, slug, tenant.TenantSlug, facility.ConsoleBaseUrl);
 
                 // Re-issue the licence over the hub (staged in the outbox; committed by the SaveChanges below)
-                provisioningPublisher.EnqueueLicenseIssued(new FacilityCreatedEvent
+                await provisioningPublisher.StageProvisionedAsync(tenant, new FacilityCreatedEvent
                 {
                     TenantId = tenant.Id.ToString(),
                     TenantSlug = tenant.TenantSlug,
@@ -83,7 +83,7 @@ public class FacilityProvisioningReconciliationJob(
                     PlanTier = planTier,
                     LicenseExpiresAt = expiresAt,
                     ConsoleUrl = consoleUrl
-                });
+                }, cancellationToken);
 
                 logger.LogInformation("[Reconciliation] Re-published FacilityCreatedEvent for facility '{Name}' ({Id})", facility.Name, facility.Id);
 

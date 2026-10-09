@@ -11,9 +11,9 @@ using System.Threading.Tasks;
 namespace ClinicEz.Portal.Application.Features.Workspace;
 
 /// <summary>
-/// Announces that the workspace profile changed: every clinic of the workspace is told over the hub that its
-/// cached profile is stale, and the workspace's webhook endpoints get the new profile. Only clinics are told,
-/// because no other facility service consumes <c>workspace.profile.updated</c> yet.
+/// Announces that the workspace profile changed: every routable facility of the workspace (clinic, laboratory,
+/// pharmacy, organization) is told over the hub that its cached profile is stale, and the workspace's webhook
+/// endpoints get the new profile.
 /// </summary>
 public interface IWorkspaceProfilePublisher
 {
@@ -37,19 +37,14 @@ public sealed class WorkspaceProfilePublisher(
             .Where(f => f.TenantId == tenant.Id)
             .ToListAsync(cancellationToken);
 
-        foreach (var facility in facilities.Where(f => f.FacilityType == FacilityType.Clinic && FacilityCells.IsRoutable(f)))
+        foreach (var facility in facilities.Where(FacilityCells.IsRoutable))
         {
             publisher.Enqueue(
                 InteropTypes.WorkspaceProfileUpdated,
                 Party.Portal,
                 Party.ForFacility(tenant.Id.ToString(), facility.Id.ToString(), facility.FacilityType),
                 tenant.Id,
-                new WorkspaceProfileUpdatedEvent
-                {
-                    TenantId = tenant.Id.ToString(),
-                    TenantSlug = tenant.TenantSlug,
-                    Version = settings.ProfileVersion
-                });
+                WorkspaceProfileMapper.ToEvent(tenant, settings));
         }
 
         // Webhook receivers want the profile itself, not just the version number.

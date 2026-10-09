@@ -341,7 +341,7 @@ public class FacilityEndpoints : IEndpoint
                 : GetFacilitiesQueryHandler.GenerateFacilitySlug(facility.Name);
             var consoleUrl = GetFacilitiesQueryHandler.ResolveConsoleUrl(configuration, facility.FacilityType, facility.Status, facility.Id, slug, tenant.TenantSlug, facility.ConsoleBaseUrl);
 
-            provisioningPublisher.EnqueueLicenseIssued(new FacilityCreatedEvent
+            await provisioningPublisher.StageProvisionedAsync(tenant, new FacilityCreatedEvent
             {
                 TenantId = tenant.Id.ToString(),
                 TenantSlug = tenant.TenantSlug,
@@ -354,7 +354,7 @@ public class FacilityEndpoints : IEndpoint
                 PlanTier = planTier,
                 LicenseExpiresAt = expiresAt,
                 ConsoleUrl = consoleUrl
-            });
+            }, ct);
 
             await context.SaveChangesAsync(default);
 

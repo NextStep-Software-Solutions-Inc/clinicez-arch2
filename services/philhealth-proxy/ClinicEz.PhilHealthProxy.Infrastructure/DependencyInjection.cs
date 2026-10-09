@@ -1,4 +1,5 @@
-using Microsoft.AspNetCore.DataProtection;
+using ClinicEz.Shared.LocalAuth;
+using ClinicEz.Shared.Security;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -12,8 +13,11 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructureServices(
         this IServiceCollection services,
         IConfiguration configuration,
-        IHostEnvironment? env = null)
+        IHostEnvironment env)
     {
+        // No built-in secrets or endpoints: outside Development a missing value stops the start-up.
+        RequiredSettings.EnsureConfigured(configuration, env, "Internal:ApiKey");
+
         // Pure Stateless Zero-DB Micro-Gateway:
         // Register in-memory cache for 1-hour statutory credentials caching
         services.AddMemoryCache();
@@ -21,7 +25,8 @@ public static class DependencyInjection
         // Resilient HTTP Client connecting to Portal API for branch accreditation credentials
         var portalBaseUrl = (configuration["PortalApi:BaseUrl"]
             ?? configuration["PORTAL_API_BASE_URL"]
-            ?? "http://localhost:5000").TrimEnd('/');
+            ?? throw new InvalidOperationException("PortalApi:BaseUrl is not configured (environment variable PortalApi__BaseUrl)."))
+            .TrimEnd('/');
 
         if (portalBaseUrl.EndsWith("/api/v1", StringComparison.OrdinalIgnoreCase))
         {
@@ -32,6 +37,13 @@ public static class DependencyInjection
         {
             client.BaseAddress = new Uri(portalBaseUrl + "/");
             client.Timeout = TimeSpan.FromSeconds(10);
+
+            // The portal only serves the stored PhilHealth credentials to callers that present the shared internal key.
+            var internalKey = configuration["Internal:ApiKey"];
+            if (!string.IsNullOrWhiteSpace(internalKey))
+            {
+                client.DefaultRequestHeaders.TryAddWithoutValidation(FacilityAuthSchemes.InternalKeyHeader, internalKey);
+            }
         })
         .AddStandardResilienceHandler();
 
@@ -55,8 +67,8 @@ public static class DependencyInjection
         services.AddSingleton<IKonsultaMasterlistParser, KonsultaMasterlistParser>();
         services.AddSingleton<ISoapSandboxService, SoapSandboxService>();
 
-        services.AddDataProtection()
-            .SetApplicationName("ClinicEz.PhilHealthProxy");
+        // The key ring protects the tenant credentials cached from the portal, so it must outlive restarts (DataProtection:KeysPath).
+        services.AddPersistentDataProtection(configuration, env, "ClinicEz.PhilHealthProxy");
 
         return services;
     }

@@ -189,7 +189,7 @@ public class CreateFacilityCommandHandler(
         var consoleUrl = GetFacilitiesQueryHandler.ResolveConsoleUrl(configuration, request.FacilityType, FacilityStatus.Active, resourceId, candidateSlug, tenant.TenantSlug, facility.ConsoleBaseUrl);
 
         // Staged in the outbox before SaveChanges so the facility and its licence messages commit atomically.
-        provisioningPublisher.EnqueueLicenseIssued(new FacilityCreatedEvent
+        await provisioningPublisher.StageProvisionedAsync(tenant, new FacilityCreatedEvent
         {
             TenantId = tenant.Id.ToString(),
             TenantSlug = tenant.TenantSlug,
@@ -202,7 +202,7 @@ public class CreateFacilityCommandHandler(
             PlanTier = planTier,
             LicenseExpiresAt = licenseExpiresAt,
             ConsoleUrl = consoleUrl
-        });
+        }, cancellationToken);
 
         // Customers' webhook endpoints learn about the facility, never about its licence.
         await webhookDispatcher.StageAsync(

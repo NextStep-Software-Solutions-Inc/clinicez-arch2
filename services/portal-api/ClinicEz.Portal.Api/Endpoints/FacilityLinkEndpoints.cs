@@ -2,6 +2,7 @@ using ClinicEz.Portal.Api.Abstractions;
 using ClinicEz.Portal.Application.Features.Hub;
 using ClinicEz.Portal.Application.Features.Links;
 using ClinicEz.Portal.Application.Features.Workspace;
+using ClinicEz.Portal.Domain.Common;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop.Contracts;
 using MediatR;
@@ -149,7 +150,7 @@ public class FacilityLinkEndpoints : IEndpoint
             var denied = await TenantSettingsEndpoints.Authorize(access, httpContext, tenantSlug, WorkspaceRole.Admin, ct);
             if (denied.Result != null) return denied.Result;
 
-            if (!Enum.TryParse<FacilityVisibility>(body.Visibility, ignoreCase: true, out var visibility) || !Enum.IsDefined(visibility))
+            if (!StrictEnum.TryParse<FacilityVisibility>(body.Visibility, out var visibility))
             {
                 return Results.BadRequest(new { Message = "Visibility must be Private, Network or Public." });
             }
@@ -182,7 +183,7 @@ public class FacilityLinkEndpoints : IEndpoint
             FacilityType? facilityType = null;
             if (!string.IsNullOrWhiteSpace(type))
             {
-                if (!Enum.TryParse<FacilityType>(type, ignoreCase: true, out var parsed) || !Enum.IsDefined(parsed))
+                if (!StrictEnum.TryParse<FacilityType>(type, out var parsed))
                 {
                     return Results.BadRequest(new { Message = "Unknown facility type." });
                 }
@@ -214,7 +215,7 @@ public class FacilityLinkEndpoints : IEndpoint
 
         foreach (var name in names)
         {
-            if (!Enum.TryParse<LinkScopes>(name, ignoreCase: true, out var scope) || scope == LinkScopes.None || !Enum.IsDefined(scope))
+            if (!StrictEnum.TryParse<LinkScopes>(name, out var scope) || scope == LinkScopes.None)
             {
                 return false;
             }

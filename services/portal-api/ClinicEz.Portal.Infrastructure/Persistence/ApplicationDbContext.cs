@@ -43,6 +43,12 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<InteropOutboxMessage> InteropOutbox { get; set; }
     public DbSet<InteropInboxMessage> InteropInbox { get; set; }
 
+    /// <summary>Every enum is stored as its member name, never as a number (explicit mappings below only narrow the length).</summary>
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        configurationBuilder.Properties<Enum>().HaveConversion<string>().HaveMaxLength(64);
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         const string schemaName = "main";
@@ -266,7 +272,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         modelBuilder.Entity<FacilityLink>(entity =>
         {
             entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(16);
-            entity.Property(e => e.Scopes).HasConversion<int>();
+            entity.Property(e => e.Scopes).HasConversion<string>().HasMaxLength(64);
             entity.Property(e => e.RequestedBy).HasMaxLength(128);
             entity.Property(e => e.ApprovedBy).HasMaxLength(128);
 
@@ -467,7 +473,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
             entity.Property(e => e.EventType).HasMaxLength(64);
             entity.Property(e => e.Payload).HasColumnType("jsonb");
-            entity.Property(e => e.Status).HasConversion<int>();
+            entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(16);
             entity.Property(e => e.LastError).HasMaxLength(300);
         });
 

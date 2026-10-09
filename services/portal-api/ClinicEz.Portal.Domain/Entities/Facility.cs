@@ -6,7 +6,7 @@ using System.Text.Json.Serialization;
 
 namespace ClinicEz.Portal.Domain.Entities;
 
-[JsonConverter(typeof(JsonStringEnumConverter))]
+[JsonConverter(typeof(StrictJsonStringEnumConverter))]
 public enum FacilityStatus
 {
     Provisioning,
@@ -16,7 +16,7 @@ public enum FacilityStatus
 }
 
 /// <summary>Where a facility's service is hosted. Each facility is its own deployable service.</summary>
-[JsonConverter(typeof(JsonStringEnumConverter))]
+[JsonConverter(typeof(StrictJsonStringEnumConverter))]
 public enum FacilityDeploymentMode
 {
     SharedCloud,

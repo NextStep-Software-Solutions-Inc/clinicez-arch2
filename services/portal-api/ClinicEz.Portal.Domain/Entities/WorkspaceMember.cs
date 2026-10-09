@@ -1,11 +1,12 @@
 using System;
 using System.Text.Json.Serialization;
 using ClinicEz.Portal.Domain.Common;
+using ClinicEz.Shared.Common;
 
 namespace ClinicEz.Portal.Domain.Entities;
 
 /// <summary>What a person may do in the workspace itself (separate from any job role at a facility).</summary>
-[JsonConverter(typeof(JsonStringEnumConverter))]
+[JsonConverter(typeof(StrictJsonStringEnumConverter))]
 public enum WorkspaceMemberRole
 {
     Member,
@@ -14,7 +15,7 @@ public enum WorkspaceMemberRole
     Owner
 }
 
-[JsonConverter(typeof(JsonStringEnumConverter))]
+[JsonConverter(typeof(StrictJsonStringEnumConverter))]
 public enum MemberStatus
 {
     Invited,

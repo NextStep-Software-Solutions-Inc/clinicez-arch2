@@ -15,7 +15,7 @@ public sealed class ClinicApiClient : IClinicApiClient
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<ClinicApiClient> _logger;
-    private readonly JsonSerializerOptions _jsonOptions = new() { PropertyNameCaseInsensitive = true };
+    private readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true }.UseStrictStringEnums();
 
     public ClinicApiClient(HttpClient httpClient, ILogger<ClinicApiClient> logger)
     {

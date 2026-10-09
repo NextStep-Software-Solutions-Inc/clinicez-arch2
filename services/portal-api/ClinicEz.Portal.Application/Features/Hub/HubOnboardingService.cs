@@ -9,8 +9,11 @@ using System.Net;
 
 namespace ClinicEz.Portal.Application.Features.Hub;
 
-/// <summary>One hub client's credentials. The secret is shown once; the hub keeps only a hash.</summary>
-public sealed record HubClientSecret(string ClientId, string ClientSecret);
+/// <summary>
+/// One hub client's credentials. The secret and the envelope signing key (<c>Messaging:SigningKey</c>, base64 of a PEM
+/// ECDSA P-256 private key) are shown once; the hub keeps only a hash and the public key.
+/// </summary>
+public sealed record HubClientSecret(string ClientId, string ClientSecret, string? SigningKey);
 
 /// <summary>
 /// What an on-premise workspace needs to join the cloud hub: the hub address, the upstream client its local hub uses to
@@ -23,7 +26,7 @@ public sealed record HubEdgeCredentials(
     IReadOnlyDictionary<string, HubClientSecret> Services);
 
 /// <summary>The result of rotating a single hub client.</summary>
-public sealed record HubRotatedCredentials(string HubUrl, string Service, string ClientId, string ClientSecret);
+public sealed record HubRotatedCredentials(string HubUrl, string Service, string ClientId, string ClientSecret, string? SigningKey);
 
 /// <summary>Names of the clients an edge cell gets.</summary>
 public static class EdgeHubServices
@@ -132,11 +135,11 @@ public sealed class HubOnboardingService(
         {
             var rotated = await hubAdmin.RotateClientAsync(record.ClientId, cancellationToken);
             logger.LogInformation("Rotated hub client {ClientId} ({Service}) of workspace {TenantId}.", rotated.ClientId, target, tenant.Id);
-            secret = new HubClientSecret(rotated.ClientId, rotated.ClientSecret);
+            secret = new HubClientSecret(rotated.ClientId, rotated.ClientSecret, rotated.SigningKey);
         }
 
         await LinkFacilityClientAsync(facility, cancellationToken);
-        return new HubRotatedCredentials(hubUrl, target, secret.ClientId, secret.ClientSecret);
+        return new HubRotatedCredentials(hubUrl, target, secret.ClientId, secret.ClientSecret, secret.SigningKey);
     }
 
     public async Task RevokeForFacilityAsync(Facility facility, CancellationToken cancellationToken, bool leftEdgeCell = false)
@@ -220,7 +223,7 @@ public sealed class HubOnboardingService(
         await context.SaveChangesAsync(cancellationToken);
 
         logger.LogInformation("Created hub client {ClientId} ({Service}) in cell {CellId}.", created.ClientId, service, cellId);
-        return new HubClientSecret(created.ClientId, created.ClientSecret);
+        return new HubClientSecret(created.ClientId, created.ClientSecret, created.SigningKey);
     }
 
     private async Task LinkFacilityClientAsync(Facility facility, CancellationToken cancellationToken)

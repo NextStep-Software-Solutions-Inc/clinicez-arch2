@@ -4,8 +4,8 @@ using ClinicEz.Shared.Interfaces;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Interoperability;
+using ClinicEz.Shared.Security;
 using ClinicEz.Portal.Domain.Interfaces;
-using Microsoft.AspNetCore.DataProtection;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Application.Features.Admin.Consumers;
 using ClinicEz.Portal.Application.Features.Admin.Services;
@@ -41,6 +41,10 @@ public static class DependencyInjection
         IConfiguration configuration,
         IHostEnvironment env)
     {
+        // No built-in secrets or endpoints: outside Development a missing value stops the start-up.
+        RequiredSettings.EnsureConfigured(configuration, env,
+            "ConnectionStrings:DefaultConnection", "Clerk:Authority", "Xendit:SecretKey", "Xendit:CallbackToken", "Internal:ApiKey");
+
         var connectionString = configuration.GetConnectionString("DefaultConnection");
 
         services.AddSingleton(new ClerkBackendApi(bearerAuth: configuration["Clerk:SecretKey"] ?? throw new InvalidOperationException("Clerk SecretKey is missing.")));
@@ -88,8 +92,8 @@ public static class DependencyInjection
         services.AddScoped<IEntitlementRenewalJob, EntitlementRenewalJob>();
         services.AddScoped<ClinicEz.Portal.Application.Features.Ownership.IOwnershipPolicy, ClinicEz.Portal.Application.Features.Ownership.OwnershipPolicy>();
         services.AddScoped<IClerkMetadataSync, ClerkMetadataSync>();
-        services.AddDataProtection()
-            .SetApplicationName("ClinicEz.Portal");
+        // The key ring protects the PhilHealth credentials stored per branch, so it must outlive restarts (DataProtection:KeysPath).
+        services.AddPersistentDataProtection(configuration, env, "ClinicEz.Portal");
 
         services.AddSingleton<ClinicEz.Shared.Licensing.IFacilityLicenseSigner, ClinicEz.Shared.Licensing.FacilityLicenseSigner>();
         services.AddSingleton<ClinicEz.Shared.Licensing.IFacilityLicenseValidator, ClinicEz.Shared.Licensing.FacilityLicenseValidator>();

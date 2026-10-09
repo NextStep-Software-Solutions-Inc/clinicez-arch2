@@ -115,14 +115,14 @@ public class WorkspaceBrandingTests : IDisposable
 
     // ---------- propagation event ----------
 
-    private async Task<Facility> AddFacilityAsync(FacilityStatus status = FacilityStatus.Active)
+    private async Task<Facility> AddFacilityAsync(FacilityStatus status = FacilityStatus.Active, FacilityType type = FacilityType.Clinic)
     {
         var facility = new Facility
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
             Name = $"Facility {Guid.NewGuid():N}",
-            FacilityType = FacilityType.Clinic,
+            FacilityType = type,
             Status = status
         };
         _context.Facilities.Add(facility);
@@ -134,23 +134,35 @@ public class WorkspaceBrandingTests : IDisposable
     public async Task Update_PublishesProfileUpdatedToEachFacility_OnlyWhenSomethingChanged()
     {
         var clinic = await AddFacilityAsync();
-        var lab = await AddFacilityAsync();
-        await AddFacilityAsync(FacilityStatus.Failed);
+        var lab = await AddFacilityAsync(type: FacilityType.Laboratory);
+        var pharmacy = await AddFacilityAsync(type: FacilityType.Pharmacy);
+        var organization = await AddFacilityAsync(type: FacilityType.Organization);
+        await AddFacilityAsync(FacilityStatus.Failed, FacilityType.Pharmacy);
         var handler = new UpdateWorkspaceBrandingCommandHandler(_context, _publisher);
 
         await handler.Handle(Cmd(), CancellationToken.None);
         await handler.Handle(Cmd(), CancellationToken.None); // identical => no change => no event
 
         var messages = TestSupport.Outbox(_context, InteropTypes.WorkspaceProfileUpdated);
-        Assert.Equal(2, messages.Count);
+        Assert.Equal(4, messages.Count);
         Assert.All(messages, m => Assert.Equal(PartyKind.Facility, m.To.Kind));
-        Assert.Equivalent(new[] { clinic.Id.ToString(), lab.Id.ToString() }, messages.Select(m => m.To.FacilityId));
+        Assert.Equivalent(
+            new[] { clinic.Id.ToString(), lab.Id.ToString(), pharmacy.Id.ToString(), organization.Id.ToString() },
+            messages.Select(m => m.To.FacilityId));
+        Assert.Equivalent(
+            new[] { FacilityType.Clinic, FacilityType.Laboratory, FacilityType.Pharmacy, FacilityType.Organization },
+            messages.Select(m => m.To.FacilityType!.Value));
         Assert.All(messages, m =>
         {
             var payload = m.GetPayload<ClinicEz.Shared.Common.WorkspaceProfileUpdatedEvent>();
             Assert.Equal(Slug, payload.TenantSlug);
             Assert.Equal(_tenantId.ToString(), payload.TenantId);
             Assert.Equal(2, payload.Version);
+            Assert.NotNull(payload.Profile);
+            Assert.Equal(payload.Version, payload.Profile.Version);
+            Assert.Equal(Slug, payload.Profile.TenantSlug);
+            Assert.Equal("Metro Health", payload.Profile.DisplayName);
+            Assert.Equal("#0284C7", payload.Profile.AccentColorHex);
         });
     }
 
@@ -203,7 +215,7 @@ public class WorkspaceBrandingTests : IDisposable
         Assert.Equal("#0284C7", profile.AccentColorHex);
         Assert.Equal(2, profile.Version);
 
-        var exposed = typeof(WorkspaceProfileDto).GetProperties().Select(p => p.Name).ToArray();
+        var exposed = typeof(ClinicEz.Shared.Workspace.WorkspaceProfile).GetProperties().Select(p => p.Name).ToArray();
         Assert.DoesNotContain("Email", exposed);
         Assert.DoesNotContain("PhoneNumber", exposed);
         Assert.DoesNotContain("RepresentativeName", exposed);

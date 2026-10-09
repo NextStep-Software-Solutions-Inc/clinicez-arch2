@@ -1,33 +1,39 @@
-using ClinicEz.Portal.Application;
+using ClinicEz.Shared.Middlewares;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace ClinicEz.Portal.Tests.Cors;
 
+/// <summary>portal-api uses the shared CORS policy (AddClinicEzCors); these pin the behaviour it relies on.</summary>
 public class CorsPolicyTests
 {
-    private readonly CorsPolicy _productionPolicy;
-
-    public CorsPolicyTests()
+    private sealed class FakeEnvironment(string name) : IHostEnvironment
     {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                { "Cors:AllowedOrigins:0", "https://portal-preview.vercel.app" },
-                { "Facility:BaseDomain", "example.com" }
-            })
-            .Build();
-
-        var services = new ServiceCollection();
-        services.AddApplicationServices(configuration);
-
-        var serviceProvider = services.BuildServiceProvider();
-        var corsOptions = serviceProvider.GetRequiredService<IOptions<CorsOptions>>().Value;
-        _productionPolicy = corsOptions.GetPolicy("production")!;
+        public string EnvironmentName { get; set; } = name;
+        public string ApplicationName { get; set; } = "ClinicEz.Portal.Tests";
+        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
+
+    private static IConfiguration Config(params (string Key, string Value)[] values) =>
+        new ConfigurationBuilder().AddInMemoryCollection(values.ToDictionary(v => v.Key, v => (string?)v.Value)).Build();
+
+    private static CorsPolicy Policy(string policyName, string environment, params (string Key, string Value)[] values)
+    {
+        var services = new ServiceCollection().AddClinicEzCors(Config(values), new FakeEnvironment(environment));
+        return services.BuildServiceProvider().GetRequiredService<IOptions<CorsOptions>>().Value.GetPolicy(policyName)!;
+    }
+
+    private static CorsPolicy ProductionPolicy() => Policy(
+        CorsExtensions.ProductionPolicyName,
+        "Production",
+        ("Cors:AllowedOrigins:0", "https://portal-preview.vercel.app"),
+        ("Facility:BaseDomain", "example.com"));
 
     [Theory]
     [InlineData("https://example.com")]
@@ -41,9 +47,7 @@ public class CorsPolicyTests
     [InlineData("https://portal-preview.vercel.app")]
     public void ProductionPolicy_AllowsValidOriginsAndSubdomains(string origin)
     {
-        Assert.NotNull(_productionPolicy);
-        Assert.NotNull(_productionPolicy.IsOriginAllowed);
-        Assert.True(_productionPolicy.IsOriginAllowed(origin), $"Origin '{origin}' should be allowed by production CORS policy.");
+        Assert.True(ProductionPolicy().IsOriginAllowed(origin), $"Origin '{origin}' should be allowed by production CORS policy.");
     }
 
     [Theory]
@@ -55,17 +59,72 @@ public class CorsPolicyTests
     [InlineData("https://example.ph.attacker.com")]
     [InlineData("https://malicious.com")]
     [InlineData("http://untrusted-site.com")]
+    [InlineData("https://someone-elses-app.vercel.app")]
+    [InlineData("https://portal-preview.vercel.app.attacker.com")]
+    [InlineData("http://localhost:3000")]
+    [InlineData("https://app.localhost")]
+    [InlineData("https://tenant.lvh.me")]
     [InlineData("")]
     public void ProductionPolicy_RejectsUntrustedOrigins(string origin)
     {
-        Assert.NotNull(_productionPolicy);
-        Assert.NotNull(_productionPolicy.IsOriginAllowed);
-        Assert.False(_productionPolicy.IsOriginAllowed(origin), $"Origin '{origin}' should NOT be allowed by production CORS policy.");
+        Assert.False(ProductionPolicy().IsOriginAllowed(origin), $"Origin '{origin}' should NOT be allowed by production CORS policy.");
     }
 
     [Fact]
     public void ProductionPolicy_EnablesCredentials()
     {
-        Assert.True(_productionPolicy.SupportsCredentials, "Production CORS policy should support credentials.");
+        Assert.True(ProductionPolicy().SupportsCredentials, "Production CORS policy should support credentials.");
+    }
+
+    [Fact]
+    public void ProductionPolicy_AllowsConfiguredAllowedDomainsAndTheirSubdomains_Only()
+    {
+        var policy = Policy(CorsExtensions.ProductionPolicyName, "Production", ("Cors:AllowedDomains", "partner.org"));
+
+        Assert.True(policy.IsOriginAllowed("https://partner.org"));
+        Assert.True(policy.IsOriginAllowed("https://app.partner.org"));
+        Assert.False(policy.IsOriginAllowed("https://partner.org.attacker.com"));
+    }
+
+    [Fact]
+    public void DevelopmentPolicy_AllowsAnyOrigin()
+    {
+        var policy = Policy(CorsExtensions.DevelopmentPolicyName, "Development");
+
+        Assert.True(policy.IsOriginAllowed("http://localhost:3000"));
+        Assert.True(policy.IsOriginAllowed("https://anything.vercel.app"));
+    }
+
+    [Fact]
+    public void OutsideDevelopment_WithoutAnyConfiguredOrigin_FailsFast()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() => Policy(CorsExtensions.ProductionPolicyName, "Production"));
+
+        Assert.Contains("Cors__AllowedOrigins", ex.Message);
+    }
+
+    [Fact]
+    public void OutsideDevelopment_AnAllowAnyOriginSwitch_IsRefused()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            Policy(CorsExtensions.ProductionPolicyName, "Production", ("Cors:AllowAnyOrigin", "true"), ("Cors:AllowedOrigins", "https://app.example.org")));
+
+        Assert.Contains("Cors:AllowAnyOrigin", ex.Message);
+    }
+
+    [Fact]
+    public void OutsideDevelopment_ABaseDomainAlone_IsEnough()
+    {
+        var ex = Record.Exception(() => Policy(CorsExtensions.ProductionPolicyName, "Production", ("Facility:BaseDomain", "example.com")));
+
+        Assert.Null(ex);
+    }
+
+    [Fact]
+    public void Development_NeedsNoConfiguredOrigins()
+    {
+        var ex = Record.Exception(() => Policy(CorsExtensions.DevelopmentPolicyName, "Development"));
+
+        Assert.Null(ex);
     }
 }

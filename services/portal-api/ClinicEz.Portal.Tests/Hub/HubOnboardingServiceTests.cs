@@ -65,6 +65,10 @@ public class HubOnboardingServiceTests : IDisposable
             credentials.Services.Keys.Order());
         Assert.All(credentials.Services.Values, c => Assert.Equal("created-secret", c.ClientSecret));
 
+        var signingKeys = credentials.Services.Values.Append(credentials.Upstream).Select(c => c.SigningKey).ToList();
+        Assert.All(signingKeys, key => Assert.StartsWith("created-signing-key-", key));
+        Assert.Equal(signingKeys.Count, signingKeys.Distinct().Count());
+
         var cell = Assert.Single(_hub.Cells);
         Assert.Equal($"edge-{_tenant.Id}", cell.CellId);
         Assert.Equal(CellKind.Edge, cell.Kind);
@@ -93,6 +97,8 @@ public class HubOnboardingServiceTests : IDisposable
         Assert.Equal(credentials!.Services[InteropServices.Laboratory].ClientId, stored.HubClientId);
         Assert.DoesNotContain("created-secret", string.Join('|', typeof(Facility).GetProperties().Select(p => p.GetValue(stored)?.ToString())));
         Assert.DoesNotContain("created-secret", string.Join('|', typeof(EdgeHubClient).GetProperties().Select(p => p.GetValue(rows[0])?.ToString())));
+        Assert.DoesNotContain("signing-key", string.Join('|', typeof(Facility).GetProperties().Select(p => p.GetValue(stored)?.ToString())));
+        Assert.DoesNotContain("signing-key", string.Join('|', typeof(EdgeHubClient).GetProperties().Select(p => p.GetValue(rows[0])?.ToString())));
     }
 
     [Fact]
@@ -121,6 +127,7 @@ public class HubOnboardingServiceTests : IDisposable
 
         Assert.NotEmpty(_logger.Messages);
         Assert.DoesNotContain(_logger.Messages, m => m.Contains("created-secret"));
+        Assert.DoesNotContain(_logger.Messages, m => m.Contains("signing-key"));
     }
 
     [Fact]
@@ -159,6 +166,7 @@ public class HubOnboardingServiceTests : IDisposable
         Assert.Equal(laboratoryClient, rotated.ClientId);
         Assert.Equal(InteropServices.Laboratory, rotated.Service);
         Assert.Equal("rotated-secret", rotated.ClientSecret);
+        Assert.Equal("rotated-signing-key", rotated.SigningKey);
         Assert.Equal(PublicUrl, rotated.HubUrl);
         Assert.Equal([laboratoryClient], _hub.RotatedClients);
         Assert.Equal(created, _hub.CreatedClients.Count);
@@ -186,6 +194,7 @@ public class HubOnboardingServiceTests : IDisposable
         var rotated = await Service().RotateAsync(facility, _tenant, null, CancellationToken.None);
 
         Assert.Equal("created-secret", rotated.ClientSecret);
+        Assert.StartsWith("created-signing-key-", rotated.SigningKey);
         Assert.Equal(InteropServices.Clinic, rotated.Service);
         Assert.Single(_hub.CreatedClients);
         Assert.Empty(_hub.RotatedClients);

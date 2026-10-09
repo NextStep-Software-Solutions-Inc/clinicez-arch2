@@ -90,6 +90,8 @@ transaction as the business change, and are relayed to the hub.
 - Pool limits (staff, terminals, storage) are split across facilities with `PUT /tenants/{slug}/facilities/{facilityId}/allocation`.
   The signed facility license (`GET /facilities/{id}/license-key`, activation, reconciliation and the renewal job) is always derived
   from entitlements and allocations by `ILicenseIssuer`; every change publishes `entitlements.changed`.
+- A change to the workspace profile (general, branding, compliance) bumps `ProfileVersion` and publishes `workspace.profile.updated`
+  to every routable facility of the workspace (clinic, laboratory, pharmacy, organization) and to the workspace webhooks. The message carries the complete profile (`Profile.Version` = event `Version`), so facilities never call the portal for it; a new facility gets the same message right after its license (default settings are created if absent). `GET /tenants/{slug}/workspace-profile` remains for the web apps.
 - Cross-tenant links: `GET/POST /tenants/{slug}/links`, `POST .../links/{linkId}/approve|reject`, `DELETE .../links/{linkId}`;
   facility visibility `PUT /tenants/{slug}/facilities/{facilityId}/visibility` (Private/Network/Public); directory search
   `GET /tenants/{slug}/directory/facilities?type&q&city` (answers 502 when the hub is unreachable).
@@ -108,8 +110,11 @@ transaction as the business change, and are relayed to the hub.
 ### Hub credentials and background jobs
 
 - The first on-premise facility of a workspace receives the full credential set once:
-  `{ hubUrl, upstream, services: { <service>: { clientId, clientSecret } } }`; later facilities of the workspace receive none.
-  `POST /facilities/{id}/hub-credentials/rotate?service=` issues a new secret for one service.
+  `{ hubUrl, upstream, services: { <service>: { clientId, clientSecret, signingKey } } }` (`upstream` has the same three fields);
+  later facilities of the workspace receive none. `signingKey` is the client's envelope signing private key (ECDSA P-256, base64 of a PEM) for
+  `Messaging:SigningKey` of that service; the hub keeps only the public key, so like the secret it is shown once.
+  `POST /facilities/{id}/hub-credentials/rotate?service=` returns `{ hubUrl, service, clientId, clientSecret, signingKey }` for one service
+  (new secret and new signing key; the old ones stop working).
 - Hub clients are revoked when a facility is updated or deleted, the workspace is archived, a deployment changes from on-premise to
   cloud, and by the daily `lapsed-hub-client-revocation` job. A hub `404` on revoke counts as already revoked; other failures are
   logged and retried later.
@@ -121,3 +126,23 @@ Existing staff rows become workspace members (same id; Owner/Admin roles map to 
 `OwnerId` becomes `Owner`); a missing owner member is created. Provider subscription ids are not migrated: the old
 `SubscriptionPlans` tables are dropped, plans are re-seeded and trials start lazily. Tenants that share an `OwnerId` must be cleaned up
 before applying, otherwise the unique owner index fails.
+
+## Enums and security configuration
+
+- **Enums are strings.** Every enum is stored as its member name (`ConfigureConventions`: `Properties<Enum>().HaveConversion<string>()`, max length 64) and
+  is written and read by name on the wire (`AddStrictStringEnums()`); numbers are rejected with 400. `StringEnumTests` fails when a
+  new enum property is mapped as a number. Migration `EnumsAsStrings` converts `WebhookDeliveries.Status` and `FacilityLinks.Scopes`
+  (flags are stored as `LabOrder, Prescription`, or `All`).
+- **No built-in secrets.** Outside Development the host refuses to start when one of these is missing (the message names the
+  environment variable):
+
+| Setting (env) | Purpose |
+| --- | --- |
+| `ConnectionStrings:DefaultConnection` | Database. |
+| `Clerk:SecretKey`, `Clerk:Authority`, `Clerk:AuthorizedParties` | Clerk backend API and JWT validation. |
+| `Xendit:SecretKey`, `Xendit:CallbackToken` | Xendit API and the callback token of `POST /billing/webhook` (compared in constant time; there is no default). |
+| `Cors:AllowedOrigins` (`Cors__AllowedOrigins`, comma separated); at least one of it, `Facility:BaseDomain`, `Cors:AllowedDomains` is required, and `Cors:AllowAnyOrigin=true` stops the start-up | Portal web origin(s) allowed to call the API with credentials. Outside Development only these, subdomains of `Facility:BaseDomain` and of `Cors:AllowedDomains` are allowed: no localhost, `*.lvh.me` or `*.vercel.app` (list a Vercel preview origin explicitly if needed). There is no allow-any-origin switch; Development allows every origin. |
+| `Messaging:SigningKey` (`Messaging__SigningKey`) | Private key portal-api signs its hub messages with (the hub client's ECDSA P-256 key, PEM or base64 of one). The hub is bootstrapped with the matching public key through `INTEROP_HUB_PORTAL_PUBLIC_KEY`. |
+| `Internal:ApiKey` (`Internal__ApiKey`), optional `Internal:PreviousApiKey` | Shared key of service-to-service calls. The `/internal/*` endpoints (PhilHealth credentials read by philhealth-proxy) require it in `X-Internal-Key`; during a rotation set the new value as `ApiKey` and the old one as `PreviousApiKey`, then update the callers. |
+| `DataProtection:KeysPath` (`DataProtection__KeysPath`) | Persistent, shared directory of the Data Protection key ring (`/var/dpkeys`, mount a volume). The ring protects the PhilHealth credentials stored per branch; losing it makes them unreadable. Development uses the default key ring. |
+| `DataProtection:CertificateBase64` / `CertificatePassword` | Optional PKCS#12 (.pfx, base64) that encrypts the key ring at rest. |

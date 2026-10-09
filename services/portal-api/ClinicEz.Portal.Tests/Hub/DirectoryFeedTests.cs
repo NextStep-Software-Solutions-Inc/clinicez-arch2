@@ -255,14 +255,14 @@ public class DirectoryFeedTests : IDisposable
     {
         var facility = NewFacility("Downtown Clinic", status: FacilityStatus.Provisioning);
         _context.Facilities.Add(facility);
-        new Application.Features.Admin.Services.FacilityProvisioningPublisher(new InteropPublisher(_context))
-            .EnqueueLicenseIssued(new FacilityCreatedEvent
+        await TestSupport.ProvisioningPublisher(_context)
+            .StageProvisionedAsync(await _context.Tenants.SingleAsync(), new FacilityCreatedEvent
             {
                 TenantId = _tenantId.ToString(),
                 ResourceId = facility.Id,
                 FacilityType = facility.FacilityType,
                 LicenseToken = "token"
-            });
+            }, CancellationToken.None);
         await _context.SaveChangesAsync();
 
         var order = TestSupport.Outbox(_context).Select(e => e.Type).ToList();

@@ -590,7 +590,8 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
 
                     b.Property<string>("FacilityType")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<string>("HubClientId")
                         .HasMaxLength(128)
@@ -643,7 +644,8 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
 
                     b.Property<string>("Status")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<string>("StreetAddress")
                         .HasColumnType("text");
@@ -774,8 +776,10 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
-                    b.Property<int>("Scopes")
-                        .HasColumnType("integer");
+                    b.Property<string>("Scopes")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<Guid>("SourceFacilityId")
                         .HasColumnType("uuid");
@@ -1568,8 +1572,10 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                     b.Property<int?>("ResponseStatusCode")
                         .HasColumnType("integer");
 
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");

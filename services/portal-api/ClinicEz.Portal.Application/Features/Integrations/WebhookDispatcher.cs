@@ -1,5 +1,6 @@
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
+using ClinicEz.Shared.Common;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
@@ -42,7 +43,10 @@ public interface IWebhookDispatcher
 
 public class WebhookDispatcher(IApplicationDbContext context) : IWebhookDispatcher
 {
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new StrictJsonStringEnumConverter() }
+    };
 
     public async Task<int> EnqueueAsync(
         Guid tenantId,

@@ -1,10 +1,11 @@
 using ClinicEz.Portal.Application.Common.Exceptions;
+using ClinicEz.Portal.Domain.Common;
 
 public static class EnumValidator
 {
     public static ValidationResult ValidateEnum<TEnum>(string? value, string fieldName) where TEnum : struct, Enum
     {
-        if (string.IsNullOrWhiteSpace(value) || !Enum.TryParse<TEnum>(value, true, out _))
+        if (!StrictEnum.IsName(value) || !Enum.TryParse<TEnum>(value, true, out _))
         {
             return ValidationResult.Fail(
                 $"Invalid {fieldName} '{value}'. Allowed values: {string.Join(", ", Enum.GetNames(typeof(TEnum)))}"
@@ -18,7 +19,7 @@ public static class EnumValidator
     {
         foreach (var (enumType, value, fieldName) in validations)
         {
-            if (string.IsNullOrWhiteSpace(value) || !Enum.TryParse(enumType, value, true, out _))
+            if (!StrictEnum.IsName(value) || !Enum.TryParse(enumType, value, true, out _))
             {
                 return ValidationResult.Fail(
                     $"Invalid {fieldName} '{value}'. Allowed values: {string.Join(", ", Enum.GetNames(enumType))}"

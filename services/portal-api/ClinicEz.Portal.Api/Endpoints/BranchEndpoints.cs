@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using ClinicEz.Portal.Api.Abstractions;
+using ClinicEz.Portal.Api.Auth;
 using ClinicEz.Portal.Application.Features.Branches;
 using ClinicEz.Portal.Application.Features.Entitlements;
 using ClinicEz.Portal.Application.Interfaces;
@@ -589,8 +590,10 @@ public class BranchEndpoints : IEndpoint
         .RequireAuthorization()
         .WithName("DeleteBranch");
 
-        // ── Internal Endpoints (Invoked by philhealth-proxy via resilient HTTP) ──────
-        var internalApi = app.MapGroup("/internal").WithTags("Internal PhilHealth Proxy Gateway");
+        // ── Internal Endpoints (Invoked by philhealth-proxy via resilient HTTP; they require the shared X-Internal-Key) ──────
+        var internalApi = app.MapGroup("/internal")
+            .WithTags("Internal PhilHealth Proxy Gateway")
+            .RequireAuthorization(InternalServiceAuth.Policy);
 
         // 7. GET decrypted PhilHealth config by Branch ID
         internalApi.MapGet("/branches/{branchId:guid}/philhealth-config", async (

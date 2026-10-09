@@ -1,4 +1,6 @@
 using ClinicEz.Shared.Common;
+using ClinicEz.Shared.LocalAuth;
+using ClinicEz.Shared.Middlewares;
 using ClinicEz.Portal.Api;
 using ClinicEz.Portal.Application;
 using ClinicEz.Portal.Infrastructure;
@@ -31,12 +33,7 @@ builder.Services
     .AddJwtBearer(options =>
     {
         // These values MUST be correctly configured in appsettings.json
-        var authority = builder.Configuration["Clerk:Authority"];
-        if (string.IsNullOrWhiteSpace(authority) && env.IsDevelopment())
-        {
-            authority = "https://amazing-mosquito-75.clerk.accounts.dev";
-        }
-        options.Authority = authority;
+        options.Authority = builder.Configuration["Clerk:Authority"];
 
         // This parameter block configures how the token is validated
         options.TokenValidationParameters = new TokenValidationParameters
@@ -79,9 +76,16 @@ builder.Services
         };
     })
     .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, ClinicEz.Portal.Api.Auth.ApiKeyAuthenticationHandler>(
-        ClinicEz.Portal.Api.Auth.ApiKeyAuthenticationHandler.SchemeName, null);
+        ClinicEz.Portal.Api.Auth.ApiKeyAuthenticationHandler.SchemeName, null)
+    .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, InternalKeyAuthenticationHandler>(FacilityAuthSchemes.Internal, null);
+builder.Services.AddOptions<InternalKeyOptions>().Bind(builder.Configuration.GetSection(InternalKeyOptions.SectionName));
 builder.Services.AddAuthorization(options =>
 {
+    // Service-to-service endpoints (philhealth-proxy reading credentials): the shared internal key only.
+    options.AddPolicy(ClinicEz.Portal.Api.Auth.InternalServiceAuth.Policy, policy => policy
+        .AddAuthenticationSchemes(FacilityAuthSchemes.Internal)
+        .RequireClaim(FacilityAuthSchemes.InternalClaim, "true"));
+
     // Integration (workspace API key) endpoints: one policy per scope, bound to the ApiKey scheme only.
     foreach (var scope in ClinicEz.Portal.Application.Features.Integrations.IntegrationCatalog.Scopes)
     {
@@ -102,8 +106,10 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 // 1. Add services from our other layers
 builder.Services
     .AddApiServices()
-    .AddApplicationServices(builder.Configuration)
+    .AddApplicationServices()
     .AddInfrastructureServices(builder.Configuration, builder.Environment);
+
+builder.Services.AddClinicEzCors(builder.Configuration, builder.Environment);
 
 var app = builder.Build();
 bool isDevelopment = app.Environment.IsDevelopment();
@@ -200,7 +206,7 @@ if (isDevelopment)
 
 // 4. Add middleware
 app.UseForwardedHeaders();
-app.UseCors(isDevelopment ? "development" : "production");
+app.UseCors(isDevelopment ? CorsExtensions.DevelopmentPolicyName : CorsExtensions.ProductionPolicyName);
 app.UseHttpsRedirection();
 app.UseExceptionHandler(); // Use our global exception handler
 app.UseHangfireDashboard("/hangfire", new DashboardOptions { Authorization = [new HangfireDashboardAuthFilter(app.Configuration)] }); // Basic Auth; denied when no password is configured

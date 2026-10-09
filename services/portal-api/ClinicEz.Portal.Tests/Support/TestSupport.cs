@@ -38,7 +38,7 @@ internal static class TestSupport
         new WorkspaceProfilePublisher(context, new InteropPublisher(context), new WebhookDispatcher(context));
 
     public static IFacilityProvisioningPublisher ProvisioningPublisher(ApplicationDbContext context) =>
-        new FacilityProvisioningPublisher(new InteropPublisher(context));
+        new FacilityProvisioningPublisher(context, new InteropPublisher(context));
 
     public static IStaffInvitationNotifier InvitationNotifier(ApplicationDbContext context, string? frontendUrl = "https://app.clinicez.test") =>
         new StaffInvitationNotifier(
@@ -200,14 +200,14 @@ internal sealed class FakeHubAdminClient : IHubAdminClient
     {
         ThrowIfFailing();
         CreatedClients.Add((cellId, request));
-        return Task.FromResult(new HubClientCredentials($"client-{CreatedClients.Count}", "created-secret", cellId, request.Service, request.Kind));
+        return Task.FromResult(new HubClientCredentials($"client-{CreatedClients.Count}", "created-secret", cellId, request.Service, request.Kind, $"created-signing-key-{CreatedClients.Count}"));
     }
 
     public Task<HubClientCredentials> RotateClientAsync(string clientId, CancellationToken ct)
     {
         ThrowIfFailing();
         RotatedClients.Add(clientId);
-        return Task.FromResult(new HubClientCredentials(clientId, "rotated-secret", "cell", "clinic", HubClientKind.EdgeCell));
+        return Task.FromResult(new HubClientCredentials(clientId, "rotated-secret", "cell", "clinic", HubClientKind.EdgeCell, "rotated-signing-key"));
     }
 
     public Task RevokeClientAsync(string clientId, CancellationToken ct)

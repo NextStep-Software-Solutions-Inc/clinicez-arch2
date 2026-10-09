@@ -57,6 +57,8 @@ public class CreateOnPremiseFacilityTests : IDisposable
         Assert.Equal("https://hub.clinicez.test", result.HubCredentials.HubUrl);
         Assert.Equal("created-secret", result.HubCredentials.Upstream!.ClientSecret);
         Assert.Equal("created-secret", result.HubCredentials.Services[InteropServices.Clinic].ClientSecret);
+        Assert.StartsWith("created-signing-key-", result.HubCredentials.Services[InteropServices.Clinic].SigningKey);
+        Assert.StartsWith("created-signing-key-", result.HubCredentials.Upstream!.SigningKey);
 
         var facility = await _context.Facilities.AsNoTracking().SingleAsync();
         Assert.Equal(FacilityDeploymentMode.OnPremise, facility.DeploymentMode);

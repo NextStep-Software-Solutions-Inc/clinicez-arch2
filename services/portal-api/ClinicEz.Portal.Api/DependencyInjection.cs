@@ -3,6 +3,7 @@ using ClinicEz.Portal.Api.Endpoints;
 using ClinicEz.Portal.Application.Features.PublicUploads;
 using ClinicEz.Shared.Middlewares;
 using ClinicEz.Portal.Api.Extensions;
+using ClinicEz.Shared.Common;
 using Microsoft.Extensions.Options;
 namespace ClinicEz.Portal.Api;
 
@@ -12,6 +13,9 @@ public static class DependencyInjection
     {
         services.AddEndpoints(typeof(DependencyInjection).Assembly);
         services.AddEndpointsApiExplorer();
+
+        // Every enum goes over the wire as its name; numbers are rejected instead of silently accepted.
+        services.AddStrictStringEnums();
 
         services.AddOpenApi();
 
