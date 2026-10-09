@@ -17,6 +17,9 @@ namespace ClinicEz.Clinic.Application.Tests;
 
 public sealed class YakapSimulationTests
 {
+    /// <summary>The proxy writes enums as strings, like every platform API.</summary>
+    private static readonly JsonSerializerOptions ProxyJson = new JsonSerializerOptions().UseStrictStringEnums();
+
     private class MockHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> handlerFunc) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -68,7 +71,7 @@ public sealed class YakapSimulationTests
         {
             req.Method.Should().Be(HttpMethod.Post);
             req.RequestUri!.PathAndQuery.Should().Be("/api/soap-sandbox/run-e2e");
-            var json = JsonSerializer.Serialize(ApiResponse<SoapSimulationReportDto>.Success(sampleReport));
+            var json = JsonSerializer.Serialize(ApiResponse<SoapSimulationReportDto>.Success(sampleReport), ProxyJson);
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")
@@ -99,7 +102,7 @@ public sealed class YakapSimulationTests
         {
             req.Method.Should().Be(HttpMethod.Get);
             req.RequestUri!.PathAndQuery.Should().Be("/api/soap-sandbox/status");
-            var json = JsonSerializer.Serialize(ApiResponse<SoapSandboxStatusDto>.Success(sampleStatus));
+            var json = JsonSerializer.Serialize(ApiResponse<SoapSandboxStatusDto>.Success(sampleStatus), ProxyJson);
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")
@@ -128,7 +131,7 @@ public sealed class YakapSimulationTests
         {
             req.Method.Should().Be(HttpMethod.Post);
             req.RequestUri!.PathAndQuery.Should().Be("/api/soap-sandbox/scenario");
-            var json = JsonSerializer.Serialize(ApiResponse<SoapSandboxStatusDto>.Success(updatedStatus));
+            var json = JsonSerializer.Serialize(ApiResponse<SoapSandboxStatusDto>.Success(updatedStatus), ProxyJson);
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")
@@ -155,7 +158,7 @@ public sealed class YakapSimulationTests
         {
             req.Method.Should().Be(HttpMethod.Post);
             req.RequestUri!.PathAndQuery.Should().Be("/api/soap-sandbox/reset");
-            var json = JsonSerializer.Serialize(ApiResponse<SoapSandboxStatusDto>.Success(resetStatus));
+            var json = JsonSerializer.Serialize(ApiResponse<SoapSandboxStatusDto>.Success(resetStatus), ProxyJson);
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")

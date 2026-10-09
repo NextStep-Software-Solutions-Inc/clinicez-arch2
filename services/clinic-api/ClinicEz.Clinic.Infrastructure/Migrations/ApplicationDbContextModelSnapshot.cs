@@ -92,6 +92,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<string>("Status")
                         .IsRequired()
+                        .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
                     b.Property<string>("TenantId")
@@ -135,6 +136,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<string>("DataType")
                         .IsRequired()
+                        .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
                     b.Property<DateTime?>("DeletedAt")
@@ -319,6 +321,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<string>("Stage")
                         .IsRequired()
+                        .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
                     b.Property<DateTime>("StageChangedAt")
@@ -333,6 +336,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<string>("Status")
                         .IsRequired()
+                        .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
                     b.Property<Guid?>("TargetFacilityId")
@@ -387,6 +391,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<string>("Status")
                         .IsRequired()
+                        .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
                     b.Property<string>("TestName")
@@ -469,6 +474,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<string>("Source")
                         .IsRequired()
+                        .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
                     b.Property<string>("StorageKey")
@@ -494,6 +500,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<string>("Verification")
                         .IsRequired()
+                        .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
                     b.Property<DateTime?>("VerifiedAt")
@@ -660,7 +667,8 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<string>("ShareGrantScopes")
                         .IsRequired()
-                        .HasColumnType("character varying(50)");
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<string>("Suffix")
                         .HasColumnType("text");
@@ -1289,6 +1297,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<string>("Status")
                         .IsRequired()
+                        .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
                     b.Property<string>("TenantId")
@@ -1417,6 +1426,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<string>("RxDispenseStatus")
                         .IsRequired()
+                        .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
                     b.Property<DateTime?>("RxDispensedAt")
@@ -1457,6 +1467,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<string>("RxStage")
                         .IsRequired()
+                        .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
                     b.Property<string>("RxStageReason")
@@ -1685,6 +1696,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<string>("DiscountType")
                         .IsRequired()
+                        .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
                     b.Property<decimal>("GrossAmount")
@@ -1722,6 +1734,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<string>("Status")
                         .IsRequired()
+                        .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
                     b.Property<string>("TenantId")
@@ -1936,6 +1949,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<string>("Method")
                         .IsRequired()
+                        .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
                     b.Property<string>("Notes")
@@ -2027,10 +2041,12 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<string>("Source")
                         .IsRequired()
+                        .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
                     b.Property<string>("Status")
                         .IsRequired()
+                        .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
                     b.Property<int>("Unchanged")
@@ -2158,6 +2174,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<string>("SequenceType")
                         .IsRequired()
+                        .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
                     b.Property<string>("TenantId")
@@ -2360,6 +2377,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<string>("Priority")
                         .IsRequired()
+                        .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
                     b.Property<DateOnly>("QueueDate")
@@ -2375,6 +2393,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<string>("Status")
                         .IsRequired()
+                        .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
                     b.Property<string>("TenantId")
@@ -2594,10 +2613,12 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<string>("Scopes")
                         .IsRequired()
-                        .HasColumnType("character varying(50)");
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<string>("Status")
                         .IsRequired()
+                        .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
                     b.Property<string>("TenantId")
@@ -2696,6 +2717,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<string>("Role")
                         .IsRequired()
+                        .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
                     b.Property<string>("S2LicenseNumber")
@@ -2862,6 +2884,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<string>("Kind")
                         .IsRequired()
+                        .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
                     b.Property<Guid>("LabOrderId")
@@ -2960,6 +2983,7 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<string>("Status")
                         .IsRequired()
+                        .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
                     b.Property<DateTime?>("SubmittedAt")
@@ -3148,6 +3172,34 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.HasIndex("DispatchedAtUtc", "DeadLetteredAtUtc", "NextAttemptAtUtc");
 
                     b.ToTable("interop_outbox", "clinic_dashboard");
+                });
+
+            modelBuilder.Entity("ClinicEz.Shared.Workspace.WorkspaceProfileRecord", b =>
+                {
+                    b.Property<string>("TenantId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ProfileJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("TenantSlug")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("TenantId");
+
+                    b.HasIndex("TenantSlug");
+
+                    b.ToTable("workspace_profiles", "clinic_dashboard");
                 });
 
             modelBuilder.Entity("ClinicEz.Clinic.Domain.Entities.ClinicLabOrderItem", b =>

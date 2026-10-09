@@ -4,6 +4,7 @@ using System.Text.Json;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Interop.Persistence;
+using ClinicEz.Shared.Workspace;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata;
@@ -12,7 +13,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace ClinicEz.Clinic.Infrastructure.Persistence;
 
-public class ApplicationDbContext : DbContext, IInteropDbContext
+public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProfileDbContext
 {
     private readonly IConfiguration _configuration;
     private readonly IClinicContext? _clinicContext;
@@ -60,8 +61,15 @@ public class ApplicationDbContext : DbContext, IInteropDbContext
     public DbSet<ShareImport> ShareImports { get; set; } = null!;
     public DbSet<InteropOutboxMessage> InteropOutbox { get; set; } = null!;
     public DbSet<InteropInboxMessage> InteropInbox { get; set; } = null!;
+    public DbSet<WorkspaceProfileRecord> WorkspaceProfiles => Set<WorkspaceProfileRecord>();
 
     public Guid CurrentClinicId => _clinicContext?.ClinicId ?? Guid.Empty;
+
+    /// <summary>Every enum is persisted as its C# name (nullable enums included), never as a number.</summary>
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        configurationBuilder.Properties<Enum>().HaveConversion<string>().HaveMaxLength(50);
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -85,22 +93,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext
             }
         }
 
-        // 1. Mandatory Enum-to-String Value Conversion across the entire DB
-        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
-        {
-            foreach (var property in entityType.GetProperties())
-            {
-                if (property.ClrType.IsEnum)
-                {
-                    var converterType = typeof(EnumToStringConverter<>).MakeGenericType(property.ClrType);
-                    var converter = (ValueConverter)Activator.CreateInstance(converterType)!;
-                    property.SetValueConverter(converter);
-                    property.SetColumnType("character varying(50)");
-                }
-            }
-        }
-
-        // 2. Multi-Tenant & Clinic Jurisdiction Global Query Filters
+        // 1. Multi-Tenant & Clinic Jurisdiction Global Query Filters
         modelBuilder.Entity<ClinicRole>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<StaffMember>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<Appointment>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
@@ -128,7 +121,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext
         modelBuilder.Entity<Product>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<ClinicRefreshToken>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
 
-        // 3. Entity Configurations
+        // 2. Entity Configurations
         var permissionsConverter = new ValueConverter<List<string>, string>(
             v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
             v => string.IsNullOrEmpty(v) ? new List<string>() : JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null) ?? new List<string>()
@@ -431,7 +424,8 @@ public class ApplicationDbContext : DbContext, IInteropDbContext
             entity.Property(e => e.ClinicEzId).HasMaxLength(40);
             entity.Property(e => e.QueueNumber).HasMaxLength(20);
             entity.Property(e => e.ItemsJson).HasColumnType("text");
-            entity.Property(e => e.Scopes).HasConversion<int>();
+            // A flags enum is stored as its comma-separated names, which outgrow the 50-character default.
+            entity.Property(e => e.Scopes).HasMaxLength(200);
             entity.HasIndex(e => new { e.ClinicId, e.RequestedAt });
         });
 
@@ -448,6 +442,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
             entity.Property(e => e.PatientCode).IsRequired().HasMaxLength(30);
+            entity.Property(e => e.ShareGrantScopes).HasMaxLength(200);
             entity.Property(e => e.FirstName).IsRequired().HasMaxLength(100);
             entity.Property(e => e.LastName).IsRequired().HasMaxLength(100);
             entity.Property(e => e.ContactNumber).IsRequired().HasMaxLength(50);
@@ -617,6 +612,8 @@ public class ApplicationDbContext : DbContext, IInteropDbContext
 
         // Interop transactional outbox and inbox
         modelBuilder.ApplyInteropModel();
+
+        modelBuilder.ApplyWorkspaceProfileModel();
 
         base.OnModelCreating(modelBuilder);
     }

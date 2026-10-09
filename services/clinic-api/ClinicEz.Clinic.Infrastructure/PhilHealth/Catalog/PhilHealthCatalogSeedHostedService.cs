@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Shared.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,7 +20,7 @@ public static class PhilHealthCatalogEmbeddedSeed
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
         PropertyNameCaseInsensitive = true,
-        Converters = { new JsonStringEnumConverter() },
+        Converters = { new StrictJsonStringEnumConverter() },
     };
 
     private sealed record SeedFile(string Library, string KitVersion, List<SeedItem> Items);

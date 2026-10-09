@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
@@ -10,6 +11,7 @@ using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Clinic.Infrastructure.Services.Storage;
 using FluentAssertions;
+using Microsoft.Extensions.Configuration;
 using NSubstitute;
 using Xunit;
 
@@ -20,12 +22,84 @@ public class ClinicEncryptionServiceTests
     private readonly ClinicEncryptionService _encryptionService;
     private readonly string _testTenantId = "tenant-st-luke";
     private readonly Guid _testClinicId = Guid.NewGuid();
+    private const string CurrentSecret = "unit-test-current-master-secret-0123456789abcdef";
+    private const string RetiredSecret = "unit-test-retired-master-secret-0123456789abcdef";
 
     public ClinicEncryptionServiceTests()
     {
-        _encryptionService = new ClinicEncryptionService();
+        _encryptionService = new ClinicEncryptionService(KeyRing(CurrentSecret));
     }
 
+    private static ClinicEncryptionKeyRing KeyRing(string? current, params string[] previous)
+    {
+        var values = new Dictionary<string, string?> { [ClinicEncryptionKeyRing.MasterSecretKey] = current };
+        for (var i = 0; i < previous.Length; i++)
+            values[$"{ClinicEncryptionKeyRing.PreviousMasterSecretsKey}:{i}"] = previous[i];
+        return ClinicEncryptionKeyRing.FromConfiguration(new ConfigurationBuilder().AddInMemoryCollection(values).Build());
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("too-short")]
+    public void KeyRing_WithoutUsableCurrentSecret_FailsFast(string? secret)
+    {
+        var act = () => KeyRing(secret);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*ClinicEncryption*");
+    }
+
+    [Fact]
+    public void KeyRing_WithShortPreviousSecret_FailsFast()
+    {
+        var act = () => KeyRing(CurrentSecret, "short");
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task Rotation_FilesWrappedWithRetiredSecret_StayReadableAndNewFilesUseCurrent()
+    {
+        var plaintext = Encoding.UTF8.GetBytes("record attachment wrapped before rotation");
+        var before = new ClinicEncryptionService(KeyRing(RetiredSecret));
+        var oldFile = await before.EncryptAsync(plaintext, _testTenantId, _testClinicId);
+
+        var rotated = new ClinicEncryptionService(KeyRing(CurrentSecret, RetiredSecret));
+        var decryptedOld = await rotated.DecryptAsync(oldFile.Ciphertext, oldFile.IvBase64, oldFile.TagBase64, oldFile.WrappedKeyJson, _testTenantId, _testClinicId);
+        var newFile = await rotated.EncryptAsync(plaintext, _testTenantId, _testClinicId);
+
+        decryptedOld.Should().Equal(plaintext);
+        var onlyCurrent = new ClinicEncryptionService(KeyRing(CurrentSecret));
+        (await onlyCurrent.DecryptAsync(newFile.Ciphertext, newFile.IvBase64, newFile.TagBase64, newFile.WrappedKeyJson, _testTenantId, _testClinicId))
+            .Should().Equal(plaintext);
+    }
+
+    [Fact]
+    public async Task Rotation_DroppingTheRetiredSecret_MakesOldFilesUnreadable()
+    {
+        var plaintext = Encoding.UTF8.GetBytes("record attachment");
+        var oldFile = await new ClinicEncryptionService(KeyRing(RetiredSecret)).EncryptAsync(plaintext, _testTenantId, _testClinicId);
+
+        var act = () => new ClinicEncryptionService(KeyRing(CurrentSecret))
+            .DecryptAsync(oldFile.Ciphertext, oldFile.IvBase64, oldFile.TagBase64, oldFile.WrappedKeyJson, _testTenantId, _testClinicId);
+
+        await act.Should().ThrowAsync<CryptographicException>();
+    }
+
+    [Fact]
+    public async Task Decrypt_FileWrappedWithoutKeyId_IsTriedAgainstEverySecret()
+    {
+        var plaintext = Encoding.UTF8.GetBytes("legacy attachment");
+        var file = await new ClinicEncryptionService(KeyRing(RetiredSecret)).EncryptAsync(plaintext, _testTenantId, _testClinicId);
+        var legacyWrappedKey = System.Text.RegularExpressions.Regex.Replace(file.WrappedKeyJson, "\"Kid\":\"[^\"]*\",?", string.Empty);
+        legacyWrappedKey.Should().NotContain("Kid");
+
+        var rotated = new ClinicEncryptionService(KeyRing(CurrentSecret, RetiredSecret));
+
+        (await rotated.DecryptAsync(file.Ciphertext, file.IvBase64, file.TagBase64, legacyWrappedKey, _testTenantId, _testClinicId))
+            .Should().Equal(plaintext);
+    }
     [Fact]
     public async Task EncryptAsync_ShouldProduceValidCiphertextAndMetadata()
     {

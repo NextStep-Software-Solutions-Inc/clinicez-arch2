@@ -20,10 +20,10 @@ public sealed class PhilHealthProxyClient : IPhilHealthProxyClient
     private readonly ILogger<PhilHealthProxyClient> _logger;
     private readonly IClinicContext? _clinicContext;
     private readonly string _baseUrl;
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
     {
         PropertyNameCaseInsensitive = true
-    };
+    }.UseStrictStringEnums();
 
     public PhilHealthProxyClient(
         HttpClient httpClient,

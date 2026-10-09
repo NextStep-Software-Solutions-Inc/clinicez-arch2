@@ -75,8 +75,8 @@ public static class DependencyInjection
         services.AddHostedService<ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.PhilHealthCatalogSeedHostedService>();
         services.AddHostedService<ClinicEz.Clinic.Infrastructure.Idempotency.IdempotencyCleanupHostedService>();
 
-        // Workspace brand/regional defaults, pulled from portal-api (works against a remote portal)
-        services.AddWorkspaceProfileClient();
+        // Workspace brand/regional defaults: fed by workspace.profile.updated messages and held in this service's own database
+        services.AddWorkspaceProfile<ApplicationDbContext>();
 
         // Outbound PhilHealth Yakap integration client
         services.AddHttpClient<IPhilHealthProxyClient, PhilHealthProxyClient>();
@@ -104,6 +104,8 @@ public static class DependencyInjection
         services.AddScoped<ILabResultReviewedPublisher, LabResultReviewedPublisher>();
         services.AddClinicEzDocumentEngine();
         services.AddScoped<IClinicDocumentPdfService, ClinicDocumentPdfService>();
+        // Read eagerly: a missing or too-short ClinicEncryption:MasterSecret stops the service from starting.
+        services.AddSingleton(ClinicEz.Clinic.Infrastructure.Services.Storage.ClinicEncryptionKeyRing.FromConfiguration(configuration));
         services.AddSingleton<IClinicEncryptionService, ClinicEz.Clinic.Infrastructure.Services.Storage.ClinicEncryptionService>();
         services.AddSingleton<IClinicStorageService, ClinicEz.Clinic.Infrastructure.Services.Storage.LocalClinicStorageService>();
         services.AddScoped<IClinicRecordEventPublisher, ClinicEz.Clinic.Infrastructure.Services.ClinicRecordEventPublisher>();
@@ -126,7 +128,7 @@ public static class DependencyInjection
         // and lab.order.payment.confirmed are never sent to a clinic and are intentionally not registered here.
         services.AddInterop<ApplicationDbContext>(configuration, b => b
             .Handle<FacilityCreatedEvent, FacilityCreatedHandler>(InteropTypes.FacilityLicenseIssued)
-            .Handle<WorkspaceProfileUpdatedEvent, WorkspaceProfileUpdatedHandler>(InteropTypes.WorkspaceProfileUpdated)
+            .HandleWorkspaceProfileUpdated()
             .Handle<AppointmentBookedEvent, AppointmentBookedHandler>(InteropTypes.PatientAppointmentBooked)
             .Handle<DiagnosticReportFinalizedEvent, DiagnosticReportFinalizedHandler>(InteropTypes.LabResultFinalized)
             .Handle<PrescriptionDispensedEvent, PrescriptionDispensedHandler>(InteropTypes.RxDispensed)

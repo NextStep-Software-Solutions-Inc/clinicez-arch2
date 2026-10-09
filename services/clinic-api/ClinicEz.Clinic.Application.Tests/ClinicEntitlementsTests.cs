@@ -31,6 +31,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using NSubstitute;
 using Xunit;
 
@@ -349,7 +350,7 @@ public class ClinicEntitlementsTests
         seed.ClinicSettings.Add(Settings(Token(1, facilityId: OtherClinicGuid), id: OtherClinicGuid));
         await seed.SaveChangesAsync();
 
-        var builder = WebApplication.CreateBuilder();
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = Environments.Development });
         builder.WebHost.UseTestServer();
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { ["DbSchema"] = "clinic_dashboard" });
         builder.Services.AddHttpContextAccessor();
