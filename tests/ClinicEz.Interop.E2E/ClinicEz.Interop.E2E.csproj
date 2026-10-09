@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);MSB3277</NoWarn>
+    <NuGetAudit>false</NuGetAudit>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="FluentAssertions" Version="8.10.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.9" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.9" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.9" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\packages\shared-dotnet\ClinicEz.Shared.csproj" />
+
+    <ProjectReference Include="..\..\services\interop-hub\ClinicEz.Interop.Api\ClinicEz.Interop.Api.csproj" />
+    <ProjectReference Include="..\..\services\interop-hub\ClinicEz.Interop.Infrastructure\ClinicEz.Interop.Infrastructure.csproj" />
+
+    <ProjectReference Include="..\..\services\clinic-api\ClinicEz.Clinic.Application\ClinicEz.Clinic.Application.csproj" />
+    <ProjectReference Include="..\..\services\clinic-api\ClinicEz.Clinic.Domain\ClinicEz.Clinic.Domain.csproj" />
+    <ProjectReference Include="..\..\services\clinic-api\ClinicEz.Clinic.Infrastructure\ClinicEz.Clinic.Infrastructure.csproj" />
+
+    <ProjectReference Include="..\..\services\laboratory-api\ClinicEz.Laboratory.Application\ClinicEz.Laboratory.Application.csproj" />
+    <ProjectReference Include="..\..\services\laboratory-api\ClinicEz.Laboratory.Domain\ClinicEz.Laboratory.Domain.csproj" />
+    <ProjectReference Include="..\..\services\laboratory-api\ClinicEz.Laboratory.Infrastructure\ClinicEz.Laboratory.Infrastructure.csproj" />
+
+    <ProjectReference Include="..\..\services\pharmacy-api\ClinicEz.Pharmacy.Application\ClinicEz.Pharmacy.Application.csproj" />
+    <ProjectReference Include="..\..\services\pharmacy-api\ClinicEz.Pharmacy.Domain\ClinicEz.Pharmacy.Domain.csproj" />
+    <ProjectReference Include="..\..\services\pharmacy-api\ClinicEz.Pharmacy.Infrastructure\ClinicEz.Pharmacy.Infrastructure.csproj" />
+
+    <ProjectReference Include="..\..\services\billing-api\ClinicEz.Billing.Application\ClinicEz.Billing.Application.csproj" />
+    <ProjectReference Include="..\..\services\billing-api\ClinicEz.Billing.Domain\ClinicEz.Billing.Domain.csproj" />
+    <ProjectReference Include="..\..\services\billing-api\ClinicEz.Billing.Infrastructure\ClinicEz.Billing.Infrastructure.csproj" />
+
+    <ProjectReference Include="..\..\services\patient-api\ClinicEz.Patient.Application\ClinicEz.Patient.Application.csproj" />
+    <ProjectReference Include="..\..\services\patient-api\ClinicEz.Patient.Domain\ClinicEz.Patient.Domain.csproj" />
+    <ProjectReference Include="..\..\services\patient-api\ClinicEz.Patient.Infrastructure\ClinicEz.Patient.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>
