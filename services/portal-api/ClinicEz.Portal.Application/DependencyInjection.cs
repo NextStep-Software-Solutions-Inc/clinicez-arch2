@@ -11,6 +11,7 @@ public static class DependencyInjection
     public static IServiceCollection AddApplicationServices(this IServiceCollection services, IConfiguration? configuration = null)
     {
         services.AddScoped<ISieveProcessor, SieveProcessor>();
+        services.AddScoped<Features.Workspace.IWorkspaceAccessService, Features.Workspace.WorkspaceAccessService>();
         services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly());
         services.AddMediatR(config =>
         {

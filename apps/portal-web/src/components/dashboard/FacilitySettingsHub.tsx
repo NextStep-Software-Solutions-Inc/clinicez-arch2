@@ -25,8 +25,7 @@ import {
   IconMapPin,
   IconPhone,
   IconMail,
-  IconX,
-  IconFileText
+  IconExternalLink
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 
@@ -59,12 +58,6 @@ export interface FacilityData {
   streetAddress?: string | null;
   contactNumber?: string | null;
   contactEmail?: string | null;
-  logoUrl?: string | null;
-  letterheadHeader?: string | null;
-  letterheadSubHeader?: string | null;
-  letterheadAddress?: string | null;
-  letterheadContact?: string | null;
-  letterheadFooter?: string | null;
   notificationPreferencesJson?: string | null;
 }
 
@@ -149,22 +142,6 @@ export default function FacilitySettingsHub({
   const [contactNumber, setContactNumber] = useState(facility?.contactNumber || "");
   const [contactEmail, setContactEmail] = useState(facility?.contactEmail || "");
 
-  // Letterhead Branding State (No falsey defaults)
-  const [logoUrl, setLogoUrl] = useState(facility?.logoUrl || "");
-  const [letterheadHeader, setLetterheadHeader] = useState(facility?.letterheadHeader || facility?.name?.toUpperCase() || "");
-  const [letterheadSubHeader, setLetterheadSubHeader] = useState(facility?.letterheadSubHeader || "");
-  const [letterheadAddress, setLetterheadAddress] = useState(
-    facility?.letterheadAddress ||
-    [facility?.streetAddress, facility?.city, facility?.province].filter(Boolean).join(", ") ||
-    ""
-  );
-  const [letterheadContact, setLetterheadContact] = useState(
-    facility?.letterheadContact ||
-    [facility?.contactNumber, facility?.contactEmail].filter(Boolean).join(" | ") ||
-    ""
-  );
-  const [letterheadFooter, setLetterheadFooter] = useState(facility?.letterheadFooter || "");
-
   // Notification Preferences State
   const initialPrefs = (() => {
     try {
@@ -205,21 +182,6 @@ export default function FacilitySettingsHub({
       setContactNumber(facility.contactNumber || "");
       setContactEmail(facility.contactEmail || "");
 
-      setLogoUrl(facility.logoUrl || "");
-      setLetterheadHeader(facility.letterheadHeader || facility.name?.toUpperCase() || "");
-      setLetterheadSubHeader(facility.letterheadSubHeader || "");
-      setLetterheadAddress(
-        facility.letterheadAddress ||
-        [facility.streetAddress, facility.city, facility.province].filter(Boolean).join(", ") ||
-        ""
-      );
-      setLetterheadContact(
-        facility.letterheadContact ||
-        [facility.contactNumber, facility.contactEmail].filter(Boolean).join(" | ") ||
-        ""
-      );
-      setLetterheadFooter(facility.letterheadFooter || "");
-
       try {
         if (facility.notificationPreferencesJson) {
           setNotifications(JSON.parse(facility.notificationPreferencesJson));
@@ -229,12 +191,6 @@ export default function FacilitySettingsHub({
       }
     }
   }, [facility]);
-
-  const handleApplyStandardFooter = () => {
-    setLetterheadFooter(
-      "This medical document and official record is digitally generated in compliance with Philippine DOH standards and RA 10173 (Data Privacy Act of 2012)."
-    );
-  };
 
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -257,17 +213,11 @@ export default function FacilitySettingsHub({
         zipCode: zipCode.trim() || undefined,
         contactNumber: contactNumber.trim() || undefined,
         contactEmail: contactEmail.trim() || undefined,
-        logoUrl: logoUrl.trim() || undefined,
-        letterheadHeader: letterheadHeader.trim() || undefined,
-        letterheadSubHeader: letterheadSubHeader.trim() || undefined,
-        letterheadAddress: letterheadAddress.trim() || undefined,
-        letterheadContact: letterheadContact.trim() || undefined,
-        letterheadFooter: letterheadFooter.trim() || undefined,
         notificationPreferencesJson: JSON.stringify(notifications),
       };
 
       await apiClient.put(`/facilities/${facility.id}/settings`, payload);
-      toast.success("Facility profile, regulatory settings, and letterhead updated successfully!");
+      toast.success("Facility profile and regulatory settings updated successfully!");
       onOpenChange(false);
       if (onSaved) onSaved();
     } catch (err: any) {
@@ -296,7 +246,7 @@ export default function FacilitySettingsHub({
                 </Badge>
               </DialogTitle>
               <DialogDescription className="text-xs text-slate-500 truncate">
-                Configure facility profile, official letterhead, regulatory IDs, and notifications
+                Configure facility profile, regulatory IDs, and notifications
               </DialogDescription>
             </div>
           </div>
@@ -324,7 +274,7 @@ export default function FacilitySettingsHub({
                 className="rounded-lg px-3 py-1.5 text-xs font-semibold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-primary data-[state=active]:shadow-xs gap-1.5 shrink-0 whitespace-nowrap text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-all"
               >
                 <IconPalette className="h-3.5 w-3.5" />
-                <span>Digital Letterhead</span>
+                <span>Letterhead</span>
               </TabsTrigger>
               <TabsTrigger
                 value="notifications"
@@ -545,228 +495,28 @@ export default function FacilitySettingsHub({
               </div>
             </TabsContent>
 
-            {/* TAB 2: DIGITAL LETTERHEAD BRANDING */}
-            <TabsContent value="letterhead" className="m-0 space-y-6">
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                {/* Form Controls (Left Col) */}
-                <div className="lg:col-span-6 space-y-4">
-                  <div className="p-3.5 rounded-2xl bg-primary/5 border border-primary/10 flex items-start gap-2.5">
-                    <IconSparkles className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                      Custom letterhead printed automatically atop consultations, diagnostic orders, and official receipts. Changes reflect live in the preview.
-                    </p>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                      Clinic Logo Image URL
-                    </Label>
-                    <div className="flex gap-2">
-                      <Input
-                        value={logoUrl}
-                        onChange={(e) => setLogoUrl(e.target.value)}
-                        placeholder="https://example.com/logo.png"
-                        className="h-9 text-xs rounded-xl"
-                      />
-                      {logoUrl && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setLogoUrl("")}
-                          className="rounded-xl text-xs shrink-0 text-slate-500 hover:text-rose-600"
-                          title="Clear logo"
-                        >
-                          <IconX className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                      Primary Institutional Header
-                    </Label>
-                    <Input
-                      value={letterheadHeader}
-                      onChange={(e) => setLetterheadHeader(e.target.value)}
-                      placeholder={name ? name.toUpperCase() : "e.g. CITY HEALTH INTEGRATED CLINIC"}
-                      className="h-9 text-xs font-bold rounded-xl"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                      Department / Clinical Specialty Subheader
-                    </Label>
-                    <Input
-                      value={letterheadSubHeader}
-                      onChange={(e) => setLetterheadSubHeader(e.target.value)}
-                      placeholder="e.g. Center for Outpatient Medicine & Diagnostic Excellence"
-                      className="h-9 text-xs rounded-xl"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                        Printed Address Line
-                      </Label>
-                      {(!letterheadAddress && (streetAddress || city)) && (
-                        <button
-                          type="button"
-                          onClick={() => setLetterheadAddress([streetAddress, city, province].filter(Boolean).join(", "))}
-                          className="text-[10px] text-primary hover:underline font-semibold"
-                        >
-                          Use physical address
-                        </button>
-                      )}
-                    </div>
-                    <Input
-                      value={letterheadAddress}
-                      onChange={(e) => setLetterheadAddress(e.target.value)}
-                      placeholder="e.g. 124 Rizal Avenue, San Pedro, Laguna, Philippines"
-                      className="h-9 text-xs rounded-xl"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                        Printed Contact Line (Phone, Mobile, Email)
-                      </Label>
-                      {(!letterheadContact && (contactNumber || contactEmail)) && (
-                        <button
-                          type="button"
-                          onClick={() => setLetterheadContact([contactNumber, contactEmail].filter(Boolean).join(" | "))}
-                          className="text-[10px] text-primary hover:underline font-semibold"
-                        >
-                          Use facility contact
-                        </button>
-                      )}
-                    </div>
-                    <Input
-                      value={letterheadContact}
-                      onChange={(e) => setLetterheadContact(e.target.value)}
-                      placeholder="e.g. Tel: +63 (2) 8876-5432 | Email: clinic@example.ph"
-                      className="h-9 text-xs rounded-xl"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                        Compliance Legal Footer Notice
-                      </Label>
-                      {!letterheadFooter && (
-                        <button
-                          type="button"
-                          onClick={handleApplyStandardFooter}
-                          className="text-[10px] text-primary hover:underline font-semibold"
-                        >
-                          Insert standard notice
-                        </button>
-                      )}
-                    </div>
-                    <textarea
-                      value={letterheadFooter}
-                      onChange={(e) => setLetterheadFooter(e.target.value)}
-                      placeholder="e.g. Valid clinical documentation. Digitally archived under RA 10173 (Data Privacy Act) and DOH standards."
-                      rows={3}
-                      className="w-full text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-background p-2.5 font-medium text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    />
-                  </div>
-                </div>
-
-                {/* Official Letterhead Preview (Right Col) */}
-                <div className="lg:col-span-6 space-y-2">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Official Document &amp; Letterhead Preview
-                  </span>
-
-                  <div className="rounded-2xl border-2 border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-md min-h-[380px] flex flex-col justify-between text-slate-800 dark:text-slate-200 font-sans">
-                    {/* Official Letterhead Header */}
-                    <div>
-                      <div className="flex items-start justify-between gap-3 pb-3 border-b-2 border-primary/25">
-                        <div className="space-y-1 min-w-0 flex-1">
-                          <h2 className="text-sm sm:text-base font-black tracking-tight text-primary uppercase break-words">
-                            {letterheadHeader || name.toUpperCase() || "OFFICIAL CLINIC LETTERHEAD"}
-                          </h2>
-                          {letterheadSubHeader ? (
-                            <div className="text-[11px] font-medium text-slate-600 dark:text-slate-300">
-                              {letterheadSubHeader}
-                            </div>
-                          ) : null}
-                          {letterheadAddress ? (
-                            <div className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
-                              {letterheadAddress}
-                            </div>
-                          ) : null}
-                          {letterheadContact ? (
-                            <div className="text-[10px] font-semibold text-primary/80">
-                              {letterheadContact}
-                            </div>
-                          ) : null}
-                        </div>
-
-                        {/* Logo box */}
-                        <div className="size-12 sm:size-14 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden bg-slate-50 dark:bg-slate-800 flex items-center justify-center shrink-0">
-                          {logoUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={logoUrl} alt="Clinic Logo" className="size-full object-cover" />
-                          ) : (
-                            <IconBuildingHospital className="h-6 w-6 text-primary/60" />
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Mock Official Document Body */}
-                      <div className="py-4 space-y-3">
-                        <div className="flex items-center justify-between text-[10px] text-slate-400 border-b border-dashed pb-2">
-                          <span className="font-semibold text-slate-500 uppercase tracking-wider">Official Clinical Document</span>
-                          <span className="font-mono">REF: #{facility.id.slice(0, 8).toUpperCase()}</span>
-                        </div>
-
-                        <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-[11px] space-y-1.5 text-slate-600 dark:text-slate-300">
-                          <div className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                            <IconFileText className="h-3.5 w-3.5 text-primary" />
-                            <span>Clinical Letterhead Specimen</span>
-                          </div>
-                          <p className="text-[10px] text-slate-500 leading-relaxed">
-                            This header is placed on e-prescriptions, diagnostic orders, laboratory result summaries, and PhilHealth Konsulta claim attachments generated across all terminals in this facility.
-                          </p>
-                        </div>
-
-                        {/* Optional Institutional Seal Display */}
-                        {(licenseToOperate || philHealthAccreditationNumber) && (
-                          <div className="flex items-center gap-2 pt-1">
-                            {licenseToOperate && (
-                              <Badge variant="outline" className="text-[9px] font-mono border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/20">
-                                DOH-LTO: {licenseToOperate}
-                              </Badge>
-                            )}
-                            {philHealthAccreditationNumber && (
-                              <Badge variant="outline" className="text-[9px] font-mono border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-400 bg-blue-50/50 dark:bg-blue-950/20">
-                                PHIC: {philHealthAccreditationNumber}
-                              </Badge>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Official Document Footer Notice */}
-                    <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 text-[9px] text-slate-400">
-                      <div className="leading-tight flex-1">
-                        {letterheadFooter || "Official medical documentation. Validated under Philippine healthcare compliance standards."}
-                      </div>
-                      <Badge variant="secondary" className="text-[9px] shrink-0 font-medium">
-                        Verified Facility
-                      </Badge>
-                    </div>
-                  </div>
-                </div>
+            {/* TAB 2: LETTERHEAD LIVES IN THE FACILITY CONSOLE */}
+            <TabsContent value="letterhead" className="m-0 space-y-4">
+              <div className="p-3.5 rounded-2xl bg-primary/5 border border-primary/10 flex items-start gap-2.5">
+                <IconSparkles className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  Letterhead, logo, paper size and physician stamps are printed by the facility itself, so they are edited
+                  in the facility&apos;s own console. Workspace-wide brand identity (name, logo and accent color) is managed in
+                  Workspace Settings.
+                </p>
               </div>
+              {facility.consoleUrl ? (
+                <Button asChild variant="outline" className="rounded-xl text-xs font-semibold gap-1.5">
+                  <a href={facility.consoleUrl} target="_blank" rel="noopener noreferrer">
+                    <IconExternalLink className="h-3.5 w-3.5" />
+                    Edit letterhead in facility console
+                  </a>
+                </Button>
+              ) : (
+                <p className="text-xs text-slate-500">
+                  The facility console link becomes available once the facility has finished provisioning.
+                </p>
+              )}
             </TabsContent>
 
             {/* TAB 3: NOTIFICATION PREFERENCES */}

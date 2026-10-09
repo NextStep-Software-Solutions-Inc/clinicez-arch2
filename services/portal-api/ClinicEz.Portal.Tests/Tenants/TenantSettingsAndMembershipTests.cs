@@ -1,4 +1,3 @@
-using ClinicEz.Portal.Application.Features.Tenants.Commands.UpdateTenantSettings;
 using ClinicEz.Portal.Application.Features.Tenants.Queries.GetTenantByOwner;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Portal.Infrastructure.Persistence;
@@ -92,36 +91,5 @@ public class TenantSettingsAndMembershipTests : IDisposable
         Assert.NotNull(result);
         Assert.Equal(TenantSlug, result.TenantSlug);
         Assert.Equal("Biller", result.Role);
-    }
-
-    [Fact]
-    public async Task UpdateTenantSettings_ValidRequest_UpdatesDatabase()
-    {
-        var handler = new UpdateTenantSettingsCommandHandler(_context);
-        var command = new UpdateTenantSettingsCommand(
-            TenantSlug: TenantSlug,
-            Name: "Metro Super Clinic",
-            RepresentativeName: "Maria Santos",
-            Email: "maria@metro.ph",
-            PhoneNumber: "+639189999999",
-            Timezone: "UTC+08:00 Manila, Singapore"
-        );
-
-        var result = await handler.Handle(command, CancellationToken.None);
-
-        Assert.NotNull(result);
-        Assert.Equal("Metro Super Clinic", result.Name);
-        Assert.Equal("Maria Santos", result.RepresentativeName);
-        Assert.Equal("maria@metro.ph", result.Email);
-        Assert.Equal("+639189999999", result.PhoneNumber);
-
-        // Verify in DB
-        var tenantInDb = await _context.Tenants.FirstOrDefaultAsync(t => t.Id == _tenantId);
-        Assert.NotNull(tenantInDb);
-        Assert.Equal("Metro Super Clinic", tenantInDb.Name);
-        Assert.Equal("Maria", tenantInDb.FirstName);
-        Assert.Equal("Santos", tenantInDb.LastName);
-        Assert.Equal("maria@metro.ph", tenantInDb.Email);
-        Assert.Equal("+639189999999", tenantInDb.PhoneNumber);
     }
 }

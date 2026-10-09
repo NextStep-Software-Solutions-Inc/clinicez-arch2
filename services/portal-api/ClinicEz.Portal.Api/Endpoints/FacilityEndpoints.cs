@@ -438,7 +438,7 @@ public class FacilityEndpoints : IEndpoint
         .WithDescription("Retrieves the cryptographically signed facility license key for offline or on-premise installation.")
         .WithTags("Facilities");
 
-        // 7. Update facility settings (regulatory profile, digital letterhead, medical stamp, notifications)
+        // 7. Update facility settings (regulatory profile, notifications)
         app.MapPut("/facilities/{id:guid}/settings", async (
             Guid id,
             UpdateFacilitySettingsRequest request,
@@ -490,16 +490,6 @@ public class FacilityEndpoints : IEndpoint
             if (request.StreetAddress != null) facility.StreetAddress = request.StreetAddress;
             if (request.ContactNumber != null) facility.ContactNumber = request.ContactNumber;
             if (request.ContactEmail != null) facility.ContactEmail = request.ContactEmail;
-            if (request.LogoUrl != null) facility.LogoUrl = request.LogoUrl;
-            if (request.LetterheadHeader != null) facility.LetterheadHeader = request.LetterheadHeader;
-            if (request.LetterheadSubHeader != null) facility.LetterheadSubHeader = request.LetterheadSubHeader;
-            if (request.LetterheadAddress != null) facility.LetterheadAddress = request.LetterheadAddress;
-            if (request.LetterheadContact != null) facility.LetterheadContact = request.LetterheadContact;
-            if (request.LetterheadFooter != null) facility.LetterheadFooter = request.LetterheadFooter;
-            if (request.StampPhysicianName != null) facility.StampPhysicianName = request.StampPhysicianName;
-            if (request.StampPrcLicense != null) facility.StampPrcLicense = request.StampPrcLicense;
-            if (request.StampPtrNumber != null) facility.StampPtrNumber = request.StampPtrNumber;
-            if (request.StampS2License != null) facility.StampS2License = request.StampS2License;
             if (request.NotificationPreferencesJson != null) facility.NotificationPreferencesJson = request.NotificationPreferencesJson;
             facility.UpdatedAt = DateTime.UtcNow;
 
@@ -508,7 +498,7 @@ public class FacilityEndpoints : IEndpoint
         })
         .RequireAuthorization()
         .WithName("UpdateFacilitySettings")
-        .WithDescription("Updates facility regulatory profile, digital letterhead, medical stamp, and notification preferences.")
+        .WithDescription("Updates facility regulatory profile and notification preferences.")
         .WithTags("Facilities");
     }
 }
@@ -533,15 +523,5 @@ public record UpdateFacilitySettingsRequest(
     string? StreetAddress = null,
     string? ContactNumber = null,
     string? ContactEmail = null,
-    string? LogoUrl = null,
-    string? LetterheadHeader = null,
-    string? LetterheadSubHeader = null,
-    string? LetterheadAddress = null,
-    string? LetterheadContact = null,
-    string? LetterheadFooter = null,
-    string? StampPhysicianName = null,
-    string? StampPrcLicense = null,
-    string? StampPtrNumber = null,
-    string? StampS2License = null,
     string? NotificationPreferencesJson = null
 );

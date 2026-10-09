@@ -25,7 +25,7 @@ const ROLE_DESCRIPTIONS: Record<string, string> = {
     "Attending Physician": "Authorized to conduct patient consultations, order laboratory diagnostics, and issue digitally signed e-prescriptions.",
     "Medical Technologist": "Authorized to access the diagnostic dropzone, process specimen assays, and certify clinical lab results.",
     "Registered Pharmacist": "Authorized to verify e-prescriptions, log dispensing transactions, and manage pharmacy dispensary pathways.",
-    "Facility Administrator": "Authorized to govern branch-level operations, facility operating hours, staff schedules, and letterhead customizers.",
+    "Facility Administrator": "Authorized to govern branch-level operations, facility operating hours, and staff schedules.",
     "Phlebotomist": "Authorized to collect specimens, manage barcode accessioning, and intake patients at the diagnostic dropzone.",
     "Cashier/Billing Staff": "Authorized to process patient payments, manage PhilHealth Konsulta claims, and generate official BIR receipts.",
     Admin: "Full administrative access to manage facilities, invite workspace practitioners, and configure tenancy settings.",

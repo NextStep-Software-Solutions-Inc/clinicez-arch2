@@ -19,6 +19,8 @@ public interface IApplicationDbContext
     DbSet<Facility> Facilities { get; }
     DbSet<Branch> Branches { get; }
     DbSet<StaffMember> StaffMembers { get; }
+    DbSet<WorkspaceSettings> WorkspaceSettings { get; }
+    DbSet<WorkspaceAuditEntry> WorkspaceAuditEntries { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

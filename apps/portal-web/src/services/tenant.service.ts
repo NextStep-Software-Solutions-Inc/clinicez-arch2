@@ -19,18 +19,23 @@ export interface CreateTenantPayload {
   email?: string;
 }
 
-export interface UpdateTenantSettingsPayload {
-  name?: string;
-  representativeName?: string;
-  email?: string;
-  phoneNumber?: string;
-  timezone?: string;
-  primaryColorHex?: string;
-  primaryLogoUrl?: string;
-  paperSize?: string;
-  letterheadHeader?: string;
-  letterheadSubHeader?: string;
-  letterheadAddress?: string;
+/** General section: identity, contacts and locale defaults (mirrors `WorkspaceGeneralDto`). */
+export interface WorkspaceGeneral {
+  name: string;
+  representativeName?: string | null;
+  email: string;
+  phoneNumber?: string | null;
+  timeZoneId: string;
+  locale: string;
+  dateFormat: string;
+  currencyCode: string;
+}
+
+/** Mirrors `WorkspaceSettingsDto`; later sections are added as new properties. */
+export interface WorkspaceSettingsDto {
+  tenantSlug: string;
+  tenantType: string;
+  general: WorkspaceGeneral;
 }
 
 export interface TenantDto {
@@ -105,11 +110,21 @@ export const tenantService = {
   },
 
   /**
-   * Updates workspace settings and identity in the database.
+   * Fetches all workspace settings, grouped by section. Requires workspace Owner/Admin.
    */
-  updateTenantSettings: async (tenantSlug: string, payload: UpdateTenantSettingsPayload, token?: string | null) => {
-    const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
-    const response = await apiClient.put(`/tenants/${tenantSlug}/settings`, payload, { headers });
+  getWorkspaceSettings: async (tenantSlug: string): Promise<WorkspaceSettingsDto> => {
+    const response = await apiClient.get<WorkspaceSettingsDto>(`/tenants/${encodeURIComponent(tenantSlug)}/settings`);
     return response.data;
-  }
+  },
+
+  /**
+   * Replaces the General section (identity, contacts, locale defaults). Returns the saved section.
+   */
+  updateGeneral: async (tenantSlug: string, payload: WorkspaceGeneral): Promise<WorkspaceGeneral> => {
+    const response = await apiClient.put<WorkspaceGeneral>(
+      `/tenants/${encodeURIComponent(tenantSlug)}/settings/general`,
+      payload,
+    );
+    return response.data;
+  },
 };

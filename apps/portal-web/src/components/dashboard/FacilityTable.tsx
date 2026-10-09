@@ -377,7 +377,7 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                                 onClick={() => setSettingsFacility(fac)}
                                 variant="ghost"
                                 size="sm"
-                                title="Letterhead & Facility Settings"
+                                title="Facility Settings"
                                 className="rounded-xl h-9 w-9 p-0 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0"
                             >
                                 <IconSettings className="h-4 w-4" />
@@ -488,7 +488,7 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                                                 onClick={() => setSettingsFacility(fac)}
                                                 variant="ghost"
                                                 size="sm"
-                                                title="Letterhead & Facility Settings"
+                                                title="Facility Settings"
                                                 className="rounded-xl h-8 w-8 p-0 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800"
                                             >
                                                 <IconSettings className="h-3.5 w-3.5" />
@@ -711,7 +711,7 @@ export default function FacilityTable({ facilityType }: FacilityTableProps) {
                 </DialogContent>
             </Dialog>
 
-            {/* Facility Settings, Letterhead Customizer & Medical Stamp Hub */}
+            {/* Facility Settings Hub */}
             <FacilitySettingsHub
                 facility={settingsFacility}
                 open={!!settingsFacility}

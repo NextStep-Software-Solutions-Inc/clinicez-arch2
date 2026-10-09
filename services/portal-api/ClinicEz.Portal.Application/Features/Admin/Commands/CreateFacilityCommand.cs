@@ -147,10 +147,7 @@ public class CreateFacilityCommandHandler(
             ZipCode = request.ZipCode,
             StreetAddress = request.StreetAddress,
             ContactNumber = request.ContactNumber,
-            ContactEmail = request.ContactEmail,
-            LetterheadHeader = trimmedName.ToUpper(),
-            LetterheadAddress = string.Join(", ", new[] { request.StreetAddress, request.Barangay, request.City, request.Province }.Where(s => !string.IsNullOrWhiteSpace(s))),
-            LetterheadContact = request.ContactNumber
+            ContactEmail = request.ContactEmail
         };
         context.Facilities.Add(facility);
 

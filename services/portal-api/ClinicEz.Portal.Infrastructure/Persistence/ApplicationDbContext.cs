@@ -23,6 +23,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<Facility> Facilities { get; set; }
     public DbSet<Branch> Branches { get; set; }
     public DbSet<StaffMember> StaffMembers { get; set; }
+    public DbSet<WorkspaceSettings> WorkspaceSettings { get; set; }
+    public DbSet<WorkspaceAuditEntry> WorkspaceAuditEntries { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -163,6 +165,40 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(e => new { e.TenantId, e.Email })
                 .HasFilter("\"IsDeleted\" = false")
                 .IsUnique();
+        });
+
+        modelBuilder.Entity<WorkspaceSettings>(entity =>
+        {
+            entity.HasOne(e => e.Tenant)
+                .WithMany()
+                .HasForeignKey(e => e.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.TenantId)
+                .HasFilter("\"IsDeleted\" = false")
+                .IsUnique();
+
+            entity.Property(e => e.TimeZoneId).HasMaxLength(64);
+            entity.Property(e => e.Locale).HasMaxLength(16);
+            entity.Property(e => e.DateFormat).HasMaxLength(32);
+            entity.Property(e => e.CurrencyCode).HasMaxLength(3);
+        });
+
+        modelBuilder.Entity<WorkspaceAuditEntry>(entity =>
+        {
+            entity.HasOne(e => e.Tenant)
+                .WithMany()
+                .HasForeignKey(e => e.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.TenantId, e.CreatedAt });
+
+            entity.Property(e => e.Section).HasMaxLength(32);
+            entity.Property(e => e.Action).HasMaxLength(32);
+            entity.Property(e => e.ActorUserId).HasMaxLength(128);
+            entity.Property(e => e.ActorName).HasMaxLength(256);
+            entity.Property(e => e.ActorRole).HasMaxLength(32);
+            entity.Property(e => e.ChangesJson).HasColumnType("jsonb");
         });
 
         modelBuilder.AddInboxStateEntity();

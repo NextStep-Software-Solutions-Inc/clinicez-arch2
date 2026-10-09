@@ -52,7 +52,7 @@ const ROLE_DETAILS: Record<string, { label: string; badgeClass: string; descript
     "Facility Administrator": {
         label: "Facility Administrator",
         badgeClass: "bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800",
-        description: "Governs branch-level clinical operations, staff scheduling, local facility settings, and letterheads."
+        description: "Governs branch-level clinical operations, staff scheduling, and local facility settings."
     },
     "Attending Physician": {
         label: "Attending Physician",

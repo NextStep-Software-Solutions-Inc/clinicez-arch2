@@ -34,16 +34,6 @@ public record FacilityDto(
     string? StreetAddress = null,
     string? ContactNumber = null,
     string? ContactEmail = null,
-    string? LogoUrl = null,
-    string? LetterheadHeader = null,
-    string? LetterheadSubHeader = null,
-    string? LetterheadAddress = null,
-    string? LetterheadContact = null,
-    string? LetterheadFooter = null,
-    string? StampPhysicianName = null,
-    string? StampPrcLicense = null,
-    string? StampPtrNumber = null,
-    string? StampS2License = null,
     string? NotificationPreferencesJson = null
 );
 
@@ -95,16 +85,6 @@ public class GetFacilitiesQueryHandler(
                 f.StreetAddress,
                 f.ContactNumber,
                 f.ContactEmail,
-                f.LogoUrl,
-                f.LetterheadHeader,
-                f.LetterheadSubHeader,
-                f.LetterheadAddress,
-                f.LetterheadContact,
-                f.LetterheadFooter,
-                f.StampPhysicianName,
-                f.StampPrcLicense,
-                f.StampPtrNumber,
-                f.StampS2License,
                 f.NotificationPreferencesJson
             );
         }).ToList();

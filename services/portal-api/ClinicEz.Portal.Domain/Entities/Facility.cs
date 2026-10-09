@@ -48,17 +48,8 @@ public class Facility : BaseEntity
     public string? ContactNumber { get; set; }
     public string? ContactEmail { get; set; }
 
-    // Digital Letterhead Customizer & Branding
-    public string? LogoUrl { get; set; }
-    public string? LetterheadHeader { get; set; }
-    public string? LetterheadSubHeader { get; set; }
-    public string? LetterheadAddress { get; set; }
-    public string? LetterheadContact { get; set; }
-    public string? LetterheadFooter { get; set; }
-    public string? StampPhysicianName { get; set; }
-    public string? StampPrcLicense { get; set; }
-    public string? StampPtrNumber { get; set; }
-    public string? StampS2License { get; set; }
+    // Facility letterhead/logo/stamp are owned by each facility's own service (e.g. clinic ClinicSettings),
+    // not by the portal. Workspace-level brand defaults live in WorkspaceSettings.
 
     // Notification Preferences
     public string? NotificationPreferencesJson { get; set; }
