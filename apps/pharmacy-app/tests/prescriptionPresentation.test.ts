@@ -34,6 +34,11 @@ describe('describePaymentChip', () => {
     expect(describePaymentChip('Paid')).toEqual({ label: 'Paid', tone: 'success' });
   });
 
+  test('shows billing corrections on dispensed orders as neutral chips', () => {
+    expect(describePaymentChip('Voided')).toEqual({ label: 'Voided', tone: 'neutral' });
+    expect(describePaymentChip('Refunded')).toEqual({ label: 'Refunded', tone: 'neutral' });
+  });
+
   test('shows nothing for NotRequired unless the detail view asks for it', () => {
     expect(describePaymentChip('NotRequired')).toBeNull();
     expect(describePaymentChip('NotRequired', { showNotRequired: true })).toEqual({

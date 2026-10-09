@@ -47,6 +47,10 @@ export function describePaymentChip(
       return { label: 'Awaiting payment', tone: 'warning' };
     case 'Paid':
       return { label: 'Paid', tone: 'success' };
+    case 'Voided':
+      return { label: 'Voided', tone: 'neutral' };
+    case 'Refunded':
+      return { label: 'Refunded', tone: 'neutral' };
     default:
       return options.showNotRequired ? { label: 'No payment required', tone: 'neutral' } : null;
   }

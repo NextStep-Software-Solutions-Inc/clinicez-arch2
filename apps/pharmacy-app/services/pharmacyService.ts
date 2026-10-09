@@ -51,7 +51,7 @@ export type PrescriptionOrderStatus =
 
 export type PaymentPolicy = 'Prepaid' | 'Postpaid' | 'None';
 
-export type PaymentStatus = 'NotRequired' | 'AwaitingPayment' | 'Paid';
+export type PaymentStatus = 'NotRequired' | 'AwaitingPayment' | 'Paid' | 'Voided' | 'Refunded';
 
 export type DispenseBlockedReason = 'acceptance_required' | 'payment_required';
 

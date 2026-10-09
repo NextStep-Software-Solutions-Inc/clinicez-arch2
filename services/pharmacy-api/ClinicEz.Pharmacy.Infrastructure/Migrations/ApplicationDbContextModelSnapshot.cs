@@ -787,12 +787,19 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
 
+                    b.Property<DateTime?>("PaymentCorrectedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("PaymentPolicy")
                         .HasColumnType("integer");
 
                     b.Property<string>("PaymentReceiptNumber")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<decimal?>("PaymentReversedAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
 
                     b.Property<int>("PaymentStatus")
                         .HasColumnType("integer");

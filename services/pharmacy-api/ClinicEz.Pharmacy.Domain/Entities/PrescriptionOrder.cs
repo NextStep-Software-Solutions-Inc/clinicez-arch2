@@ -52,6 +52,12 @@ public sealed class PrescriptionOrder : BaseEntity
 
     public string? PaymentReceiptNumber { get; set; }
 
+    /// <summary>When billing last voided the invoice or refunded the payment (billing's clock); guards against replayed or stale corrections.</summary>
+    public DateTime? PaymentCorrectedAt { get; set; }
+
+    /// <summary>Money billing gave back in the last correction: 0 for a void of an unpaid invoice, the amount paid for a refund.</summary>
+    public decimal? PaymentReversedAmount { get; set; }
+
     /// <summary>Why the order was rejected or only partially accepted.</summary>
     public string? StatusReason { get; set; }
 

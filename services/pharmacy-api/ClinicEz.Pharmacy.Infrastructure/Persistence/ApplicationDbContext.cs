@@ -110,6 +110,7 @@ public class ApplicationDbContext(
             entity.Property(e => e.QuotedAmount).HasPrecision(18, 2);
             entity.Property(e => e.PaidAmount).HasPrecision(18, 2);
             entity.Property(e => e.PaymentReceiptNumber).HasMaxLength(100);
+            entity.Property(e => e.PaymentReversedAmount).HasPrecision(18, 2);
             entity.Property(e => e.StatusReason).HasMaxLength(1000);
 
             entity.HasMany(e => e.Items)

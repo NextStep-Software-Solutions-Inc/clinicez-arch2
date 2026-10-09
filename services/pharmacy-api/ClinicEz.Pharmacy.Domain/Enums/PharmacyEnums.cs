@@ -47,5 +47,9 @@ public enum PrescriptionPaymentStatus
 {
     NotRequired = 0,
     AwaitingPayment = 1,
-    Paid = 2
+    Paid = 2,
+    /// <summary>Billing voided the invoice after the order was already dispensed; recorded for the audit trail only.</summary>
+    Voided = 3,
+    /// <summary>Billing refunded the payment after the order was already dispensed; recorded for the audit trail only.</summary>
+    Refunded = 4
 }

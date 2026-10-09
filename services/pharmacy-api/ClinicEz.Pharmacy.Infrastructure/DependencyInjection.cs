@@ -79,6 +79,7 @@ public static class DependencyInjection
             .Handle<FacilityCreatedEvent, FacilityCreatedHandler>(InteropTypes.FacilityLicenseIssued)
             .Handle<PrescriptionIssuedEvent, PrescriptionIssuedHandler>(InteropTypes.RxIssued)
             .Handle<BillingPaymentConfirmedPayload, BillingPaymentConfirmedHandler>(InteropTypes.BillingPaymentConfirmed)
+            .Handle<BillingInvoiceVoidedPayload, BillingInvoiceVoidedHandler>(InteropTypes.BillingInvoiceVoided)
             .HandleEntitlementsChanged());
 
         if (env != null && env.IsDevelopment())
