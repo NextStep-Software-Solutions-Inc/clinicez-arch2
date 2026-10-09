@@ -1210,7 +1210,15 @@ export const clinicService = {
   },
 
   async deactivateStaff(id: string) {
-    return clinicApiClient.delete(`/staff/${id}`);
+    return clinicApiClient.delete<boolean>(`/staff/${id}`);
+  },
+
+  async activateStaff(id: string) {
+    return clinicApiClient.post<StaffMember>(`/staff/${id}/activate`, {});
+  },
+
+  async reactivateStaff(id: string) {
+    return this.activateStaff(id);
   },
 
   /** Sets or auto-generates a temporary password; the staff member must change it at next sign-in. Requires `staff:manage`. */

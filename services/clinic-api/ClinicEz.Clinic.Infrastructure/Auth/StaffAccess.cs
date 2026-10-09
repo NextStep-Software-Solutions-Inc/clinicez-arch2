@@ -18,11 +18,9 @@ namespace ClinicEz.Clinic.Infrastructure.Auth;
 
 public sealed record StaffAccessInfo(bool IsActive, int TokenVersion, IReadOnlyList<string> Permissions);
 
-public interface IStaffAccessCache
+public interface IStaffAccessCache : ClinicEz.Clinic.Domain.Interfaces.IStaffAccessInvalidator
 {
     Task<StaffAccessInfo?> GetAsync(Guid staffId, CancellationToken ct = default);
-
-    void Invalidate(Guid staffId);
 }
 
 public static class StaffPermissions

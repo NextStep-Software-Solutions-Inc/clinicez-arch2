@@ -418,4 +418,270 @@ public class StaffCommandsTests
         updated.TokenVersion.Should().Be(2);
         hasher.Verify(updated.PasswordHash!, result.TemporaryPassword).Should().BeTrue();
     }
+
+    [Fact]
+    public async Task DeactivateStaffMember_DeactivatesUser_IncrementsTokenVersion_AndInvalidatesCache()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var callerId = Guid.NewGuid();
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+        clinicContext.StaffId.Returns(callerId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+
+        var staff = new StaffMember
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = clinicId,
+            TenantId = tenantId,
+            FirstName = "Maria",
+            LastName = "Santos",
+            Email = "maria@clinic.com",
+            Role = StaffRole.Nurse,
+            TokenVersion = 1,
+            IsActive = true
+        };
+        await context.StaffMembers.AddAsync(staff);
+        await context.SaveChangesAsync();
+
+        var accessCache = Substitute.For<IStaffAccessInvalidator>();
+        var handler = new DeactivateStaffMemberCommandHandler(staffRepo, uow, clinicContext, accessCache);
+
+        // Act
+        var result = await handler.Handle(new DeactivateStaffMemberCommand(staff.Id), CancellationToken.None);
+
+        // Assert
+        result.Should().BeTrue();
+        var updated = await context.StaffMembers.FirstOrDefaultAsync(s => s.Id == staff.Id);
+        updated.Should().NotBeNull();
+        updated!.IsActive.Should().BeFalse();
+        updated.TokenVersion.Should().Be(2);
+        updated.UpdatedBy.Should().Be(callerId.ToString());
+        accessCache.Received(1).Invalidate(staff.Id);
+    }
+
+    [Fact]
+    public async Task DeactivateStaffMember_SelfDeactivation_ThrowsValidationException()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var staffId = Guid.NewGuid();
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+        clinicContext.StaffId.Returns(staffId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+
+        var staff = new StaffMember
+        {
+            Id = staffId,
+            ClinicId = clinicId,
+            TenantId = tenantId,
+            FirstName = "Self",
+            LastName = "Admin",
+            Email = "admin@clinic.com",
+            Role = StaffRole.Admin,
+            TokenVersion = 1,
+            IsActive = true
+        };
+        await context.StaffMembers.AddAsync(staff);
+        await context.SaveChangesAsync();
+
+        var handler = new DeactivateStaffMemberCommandHandler(staffRepo, uow, clinicContext);
+
+        // Act & Assert
+        var act = () => handler.Handle(new DeactivateStaffMemberCommand(staffId), CancellationToken.None);
+        await act.Should().ThrowAsync<ClinicEz.Shared.Exceptions.ValidationException>()
+            .WithMessage("*cannot deactivate your own account*");
+    }
+
+    [Fact]
+    public async Task DeactivateStaffMember_SoleActiveAdmin_ThrowsValidationException()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var callerId = Guid.NewGuid();
+        var adminId = Guid.NewGuid();
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+        clinicContext.StaffId.Returns(callerId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+
+        var soleAdmin = new StaffMember
+        {
+            Id = adminId,
+            ClinicId = clinicId,
+            TenantId = tenantId,
+            FirstName = "Sole",
+            LastName = "Admin",
+            Email = "sole@clinic.com",
+            Role = StaffRole.Admin,
+            TokenVersion = 1,
+            IsActive = true
+        };
+        await context.StaffMembers.AddAsync(soleAdmin);
+        await context.SaveChangesAsync();
+
+        var handler = new DeactivateStaffMemberCommandHandler(staffRepo, uow, clinicContext);
+
+        // Act & Assert
+        var act = () => handler.Handle(new DeactivateStaffMemberCommand(adminId), CancellationToken.None);
+        await act.Should().ThrowAsync<ClinicEz.Shared.Exceptions.ValidationException>()
+            .WithMessage("*only active Administrator*");
+    }
+
+    [Fact]
+    public async Task DeactivateStaffMember_NotFound_ThrowsNotFoundException()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var handler = new DeactivateStaffMemberCommandHandler(staffRepo, uow, clinicContext);
+
+        var act = () => handler.Handle(new DeactivateStaffMemberCommand(Guid.NewGuid()), CancellationToken.None);
+        await act.Should().ThrowAsync<ClinicEz.Shared.Exceptions.NotFoundException>();
+    }
+
+    [Fact]
+    public async Task ActivateStaffMember_ActivatesInactiveStaff_WithinLicenseLimit()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+
+        var inactiveStaff = new StaffMember
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = clinicId,
+            TenantId = tenantId,
+            FirstName = "Rosa",
+            LastName = "Diaz",
+            Email = "rosa@clinic.com",
+            Role = StaffRole.Doctor,
+            PrcLicenseNumber = "PRC-998877",
+            IsActive = false
+        };
+        await context.StaffMembers.AddAsync(inactiveStaff);
+
+        var settings = new ClinicSettings
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = clinicId,
+            TenantId = tenantId,
+            ClinicName = "Test Clinic",
+            LicenseToken = "mock.valid.token"
+        };
+        await context.ClinicSettings.AddAsync(settings);
+        await context.SaveChangesAsync();
+
+        var licenseValidator = Substitute.For<ClinicEz.Shared.Licensing.IFacilityLicenseValidator>();
+        licenseValidator.Validate(Arg.Any<string?>(), clinicId, tenantId)
+            .Returns(ClinicEz.Shared.Licensing.LicenseValidationResult.Success(new ClinicEz.Shared.Licensing.FacilityLicensePayload
+            {
+                FacilityId = clinicId,
+                TenantId = tenantId,
+                Limits = new ClinicEz.Shared.Licensing.FacilityLimits { MaxStaff = 5 }
+            }));
+
+        var handler = new ActivateStaffMemberCommandHandler(staffRepo, settingsRepo, licenseValidator, uow, clinicContext);
+
+        // Act
+        var result = await handler.Handle(new ActivateStaffMemberCommand(inactiveStaff.Id), CancellationToken.None);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.IsActive.Should().BeTrue();
+
+        var updated = await context.StaffMembers.FirstOrDefaultAsync(s => s.Id == inactiveStaff.Id);
+        updated.Should().NotBeNull();
+        updated!.IsActive.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ActivateStaffMember_ExceedsLicenseLimit_ThrowsValidationException()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var settingsRepo = TestDbHelper.CreateRepository<ClinicSettings>(context, sieve);
+
+        // Add 2 active staff
+        for (int i = 0; i < 2; i++)
+        {
+            await context.StaffMembers.AddAsync(new StaffMember
+            {
+                Id = Guid.NewGuid(),
+                ClinicId = clinicId,
+                TenantId = tenantId,
+                FirstName = $"Active{i}",
+                LastName = "Staff",
+                Role = StaffRole.Nurse,
+                IsActive = true
+            });
+        }
+
+        var inactiveStaff = new StaffMember
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = clinicId,
+            TenantId = tenantId,
+            FirstName = "Rosa",
+            LastName = "Diaz",
+            Role = StaffRole.Nurse,
+            IsActive = false
+        };
+        await context.StaffMembers.AddAsync(inactiveStaff);
+
+        var settings = new ClinicSettings
+        {
+            Id = Guid.NewGuid(),
+            ClinicId = clinicId,
+            TenantId = tenantId,
+            ClinicName = "Test Clinic",
+            LicenseToken = "mock.valid.token"
+        };
+        await context.ClinicSettings.AddAsync(settings);
+        await context.SaveChangesAsync();
+
+        var licenseValidator = Substitute.For<ClinicEz.Shared.Licensing.IFacilityLicenseValidator>();
+        licenseValidator.Validate(Arg.Any<string?>(), clinicId, tenantId)
+            .Returns(ClinicEz.Shared.Licensing.LicenseValidationResult.Success(new ClinicEz.Shared.Licensing.FacilityLicensePayload
+            {
+                FacilityId = clinicId,
+                TenantId = tenantId,
+                Limits = new ClinicEz.Shared.Licensing.FacilityLimits { MaxStaff = 2 }
+            }));
+
+        var handler = new ActivateStaffMemberCommandHandler(staffRepo, settingsRepo, licenseValidator, uow, clinicContext);
+
+        // Act & Assert
+        var act = () => handler.Handle(new ActivateStaffMemberCommand(inactiveStaff.Id), CancellationToken.None);
+        await act.Should().ThrowAsync<ClinicEz.Shared.Exceptions.ValidationException>()
+            .WithMessage("*Staff limit reached*");
+    }
 }
