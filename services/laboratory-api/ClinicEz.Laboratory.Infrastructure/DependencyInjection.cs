@@ -9,6 +9,7 @@ using Hangfire.PostgreSql;
 using ClinicEz.Laboratory.Application.Interop;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Facility;
 using ClinicEz.Shared.Interoperability;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -70,11 +71,16 @@ public static class DependencyInjection
 
         services.AddHangfireServer();
 
+        // Entitlement renewals from the portal and the liveness heartbeat, both on LabSettings
+        services.AddFacilityEntitlements<LabLicenseStore>();
+        services.AddFacilityHeartbeat<LabLicenseStore>();
+
         // Interop hub messaging (replaces the message broker): transactional outbox/inbox + typed handlers.
         services.AddInterop<ApplicationDbContext>(configuration, handlers => handlers
             .Handle<FacilityCreatedEvent, FacilityLicenseIssuedHandler>(InteropTypes.FacilityLicenseIssued)
             .Handle<LabRequisitionIssuedEvent, LabOrderIssuedHandler>(InteropTypes.LabOrderIssued)
-            .Handle<BillingPaymentConfirmedPayload, BillingPaymentConfirmedHandler>(InteropTypes.BillingPaymentConfirmed));
+            .Handle<BillingPaymentConfirmedPayload, BillingPaymentConfirmedHandler>(InteropTypes.BillingPaymentConfirmed)
+            .HandleEntitlementsChanged());
 
 
         if (env != null && env.IsDevelopment())

@@ -23,7 +23,9 @@ public record LabLicenseStatusDto(
     System.Collections.Generic.List<string> EnabledFeatures,
     DateTime? ExpiresAtUtc,
     bool IsTampered,
-    string? ErrorMessage);
+    string? ErrorMessage,
+    bool IsReadOnlyGrace = false,
+    DateTime? ReadOnlyGraceUntilUtc = null);
 
 [ApiController]
 [Route("api/v1/laboratory/license")]
@@ -81,7 +83,9 @@ public sealed class LicenseController : ControllerBase
             features,
             validation.Payload?.ExpiresAtUtc ?? settings?.LicenseExpiresAt,
             validation.IsTampered,
-            validation.ErrorMessage);
+            validation.ErrorMessage,
+            validation.IsReadOnlyGrace,
+            validation.ReadOnlyGraceUntilUtc);
 
         return Ok(ApiResponse<LabLicenseStatusDto>.Success(dto));
     }
@@ -122,6 +126,7 @@ public sealed class LicenseController : ControllerBase
                 LaboratoryId = targetLabId != Guid.Empty ? targetLabId : (validation.Payload?.FacilityId ?? Guid.NewGuid()),
                 LaboratoryName = validation.Payload?.FacilityName ?? "Laboratory Facility",
                 LicenseToken = request.LicenseToken.Trim(),
+                EntitlementVersion = validation.Payload?.EntitlementVersion ?? 0,
                 PlanTier = validation.Payload?.PlanTier ?? "Community",
                 MaxStaffLimit = validation.Payload?.Limits?.MaxStaff ?? 5,
                 MaxAnalyzersLimit = validation.Payload?.Limits?.MaxAnalyzers ?? 1,
@@ -134,6 +139,7 @@ public sealed class LicenseController : ControllerBase
         else
         {
             settings.LicenseToken = request.LicenseToken.Trim();
+            settings.EntitlementVersion = validation.Payload?.EntitlementVersion ?? 0;
             settings.PlanTier = validation.Payload?.PlanTier ?? "Community";
             settings.MaxStaffLimit = validation.Payload?.Limits?.MaxStaff ?? 5;
             settings.MaxAnalyzersLimit = validation.Payload?.Limits?.MaxAnalyzers ?? 1;
@@ -156,7 +162,9 @@ public sealed class LicenseController : ControllerBase
             validation.Payload?.EnabledFeatures ?? PlanTierDefaults.GetFeaturesForTier(settings.PlanTier),
             validation.Payload?.ExpiresAtUtc,
             false,
-            validation.ErrorMessage);
+            validation.ErrorMessage,
+            validation.IsReadOnlyGrace,
+            validation.ReadOnlyGraceUntilUtc);
 
         return Ok(ApiResponse<LabLicenseStatusDto>.Success(dto, "Laboratory facility license successfully applied and verified."));
     }

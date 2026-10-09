@@ -5,6 +5,7 @@ using ClinicEz.Laboratory.Application;
 using ClinicEz.Laboratory.Infrastructure;
 using ClinicEz.Laboratory.Infrastructure.Auth;
 using ClinicEz.Shared.LocalAuth;
+using ClinicEz.Shared.Licensing;
 using ClinicEz.Shared.Middlewares;
 using Hangfire;
 using Microsoft.AspNetCore.RateLimiting;
@@ -61,6 +62,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseInternalServiceGuard(); // internal-key principal is default-denied except on permission-guarded endpoints
 app.UseMiddleware<LabScopeMiddleware>();
+app.UseReadOnlyGrace(); // expired subscription: GET only inside the grace window, nothing after it
 app.UseHangfireDashboard("/hangfire", new DashboardOptions { Authorization = [new HangfireDashboardAuthFilter(app.Configuration)] }); // Basic Auth; denied when no password is configured
 
 // 5. Tell the app to use controllers

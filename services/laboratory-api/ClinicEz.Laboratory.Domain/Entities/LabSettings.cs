@@ -15,6 +15,9 @@ public sealed class LabSettings : BaseEntity, ILabScopedEntity
 
     // Cryptographic License & Hard Limit Profile
     public string? LicenseToken { get; set; }
+
+    /// <summary>Version of the signed license in <see cref="LicenseToken"/>; an entitlement update older than this is ignored.</summary>
+    public int EntitlementVersion { get; set; }
     public string PlanTier { get; set; } = "Community";
     public int MaxStaffLimit { get; set; } = 5;
     public int MaxAnalyzersLimit { get; set; } = 1;
