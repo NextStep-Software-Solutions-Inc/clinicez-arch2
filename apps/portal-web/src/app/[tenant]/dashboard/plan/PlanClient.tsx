@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useEntitlements } from "@/hooks/useEntitlements";
+import type { EntitlementStatus } from "@/lib/wire";
 import { billingService, type BillingPlan } from "@/services/billing.service";
 import { branchService } from "@/services/branch.service";
 import { ENTITLEMENT_KEYS, formatLimit, isUnlimited, type WorkspaceEntitlements } from "@/services/entitlement.service";
@@ -113,10 +114,9 @@ function usageFor(key: string, usage: WorkspaceUsage | undefined, entitlements: 
   }
 }
 
-function statusTone(status: string): string {
-  const s = status.toLowerCase();
-  if (s === "active" || s === "trialing") return "border-emerald-300 text-emerald-700 dark:text-emerald-300";
-  if (s === "cancelled" || s === "canceled") return "border-amber-300 text-amber-700 dark:text-amber-300";
+function statusTone(status: EntitlementStatus): string {
+  if (status === "Active" || status === "Trialing") return "border-emerald-300 text-emerald-700 dark:text-emerald-300";
+  if (status === "Cancelled") return "border-amber-300 text-amber-700 dark:text-amber-300";
   return "border-rose-300 text-rose-700 dark:text-rose-300";
 }
 

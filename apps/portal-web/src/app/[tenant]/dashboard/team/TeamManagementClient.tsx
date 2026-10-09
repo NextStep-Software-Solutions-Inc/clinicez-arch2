@@ -418,8 +418,8 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
                                     {members.map((member) => {
                                         const roleMeta = ROLE_DETAILS[member.role] || ROLE_DETAILS.Viewer;
-                                        const isOwner = member.role.toLowerCase() === "owner";
-                                        const isPending = member.status.toLowerCase().includes("pending");
+                                        const isOwner = member.role === "Owner";
+                                        const isPending = member.status === "PendingInvitation";
 
                                         // Initials for avatar
                                         const initials = member.fullName

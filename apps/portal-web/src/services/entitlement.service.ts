@@ -1,4 +1,6 @@
+import { z } from "zod";
 import { apiClient } from "@/transport/apiClient";
+import { entitlementStatusSchema, facilityKindSchema, parseWire } from "@/lib/wire";
 
 /** Entitlement keys of `EntitlementKeys` (portal-api). Limits are `limit.*`, features `feature.*`. */
 export const ENTITLEMENT_KEYS = {
@@ -35,42 +37,40 @@ export function formatLimit(value: number | null | undefined): string {
   return value.toLocaleString();
 }
 
-/** A facility's slice of the workspace pools, as it is in its signed license right now. */
-export interface FacilityAllocation {
-  facilityId: string;
-  facilityName: string;
-  facilityType: string;
-  maxStaff: number;
-  maxStorageMb: number;
-  concurrentTerminals: number;
-  /** Explicit share; null means "automatic share of the pool". */
-  explicitMaxStaff: number | null;
-  explicitMaxStorageMb: number | null;
-  explicitConcurrentTerminals: number | null;
-  licenseExpiresAt: string | null;
-  lastSeenAt: string | null;
-  appVersion: string | null;
-}
+const facilityAllocationSchema = z.object({
+  facilityId: z.string(),
+  facilityName: z.string(),
+  facilityType: facilityKindSchema,
+  maxStaff: z.number(),
+  maxStorageMb: z.number(),
+  concurrentTerminals: z.number(),
+  explicitMaxStaff: z.number().nullable(),
+  explicitMaxStorageMb: z.number().nullable(),
+  explicitConcurrentTerminals: z.number().nullable(),
+  licenseExpiresAt: z.string().nullable(),
+  lastSeenAt: z.string().nullable(),
+  appVersion: z.string().nullable(),
+});
 
-export interface WorkspacePools {
-  staff: number;
-  storageMb: number;
-  terminals: number;
-}
+const workspaceEntitlementsSchema = z.object({
+  planSlug: z.string(),
+  planName: z.string(),
+  status: entitlementStatusSchema,
+  version: z.number(),
+  periodEnd: z.string().nullable(),
+  limits: z.record(z.string(), z.number().nullable()),
+  features: z.array(z.string()),
+  pools: z.object({ staff: z.number(), storageMb: z.number(), terminals: z.number() }),
+  facilities: z.array(facilityAllocationSchema),
+});
 
-/** Mirrors `WorkspaceEntitlementsDto`. */
-export interface WorkspaceEntitlements {
-  planSlug: string;
-  planName: string;
-  status: string;
-  version: number;
-  periodEnd: string | null;
-  /** Limit key → ceiling; null means unlimited. */
-  limits: Record<string, number | null>;
-  features: string[];
-  pools: WorkspacePools;
-  facilities: FacilityAllocation[];
-}
+/** A facility's slice of the workspace pools, as it is in its signed license right now. Explicit shares: null means "automatic share of the pool". */
+export type FacilityAllocation = z.infer<typeof facilityAllocationSchema>;
+
+/** Mirrors `WorkspaceEntitlementsDto`. `limits` maps limit key → ceiling; null means unlimited. */
+export type WorkspaceEntitlements = z.infer<typeof workspaceEntitlementsSchema>;
+
+export type WorkspacePools = WorkspaceEntitlements["pools"];
 
 /** A null value means "automatic share of the pool". */
 export interface AllocationInput {
@@ -81,16 +81,16 @@ export interface AllocationInput {
 
 export const entitlementService = {
   getEntitlements: async (tenantSlug: string): Promise<WorkspaceEntitlements> => {
-    const res = await apiClient.get<WorkspaceEntitlements>(`/tenants/${encodeURIComponent(tenantSlug)}/entitlements`);
-    return res.data;
+    const res = await apiClient.get<unknown>(`/tenants/${encodeURIComponent(tenantSlug)}/entitlements`);
+    return parseWire(workspaceEntitlementsSchema, res.data, "entitlements");
   },
 
   /** Sets (or, with all values null, clears) a facility's explicit pool shares. Answers 409 `allocation_exceeds_pool` when over a pool. */
   setAllocation: async (tenantSlug: string, facilityId: string, input: AllocationInput): Promise<WorkspaceEntitlements> => {
-    const res = await apiClient.put<WorkspaceEntitlements>(
+    const res = await apiClient.put<unknown>(
       `/tenants/${encodeURIComponent(tenantSlug)}/facilities/${encodeURIComponent(facilityId)}/allocation`,
       input,
     );
-    return res.data;
+    return parseWire(workspaceEntitlementsSchema, res.data, "entitlements");
   },
 };

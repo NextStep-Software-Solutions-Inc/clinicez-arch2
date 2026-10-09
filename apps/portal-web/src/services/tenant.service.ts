@@ -1,4 +1,7 @@
+import { z } from "zod";
 import { apiClient } from "@/transport/apiClient";
+import { ownershipTransferStatusSchema, parseWire } from "@/lib/wire";
+import type { FacilityDeploymentMode, WorkspaceRole } from "@/lib/wire";
 
 export interface RegisterTenantPayload {
   firstName: string;
@@ -70,7 +73,7 @@ export interface WorkspaceSessionPolicy {
   idleTimeoutMinutes: number;
 }
 
-export type FacilityDeploymentMode = "SharedCloud" | "OnPremise";
+export type { FacilityDeploymentMode };
 
 /** Mirrors `FacilityDeploymentDto`. */
 export interface FacilityDeployment {
@@ -95,16 +98,18 @@ export interface WorkspaceAuditLogPage {
   nextCursor?: string | null;
 }
 
+const ownershipTransferSchema = z.object({
+  id: z.string(),
+  targetMemberId: z.string(),
+  targetName: z.string(),
+  targetEmail: z.string(),
+  status: ownershipTransferStatusSchema,
+  expiresAt: z.string(),
+  createdAt: z.string(),
+});
+
 /** Mirrors `OwnershipTransferDto`: the open offer. Status is "Pending" while it waits for an answer. */
-export interface OwnershipTransfer {
-  id: string;
-  targetMemberId: string;
-  targetName: string;
-  targetEmail: string;
-  status: string;
-  expiresAt: string;
-  createdAt: string;
-}
+export type OwnershipTransfer = z.infer<typeof ownershipTransferSchema>;
 
 export interface OwnershipTransferResult {
   newOwnerName: string;
@@ -199,8 +204,8 @@ export interface TenantDto {
   tenantType: string;
   clinicName?: string;
   facilityType?: string;
-  role?: "Owner" | "Admin" | "Billing" | "Member" | string;
-  status?: string;
+  role?: WorkspaceRole;
+  status?: "Active" | "Archived";
 }
 
 export const tenantService = {
@@ -318,19 +323,19 @@ export const tenantService = {
     tenantSlug: string,
     payload: { targetStaffMemberId: string; confirmSlug: string },
   ): Promise<OwnershipTransfer> => {
-    const response = await apiClient.post<OwnershipTransfer>(
+    const response = await apiClient.post<unknown>(
       `/tenants/${encodeURIComponent(tenantSlug)}/settings/ownership-transfer`,
       payload,
     );
-    return response.data;
+    return parseWire(ownershipTransferSchema, response.data, "ownership transfer");
   },
 
   /** The open offer, visible to the owner who made it and the member it is addressed to; null otherwise (204). */
   getOwnershipTransfer: async (tenantSlug: string): Promise<OwnershipTransfer | null> => {
-    const response = await apiClient.get<OwnershipTransfer | "">(
+    const response = await apiClient.get<unknown>(
       `/tenants/${encodeURIComponent(tenantSlug)}/settings/ownership-transfer`,
     );
-    return response.status === 204 || response.data === "" ? null : response.data;
+    return response.status === 204 || response.data === "" ? null : parseWire(ownershipTransferSchema, response.data, "ownership transfer");
   },
 
   /** Step two, by the member the offer is addressed to. The previous owner becomes an Admin. */

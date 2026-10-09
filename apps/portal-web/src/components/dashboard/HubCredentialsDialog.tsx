@@ -1,17 +1,19 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import { IconCheck, IconCopy, IconKey } from "@tabler/icons-react";
+import { IconCheck, IconCopy, IconDownload, IconKey } from "@tabler/icons-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import type { HubEdgeCredentials, HubRotatedCredentials } from "@/services/facility.service";
+import type { HubClientCredentials, HubEdgeCredentials, HubRotatedCredentials } from "@/services/facility.service";
 
-interface CredentialRow {
-  label: string;
-  clientId: string;
-  clientSecret: string;
+/** Service name the portal uses for the local hub's upstream client. */
+const UPSTREAM_SERVICE = "cell";
+
+interface CredentialRow extends HubClientCredentials {
+  /** Service name of the hub client (`cell` for the upstream client). */
+  service: string;
 }
 
 interface ShownCredentials {
@@ -19,12 +21,15 @@ interface ShownCredentials {
   facilityName: string;
   hubUrl: string;
   rows: CredentialRow[];
+  /** `.env` lines for the edge installer. Built in memory for the download button only. */
+  envSnippet: string;
+  envFileName: string;
 }
 
 interface HubCredentialsContextValue {
   /** Shows the credentials returned when the first on-premise facility is created. */
   showEdge: (facilityName: string, credentials: HubEdgeCredentials) => void;
-  /** Shows the single hub client secret returned by a rotation. */
+  /** Shows the single hub client secret and signing key returned by a rotation. */
   showRotated: (facilityName: string, rotated: HubRotatedCredentials) => void;
 }
 
@@ -74,9 +79,48 @@ function titleCase(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
+function rowLabel(service: string): string {
+  return service === UPSTREAM_SERVICE ? "Upstream (cell)" : titleCase(service);
+}
+
+/** Name of the setting the signing key goes into: the hub's upstream client or the service's messaging client. */
+function signingKeySetting(service: string): string {
+  return service === UPSTREAM_SERVICE ? "Hub__Upstream__SigningKey" : "Messaging__SigningKey";
+}
+
+/** `.env` variable names of the edge deployment (`deploy/edge`): `UPSTREAM_*` for the cell client, `<SERVICE>_HUB_*` for the others. */
+function envLines(row: CredentialRow): string[] {
+  if (row.service === UPSTREAM_SERVICE) {
+    return [
+      `UPSTREAM_CLIENT_ID=${row.clientId}`,
+      `UPSTREAM_CLIENT_SECRET=${row.clientSecret}`,
+      `EDGE_HUB_SIGNING_KEY=${row.signingKey}`,
+    ];
+  }
+  const prefix = `${row.service.toUpperCase()}_HUB`;
+  return [`${prefix}_CLIENT_ID=${row.clientId}`, `${prefix}_CLIENT_SECRET=${row.clientSecret}`, `${prefix}_SIGNING_KEY=${row.signingKey}`];
+}
+
+function toEnvSnippet(hubUrlLine: string | null, rows: CredentialRow[]): string {
+  const lines = hubUrlLine ? [hubUrlLine] : [];
+  for (const row of rows) lines.push(...envLines(row));
+  return `${lines.join("\n")}\n`;
+}
+
+/** Saves the text as a file entirely in the browser; the blob never leaves the page. */
+function downloadTextFile(fileName: string, text: string) {
+  const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 /**
  * Holds hub credentials in component state only and shows them in a dialog that cannot be dismissed until the
  * user confirms they saved them. Nothing is written to storage, the URL or a cache; closing clears the state.
+ * The `.env` download is generated in the browser from that state and is never uploaded.
  */
 export function HubCredentialsProvider({ children }: { children: ReactNode }) {
   const [shown, setShown] = useState<ShownCredentials | null>(null);
@@ -91,23 +135,35 @@ export function HubCredentialsProvider({ children }: { children: ReactNode }) {
     (facilityName: string, credentials: HubEdgeCredentials) => {
       const rows: CredentialRow[] = [];
       if (credentials.upstream) {
-        rows.push({ label: "Upstream (cell)", ...credentials.upstream });
+        rows.push({ service: UPSTREAM_SERVICE, ...credentials.upstream });
       }
       for (const [service, secret] of Object.entries(credentials.services)) {
-        rows.push({ label: titleCase(service), ...secret });
+        rows.push({ service, ...secret });
       }
-      open({ title: "On-premise hub credentials", facilityName, hubUrl: credentials.hubUrl, rows });
+      open({
+        title: "On-premise hub credentials",
+        facilityName,
+        hubUrl: credentials.hubUrl,
+        rows,
+        envSnippet: toEnvSnippet(`${credentials.upstream ? "UPSTREAM_HUB_URL" : "MESSAGING_HUB_URL"}=${credentials.hubUrl}`, rows),
+        envFileName: "hub-credentials.env",
+      });
     },
     [open],
   );
 
   const showRotated = useCallback(
     (facilityName: string, rotated: HubRotatedCredentials) => {
+      const rows: CredentialRow[] = [
+        { service: rotated.service, clientId: rotated.clientId, clientSecret: rotated.clientSecret, signingKey: rotated.signingKey },
+      ];
       open({
         title: "New hub client secret",
         facilityName,
         hubUrl: rotated.hubUrl,
-        rows: [{ label: titleCase(rotated.service), clientId: rotated.clientId, clientSecret: rotated.clientSecret }],
+        rows,
+        envSnippet: toEnvSnippet(null, rows),
+        envFileName: `hub-${rotated.service}.env`,
       });
     },
     [open],
@@ -137,8 +193,8 @@ export function HubCredentialsProvider({ children }: { children: ReactNode }) {
               {shown?.title}
             </DialogTitle>
             <DialogDescription>
-              For <strong>{shown?.facilityName}</strong>. These secrets are shown only once and cannot be retrieved later. If you lose
-              them you will have to rotate them, which invalidates the old ones.
+              For <strong>{shown?.facilityName}</strong>. The client secrets and signing keys are shown only once and cannot be
+              retrieved later. If you lose them you will have to rotate them, which invalidates the old ones.
             </DialogDescription>
           </DialogHeader>
 
@@ -146,18 +202,32 @@ export function HubCredentialsProvider({ children }: { children: ReactNode }) {
             <div className="space-y-4">
               <ValueLine caption="Hub URL" value={shown.hubUrl} />
               {shown.rows.map((row) => (
-                <div key={row.label} className="space-y-2 rounded-2xl border border-slate-100 p-3 dark:border-slate-800">
-                  <p className="text-sm font-bold">{row.label}</p>
+                <div key={row.service} className="space-y-2 rounded-2xl border border-slate-100 p-3 dark:border-slate-800">
+                  <p className="text-sm font-bold">{rowLabel(row.service)}</p>
                   <ValueLine caption="Client ID" value={row.clientId} />
                   <ValueLine caption="Client secret" value={row.clientSecret} />
+                  <ValueLine caption={`Signing key (${signingKeySetting(row.service)})`} value={row.signingKey} />
                 </div>
               ))}
+              <div className="flex items-center justify-between gap-3 rounded-2xl bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                <span>The .env file is created in your browser and contains these secrets. Store it as carefully as a password.</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => downloadTextFile(shown.envFileName, shown.envSnippet)}
+                >
+                  <IconDownload className="mr-1.5 h-4 w-4" />
+                  Download .env
+                </Button>
+              </div>
             </div>
           )}
 
           <label className="flex cursor-pointer items-start gap-2 text-sm">
             <Checkbox checked={confirmed} onCheckedChange={(v) => setConfirmed(v === true)} className="mt-0.5" />
-            <span>I saved these credentials in a safe place.</span>
+            <span>I saved the client secrets and signing keys in a safe place.</span>
           </label>
 
           <DialogFooter>

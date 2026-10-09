@@ -1,67 +1,68 @@
+import { z } from "zod";
 import { apiClient } from "@/transport/apiClient";
-import type { FacilityKind, FacilityVisibility } from "@/services/facility.service";
+import {
+  facilityKindSchema,
+  facilityVisibilitySchema,
+  linkDirectionSchema,
+  linkScopeSchema,
+  linkStatusSchema,
+  parseWire,
+  type FacilityKind,
+  type FacilityVisibility,
+  type LinkDirection,
+  type LinkScope,
+  type LinkStatus,
+} from "@/lib/wire";
 
-export const LINK_SCOPES = ["LabOrder", "Prescription", "Referral", "Result"] as const;
-export type LinkScope = (typeof LINK_SCOPES)[number];
+export type { LinkDirection, LinkScope, LinkStatus };
 
-export type LinkStatus = "Pending" | "Active" | "Rejected" | "Revoked";
-export type LinkDirection = "outgoing" | "incoming";
+export const LINK_SCOPES = linkScopeSchema.options;
+
+const nullableText = z.string().nullish().transform((v) => v ?? null);
 
 /** Mirrors `FacilityLinkDto`: a cross-tenant link as the workspace sees it. */
-export interface FacilityLink {
-  id: string;
-  direction: LinkDirection;
-  status: LinkStatus;
-  scopes: LinkScope[];
-  sourceFacilityId: string;
-  sourceFacilityName: string;
-  sourceCity?: string | null;
-  targetFacilityId: string;
-  targetFacilityName: string;
-  targetCity?: string | null;
-  createdAt: string;
-  updatedAt?: string | null;
-}
+const facilityLinkSchema = z.object({
+  id: z.string(),
+  direction: linkDirectionSchema,
+  status: linkStatusSchema,
+  scopes: z.array(linkScopeSchema),
+  sourceFacilityId: z.string(),
+  sourceFacilityName: z.string(),
+  sourceCity: nullableText,
+  targetFacilityId: z.string(),
+  targetFacilityName: z.string(),
+  targetCity: nullableText,
+  createdAt: z.string(),
+  updatedAt: nullableText,
+});
+export type FacilityLink = z.infer<typeof facilityLinkSchema>;
 
-/** One hit of the hub directory search, with enums normalised to their names. */
-export interface DirectoryFacility {
-  tenantId: string;
-  facilityId: string;
-  facilityType: FacilityKind;
-  displayName: string;
-  city: string | null;
-  visibility: FacilityVisibility;
-  acceptsExternalRequests: boolean;
-  isOwnWorkspace: boolean;
+/** One hit of the hub directory search. */
+const directoryFacilitySchema = z.object({
+  tenantId: z.string(),
+  facilityId: z.string(),
+  facilityType: facilityKindSchema,
+  displayName: z.string(),
+  city: nullableText,
+  visibility: facilityVisibilitySchema,
+  acceptsExternalRequests: z.boolean(),
+  isOwnWorkspace: z.boolean(),
   /** Link between the searching workspace and this facility, if any. */
-  linkStatus: LinkStatus | null;
-}
+  linkStatus: linkStatusSchema.nullish().transform((v) => v ?? null),
+});
+export type DirectoryFacility = z.infer<typeof directoryFacilitySchema>;
+
+const facilityVisibilityResultSchema = z.object({
+  facilityId: z.string(),
+  visibility: facilityVisibilitySchema,
+  acceptsExternalRequests: z.boolean(),
+});
+export type FacilityVisibilityResult = z.infer<typeof facilityVisibilityResultSchema>;
 
 export interface DirectoryQuery {
   type?: FacilityKind;
   q?: string;
   city?: string;
-}
-
-export interface FacilityVisibilityResult {
-  facilityId: string;
-  visibility: FacilityVisibility;
-  acceptsExternalRequests: boolean;
-}
-
-const VISIBILITY_BY_NUMBER: readonly FacilityVisibility[] = ["Private", "Network", "Public"];
-const LINK_STATUS_BY_NUMBER: readonly LinkStatus[] = ["Pending", "Active", "Rejected", "Revoked"];
-
-/** The directory endpoint serialises these two enums as numbers; accept the names too in case that changes. */
-function enumName<T extends string>(value: number | string | null, names: readonly T[]): T | null {
-  if (value === null) return null;
-  if (typeof value === "number") return names[value] ?? null;
-  return names.find((n) => n.toLowerCase() === value.toLowerCase()) ?? null;
-}
-
-interface RawDirectoryFacility extends Omit<DirectoryFacility, "visibility" | "linkStatus"> {
-  visibility: number | string;
-  linkStatus: number | string | null;
 }
 
 function slugPath(tenantSlug: string): string {
@@ -76,17 +77,13 @@ export const linkService = {
     if (query.q?.trim()) params.set("q", query.q.trim());
     if (query.city?.trim()) params.set("city", query.city.trim());
     const qs = params.toString();
-    const res = await apiClient.get<RawDirectoryFacility[]>(`${slugPath(tenantSlug)}/directory/facilities${qs ? `?${qs}` : ""}`);
-    return res.data.map((f) => ({
-      ...f,
-      visibility: enumName(f.visibility, VISIBILITY_BY_NUMBER) ?? "Private",
-      linkStatus: enumName(f.linkStatus ?? null, LINK_STATUS_BY_NUMBER),
-    }));
+    const res = await apiClient.get<unknown>(`${slugPath(tenantSlug)}/directory/facilities${qs ? `?${qs}` : ""}`);
+    return parseWire(z.array(directoryFacilitySchema), res.data, "directory result");
   },
 
   getLinks: async (tenantSlug: string): Promise<FacilityLink[]> => {
-    const res = await apiClient.get<FacilityLink[]>(`${slugPath(tenantSlug)}/links`);
-    return res.data;
+    const res = await apiClient.get<unknown>(`${slugPath(tenantSlug)}/links`);
+    return parseWire(z.array(facilityLinkSchema), res.data, "links");
   },
 
   /** Active at once when the target accepts external requests, otherwise Pending until the target's admin approves. */
@@ -94,24 +91,24 @@ export const linkService = {
     tenantSlug: string,
     payload: { sourceFacilityId: string; targetFacilityId: string; scopes: LinkScope[] },
   ): Promise<FacilityLink> => {
-    const res = await apiClient.post<FacilityLink>(`${slugPath(tenantSlug)}/links`, payload);
-    return res.data;
+    const res = await apiClient.post<unknown>(`${slugPath(tenantSlug)}/links`, payload);
+    return parseWire(facilityLinkSchema, res.data, "link");
   },
 
   approveLink: async (tenantSlug: string, linkId: string, scopes?: LinkScope[]): Promise<FacilityLink> => {
-    const res = await apiClient.post<FacilityLink>(`${slugPath(tenantSlug)}/links/${encodeURIComponent(linkId)}/approve`, { scopes });
-    return res.data;
+    const res = await apiClient.post<unknown>(`${slugPath(tenantSlug)}/links/${encodeURIComponent(linkId)}/approve`, { scopes });
+    return parseWire(facilityLinkSchema, res.data, "link");
   },
 
   rejectLink: async (tenantSlug: string, linkId: string): Promise<FacilityLink> => {
-    const res = await apiClient.post<FacilityLink>(`${slugPath(tenantSlug)}/links/${encodeURIComponent(linkId)}/reject`);
-    return res.data;
+    const res = await apiClient.post<unknown>(`${slugPath(tenantSlug)}/links/${encodeURIComponent(linkId)}/reject`);
+    return parseWire(facilityLinkSchema, res.data, "link");
   },
 
   /** Either side may end a pending or active link, whatever the plan. */
   revokeLink: async (tenantSlug: string, linkId: string): Promise<FacilityLink> => {
-    const res = await apiClient.delete<FacilityLink>(`${slugPath(tenantSlug)}/links/${encodeURIComponent(linkId)}`);
-    return res.data;
+    const res = await apiClient.delete<unknown>(`${slugPath(tenantSlug)}/links/${encodeURIComponent(linkId)}`);
+    return parseWire(facilityLinkSchema, res.data, "link");
   },
 
   /** Anything above Private needs `feature.cross_tenant_interop`; accepting external requests needs Public. */
@@ -120,10 +117,10 @@ export const linkService = {
     facilityId: string,
     payload: { visibility: FacilityVisibility; acceptsExternalRequests: boolean },
   ): Promise<FacilityVisibilityResult> => {
-    const res = await apiClient.put<FacilityVisibilityResult>(
+    const res = await apiClient.put<unknown>(
       `${slugPath(tenantSlug)}/facilities/${encodeURIComponent(facilityId)}/visibility`,
       payload,
     );
-    return res.data;
+    return parseWire(facilityVisibilityResultSchema, res.data, "visibility");
   },
 };

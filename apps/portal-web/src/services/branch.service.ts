@@ -1,10 +1,11 @@
 import { apiClient } from "@/transport/apiClient";
+import type { FacilityKind, FacilityStatus } from "@/lib/wire";
 
 export interface BranchFacilitySummary {
   id: string;
   name: string;
-  facilityType: string;
-  status: string;
+  facilityType: FacilityKind;
+  status: FacilityStatus;
 }
 
 export interface BranchDto {

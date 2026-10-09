@@ -1,43 +1,43 @@
+import { z } from "zod";
 import { apiClient } from "@/transport/apiClient";
-import type { FacilityDeploymentMode } from "@/services/tenant.service";
+import {
+  deploymentModeSchema,
+  facilityKindSchema,
+  facilityStatusSchema,
+  facilityVisibilitySchema,
+  hubEdgeCredentialsSchema,
+  hubRotatedCredentialsSchema,
+  parseWire,
+  type FacilityDeploymentMode,
+  type FacilityKind,
+  type FacilityVisibility,
+  type HubClientCredentials,
+  type HubEdgeCredentials,
+  type HubRotatedCredentials,
+} from "@/lib/wire";
 
-export type FacilityKind = "Clinic" | "Organization" | "Laboratory" | "Pharmacy";
-export type FacilityVisibility = "Private" | "Network" | "Public";
+export type { FacilityKind, FacilityVisibility };
 
-/** Mirrors `FacilityDto`. Visibility fields are always present on responses of the current API. */
-export interface WorkspaceFacility {
-  id: string;
-  name: string;
-  facilityType: FacilityKind;
-  status: string;
-  createdAt: string;
-  slug: string;
-  consoleUrl?: string | null;
-  city?: string | null;
-  deploymentMode?: FacilityDeploymentMode;
-  consoleBaseUrl?: string | null;
-  visibility?: FacilityVisibility;
-  acceptsExternalRequests?: boolean;
-}
+const optionalText = z.string().nullish().transform((v) => v ?? null);
 
-/** One hub client. The secret is shown once; the hub keeps only a hash. */
-export interface HubClientSecret {
-  clientId: string;
-  clientSecret: string;
-}
+/** Mirrors `FacilityDto` (the fields the portal reads). */
+const workspaceFacilitySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  facilityType: facilityKindSchema,
+  status: facilityStatusSchema,
+  createdAt: z.string(),
+  slug: z.string(),
+  consoleUrl: optionalText,
+  city: optionalText,
+  deploymentMode: deploymentModeSchema,
+  consoleBaseUrl: optionalText,
+  visibility: facilityVisibilitySchema,
+  acceptsExternalRequests: z.boolean(),
+});
+export type WorkspaceFacility = z.infer<typeof workspaceFacilitySchema>;
 
-/** Mirrors `HubEdgeCredentials`: everything an on-premise workspace needs to join the hub. Returned once. */
-export interface HubEdgeCredentials {
-  hubUrl: string;
-  upstream: HubClientSecret | null;
-  services: Record<string, HubClientSecret>;
-}
-
-/** Mirrors `HubRotatedCredentials`: the new secret of a single hub client. Returned once. */
-export interface HubRotatedCredentials extends HubClientSecret {
-  hubUrl: string;
-  service: string;
-}
+export type { HubClientCredentials, HubEdgeCredentials, HubRotatedCredentials };
 
 /** Services whose hub client can be rotated (`cell` is the local hub's upstream client). */
 export const HUB_ROTATABLE_SERVICES = ["cell", "clinic", "laboratory", "pharmacy", "organization", "billing"] as const;
@@ -67,40 +67,48 @@ export interface CreateFacilityPayload {
   consoleBaseUrl?: string;
 }
 
+const createFacilityResultSchema = z.object({
+  success: z.boolean(),
+  message: z.string().nullish().transform((v) => v ?? ""),
+  hubCredentials: hubEdgeCredentialsSchema.nullish().transform((v) => v ?? null),
+  hubOnboardingPending: z.boolean().nullish().transform((v) => v ?? false),
+});
+
 export interface CreateFacilityResult {
   success: boolean;
   message: string;
-  /** Only for the first on-premise facility of a workspace; never returned again. */
+  /** Only for the first on-premise facility of a workspace; never returned again. Null for cloud facilities and later on-premise ones. */
   hubCredentials: HubEdgeCredentials | null;
   /** The facility exists but the hub was unreachable: issue credentials from the facility's rotate action. */
   hubOnboardingPending: boolean;
 }
 
+const rotateHubCredentialsResultSchema = z.object({
+  success: z.boolean(),
+  hubCredentials: hubRotatedCredentialsSchema,
+});
+
 export const facilityService = {
   getFacilities: async (tenantSlug: string): Promise<WorkspaceFacility[]> => {
-    const res = await apiClient.get<WorkspaceFacility[]>(`/facilities?tenantSlug=${encodeURIComponent(tenantSlug)}`);
-    return res.data;
+    const res = await apiClient.get<unknown>(`/facilities?tenantSlug=${encodeURIComponent(tenantSlug)}`);
+    return parseWire(z.array(workspaceFacilitySchema), res.data, "facility list");
   },
 
   createFacility: async (payload: CreateFacilityPayload): Promise<CreateFacilityResult> => {
-    const res = await apiClient.post<CreateFacilityResult>("/facilities", payload);
-    return {
-      ...res.data,
-      hubCredentials: res.data.hubCredentials ?? null,
-      hubOnboardingPending: res.data.hubOnboardingPending ?? false,
-    };
+    const res = await apiClient.post<unknown>("/facilities", payload);
+    return parseWire(createFacilityResultSchema, res.data, "facility");
   },
 
-  /** Issues a new secret for one hub client; the old one stops working. The result must never be persisted. */
+  /** Issues a new secret and signing key for one hub client; the old ones stop working. The result must never be persisted. */
   rotateHubCredentials: async (
     tenantSlug: string,
     facilityId: string,
     service: HubRotatableService,
   ): Promise<HubRotatedCredentials> => {
-    const res = await apiClient.post<{ success: boolean; hubCredentials: HubRotatedCredentials }>(
+    const res = await apiClient.post<unknown>(
       `/facilities/${encodeURIComponent(facilityId)}/hub-credentials/rotate?tenantSlug=${encodeURIComponent(tenantSlug)}&service=${encodeURIComponent(service)}`,
     );
-    return res.data.hubCredentials;
+    return parseWire(rotateHubCredentialsResultSchema, res.data, "hub credentials").hubCredentials;
   },
 };
 

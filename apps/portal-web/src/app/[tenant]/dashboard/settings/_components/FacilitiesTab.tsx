@@ -46,12 +46,12 @@ interface FacilityRowProps {
 
 function FacilityRow({ tenantSlug, facility, interopAvailable, onSaved }: FacilityRowProps) {
     const { showRotated } = useHubCredentials();
-    const [mode, setMode] = useState<FacilityDeploymentMode>(facility.deploymentMode ?? "SharedCloud");
+    const [mode, setMode] = useState<FacilityDeploymentMode>(facility.deploymentMode);
     const [url, setUrl] = useState(facility.consoleBaseUrl ?? "");
     const [saving, setSaving] = useState(false);
 
-    const currentVisibility: FacilityVisibility = facility.visibility ?? "Private";
-    const currentAccepts = facility.acceptsExternalRequests ?? false;
+    const currentVisibility: FacilityVisibility = facility.visibility;
+    const currentAccepts = facility.acceptsExternalRequests;
     const [visibility, setVisibility] = useState<FacilityVisibility>(currentVisibility);
     const [accepts, setAccepts] = useState(currentAccepts);
     const [savingVisibility, setSavingVisibility] = useState(false);
@@ -61,7 +61,7 @@ function FacilityRow({ tenantSlug, facility, interopAvailable, onSaved }: Facili
     const [rotating, setRotating] = useState(false);
 
     const dirty =
-        mode !== (facility.deploymentMode ?? "SharedCloud") ||
+        mode !== facility.deploymentMode ||
         (mode === "OnPremise" && url.trim() !== (facility.consoleBaseUrl ?? ""));
 
     const visibilityDirty = visibility !== currentVisibility || accepts !== currentAccepts;
@@ -238,7 +238,7 @@ function FacilityRow({ tenantSlug, facility, interopAvailable, onSaved }: Facili
                     {confirmingRotate ? (
                         <>
                             <span className="text-xs text-amber-700 dark:text-amber-400">
-                                The current {rotateService} secret stops working immediately.
+                                The current {rotateService} secret and signing key stop working immediately.
                             </span>
                             <Button type="button" size="sm" variant="destructive" disabled={rotating} onClick={rotate} className="rounded-xl text-xs font-bold">
                                 {rotating ? "Rotating..." : "Rotate now"}
