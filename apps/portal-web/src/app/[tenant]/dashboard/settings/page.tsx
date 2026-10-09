@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { IconBuildingHospital, IconPalette, IconSettings, IconShieldLock, IconShieldCheck } from "@tabler/icons-react";
+import { IconAlertTriangle, IconBuildingHospital, IconHistory, IconPalette, IconSettings, IconShieldLock, IconShieldCheck } from "@tabler/icons-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useWorkspaceSettings } from "@/hooks/useWorkspaceSettings";
@@ -10,6 +10,8 @@ import { BrandingTab } from "./_components/BrandingTab";
 import { SecurityTab } from "./_components/SecurityTab";
 import { ComplianceTab } from "./_components/ComplianceTab";
 import { FacilitiesTab } from "./_components/FacilitiesTab";
+import { AuditLogTab } from "./_components/AuditLogTab";
+import { DangerZoneTab } from "./_components/DangerZoneTab";
 
 export default function SettingsPage() {
     const params = useParams();
@@ -68,7 +70,16 @@ export default function SettingsPage() {
                                 <IconShieldCheck className="h-3.5 w-3.5 shrink-0" />
                                 Compliance
                             </TabsTrigger>
-                        </TabsList>                    </div>
+                            <TabsTrigger value="audit" className="px-4 sm:px-6 py-2 text-xs font-semibold flex items-center gap-1.5 shrink-0 whitespace-nowrap">
+                                <IconHistory className="h-3.5 w-3.5 shrink-0" />
+                                Audit Log
+                            </TabsTrigger>
+                            <TabsTrigger value="danger" className="px-4 sm:px-6 py-2 text-xs font-semibold flex items-center gap-1.5 shrink-0 whitespace-nowrap text-red-600 dark:text-red-400">
+                                <IconAlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                                Danger Zone
+                            </TabsTrigger>
+                        </TabsList>
+                    </div>
 
                     <TabsContent value="general" className="outline-none">
                         <GeneralTab key={JSON.stringify(settings.general)} tenantSlug={tenantSlug} general={settings.general} onSaved={() => mutate()} />
@@ -95,7 +106,16 @@ export default function SettingsPage() {
                     <TabsContent value="compliance" className="outline-none">
                         <ComplianceTab key={JSON.stringify(settings.compliance)} tenantSlug={tenantSlug} compliance={settings.compliance} onSaved={() => mutate()} />
                     </TabsContent>
-                </Tabs>            )}
+
+                    <TabsContent value="audit" className="outline-none">
+                        <AuditLogTab tenantSlug={tenantSlug} />
+                    </TabsContent>
+
+                    <TabsContent value="danger" className="outline-none">
+                        <DangerZoneTab tenantSlug={tenantSlug} viewerRole={settings.viewerRole} />
+                    </TabsContent>
+                </Tabs>
+            )}
         </div>
     );
 }

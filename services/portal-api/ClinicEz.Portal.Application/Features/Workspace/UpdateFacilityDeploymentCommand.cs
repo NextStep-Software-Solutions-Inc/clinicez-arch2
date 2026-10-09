@@ -74,11 +74,11 @@ public class UpdateFacilityDeploymentCommandHandler(IApplicationDbContext contex
         var key = request.TenantSlug.Trim().ToLowerInvariant();
         var tenant = await context.Tenants
             .FirstOrDefaultAsync(t => t.TenantSlug.ToLower() == key || t.Id.ToString() == key, cancellationToken)
-            ?? throw new KeyNotFoundException($"Workspace '{request.TenantSlug}' not found.");
+            ?? throw new ClinicEz.Shared.Exceptions.NotFoundException($"Workspace '{request.TenantSlug}' not found.");
 
         var facility = await context.Facilities
             .FirstOrDefaultAsync(f => f.Id == request.FacilityId && f.TenantId == tenant.Id, cancellationToken)
-            ?? throw new KeyNotFoundException("Facility not found in this workspace.");
+            ?? throw new ClinicEz.Shared.Exceptions.NotFoundException("Facility not found in this workspace.");
 
         var url = request.DeploymentMode == FacilityDeploymentMode.OnPremise
             ? ConsoleBaseUrlRule.Normalize(request.ConsoleBaseUrl!)

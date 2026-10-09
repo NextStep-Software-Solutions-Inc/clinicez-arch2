@@ -9,6 +9,9 @@ public class Tenant : BaseEntity
     public string Name { get; set; } = string.Empty;
     public string TenantSlug { get; set; } = string.Empty;
     public string TenantType { get; set; } = "Workplace";
+
+    /// <summary>Set when the owner archived the workspace. The portal closes it; data is kept and support can restore it.</summary>
+    public DateTime? ArchivedAt { get; set; }
     
     // Additional contact info based on registration
     public string FirstName { get; set; } = string.Empty;

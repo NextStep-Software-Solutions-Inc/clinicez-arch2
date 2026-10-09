@@ -347,7 +347,7 @@ public class WorkspaceSecurityComplianceTests : IDisposable
         _context.SaveChanges();
         var foreign = SeedFacility(otherTenant, "Foreign Lab");
 
-        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
+        await Assert.ThrowsAsync<ClinicEz.Shared.Exceptions.NotFoundException>(() =>
             new UpdateFacilityDeploymentCommandHandler(_context).Handle(
                 new UpdateFacilityDeploymentCommand(Slug, Actor, foreign.Id, FacilityDeploymentMode.OnPremise, "https://lab.hospital.local"),
                 CancellationToken.None));

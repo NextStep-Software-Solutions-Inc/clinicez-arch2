@@ -103,6 +103,19 @@ public class WorkspaceSettingsTests : IDisposable
         Assert.Null(await handler.Handle(new GetWorkspaceSettingsQuery("nope"), CancellationToken.None));
     }
 
+    [Theory]
+    [InlineData("Owner")]
+    [InlineData("Admin")]
+    public async Task Get_ReturnsTheViewersRole(string role)
+    {
+        var handler = new GetWorkspaceSettingsQueryHandler(_context);
+
+        var dto = await handler.Handle(new GetWorkspaceSettingsQuery(Slug, role), CancellationToken.None);
+
+        Assert.NotNull(dto);
+        Assert.Equal(role, dto.ViewerRole);
+    }
+
     // ---------- PUT general ----------
 
     [Fact]
@@ -191,7 +204,7 @@ public class WorkspaceSettingsTests : IDisposable
     public async Task UpdateGeneral_UnknownWorkspace_Throws()
     {
         var handler = new UpdateWorkspaceGeneralCommandHandler(_context, _publisher.Object);
-        await Assert.ThrowsAsync<System.Collections.Generic.KeyNotFoundException>(() =>
+        await Assert.ThrowsAsync<ClinicEz.Shared.Exceptions.NotFoundException>(() =>
             handler.Handle(Command() with { TenantSlug = "nope" }, CancellationToken.None));
     }
 

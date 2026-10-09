@@ -36,6 +36,12 @@ public record UpdateWorkspaceComplianceRequest(string? DpoName, string? DpoEmail
 /// <summary>Body of PUT /tenants/{slug}/facilities/{facilityId}/deployment.</summary>
 public record UpdateFacilityDeploymentRequest(FacilityDeploymentMode DeploymentMode, string? ConsoleBaseUrl);
 
+/// <summary>Body of POST /tenants/{slug}/settings/ownership-transfer.</summary>
+public record TransferWorkspaceOwnershipRequest(Guid TargetStaffMemberId, string ConfirmSlug);
+
+/// <summary>Body of POST /tenants/{slug}/settings/archive.</summary>
+public record ArchiveWorkspaceRequest(string ConfirmSlug);
+
 /// <summary>Workspace (tenant-wide) settings. Facility-specific configuration is owned by each facility service.</summary>
 public class TenantSettingsEndpoints : IEndpoint
 {
@@ -55,7 +61,7 @@ public class TenantSettingsEndpoints : IEndpoint
             var denied = await Authorize(access, httpContext, tenantSlug, WorkspaceRole.Admin, ct);
             if (denied.Result != null) return denied.Result;
 
-            var settings = await sender.Send(new GetWorkspaceSettingsQuery(denied.Access!.Tenant.TenantSlug), ct);
+            var settings = await sender.Send(new GetWorkspaceSettingsQuery(denied.Access!.Tenant.TenantSlug, denied.Access.RoleName), ct);
             return settings is null ? Results.NotFound(new { Message = "Workspace not found." }) : Results.Ok(settings);
         })
         .WithName("GetWorkspaceSettings")
@@ -111,6 +117,68 @@ public class TenantSettingsEndpoints : IEndpoint
         })
         .WithName("UpdateWorkspaceBrandingSettings")
         .WithDescription("Replaces the brand identity (display name, https logo URL, accent color) that facilities inherit.");
+
+        group.MapGet("/audit-log", async (
+            string tenantSlug,
+            int? take,
+            DateTime? before,
+            string? section,
+            HttpContext httpContext,
+            IWorkspaceAccessService access,
+            ISender sender,
+            CancellationToken ct) =>
+        {
+            var denied = await Authorize(access, httpContext, tenantSlug, WorkspaceRole.Admin, ct);
+            if (denied.Result != null) return denied.Result;
+
+            var page = await sender.Send(new GetWorkspaceAuditLogQuery(denied.Access!.Tenant.TenantSlug, take ?? 25, before, section), ct);
+            return page is null ? Results.NotFound(new { Message = "Workspace not found." }) : Results.Ok(page);
+        })
+        .WithName("GetWorkspaceAuditLog")
+        .WithDescription("Newest-first audit trail of workspace settings changes. Page backwards with the returned nextCursor as `before`.");
+
+        group.MapPost("/ownership-transfer", async (
+            string tenantSlug,
+            TransferWorkspaceOwnershipRequest body,
+            HttpContext httpContext,
+            IWorkspaceAccessService access,
+            ISender sender,
+            CancellationToken ct) =>
+        {
+            var denied = await Authorize(access, httpContext, tenantSlug, WorkspaceRole.Owner, ct);
+            if (denied.Result != null) return denied.Result;
+
+            var result = await sender.Send(new TransferWorkspaceOwnershipCommand(
+                denied.Access!.Tenant.TenantSlug,
+                Actor(httpContext, denied.Access),
+                body.TargetStaffMemberId,
+                body.ConfirmSlug), ct);
+
+            return Results.Ok(result);
+        })
+        .WithName("TransferWorkspaceOwnership")
+        .WithDescription("Owner only. Immediately makes an active Admin the workspace owner; the previous owner becomes an Admin.");
+
+        group.MapPost("/archive", async (
+            string tenantSlug,
+            ArchiveWorkspaceRequest body,
+            HttpContext httpContext,
+            IWorkspaceAccessService access,
+            ISender sender,
+            CancellationToken ct) =>
+        {
+            var denied = await Authorize(access, httpContext, tenantSlug, WorkspaceRole.Owner, ct);
+            if (denied.Result != null) return denied.Result;
+
+            var result = await sender.Send(new ArchiveWorkspaceCommand(
+                denied.Access!.Tenant.TenantSlug,
+                Actor(httpContext, denied.Access),
+                body.ConfirmSlug), ct);
+
+            return Results.Ok(result);
+        })
+        .WithName("ArchiveWorkspace")
+        .WithDescription("Owner only. Closes the workspace in the portal and suspends its facilities. Refused while a paid subscription is active.");
 
         group.MapPut("/security", async (
             string tenantSlug,
@@ -218,6 +286,12 @@ public class TenantSettingsEndpoints : IEndpoint
         var resolved = await access.ResolveAsync(tenantSlug, userId, ct);
         if (resolved == null) return new AuthResult(Results.NotFound(new { Message = "Workspace not found." }), null);
         if (!resolved.HasAtLeast(required)) return new AuthResult(Results.Forbid(), null);
+
+        // An archived workspace stays readable (settings, audit log) but cannot be changed.
+        if (resolved.Tenant.ArchivedAt != null && !HttpMethods.IsGet(httpContext.Request.Method))
+        {
+            return new AuthResult(Results.Conflict(new { Message = "This workspace is archived and can no longer be changed." }), null);
+        }
 
         return new AuthResult(null, resolved);
     }

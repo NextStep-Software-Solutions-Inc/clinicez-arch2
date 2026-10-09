@@ -801,6 +801,9 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                     b.Property<int>("ActivePatientRecordsCount")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("BusinessType")
                         .HasColumnType("text");
 

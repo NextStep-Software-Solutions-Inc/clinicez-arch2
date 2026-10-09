@@ -104,7 +104,7 @@ public class UpdateWorkspaceGeneralCommandHandler(IApplicationDbContext context,
         var key = request.TenantSlug.Trim().ToLowerInvariant();
         var tenant = await context.Tenants
             .FirstOrDefaultAsync(t => t.TenantSlug.ToLower() == key || t.Id.ToString() == key, cancellationToken)
-            ?? throw new KeyNotFoundException($"Workspace '{request.TenantSlug}' not found.");
+            ?? throw new ClinicEz.Shared.Exceptions.NotFoundException($"Workspace '{request.TenantSlug}' not found.");
 
         var settings = await WorkspaceSettingsStore.GetOrCreateAsync(context, tenant, cancellationToken);
         var changes = new WorkspaceChangeSet();

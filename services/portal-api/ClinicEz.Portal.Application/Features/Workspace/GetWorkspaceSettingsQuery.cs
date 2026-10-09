@@ -40,10 +40,12 @@ public record WorkspaceSettingsDto(
     WorkspaceGeneralDto General,
     WorkspaceBrandingDto Branding,
     WorkspaceSecurityDto Security,
-    WorkspaceComplianceDto Compliance
+    WorkspaceComplianceDto Compliance,
+    string ViewerRole
 );
 
-public record GetWorkspaceSettingsQuery(string TenantSlug) : IRequest<WorkspaceSettingsDto?>;
+/// <param name="ViewerRole">Role of the caller ("Owner"/"Admin"); echoed so the UI can show owner-only controls.</param>
+public record GetWorkspaceSettingsQuery(string TenantSlug, string ViewerRole = "Admin") : IRequest<WorkspaceSettingsDto?>;
 
 public class GetWorkspaceSettingsQueryHandler(IApplicationDbContext context)
     : IRequestHandler<GetWorkspaceSettingsQuery, WorkspaceSettingsDto?>
@@ -63,19 +65,20 @@ public class GetWorkspaceSettingsQueryHandler(IApplicationDbContext context)
             .FirstOrDefaultAsync(s => s.TenantId == tenant.Id, cancellationToken)
             ?? new WorkspaceSettings { TenantId = tenant.Id };
 
-        return WorkspaceSettingsMapper.ToDto(tenant, settings);
+        return WorkspaceSettingsMapper.ToDto(tenant, settings, request.ViewerRole);
     }
 }
 
 internal static class WorkspaceSettingsMapper
 {
-    public static WorkspaceSettingsDto ToDto(Tenant tenant, WorkspaceSettings settings) => new(
+    public static WorkspaceSettingsDto ToDto(Tenant tenant, WorkspaceSettings settings, string viewerRole) => new(
         tenant.TenantSlug,
         tenant.TenantType,
         ToGeneral(tenant, settings),
         ToBranding(settings),
         ToSecurity(settings),
-        ToCompliance(settings));
+        ToCompliance(settings),
+        viewerRole);
 
     public static WorkspaceBrandingDto ToBranding(WorkspaceSettings settings) =>
         new(settings.BrandName, settings.LogoUrl, settings.AccentColorHex);

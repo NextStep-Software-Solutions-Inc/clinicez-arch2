@@ -1,5 +1,6 @@
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
 import { BrandTheme } from "@/components/dashboard/BrandTheme";
+import { ArchivedWorkspaceNotice } from "@/components/dashboard/ArchivedWorkspaceNotice";
 import { IdleSessionGuard } from "@/components/dashboard/IdleSessionGuard";
 import { MfaRequiredGate } from "@/components/dashboard/MfaRequiredGate";
 import CreateResourceDialog from "@/components/dashboard/CreateResourceDialog";
@@ -75,6 +76,10 @@ export default async function TenantDashboardLayout({
     // Brand identity is cosmetic: a failed lookup falls back to the product defaults.
     const profile = await tenantService.getWorkspaceProfile(routeTenantSlug);
     const brandName = profile?.displayName || workplaceName;
+
+    if (tenant.status === "Archived") {
+        return <ArchivedWorkspaceNotice workspaceName={brandName} />;
+    }
 
     // Session policy fails open: a lookup problem must never lock people out of their own workspace.
     const policy = await tenantService.getSessionPolicy(routeTenantSlug, token);

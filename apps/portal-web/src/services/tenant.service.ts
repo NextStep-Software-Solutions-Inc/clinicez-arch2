@@ -60,6 +60,8 @@ export interface WorkspaceSettingsDto {
   branding: WorkspaceBranding;
   security: WorkspaceSecurity;
   compliance: WorkspaceCompliance;
+  /** Role of the signed-in viewer ("Owner" | "Admin"); owner-only controls are shown for "Owner". */
+  viewerRole: string;
 }
 
 /** What every signed-in member needs to honour the policy (mirrors `WorkspaceSessionPolicyDto`). */
@@ -75,6 +77,33 @@ export interface FacilityDeployment {
   facilityId: string;
   deploymentMode: FacilityDeploymentMode;
   consoleBaseUrl?: string | null;
+}
+
+/** One settings change (mirrors `WorkspaceAuditEntryDto`). `changes` maps field name to { old, new }. */
+export interface WorkspaceAuditEntry {
+  id: string;
+  occurredAt: string;
+  actorName: string;
+  actorRole: string;
+  section: string;
+  action: string;
+  changes: Record<string, { old: unknown; new: unknown }>;
+}
+
+export interface WorkspaceAuditLogPage {
+  items: WorkspaceAuditEntry[];
+  nextCursor?: string | null;
+}
+
+export interface OwnershipTransferResult {
+  newOwnerName: string;
+  newOwnerEmail: string;
+  previousOwnerNewRole: string;
+}
+
+export interface ArchiveWorkspaceResult {
+  archivedAt: string;
+  facilitiesSuspended: number;
 }
 
 /** Anonymous facility-facing projection of the workspace identity (mirrors `WorkspaceProfileDto`). */
@@ -190,6 +219,43 @@ export const tenantService = {
     const response = await apiClient.put<WorkspaceBranding>(
       `/tenants/${encodeURIComponent(tenantSlug)}/settings/branding`,
       payload,
+    );
+    return response.data;
+  },
+
+  /** Newest-first page of the settings audit trail. Pass the returned `nextCursor` as `before` for the next page. */
+  getAuditLog: async (
+    tenantSlug: string,
+    opts: { take?: number; before?: string | null; section?: string | null } = {},
+  ): Promise<WorkspaceAuditLogPage> => {
+    const params = new URLSearchParams();
+    if (opts.take) params.set("take", String(opts.take));
+    if (opts.before) params.set("before", opts.before);
+    if (opts.section) params.set("section", opts.section);
+    const qs = params.toString();
+    const response = await apiClient.get<WorkspaceAuditLogPage>(
+      `/tenants/${encodeURIComponent(tenantSlug)}/settings/audit-log${qs ? `?${qs}` : ""}`,
+    );
+    return response.data;
+  },
+
+  /** Owner only. Hands ownership to an active Admin; the caller becomes an Admin. */
+  transferOwnership: async (
+    tenantSlug: string,
+    payload: { targetStaffMemberId: string; confirmSlug: string },
+  ): Promise<OwnershipTransferResult> => {
+    const response = await apiClient.post<OwnershipTransferResult>(
+      `/tenants/${encodeURIComponent(tenantSlug)}/settings/ownership-transfer`,
+      payload,
+    );
+    return response.data;
+  },
+
+  /** Owner only. Closes the workspace in the portal and suspends its facilities. */
+  archiveWorkspace: async (tenantSlug: string, confirmSlug: string): Promise<ArchiveWorkspaceResult> => {
+    const response = await apiClient.post<ArchiveWorkspaceResult>(
+      `/tenants/${encodeURIComponent(tenantSlug)}/settings/archive`,
+      { confirmSlug },
     );
     return response.data;
   },

@@ -30,7 +30,7 @@ public class GetTenantByOwnerQueryHandler(IApplicationDbContext context) : IRequ
 
             if (ownedTenant != null)
             {
-                return new TenantDto(ownedTenant.TenantSlug, ownedTenant.Name, ownedTenant.TenantType, "Owner", "Active");
+                return new TenantDto(ownedTenant.TenantSlug, ownedTenant.Name, ownedTenant.TenantType, "Owner", StatusOf(ownedTenant, "Active"));
             }
 
             var staffMember = await context.StaffMembers
@@ -39,7 +39,7 @@ public class GetTenantByOwnerQueryHandler(IApplicationDbContext context) : IRequ
 
             if (staffMember != null && staffMember.Tenant != null)
             {
-                return new TenantDto(staffMember.Tenant.TenantSlug, staffMember.Tenant.Name, staffMember.Tenant.TenantType, staffMember.Role, staffMember.Status);
+                return new TenantDto(staffMember.Tenant.TenantSlug, staffMember.Tenant.Name, staffMember.Tenant.TenantType, staffMember.Role, StatusOf(staffMember.Tenant, staffMember.Status));
             }
 
             return null;
@@ -51,7 +51,7 @@ public class GetTenantByOwnerQueryHandler(IApplicationDbContext context) : IRequ
 
         if (tenant != null)
         {
-            return new TenantDto(tenant.TenantSlug, tenant.Name, tenant.TenantType, "Owner", "Active");
+            return new TenantDto(tenant.TenantSlug, tenant.Name, tenant.TenantType, "Owner", StatusOf(tenant, "Active"));
         }
 
         // 3. Fallback: check any active staff membership for user
@@ -61,9 +61,13 @@ public class GetTenantByOwnerQueryHandler(IApplicationDbContext context) : IRequ
 
         if (anyStaff != null && anyStaff.Tenant != null)
         {
-            return new TenantDto(anyStaff.Tenant.TenantSlug, anyStaff.Tenant.Name, anyStaff.Tenant.TenantType, anyStaff.Role, anyStaff.Status);
+            return new TenantDto(anyStaff.Tenant.TenantSlug, anyStaff.Tenant.Name, anyStaff.Tenant.TenantType, anyStaff.Role, StatusOf(anyStaff.Tenant, anyStaff.Status));
         }
 
         return null;
     }
+
+    /// <summary>An archived workspace reports "Archived" so clients can close it; otherwise the member's own status.</summary>
+    private static string StatusOf(Domain.Entities.Tenant tenant, string memberStatus) =>
+        tenant.ArchivedAt != null ? "Archived" : memberStatus;
 }
