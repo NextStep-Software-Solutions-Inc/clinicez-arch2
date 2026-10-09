@@ -382,7 +382,7 @@ export default function SettingsScreen() {
                       [
                         'ChiefPharmacist',
                         'StaffPharmacist',
-                        'PharmacyTechnician',
+                        'PharmacyAssistant',
                         'Cashier',
                         'InventoryClerk',
                       ] as const
@@ -405,8 +405,8 @@ export default function SettingsScreen() {
                             ? 'Chief RPh'
                             : r === 'StaffPharmacist'
                             ? 'Staff RPh'
-                            : r === 'PharmacyTechnician'
-                            ? 'Tech'
+                            : r === 'PharmacyAssistant'
+                            ? 'Assistant'
                             : r}
                         </ThemedText>
                       </Pressable>

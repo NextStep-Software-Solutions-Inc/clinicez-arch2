@@ -456,6 +456,18 @@ public class ApiTests
         audit.Data.EnumerateArray().Select(a => a.GetProperty("action").GetString()).Should().Contain("shift.closed");
     }
 
+    [Fact]
+    public async Task Enums_in_a_query_string_are_member_names_and_a_number_is_a_400()
+    {
+        await using var app = await StartAsync();
+        var team = await app.TeamAsync(BillingHost.TenantA);
+
+        (await app.GetAsync("/api/v1/invoices?status=Paid&status=open", team.Cashier)).Status.Should().Be(HttpStatusCode.OK);
+        (await app.GetAsync("/api/v1/invoices?status=2", team.Cashier)).Status.Should().Be(HttpStatusCode.BadRequest);
+        (await app.GetAsync("/api/v1/invoices?status=Paid&status=0", team.Cashier)).Status.Should().Be(HttpStatusCode.BadRequest);
+        (await app.GetAsync("/api/v1/invoices?status=Bogus", team.Cashier)).Status.Should().Be(HttpStatusCode.BadRequest);
+    }
+
     // ── structural guarantee ────────────────────────────────────────────────────────
 
     [Fact]

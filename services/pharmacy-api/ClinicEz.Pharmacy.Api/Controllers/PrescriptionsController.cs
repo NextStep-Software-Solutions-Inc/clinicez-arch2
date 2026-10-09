@@ -3,12 +3,14 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Pharmacy.Api.Authorization;
+using ClinicEz.Pharmacy.Application.Common;
 using ClinicEz.Pharmacy.Application.Features.Prescriptions.Commands;
 using ClinicEz.Pharmacy.Application.Features.Prescriptions.DTOs;
 using ClinicEz.Pharmacy.Application.Features.Prescriptions.Queries;
 using ClinicEz.Pharmacy.Domain.Constants;
 using ClinicEz.Pharmacy.Domain.Enums;
 using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Exceptions;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
@@ -28,12 +30,23 @@ public sealed class PrescriptionsController : ControllerBase
     [HttpGet]
     [HasPermission(PharmacyPermissions.PrescriptionsRead)]
     public async Task<ActionResult<ApiResponse<List<PrescriptionOrderDto>>>> GetQueue(
-        [FromQuery] PrescriptionStatus? status,
+        [FromQuery] string? status,
         [FromQuery] string? search,
         [FromQuery] string? branchId = null,
         CancellationToken ct = default)
     {
-        var result = await _sender.Send(new GetPrescriptionsQueueQuery(status, search, branchId), ct);
+        PrescriptionStatus? statusFilter = null;
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            if (!EnumNames.TryParse<PrescriptionStatus>(status, out var parsed))
+            {
+                throw new BadRequestException($"status must be one of: {EnumNames.Names<PrescriptionStatus>()}.");
+            }
+
+            statusFilter = parsed;
+        }
+
+        var result = await _sender.Send(new GetPrescriptionsQueueQuery(statusFilter, search, branchId), ct);
         return Ok(ApiResponse<List<PrescriptionOrderDto>>.Success(result));
     }
 

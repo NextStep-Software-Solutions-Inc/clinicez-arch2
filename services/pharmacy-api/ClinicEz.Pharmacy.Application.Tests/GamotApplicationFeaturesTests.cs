@@ -21,7 +21,7 @@ namespace ClinicEz.Pharmacy.Application.Tests;
 
 public class GamotApplicationFeaturesTests
 {
-    private readonly IUpscSecurityService _upscService = new UpscSecurityService();
+    private readonly IUpscSecurityService _upscService = new UpscSecurityService("test-only-upsc-secret-key-0123456789abcdef");
     private readonly IGamotFormularyService _formularyService = new GamotFormularyService();
 
     [Fact]

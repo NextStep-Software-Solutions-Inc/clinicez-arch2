@@ -1,4 +1,5 @@
 using ClinicEz.Pharmacy.Api.Middleware;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Licensing;
 using ClinicEz.Shared.Middlewares;
 
@@ -9,6 +10,7 @@ public static class DependencyInjection
     public static IServiceCollection AddApiServices(this IServiceCollection services)
     {
         services.AddControllers();
+        services.AddStrictStringEnums();
         services.AddOpenApi();
 
         // Pharmacy-specific failures (payment gate, hub claims) first, so they keep their stable error codes

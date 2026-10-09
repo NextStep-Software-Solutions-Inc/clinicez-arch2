@@ -1,4 +1,4 @@
-using System.Text.Json.Serialization;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Middlewares;
 
 namespace ClinicEz.Billing.Api;
@@ -7,8 +7,8 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddApiServices(this IServiceCollection services)
     {
-        services.AddControllers()
-            .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+        services.AddControllers();
+        services.AddStrictStringEnums();
         services.AddOpenApi();
 
         services.AddExceptionHandler<GlobalExceptionHandler>();

@@ -21,6 +21,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using NSubstitute;
 using Sieve.Services;
 
@@ -239,7 +240,7 @@ public class PharmacyEntitlementsTests
         if (provisioned) seed.PharmacySettings.Add(Settings(token));
         await seed.SaveChangesAsync();
 
-        var builder = WebApplication.CreateBuilder();
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = Environments.Development });
         builder.WebHost.UseTestServer();
         builder.Services.AddScoped(_ => PharmacyTestDbHelper.CreateContext(dbName, scope));
         builder.Services.AddSingleton<IPharmacyContext>(scope);

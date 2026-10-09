@@ -1,6 +1,7 @@
 using ClinicEz.Pharmacy.Domain.Entities;
 using ClinicEz.Pharmacy.Domain.Interfaces;
 using ClinicEz.Shared.Interop.Persistence;
+using ClinicEz.Shared.Workspace;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 
@@ -9,7 +10,7 @@ namespace ClinicEz.Pharmacy.Infrastructure.Persistence;
 public class ApplicationDbContext(
     DbContextOptions<ApplicationDbContext> options,
     Microsoft.Extensions.Configuration.IConfiguration configuration,
-    IPharmacyContext pharmacyContext) : DbContext(options), IInteropDbContext
+    IPharmacyContext pharmacyContext) : DbContext(options), IInteropDbContext, IWorkspaceProfileDbContext
 {
     public DbSet<Product> Products { get; set; }
     public DbSet<PharmacyInventoryItem> InventoryItems { get; set; }
@@ -24,12 +25,19 @@ public class ApplicationDbContext(
     public DbSet<GamotLedgerTransaction> GamotLedgerTransactions { get; set; }
     public DbSet<InteropOutboxMessage> InteropOutbox => Set<InteropOutboxMessage>();
     public DbSet<InteropInboxMessage> InteropInbox => Set<InteropInboxMessage>();
+    public DbSet<WorkspaceProfileRecord> WorkspaceProfiles => Set<WorkspaceProfileRecord>();
 
     // Read by the global query filters; EF re-evaluates them per DbContext instance, so every
     // request / message handler is scoped to its own tenant + pharmacy.
     private string CurrentTenantId => pharmacyContext.TenantId;
     private Guid CurrentPharmacyId => pharmacyContext.PharmacyId;
     private string CurrentPharmacyIdText => pharmacyContext.PharmacyId.ToString();
+
+    // Every enum, nullable ones included, is stored as its C# name so the tables stay readable and ordinals can be reordered safely.
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        configurationBuilder.Properties<Enum>().HaveConversion<string>().HaveMaxLength(64);
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -220,6 +228,7 @@ public class ApplicationDbContext(
         modelBuilder.Entity<Product>().HasQueryFilter(e => !e.IsDeleted);
 
         modelBuilder.ApplyInteropModel();
+        modelBuilder.ApplyWorkspaceProfileModel();
 
         base.OnModelCreating(modelBuilder);
     }

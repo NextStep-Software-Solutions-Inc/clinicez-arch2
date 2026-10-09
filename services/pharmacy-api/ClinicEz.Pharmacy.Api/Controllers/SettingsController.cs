@@ -1,6 +1,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Pharmacy.Api.Authorization;
+using ClinicEz.Pharmacy.Application.Common;
 using ClinicEz.Pharmacy.Application.Features.Settings;
 using ClinicEz.Pharmacy.Domain.Constants;
 using ClinicEz.Pharmacy.Domain.Enums;
@@ -36,10 +37,9 @@ public sealed class SettingsController : ControllerBase
         [FromBody] UpdatePaymentPolicyApiRequest request,
         CancellationToken ct = default)
     {
-        if (!Enum.TryParse<PharmacyPaymentPolicy>(request.PaymentPolicy, ignoreCase: true, out var policy)
-            || !Enum.IsDefined(policy))
+        if (!EnumNames.TryParse<PharmacyPaymentPolicy>(request.PaymentPolicy, out var policy))
         {
-            throw new BadRequestException("PaymentPolicy must be one of: Prepaid, Postpaid, None.");
+            throw new BadRequestException($"PaymentPolicy must be one of: {EnumNames.Names<PharmacyPaymentPolicy>()}.");
         }
 
         var result = await _sender.Send(new UpdatePaymentPolicyCommand(policy), ct);

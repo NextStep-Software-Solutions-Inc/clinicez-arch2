@@ -52,6 +52,12 @@ public class ApplicationDbContext(
             throw new InvalidOperationException("Audit entries are immutable and cannot be changed or deleted.");
     }
 
+    /// <summary>Every enum, nullable or not, is stored as its C# name (never its ordinal).</summary>
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        configurationBuilder.Properties<Enum>().HaveConversion<string>().HaveMaxLength(32);
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         var schemaName = configuration["DbSchema"];
@@ -69,15 +75,15 @@ public class ApplicationDbContext(
             b.Property(x => x.Id).ValueGeneratedNever();
             b.Property(x => x.TenantId).HasMaxLength(100).IsRequired();
             b.Property(x => x.FacilityId).HasMaxLength(100).IsRequired();
-            b.Property(x => x.FacilityType).HasConversion<string>().HasMaxLength(32);
+            b.Property(x => x.FacilityType);
             b.Property(x => x.BranchId).HasMaxLength(100);
-            b.Property(x => x.Origin).HasConversion<string>().HasMaxLength(32);
+            b.Property(x => x.Origin);
             b.Property(x => x.SourceType).HasMaxLength(64).IsRequired();
             b.Property(x => x.InvoiceNumber).HasMaxLength(32).IsRequired();
             b.Property(x => x.PatientName).HasMaxLength(200).IsRequired();
             b.Property(x => x.VisitKey).HasMaxLength(128);
             b.Property(x => x.Currency).HasMaxLength(3).IsRequired();
-            b.Property(x => x.Status).HasConversion<string>().HasMaxLength(32);
+            b.Property(x => x.Status);
             b.Property(x => x.Subtotal).HasPrecision(18, 2);
             b.Property(x => x.DiscountTotal).HasPrecision(18, 2);
             b.Property(x => x.Total).HasPrecision(18, 2);
@@ -118,8 +124,8 @@ public class ApplicationDbContext(
             b.HasKey(x => x.Id);
             b.Property(x => x.Id).ValueGeneratedNever();
             b.Property(x => x.TenantId).HasMaxLength(100).IsRequired();
-            b.Property(x => x.Kind).HasConversion<string>().HasMaxLength(32);
-            b.Property(x => x.Mode).HasConversion<string>().HasMaxLength(32);
+            b.Property(x => x.Kind);
+            b.Property(x => x.Mode);
             b.Property(x => x.Value).HasPrecision(18, 2);
             b.Property(x => x.Amount).HasPrecision(18, 2);
             b.Property(x => x.Reason).HasMaxLength(500).IsRequired();
@@ -139,8 +145,8 @@ public class ApplicationDbContext(
             b.Property(x => x.FacilityId).HasMaxLength(100).IsRequired();
             b.Property(x => x.BranchId).HasMaxLength(100);
             b.Property(x => x.PatientName).HasMaxLength(200).IsRequired();
-            b.Property(x => x.Method).HasConversion<string>().HasMaxLength(32);
-            b.Property(x => x.InsurerKind).HasConversion<string>().HasMaxLength(32);
+            b.Property(x => x.Method);
+            b.Property(x => x.InsurerKind);
             b.Property(x => x.Currency).HasMaxLength(3).IsRequired();
             b.Property(x => x.Amount).HasPrecision(18, 2);
             b.Property(x => x.Tendered).HasPrecision(18, 2);
@@ -163,7 +169,7 @@ public class ApplicationDbContext(
             b.Property(x => x.Id).ValueGeneratedNever();
             b.Property(x => x.TenantId).HasMaxLength(100).IsRequired();
             b.Property(x => x.InvoiceFacilityId).HasMaxLength(100).IsRequired();
-            b.Property(x => x.InvoiceFacilityType).HasConversion<string>().HasMaxLength(32);
+            b.Property(x => x.InvoiceFacilityType);
             b.Property(x => x.BranchId).HasMaxLength(100);
             b.Property(x => x.Amount).HasPrecision(18, 2);
             b.HasIndex(x => new { x.TenantId, x.InvoiceId });
@@ -194,7 +200,7 @@ public class ApplicationDbContext(
             b.Property(x => x.BranchId).HasMaxLength(100);
             b.Property(x => x.Currency).HasMaxLength(3).IsRequired();
             b.Property(x => x.Amount).HasPrecision(18, 2);
-            b.Property(x => x.Method).HasConversion<string>().HasMaxLength(32);
+            b.Property(x => x.Method);
             b.Property(x => x.Reason).HasMaxLength(500).IsRequired();
             b.Property(x => x.ApprovedByName).HasMaxLength(200).IsRequired();
             b.HasIndex(x => new { x.TenantId, x.InvoiceId });
@@ -210,7 +216,7 @@ public class ApplicationDbContext(
             b.Property(x => x.TenantId).HasMaxLength(100).IsRequired();
             b.Property(x => x.FacilityId).HasMaxLength(100).IsRequired();
             b.Property(x => x.CashierName).HasMaxLength(200).IsRequired();
-            b.Property(x => x.Status).HasConversion<string>().HasMaxLength(32);
+            b.Property(x => x.Status);
             b.Property(x => x.OpeningFloat).HasPrecision(18, 2);
             b.Property(x => x.CashCollected).HasPrecision(18, 2);
             b.Property(x => x.CashRefunded).HasPrecision(18, 2);
@@ -247,7 +253,7 @@ public class ApplicationDbContext(
             b.Property(x => x.Id).ValueGeneratedNever();
             b.Property(x => x.TenantId).HasMaxLength(100).IsRequired();
             b.Property(x => x.FacilityId).HasMaxLength(100).IsRequired();
-            b.Property(x => x.FacilityType).HasConversion<string>().HasMaxLength(32);
+            b.Property(x => x.FacilityType);
             b.HasIndex(x => new { x.TenantId, x.FacilityId }).IsUnique();
             b.HasQueryFilter(x => CurrentTenantId == null || x.TenantId == CurrentTenantId);
         });
@@ -275,7 +281,7 @@ public class ApplicationDbContext(
             b.Property(x => x.Email).HasMaxLength(256).IsRequired();
             b.Property(x => x.FullName).HasMaxLength(200).IsRequired();
             b.Property(x => x.PasswordHash).HasMaxLength(512).IsRequired();
-            b.Property(x => x.Role).HasConversion<string>().HasMaxLength(32);
+            b.Property(x => x.Role);
             b.HasIndex(x => new { x.TenantId, x.FacilityId, x.Email }).IsUnique();
             b.HasQueryFilter(x => CurrentTenantId == null || x.TenantId == CurrentTenantId);
         });

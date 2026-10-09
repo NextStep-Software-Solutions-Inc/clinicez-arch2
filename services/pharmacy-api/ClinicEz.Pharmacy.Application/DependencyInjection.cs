@@ -20,7 +20,6 @@ public static class DependencyInjection
 
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
 
-        services.AddSingleton<ClinicEz.Pharmacy.Domain.Services.IUpscSecurityService, ClinicEz.Pharmacy.Domain.Services.UpscSecurityService>();
         services.AddSingleton<ClinicEz.Pharmacy.Domain.Services.IGamotFormularyService, ClinicEz.Pharmacy.Domain.Services.GamotFormularyService>();
 
         return services;

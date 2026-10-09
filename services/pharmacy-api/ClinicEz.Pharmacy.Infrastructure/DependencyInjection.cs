@@ -8,6 +8,7 @@ using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Facility;
 using ClinicEz.Shared.Interoperability;
+using ClinicEz.Shared.Workspace;
 using Hangfire;
 using Hangfire.PostgreSql;
 using Microsoft.EntityFrameworkCore;
@@ -47,9 +48,15 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddSingleton<ClinicEz.Shared.Licensing.IFacilityLicenseValidator, ClinicEz.Shared.Licensing.FacilityLicenseValidator>();
 
+        // UPSC signing secret: required config, resolved now so a missing secret stops startup instead of the first GAMOT dispense
+        services.AddSingleton<Domain.Services.IUpscSecurityService>(UpscSecurityServiceFactory.Create(configuration));
+
         // Entitlement renewals from the portal and the liveness heartbeat, both on PharmacySettings
         services.AddFacilityEntitlements<PharmacyLicenseStore>();
         services.AddFacilityHeartbeat<PharmacyLicenseStore>();
+
+        // Workspace brand / regional profile, pushed by the portal (workspace.profile.updated) and held in this database
+        services.AddWorkspaceProfile<ApplicationDbContext>();
 
         // Facility-local authentication (no external identity provider; works offline/LAN)
         services.AddMemoryCache();
@@ -80,7 +87,8 @@ public static class DependencyInjection
             .Handle<PrescriptionIssuedEvent, PrescriptionIssuedHandler>(InteropTypes.RxIssued)
             .Handle<BillingPaymentConfirmedPayload, BillingPaymentConfirmedHandler>(InteropTypes.BillingPaymentConfirmed)
             .Handle<BillingInvoiceVoidedPayload, BillingInvoiceVoidedHandler>(InteropTypes.BillingInvoiceVoided)
-            .HandleEntitlementsChanged());
+            .HandleEntitlementsChanged()
+            .HandleWorkspaceProfileUpdated());
 
         if (env != null && env.IsDevelopment())
         {

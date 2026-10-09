@@ -49,6 +49,7 @@ Billing has its **own staff store** (`BillingStaff`), audience `clinicez-billing
 * The JWT carries `sub`, `tenant_id`, `facility_id`, `ver`. Role, name and permissions are re-read from the database (cached 60 s) on every request; deactivating a user bumps their token version and ends their sessions at once. No refresh tokens: a session lasts a shift (`Jwt:AccessTokenMinutes`, default 600).
 * Roles: **Cashier** (read invoices, create walk-in invoices, statutory discounts, take payments, shifts), **Supervisor** (+ promo discounts, void, refund, reports, audit), **Admin** (+ staff management).
 * `X-Facility-Id` that differs from the token's facility is a 403; `X-Tenant-Id`/permission headers are ignored for signed-in staff.
+* **CORS** is closed by default. `Cors:AllowAnyOrigin=true` exists only in `appsettings.Development.json`; outside Development the service refuses to start with it, and also without `Facility:BaseDomain` (`BASE_DOMAIN`) or `Cors:AllowedOrigins` (`CORS_ALLOWED_ORIGINS`). `Messaging:SigningKey` is likewise required outside Development.
 * **Bootstrap:** the internal service key (`X-Internal-Key` + `X-Tenant-Id`, `Internal:ApiKey`) may *only* manage staff. Use it to create the first admin:
 
 ```http
@@ -89,6 +90,7 @@ Invoices of the same **tenant + patient + `VisitKey`** (same branch) form one *v
 * Discounts: senior citizen / PWD are a fixed 20 % and need the ID number; promo/other need supervisor approval and a reason. Discounts only apply while no money is held on an invoice (paid, net of refunds). A visit-wide fixed discount is split in proportion to the invoice totals (`Money.Distribute`, left-over cents on the last invoice).
 * Voids apply to unpaid invoices, refunds to paid ones (full refunds only). Both need a reason and are written to the append-only audit trail.
 * Money is `decimal` with two places; percentages round half-up (away from zero) per invoice.
+* Enums are strings everywhere: stored as their C# name (`varchar(32)`, by model convention), sent and read as names in JSON bodies and in query strings (`?status=Paid`). A number (`?status=2`, `"kind": 1`) is rejected with a 400.
 
 ## Messages (interop SDK)
 

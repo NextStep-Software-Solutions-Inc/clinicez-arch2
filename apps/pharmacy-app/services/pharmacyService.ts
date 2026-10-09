@@ -22,7 +22,7 @@ export interface PrescriptionItemResponseDto {
   allocatedBatchExpiry?: string;
   unitPrice: number;
   subtotal: number;
-  status: string;
+  status: ItemDispenseStatus;
   isDangerousDrug: boolean;
   remarks?: string;
   availableBatches: BatchAllocationRecommendationDto[];
@@ -50,6 +50,10 @@ export type PrescriptionOrderStatus =
   | 'Cancelled';
 
 export type PaymentPolicy = 'Prepaid' | 'Postpaid' | 'None';
+
+export type ItemDispenseStatus = 'Pending' | 'Dispensed' | 'OutOfStock' | 'Substituted' | 'Rejected';
+
+export type BatchStatus = 'Active' | 'Depleted' | 'Expired' | 'Quarantined';
 
 export type PaymentStatus = 'NotRequired' | 'AwaitingPayment' | 'Paid' | 'Voided' | 'Refunded';
 
@@ -100,7 +104,7 @@ export interface InventoryBatchDto {
   quantityReceived: number;
   quantityRemaining: number;
   receivedDate: string;
-  status: string;
+  status: BatchStatus;
 }
 
 export interface PharmacyInventoryItemDto {
@@ -245,7 +249,7 @@ export const pharmacyService = {
 export type PharmacyStaffRole =
   | 'ChiefPharmacist'
   | 'StaffPharmacist'
-  | 'PharmacyTechnician'
+  | 'PharmacyAssistant'
   | 'Cashier'
   | 'InventoryClerk';
 

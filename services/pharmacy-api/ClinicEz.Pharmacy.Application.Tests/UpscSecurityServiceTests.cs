@@ -1,13 +1,78 @@
 using System;
+using System.Collections.Generic;
 using ClinicEz.Pharmacy.Domain.Services;
+using ClinicEz.Pharmacy.Infrastructure.Services;
 using FluentAssertions;
+using Microsoft.Extensions.Configuration;
 using Xunit;
 
 namespace ClinicEz.Pharmacy.Application.Tests;
 
 public class UpscSecurityServiceTests
 {
-    private readonly IUpscSecurityService _sut = new UpscSecurityService();
+    private const string TestKey = "test-only-upsc-secret-key-0123456789abcdef";
+
+    private readonly IUpscSecurityService _sut = new UpscSecurityService(TestKey);
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("too-short")]
+    public void Constructor_Should_Reject_Missing_Or_Short_Key(string key)
+    {
+        var act = () => new UpscSecurityService(key);
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void GenerateUpsc_Should_Depend_On_The_Secret_Key()
+    {
+        var issueDate = new DateTime(2026, 10, 3, 8, 30, 0, DateTimeKind.Utc);
+        var other = new UpscSecurityService("another-test-upsc-secret-key-0123456789ab");
+
+        string Generate(IUpscSecurityService svc) => svc.GenerateUpsc("HCI-001", "123456789012", "RX-01", "PRC-01",
+            "LOSARTAN5000000000000000000000", 30, issueDate);
+
+        Generate(_sut).Should().NotBe(Generate(other));
+    }
+
+    [Fact]
+    public void Factory_Should_Fail_Fast_When_Secret_Is_Not_Configured()
+    {
+        var configuration = new ConfigurationBuilder().Build();
+
+        var act = () => UpscSecurityServiceFactory.Create(configuration);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*Gamot__UpscSecretKey*");
+    }
+
+    [Fact]
+    public void Factory_Should_Reject_A_Short_Secret()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { [UpscSecurityServiceFactory.ConfigurationKey] = "short" })
+            .Build();
+
+        var act = () => UpscSecurityServiceFactory.Create(configuration);
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void Factory_Should_Create_Service_From_Configured_Secret()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { [UpscSecurityServiceFactory.ConfigurationKey] = TestKey })
+            .Build();
+
+        var created = UpscSecurityServiceFactory.Create(configuration);
+        var issueDate = new DateTime(2026, 10, 3, 8, 30, 0, DateTimeKind.Utc);
+
+        var code = created.GenerateUpsc("HCI-001", "123456789012", "RX-01", "PRC-01", "LOSARTAN5000000000000000000000", 30, issueDate);
+
+        code.Should().Be(_sut.GenerateUpsc("HCI-001", "123456789012", "RX-01", "PRC-01", "LOSARTAN5000000000000000000000", 30, issueDate));
+    }
 
     [Fact]
     public void GenerateUpsc_Should_Return_Well_Formatted_UPSC()

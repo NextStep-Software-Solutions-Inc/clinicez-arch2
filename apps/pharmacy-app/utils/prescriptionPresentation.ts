@@ -1,5 +1,6 @@
 import type {
   DispenseBlockedReason,
+  ItemDispenseStatus,
   PaymentStatus,
   PrescriptionOrderDto,
   PrescriptionOrderStatus,
@@ -102,7 +103,7 @@ export function isReviewable(order: Pick<PrescriptionOrderDto, 'status'>): boole
   return order.status === 'Pending';
 }
 
-export function isRejectedItem(item: { status: string }): boolean {
+export function isRejectedItem(item: { status: ItemDispenseStatus }): boolean {
   return item.status === 'Rejected';
 }
 
