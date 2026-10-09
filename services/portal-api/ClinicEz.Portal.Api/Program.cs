@@ -77,8 +77,20 @@ builder.Services
                 return Task.CompletedTask;
             }
         };
-    });
-builder.Services.AddAuthorization();
+    })
+    .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, ClinicEz.Portal.Api.Auth.ApiKeyAuthenticationHandler>(
+        ClinicEz.Portal.Api.Auth.ApiKeyAuthenticationHandler.SchemeName, null);
+builder.Services.AddAuthorization(options =>
+{
+    // Integration (workspace API key) endpoints: one policy per scope, bound to the ApiKey scheme only.
+    foreach (var scope in ClinicEz.Portal.Application.Features.Integrations.IntegrationCatalog.Scopes)
+    {
+        options.AddPolicy($"ApiKey:{scope}", policy => policy
+            .AddAuthenticationSchemes(ClinicEz.Portal.Api.Auth.ApiKeyAuthenticationHandler.SchemeName)
+            .RequireAuthenticatedUser()
+            .RequireClaim(ClinicEz.Portal.Api.Auth.ApiKeyAuthenticationHandler.ScopeClaim, scope));
+    }
+});
 
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
@@ -195,6 +207,13 @@ RecurringJob.AddOrUpdate<ClinicEz.Portal.Infrastructure.Services.IFacilityProvis
     "facility-provisioning-reconciliation",
     job => job.ReconcileStuckFacilitiesAsync(CancellationToken.None),
     "*/2 * * * *"
+);
+
+// Sends queued workspace webhooks (and retries failed ones with backoff)
+RecurringJob.AddOrUpdate<ClinicEz.Portal.Infrastructure.Webhooks.IWebhookDeliveryJob>(
+    "workspace-webhook-delivery",
+    job => job.DeliverDueAsync(CancellationToken.None),
+    "* * * * *"
 );
 
 // Support root /api/internal requests from internal microservices (e.g. philhealth-proxy)

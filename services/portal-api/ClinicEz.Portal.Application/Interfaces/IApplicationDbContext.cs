@@ -21,6 +21,9 @@ public interface IApplicationDbContext
     DbSet<StaffMember> StaffMembers { get; }
     DbSet<WorkspaceSettings> WorkspaceSettings { get; }
     DbSet<WorkspaceAuditEntry> WorkspaceAuditEntries { get; }
+    DbSet<WorkspaceApiKey> WorkspaceApiKeys { get; }
+    DbSet<WebhookEndpoint> WebhookEndpoints { get; }
+    DbSet<WebhookDelivery> WebhookDeliveries { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

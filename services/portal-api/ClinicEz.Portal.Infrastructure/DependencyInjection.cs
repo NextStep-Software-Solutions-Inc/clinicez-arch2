@@ -97,10 +97,27 @@ public static class DependencyInjection
         services.AddHangfireServer();
         services.AddScoped<IFacilityProvisioningReconciliationJob, FacilityProvisioningReconciliationJob>();
 
+        // Outbound webhooks: no redirects, no proxy, and every connection is checked against private/reserved ranges.
+        services.AddHttpClient(ClinicEz.Portal.Infrastructure.Webhooks.WebhookDeliveryJob.HttpClientName, client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(10);
+            })
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                AllowAutoRedirect = false,
+                UseProxy = false,
+                ConnectTimeout = TimeSpan.FromSeconds(5),
+                PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+                ConnectCallback = ClinicEz.Portal.Infrastructure.Webhooks.SafeWebhookConnect.ConnectAsync
+            });
+        services.AddScoped<ClinicEz.Portal.Infrastructure.Webhooks.IWebhookDeliveryJob, ClinicEz.Portal.Infrastructure.Webhooks.WebhookDeliveryJob>();
+
         services.AddMassTransit(x =>
         {
             x.SetEndpointNameFormatter(new KebabCaseEndpointNameFormatter("portal", false));
             x.AddConsumer<FacilityProvisionedEventConsumer>();
+            x.AddConsumer<ClinicEz.Portal.Application.Features.Integrations.WorkspaceProfileUpdatedWebhookConsumer>();
+            x.AddConsumer<ClinicEz.Portal.Application.Features.Integrations.FacilityCreatedWebhookConsumer>();
 
             x.AddEntityFrameworkOutbox<ApplicationDbContext>(o =>
             {

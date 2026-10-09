@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { IconAlertTriangle, IconBuildingHospital, IconHistory, IconPalette, IconSettings, IconShieldLock, IconShieldCheck } from "@tabler/icons-react";
+import { IconAlertTriangle, IconBuildingHospital, IconHistory, IconPalette, IconPlugConnected, IconSettings, IconShieldLock, IconShieldCheck } from "@tabler/icons-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useWorkspaceSettings } from "@/hooks/useWorkspaceSettings";
@@ -10,6 +10,7 @@ import { BrandingTab } from "./_components/BrandingTab";
 import { SecurityTab } from "./_components/SecurityTab";
 import { ComplianceTab } from "./_components/ComplianceTab";
 import { FacilitiesTab } from "./_components/FacilitiesTab";
+import { IntegrationsTab } from "./_components/IntegrationsTab";
 import { AuditLogTab } from "./_components/AuditLogTab";
 import { DangerZoneTab } from "./_components/DangerZoneTab";
 
@@ -70,6 +71,10 @@ export default function SettingsPage() {
                                 <IconShieldCheck className="h-3.5 w-3.5 shrink-0" />
                                 Compliance
                             </TabsTrigger>
+                            <TabsTrigger value="integrations" className="px-4 sm:px-6 py-2 text-xs font-semibold flex items-center gap-1.5 shrink-0 whitespace-nowrap">
+                                <IconPlugConnected className="h-3.5 w-3.5 shrink-0" />
+                                Integrations
+                            </TabsTrigger>
                             <TabsTrigger value="audit" className="px-4 sm:px-6 py-2 text-xs font-semibold flex items-center gap-1.5 shrink-0 whitespace-nowrap">
                                 <IconHistory className="h-3.5 w-3.5 shrink-0" />
                                 Audit Log
@@ -105,6 +110,10 @@ export default function SettingsPage() {
 
                     <TabsContent value="compliance" className="outline-none">
                         <ComplianceTab key={JSON.stringify(settings.compliance)} tenantSlug={tenantSlug} compliance={settings.compliance} onSaved={() => mutate()} />
+                    </TabsContent>
+
+                    <TabsContent value="integrations" className="outline-none">
+                        <IntegrationsTab tenantSlug={tenantSlug} />
                     </TabsContent>
 
                     <TabsContent value="audit" className="outline-none">

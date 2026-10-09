@@ -25,6 +25,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<StaffMember> StaffMembers { get; set; }
     public DbSet<WorkspaceSettings> WorkspaceSettings { get; set; }
     public DbSet<WorkspaceAuditEntry> WorkspaceAuditEntries { get; set; }
+    public DbSet<WorkspaceApiKey> WorkspaceApiKeys { get; set; }
+    public DbSet<WebhookEndpoint> WebhookEndpoints { get; set; }
+    public DbSet<WebhookDelivery> WebhookDeliveries { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -208,6 +211,56 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(e => e.ActorName).HasMaxLength(256);
             entity.Property(e => e.ActorRole).HasMaxLength(32);
             entity.Property(e => e.ChangesJson).HasColumnType("jsonb");
+        });
+
+        modelBuilder.Entity<WorkspaceApiKey>(entity =>
+        {
+            entity.HasOne(e => e.Tenant)
+                .WithMany()
+                .HasForeignKey(e => e.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.TenantId);
+            entity.HasIndex(e => e.KeyHash)
+                .HasFilter("\"IsDeleted\" = false")
+                .IsUnique();
+
+            entity.Property(e => e.Name).HasMaxLength(100);
+            entity.Property(e => e.KeyPrefix).HasMaxLength(16);
+            entity.Property(e => e.KeyHash).HasMaxLength(64);
+            entity.Property(e => e.Scopes).HasMaxLength(256);
+            entity.Property(e => e.CreatedByName).HasMaxLength(256);
+        });
+
+        modelBuilder.Entity<WebhookEndpoint>(entity =>
+        {
+            entity.HasOne(e => e.Tenant)
+                .WithMany()
+                .HasForeignKey(e => e.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.TenantId);
+
+            entity.Property(e => e.Url).HasMaxLength(2048);
+            entity.Property(e => e.Description).HasMaxLength(200);
+            entity.Property(e => e.Events).HasMaxLength(512);
+            entity.Property(e => e.SigningSecret).HasMaxLength(128);
+        });
+
+        modelBuilder.Entity<WebhookDelivery>(entity =>
+        {
+            entity.HasOne(e => e.Endpoint)
+                .WithMany(e => e.Deliveries)
+                .HasForeignKey(e => e.EndpointId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.Status, e.NextAttemptAt });
+            entity.HasIndex(e => new { e.EndpointId, e.CreatedAt });
+
+            entity.Property(e => e.EventType).HasMaxLength(64);
+            entity.Property(e => e.Payload).HasColumnType("jsonb");
+            entity.Property(e => e.Status).HasConversion<int>();
+            entity.Property(e => e.LastError).HasMaxLength(300);
         });
 
         modelBuilder.AddInboxStateEntity();

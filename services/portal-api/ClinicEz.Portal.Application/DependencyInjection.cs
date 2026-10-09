@@ -12,6 +12,8 @@ public static class DependencyInjection
     {
         services.AddScoped<ISieveProcessor, SieveProcessor>();
         services.AddScoped<Features.Workspace.IWorkspaceAccessService, Features.Workspace.WorkspaceAccessService>();
+        services.AddScoped<Features.Integrations.IWebhookDispatcher, Features.Integrations.WebhookDispatcher>();
+        services.AddScoped<Features.Integrations.IApiKeyValidator, Features.Integrations.ApiKeyValidator>();
         services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly());
         services.AddMediatR(config =>
         {

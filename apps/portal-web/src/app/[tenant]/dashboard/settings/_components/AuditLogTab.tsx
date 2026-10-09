@@ -17,6 +17,7 @@ const SECTIONS = [
     { value: "security", label: "Security" },
     { value: "compliance", label: "Compliance" },
     { value: "facilities", label: "Facilities" },
+    { value: "integrations", label: "Integrations" },
     { value: "ownership", label: "Ownership" },
     { value: "workspace", label: "Workspace" },
 ];
@@ -35,7 +36,7 @@ function EntryRow({ entry }: { entry: WorkspaceAuditEntry }) {
         <li className="py-4 first:pt-0 last:pb-0 space-y-2">
             <div className="flex flex-wrap items-center gap-2 text-xs">
                 <Badge variant="outline" className="text-[10px] capitalize">{entry.section}</Badge>
-                <span className="font-semibold capitalize">{entry.action}</span>
+                <span className="font-semibold capitalize">{entry.action.replace(/_/g, " ")}</span>
                 <span className="text-slate-500">
                     by {entry.actorName || "Unknown"}{entry.actorRole ? ` (${entry.actorRole})` : ""}
                 </span>

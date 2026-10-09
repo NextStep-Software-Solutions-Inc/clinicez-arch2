@@ -106,6 +106,66 @@ export interface ArchiveWorkspaceResult {
   facilitiesSuspended: number;
 }
 
+/** Mirrors `ApiKeyDto`. The key itself is never returned except once, by `createApiKey`. */
+export interface WorkspaceApiKey {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  scopes: string[];
+  createdByName: string;
+  createdAt: string;
+  lastUsedAt?: string | null;
+  revokedAt?: string | null;
+}
+
+export interface CreatedApiKey {
+  apiKey: WorkspaceApiKey;
+  key: string;
+}
+
+/** Mirrors `WebhookEndpointDto`. The signing secret is never returned except once, by `createWebhook`. */
+export interface WorkspaceWebhook {
+  id: string;
+  url: string;
+  description?: string | null;
+  events: string[];
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface CreatedWebhook {
+  endpoint: WorkspaceWebhook;
+  secret: string;
+}
+
+export interface WebhookDelivery {
+  id: string;
+  eventType: string;
+  status: "Pending" | "Succeeded" | "Failed";
+  attemptCount: number;
+  createdAt: string;
+  lastAttemptAt?: string | null;
+  nextAttemptAt?: string | null;
+  responseStatusCode?: number | null;
+  lastError?: string | null;
+}
+
+export interface WorkspaceIntegrations {
+  apiKeys: WorkspaceApiKey[];
+  webhooks: WorkspaceWebhook[];
+  availableScopes: string[];
+  availableEvents: string[];
+  maxActiveApiKeys: number;
+  maxWebhookEndpoints: number;
+}
+
+export interface WebhookInput {
+  url: string;
+  description?: string | null;
+  events: string[];
+  isActive?: boolean;
+}
+
 /** Anonymous facility-facing projection of the workspace identity (mirrors `WorkspaceProfileDto`). */
 export interface WorkspaceProfile {
   tenantSlug: string;
@@ -257,6 +317,47 @@ export const tenantService = {
       `/tenants/${encodeURIComponent(tenantSlug)}/settings/archive`,
       { confirmSlug },
     );
+    return response.data;
+  },
+
+  /** API keys and webhook endpoints of the workspace. Never contains a key or signing secret. */
+  getIntegrations: async (tenantSlug: string): Promise<WorkspaceIntegrations> => {
+    const response = await apiClient.get<WorkspaceIntegrations>(`/tenants/${encodeURIComponent(tenantSlug)}/integrations`);
+    return response.data;
+  },
+
+  /** The plain key is in this response only. */
+  createApiKey: async (tenantSlug: string, payload: { name: string; scopes: string[] }): Promise<CreatedApiKey> => {
+    const response = await apiClient.post<CreatedApiKey>(`/tenants/${encodeURIComponent(tenantSlug)}/integrations/api-keys`, payload);
+    return response.data;
+  },
+
+  revokeApiKey: async (tenantSlug: string, apiKeyId: string): Promise<void> => {
+    await apiClient.delete(`/tenants/${encodeURIComponent(tenantSlug)}/integrations/api-keys/${apiKeyId}`);
+  },
+
+  /** The signing secret is in this response only. */
+  createWebhook: async (tenantSlug: string, payload: WebhookInput): Promise<CreatedWebhook> => {
+    const response = await apiClient.post<CreatedWebhook>(`/tenants/${encodeURIComponent(tenantSlug)}/integrations/webhooks`, payload);
+    return response.data;
+  },
+
+  updateWebhook: async (tenantSlug: string, id: string, payload: Required<WebhookInput>): Promise<WorkspaceWebhook> => {
+    const response = await apiClient.put<WorkspaceWebhook>(`/tenants/${encodeURIComponent(tenantSlug)}/integrations/webhooks/${id}`, payload);
+    return response.data;
+  },
+
+  deleteWebhook: async (tenantSlug: string, id: string): Promise<void> => {
+    await apiClient.delete(`/tenants/${encodeURIComponent(tenantSlug)}/integrations/webhooks/${id}`);
+  },
+
+  /** Queues a webhook.ping; it is delivered by the next delivery run (about a minute). */
+  sendTestWebhook: async (tenantSlug: string, id: string): Promise<void> => {
+    await apiClient.post(`/tenants/${encodeURIComponent(tenantSlug)}/integrations/webhooks/${id}/test`);
+  },
+
+  getWebhookDeliveries: async (tenantSlug: string, id: string): Promise<WebhookDelivery[]> => {
+    const response = await apiClient.get<WebhookDelivery[]>(`/tenants/${encodeURIComponent(tenantSlug)}/integrations/webhooks/${id}/deliveries`);
     return response.data;
   },
 
