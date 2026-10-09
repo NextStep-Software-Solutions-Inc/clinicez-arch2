@@ -17,7 +17,8 @@ public record GetWorklistQuery(
     string? SearchTerm = null,
     string? BranchId = null,
     int PageNumber = 1,
-    int PageSize = 50
+    int PageSize = 50,
+    string? Stage = null
 ) : IRequest<List<LabRequisitionDto>>;
 
 public class GetWorklistQueryHandler : IRequestHandler<GetWorklistQuery, List<LabRequisitionDto>>
@@ -40,6 +41,11 @@ public class GetWorklistQueryHandler : IRequestHandler<GetWorklistQuery, List<La
         if (!string.IsNullOrWhiteSpace(request.Status) && Enum.TryParse<RequisitionStatus>(request.Status, true, out var parsedStatus))
         {
             query = query.Where(r => r.Status == parsedStatus);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Stage) && Enum.TryParse<RequisitionStage>(request.Stage, true, out var parsedStage))
+        {
+            query = query.Where(r => r.Stage == parsedStage);
         }
 
         if (!string.IsNullOrWhiteSpace(request.BranchId))
@@ -87,6 +93,16 @@ public class GetWorklistQueryHandler : IRequestHandler<GetWorklistQuery, List<La
             FastingInstructions = r.FastingInstructions,
             Urgency = r.Urgency,
             Status = r.Status.ToString(),
+            Stage = r.Stage.ToString(),
+            StageReason = r.StageReason,
+            PaymentPolicy = r.PaymentPolicy.ToString(),
+            QuotedAmount = r.QuotedAmount,
+            Currency = r.Currency,
+            PaymentRequired = r.IsPaymentBlocking,
+            Paid = r.PaidAtUtc != null,
+            PaidAtUtc = r.PaidAtUtc,
+            ReceiptNumber = r.ReceiptNumber,
+            InvoiceId = r.InvoiceId,
             CreatedAt = r.CreatedAt,
             Specimens = r.Specimens.Select(s => new SpecimenDto
             {

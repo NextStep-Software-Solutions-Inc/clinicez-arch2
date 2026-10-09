@@ -1,13 +1,17 @@
 using System;
 using ClinicEz.Laboratory.Domain.Common;
+using ClinicEz.Laboratory.Domain.Enums;
 
 namespace ClinicEz.Laboratory.Domain.Entities;
 
-public sealed class LabSettings : BaseEntity
+public sealed class LabSettings : BaseEntity, ILabScopedEntity
 {
     public required string TenantId { get; set; }
     public Guid LaboratoryId { get; set; }
     public required string LaboratoryName { get; set; }
+
+    /// <summary>Whether orders must be paid before specimen collection (default), are billed afterwards, or are not billed.</summary>
+    public PaymentPolicy PaymentPolicy { get; set; } = PaymentPolicy.Prepaid;
 
     // Cryptographic License & Hard Limit Profile
     public string? LicenseToken { get; set; }

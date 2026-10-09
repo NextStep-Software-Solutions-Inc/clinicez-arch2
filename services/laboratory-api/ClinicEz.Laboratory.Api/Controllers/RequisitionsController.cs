@@ -32,9 +32,10 @@ public sealed class RequisitionsController : ControllerBase
         [FromQuery] string? branchId = null,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 50,
+        [FromQuery] string? stage = null,
         CancellationToken ct = default)
     {
-        var result = await _sender.Send(new GetWorklistQuery(status, searchTerm, branchId, pageNumber, pageSize), ct);
+        var result = await _sender.Send(new GetWorklistQuery(status, searchTerm, branchId, pageNumber, pageSize, stage), ct);
         return Ok(ApiResponse<List<LabRequisitionDto>>.Success(result));
     }
 
@@ -121,6 +122,48 @@ public sealed class RequisitionsController : ControllerBase
         var result = await _sender.Send(new GetRackInventoryQuery(rackId), ct);
         return Ok(ApiResponse<List<RackInventoryItemDto>>.Success(result));
     }
+
+    /// <summary>Redeems a patient's QR claim slip for this laboratory; the order then arrives on the worklist.</summary>
+    [HttpPost("claim")]
+    [HasPermission(LabPermissions.RequisitionsManage)]
+    public async Task<ActionResult<ApiResponse<ClaimLabOrderResult>>> Claim(
+        [FromBody] ClaimRequisitionRequest request,
+        CancellationToken ct = default)
+    {
+        var result = await _sender.Send(new ClaimLabOrderCommand(request.Token), ct);
+        return Ok(ApiResponse<ClaimLabOrderResult>.Success(result));
+    }
+
+    [HttpPost("{id:guid}/reject")]
+    [HasPermission(LabPermissions.RequisitionsManage)]
+    public async Task<ActionResult<ApiResponse<LabRequisitionDto>>> Reject(
+        [FromRoute] Guid id,
+        [FromBody] RejectRequisitionRequest request,
+        CancellationToken ct = default)
+    {
+        var result = await _sender.Send(new RejectLabOrderCommand(id, request.Reason), ct);
+        return Ok(ApiResponse<LabRequisitionDto>.Success(result));
+    }
+
+    [HttpPost("{id:guid}/payment/refresh")]
+    [HasPermission(LabPermissions.RequisitionsManage)]
+    public async Task<ActionResult<ApiResponse<LabRequisitionDto>>> RefreshPayment(
+        [FromRoute] Guid id,
+        CancellationToken ct = default)
+    {
+        var result = await _sender.Send(new RefreshPaymentStatusCommand(id), ct);
+        return Ok(ApiResponse<LabRequisitionDto>.Success(result));
+    }
+}
+
+public record ClaimRequisitionRequest
+{
+    public required string Token { get; init; }
+}
+
+public record RejectRequisitionRequest
+{
+    public required string Reason { get; init; }
 }
 
 public record AccessionSpecimenRequest

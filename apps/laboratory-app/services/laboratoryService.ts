@@ -56,6 +56,19 @@ export interface DiagnosticReportItem {
   signedPdfBase64?: string;
 }
 
+export type PaymentPolicy = 'Prepaid' | 'Postpaid' | 'None';
+
+export type RequisitionStage =
+  | 'Routed'
+  | 'Claimed'
+  | 'AwaitingPayment'
+  | 'Paid'
+  | 'SpecimenCollected'
+  | 'InProcess'
+  | 'ResultFinalized'
+  | 'Rejected'
+  | 'Cancelled';
+
 export interface LabRequisitionItem {
   id: string;
   externalRequisitionId?: string;
@@ -73,6 +86,17 @@ export interface LabRequisitionItem {
   fastingInstructions?: string;
   urgency: 'Routine' | 'STAT';
   status: 'PendingAccession' | 'SpecimenCollected' | 'InTesting' | 'AwaitingReview' | 'Verified' | 'Rejected';
+  stage?: RequisitionStage;
+  stageReason?: string;
+  paymentPolicy?: PaymentPolicy;
+  quotedAmount?: number;
+  currency?: string;
+  /** True while a prepaid order is unpaid; specimen collection and processing are blocked. */
+  paymentRequired?: boolean;
+  paid?: boolean;
+  paidAtUtc?: string;
+  receiptNumber?: string;
+  invoiceId?: string;
   createdAt: string;
   specimens: SpecimenItem[];
   analyteResults: AnalyteResultItem[];
@@ -213,11 +237,17 @@ export interface SimulateAnalyzerResult {
   rawPayload: string;
 }
 
+export interface ClaimRequisitionResult {
+  claimId: string;
+  correlationId: string;
+}
+
 export const laboratoryService = {
-  async getWorklist(status?: string, searchTerm?: string) {
+  async getWorklist(status?: string, searchTerm?: string, stage?: RequisitionStage) {
     const params = new URLSearchParams();
     if (status) params.append('status', status);
     if (searchTerm) params.append('searchTerm', searchTerm);
+    if (stage) params.append('stage', stage);
     const qs = params.toString();
     return labApiClient.get<LabRequisitionItem[]>(`/requisitions${qs ? `?${qs}` : ''}`);
   },
@@ -228,6 +258,20 @@ export const laboratoryService = {
 
   async getByAccession(accessionNumber: string) {
     return labApiClient.get<LabRequisitionItem>(`/requisitions/by-accession/${encodeURIComponent(accessionNumber)}`);
+  },
+
+  /** Redeems a patient's paper-slip QR token so the order is delivered to this laboratory. */
+  async claimRequisition(token: string) {
+    return labApiClient.post<ClaimRequisitionResult>('/requisitions/claim', { token });
+  },
+
+  async rejectRequisition(id: string, reason: string) {
+    return labApiClient.post<LabRequisitionItem>(`/requisitions/${id}/reject`, { reason });
+  },
+
+  /** Asks billing for the current payment state of a prepaid order. */
+  async refreshPaymentStatus(id: string) {
+    return labApiClient.post<LabRequisitionItem>(`/requisitions/${id}/payment/refresh`);
   },
 
   async accessionSpecimen(id: string, phlebotomistName: string, specimens: {

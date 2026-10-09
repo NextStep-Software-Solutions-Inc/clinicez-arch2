@@ -143,6 +143,9 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<Guid>("LaboratoryId")
+                        .HasColumnType("uuid");
+
                     b.Property<int>("NotificationMethod")
                         .HasColumnType("integer");
 
@@ -369,6 +372,11 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -380,6 +388,9 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
 
                     b.Property<string>("FastingInstructions")
                         .HasColumnType("text");
+
+                    b.Property<Guid?>("InvoiceId")
+                        .HasColumnType("uuid");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
@@ -407,6 +418,9 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<DateTime?>("PaidAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("PatientAge")
                         .HasColumnType("integer");
 
@@ -422,8 +436,32 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
 
+                    b.Property<int>("PaymentPolicy")
+                        .HasColumnType("integer");
+
                     b.Property<string>("PhilHealthPin")
                         .HasColumnType("text");
+
+                    b.Property<string>("QuoteLinesJson")
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("QuotedAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("ReceiptNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Stage")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("StageChangedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("StageReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
@@ -443,14 +481,20 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.HasKey("Id");
+                    b.Property<string>("VisitKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
-                    b.HasIndex("AccessionNumber")
-                        .IsUnique();
+                    b.HasKey("Id");
 
                     b.HasIndex("BranchId");
 
                     b.HasIndex("ExternalRequisitionId");
+
+                    b.HasIndex("InvoiceId");
+
+                    b.HasIndex("LaboratoryId", "AccessionNumber")
+                        .IsUnique();
 
                     b.HasIndex("LaboratoryId", "OrderingTenantId", "OrderingFacilityId", "ExternalRequisitionId")
                         .IsUnique();
@@ -500,6 +544,9 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                         .HasColumnType("integer");
 
                     b.Property<int>("MaxStaffLimit")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PaymentPolicy")
                         .HasColumnType("integer");
 
                     b.Property<string>("PlanTier")
@@ -642,6 +689,9 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<Guid>("LaboratoryId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(255)
@@ -652,6 +702,11 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                         .HasColumnType("numeric(18,2)");
 
                     b.Property<string>("Sku")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
@@ -706,6 +761,9 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
+
+                    b.Property<Guid>("LaboratoryId")
+                        .HasColumnType("uuid");
 
                     b.Property<int>("Level")
                         .HasColumnType("integer");
@@ -775,6 +833,9 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
+
+                    b.Property<Guid>("LaboratoryId")
+                        .HasColumnType("uuid");
 
                     b.Property<double>("MeasuredValue")
                         .HasColumnType("double precision");
@@ -917,10 +978,8 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Barcode")
+                    b.HasIndex("LabRequisitionId", "Barcode")
                         .IsUnique();
-
-                    b.HasIndex("LabRequisitionId");
 
                     b.ToTable("Specimens", "laboratory_dashboard");
                 });

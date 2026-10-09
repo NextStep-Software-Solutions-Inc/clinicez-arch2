@@ -1,3 +1,4 @@
+using ClinicEz.Laboratory.Application.Common.Interfaces;
 using ClinicEz.Laboratory.Domain.Entities;
 using ClinicEz.Laboratory.Domain.Enums;
 using ClinicEz.Laboratory.Domain.Interfaces;
@@ -13,12 +14,18 @@ namespace ClinicEz.Laboratory.Application.Interop;
 /// <summary>
 /// <c>lab.order.issued</c>: ingests a clinic's requisition into the laboratory worklist.
 /// <list type="bullet">
-/// <item>The envelope <c>To</c> must be a laboratory known here (tenant + facility); the requisition is created for
-/// that laboratory, never for whatever the payload claims.</item>
+/// <item>The envelope <c>To</c> (tenant + laboratory) sets the data scope of the whole handler: the requisition is created for
+/// that laboratory, never for whatever the payload claims, and nothing outside that laboratory can be read or matched.</item>
 /// <item>The envelope <c>From</c> (tenant + facility) is stored as the ordering party and the envelope correlation
 /// id (the clinic's requisition id) is stored as well: results and panic alerts are addressed from them.</item>
-/// <item>Idempotent per ordering facility and requisition id. Accession numbers are per-facility and are never used
+/// <item>Idempotent per ordering facility and requisition id. Accession numbers are per-laboratory and are never used
 /// to match requisitions across tenants.</item>
+/// <item>An order the clinic addressed to this laboratory starts as <see cref="RequisitionStage.Routed"/>; an order that
+/// reached it through a patient-carried claim (the clinic named no target laboratory) starts as
+/// <see cref="RequisitionStage.Claimed"/>.</item>
+/// <item>Unless the laboratory's <see cref="PaymentPolicy"/> is <see cref="PaymentPolicy.None"/>, the order is quoted from
+/// the laboratory's catalogue, billing is asked to invoice it (<c>billing.invoice.requested</c>) and the order waits in
+/// <see cref="RequisitionStage.AwaitingPayment"/>. Every stage is announced to the clinic and the patient.</item>
 /// </list>
 /// </summary>
 public sealed class LabOrderIssuedHandler : IInteropHandler<LabRequisitionIssuedEvent>
@@ -26,17 +33,26 @@ public sealed class LabOrderIssuedHandler : IInteropHandler<LabRequisitionIssued
     private readonly IRepository<LabRequisition> _requisitionRepository;
     private readonly IRepository<LabSettings> _settingsRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ILabContext _labContext;
+    private readonly ILabOrderLifecycle _lifecycle;
+    private readonly ILabOrderBilling _billing;
     private readonly ILogger<LabOrderIssuedHandler> _logger;
 
     public LabOrderIssuedHandler(
         IRepository<LabRequisition> requisitionRepository,
         IRepository<LabSettings> settingsRepository,
         IUnitOfWork unitOfWork,
+        ILabContext labContext,
+        ILabOrderLifecycle lifecycle,
+        ILabOrderBilling billing,
         ILogger<LabOrderIssuedHandler> logger)
     {
         _requisitionRepository = requisitionRepository;
         _settingsRepository = settingsRepository;
         _unitOfWork = unitOfWork;
+        _labContext = labContext;
+        _lifecycle = lifecycle;
+        _billing = billing;
         _logger = logger;
     }
 
@@ -55,7 +71,9 @@ public sealed class LabOrderIssuedHandler : IInteropHandler<LabRequisitionIssued
         }
 
         var to = context.To;
-        if (to.Kind != PartyKind.Facility || !Guid.TryParse(to.FacilityId, out var laboratoryId))
+        if (to.Kind != PartyKind.Facility
+            || string.IsNullOrWhiteSpace(to.TenantId)
+            || !Guid.TryParse(to.FacilityId, out var laboratoryId))
         {
             _logger.LogWarning(
                 "[LabOrderIssuedHandler] Ignoring lab.order.issued {MessageId}: {Recipient} is not a laboratory address.",
@@ -63,33 +81,26 @@ public sealed class LabOrderIssuedHandler : IInteropHandler<LabRequisitionIssued
             return;
         }
 
-        var laboratory = await _settingsRepository.IgnoreQueryFilters()
+        using var scope = _labContext.BeginFacilityScope(to.TenantId, laboratoryId);
+
+        var laboratory = await _settingsRepository.Query()
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.LaboratoryId == laboratoryId, ct);
 
-        // Not provisioned here (yet): fail so the hub redelivers rather than silently losing the order.
+        // Not provisioned here for this tenant (yet): fail so the hub redelivers rather than silently losing the order.
         if (laboratory == null)
         {
             throw new InvalidOperationException(
-                $"Laboratory {laboratoryId} is not provisioned in this service; cannot accept lab.order.issued {context.MessageId}.");
-        }
-
-        if (!string.Equals(laboratory.TenantId, to.TenantId, StringComparison.Ordinal))
-        {
-            _logger.LogWarning(
-                "[LabOrderIssuedHandler] Ignoring lab.order.issued {MessageId}: addressed to tenant {Tenant} but laboratory {LaboratoryId} belongs to another tenant.",
-                context.MessageId, to.TenantId, laboratoryId);
-            return;
+                $"Laboratory {laboratoryId} of tenant {to.TenantId} is not provisioned in this service; cannot accept lab.order.issued {context.MessageId}.");
         }
 
         _logger.LogInformation(
             "[LabOrderIssuedHandler] Received lab order {RequisitionId} (Accession {AccessionNumber}, Patient {PatientName}) from {Sender}",
             msg.RequisitionId, msg.AccessionNumber, msg.Patient.FullName, from.Address);
 
-        var alreadyIngested = await _requisitionRepository.IgnoreQueryFilters()
+        var alreadyIngested = await _requisitionRepository.Query()
             .AnyAsync(r =>
-                r.LaboratoryId == laboratory.LaboratoryId
-                && r.OrderingTenantId == from.TenantId
+                r.OrderingTenantId == from.TenantId
                 && r.OrderingFacilityId == from.FacilityId
                 && r.ExternalRequisitionId == msg.RequisitionId, ct);
 
@@ -102,18 +113,20 @@ public sealed class LabOrderIssuedHandler : IInteropHandler<LabRequisitionIssued
         }
 
         // The ordering clinic's accession number is only unique within that clinic. Keep it when it is free in this
-        // laboratory, otherwise make it unique here so another tenant's order is never dropped or merged.
+        // laboratory, otherwise make it unique here so another clinic's order is never dropped or merged.
         var accessionNumber = msg.AccessionNumber;
-        if (await _requisitionRepository.IgnoreQueryFilters().AnyAsync(r => r.AccessionNumber == accessionNumber, ct))
+        if (await _requisitionRepository.Query().AnyAsync(r => r.AccessionNumber == accessionNumber, ct))
         {
             accessionNumber = $"{msg.AccessionNumber}-{msg.RequisitionId.ToString("N")[..8]}";
         }
 
         var requisition = new LabRequisition
         {
+            Id = Guid.NewGuid(),
             TenantId = laboratory.TenantId,
             LaboratoryId = laboratory.LaboratoryId,
             BranchId = msg.BranchId,
+            VisitKey = msg.VisitKey,
             ExternalRequisitionId = msg.RequisitionId,
             CorrelationId = context.CorrelationId,
             AccessionNumber = accessionNumber,
@@ -131,7 +144,8 @@ public sealed class LabOrderIssuedHandler : IInteropHandler<LabRequisitionIssued
             ClinicalDiagnosis = msg.ProvisionalDiagnosis,
             FastingInstructions = msg.FastingInstructions,
             Urgency = string.IsNullOrWhiteSpace(msg.Urgency) ? "Routine" : msg.Urgency,
-            Status = RequisitionStatus.PendingAccession
+            Status = RequisitionStatus.PendingAccession,
+            PaymentPolicy = laboratory.PaymentPolicy
         };
 
         // Pre-create planned specimen containers based on requisition items
@@ -166,6 +180,21 @@ public sealed class LabOrderIssuedHandler : IInteropHandler<LabRequisitionIssued
                 Status = SpecimenStatus.Pending,
                 Notes = "Standard specimen collection"
             });
+        }
+
+        // Quote, invoice request and stage announcements are queued in the outbox BEFORE the save, so they exist if and
+        // only if the requisition was committed.
+        await _billing.RequestInvoiceAsync(requisition, msg.Items, ct);
+
+        var namedThisLaboratory = string.Equals(msg.TargetFacilityId, to.FacilityId, StringComparison.OrdinalIgnoreCase);
+        await _lifecycle.BeginAsync(
+            requisition,
+            namedThisLaboratory ? RequisitionStage.Routed : RequisitionStage.Claimed,
+            ct);
+
+        if (requisition.PaymentPolicy != PaymentPolicy.None)
+        {
+            await _lifecycle.TransitionAsync(requisition, RequisitionStage.AwaitingPayment, null, ct);
         }
 
         await _requisitionRepository.AddAsync(requisition, ct);

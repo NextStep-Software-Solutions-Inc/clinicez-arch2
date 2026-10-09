@@ -1,9 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, TextInput, Alert, RefreshControl, Modal, ActivityIndicator } from 'react-native';
 import ThemedText from '@ui/ThemedText';
+import PaymentSummary from '../../components/PaymentSummary';
 import { laboratoryService, LabRequisitionItem, SpecimenItem, PrintableTubeStickerItem, RackInventoryItem } from '../../services/laboratoryService';
+import { describeActionError, isPaymentRequiredError } from '../../utils/requisitionPresentation';
 
-interface SpecimenWithMeta extends SpecimenItem {
+interface SpecimenWithMeta
+  extends SpecimenItem,
+    Pick<
+      LabRequisitionItem,
+      'stage' | 'paymentPolicy' | 'paymentRequired' | 'paid' | 'paidAtUtc' | 'receiptNumber' | 'quotedAmount' | 'currency'
+    > {
   requisitionId: string;
   accessionNumber: string;
   patientName: string;
@@ -56,6 +63,14 @@ export default function SpecimenScreen() {
             patientGender: order.patientGender,
             philHealthPin: order.philHealthPin,
             urgency: order.urgency,
+            stage: order.stage,
+            paymentPolicy: order.paymentPolicy,
+            paymentRequired: order.paymentRequired,
+            paid: order.paid,
+            paidAtUtc: order.paidAtUtc,
+            receiptNumber: order.receiptNumber,
+            quotedAmount: order.quotedAmount,
+            currency: order.currency,
           });
         }
       }
@@ -131,7 +146,7 @@ export default function SpecimenScreen() {
     ]);
 
     if (err) {
-      Alert.alert('Collection Error', err.message);
+      Alert.alert(isPaymentRequiredError(err) ? 'Payment Required' : 'Collection Error', describeActionError(err));
     } else {
       Alert.alert('Accessioned', `Specimen ${item.barcode} marked as Collected.`);
       loadSpecimens();
@@ -341,6 +356,8 @@ export default function SpecimenScreen() {
                     {cap.name} • {item.specimenType}
                   </ThemedText>
                 </View>
+
+                <PaymentSummary order={item} />
 
                 {/* Storage position if assigned */}
                 {item.rackId && (

@@ -54,15 +54,11 @@ public sealed class LicenseController : ControllerBase
         [FromHeader(Name = "X-Tenant-Id")] string? tenantId,
         CancellationToken ct)
     {
-        var settings = (facilityId.HasValue && facilityId.Value != Guid.Empty)
-            ? await _settingsRepo.FindAsync(s => s.LaboratoryId == facilityId.Value, ct)
-            : await _settingsRepo.Query().FirstOrDefaultAsync(ct);
+        var settings = await FindSettingsAsync(tenantId, facilityId, ct);
 
-        var targetLabId = facilityId ?? settings?.LaboratoryId ?? Guid.Empty;
+        var targetLabId = facilityId ?? Guid.Empty;
 
-        var activeStaffCount = targetLabId != Guid.Empty
-            ? await _staffRepo.Query(s => s.LaboratoryId == targetLabId && s.IsActive).CountAsync(ct)
-            : await _staffRepo.Query(s => s.IsActive).CountAsync(ct);
+        var activeStaffCount = settings == null ? 0 : await CountActiveStaffAsync(settings, ct);
 
         var validation = _licenseValidator.Validate(settings?.LicenseToken, targetLabId, tenantId ?? settings?.TenantId);
 
@@ -113,10 +109,9 @@ public sealed class LicenseController : ControllerBase
         }
 
         var resolvedLabId = targetLabId != Guid.Empty ? targetLabId : (validation.Payload?.FacilityId ?? Guid.Empty);
+        var resolvedTenantId = !string.IsNullOrWhiteSpace(targetTenantId) ? targetTenantId : validation.Payload?.TenantId;
 
-        var settings = resolvedLabId != Guid.Empty
-            ? await _settingsRepo.FindAsync(s => s.LaboratoryId == resolvedLabId, ct)
-            : await _settingsRepo.Query().FirstOrDefaultAsync(ct);
+        var settings = await FindSettingsAsync(resolvedTenantId, resolvedLabId, ct);
 
         if (settings == null)
         {
@@ -147,8 +142,7 @@ public sealed class LicenseController : ControllerBase
 
         await _unitOfWork.SaveChangesAsync(ct);
 
-        var activeStaffCount = await _staffRepo.Query(s => s.LaboratoryId == settings.LaboratoryId && s.IsActive)
-            .CountAsync(ct);
+        var activeStaffCount = await CountActiveStaffAsync(settings, ct);
 
         var status = validation.IsExpired ? "Expired" : "Active";
 
@@ -166,4 +160,23 @@ public sealed class LicenseController : ControllerBase
 
         return Ok(ApiResponse<LabLicenseStatusDto>.Success(dto, "Laboratory facility license successfully applied and verified."));
     }
+
+    /// <summary>
+    /// These endpoints are anonymous (activation happens before any staff session exists), so there is no ambient scope:
+    /// the row is matched on BOTH the tenant and the laboratory, and nothing is returned when either is unknown.
+    /// </summary>
+    private Task<LabSettings?> FindSettingsAsync(string? tenantId, Guid? laboratoryId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId) || laboratoryId is null || laboratoryId == Guid.Empty)
+        {
+            return Task.FromResult<LabSettings?>(null);
+        }
+
+        return _settingsRepo.IgnoreQueryFilters()
+            .FirstOrDefaultAsync(s => s.TenantId == tenantId && s.LaboratoryId == laboratoryId && !s.IsDeleted, ct);
+    }
+
+    private Task<int> CountActiveStaffAsync(LabSettings settings, CancellationToken ct) =>
+        _staffRepo.IgnoreQueryFilters()
+            .CountAsync(s => s.TenantId == settings.TenantId && s.LaboratoryId == settings.LaboratoryId && s.IsActive && !s.IsDeleted, ct);
 }

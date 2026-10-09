@@ -9,6 +9,7 @@ using ClinicEz.Laboratory.Application.Interop;
 using ClinicEz.Laboratory.Domain.Entities;
 using ClinicEz.Laboratory.Domain.Enums;
 using ClinicEz.Laboratory.Domain.Interfaces;
+using ClinicEz.Laboratory.Infrastructure.Context;
 using ClinicEz.Laboratory.Infrastructure.Persistence;
 using ClinicEz.Laboratory.Infrastructure.Persistence.Repositories;
 using ClinicEz.Laboratory.Infrastructure.Services;
@@ -51,28 +52,45 @@ internal sealed class LabInteropHost : IDisposable
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton<IConfiguration>(config);
+        services.AddHttpContextAccessor();
+        services.AddScoped<ILabContext, LabContext>();
         services.AddDbContext<ApplicationDbContext>(o => o.UseInMemoryDatabase(dbName));
         services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
         services.AddScoped(_ => Substitute.For<ISieveProcessor>());
         services.AddScoped(_ => Substitute.For<IProductRepository>());
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<ILabOrderLifecycle, LabOrderLifecycle>();
+        services.AddScoped<ILabOrderBilling, LabOrderBilling>();
         services.AddScoped<IDiagnosticReportPublisher, DiagnosticReportPublisher>();
         services.AddScoped<IPanicAlertPublisher, PanicAlertPublisher>();
         services.AddInterop<ApplicationDbContext>(config, handlers => handlers
             .Handle<FacilityCreatedEvent, FacilityLicenseIssuedHandler>(InteropTypes.FacilityLicenseIssued)
-            .Handle<LabRequisitionIssuedEvent, LabOrderIssuedHandler>(InteropTypes.LabOrderIssued));
+            .Handle<LabRequisitionIssuedEvent, LabOrderIssuedHandler>(InteropTypes.LabOrderIssued)
+            .Handle<BillingPaymentConfirmedPayload, BillingPaymentConfirmedHandler>(InteropTypes.BillingPaymentConfirmed));
         Provider = services.BuildServiceProvider();
     }
 
+    /// <summary>Test inspection and seeding: sees every tenant's rows (system scope), like an administrative job.</summary>
     public async Task<T> WithDbAsync<T>(Func<ApplicationDbContext, Task<T>> action)
     {
         using var scope = Provider.CreateScope();
+        using var system = scope.ServiceProvider.GetRequiredService<ILabContext>().BeginSystemScope();
         return await action(scope.ServiceProvider.GetRequiredService<ApplicationDbContext>());
     }
 
-    public Task SeedLabAsync() => WithDbAsync(async db =>
+    /// <summary>Runs code the way an authenticated staff request of that laboratory would: scoped to its tenant and laboratory.</summary>
+    public async Task<T> InLabScopeAsync<T>(
+        Func<IServiceProvider, Task<T>> action, string tenantId = LabInteropTestData.LabTenant, Guid? laboratoryId = null)
     {
-        await LabInteropTestData.SeedLabAsync(db);
+        using var scope = Provider.CreateScope();
+        using var facility = scope.ServiceProvider.GetRequiredService<ILabContext>()
+            .BeginFacilityScope(tenantId, laboratoryId ?? LabInteropTestData.LabId);
+        return await action(scope.ServiceProvider);
+    }
+
+    public Task SeedLabAsync(PaymentPolicy paymentPolicy = PaymentPolicy.None) => WithDbAsync(async db =>
+    {
+        await LabInteropTestData.SeedLabAsync(db, paymentPolicy);
         return 0;
     });
 
@@ -169,7 +187,7 @@ public class LabInteropFlowTests
     }
 
     [Fact]
-    public async Task Order_addressed_to_another_tenants_laboratory_is_ignored()
+    public async Task Order_addressed_to_another_tenants_laboratory_creates_nothing_and_is_failed_for_redelivery()
     {
         using var host = new LabInteropHost();
         await host.SeedLabAsync();
@@ -178,7 +196,7 @@ public class LabInteropFlowTests
 
         var result = await host.Dispatcher.DispatchAsync(envelope, default);
 
-        result.ShouldAck.Should().BeTrue();
+        result.Outcome.Should().Be(DispatchOutcome.Failed);
         (await host.RequisitionsAsync()).Should().BeEmpty();
     }
 
@@ -210,6 +228,19 @@ public class LabInteropFlowTests
         (await host.RequisitionsAsync()).Should().BeEmpty();
     }
 
+    private static Task<int> FinalizeAsync(LabInteropHost host, Guid requisitionId) => host.InLabScopeAsync(async sp =>
+    {
+        var handler = new VerifyAndSignReportCommandHandler(
+            sp.GetRequiredService<IRepository<LabRequisition>>(),
+            sp.GetRequiredService<IUnitOfWork>(),
+            sp.GetRequiredService<IDiagnosticReportPublisher>(),
+            new DiagnosticReportPdfGenerator(),
+            sp.GetRequiredService<ILabOrderLifecycle>());
+        await handler.Handle(new VerifyAndSignReportCommand(
+            requisitionId, "Dr. Pathologist", "PRC-1", "Med Tech", "PRC-2", "ok", "JVBERi0xLjQK"), CancellationToken.None);
+        return 0;
+    });
+
     [Fact]
     public async Task Finalized_result_is_addressed_to_the_ordering_clinic_with_the_orders_correlation_id()
     {
@@ -218,9 +249,8 @@ public class LabInteropFlowTests
         var order = LabInteropTestData.Order("ACC-500");
         await host.Dispatcher.DispatchAsync(LabInteropTestData.OrderEnvelope(order, LabInteropTestData.ClinicB), default);
 
-        using (var scope = host.Provider.CreateScope())
+        var requisitionId = await host.InLabScopeAsync(async sp =>
         {
-            var sp = scope.ServiceProvider;
             var db = sp.GetRequiredService<ApplicationDbContext>();
             var requisition = await db.LabRequisitions.SingleAsync();
             db.AnalyteResults.Add(new AnalyteResult
@@ -236,19 +266,12 @@ public class LabInteropFlowTests
             });
             requisition.Status = RequisitionStatus.InTesting;
             await db.SaveChangesAsync();
+            return requisition.Id;
+        });
+        await FinalizeAsync(host, requisitionId);
 
-            var handler = new VerifyAndSignReportCommandHandler(
-                sp.GetRequiredService<IRepository<LabRequisition>>(),
-                sp.GetRequiredService<IUnitOfWork>(),
-                sp.GetRequiredService<IDiagnosticReportPublisher>(),
-                new DiagnosticReportPdfGenerator());
-            await handler.Handle(new VerifyAndSignReportCommand(
-                requisition.Id, "Dr. Pathologist", "PRC-1", "Med Tech", "PRC-2", "ok", "JVBERi0xLjQK"), CancellationToken.None);
-        }
-
-        (await host.Relay.RunOnceAsync(default)).Should().Be(1);
-        var sent = host.Hub.Sent.Should().ContainSingle().Subject;
-        sent.Type.Should().Be(InteropTypes.LabResultFinalized);
+        await host.Relay.RunOnceAsync(default);
+        var sent = host.Hub.Sent.Single(m => m.Type == InteropTypes.LabResultFinalized);
         sent.From.Should().Be(LabInteropTestData.Lab);
         sent.To.Should().Be(LabInteropTestData.ClinicB);
         sent.CorrelationId.Should().Be(order.RequisitionId);
@@ -260,27 +283,17 @@ public class LabInteropFlowTests
     }
 
     [Fact]
-    public async Task Finalizing_writes_the_outbox_row_in_the_same_save_as_the_verified_status()
+    public async Task Finalizing_writes_the_outbox_rows_in_the_same_save_as_the_verified_status()
     {
         using var host = new LabInteropHost();
         var requisitionId = await host.SeedRequisitionAsync(withOrderingClinic: true);
 
-        using (var scope = host.Provider.CreateScope())
-        {
-            var sp = scope.ServiceProvider;
-            var handler = new VerifyAndSignReportCommandHandler(
-                sp.GetRequiredService<IRepository<LabRequisition>>(),
-                sp.GetRequiredService<IUnitOfWork>(),
-                sp.GetRequiredService<IDiagnosticReportPublisher>(),
-                new DiagnosticReportPdfGenerator());
-            await handler.Handle(new VerifyAndSignReportCommand(
-                requisitionId, "Dr. Pathologist", "PRC-1", "Med Tech", "PRC-2", "ok", "JVBERi0xLjQK"), CancellationToken.None);
-        }
+        await FinalizeAsync(host, requisitionId);
 
         (await host.RequisitionsAsync()).Single().Status.Should().Be(RequisitionStatus.Verified);
         var outbox = await host.OutboxAsync();
-        outbox.Should().ContainSingle().Which.Type.Should().Be(InteropTypes.LabResultFinalized);
-        outbox[0].DispatchedAtUtc.Should().BeNull();
+        outbox.Select(o => o.Type).Should().BeEquivalentTo(new[] { InteropTypes.LabResultFinalized, InteropTypes.LabOrderStatusChanged });
+        outbox.Should().OnlyContain(o => o.DispatchedAtUtc == null);
     }
 
     [Fact]
@@ -289,24 +302,24 @@ public class LabInteropFlowTests
         using var host = new LabInteropHost();
         var requisitionId = await host.SeedRequisitionAsync(withOrderingClinic: false);
 
-        Func<Task> act = async () =>
-        {
-            using var scope = host.Provider.CreateScope();
-            var sp = scope.ServiceProvider;
-            var handler = new VerifyAndSignReportCommandHandler(
-                sp.GetRequiredService<IRepository<LabRequisition>>(),
-                sp.GetRequiredService<IUnitOfWork>(),
-                sp.GetRequiredService<IDiagnosticReportPublisher>(),
-                new DiagnosticReportPdfGenerator());
-            await handler.Handle(new VerifyAndSignReportCommand(
-                requisitionId, "Dr. Pathologist", "PRC-1", "Med Tech", "PRC-2", "ok", "JVBERi0xLjQK"), CancellationToken.None);
-        };
+        Func<Task> act = () => FinalizeAsync(host, requisitionId);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*ordering clinic*");
         (await host.RequisitionsAsync()).Single().Status.Should().Be(RequisitionStatus.InTesting);
         (await host.OutboxAsync()).Should().BeEmpty();
         (await host.WithDbAsync(db => db.DiagnosticReports.CountAsync())).Should().Be(0);
     }
+
+    private static Task<int> RecordPanicAsync(LabInteropHost host, Guid requisitionId) => host.InLabScopeAsync(async sp =>
+    {
+        var handler = new RecordPanicDispatchCommandHandler(
+            sp.GetRequiredService<IRepository<LabRequisition>>(),
+            sp.GetRequiredService<IRepository<CriticalPanicDispatchLog>>(),
+            sp.GetRequiredService<IUnitOfWork>(),
+            sp.GetRequiredService<IPanicAlertPublisher>());
+        await handler.Handle(new RecordPanicDispatchCommand(requisitionId, "Anna RMT", "Dr. Fernandez"), CancellationToken.None);
+        return 0;
+    });
 
     [Fact]
     public async Task Panic_alert_is_committed_with_its_dispatch_log_and_addressed_to_the_ordering_clinic()
@@ -315,16 +328,7 @@ public class LabInteropFlowTests
         var requisitionId = await host.SeedRequisitionAsync(withOrderingClinic: true);
         var correlationId = (await host.RequisitionsAsync()).Single().CorrelationId;
 
-        using (var scope = host.Provider.CreateScope())
-        {
-            var sp = scope.ServiceProvider;
-            var handler = new RecordPanicDispatchCommandHandler(
-                sp.GetRequiredService<IRepository<LabRequisition>>(),
-                sp.GetRequiredService<IRepository<CriticalPanicDispatchLog>>(),
-                sp.GetRequiredService<IUnitOfWork>(),
-                sp.GetRequiredService<IPanicAlertPublisher>());
-            await handler.Handle(new RecordPanicDispatchCommand(requisitionId, "Anna RMT", "Dr. Fernandez"), CancellationToken.None);
-        }
+        await RecordPanicAsync(host, requisitionId);
 
         (await host.WithDbAsync(db => db.CriticalPanicDispatchLogs.CountAsync())).Should().Be(1);
         (await host.OutboxAsync()).Should().ContainSingle().Which.Type.Should().Be(InteropTypes.LabResultPanic);
@@ -343,17 +347,7 @@ public class LabInteropFlowTests
         using var host = new LabInteropHost();
         var requisitionId = await host.SeedRequisitionAsync(withOrderingClinic: false);
 
-        Func<Task> act = async () =>
-        {
-            using var scope = host.Provider.CreateScope();
-            var sp = scope.ServiceProvider;
-            var handler = new RecordPanicDispatchCommandHandler(
-                sp.GetRequiredService<IRepository<LabRequisition>>(),
-                sp.GetRequiredService<IRepository<CriticalPanicDispatchLog>>(),
-                sp.GetRequiredService<IUnitOfWork>(),
-                sp.GetRequiredService<IPanicAlertPublisher>());
-            await handler.Handle(new RecordPanicDispatchCommand(requisitionId, "Anna RMT", "Dr. Fernandez"), CancellationToken.None);
-        };
+        Func<Task> act = () => RecordPanicAsync(host, requisitionId);
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*ordering clinic*");
         (await host.WithDbAsync(db => db.CriticalPanicDispatchLogs.CountAsync())).Should().Be(0);

@@ -65,11 +65,11 @@ public class LabPermissionPolicyTests
     }
 
     [Fact]
-    public void Clerk_IsLimitedToRequisitionIntake()
+    public void Clerk_IsLimitedToRequisitionIntakeAndFrontDeskActions()
     {
         LabRolePermissions.For(LabStaffRole.LabClerk).Should().BeEquivalentTo(new[]
         {
-            LabPermissions.RequisitionsRead, LabPermissions.SpecimensAccession
+            LabPermissions.RequisitionsRead, LabPermissions.RequisitionsManage, LabPermissions.SpecimensAccession
         });
     }
 
@@ -106,26 +106,40 @@ public class LabPermissionPolicyTests
     public async Task AuthenticatedStaff_OnlySeeRowsOfTheirOwnTenant_WhileSystemScopeSeesAll()
     {
         var name = $"Lab_Tenant_{Guid.NewGuid()}";
+        var labA = Guid.NewGuid();
+        var labB = Guid.NewGuid();
         await using (var seed = CreateDb(name, null))
         {
-            seed.LabRequisitions.Add(new LabRequisition { Id = Guid.NewGuid(), TenantId = "tenant-a", AccessionNumber = "ACC-A", PatientName = "A" });
-            seed.LabRequisitions.Add(new LabRequisition { Id = Guid.NewGuid(), TenantId = "tenant-b", AccessionNumber = "ACC-B", PatientName = "B" });
+            seed.LabRequisitions.Add(new LabRequisition { Id = Guid.NewGuid(), TenantId = "tenant-a", LaboratoryId = labA, AccessionNumber = "ACC-A", PatientName = "A" });
+            seed.LabRequisitions.Add(new LabRequisition { Id = Guid.NewGuid(), TenantId = "tenant-b", LaboratoryId = labB, AccessionNumber = "ACC-B", PatientName = "B" });
             await seed.SaveChangesAsync();
         }
 
         var staffContext = Substitute.For<ILabContext>();
+        staffContext.ScopeKind.Returns(LabScopeKind.Facility);
         staffContext.TenantId.Returns("tenant-a");
+        staffContext.LaboratoryId.Returns(labA);
         await using var asStaff = CreateDb(name, staffContext);
         (await asStaff.LabRequisitions.Select(r => r.AccessionNumber).ToListAsync()).Should().Equal("ACC-A");
 
         // A staff session whose token lacks a tenant matches nothing (fail closed).
         var broken = Substitute.For<ILabContext>();
+        broken.ScopeKind.Returns(LabScopeKind.Facility);
         broken.TenantId.Returns(string.Empty);
+        broken.LaboratoryId.Returns(Guid.Empty);
         await using var asBroken = CreateDb(name, broken);
         (await asBroken.LabRequisitions.CountAsync()).Should().Be(0);
 
-        // Background consumers / Hangfire have no HTTP principal and keep working across tenants.
-        await using var system = CreateDb(name, null);
+        // A context without a facility (anonymous) matches nothing either.
+        var anonymous = Substitute.For<ILabContext>();
+        anonymous.ScopeKind.Returns(LabScopeKind.None);
+        await using var asAnonymous = CreateDb(name, anonymous);
+        (await asAnonymous.LabRequisitions.CountAsync()).Should().Be(0);
+
+        // Only an explicit system scope (administrative jobs) or the absence of a context (plain unit-of-work tests) sees every tenant.
+        var systemContext = Substitute.For<ILabContext>();
+        systemContext.ScopeKind.Returns(LabScopeKind.System);
+        await using var system = CreateDb(name, systemContext);
         (await system.LabRequisitions.CountAsync()).Should().Be(2);
     }
 }

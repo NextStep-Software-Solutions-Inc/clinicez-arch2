@@ -5,9 +5,10 @@ using ClinicEz.Laboratory.Domain.Enums;
 
 namespace ClinicEz.Laboratory.Domain.Entities;
 
-public sealed class QcLot : BaseEntity
+public sealed class QcLot : BaseEntity, ILabScopedEntity
 {
     public required string TenantId { get; set; }
+    public Guid LaboratoryId { get; set; }
     public required string LotNumber { get; set; }
     public required string ControlName { get; set; }
     public ControlLevel Level { get; set; } = ControlLevel.Level2_Normal;

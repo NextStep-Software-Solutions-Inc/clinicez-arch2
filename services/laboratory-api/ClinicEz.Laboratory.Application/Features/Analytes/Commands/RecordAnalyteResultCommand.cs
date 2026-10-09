@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Laboratory.Application.Common;
+using ClinicEz.Laboratory.Application.Common.Interfaces;
 using ClinicEz.Laboratory.Application.Features.Requisitions.DTOs;
 using ClinicEz.Laboratory.Domain.Entities;
 using ClinicEz.Laboratory.Domain.Enums;
@@ -33,13 +35,16 @@ public class RecordAnalyteResultCommandHandler : IRequestHandler<RecordAnalyteRe
 {
     private readonly IRepository<LabRequisition> _requisitionRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ILabOrderLifecycle _lifecycle;
 
     public RecordAnalyteResultCommandHandler(
         IRepository<LabRequisition> requisitionRepository,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ILabOrderLifecycle lifecycle)
     {
         _requisitionRepository = requisitionRepository;
         _unitOfWork = unitOfWork;
+        _lifecycle = lifecycle;
     }
 
     public async Task<LabRequisitionDto> Handle(RecordAnalyteResultCommand request, CancellationToken cancellationToken)
@@ -54,6 +59,9 @@ public class RecordAnalyteResultCommandHandler : IRequestHandler<RecordAnalyteRe
         {
             throw new KeyNotFoundException($"Requisition with ID {request.RequisitionId} not found.");
         }
+
+        // A prepaid order cannot be processed until the cashier has confirmed payment.
+        OrderWorkGate.EnsureCanWork(requisition);
 
         var entryTime = DateTime.UtcNow;
 
@@ -135,6 +143,7 @@ public class RecordAnalyteResultCommandHandler : IRequestHandler<RecordAnalyteRe
         }
 
         _requisitionRepository.Update(requisition);
+        await _lifecycle.TransitionAsync(requisition, RequisitionStage.InProcess, null, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Requisitions.Queries.GetWorklistQueryHandler.MapToDto(requisition);

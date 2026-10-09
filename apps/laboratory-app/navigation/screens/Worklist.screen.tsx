@@ -1,13 +1,27 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, RefreshControl, ActivityIndicator, TextInput } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, RefreshControl, ActivityIndicator, TextInput, Alert } from 'react-native';
 import ThemedText from '@ui/ThemedText';
+import PaymentSummary from '../../components/PaymentSummary';
 import { laboratoryService, LabRequisitionItem } from '../../services/laboratoryService';
+import { describeActionError } from '../../utils/requisitionPresentation';
 
 export default function WorklistScreen() {
   const [orders, setOrders] = useState<LabRequisitionItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
+
+  const handleRefreshPayment = async (order: LabRequisitionItem) => {
+    const [updated, err] = await laboratoryService.refreshPaymentStatus(order.id);
+    if (err) {
+      Alert.alert('Payment status', describeActionError(err));
+      return;
+    }
+    if (updated) {
+      setOrders(current => current.map(o => (o.id === updated.id ? updated : o)));
+      Alert.alert('Payment status', updated.paid ? 'Payment received at the cashier.' : 'Still awaiting payment at the cashier.');
+    }
+  };
 
   const loadWorklist = async () => {
     setLoading(true);
@@ -136,7 +150,9 @@ export default function WorklistScreen() {
                 🏥 {item.orderingFacilityName || 'Clinic EZ Partner Clinic'}
               </ThemedText>
               <ThemedText style={styles.doctor}>Ordered by: {item.orderingDoctorName}</ThemedText>
-              
+
+              <PaymentSummary order={item} onRefresh={() => handleRefreshPayment(item)} />
+
               <View style={styles.footerRow}>
                 <ThemedText style={styles.specimenCount}>
                   🧪 {item.specimens?.length ?? 0} Specimen Tube(s)

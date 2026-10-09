@@ -17,17 +17,20 @@ public sealed class FacilityLicenseIssuedHandler : IInteropHandler<FacilityCreat
 {
     private readonly IRepository<LabSettings> _settingsRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ILabContext _labContext;
     private readonly IInteropPublisher _publisher;
     private readonly ILogger<FacilityLicenseIssuedHandler> _logger;
 
     public FacilityLicenseIssuedHandler(
         IRepository<LabSettings> settingsRepository,
         IUnitOfWork unitOfWork,
+        ILabContext labContext,
         IInteropPublisher publisher,
         ILogger<FacilityLicenseIssuedHandler> logger)
     {
         _settingsRepository = settingsRepository;
         _unitOfWork = unitOfWork;
+        _labContext = labContext;
         _publisher = publisher;
         _logger = logger;
     }
@@ -59,8 +62,9 @@ public sealed class FacilityLicenseIssuedHandler : IInteropHandler<FacilityCreat
             "[ClinicEz.Laboratory] Provisioning Laboratory: '{Name}' (ID: {ResourceId}) for Tenant {TenantId}",
             message.Name, message.ResourceId, message.TenantId);
 
-        // Seed or update LabSettings with cryptographically rooted license token
-        var existingSettings = await _settingsRepository.IgnoreQueryFilters()
+        // Seed or update LabSettings with cryptographically rooted license token, inside this laboratory's own data scope.
+        using var scope = _labContext.BeginFacilityScope(message.TenantId, message.ResourceId);
+        var existingSettings = await _settingsRepository.Query()
             .FirstOrDefaultAsync(s => s.LaboratoryId == message.ResourceId, ct);
 
         if (existingSettings != null)

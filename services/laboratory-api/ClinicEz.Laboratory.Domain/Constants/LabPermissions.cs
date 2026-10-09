@@ -12,6 +12,8 @@ public static class LabPermissions
 {
     // Requisitions / worklist (intake)
     public const string RequisitionsRead = "requisitions:read";
+    /// <summary>Claim a patient's QR slip, reject an order and refresh its payment status.</summary>
+    public const string RequisitionsManage = "requisitions:manage";
 
     // Specimen handling
     /// <summary>Accession specimens against a requisition and print tube stickers.</summary>
@@ -51,6 +53,7 @@ public static class LabPermissions
     public static readonly IReadOnlyList<string> All = new List<string>
     {
         RequisitionsRead,
+        RequisitionsManage,
         SpecimensAccession,
         SpecimensManage,
         ResultsRead,
@@ -83,6 +86,7 @@ public static class LabRolePermissions
     private static readonly IReadOnlyList<string> MedicalTechnologist = new List<string>
     {
         LabPermissions.RequisitionsRead,
+        LabPermissions.RequisitionsManage,
         LabPermissions.SpecimensAccession,
         LabPermissions.SpecimensManage,
         LabPermissions.ResultsRead,
@@ -105,6 +109,7 @@ public static class LabRolePermissions
     private static readonly IReadOnlyList<string> LabClerk = new List<string>
     {
         LabPermissions.RequisitionsRead,
+        LabPermissions.RequisitionsManage,
         LabPermissions.SpecimensAccession
     }.AsReadOnly();
 

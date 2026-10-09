@@ -4,9 +4,10 @@ using ClinicEz.Laboratory.Domain.Enums;
 
 namespace ClinicEz.Laboratory.Domain.Entities;
 
-public sealed class CriticalPanicDispatchLog : BaseEntity
+public sealed class CriticalPanicDispatchLog : BaseEntity, ILabScopedEntity
 {
     public required string TenantId { get; set; }
+    public Guid LaboratoryId { get; set; }
     public Guid RequisitionId { get; set; }
     public required string AccessionNumber { get; set; }
     public Guid PatientId { get; set; }

@@ -67,6 +67,7 @@ public class RecordPanicDispatchCommandHandler : IRequestHandler<RecordPanicDisp
         var log = new CriticalPanicDispatchLog
         {
             TenantId = requisition.TenantId,
+            LaboratoryId = requisition.LaboratoryId,
             RequisitionId = requisition.Id,
             AccessionNumber = requisition.AccessionNumber,
             PatientId = requisition.PatientId,

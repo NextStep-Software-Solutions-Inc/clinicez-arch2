@@ -72,7 +72,7 @@ public class LaboratoryInteroperabilityTests
         await db.LabRequisitions.AddAsync(req);
         await db.SaveChangesAsync();
 
-        var handler = new AccessionSpecimenCommandHandler(repo, uow);
+        var handler = new AccessionSpecimenCommandHandler(repo, uow, LabTestDbHelper.CreateLifecycle(db, sieve));
         var command = new AccessionSpecimenCommand(
             req.Id,
             "MedTech Anna Phleb",
@@ -115,7 +115,7 @@ public class LaboratoryInteroperabilityTests
         await db.LabRequisitions.AddAsync(req);
         await db.SaveChangesAsync();
 
-        var handler = new RecordAnalyteResultCommandHandler(repo, uow);
+        var handler = new RecordAnalyteResultCommandHandler(repo, uow, LabTestDbHelper.CreateLifecycle(db, sieve));
         var command = new RecordAnalyteResultCommand(
             req.Id,
             "MedTech Carlo RMT",
@@ -186,7 +186,7 @@ public class LaboratoryInteroperabilityTests
         await db.SaveChangesAsync();
 
         var pdfGen = new ClinicEz.Laboratory.Infrastructure.Services.DiagnosticReportPdfGenerator();
-        var handler = new VerifyAndSignReportCommandHandler(repo, uow, reportPublisher, pdfGen);
+        var handler = new VerifyAndSignReportCommandHandler(repo, uow, reportPublisher, pdfGen, LabTestDbHelper.CreateLifecycle(db, sieve));
         var command = new VerifyAndSignReportCommand(
             req.Id,
             "Dr. Roberto Gomez, MD, FPSP",

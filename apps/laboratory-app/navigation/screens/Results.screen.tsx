@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, TextInput, Alert, Modal, ActivityIndicator, Linking } from 'react-native';
 import ThemedText from '@ui/ThemedText';
 import { laboratoryService, LabRequisitionItem, AnalyteCatalogSpec } from '../../services/laboratoryService';
+import { describeActionError, isPaymentRequiredError } from '../../utils/requisitionPresentation';
 
 interface AnalyteRow {
   code: string;
@@ -114,7 +115,7 @@ export default function ResultsScreen() {
     setSubmitting(false);
 
     if (err) {
-      Alert.alert('Error', err.message);
+      Alert.alert(isPaymentRequiredError(err) ? 'Payment Required' : 'Error', describeActionError(err));
     } else {
       Alert.alert('Saved', 'Observations recorded. Reference ranges and delta checks applied.');
       if (updated) {
@@ -149,7 +150,7 @@ export default function ResultsScreen() {
     setSubmitting(false);
 
     if (err) {
-      Alert.alert('Feed Ingestion Error', err.message);
+      Alert.alert(isPaymentRequiredError(err) ? 'Payment Required' : 'Feed Ingestion Error', describeActionError(err));
     } else if (res) {
       setAnalyzerModalVisible(false);
       Alert.alert(
@@ -203,7 +204,7 @@ export default function ResultsScreen() {
     setSignModalVisible(false);
 
     if (err) {
-      Alert.alert('Release Error', err.message);
+      Alert.alert(isPaymentRequiredError(err) ? 'Payment Required' : 'Release Error', describeActionError(err));
     } else {
       Alert.alert(
         'Diagnostic Report Released! 📜',

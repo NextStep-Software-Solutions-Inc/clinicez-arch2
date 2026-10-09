@@ -1,4 +1,6 @@
+using ClinicEz.Laboratory.Domain.Common;
 using ClinicEz.Laboratory.Domain.Entities;
+using ClinicEz.Laboratory.Domain.Interfaces;
 using ClinicEz.Shared.Interop.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
@@ -25,10 +27,65 @@ public class ApplicationDbContext(
     public DbSet<LabSettings> LabSettings { get; set; }
 
     /// <summary>
-    /// Tenant of the authenticated staff session (from validated token claims). <c>null</c> for system scope
-    /// (consumers, Hangfire, seeders, tests) and anonymous public endpoints, which disables the tenant filter.
+    /// True only for the explicit <see cref="LabScopeKind.System"/> scope of named administrative jobs. A context built
+    /// without an <see cref="ILabContext"/> (design-time tooling and unit tests; the host always registers one) is unscoped.
     /// </summary>
-    private string? CurrentTenantId => labContext?.TenantId;
+    private bool UnrestrictedScope => labContext is null || labContext.ScopeKind == LabScopeKind.System;
+
+    /// <summary>Tenant of the active facility scope; empty (matches no row) when there is none.</summary>
+    private string ScopeTenantId => labContext?.TenantId ?? string.Empty;
+
+    /// <summary>Laboratory of the active facility scope; empty (matches no row) when there is none.</summary>
+    private Guid ScopeLaboratoryId => labContext?.LaboratoryId ?? Guid.Empty;
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        EnforceFacilityScopeOnWrites();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        EnforceFacilityScopeOnWrites();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    /// <summary>
+    /// Inside a facility scope a new laboratory-owned row is stamped with that tenant and laboratory when it carries none,
+    /// and any laboratory-owned row that belongs to a different tenant or laboratory is refused, so a scoped caller can
+    /// never write across facilities.
+    /// </summary>
+    private void EnforceFacilityScopeOnWrites()
+    {
+        if (labContext is not { ScopeKind: LabScopeKind.Facility })
+        {
+            return;
+        }
+
+        var tenantId = labContext.TenantId ?? string.Empty;
+        var laboratoryId = labContext.LaboratoryId ?? Guid.Empty;
+
+        foreach (var entry in ChangeTracker.Entries<ILabScopedEntity>())
+        {
+            if (entry.State is not (EntityState.Added or EntityState.Modified))
+            {
+                continue;
+            }
+
+            var entity = entry.Entity;
+            if (entry.State == EntityState.Added)
+            {
+                if (string.IsNullOrEmpty(entity.TenantId)) entity.TenantId = tenantId;
+                if (entity.LaboratoryId == Guid.Empty) entity.LaboratoryId = laboratoryId;
+            }
+
+            if (!string.Equals(entity.TenantId, tenantId, StringComparison.Ordinal) || entity.LaboratoryId != laboratoryId)
+            {
+                throw new InvalidOperationException(
+                    $"Refusing to save a {entry.Metadata.ClrType.Name} of tenant '{entity.TenantId}' / laboratory '{entity.LaboratoryId}' from the scope of tenant '{tenantId}' / laboratory '{laboratoryId}'.");
+            }
+        }
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -60,6 +117,7 @@ public class ApplicationDbContext(
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(255);
             entity.Property(e => e.Sku).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.TenantId).HasMaxLength(100);
             entity.Property(e => e.Price).HasPrecision(18, 2);
         });
 
@@ -69,10 +127,16 @@ public class ApplicationDbContext(
             entity.Property(e => e.AccessionNumber).IsRequired().HasMaxLength(50);
             entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
             entity.Property(e => e.BranchId).HasMaxLength(100);
+            entity.Property(e => e.VisitKey).HasMaxLength(100);
+            entity.Property(e => e.StageReason).HasMaxLength(500);
+            entity.Property(e => e.Currency).IsRequired().HasMaxLength(3);
+            entity.Property(e => e.ReceiptNumber).HasMaxLength(100);
+            entity.Property(e => e.QuotedAmount).HasPrecision(18, 2);
+            entity.HasIndex(e => e.InvoiceId);
             entity.Property(e => e.OrderingTenantId).HasMaxLength(100);
             entity.Property(e => e.OrderingFacilityId).HasMaxLength(100);
             entity.Property(e => e.PatientName).IsRequired().HasMaxLength(255);
-            entity.HasIndex(e => e.AccessionNumber).IsUnique();
+            entity.HasIndex(e => new { e.LaboratoryId, e.AccessionNumber }).IsUnique();
             entity.HasIndex(e => e.ExternalRequisitionId);
             entity.HasIndex(e => new { e.LaboratoryId, e.OrderingTenantId, e.OrderingFacilityId, e.ExternalRequisitionId }).IsUnique();
             entity.HasIndex(e => e.BranchId);
@@ -85,7 +149,7 @@ public class ApplicationDbContext(
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Barcode).IsRequired().HasMaxLength(50);
-            entity.HasIndex(e => e.Barcode).IsUnique();
+            entity.HasIndex(e => new { e.LabRequisitionId, e.Barcode }).IsUnique();
             entity.Property(e => e.RackId).HasMaxLength(50);
             entity.Property(e => e.RackPosition).HasMaxLength(20);
         });
@@ -156,15 +220,17 @@ public class ApplicationDbContext(
             entity.HasOne(e => e.StaffMember).WithMany().HasForeignKey(e => e.StaffMemberId).OnDelete(DeleteBehavior.Cascade);
         });
 
-        // Tenant isolation: authenticated staff only ever see rows of the tenant in their token. System scope
-        // (no HTTP principal: consumers, Hangfire, seeders) and anonymous public endpoints are not restricted.
-        modelBuilder.Entity<LabRequisition>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
-        modelBuilder.Entity<QcLot>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
-        modelBuilder.Entity<QcRun>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
-        modelBuilder.Entity<CriticalPanicDispatchLog>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
-        modelBuilder.Entity<LabStaffMember>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
-        modelBuilder.Entity<LabRefreshToken>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
-        modelBuilder.Entity<LabSettings>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
+        // Data isolation (plan 4.9): every row is filtered by tenant AND laboratory. The scope comes from the staff token, the
+        // internal-service headers or, for message handlers, the envelope's To address. Anonymous requests and code that
+        // never entered a scope match nothing. The only unrestricted scope is the explicit, named System scope.
+        modelBuilder.Entity<Product>().HasQueryFilter(e => UnrestrictedScope || (e.TenantId == ScopeTenantId && e.LaboratoryId == ScopeLaboratoryId));
+        modelBuilder.Entity<LabRequisition>().HasQueryFilter(e => UnrestrictedScope || (e.TenantId == ScopeTenantId && e.LaboratoryId == ScopeLaboratoryId));
+        modelBuilder.Entity<QcLot>().HasQueryFilter(e => UnrestrictedScope || (e.TenantId == ScopeTenantId && e.LaboratoryId == ScopeLaboratoryId));
+        modelBuilder.Entity<QcRun>().HasQueryFilter(e => UnrestrictedScope || (e.TenantId == ScopeTenantId && e.LaboratoryId == ScopeLaboratoryId));
+        modelBuilder.Entity<CriticalPanicDispatchLog>().HasQueryFilter(e => UnrestrictedScope || (e.TenantId == ScopeTenantId && e.LaboratoryId == ScopeLaboratoryId));
+        modelBuilder.Entity<LabStaffMember>().HasQueryFilter(e => UnrestrictedScope || (e.TenantId == ScopeTenantId && e.LaboratoryId == ScopeLaboratoryId));
+        modelBuilder.Entity<LabRefreshToken>().HasQueryFilter(e => UnrestrictedScope || (e.TenantId == ScopeTenantId && e.LaboratoryId == ScopeLaboratoryId));
+        modelBuilder.Entity<LabSettings>().HasQueryFilter(e => UnrestrictedScope || (e.TenantId == ScopeTenantId && e.LaboratoryId == ScopeLaboratoryId));
 
         modelBuilder.ApplyInteropModel();
 

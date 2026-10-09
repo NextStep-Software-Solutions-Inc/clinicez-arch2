@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Laboratory.Application.Common;
+using ClinicEz.Laboratory.Application.Common.Interfaces;
 using ClinicEz.Laboratory.Application.Features.Requisitions.DTOs;
 using ClinicEz.Laboratory.Domain.Entities;
 using ClinicEz.Laboratory.Domain.Enums;
@@ -32,13 +34,16 @@ public class AccessionSpecimenCommandHandler : IRequestHandler<AccessionSpecimen
 {
     private readonly IRepository<LabRequisition> _requisitionRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ILabOrderLifecycle _lifecycle;
 
     public AccessionSpecimenCommandHandler(
         IRepository<LabRequisition> requisitionRepository,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ILabOrderLifecycle lifecycle)
     {
         _requisitionRepository = requisitionRepository;
         _unitOfWork = unitOfWork;
+        _lifecycle = lifecycle;
     }
 
     public async Task<LabRequisitionDto> Handle(AccessionSpecimenCommand request, CancellationToken cancellationToken)
@@ -53,6 +58,9 @@ public class AccessionSpecimenCommandHandler : IRequestHandler<AccessionSpecimen
         {
             throw new KeyNotFoundException($"Requisition with ID {request.RequisitionId} not found.");
         }
+
+        // A prepaid order cannot be collected until the cashier has confirmed payment.
+        OrderWorkGate.EnsureCanWork(requisition);
 
         var collectionTime = DateTime.UtcNow;
 
@@ -100,6 +108,7 @@ public class AccessionSpecimenCommandHandler : IRequestHandler<AccessionSpecimen
 
         requisition.Status = RequisitionStatus.SpecimenCollected;
         _requisitionRepository.Update(requisition);
+        await _lifecycle.TransitionAsync(requisition, RequisitionStage.SpecimenCollected, null, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Queries.GetWorklistQueryHandler.MapToDto(requisition);

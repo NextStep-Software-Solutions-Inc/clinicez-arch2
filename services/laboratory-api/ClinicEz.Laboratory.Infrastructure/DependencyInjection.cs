@@ -73,7 +73,8 @@ public static class DependencyInjection
         // Interop hub messaging (replaces the message broker): transactional outbox/inbox + typed handlers.
         services.AddInterop<ApplicationDbContext>(configuration, handlers => handlers
             .Handle<FacilityCreatedEvent, FacilityLicenseIssuedHandler>(InteropTypes.FacilityLicenseIssued)
-            .Handle<LabRequisitionIssuedEvent, LabOrderIssuedHandler>(InteropTypes.LabOrderIssued));
+            .Handle<LabRequisitionIssuedEvent, LabOrderIssuedHandler>(InteropTypes.LabOrderIssued)
+            .Handle<BillingPaymentConfirmedPayload, BillingPaymentConfirmedHandler>(InteropTypes.BillingPaymentConfirmed));
 
 
         if (env != null && env.IsDevelopment())
