@@ -46,7 +46,13 @@ public class InvoiceDuplicatePreventionTests
         await context.Invoices.AddAsync(existingInvoice);
         await context.SaveChangesAsync();
 
-        var handler = new CreateInvoiceCommandHandler(invoiceRepo, uow, clinicContext);
+        var handler = new CreateInvoiceCommandHandler(
+            invoiceRepo,
+            TestDbHelper.CreateRepository<ClinicPatient>(context, sieve),
+            TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve),
+            uow,
+            clinicContext,
+            NSubstitute.Substitute.For<ClinicEz.Clinic.Application.Common.Interfaces.IBillingRequestPublisher>());
 
         var command = new CreateInvoiceCommand(
             patientId,
@@ -93,7 +99,13 @@ public class InvoiceDuplicatePreventionTests
         await context.Invoices.AddAsync(existingInvoice);
         await context.SaveChangesAsync();
 
-        var handler = new CreateInvoiceCommandHandler(invoiceRepo, uow, clinicContext);
+        var handler = new CreateInvoiceCommandHandler(
+            invoiceRepo,
+            TestDbHelper.CreateRepository<ClinicPatient>(context, sieve),
+            TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve),
+            uow,
+            clinicContext,
+            NSubstitute.Substitute.For<ClinicEz.Clinic.Application.Common.Interfaces.IBillingRequestPublisher>());
 
         var command = new CreateInvoiceCommand(
             patientId,

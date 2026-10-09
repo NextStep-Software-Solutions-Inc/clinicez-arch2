@@ -153,7 +153,8 @@ public class ConsultationCommandHandlersTests
         identity.GetAsync(Arg.Any<CancellationToken>()).Returns(new ClinicIdentity(tenantId, clinicId, "Apex Clinic"));
         var handler = new SignConsultationCommandHandler(
             consultationRepo, staffRepo, queueRepo, apptRepo, TestDbHelper.CreateRepository<ClinicPatient>(context, sieve), uow, clinicContext,
-            identity, appointmentPublisher, Substitute.For<IPrescriptionPublisher>());
+            identity, appointmentPublisher, Substitute.For<IPrescriptionPublisher>(),
+            Phase3TestKit.Claims(), Phase3TestKit.Documents(context));
 
         // Act
         var result = await handler.Handle(new SignConsultationCommand(encounterId), CancellationToken.None);
@@ -240,7 +241,8 @@ public class ConsultationCommandHandlersTests
 
         var handler = new SignConsultationCommandHandler(
             consultationRepo, staffRepo, queueRepo, apptRepo, TestDbHelper.CreateRepository<ClinicPatient>(context, sieve), uow, clinicContext,
-            Substitute.For<IClinicIdentityProvider>(), appointmentPublisher, Substitute.For<IPrescriptionPublisher>());
+            Substitute.For<IClinicIdentityProvider>(), appointmentPublisher, Substitute.For<IPrescriptionPublisher>(),
+            Phase3TestKit.Claims(), Phase3TestKit.Documents(context));
 
         // Act & Assert
         var act = async () => await handler.Handle(new SignConsultationCommand(encounterId), CancellationToken.None);

@@ -6,6 +6,7 @@ using ClinicEz.Clinic.Api.Authorization;
 using ClinicEz.Clinic.Application.Features.LabOrders.Commands;
 using ClinicEz.Clinic.Application.Features.LabOrders.DTOs;
 using ClinicEz.Clinic.Application.Features.LabOrders.Queries;
+using ClinicEz.Clinic.Application.Features.LabResults.Queries;
 using ClinicEz.Clinic.Domain.Constants;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Shared.Common;
@@ -111,10 +112,10 @@ public sealed class LabOrdersController : ControllerBase
             id,
             request.ExternalLabName,
             request.DocumentType,
-            request.DocumentUrl,
             request.FileBase64,
             request.Notes,
-            request.UploadedBy
+            request.ContentType,
+            request.FileName
         );
 
         var result = await _sender.Send(command, ct);
@@ -147,21 +148,7 @@ public sealed class LabOrdersController : ControllerBase
         [FromRoute] Guid id,
         CancellationToken ct)
     {
-        var result = await _sender.Send(new GetClinicLabOrdersQuery(), ct);
-        var order = result.Find(o => o.Id == id);
-        if (order == null || string.IsNullOrEmpty(order.ExternalReportFileBase64))
-        {
-            return NotFound("Official signed PDF report is not yet available for this order.");
-        }
-
-        try
-        {
-            var pdfBytes = Convert.FromBase64String(order.ExternalReportFileBase64);
-            return File(pdfBytes, "application/pdf", $"LabReport-{order.OrderNumber}.pdf");
-        }
-        catch
-        {
-            return BadRequest("Invalid report PDF payload.");
-        }
+        var file = await _sender.Send(new GetLabOrderReportFileQuery(id), ct);
+        return File(file.Content, file.ContentType, file.FileName);
     }
 }

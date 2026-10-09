@@ -10,7 +10,7 @@ import { ensureFreshToken, getAccessToken } from './authSession';
  * The file is downloaded into the app cache with the session's bearer token, then handed to the system share sheet
  * (view in a PDF reader, print, save, send). URLs outside the clinic API are opened with the system handler.
  */
-export async function openDocument(url: string): Promise<boolean> {
+export async function openDocument(url: string, contentType?: string): Promise<boolean> {
   const base = getApiBaseUrl();
   if (!base || !url.startsWith(base)) {
     try {
@@ -33,7 +33,11 @@ export async function openDocument(url: string): Promise<boolean> {
     });
 
     if (!(await Sharing.isAvailableAsync())) return false;
-    await Sharing.shareAsync(file.uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf' });
+    const mimeType = contentType || 'application/pdf';
+    await Sharing.shareAsync(file.uri, {
+      mimeType,
+      UTI: mimeType === 'application/pdf' ? 'com.adobe.pdf' : undefined,
+    });
     return true;
   } catch {
     return false;

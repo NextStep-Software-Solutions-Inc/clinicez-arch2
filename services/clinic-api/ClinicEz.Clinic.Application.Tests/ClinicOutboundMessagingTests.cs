@@ -162,7 +162,9 @@ public class ClinicOutboundMessagingTests
             _clinicContext,
             new ClinicIdentityProvider(db, _clinicContext),
             new PatientAppointmentPublisher(new InteropPublisher(db), MessagingTestKit.Addresses(db), NullLogger<PatientAppointmentPublisher>.Instance),
-            new PrescriptionPublisher(new InteropPublisher(db)));
+            new PrescriptionPublisher(new InteropPublisher(db)),
+            Phase3TestKit.Claims(),
+            Phase3TestKit.Documents(db));
         return (db, handler, probe, encounter.Id, syncId);
     }
 
@@ -177,7 +179,7 @@ public class ClinicOutboundMessagingTests
             CancellationToken.None);
 
         result.IsSigned.Should().BeTrue();
-        probe.Saves.Should().ContainSingle().Which.PendingOutbox.Should().Be(2);
+        probe.Saves.Should().ContainSingle().Which.PendingOutbox.Should().Be(3);
 
         var rx = await db.InteropOutbox.SingleAsync(o => o.Type == InteropTypes.RxIssued);
         rx.CorrelationId.Should().Be(encounterId);
@@ -202,8 +204,10 @@ public class ClinicOutboundMessagingTests
 
         await handler.Handle(new SignConsultationCommand(encounterId), CancellationToken.None);
 
-        probe.Saves.Should().ContainSingle().Which.PendingOutbox.Should().Be(1);
+        // The appointment update and the Prescription document sync; no routed rx.issued (the slip is patient-carried).
+        probe.Saves.Should().ContainSingle().Which.PendingOutbox.Should().Be(2);
         (await db.InteropOutbox.CountAsync(o => o.Type == InteropTypes.RxIssued)).Should().Be(0);
+        (await db.InteropOutbox.CountAsync(o => o.Type == InteropTypes.PatientDocumentIssued)).Should().Be(1);
     }
 
     [Fact]

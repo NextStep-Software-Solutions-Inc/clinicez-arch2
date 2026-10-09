@@ -175,7 +175,7 @@ public sealed class DocumentsController : ControllerBase
 
         // 4. Check Laboratory Orders
         var labOrder = await _labOrderRepo.Query()
-            .FirstOrDefaultAsync(l => l.OrderNumber == trimmed || l.PublicUploadToken == trimmed, ct);
+            .FirstOrDefaultAsync(l => l.OrderNumber == trimmed || l.ClaimToken == trimmed, ct);
         if (labOrder != null)
         {
             return Ok(ApiResponse<DocumentVerificationResultDto>.Success(new DocumentVerificationResultDto(

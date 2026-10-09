@@ -14,6 +14,7 @@ using ClinicEz.Clinic.Infrastructure.Services;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
 using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Transport;
 using ClinicEz.Shared.Interoperability;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -37,7 +38,7 @@ public class LabOrdersAndInteroperabilityTests
     }
 
     [Fact]
-    public async Task CreateLabOrder_GeneratesPublicUploadTokenAndUrl()
+    public async Task CreateLabOrder_MintsHashedUploadGrantAndAbsoluteUrl()
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var orderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
@@ -59,13 +60,19 @@ public class LabOrdersAndInteroperabilityTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.Should().NotBeNull();
-        result.PublicUploadToken.Should().NotBeNullOrWhiteSpace();
-        result.PublicUploadUrl.Should().Contain(result.PublicUploadToken);
+        result.PublicUploadUrl.Should().StartWith(Phase3TestKit.UploadBaseUrl + "/");
         result.Status.Should().Be(LabOrderStatus.Ordered);
+        result.Stage.Should().Be(LabOrderStage.Issued);
+
+        var token = result.PublicUploadUrl![(Phase3TestKit.UploadBaseUrl.Length + 1)..];
+        var grant = await db.UploadGrants.IgnoreQueryFilters().SingleAsync();
+        grant.LabOrderId.Should().Be(result.Id);
+        grant.TokenHash.Should().Equal(UploadGrantService.Hash(token));
+        grant.TokenHash.Should().NotEqual(System.Text.Encoding.UTF8.GetBytes(token));
     }
 
     [Fact]
-    public async Task AttachExternalLabResult_UpdatesStatusAndStoresDocument()
+    public async Task AttachExternalLabResult_StoresEncryptedFileAsUnverifiedResult()
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var orderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
@@ -77,28 +84,33 @@ public class LabOrdersAndInteroperabilityTests
             PatientName: "Juan Dela Cruz"
         ), CancellationToken.None);
 
-        var attachHandler = new AttachExternalLabResultCommandHandler(orderRepo, unitOfWork);
+        var files = new Phase3TestKit.InMemoryFileStore();
+        var attachHandler = new AttachExternalLabResultCommandHandler(
+            orderRepo, TestDbHelper.CreateRepository<ClinicLabResult>(db, sieve), _clinicContext, Phase3TestKit.Intake(db, files));
         var attachCommand = new AttachExternalLabResultCommand(
             OrderId: createdOrder.Id,
             ExternalLabName: "Hi-Precision Diagnostics Inc.",
             DocumentType: "Photo",
-            DocumentUrl: "https://storage.clinicez.com/results/sample-photo.jpg",
-            FileBase64: "data:image/jpeg;base64,sample-bytes",
+            FileBase64: "data:image/jpeg;base64," + Convert.ToBase64String(new byte[] { 1, 2, 3, 4 }),
             Notes: "CBC normal. Blood sugar within range.",
-            UploadedBy: "Patient"
+            ContentType: "image/jpeg",
+            FileName: "cbc.jpg"
         );
 
         var updated = await attachHandler.Handle(attachCommand, CancellationToken.None);
 
         updated.Status.Should().Be(LabOrderStatus.CompletedWithExternalReport);
+        updated.Stage.Should().Be(LabOrderStage.ExternalSubmitted);
+        updated.Results.Should().ContainSingle().Which.VerificationState.Should().Be(VerificationState.Unverified);
         updated.ExternalLabName.Should().Be("Hi-Precision Diagnostics Inc.");
-        updated.ExternalReportType.Should().Be("Photo");
-        updated.UploadedBy.Should().Be("Patient");
-        updated.ReportReleasedAt.Should().NotBeNull();
+        var result = await db.LabResults.IgnoreQueryFilters().SingleAsync();
+        result.Source.Should().Be(ResultSource.ExternalLab);
+        result.Verification.Should().Be(VerificationState.Unverified);
+        (await files.ReadAsync(result, CancellationToken.None)).Should().Equal(1, 2, 3, 4);
     }
 
     [Fact]
-    public async Task SubmitPublicLabUpload_AcceptsResultViaToken()
+    public async Task SubmitPublicLabUpload_AcceptsResultViaGrantToken()
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
         var orderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
@@ -109,24 +121,26 @@ public class LabOrdersAndInteroperabilityTests
             PatientId: Guid.NewGuid(),
             PatientName: "Elena Ramos"
         ), CancellationToken.None);
+        var token = createdOrder.PublicUploadUrl![(Phase3TestKit.UploadBaseUrl.Length + 1)..];
 
-        var publicUploadHandler = new SubmitPublicLabUploadCommandHandler(orderRepo, unitOfWork);
+        var publicUploadHandler = new SubmitPublicLabUploadCommandHandler(Phase3TestKit.Grants(db), Phase3TestKit.Intake(db));
         var uploadCommand = new SubmitPublicLabUploadCommand(
-            Token: createdOrder.PublicUploadToken!,
+            Token: token,
             ExternalLabName: "St. Luke's Diagnostic Lab",
-            DocumentType: "PDF",
-            DocumentUrl: "https://storage.clinicez.com/docs/report-001.pdf",
-            FileBase64: null,
-            Notes: "Official certified PDF attached by lab staff",
-            UploadedBy: "ExternalLab"
+            Content: new byte[] { 37, 80, 68, 70 },
+            ContentType: "application/pdf",
+            FileName: "report-001.pdf",
+            Notes: "Official certified PDF attached by lab staff"
         );
 
-        var uploaded = await publicUploadHandler.Handle(uploadCommand, CancellationToken.None);
+        var receipt = await publicUploadHandler.Handle(uploadCommand, CancellationToken.None);
 
-        uploaded.Status.Should().Be(LabOrderStatus.CompletedWithExternalReport);
-        uploaded.ExternalLabName.Should().Be("St. Luke's Diagnostic Lab");
-        uploaded.ExternalReportType.Should().Be("PDF");
-        uploaded.UploadedBy.Should().Be("ExternalLab");
+        receipt.OrderNumber.Should().Be(createdOrder.OrderNumber);
+        var result = await db.LabResults.IgnoreQueryFilters().SingleAsync();
+        result.Id.Should().Be(receipt.ResultId);
+        result.Source.Should().Be(ResultSource.ExternalLab);
+        result.Verification.Should().Be(VerificationState.Unverified);
+        (await db.LabOrders.IgnoreQueryFilters().SingleAsync()).Stage.Should().Be(LabOrderStage.ExternalSubmitted);
     }
 
     [Fact]
@@ -160,15 +174,16 @@ public class LabOrdersAndInteroperabilityTests
             Notes: "10-12 hours fasting"
         ), CancellationToken.None);
 
-        var slipHandler = new GetClinicLabOrderSlipQueryHandler(orderRepo, patientRepo, settingsRepo);
+        var slipHandler = new GetClinicLabOrderSlipQueryHandler(
+            orderRepo, patientRepo, settingsRepo, TestDbHelper.CreateRepository<StaffMember>(db, sieve), Phase3TestKit.Grants(db), unitOfWork);
         var slip = await slipHandler.Handle(new GetClinicLabOrderSlipQuery(createdOrder.Id), CancellationToken.None);
 
         slip.Should().NotBeNull();
         slip.OrderNumber.Should().Be(createdOrder.OrderNumber);
         slip.PatientName.Should().Be("Maria Santos");
         slip.PhilHealthNumber.Should().Be("12-050412345-6");
-        slip.QrPayload.Should().Contain(createdOrder.OrderNumber);
-        slip.PublicUploadToken.Should().Be(createdOrder.PublicUploadToken);
+        slip.PublicUploadUrl.Should().StartWith(Phase3TestKit.UploadBaseUrl + "/");
+        slip.QrPayload.Should().Be(createdOrder.ClaimToken ?? $"CLINICEZ:REQ:{createdOrder.OrderNumber}");
     }
 
     [Fact]
@@ -180,8 +195,9 @@ public class LabOrdersAndInteroperabilityTests
 
         var order = await handler.Handle(new CreateClinicLabOrderCommand(Guid.NewGuid(), "Maria Santos"), CancellationToken.None);
 
-        order.PublicUploadToken.Should().NotBeNullOrWhiteSpace();
-        (await db.InteropOutbox.CountAsync()).Should().Be(0);
+        order.PublicUploadUrl.Should().NotBeNullOrWhiteSpace();
+        order.Stage.Should().Be(LabOrderStage.Issued);
+        (await db.InteropOutbox.CountAsync(o => o.Type == InteropTypes.LabOrderIssued)).Should().Be(0);
     }
 
     [Fact]
@@ -285,19 +301,20 @@ public class LabOrdersAndInteroperabilityTests
         ISieveProcessor sieve,
         IUnitOfWork unitOfWork,
         IRepository<ClinicLabOrder> orderRepo,
-        IRepository<ClinicPatient> patientRepo)
+        IRepository<ClinicPatient> patientRepo,
+        IHubClaimsClient? hub = null)
     {
-        var identity = Substitute.For<IClinicIdentityProvider>();
-        identity.GetAsync(Arg.Any<CancellationToken>()).Returns(new ClinicIdentity(_testTenantId, _testClinicId, "Apex Clinic"));
-
         return new CreateClinicLabOrderCommandHandler(
             orderRepo,
             patientRepo,
             TestDbHelper.CreateRepository<StaffMember>(db, sieve),
             unitOfWork,
             _clinicContext,
-            identity,
-            new LabRequisitionPublisher(new InteropPublisher(db)));
+            Phase3TestKit.Identity(_testClinicId, _testTenantId),
+            new LabRequisitionPublisher(new InteropPublisher(db)),
+            Phase3TestKit.Grants(db),
+            Phase3TestKit.Claims(hub),
+            Phase3TestKit.Documents(db));
     }
 
     private (Guid DoctorId, Guid PatientId) SeedDoctorAndPatient(ApplicationDbContext db)

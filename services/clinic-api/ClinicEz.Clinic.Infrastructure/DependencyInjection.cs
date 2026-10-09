@@ -1,3 +1,5 @@
+using System.Net.Http;
+using ClinicEz.Clinic.Application.Common;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Clinic.Infrastructure.Messaging;
@@ -88,6 +90,17 @@ public static class DependencyInjection
         services.AddScoped<IPatientAppointmentPublisher, PatientAppointmentPublisher>();
         services.AddScoped<ILabRequisitionPublisher, LabRequisitionPublisher>();
         services.AddScoped<IPrescriptionPublisher, PrescriptionPublisher>();
+        services.AddHttpClient(PatientRecordSharedHandler.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(30))
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+        services.Configure<ClinicUploadOptions>(configuration.GetSection(ClinicUploadOptions.SectionName));
+        services.AddScoped<IUploadGrantService, UploadGrantService>();
+        services.AddScoped<ILabResultFileStore, LabResultFileStore>();
+        services.AddScoped<ILabResultIntake, LabResultIntake>();
+        services.AddScoped<IPatientDocumentPublisher, PatientDocumentPublisher>();
+        services.AddScoped<IClaimSlipService, ClaimSlipService>();
+        services.AddScoped<IBillingRequestPublisher, BillingRequestPublisher>();
+        services.AddScoped<IPatientRecordGateway, PatientRecordGateway>();
+        services.AddScoped<ILabResultReviewedPublisher, LabResultReviewedPublisher>();
         services.AddClinicEzDocumentEngine();
         services.AddScoped<IClinicDocumentPdfService, ClinicDocumentPdfService>();
         services.AddSingleton<IClinicEncryptionService, ClinicEz.Clinic.Infrastructure.Services.Storage.ClinicEncryptionService>();
@@ -109,7 +122,13 @@ public static class DependencyInjection
             .Handle<AppointmentBookedEvent, AppointmentBookedHandler>(InteropTypes.PatientAppointmentBooked)
             .Handle<DiagnosticReportFinalizedEvent, DiagnosticReportFinalizedHandler>(InteropTypes.LabResultFinalized)
             .Handle<PrescriptionDispensedEvent, PrescriptionDispensedHandler>(InteropTypes.RxDispensed)
-            .Handle<LabPanicResultAlertEvent, LabPanicResultAlertHandler>(InteropTypes.LabResultPanic));
+            .Handle<LabPanicResultAlertEvent, LabPanicResultAlertHandler>(InteropTypes.LabResultPanic)
+            .Handle<LabOrderStatusChangedPayload, LabOrderStatusChangedHandler>(InteropTypes.LabOrderStatusChanged)
+            .Handle<ExternalLabResultUploadedEvent, LabResultExternalSubmittedHandler>(InteropTypes.LabResultExternalSubmitted)
+            .Handle<BillingPaymentConfirmedPayload, BillingPaymentConfirmedHandler>(InteropTypes.BillingPaymentConfirmed)
+            .Handle<PatientShareSnapshotPayload, PatientShareSnapshotHandler>(InteropTypes.PatientShareSnapshot)
+            .Handle<PatientRecordSharedPayload, PatientRecordSharedHandler>(InteropTypes.PatientRecordShared)
+            .Handle<ExternalPrescriptionDispensedEvent, ExternalPrescriptionDispensedHandler>(InteropTypes.RxExternalDispensed));
 
         if (env != null && env.IsDevelopment())
         {

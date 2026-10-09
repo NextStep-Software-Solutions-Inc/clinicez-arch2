@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Exceptions;
+using ClinicEz.Shared.Interoperability;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -35,11 +37,15 @@ public record LabOrderSlipDto(
     string? ClinicalDiagnosis,
     string? FastingInstructions,
     List<LabOrderSlipItemDto> Items,
-    string PublicUploadToken,
     string PublicUploadUrl,
-    string QrPayload
+    string QrPayload,
+    string? ClaimToken = null
 );
 
+/// <summary>
+/// Builds the printable slip. Printing issues a fresh one-time upload link (the stored grant is only a hash, so an earlier
+/// link cannot be shown again); the previous unused link stops working.
+/// </summary>
 public record GetClinicLabOrderSlipQuery(Guid OrderId) : IRequest<LabOrderSlipDto>;
 
 public class GetClinicLabOrderSlipQueryHandler : IRequestHandler<GetClinicLabOrderSlipQuery, LabOrderSlipDto>
@@ -47,15 +53,24 @@ public class GetClinicLabOrderSlipQueryHandler : IRequestHandler<GetClinicLabOrd
     private readonly IRepository<ClinicLabOrder> _orderRepo;
     private readonly IRepository<ClinicPatient> _patientRepo;
     private readonly IRepository<ClinicSettings> _settingsRepo;
+    private readonly IRepository<StaffMember> _staffRepo;
+    private readonly IUploadGrantService _uploadGrants;
+    private readonly IUnitOfWork _unitOfWork;
 
     public GetClinicLabOrderSlipQueryHandler(
         IRepository<ClinicLabOrder> orderRepo,
         IRepository<ClinicPatient> patientRepo,
-        IRepository<ClinicSettings> settingsRepo)
+        IRepository<ClinicSettings> settingsRepo,
+        IRepository<StaffMember> staffRepo,
+        IUploadGrantService uploadGrants,
+        IUnitOfWork unitOfWork)
     {
         _orderRepo = orderRepo;
         _patientRepo = patientRepo;
         _settingsRepo = settingsRepo;
+        _staffRepo = staffRepo;
+        _uploadGrants = uploadGrants;
+        _unitOfWork = unitOfWork;
     }
 
     public async Task<LabOrderSlipDto> Handle(GetClinicLabOrderSlipQuery request, CancellationToken cancellationToken)
@@ -71,10 +86,15 @@ public class GetClinicLabOrderSlipQueryHandler : IRequestHandler<GetClinicLabOrd
 
         var patient = await _patientRepo.GetByIdAsync(order.PatientId, cancellationToken);
         var settings = await _settingsRepo.Query().FirstOrDefaultAsync(cancellationToken);
+        var doctor = order.OrderedByDoctorId is { } doctorId
+            ? await _staffRepo.Query(s => s.Id == doctorId).FirstOrDefaultAsync(cancellationToken)
+            : null;
 
-        var token = order.PublicUploadToken ?? Guid.NewGuid().ToString("N")[..16];
-        var uploadUrl = $"/api/v1/public/lab-upload/{token}";
-        var qrPayload = $"CLINICEZ:REQ:{order.OrderNumber}:{token}";
+        var upload = await _uploadGrants.MintAsync(order, UploaderKind.ExternalLab, cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // The claim QR is what a ClinicEZ laboratory scans to take the order; a routed or local slip falls back to the order number.
+        var qrPayload = order.ClaimToken ?? $"CLINICEZ:REQ:{order.OrderNumber}";
 
         var patientAge = patient != null ? DateTime.UtcNow.Year - patient.DateOfBirth.Year : 40;
 
@@ -86,8 +106,8 @@ public class GetClinicLabOrderSlipQueryHandler : IRequestHandler<GetClinicLabOrd
             settings?.LetterheadAddress ?? "124 Rizal Avenue, San Pedro, Laguna",
             settings?.LetterheadContact ?? "Tel: (02) 8876-5432 • Mobile: +63 917 123 4567",
             order.OrderedByDoctorName ?? "Dr. Cruz, MD",
-            "0149281",
-            "PTR-2026-9912",
+            doctor?.PrcLicenseNumber ?? string.Empty,
+            doctor?.PtrNumber,
             order.PatientId,
             order.PatientName,
             patientAge,
@@ -96,9 +116,9 @@ public class GetClinicLabOrderSlipQueryHandler : IRequestHandler<GetClinicLabOrd
             order.ClinicalDiagnosis,
             order.Notes,
             order.Items.Select(i => new LabOrderSlipItemDto(i.TestName, i.Category, i.Instructions)).ToList(),
-            token,
-            uploadUrl,
-            qrPayload
+            upload.Url,
+            qrPayload,
+            order.ClaimToken
         );
     }
 }

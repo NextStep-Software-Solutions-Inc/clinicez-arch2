@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -23,7 +23,8 @@ public class ClinicInboundHandlerTests
     private const string TenantId = "tenant_test";
 
     private static DiagnosticReportFinalizedHandler FinalizedHandler(ApplicationDbContext db) =>
-        new(db, MessagingTestKit.Recipient(db), NullLogger<DiagnosticReportFinalizedHandler>.Instance);
+        new(db, MessagingTestKit.Recipient(db), new Phase3TestKit.InMemoryFileStore(), Phase3TestKit.Documents(db),
+            NullLogger<DiagnosticReportFinalizedHandler>.Instance);
 
     private static LabPanicResultAlertHandler PanicHandler(ApplicationDbContext db) =>
         new(db, MessagingTestKit.Recipient(db), NullLogger<LabPanicResultAlertHandler>.Instance);
@@ -102,7 +103,7 @@ public class ClinicInboundHandlerTests
         await FinalizedHandler(db).HandleAsync(
             report, FromLab(InteropTypes.LabResultFinalized, order.Id, report, MessagingTestKit.ClinicParty(TenantId, clinicId)), CancellationToken.None);
 
-        var saved = await db.LabOrders.Include(o => o.Items).SingleAsync();
+        var saved = await db.LabOrders.IgnoreQueryFilters().Include(o => o.Items).SingleAsync();
         saved.Status.Should().Be(LabOrderStatus.ResultsReceived);
         saved.ExternalLabName.Should().Be("Hi-Precision");
         saved.VerifiedByPathologist.Should().Be("Dr. Reyes");
@@ -124,8 +125,8 @@ public class ClinicInboundHandlerTests
         await FinalizedHandler(db).HandleAsync(report, context, CancellationToken.None);
         await FinalizedHandler(db).HandleAsync(report, context, CancellationToken.None);
 
-        (await db.LabOrders.CountAsync()).Should().Be(1);
-        var saved = await db.LabOrders.Include(o => o.Items).SingleAsync();
+        (await db.LabOrders.IgnoreQueryFilters().CountAsync()).Should().Be(1);
+        var saved = await db.LabOrders.IgnoreQueryFilters().Include(o => o.Items).SingleAsync();
         saved.Status.Should().Be(LabOrderStatus.ResultsReceived);
         saved.Items.Should().HaveCount(2);
         (await db.InteropOutbox.CountAsync()).Should().Be(0);
@@ -143,7 +144,7 @@ public class ClinicInboundHandlerTests
         await FinalizedHandler(db).HandleAsync(
             report, FromLab(InteropTypes.LabResultFinalized, Guid.NewGuid(), report, MessagingTestKit.ClinicParty(TenantId, clinicId)), CancellationToken.None);
 
-        (await db.LabOrders.SingleAsync(o => o.Id == order.Id)).Status.Should().Be(LabOrderStatus.Ordered);
+        (await db.LabOrders.IgnoreQueryFilters().SingleAsync(o => o.Id == order.Id)).Status.Should().Be(LabOrderStatus.Ordered);
     }
 
     [Fact]
@@ -158,7 +159,7 @@ public class ClinicInboundHandlerTests
         await FinalizedHandler(db).HandleAsync(
             report, FromLab(InteropTypes.LabResultFinalized, order.Id, report, MessagingTestKit.ClinicParty(TenantId, clinicId)), CancellationToken.None);
 
-        (await db.LabOrders.SingleAsync()).Status.Should().Be(LabOrderStatus.Ordered);
+        (await db.LabOrders.IgnoreQueryFilters().SingleAsync()).Status.Should().Be(LabOrderStatus.Ordered);
     }
 
     [Fact]
@@ -175,7 +176,7 @@ public class ClinicInboundHandlerTests
         await FinalizedHandler(db).HandleAsync(
             report, FromLab(InteropTypes.LabResultFinalized, order.Id, report, MessagingTestKit.ClinicParty("another_tenant", clinicId)), CancellationToken.None);
 
-        (await db.LabOrders.SingleAsync()).Status.Should().Be(LabOrderStatus.Ordered);
+        (await db.LabOrders.IgnoreQueryFilters().SingleAsync()).Status.Should().Be(LabOrderStatus.Ordered);
     }
 
     [Fact]
@@ -192,7 +193,7 @@ public class ClinicInboundHandlerTests
         await FinalizedHandler(db).HandleAsync(
             report, FromLab(InteropTypes.LabResultFinalized, orderOfB.Id, report, MessagingTestKit.ClinicParty(TenantId, clinicA)), CancellationToken.None);
 
-        (await db.LabOrders.SingleAsync()).Status.Should().Be(LabOrderStatus.Ordered);
+        (await db.LabOrders.IgnoreQueryFilters().SingleAsync()).Status.Should().Be(LabOrderStatus.Ordered);
     }
 
     // ----- lab.result.panic -----
@@ -213,7 +214,7 @@ public class ClinicInboundHandlerTests
         await PanicHandler(db).HandleAsync(
             alert, FromLab(InteropTypes.LabResultPanic, order.Id, alert, MessagingTestKit.ClinicParty(TenantId, clinicId)), CancellationToken.None);
 
-        var saved = await db.LabOrders.SingleAsync();
+        var saved = await db.LabOrders.IgnoreQueryFilters().SingleAsync();
         saved.HasCriticalPanicAlert.Should().BeTrue();
         saved.CriticalFindingsJson.Should().Contain("6.9");
         saved.PanicAlertTriggeredAt.Should().Be(alert.TriggeredAt);
@@ -246,8 +247,8 @@ public class ClinicInboundHandlerTests
         await PanicHandler(db).HandleAsync(alert, context, CancellationToken.None);
         await PanicHandler(db).HandleAsync(alert, context, CancellationToken.None);
 
-        (await db.LabOrders.CountAsync()).Should().Be(1);
-        (await db.LabOrders.SingleAsync()).PanicAlertTriggeredAt.Should().Be(alert.TriggeredAt);
+        (await db.LabOrders.IgnoreQueryFilters().CountAsync()).Should().Be(1);
+        (await db.LabOrders.IgnoreQueryFilters().SingleAsync()).PanicAlertTriggeredAt.Should().Be(alert.TriggeredAt);
     }
 
     [Fact]
@@ -262,7 +263,7 @@ public class ClinicInboundHandlerTests
         await PanicHandler(db).HandleAsync(
             alert, FromLab(InteropTypes.LabResultPanic, order.Id, alert, MessagingTestKit.ClinicParty("another_tenant", clinicId)), CancellationToken.None);
 
-        (await db.LabOrders.SingleAsync()).HasCriticalPanicAlert.Should().BeFalse();
+        (await db.LabOrders.IgnoreQueryFilters().SingleAsync()).HasCriticalPanicAlert.Should().BeFalse();
     }
 
     // ----- rx.dispensed -----
@@ -288,7 +289,7 @@ public class ClinicInboundHandlerTests
         await DispensedHandler(db).HandleAsync(
             dispensed, FromPharmacy(encounter.Id, dispensed, MessagingTestKit.ClinicParty(TenantId, clinicId)), CancellationToken.None);
 
-        var saved = await db.Consultations.SingleAsync();
+        var saved = await db.Consultations.IgnoreQueryFilters().SingleAsync();
         saved.RxDispenseStatus.Should().Be(PrescriptionDispenseStatus.DispensedAtPartnerPharmacy);
         saved.RxDispensedPharmacyName.Should().Be("Mercury Drug");
         saved.RxDispensedPharmacistPrc.Should().Be("0112233");
@@ -307,11 +308,11 @@ public class ClinicInboundHandlerTests
         var context = FromPharmacy(encounter.Id, dispensed, MessagingTestKit.ClinicParty(TenantId, clinicId));
 
         await DispensedHandler(db).HandleAsync(dispensed, context, CancellationToken.None);
-        var afterFirst = (await db.Consultations.SingleAsync()).RxNotes;
+        var afterFirst = (await db.Consultations.IgnoreQueryFilters().SingleAsync()).RxNotes;
         await DispensedHandler(db).HandleAsync(dispensed, context, CancellationToken.None);
 
-        (await db.Consultations.CountAsync()).Should().Be(1);
-        var saved = await db.Consultations.SingleAsync();
+        (await db.Consultations.IgnoreQueryFilters().CountAsync()).Should().Be(1);
+        var saved = await db.Consultations.IgnoreQueryFilters().SingleAsync();
         saved.RxNotes.Should().Be(afterFirst);
         saved.RxDispensedAt.Should().Be(dispensed.DispensedAt);
     }
@@ -328,7 +329,7 @@ public class ClinicInboundHandlerTests
         await DispensedHandler(db).HandleAsync(
             dispensed, FromPharmacy(Guid.NewGuid(), dispensed, MessagingTestKit.ClinicParty(TenantId, clinicId)), CancellationToken.None);
 
-        (await db.Consultations.SingleAsync()).RxDispenseStatus.Should().NotBe(PrescriptionDispenseStatus.DispensedAtPartnerPharmacy);
+        (await db.Consultations.IgnoreQueryFilters().SingleAsync()).RxDispenseStatus.Should().NotBe(PrescriptionDispenseStatus.DispensedAtPartnerPharmacy);
     }
 
     [Fact]
@@ -345,7 +346,7 @@ public class ClinicInboundHandlerTests
         await DispensedHandler(db).HandleAsync(
             dispensed, FromPharmacy(encounter.Id, dispensed, MessagingTestKit.ClinicParty("another_tenant", clinicId)), CancellationToken.None);
 
-        (await db.Consultations.SingleAsync()).RxDispenseStatus.Should().NotBe(PrescriptionDispenseStatus.DispensedAtPartnerPharmacy);
+        (await db.Consultations.IgnoreQueryFilters().SingleAsync()).RxDispenseStatus.Should().NotBe(PrescriptionDispenseStatus.DispensedAtPartnerPharmacy);
     }
 
     [Fact]
@@ -362,7 +363,7 @@ public class ClinicInboundHandlerTests
         await DispensedHandler(db).HandleAsync(
             dispensed, FromPharmacy(encounterOfB.Id, dispensed, MessagingTestKit.ClinicParty(TenantId, clinicA)), CancellationToken.None);
 
-        (await db.Consultations.SingleAsync()).RxDispenseStatus.Should().NotBe(PrescriptionDispenseStatus.DispensedAtPartnerPharmacy);
+        (await db.Consultations.IgnoreQueryFilters().SingleAsync()).RxDispenseStatus.Should().NotBe(PrescriptionDispenseStatus.DispensedAtPartnerPharmacy);
     }
 
     // ----- facility.license.issued -----

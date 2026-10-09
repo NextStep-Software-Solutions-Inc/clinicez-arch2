@@ -2,12 +2,11 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common;
+using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.LabOrders.DTOs;
-using ClinicEz.Clinic.Domain.Entities;
-using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Exceptions;
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 
 namespace ClinicEz.Clinic.Application.Features.LabOrders.Queries;
 
@@ -15,15 +14,11 @@ public record GetPublicLabUploadInfoQuery(string Token) : IRequest<PublicLabUplo
 
 public class GetPublicLabUploadInfoQueryHandler : IRequestHandler<GetPublicLabUploadInfoQuery, PublicLabUploadInfoResponse>
 {
-    private readonly IRepository<ClinicLabOrder> _orderRepo;
-    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IUploadGrantService _grants;
 
-    public GetPublicLabUploadInfoQueryHandler(
-        IRepository<ClinicLabOrder> orderRepo,
-        IRepository<ClinicPatient> patientRepo)
+    public GetPublicLabUploadInfoQueryHandler(IUploadGrantService grants)
     {
-        _orderRepo = orderRepo;
-        _patientRepo = patientRepo;
+        _grants = grants;
     }
 
     public async Task<PublicLabUploadInfoResponse> Handle(GetPublicLabUploadInfoQuery request, CancellationToken cancellationToken)
@@ -33,25 +28,17 @@ public class GetPublicLabUploadInfoQueryHandler : IRequestHandler<GetPublicLabUp
             throw new BadRequestException("Upload token is required.");
         }
 
-        var order = await _orderRepo.Query(o => o.PublicUploadToken == request.Token)
-            .Include(o => o.Items)
-            .FirstOrDefaultAsync(cancellationToken);
+        var context = await _grants.ResolveAsync(request.Token, cancellationToken)
+            ?? throw new NotFoundException("Invalid or expired laboratory upload link.");
 
-        if (order == null)
-        {
-            throw new NotFoundException("Invalid or expired laboratory upload link.");
-        }
-
-        var patient = await _patientRepo.GetByIdAsync(order.PatientId, cancellationToken);
+        var order = context.Order;
+        var patient = context.Patient;
 
         // Mask patient name for Philippine DPA (RA 10173) privacy: e.g. "Juan Dela Cruz" -> "J*** D*** C***"
         var initials = string.Join(" ", order.PatientName.Split(' ', StringSplitOptions.RemoveEmptyEntries)
             .Select(w => w.Length > 1 ? $"{w[0]}***" : $"{w[0]}*"));
 
-        var age = patient != null ? Math.Max(0, DateTime.UtcNow.Year - patient.DateOfBirth.Year) : 0;
-        var expiresAt = order.OrderDate.AddDays(30);
-        var isExpired = DateTime.UtcNow > expiresAt;
-        var doctorPrc = order.PathologistPrcLicense ?? "PRC # 0098765";
+        var age = patient != null ? PatientAge.InYears(patient.DateOfBirth, DateOnly.FromDateTime(DateTime.UtcNow)) : 0;
 
         return new PublicLabUploadInfoResponse(
             order.OrderNumber,
@@ -59,14 +46,14 @@ public class GetPublicLabUploadInfoQueryHandler : IRequestHandler<GetPublicLabUp
             age,
             patient?.Gender.ToString() ?? "Unknown",
             order.OrderedByDoctorName ?? "Attending Physician",
-            "St. Jude Family Clinic & Primary Care",
+            context.Clinic?.ClinicName ?? string.Empty,
             order.ClinicalDiagnosis,
             order.Items.Select(i => i.TestName).ToList(),
             order.OrderDate,
-            doctorPrc,
-            expiresAt,
-            isExpired,
-            order.Status.ToString()
+            null,
+            context.Grant.ExpiresAt,
+            !context.IsUsable(DateTime.UtcNow),
+            order.Stage.ToString()
         );
     }
 }

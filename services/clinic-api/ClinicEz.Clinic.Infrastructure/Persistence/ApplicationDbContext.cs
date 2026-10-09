@@ -55,6 +55,9 @@ public class ApplicationDbContext : DbContext, IInteropDbContext
     public DbSet<PhilHealthCatalogItem> PhilHealthCatalogItems { get; set; } = null!;
     public DbSet<PhilHealthCatalogImportLog> PhilHealthCatalogImportLogs { get; set; } = null!;
     public DbSet<IdempotencyRecord> IdempotencyRecords { get; set; } = null!;
+    public DbSet<ClinicLabResult> LabResults { get; set; } = null!;
+    public DbSet<UploadGrant> UploadGrants { get; set; } = null!;
+    public DbSet<ShareImport> ShareImports { get; set; } = null!;
     public DbSet<InteropOutboxMessage> InteropOutbox { get; set; } = null!;
     public DbSet<InteropInboxMessage> InteropInbox { get; set; } = null!;
 
@@ -98,29 +101,32 @@ public class ApplicationDbContext : DbContext, IInteropDbContext
         }
 
         // 2. Multi-Tenant & Clinic Jurisdiction Global Query Filters
-        modelBuilder.Entity<ClinicRole>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
-        modelBuilder.Entity<StaffMember>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
-        modelBuilder.Entity<Appointment>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
-        modelBuilder.Entity<QueueItem>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
-        modelBuilder.Entity<TriageVitals>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
-        modelBuilder.Entity<ConsultationEncounter>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
-        modelBuilder.Entity<ClinicServiceItem>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
-        modelBuilder.Entity<Invoice>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
-        modelBuilder.Entity<ClinicalProcedure>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
-        modelBuilder.Entity<ClinicLabOrder>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
-        modelBuilder.Entity<ClinicPatient>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
-        modelBuilder.Entity<MedicalCertificate>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
-        modelBuilder.Entity<ReferralLetter>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
-        modelBuilder.Entity<ClinicRecordAttachment>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
-        modelBuilder.Entity<ClinicCustomFieldDefinition>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
-        modelBuilder.Entity<ClinicSettings>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
-        modelBuilder.Entity<YakapTransmittal>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
-        modelBuilder.Entity<YakapTransmittalItem>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
+        modelBuilder.Entity<ClinicRole>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<StaffMember>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<Appointment>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<QueueItem>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<TriageVitals>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<ConsultationEncounter>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<ClinicServiceItem>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<Invoice>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<ClinicalProcedure>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<ClinicLabOrder>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<ClinicPatient>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<MedicalCertificate>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<ReferralLetter>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<ClinicRecordAttachment>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<ClinicCustomFieldDefinition>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<ClinicSettings>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<YakapTransmittal>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<YakapTransmittalItem>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<ClinicLabResult>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<UploadGrant>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<ShareImport>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
 
         modelBuilder.Entity<EncounterDiagnosis>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<PrescriptionItem>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<Product>().HasQueryFilter(e => !e.IsDeleted);
-        modelBuilder.Entity<ClinicRefreshToken>().HasQueryFilter(e => !e.IsDeleted && (CurrentClinicId == Guid.Empty || e.ClinicId == CurrentClinicId));
+        modelBuilder.Entity<ClinicRefreshToken>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
 
         // 3. Entity Configurations
         var permissionsConverter = new ValueConverter<List<string>, string>(
@@ -247,6 +253,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext
             entity.Property(e => e.DoctorPrcLicense).HasMaxLength(50);
             entity.Property(e => e.DoctorPtr).HasMaxLength(50);
             entity.Property(e => e.DoctorS2License).HasMaxLength(50);
+            entity.Property(e => e.RxClaimToken).HasMaxLength(200);
 
             entity.HasMany(e => e.Diagnoses)
                 .WithOne(d => d.ConsultationEncounter)
@@ -349,6 +356,14 @@ public class ApplicationDbContext : DbContext, IInteropDbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.OrderNumber).IsRequired().HasMaxLength(50);
             entity.Property(e => e.PatientName).IsRequired().HasMaxLength(150);
+            entity.Property(e => e.StageReason).HasMaxLength(500);
+            entity.Property(e => e.QuotedAmount).HasPrecision(18, 2);
+            entity.Property(e => e.QuotedCurrency).HasMaxLength(10);
+            entity.Property(e => e.TargetTenantId).HasMaxLength(100);
+            entity.Property(e => e.LaboratoryTenantId).HasMaxLength(100);
+            entity.Property(e => e.LaboratoryFacilityId).HasMaxLength(100);
+            entity.Property(e => e.LaboratoryName).HasMaxLength(200);
+            entity.Property(e => e.ClaimToken).HasMaxLength(200);
 
             entity.HasMany(e => e.Items)
                 .WithOne()
@@ -363,6 +378,61 @@ public class ApplicationDbContext : DbContext, IInteropDbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.TestName).IsRequired().HasMaxLength(150);
             entity.Property(e => e.Category).IsRequired().HasMaxLength(50);
+        });
+
+        modelBuilder.Entity<ClinicLabResult>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.ExternalLabName).HasMaxLength(200);
+            entity.Property(e => e.Notes).HasMaxLength(2000);
+            entity.Property(e => e.FileName).HasMaxLength(255);
+            entity.Property(e => e.ContentType).HasMaxLength(100);
+            entity.Property(e => e.StorageKey).HasMaxLength(400);
+            entity.Property(e => e.EncryptionIvBase64).HasMaxLength(100);
+            entity.Property(e => e.EncryptionTagBase64).HasMaxLength(100);
+            entity.Property(e => e.EncryptedHash).HasMaxLength(100);
+            entity.Property(e => e.WrappedKeyJson).HasColumnType("text");
+            entity.Property(e => e.VerifiedByName).HasMaxLength(150);
+            entity.Property(e => e.VerifiedByPrc).HasMaxLength(50);
+            entity.Property(e => e.ReviewRemarks).HasMaxLength(1000);
+            entity.HasOne<ClinicLabOrder>()
+                .WithMany()
+                .HasForeignKey(e => e.LabOrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.ClinicId, e.LabOrderId });
+            entity.HasIndex(e => new { e.ClinicId, e.Verification, e.SubmittedAt });
+            entity.HasIndex(e => new { e.ClinicId, e.LabOrderId, e.ReportId })
+                .IsUnique()
+                .HasFilter("\"ReportId\" IS NOT NULL");
+        });
+
+        modelBuilder.Entity<UploadGrant>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.TokenHash).IsRequired().HasMaxLength(32);
+            entity.HasOne<ClinicLabOrder>()
+                .WithMany()
+                .HasForeignKey(e => e.LabOrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => e.TokenHash).IsUnique();
+            entity.HasIndex(e => new { e.ClinicId, e.LabOrderId });
+        });
+
+        modelBuilder.Entity<ShareImport>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Purpose).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.ChiefComplaint).HasMaxLength(255);
+            entity.Property(e => e.DenialReason).HasMaxLength(500);
+            entity.Property(e => e.PatientName).HasMaxLength(200);
+            entity.Property(e => e.ClinicEzId).HasMaxLength(40);
+            entity.Property(e => e.QueueNumber).HasMaxLength(20);
+            entity.Property(e => e.ItemsJson).HasColumnType("text");
+            entity.Property(e => e.Scopes).HasConversion<int>();
+            entity.HasIndex(e => new { e.ClinicId, e.RequestedAt });
         });
 
         modelBuilder.Entity<Product>(entity =>
@@ -388,8 +458,11 @@ public class ApplicationDbContext : DbContext, IInteropDbContext
             entity.Property(e => e.VerificationStatus).HasMaxLength(50).HasDefaultValue("Verified");
             entity.Property(e => e.CustomFields)
                 .HasConversion(customFieldsConverter, customFieldsComparer);
+            entity.Property(e => e.ClinicEzId).HasMaxLength(40);
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientCode }).IsUnique();
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.LastName, e.FirstName });
+            entity.HasIndex(e => new { e.ClinicId, e.ClinicEzId });
+            entity.HasIndex(e => new { e.ClinicId, e.SyncPatientId });
         });
 
         modelBuilder.Entity<MedicalCertificate>(entity =>

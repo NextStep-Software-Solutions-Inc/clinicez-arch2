@@ -11,6 +11,11 @@
     <PackageReference Include="Sieve" Version="2.5.5" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\packages\shared-dotnet\ClinicEz.Shared.csproj" />
+  </ItemGroup>
+
+
 </Project>
 
 

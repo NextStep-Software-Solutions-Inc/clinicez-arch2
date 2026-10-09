@@ -1,25 +1,37 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common;
+using ClinicEz.Clinic.Application.Features.LabOrders;
 using ClinicEz.Clinic.Application.Features.LabOrders.Commands;
 using ClinicEz.Clinic.Application.Features.LabOrders.DTOs;
 using ClinicEz.Clinic.Application.Features.LabOrders.Queries;
 using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Exceptions;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace ClinicEz.Clinic.Api.Controllers;
 
+/// <summary>
+/// The anonymous upload page's API. The token in the path is an upload grant (hashed at rest, expiring, use-limited); it is
+/// the only credential, and a wrong, expired or used-up token is always the same 404.
+/// </summary>
 [ApiController]
 [Route("api/v1/public/lab-upload")]
 [AllowAnonymous]
 public sealed class PublicLabUploadController : ControllerBase
 {
     private readonly ISender _sender;
+    private readonly ClinicUploadOptions _options;
 
-    public PublicLabUploadController(ISender sender)
+    public PublicLabUploadController(ISender sender, IOptions<ClinicUploadOptions> options)
     {
         _sender = sender;
+        _options = options.Value;
     }
 
     [HttpGet("{token}/info")]
@@ -32,65 +44,61 @@ public sealed class PublicLabUploadController : ControllerBase
     }
 
     [HttpPost("{token}")]
-    public async Task<ActionResult<ApiResponse<ClinicLabOrderDto>>> SubmitExternalResult(
+    public async Task<ActionResult<ApiResponse<PublicLabUploadReceipt>>> SubmitExternalResult(
         [FromRoute] string token,
         [FromBody] AttachExternalLabResultRequest request,
         CancellationToken ct)
     {
-        var command = new SubmitPublicLabUploadCommand(
+        var (content, contentType) = LabResultUploadFiles.Decode(request.FileBase64, request.ContentType, request.DocumentType);
+
+        var result = await _sender.Send(new SubmitPublicLabUploadCommand(
             token,
             request.ExternalLabName,
-            request.DocumentType,
-            request.DocumentUrl,
-            request.FileBase64,
+            content,
+            contentType,
+            request.FileName,
             request.Notes,
-            request.UploadedBy ?? "ExternalLab",
             request.ContactNumber,
             request.PathologistName,
-            request.PathologistPrcLicense
-        );
-
-        var result = await _sender.Send(command, ct);
-        return Ok(ApiResponse<ClinicLabOrderDto>.Success(result, "Diagnostic result uploaded and transmitted to attending physician."));
+            request.PathologistPrcLicense), ct);
+        return Ok(ApiResponse<PublicLabUploadReceipt>.Success(result, "Diagnostic result uploaded and transmitted to attending physician."));
     }
 
     [HttpPost("{token}/multipart")]
     [Consumes("multipart/form-data")]
-    public async Task<ActionResult<ApiResponse<ClinicLabOrderDto>>> SubmitExternalResultMultipart(
+    public async Task<ActionResult<ApiResponse<PublicLabUploadReceipt>>> SubmitExternalResultMultipart(
         [FromRoute] string token,
         [FromForm] string? externalLabName,
         [FromForm] string? contactNumber,
         [FromForm] string? pathologistName,
         [FromForm] string? pathologistPrcLicense,
         [FromForm] string? notes,
-        [FromForm] Microsoft.AspNetCore.Http.IFormFile? file,
+        [FromForm] IFormFile? file,
         CancellationToken ct)
     {
-        string? fileBase64 = null;
-        string docType = "PDF";
-        if (file != null && file.Length > 0)
+        if (file == null || file.Length == 0)
         {
-            using var ms = new System.IO.MemoryStream();
-            await file.CopyToAsync(ms, ct);
-            var mime = string.IsNullOrEmpty(file.ContentType) ? "application/pdf" : file.ContentType;
-            fileBase64 = $"data:{mime};base64,{Convert.ToBase64String(ms.ToArray())}";
-            docType = mime.Contains("image", StringComparison.OrdinalIgnoreCase) ? "Photo" : "PDF";
+            throw new BadRequestException("A result file is required.");
         }
 
-        var command = new SubmitPublicLabUploadCommand(
+        if (file.Length > _options.UploadMaxBytes)
+        {
+            throw new BadRequestException($"The file is larger than the {_options.UploadMaxBytes / (1024 * 1024)} MB upload limit.");
+        }
+
+        using var ms = new System.IO.MemoryStream();
+        await file.CopyToAsync(ms, ct);
+
+        var result = await _sender.Send(new SubmitPublicLabUploadCommand(
             token,
             externalLabName,
-            docType,
-            null,
-            fileBase64,
+            ms.ToArray(),
+            file.ContentType,
+            file.FileName,
             notes,
-            "ExternalLab",
             contactNumber,
             pathologistName,
-            pathologistPrcLicense
-        );
-
-        var result = await _sender.Send(command, ct);
-        return Ok(ApiResponse<ClinicLabOrderDto>.Success(result, "Diagnostic result uploaded and transmitted to attending physician."));
+            pathologistPrcLicense), ct);
+        return Ok(ApiResponse<PublicLabUploadReceipt>.Success(result, "Diagnostic result uploaded and transmitted to attending physician."));
     }
 }

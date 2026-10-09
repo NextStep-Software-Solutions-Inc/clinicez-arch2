@@ -109,13 +109,13 @@ public class EnumStringConversionTests
         await context.SaveChangesAsync();
 
         // Assert
-        var fetchedStaff = await context.StaffMembers.FirstAsync(s => s.Id == staff.Id);
+        var fetchedStaff = await context.StaffMembers.IgnoreQueryFilters().FirstAsync(s => s.Id == staff.Id);
         fetchedStaff.Role.Should().Be(StaffRole.Doctor);
 
-        var fetchedAppt = await context.Appointments.FirstAsync(a => a.Id == appt.Id);
+        var fetchedAppt = await context.Appointments.IgnoreQueryFilters().FirstAsync(a => a.Id == appt.Id);
         fetchedAppt.Status.Should().Be(AppointmentStatus.CheckedIn);
 
-        var fetchedQueue = await context.QueueItems.FirstAsync(q => q.Id == queueItem.Id);
+        var fetchedQueue = await context.QueueItems.IgnoreQueryFilters().FirstAsync(q => q.Id == queueItem.Id);
         fetchedQueue.Priority.Should().Be(QueuePriority.Urgent);
         fetchedQueue.Status.Should().Be(QueueStatus.Triaged);
     }

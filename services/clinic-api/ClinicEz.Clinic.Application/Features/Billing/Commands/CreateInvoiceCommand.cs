@@ -3,11 +3,13 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Billing.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Exceptions;
+using ClinicEz.Shared.Interoperability;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -32,17 +34,26 @@ public record CreateInvoiceCommand(
 public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand, InvoiceDto>
 {
     private readonly IRepository<Invoice> _invoiceRepo;
+    private readonly IRepository<ClinicPatient> _patientRepo;
+    private readonly IRepository<ConsultationEncounter> _encounterRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
+    private readonly IBillingRequestPublisher _billingPublisher;
 
     public CreateInvoiceCommandHandler(
         IRepository<Invoice> invoiceRepo,
+        IRepository<ClinicPatient> patientRepo,
+        IRepository<ConsultationEncounter> encounterRepo,
         IUnitOfWork unitOfWork,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IBillingRequestPublisher billingPublisher)
     {
         _invoiceRepo = invoiceRepo;
+        _patientRepo = patientRepo;
+        _encounterRepo = encounterRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _billingPublisher = billingPublisher;
     }
 
     public async Task<InvoiceDto> Handle(CreateInvoiceCommand request, CancellationToken cancellationToken)
@@ -157,6 +168,7 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
 
         var invoice = new Invoice
         {
+            Id = Guid.NewGuid(),
             TenantId = _clinicContext.TenantId,
             ClinicId = _clinicContext.ClinicId,
             InvoiceNumber = invoiceNumber,
@@ -183,9 +195,71 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
         };
 
         await _invoiceRepo.AddAsync(invoice, cancellationToken);
+        await PublishInvoiceRequestAsync(invoice, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return MapToDto(invoice);
+    }
+
+    /// <summary>
+    /// The visit key groups clinic, lab and pharmacy lines into one bill at the shared counter: the consultation id,
+    /// else the encounter behind the queue entry, else the queue entry itself.
+    /// </summary>
+    private async Task PublishInvoiceRequestAsync(Invoice invoice, CancellationToken ct)
+    {
+        if (invoice.NetAmount <= 0m)
+        {
+            return;
+        }
+
+        var visitKey = invoice.ConsultationId;
+        if (visitKey is null && invoice.QueueItemId.HasValue)
+        {
+            var queueItemId = invoice.QueueItemId.Value;
+            var encounterId = await _encounterRepo
+                .Query(e => e.ClinicId == _clinicContext.ClinicId && e.QueueItemId == queueItemId)
+                .Select(e => (Guid?)e.Id)
+                .FirstOrDefaultAsync(ct);
+            visitKey = encounterId ?? queueItemId;
+        }
+
+        var syncPatientId = await _patientRepo
+            .Query(p => p.ClinicId == _clinicContext.ClinicId && p.Id == invoice.PatientId)
+            .Select(p => p.SyncPatientId)
+            .FirstOrDefaultAsync(ct);
+
+        var lines = invoice.LineItems
+            .Select(l => new BillingLineDto
+            {
+                Code = l.ItemCode ?? string.Empty,
+                Description = l.Description,
+                Quantity = l.Quantity,
+                UnitPrice = l.UnitPrice
+            })
+            .ToList();
+
+        if (invoice.DiscountAmount > 0m)
+        {
+            lines.Add(new BillingLineDto
+            {
+                Code = "DISCOUNT",
+                Description = $"Discount ({invoice.DiscountType})",
+                Quantity = 1,
+                UnitPrice = -invoice.DiscountAmount
+            });
+        }
+
+        await _billingPublisher.PublishInvoiceRequestedAsync(new BillingInvoiceRequestedPayload
+        {
+            InvoiceRequestId = invoice.Id,
+            BranchId = _clinicContext.BranchId?.ToString(),
+            PatientId = syncPatientId,
+            PatientName = invoice.PatientName,
+            VisitKey = visitKey?.ToString(),
+            SourceType = "Consultation",
+            SourceId = invoice.Id,
+            Lines = lines
+        }, ct);
     }
 
     private static InvoiceDto MapToDto(Invoice invoice)

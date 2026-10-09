@@ -46,6 +46,8 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
     private readonly IClinicIdentityProvider _clinicIdentity;
     private readonly IPatientAppointmentPublisher _appointmentPublisher;
     private readonly IPrescriptionPublisher _prescriptionPublisher;
+    private readonly IClaimSlipService _claims;
+    private readonly IPatientDocumentPublisher _documents;
 
     public SignConsultationCommandHandler(
         IRepository<ConsultationEncounter> consultationRepository,
@@ -57,7 +59,9 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
         IClinicContext clinicContext,
         IClinicIdentityProvider clinicIdentity,
         IPatientAppointmentPublisher appointmentPublisher,
-        IPrescriptionPublisher prescriptionPublisher)
+        IPrescriptionPublisher prescriptionPublisher,
+        IClaimSlipService claims,
+        IPatientDocumentPublisher documents)
     {
         _consultationRepository = consultationRepository;
         _staffRepository = staffRepository;
@@ -69,6 +73,8 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
         _clinicIdentity = clinicIdentity;
         _appointmentPublisher = appointmentPublisher;
         _prescriptionPublisher = prescriptionPublisher;
+        _claims = claims;
+        _documents = documents;
     }
 
     public async Task<ConsultationEncounterDto> Handle(SignConsultationCommand request, CancellationToken cancellationToken)
@@ -154,10 +160,35 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
         // Messages are queued in the interop outbox and commit in the same SaveChanges as the signed consultation.
         var clinic = await _clinicIdentity.GetAsync(cancellationToken);
 
-        if (targetPharmacy is { } pharmacy && encounter.Prescriptions.Any())
+        if (encounter.Prescriptions.Any())
         {
-            var rxEvent = await BuildPrescriptionEventAsync(encounter, doctor, clinic, pharmacy, cancellationToken);
-            _prescriptionPublisher.PublishPrescriptionIssued(rxEvent);
+            var rxEvent = await BuildPrescriptionEventAsync(encounter, doctor, clinic, targetPharmacy, cancellationToken);
+            if (rxEvent != null)
+            {
+                if (targetPharmacy != null)
+                {
+                    _prescriptionPublisher.PublishPrescriptionIssued(rxEvent);
+                }
+                else
+                {
+                    var claim = await _claims.CreateRxClaimAsync(rxEvent, cancellationToken);
+                    encounter.RxClaimToken = claim.Token;
+                    encounter.RxClaimExpiresAt = claim.ExpiresAtUtc;
+                }
+
+                await _documents.PublishAsync(new PatientDocumentDraft(
+                    encounter.ClinicId,
+                    encounter.PatientId,
+                    encounter.Id,
+                    Interop.PatientDocumentKind.Prescription,
+                    $"Prescription {encounter.PrescriptionNumber}",
+                    rxEvent.IssuedAt,
+                    Status: encounter.RxDispenseStatus.ToString(),
+                    VerificationToken: rxEvent.PublicVerificationToken,
+                    VerificationUrl: rxEvent.PublicVerificationUrl,
+                    ClaimToken: encounter.RxClaimToken,
+                    Body: rxEvent), cancellationToken);
+            }
         }
 
         // Patient app notification. A clinic that has not been provisioned yet has no identity to announce.
@@ -233,24 +264,39 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
         return (tenant, facilityId);
     }
 
-    private async Task<Interop.PrescriptionIssuedEvent> BuildPrescriptionEventAsync(
+    /// <summary>
+    /// A prescription routed to a pharmacy must be fully formed or signing is rejected. A patient-carried one only becomes
+    /// claimable when the clinic is provisioned and the patient and the prescriber's PRC license are on file; otherwise it
+    /// stays a local paper prescription without a claim.
+    /// </summary>
+    private async Task<Interop.PrescriptionIssuedEvent?> BuildPrescriptionEventAsync(
         ConsultationEncounter encounter,
         StaffMember? doctor,
         ClinicIdentity? clinic,
-        (string TenantId, Guid FacilityId) pharmacy,
+        (string TenantId, Guid FacilityId)? pharmacy,
         CancellationToken cancellationToken)
     {
+        var routed = pharmacy != null;
         if (clinic == null)
         {
-            throw new BadRequestException("This clinic has not been provisioned on this server, so a prescription cannot be sent to a pharmacy.");
+            return routed
+                ? throw new BadRequestException("This clinic has not been provisioned on this server, so a prescription cannot be sent to a pharmacy.")
+                : null;
         }
 
-        var patient = await _patientRepository.GetByIdAsync(encounter.PatientId, cancellationToken)
-            ?? throw new BadRequestException($"Patient '{encounter.PatientId}' was not found in this clinic; a prescription sent to a pharmacy needs the patient's demographics.");
+        var patient = await _patientRepository.GetByIdAsync(encounter.PatientId, cancellationToken);
+        if (patient == null)
+        {
+            return routed
+                ? throw new BadRequestException($"Patient '{encounter.PatientId}' was not found in this clinic; a prescription sent to a pharmacy needs the patient's demographics.")
+                : null;
+        }
 
         if (string.IsNullOrWhiteSpace(encounter.DoctorPrcLicense))
         {
-            throw new BadRequestException("The prescribing doctor's PRC license number is required to send a prescription to a pharmacy.");
+            return routed
+                ? throw new BadRequestException("The prescribing doctor's PRC license number is required to send a prescription to a pharmacy.")
+                : null;
         }
 
         return new Interop.PrescriptionIssuedEvent
@@ -261,8 +307,9 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
             OrderingFacilityName = clinic.Name,
             TenantId = clinic.TenantId,
             BranchId = _clinicContext.BranchId?.ToString(),
-            TargetPharmacyFacilityId = pharmacy.FacilityId.ToString(),
-            TargetPharmacyTenantId = pharmacy.TenantId,
+            VisitKey = encounter.Id.ToString(),
+            TargetPharmacyFacilityId = pharmacy?.FacilityId.ToString(),
+            TargetPharmacyTenantId = pharmacy?.TenantId,
             PrescriberDoctor = new Interop.PrescriberDoctorDto
             {
                 DoctorId = encounter.DoctorId.ToString(),

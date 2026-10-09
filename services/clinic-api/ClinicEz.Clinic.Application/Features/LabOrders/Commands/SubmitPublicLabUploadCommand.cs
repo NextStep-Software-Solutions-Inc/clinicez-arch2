@@ -1,98 +1,63 @@
 using System;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.LabOrders.DTOs;
-using ClinicEz.Clinic.Domain.Entities;
-using ClinicEz.Clinic.Domain.Enums;
-using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Shared.Exceptions;
+using ClinicEz.Shared.Interoperability;
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 
 namespace ClinicEz.Clinic.Application.Features.LabOrders.Commands;
 
+/// <summary>An anonymous upload through the public link. The grant decides who the uploader is, never the request.</summary>
 public record SubmitPublicLabUploadCommand(
     string Token,
     string? ExternalLabName,
-    string DocumentType, // Photo, PDF
-    string? DocumentUrl,
-    string? FileBase64,
+    byte[] Content,
+    string ContentType,
+    string? FileName,
     string? Notes,
-    string UploadedBy = "ExternalLab",
     string? ContactNumber = null,
     string? PathologistName = null,
     string? PathologistPrcLicense = null
-) : IRequest<ClinicLabOrderDto>;
+) : IRequest<PublicLabUploadReceipt>;
 
-public class SubmitPublicLabUploadCommandHandler : IRequestHandler<SubmitPublicLabUploadCommand, ClinicLabOrderDto>
+public class SubmitPublicLabUploadCommandHandler : IRequestHandler<SubmitPublicLabUploadCommand, PublicLabUploadReceipt>
 {
-    private readonly IRepository<ClinicLabOrder> _orderRepo;
-    private readonly IUnitOfWork _unitOfWork;
+    private readonly IUploadGrantService _grants;
+    private readonly ILabResultIntake _intake;
 
-    public SubmitPublicLabUploadCommandHandler(
-        IRepository<ClinicLabOrder> orderRepo,
-        IUnitOfWork unitOfWork)
+    public SubmitPublicLabUploadCommandHandler(IUploadGrantService grants, ILabResultIntake intake)
     {
-        _orderRepo = orderRepo;
-        _unitOfWork = unitOfWork;
+        _grants = grants;
+        _intake = intake;
     }
 
-    public async Task<ClinicLabOrderDto> Handle(SubmitPublicLabUploadCommand request, CancellationToken cancellationToken)
+    public async Task<PublicLabUploadReceipt> Handle(SubmitPublicLabUploadCommand request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Token))
         {
             throw new BadRequestException("Upload token is required.");
         }
 
-        var order = await _orderRepo.Query(o => o.PublicUploadToken == request.Token)
-            .Include(o => o.Items)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (order == null)
+        var grant = await _grants.ResolveAsync(request.Token, cancellationToken);
+        if (grant == null || !grant.IsUsable(DateTime.UtcNow))
         {
             throw new NotFoundException("Invalid or expired laboratory upload link.");
         }
 
-        order.ExternalLabName = request.ExternalLabName?.Trim() ?? "External Diagnostic Center";
-        order.ExternalReportType = string.IsNullOrWhiteSpace(request.DocumentType) ? "PDF" : request.DocumentType.Trim();
-        order.ExternalReportUrl = request.DocumentUrl?.Trim();
-        order.ExternalReportFileBase64 = request.FileBase64?.Trim();
-        order.UploadedBy = request.UploadedBy;
-        order.Status = LabOrderStatus.CompletedWithExternalReport;
-        order.ReportReleasedAt = DateTime.UtcNow;
+        var source = grant.Grant.Kind == UploaderKind.Patient ? ResultSource.PatientUploaded : ResultSource.ExternalLab;
+        var outcome = await _intake.SubmitAsync(new LabResultSubmission(
+            grant.Grant.ClinicId,
+            grant.Order.Id,
+            source,
+            request.Content,
+            request.FileName,
+            request.ContentType,
+            request.ExternalLabName,
+            LabResultUploadFiles.ComposeNotes(request.Notes, request.ContactNumber, request.PathologistName, request.PathologistPrcLicense),
+            grant.Grant), cancellationToken);
 
-        if (!string.IsNullOrWhiteSpace(request.PathologistName))
-        {
-            order.VerifiedByPathologist = request.PathologistName.Trim();
-        }
-        if (!string.IsNullOrWhiteSpace(request.PathologistPrcLicense))
-        {
-            order.PathologistPrcLicense = request.PathologistPrcLicense.Trim();
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.ContactNumber))
-        {
-            order.Notes = string.IsNullOrWhiteSpace(order.Notes)
-                ? $"Facility Contact: {request.ContactNumber.Trim()}"
-                : $"{order.Notes} • Facility Contact: {request.ContactNumber.Trim()}";
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.Notes))
-        {
-            order.Notes = string.IsNullOrWhiteSpace(order.Notes)
-                ? request.Notes.Trim()
-                : $"{order.Notes} • Public Upload Note: {request.Notes.Trim()}";
-        }
-
-        foreach (var item in order.Items)
-        {
-            item.Status = LabOrderStatus.CompletedWithExternalReport;
-        }
-
-        _orderRepo.Update(order);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-        return CreateClinicLabOrderCommandHandler.MapToDto(order);
+        return new PublicLabUploadReceipt(outcome.ResultId, outcome.OrderNumber, outcome.ReceivedAtUtc);
     }
 }

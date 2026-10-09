@@ -54,7 +54,7 @@ public class AppointmentBookedHandlerTests
 
         await CreateHandler(db).HandleAsync(booked, Delivered(booked, MessagingTestKit.ClinicParty(TenantId, clinicId)), CancellationToken.None);
 
-        var appt = await db.Appointments.FirstOrDefaultAsync(a => a.DraftId == draftId);
+        var appt = await db.Appointments.IgnoreQueryFilters().FirstOrDefaultAsync(a => a.DraftId == draftId);
         appt.Should().NotBeNull();
         appt!.ClinicId.Should().Be(clinicId);
         appt.TenantId.Should().Be(TenantId);
@@ -117,8 +117,8 @@ public class AppointmentBookedHandlerTests
         await handler.HandleAsync(booked, context, CancellationToken.None);
         await handler.HandleAsync(booked, context, CancellationToken.None);
 
-        (await db.Appointments.CountAsync()).Should().Be(1);
-        (await db.Patients.CountAsync()).Should().Be(1);
+        (await db.Appointments.IgnoreQueryFilters().CountAsync()).Should().Be(1);
+        (await db.Patients.IgnoreQueryFilters().CountAsync()).Should().Be(1);
         (await db.InteropOutbox.CountAsync()).Should().Be(1);
     }
 
@@ -142,7 +142,7 @@ public class AppointmentBookedHandlerTests
 
         await CreateHandler(db).HandleAsync(booked, Delivered(booked, MessagingTestKit.ClinicParty(TenantId, thisClinicId)), CancellationToken.None);
 
-        (await db.Appointments.CountAsync()).Should().Be(0);
+        (await db.Appointments.IgnoreQueryFilters().CountAsync()).Should().Be(0);
         (await db.InteropOutbox.CountAsync()).Should().Be(0);
     }
 
@@ -165,8 +165,8 @@ public class AppointmentBookedHandlerTests
         // Same facility id, different tenant: not this clinic.
         await CreateHandler(db).HandleAsync(booked, Delivered(booked, MessagingTestKit.ClinicParty("another_tenant", clinicId)), CancellationToken.None);
 
-        (await db.Appointments.CountAsync()).Should().Be(0);
-        (await db.Patients.CountAsync()).Should().Be(0);
+        (await db.Appointments.IgnoreQueryFilters().CountAsync()).Should().Be(0);
+        (await db.Patients.IgnoreQueryFilters().CountAsync()).Should().Be(0);
         (await db.InteropOutbox.CountAsync()).Should().Be(0);
     }
 
@@ -188,7 +188,7 @@ public class AppointmentBookedHandlerTests
 
         await CreateHandler(db).HandleAsync(booked, Delivered(booked, MessagingTestKit.ClinicParty(TenantId, clinicId)), CancellationToken.None);
 
-        (await db.Appointments.CountAsync()).Should().Be(0);
+        (await db.Appointments.IgnoreQueryFilters().CountAsync()).Should().Be(0);
     }
 
     [Fact]
@@ -227,7 +227,7 @@ public class AppointmentBookedHandlerTests
 
         await CreateHandler(db).HandleAsync(booked, Delivered(booked, MessagingTestKit.ClinicParty(TenantId, clinicId)), CancellationToken.None);
 
-        var patient = await db.Patients.FirstOrDefaultAsync(p => p.Id == patientId);
+        var patient = await db.Patients.IgnoreQueryFilters().FirstOrDefaultAsync(p => p.Id == patientId);
         patient.Should().NotBeNull();
         patient!.FirstName.Should().Be("Maria");
         patient.LastName.Should().Be("Santos");
@@ -246,7 +246,7 @@ public class AppointmentBookedHandlerTests
         profile.DependentRelationship.Should().Be("S");
         profile.IsWalkedIn.Should().Be("N");
 
-        var appt = await db.Appointments.FirstOrDefaultAsync(a => a.DraftId == draftId);
+        var appt = await db.Appointments.IgnoreQueryFilters().FirstOrDefaultAsync(a => a.DraftId == draftId);
         appt.Should().NotBeNull();
         appt!.PatientName.Should().Be("Maria Santos");
     }
@@ -296,7 +296,7 @@ public class AppointmentBookedHandlerTests
 
         await CreateHandler(db).HandleAsync(booked, Delivered(booked, MessagingTestKit.ClinicParty(TenantId, clinicId)), CancellationToken.None);
 
-        var attachments = await db.RecordAttachments.ToListAsync();
+        var attachments = await db.RecordAttachments.IgnoreQueryFilters().ToListAsync();
         attachments.Should().HaveCount(2);
 
         var xray = attachments.FirstOrDefault(a => a.Id == xrayFileId);

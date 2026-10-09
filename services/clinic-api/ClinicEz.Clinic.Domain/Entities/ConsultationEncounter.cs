@@ -50,6 +50,10 @@ public sealed class ConsultationEncounter : BaseEntity
     // E-Prescription Interoperability & External Verification
     public string? PrescriptionNumber { get; set; }
     public string? RxPublicVerificationToken { get; set; }
+
+    /// <summary>Hub claim capability printed as the prescription QR so any ClinicEZ pharmacy can dispense it.</summary>
+    public string? RxClaimToken { get; set; }
+    public DateTime? RxClaimExpiresAt { get; set; }
     public ClinicEz.Clinic.Domain.Enums.PrescriptionDispenseStatus RxDispenseStatus { get; set; } = ClinicEz.Clinic.Domain.Enums.PrescriptionDispenseStatus.Issued;
     public string? RxDispensedPharmacyName { get; set; }
     public string? RxDispensedPharmacistName { get; set; }

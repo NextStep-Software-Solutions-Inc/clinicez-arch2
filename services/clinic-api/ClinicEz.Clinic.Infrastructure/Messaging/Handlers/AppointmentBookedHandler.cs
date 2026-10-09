@@ -74,7 +74,7 @@ public sealed class AppointmentBookedHandler : IInteropHandler<AppointmentBooked
         var clinicPatient = await _dbContext.Patients
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(p =>
-                (p.ClinicId == message.ClinicId || p.ClinicId == Guid.Empty) &&
+                !p.IsDeleted && p.ClinicId == clinic.ClinicId &&
                 (p.Id == message.PatientId || p.SyncPatientId == message.PatientId ||
                  (!string.IsNullOrEmpty(message.PhilHealthNumber) && p.PhilHealthNumber == message.PhilHealthNumber)),
                 ct);
@@ -83,12 +83,15 @@ public sealed class AppointmentBookedHandler : IInteropHandler<AppointmentBooked
         if (clinicPatient == null)
         {
             isNewPatient = true;
+            var idTaken = await _dbContext.Patients
+                .IgnoreQueryFilters()
+                .AnyAsync(p => p.Id == message.PatientId, ct);
             clinicPatient = new ClinicPatient
             {
-                Id = message.PatientId,
+                Id = idTaken ? Guid.NewGuid() : message.PatientId,
                 SyncPatientId = message.PatientId,
                 TenantId = tenantId,
-                ClinicId = message.ClinicId,
+                ClinicId = clinic.ClinicId,
                 PatientCode = $"PAT-{DateTime.UtcNow:yyyyMMdd}-{message.PatientId.ToString()[..6].ToUpper()}",
                 FirstName = !string.IsNullOrWhiteSpace(message.PatientFirstName) ? message.PatientFirstName : "Patient",
                 LastName = !string.IsNullOrWhiteSpace(message.PatientLastName) ? message.PatientLastName : message.PatientId.ToString()[..8],
@@ -111,6 +114,23 @@ public sealed class AppointmentBookedHandler : IInteropHandler<AppointmentBooked
             if (clinicPatient.SyncPatientId == null)
             {
                 clinicPatient.SyncPatientId = message.PatientId;
+            }
+            if (string.IsNullOrWhiteSpace(clinicPatient.Email) && !string.IsNullOrWhiteSpace(message.Email))
+            {
+                clinicPatient.Email = message.Email;
+            }
+            if ((string.IsNullOrWhiteSpace(clinicPatient.ContactNumber) || clinicPatient.ContactNumber == "N/A")
+                && !string.IsNullOrWhiteSpace(message.ContactNumber))
+            {
+                clinicPatient.ContactNumber = message.ContactNumber;
+            }
+            if (string.IsNullOrWhiteSpace(clinicPatient.MiddleName) && !string.IsNullOrWhiteSpace(message.PatientMiddleName))
+            {
+                clinicPatient.MiddleName = message.PatientMiddleName;
+            }
+            if (string.IsNullOrWhiteSpace(clinicPatient.Suffix) && !string.IsNullOrWhiteSpace(message.PatientSuffix))
+            {
+                clinicPatient.Suffix = message.PatientSuffix;
             }
             clinicPatient.CustomFields ??= new Dictionary<string, object?>();
         }
@@ -266,7 +286,7 @@ public sealed class AppointmentBookedHandler : IInteropHandler<AppointmentBooked
         _logger.LogInformation("[AppointmentBookedHandler] Ingested appointment {AppointmentId} and synchronized patient {PatientId} successfully", appointment.Id, clinicPatient.Id);
     }
 
-    private static string MapRecordType(string? docTypeCode)
+    internal static string MapRecordType(string? docTypeCode)
     {
         if (string.IsNullOrWhiteSpace(docTypeCode)) return "Other";
         return docTypeCode.Trim().ToLowerInvariant() switch

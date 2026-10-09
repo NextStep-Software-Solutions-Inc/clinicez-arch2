@@ -23,6 +23,8 @@ const MOBILE_LABELS: Record<string, string> = {
   Consultations: 'Consults',
   Appointments: 'Appts',
   Billing: 'Billing',
+  ResultReview: 'Results',
+  ShareImport: 'Scan QR',
   Yakap: 'PhilHealth',
   Settings: 'Settings',
 };
@@ -33,6 +35,8 @@ const MODULE_DESCRIPTIONS: Record<string, string> = {
   Consultations: 'Doctor consultation workflows & records',
   Appointments: 'Appointment bookings & calendar schedule',
   Billing: 'Invoices, cashier payments & receipts',
+  ResultReview: 'Verify external and patient-uploaded lab results',
+  ShareImport: 'Import a patient record from their share QR',
   Yakap: 'PhilHealth Yakap formulary & claims',
   Settings: 'Clinic profile, staff permissions & audit',
 };

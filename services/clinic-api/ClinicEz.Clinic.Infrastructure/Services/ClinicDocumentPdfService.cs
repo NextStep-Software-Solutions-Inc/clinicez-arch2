@@ -201,7 +201,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
             slip.DoctorPrcLicense,
             slip.OrderDate);
 
-        var qrBytes = _qrCodeService.GenerateQrCodePng(slip.QrPayload ?? $"CLINICEZ:REQ:{slip.OrderNumber}:{slip.PublicUploadToken}", 4);
+        var qrBytes = _qrCodeService.GenerateQrCodePng(slip.QrPayload, 4);
 
         var doc = Document.Create(container =>
         {
@@ -339,7 +339,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
                                 .FontSize(9).Bold().FontColor("#0369A1");
                             c.Item().Text("Present this official slip to ANY laboratory (ClinicEz partner or accredited external diagnostic center e.g. Hi-Precision, Quest, Hospital Lab).")
                                 .FontSize(7.5f).FontColor("#334155");
-                            c.Item().PaddingTop(2).Text($"Dropzone Upload Link: {slip.PublicUploadUrl} • Token: {slip.PublicUploadToken}")
+                            c.Item().PaddingTop(2).Text($"Dropzone Upload Link: {slip.PublicUploadUrl}")
                                 .FontSize(7f).SemiBold().FontColor("#0284C7");
                         });
                     });
