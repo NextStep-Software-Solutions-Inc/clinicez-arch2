@@ -71,7 +71,8 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
                 var existingQueueInvoice = await _invoiceRepo.Query(i =>
                     i.ClinicId == _clinicContext.ClinicId &&
                     i.QueueItemId == request.QueueItemId.Value &&
-                    i.Status != InvoiceStatus.Voided)
+                    i.Status != InvoiceStatus.Voided &&
+                    i.Status != InvoiceStatus.Refunded)
                     .FirstOrDefaultAsync(cancellationToken);
 
                 if (existingQueueInvoice != null)
@@ -87,7 +88,8 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
                 var existingConsultationInvoice = await _invoiceRepo.Query(i =>
                     i.ClinicId == _clinicContext.ClinicId &&
                     i.ConsultationId == request.ConsultationId.Value &&
-                    i.Status != InvoiceStatus.Voided)
+                    i.Status != InvoiceStatus.Voided &&
+                    i.Status != InvoiceStatus.Refunded)
                     .FirstOrDefaultAsync(cancellationToken);
 
                 if (existingConsultationInvoice != null)
@@ -249,7 +251,7 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
             });
         }
 
-        await _billingPublisher.PublishInvoiceRequestedAsync(new BillingInvoiceRequestedPayload
+        var queued = await _billingPublisher.PublishInvoiceRequestedAsync(new BillingInvoiceRequestedPayload
         {
             InvoiceRequestId = invoice.Id,
             BranchId = _clinicContext.BranchId?.ToString(),
@@ -260,6 +262,11 @@ public class CreateInvoiceCommandHandler : IRequestHandler<CreateInvoiceCommand,
             SourceId = invoice.Id,
             Lines = lines
         }, ct);
+
+        if (queued)
+        {
+            invoice.BillingRequestedAt = DateTime.UtcNow;
+        }
     }
 
     private static InvoiceDto MapToDto(Invoice invoice)

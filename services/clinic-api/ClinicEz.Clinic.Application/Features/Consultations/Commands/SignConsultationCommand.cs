@@ -7,6 +7,7 @@ using ClinicEz.Clinic.Application.Common;
 using ClinicEz.Clinic.Application.Common.DTOs;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Consultations.DTOs;
+using ClinicEz.Clinic.Application.Features.Prescriptions.DTOs;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
@@ -383,6 +384,7 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
             encounter.PhilHealthOtherComplaint,
             encounter.PhilHealthPainSite,
             encounter.PhilHealthCaseNo,
-            encounter.PhilHealthSoapTransNo);
+            encounter.PhilHealthSoapTransNo,
+            RxPharmacyStatusDto.From(encounter));
     }
 }

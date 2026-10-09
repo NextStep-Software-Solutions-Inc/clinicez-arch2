@@ -353,6 +353,7 @@ public sealed class LicenseController : ControllerBase
                 PlanTier = payload?.PlanTier ?? "Community",
                 MaxStaffLimit = payload?.Limits?.MaxStaff ?? 5,
                 LicenseExpiresAt = payload?.ExpiresAtUtc,
+                EntitlementVersion = payload?.EntitlementVersion ?? 0,
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = "LicenseActivation"
             };
@@ -369,6 +370,7 @@ public sealed class LicenseController : ControllerBase
             settings.PlanTier = payload?.PlanTier ?? "Community";
             settings.MaxStaffLimit = payload?.Limits?.MaxStaff ?? 5;
             settings.LicenseExpiresAt = payload?.ExpiresAtUtc;
+            settings.EntitlementVersion = payload?.EntitlementVersion ?? 0;
         }
 
         await _unitOfWork.SaveChangesAsync(ct);

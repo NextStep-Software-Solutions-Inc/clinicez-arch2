@@ -48,7 +48,8 @@ public record PrescriptionSlipDto(
     string? DispensedReceiptNumber,
     string? DispensedReceiptUrl,
     DateTime? DispensedAt,
-    string? DispenseNotes
+    string? DispenseNotes,
+    RxPharmacyStatusDto? PharmacyStatus = null
 );
 
 public record PublicRxVerificationInfoDto(

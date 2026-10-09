@@ -68,9 +68,9 @@ public sealed class BillingPaymentConfirmedHandler : IInteropHandler<BillingPaym
             return;
         }
 
-        if (invoice.Status == InvoiceStatus.Voided)
+        if (invoice.Status is InvoiceStatus.Voided or InvoiceStatus.Refunded)
         {
-            Ignore(context, $"invoice {invoice.InvoiceNumber} is voided");
+            Ignore(context, $"invoice {invoice.InvoiceNumber} is {invoice.Status}");
             return;
         }
 

@@ -28,6 +28,8 @@ public sealed class ClinicSettings : BaseEntity
     public string PlanTier { get; set; } = "Community";
     public int MaxStaffLimit { get; set; } = 5;
     public DateTime? LicenseExpiresAt { get; set; }
+    /// <summary>Version of the entitlements the held license was minted for; an older <c>entitlements.changed</c> never replaces a newer one.</summary>
+    public int EntitlementVersion { get; set; }
 
     /// <summary>
     /// JSON encoded schedule, e.g. "Mon-Fri 8:00 AM - 5:00 PM, Sat 8:00 AM - 12:00 PM"

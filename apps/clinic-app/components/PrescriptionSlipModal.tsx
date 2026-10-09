@@ -7,6 +7,7 @@ import { useClinic } from '../context/ClinicContext';
 import { useStaff } from '../context/StaffContext';
 import { PrescriptionSlipData, clinicService } from '../services/clinicService';
 import { openPrintableUrl } from '../utils/printHelper';
+import { RxStageChip } from './interop/InteropBadges';
 
 interface PrescriptionSlipModalProps {
   visible: boolean;
@@ -268,6 +269,8 @@ export default function PrescriptionSlipModal({
         <ThemedText variant="smallBold" color={theme.colors.textSecondary}>
           Dispensing and verification
         </ThemedText>
+
+        <RxStageChip status={slip.pharmacyStatus} />
 
         {isDispensed && (
           <View style={styles.dispensedBanner}>

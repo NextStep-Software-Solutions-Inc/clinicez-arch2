@@ -1811,6 +1811,18 @@ export interface PrescriptionSlipData {
   dispensedReceiptUrl?: string;
   dispensedAt?: string;
   dispenseNotes?: string;
+  /** Where the prescription stands at the pharmacy, as last reported by it. */
+  pharmacyStatus?: RxPharmacyStatus | null;
+}
+
+export type RxStage = 'Issued' | 'Accepted' | 'PartiallyAccepted' | 'Rejected' | 'Dispensed' | 'ExternalDispensed';
+
+export interface RxPharmacyStatus {
+  stage: RxStage;
+  reason?: string | null;
+  quotedAmount?: number | null;
+  pharmacyName?: string | null;
+  reportedAt?: string | null;
 }
 
 export interface RecordExternalDispensePayload {

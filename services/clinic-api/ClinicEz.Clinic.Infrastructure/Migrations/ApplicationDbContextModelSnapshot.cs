@@ -1087,6 +1087,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<string>("DeletedBy")
                         .HasColumnType("text");
 
+                    b.Property<int>("EntitlementVersion")
+                        .HasColumnType("integer");
+
                     b.Property<string>("FacilitySlug")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
@@ -1437,8 +1440,30 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<string>("RxNotes")
                         .HasColumnType("text");
 
+                    b.Property<string>("RxPharmacyFacilityId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RxPharmacyName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RxPharmacyTenantId")
+                        .HasColumnType("text");
+
                     b.Property<string>("RxPublicVerificationToken")
                         .HasColumnType("text");
+
+                    b.Property<decimal?>("RxQuotedAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("RxStage")
+                        .IsRequired()
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("RxStageReason")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("RxStageReportedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("SignedAt")
                         .HasColumnType("timestamp with time zone");
@@ -1624,6 +1649,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
 
                     b.Property<string>("BilledByStaffName")
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("BillingRequestedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("ClinicId")
                         .HasColumnType("uuid");

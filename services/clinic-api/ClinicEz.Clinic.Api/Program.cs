@@ -5,6 +5,7 @@ using ClinicEz.Clinic.Api.Authorization;
 using ClinicEz.Clinic.Application;
 using ClinicEz.Clinic.Infrastructure;
 using ClinicEz.Clinic.Infrastructure.Auth;
+using ClinicEz.Shared.Licensing;
 using ClinicEz.Shared.LocalAuth;
 using ClinicEz.Shared.Middlewares;
 using Hangfire;
@@ -70,6 +71,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseInternalServiceGuard(); // internal-key principal is default-denied except on permission-guarded endpoints
 app.UseMiddleware<ClinicScopeMiddleware>();
+app.UseReadOnlyGrace(); // expired subscription: read-only in the grace window, blocked after it (staff sessions only)
 app.UseMiddleware<ClinicEz.Clinic.Infrastructure.Idempotency.IdempotencyMiddleware>();
 app.UseHangfireDashboard("/hangfire", new DashboardOptions { Authorization = [new HangfireDashboardAuthFilter(app.Configuration)] }); // Basic Auth; denied when no password is configured
 

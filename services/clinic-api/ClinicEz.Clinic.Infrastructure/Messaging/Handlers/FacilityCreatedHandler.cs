@@ -6,6 +6,7 @@ using ClinicEz.Clinic.Infrastructure.Persistence;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Handling;
+using ClinicEz.Shared.Licensing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -20,15 +21,18 @@ public sealed class FacilityCreatedHandler : IInteropHandler<FacilityCreatedEven
 {
     private readonly ApplicationDbContext _dbContext;
     private readonly IInteropPublisher _publisher;
+    private readonly IFacilityLicenseValidator _licenseValidator;
     private readonly ILogger<FacilityCreatedHandler> _logger;
 
     public FacilityCreatedHandler(
         ApplicationDbContext dbContext,
         IInteropPublisher publisher,
+        IFacilityLicenseValidator licenseValidator,
         ILogger<FacilityCreatedHandler> logger)
     {
         _dbContext = dbContext;
         _publisher = publisher;
+        _licenseValidator = licenseValidator;
         _logger = logger;
     }
 
@@ -61,6 +65,7 @@ public sealed class FacilityCreatedHandler : IInteropHandler<FacilityCreatedEven
             message.Name, message.ResourceId, message.TenantId);
 
         var tenantId = message.TenantId.ToLower();
+        var entitlementVersion = _licenseValidator.Validate(message.LicenseToken, message.ResourceId, message.TenantId).Payload?.EntitlementVersion ?? 0;
 
         // Seed or update ClinicSettings with cryptographically rooted license token
         var existingSettings = await _dbContext.ClinicSettings
@@ -75,6 +80,7 @@ public sealed class FacilityCreatedHandler : IInteropHandler<FacilityCreatedEven
                 existingSettings.PlanTier = message.PlanTier ?? "Community";
                 existingSettings.MaxStaffLimit = message.Limits?.MaxStaff ?? 5;
                 existingSettings.LicenseExpiresAt = message.LicenseExpiresAt;
+                existingSettings.EntitlementVersion = entitlementVersion;
             }
             existingSettings.ClinicName = message.Name;
             existingSettings.TenantSlug = message.TenantSlug ?? existingSettings.TenantSlug;
@@ -94,6 +100,7 @@ public sealed class FacilityCreatedHandler : IInteropHandler<FacilityCreatedEven
                 PlanTier = message.PlanTier ?? "Community",
                 MaxStaffLimit = message.Limits?.MaxStaff ?? 5,
                 LicenseExpiresAt = message.LicenseExpiresAt,
+                EntitlementVersion = entitlementVersion,
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = "SystemProvisioning"
             };

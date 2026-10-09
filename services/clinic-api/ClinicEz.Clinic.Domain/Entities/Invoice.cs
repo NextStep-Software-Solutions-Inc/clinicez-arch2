@@ -34,6 +34,12 @@ public sealed class Invoice : BaseEntity
     public Guid? BilledByStaffId { get; set; }
     public string? BilledByStaffName { get; set; }
 
+    /// <summary>
+    /// Set when the invoice was requested to the shared billing counter (<c>billing.invoice.requested</c>). From then on the
+    /// counter owns the collection and a local cashier payment would charge the patient twice.
+    /// </summary>
+    public DateTime? BillingRequestedAt { get; set; }
+
     public List<InvoiceLineItem> LineItems { get; set; } = new();
     public List<PaymentRecord> Payments { get; set; } = new();
 }

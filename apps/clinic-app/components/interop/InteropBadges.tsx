@@ -3,12 +3,13 @@ import { View, StyleSheet } from 'react-native';
 import { Badge, ThemedText } from '@ui';
 import type { BadgeVariant } from '@ui';
 import { theme } from '@constants/theme';
-import type { ClinicLabOrderRecord } from '../../services/clinicService';
+import type { ClinicLabOrderRecord, RxPharmacyStatus } from '../../services/clinicService';
 import {
   describeLabOrderStage,
   getResultProvenance,
   type StatusTone,
 } from '../../services/labResultReview';
+import { describeRxStage } from '../../services/rxStatus';
 
 const TONE_VARIANTS: Record<StatusTone, BadgeVariant> = {
   neutral: 'neutral',
@@ -80,6 +81,35 @@ export function LabOrderStageChip({ order }: LabOrderStageChipProps) {
   );
 }
 
+export interface RxStageChipProps {
+  status: RxPharmacyStatus | null | undefined;
+}
+
+/**
+ * Pharmacy stage chip for a prescription, with the pharmacy's quote and rejection reason.
+ * Renders nothing until a pharmacy has reported a stage.
+ */
+export function RxStageChip({ status }: RxStageChipProps) {
+  const display = describeRxStage(status);
+  if (!display) return null;
+
+  return (
+    <View style={styles.row}>
+      <Badge label={display.chip.label} variant={toneToVariant(display.chip.tone)} size="sm" />
+      {display.quote ? <Badge label={`Quote ${display.quote}`} variant="warning" size="sm" icon="cash" /> : null}
+      {display.pharmacyName ? (
+        <ThemedText variant="caption" color={theme.colors.textMuted}>
+          Pharmacy: {display.pharmacyName}
+        </ThemedText>
+      ) : null}
+      {display.reason ? (
+        <ThemedText variant="caption" color={theme.colors.textMuted}>
+          {display.reason}
+        </ThemedText>
+      ) : null}
+    </View>
+  );
+}
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',

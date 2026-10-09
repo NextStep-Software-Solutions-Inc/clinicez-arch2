@@ -5,6 +5,7 @@ using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Clinic.Infrastructure.Messaging;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Facility;
 using ClinicEz.Shared.Interoperability;
 using ClinicEz.Shared.Workspace;
 using ClinicEz.Clinic.Infrastructure.Context;
@@ -116,6 +117,13 @@ public static class DependencyInjection
 
         services.AddHangfireServer();
 
+        // Subscription entitlements: the license store, the heartbeat to the control plane and entitlements.changed.
+        services.AddFacilityEntitlements<ClinicLicenseStore>();
+        services.AddFacilityHeartbeat<ClinicLicenseStore>();
+
+        // Catalog types the clinic deliberately does not handle: the laboratory reports every stage of an order (accepted,
+        // rejected, payment confirmed included) through lab.order.status.changed only, so lab.order.accepted, lab.order.rejected
+        // and lab.order.payment.confirmed are never sent to a clinic and are intentionally not registered here.
         services.AddInterop<ApplicationDbContext>(configuration, b => b
             .Handle<FacilityCreatedEvent, FacilityCreatedHandler>(InteropTypes.FacilityLicenseIssued)
             .Handle<WorkspaceProfileUpdatedEvent, WorkspaceProfileUpdatedHandler>(InteropTypes.WorkspaceProfileUpdated)
@@ -128,7 +136,10 @@ public static class DependencyInjection
             .Handle<BillingPaymentConfirmedPayload, BillingPaymentConfirmedHandler>(InteropTypes.BillingPaymentConfirmed)
             .Handle<PatientShareSnapshotPayload, PatientShareSnapshotHandler>(InteropTypes.PatientShareSnapshot)
             .Handle<PatientRecordSharedPayload, PatientRecordSharedHandler>(InteropTypes.PatientRecordShared)
-            .Handle<ExternalPrescriptionDispensedEvent, ExternalPrescriptionDispensedHandler>(InteropTypes.RxExternalDispensed));
+            .Handle<ExternalPrescriptionDispensedEvent, ExternalPrescriptionDispensedHandler>(InteropTypes.RxExternalDispensed)
+            .Handle<RxStatusChangedPayload, RxStatusChangedHandler>(InteropTypes.RxStatusChanged)
+            .Handle<BillingInvoiceVoidedPayload, BillingInvoiceVoidedHandler>(InteropTypes.BillingInvoiceVoided)
+            .HandleEntitlementsChanged());
 
         if (env != null && env.IsDevelopment())
         {

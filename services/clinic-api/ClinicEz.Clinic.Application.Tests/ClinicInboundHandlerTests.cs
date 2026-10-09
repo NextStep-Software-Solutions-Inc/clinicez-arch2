@@ -11,6 +11,7 @@ using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Handling;
 using ClinicEz.Shared.Interoperability;
+using ClinicEz.Shared.Licensing;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -33,7 +34,7 @@ public class ClinicInboundHandlerTests
         new(db, MessagingTestKit.Recipient(db), NullLogger<PrescriptionDispensedHandler>.Instance);
 
     private static FacilityCreatedHandler FacilityHandler(ApplicationDbContext db) =>
-        new(db, new InteropPublisher(db), NullLogger<FacilityCreatedHandler>.Instance);
+        new(db, new InteropPublisher(db), new FacilityLicenseValidator(FacilityLicenseValidator.DefaultAuthorityPublicKeyPem), NullLogger<FacilityCreatedHandler>.Instance);
 
     private static ClinicLabOrder SeedLabOrder(ApplicationDbContext db, Guid clinicId, string orderNumber = "LAB-0001")
     {

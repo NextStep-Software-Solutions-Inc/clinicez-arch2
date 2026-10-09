@@ -90,7 +90,7 @@ public class GetClinicAnalyticsQueryHandler : IRequestHandler<GetClinicAnalytics
         );
 
         // 2. Financial & Revenue
-        var invoices = await _invoiceRepo.Query(i => i.InvoiceDate >= start && i.InvoiceDate < end && i.Status != InvoiceStatus.Voided)
+        var invoices = await _invoiceRepo.Query(i => i.InvoiceDate >= start && i.InvoiceDate < end && i.Status != InvoiceStatus.Voided && i.Status != InvoiceStatus.Refunded)
             .ToListAsync(cancellationToken);
 
         decimal totalGross = invoices.Sum(i => i.GrossAmount);

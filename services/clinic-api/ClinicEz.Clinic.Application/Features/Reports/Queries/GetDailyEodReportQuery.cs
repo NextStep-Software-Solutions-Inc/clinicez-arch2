@@ -58,7 +58,7 @@ public class GetDailyEodReportQueryHandler : IRequestHandler<GetDailyEodReportQu
         int totalWaitingOrInConsultation = queueItems.Count(q => q.Status == QueueStatus.Waiting || q.Status == QueueStatus.Triaged || q.Status == QueueStatus.InConsultation);
 
         // 2. Invoices & Billing
-        var invoices = await _invoiceRepo.Query(i => i.InvoiceDate >= targetDate && i.InvoiceDate < nextDay && i.Status != InvoiceStatus.Voided)
+        var invoices = await _invoiceRepo.Query(i => i.InvoiceDate >= targetDate && i.InvoiceDate < nextDay && i.Status != InvoiceStatus.Voided && i.Status != InvoiceStatus.Refunded)
             .ToListAsync(cancellationToken);
 
         decimal totalGrossAmount = invoices.Sum(i => i.GrossAmount);
