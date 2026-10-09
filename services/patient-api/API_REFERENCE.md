@@ -1078,7 +1078,6 @@ Returns full clinic info, linked organisations, and the requesting patient's mem
     "address": "Metro Manila, Philippines",
     "isPublic": true,
     "supportsAppointments": true,
-    "baseUrl": "https://family-medicine-metro-manila-1.Clinic EZ.local",
     "privacyPolicyUrl": "https://Clinic EZ.app/privacy/family-medicine-metro-manila-1",
     "termsAndConditionsUrl": "https://Clinic EZ.app/terms/family-medicine-metro-manila-1",
     "specialtiesJson": "[\"Family Medicine\",\"Telehealth\"]",
@@ -1170,11 +1169,12 @@ Creates an appointment request. The draft can be submitted to the clinic later.
 
 ### `POST /api/v1/patients/{patientId}/booking-drafts/{draftId}/submit` — Submit to clinic
 
-Forwards the booking request to the target Clinic Dashboard API through the PatientApp
-backend proxy.
+Publishes a `patient.appointment.booked` message to the clinic through the Interop hub. The message is written to the
+outbox in the same transaction as the draft status change, so delivery is at-least-once and never lost on a crash. Only
+the fields the patient chose to share (plus name and mobile) are included. The clinic answers asynchronously with
+`clinic.appointment.updated` messages, which appear in `GET /api/v1/patients/{patientId}/appointments`.
 
-> **Note:** The Clinic Dashboard booking API is not yet fully developed. This endpoint
-> currently returns a synthetic `PENDING-{draftId}` reference until the Dashboard is ready.
+The returned `PENDING-{draftId}` reference is a placeholder until the clinic confirms.
 
 **202 Accepted**
 
@@ -1188,18 +1188,16 @@ backend proxy.
 ```
 
 **404** — draft not found or does not belong to this patient.  
-**409** — draft has already been submitted.
+**409** — draft has already been submitted, or the clinic has no tenant yet (not provisioned in the directory).
 
 ---
 
 ## Appointments
 
-### `GET /api/v1/patients/{patientId}/clinic-appointments` — Proxy appointments
+### `GET /api/v1/patients/{patientId}/appointments` — List appointments
 
-Proxies the appointment list request to a specific clinic's backend. The mobile reads
-`baseUrl` from its local `clinics` SQLite table.
-
-**Query params:** `?clinicBaseUrl=https://family-medicine-metro-manila-1.Clinic EZ.local`
+Returns the patient's appointments as last reported by their clinics (`clinic.appointment.updated` Interop messages).
+No clinic is contacted at request time.
 
 **200 OK**
 
@@ -1232,8 +1230,6 @@ Proxies the appointment list request to a specific clinic's backend. The mobile 
 ```
 
 **Appointment statuses:** `pending` | `confirmed` | `cancelled` | `completed` | `noShow` | `actionRequired`
-
-**503** — the clinic backend is unreachable (Polly retries exhausted). Display cached appointments if available.
 
 ---
 

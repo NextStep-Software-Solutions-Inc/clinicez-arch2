@@ -316,34 +316,27 @@ public sealed class DispenseGamotPrescriptionCommandHandler : IRequestHandler<Di
         await _auditRepo.AddAsync(auditRecord, cancellationToken);
         _orderRepo.Update(order);
 
+        // Queue rx.dispensed in the interop outbox BEFORE saving so it commits atomically with the dispense.
+        var dispensedEvent = new PrescriptionDispensedEvent
+        {
+            DispenseId = auditRecord.Id,
+            PrescriptionId = order.ExternalPrescriptionId != Guid.Empty ? order.ExternalPrescriptionId : order.Id,
+            PrescriptionNumber = order.PrescriptionNumber,
+            PharmacyFacilityId = order.PharmacyId,
+            PharmacyFacilityName = "ClinicEz Partner Pharmacy Hub",
+            PharmacyTenantId = order.TenantId,
+            DispensingPharmacistName = order.DispensingPharmacistName,
+            DispensingPharmacistPrcLicense = order.DispensingPharmacistPrc,
+            DispensedAt = order.DispensedAt.Value,
+            DispensedItems = dispensedMedications,
+            TotalAmount = totalAmount,
+            ReceiptNumber = request.ReceiptNumber,
+            Notes = request.Notes
+        };
+
+        _dispensedPublisher.Enqueue(order, dispensedEvent);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-        // 6. Broadcast PrescriptionDispensedEvent
-        try
-        {
-            var dispensedEvent = new PrescriptionDispensedEvent
-            {
-                DispenseId = auditRecord.Id,
-                PrescriptionId = order.ExternalPrescriptionId != Guid.Empty ? order.ExternalPrescriptionId : order.Id,
-                PrescriptionNumber = order.PrescriptionNumber,
-                PharmacyFacilityId = order.PharmacyId,
-                PharmacyFacilityName = "ClinicEz Partner Pharmacy Hub",
-                PharmacyTenantId = order.TenantId,
-                DispensingPharmacistName = order.DispensingPharmacistName,
-                DispensingPharmacistPrcLicense = order.DispensingPharmacistPrc,
-                DispensedAt = order.DispensedAt.Value,
-                DispensedItems = dispensedMedications,
-                TotalAmount = totalAmount,
-                ReceiptNumber = request.ReceiptNumber,
-                Notes = request.Notes
-            };
-
-            await _dispensedPublisher.PublishPrescriptionDispensedAsync(dispensedEvent, cancellationToken);
-        }
-        catch
-        {
-            // Event publication non-blocking
-        }
 
         var dto = new PrescriptionOrderDto(
             order.Id,

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Interfaces;
-using MassTransit;
+using ClinicEz.Shared.Interop.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata;
@@ -12,7 +12,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace ClinicEz.Clinic.Infrastructure.Persistence;
 
-public class ApplicationDbContext : DbContext
+public class ApplicationDbContext : DbContext, IInteropDbContext
 {
     private readonly IConfiguration _configuration;
     private readonly IClinicContext? _clinicContext;
@@ -52,11 +52,11 @@ public class ApplicationDbContext : DbContext
     public DbSet<YakapTransmittal> YakapTransmittals { get; set; } = null!;
     public DbSet<YakapTransmittalItem> YakapTransmittalItems { get; set; } = null!;
     public DbSet<PhilHealthSequenceTracker> PhilHealthSequenceTrackers { get; set; } = null!;
-    public DbSet<TenantLookupRecord> Tenants { get; set; } = null!;
     public DbSet<PhilHealthCatalogItem> PhilHealthCatalogItems { get; set; } = null!;
     public DbSet<PhilHealthCatalogImportLog> PhilHealthCatalogImportLogs { get; set; } = null!;
     public DbSet<IdempotencyRecord> IdempotencyRecords { get; set; } = null!;
-    public DbSet<FacilityLookupRecord> Facilities { get; set; } = null!;
+    public DbSet<InteropOutboxMessage> InteropOutbox { get; set; } = null!;
+    public DbSet<InteropInboxMessage> InteropInbox { get; set; } = null!;
 
     public Guid CurrentClinicId => _clinicContext?.ClinicId ?? Guid.Empty;
 
@@ -456,6 +456,8 @@ public class ApplicationDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.TenantSlug).HasMaxLength(100);
+            entity.Property(e => e.FacilitySlug).HasMaxLength(100);
             entity.Property(e => e.ClinicName).IsRequired().HasMaxLength(200);
             entity.Property(e => e.AccreditationNumber).HasMaxLength(100);
             entity.Property(e => e.PmccNumber).HasMaxLength(100);
@@ -502,25 +504,6 @@ public class ApplicationDbContext : DbContext
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.YakapTransmittalId });
         });
 
-        modelBuilder.Entity<TenantLookupRecord>(entity =>
-        {
-            entity.ToTable("Tenants", "main", t => t.ExcludeFromMigrations());
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantSlug);
-            entity.Property(e => e.Name);
-            entity.Property(e => e.IsDeleted);
-        });
-
-        modelBuilder.Entity<FacilityLookupRecord>(entity =>
-        {
-            entity.ToTable("Facilities", "main", t => t.ExcludeFromMigrations());
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.TenantId);
-            entity.Property(e => e.Name);
-            entity.Property(e => e.Slug);
-            entity.Property(e => e.IsDeleted);
-        });
-
         // PhilHealth Catalog: official lib_* libraries shared by every clinic on this server (no tenant filter).
         modelBuilder.Entity<PhilHealthCatalogItem>(entity =>
         {
@@ -559,10 +542,8 @@ public class ApplicationDbContext : DbContext
             entity.HasIndex(e => e.CreatedAt);
         });
 
-        // MassTransit outbox
-        modelBuilder.AddInboxStateEntity();
-        modelBuilder.AddOutboxStateEntity();
-        modelBuilder.AddOutboxMessageEntity();
+        // Interop transactional outbox and inbox
+        modelBuilder.ApplyInteropModel();
 
         base.OnModelCreating(modelBuilder);
     }

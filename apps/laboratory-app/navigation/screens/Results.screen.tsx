@@ -182,7 +182,7 @@ export default function ResultsScreen() {
     } else {
       Alert.alert(
         'Panic Alert Dispatched! 🚨',
-        `Attending physician ${notifiedDoctor} notified via ${notificationMethod}. Statutory readback confirmation logged and STAT event broadcast across RabbitMQ.`
+        `Attending physician ${notifiedDoctor} notified via ${notificationMethod}. Statutory readback confirmation logged and STAT alert queued for delivery to the ordering clinic through the ClinicEZ interop hub.`
       );
     }
   };
@@ -516,7 +516,7 @@ export default function ResultsScreen() {
           <View style={styles.modalContent}>
             <ThemedText style={styles.modalTitle}>Pathologist PRC Statutory Sign-Off</ThemedText>
             <ThemedText style={styles.modalSub}>
-              Digital verification under Philippine DOH AO 2007-0027 and PRC Board of Medical Technology. Automatically generates official signed PDF and broadcasts across RabbitMQ.
+              Digital verification under Philippine DOH AO 2007-0027 and PRC Board of Medical Technology. Automatically generates official signed PDF and delivers it to the ordering clinic through the ClinicEZ interop hub.
             </ThemedText>
 
             <View style={styles.modalForm}>

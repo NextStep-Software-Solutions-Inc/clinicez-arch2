@@ -34,7 +34,7 @@ public sealed class ClinicConfiguration : IEntityTypeConfiguration<Clinic>
         builder.Property(e => e.Name).HasMaxLength(200).IsRequired();
         builder.Property(e => e.Description).HasMaxLength(1000);
         builder.Property(e => e.Address).HasMaxLength(300);
-        builder.Property(e => e.BaseUrl).HasMaxLength(500).IsRequired();
+        builder.Property(e => e.TenantId).HasMaxLength(100);
         builder.Property(e => e.LogoUrl).HasMaxLength(500);
         builder.Property(e => e.CoverImageUrl).HasMaxLength(500);
         builder.Property(e => e.PrivacyPolicyUrl).HasMaxLength(500);

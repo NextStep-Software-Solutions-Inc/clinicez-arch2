@@ -18,10 +18,12 @@ namespace ClinicEz.Pharmacy.Infrastructure.Context;
 ///   <item>Trusted internal services (Internal scheme): tenant/pharmacy come from the scoped values resolved by
 ///   <c>PharmacyScopeMiddleware</c> (or X-Tenant-Id/X-Facility-Id), with the GAMOT-only service permission set.</item>
 ///   <item>Anonymous requests: no permissions and the <see cref="UnauthenticatedPharmacyId"/> sentinel.</item>
-///   <item>No HTTP request (MassTransit consumers, seeders): configured values, trusted system scope.</item>
+///   <item>Interop message handlers (no HTTP request): the explicit scope entered via <see cref="IPharmacyScopeSetter"/> from the
+///   envelope's <c>To</c> party, with trusted system permissions.</item>
+///   <item>Other background code (seeders): configured values, trusted system scope.</item>
 /// </list>
 /// </summary>
-public sealed class PharmacyContext : IPharmacyContext
+public sealed class PharmacyContext : IPharmacyContext, IPharmacyScopeSetter
 {
     /// <summary>Sentinel for "no authenticated pharmacy". Never matches any real pharmacy row.</summary>
     public static readonly Guid UnauthenticatedPharmacyId = new("00000000-0000-0000-0000-00000000dead");
@@ -31,11 +33,20 @@ public sealed class PharmacyContext : IPharmacyContext
 
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IConfiguration _configuration;
+    private (string TenantId, Guid PharmacyId)? _explicitScope;
 
     public PharmacyContext(IHttpContextAccessor httpContextAccessor, IConfiguration configuration)
     {
         _httpContextAccessor = httpContextAccessor;
         _configuration = configuration;
+    }
+
+    public void Enter(string tenantId, Guid pharmacyId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenantId);
+        if (pharmacyId == Guid.Empty || pharmacyId == UnauthenticatedPharmacyId)
+            throw new ArgumentException("A real pharmacy id is required.", nameof(pharmacyId));
+        _explicitScope = (tenantId, pharmacyId);
     }
 
     private HttpContext? Http => _httpContextAccessor.HttpContext;
@@ -57,6 +68,8 @@ public sealed class PharmacyContext : IPharmacyContext
     {
         get
         {
+            if (_explicitScope is { } scoped) return scoped.TenantId;
+
             var http = Http;
             if (http is null) return _configuration["PharmacySettings:TenantId"] ?? "default";
 
@@ -64,8 +77,8 @@ public sealed class PharmacyContext : IPharmacyContext
 
             if (IsInternal(http.User))
             {
-                if (http.Items.TryGetValue(InternalTenantItemKey, out var scoped) && scoped is string scopedTenant)
-                    return scopedTenant;
+                if (http.Items.TryGetValue(InternalTenantItemKey, out var scopedTenant) && scopedTenant is string scopedTenantId)
+                    return scopedTenantId;
                 return Header(http, "X-Tenant-Id") ?? string.Empty;
             }
 
@@ -77,6 +90,8 @@ public sealed class PharmacyContext : IPharmacyContext
     {
         get
         {
+            if (_explicitScope is { } scoped) return scoped.PharmacyId;
+
             var http = Http;
             if (http is null)
                 return Guid.TryParse(_configuration["PharmacySettings:PharmacyId"], out var configured) ? configured : Guid.Empty;
@@ -90,7 +105,7 @@ public sealed class PharmacyContext : IPharmacyContext
 
             if (IsInternal(http.User))
             {
-                if (http.Items.TryGetValue(InternalPharmacyItemKey, out var scoped) && scoped is Guid scopedPharmacy)
+                if (http.Items.TryGetValue(InternalPharmacyItemKey, out var scopedItem) && scopedItem is Guid scopedPharmacy)
                     return scopedPharmacy;
                 return Guid.TryParse(Header(http, "X-Facility-Id"), out var header) ? header : UnauthenticatedPharmacyId;
             }
@@ -114,7 +129,7 @@ public sealed class PharmacyContext : IPharmacyContext
         get
         {
             var http = Http;
-            // Background/system scope (consumers, seeders) is trusted code, not a client.
+            // Background/system scope (interop handlers, seeders) is trusted code, not a client.
             if (http is null) return PharmacyPermissions.All;
 
             if (IsInternal(http.User)) return PharmacyPermissions.InternalService;

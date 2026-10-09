@@ -29,7 +29,10 @@ public class ApplicationDbContextFactory : IDesignTimeDbContextFactory<Applicati
         var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>();
         optionsBuilder.UseNpgsql(connectionString);
 
-        return new ApplicationDbContext(optionsBuilder.Options, configuration);
+        return new ApplicationDbContext(
+            optionsBuilder.Options,
+            configuration,
+            new ClinicEz.Pharmacy.Infrastructure.Context.PharmacyContext(new Microsoft.AspNetCore.Http.HttpContextAccessor(), configuration));
     }
 }
 

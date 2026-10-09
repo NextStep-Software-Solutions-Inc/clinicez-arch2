@@ -53,10 +53,9 @@ public class PharmacyAuthServiceTests
 
     private static async Task<Fixture> CreateAsync(string? ownerEmail = OwnerEmail, bool withSettings = true)
     {
-        var (db, _, _) = PharmacyTestDbHelper.CreateTestContext();
-
         var pharmacyId = Guid.NewGuid();
         var tenantId = Guid.NewGuid().ToString();
+        var db = PharmacyTestDbHelper.CreateContext($"Pharmacy_AuthDb_{Guid.NewGuid()}", new TestPharmacyScope(tenantId, pharmacyId));
         var license = SignLicense(pharmacyId, tenantId, ownerEmail, "Olivia Owner");
 
         if (withSettings)

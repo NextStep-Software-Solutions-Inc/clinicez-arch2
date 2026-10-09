@@ -1,6 +1,9 @@
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Domain.Interfaces;
-using ClinicEz.Clinic.Infrastructure.Consumers;
+using ClinicEz.Clinic.Infrastructure.Messaging;
+using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interoperability;
 using ClinicEz.Shared.Workspace;
 using ClinicEz.Clinic.Infrastructure.Context;
 using ClinicEz.Clinic.Infrastructure.Persistence;
@@ -9,7 +12,6 @@ using ClinicEz.Clinic.Infrastructure.Services;
 using ClinicEz.Shared.Documents;
 using Hangfire;
 using Hangfire.PostgreSql;
-using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -32,7 +34,7 @@ public static class DependencyInjection
             throw new InvalidOperationException("DbSchema configuration value is required but was not specified.");
         }
 
-        // Must be registered before Hangfire/MassTransit so the schema exists when they start (fresh on-prem installs).
+        // Must be registered before Hangfire/interop so the schema exists when they start (fresh on-prem installs).
         services.AddHostedService<ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.DatabaseMigrationHostedService>();
 
         services.AddHttpContextAccessor();
@@ -52,7 +54,7 @@ public static class DependencyInjection
         services.AddScoped<IProductRepository, ProductRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddSingleton<ClinicEz.Shared.Licensing.IFacilityLicenseValidator, ClinicEz.Shared.Licensing.FacilityLicenseValidator>();
-        services.AddHttpClient<ITenantLookupService, TenantLookupService>();
+        services.AddScoped<ITenantLookupService, TenantLookupService>();
 
         // Facility-local authentication (no external identity provider; works offline/LAN)
         services.AddMemoryCache();
@@ -73,15 +75,17 @@ public static class DependencyInjection
         // Workspace brand/regional defaults, pulled from portal-api (works against a remote portal)
         services.AddWorkspaceProfileClient();
 
-        // Outbound patient webhook notifier
-        services.AddHttpClient<IPatientWebhookNotifier, PatientWebhookNotifier>();
-
         // Outbound PhilHealth Yakap integration client
         services.AddHttpClient<IPhilHealthProxyClient, PhilHealthProxyClient>();
         services.AddHttpClient<IPharmacyGamotGateway, PharmacyGamotGateway>();
         services.AddScoped<ClinicEz.Clinic.Application.Features.Yakap.Services.IPhilHealthSequenceGenerator, PhilHealthSequenceGenerator>();
 
-        // Outbound interoperability publisher
+        // Interoperability: outbound messages are queued in the transactional interop outbox; inbound ones are
+        // scoped to the clinic they are addressed to.
+        services.AddScoped<ClinicRecipientResolver>();
+        services.AddScoped<ClinicPatientAddressResolver>();
+        services.AddScoped<IClinicIdentityProvider, ClinicIdentityProvider>();
+        services.AddScoped<IPatientAppointmentPublisher, PatientAppointmentPublisher>();
         services.AddScoped<ILabRequisitionPublisher, LabRequisitionPublisher>();
         services.AddScoped<IPrescriptionPublisher, PrescriptionPublisher>();
         services.AddClinicEzDocumentEngine();
@@ -99,48 +103,13 @@ public static class DependencyInjection
 
         services.AddHangfireServer();
 
-        services.AddMassTransit(x =>
-        {
-            x.SetEndpointNameFormatter(new KebabCaseEndpointNameFormatter("clinic", false));
-            x.AddConsumer<FacilityCreatedConsumer>();
-            x.AddConsumer<ClinicEz.Shared.Workspace.WorkspaceProfileUpdatedConsumer>();
-            x.AddConsumer<AppointmentBookedConsumer>();
-            x.AddConsumer<DiagnosticReportFinalizedConsumer>();
-            x.AddConsumer<PrescriptionDispensedConsumer>();
-            x.AddConsumer<LabPanicResultAlertConsumer>();
-            x.AddEntityFrameworkOutbox<ApplicationDbContext>(o =>
-            {
-                o.UsePostgres();
-                o.UseBusOutbox();
-            });
-
-            x.UsingRabbitMq((context, cfg) =>
-            {
-                var host = configuration["RabbitMq:Host"];
-                if (string.IsNullOrWhiteSpace(host) || host == "localhost")
-                {
-                    host = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true" ? "rabbitmq" : (string.IsNullOrWhiteSpace(host) ? "localhost" : host);
-                }
-                var portStr = configuration["RabbitMq:Port"];
-                ushort port = !string.IsNullOrEmpty(portStr) && ushort.TryParse(portStr, out var p) ? p : (ushort)5672;
-                var useSsl = configuration.GetValue<bool>("RabbitMq:UseSsl", port == 5671);
-
-                cfg.Host(host, port, configuration["RabbitMq:VirtualHost"] ?? "/", h =>
-                {
-                    h.Username(configuration["RabbitMq:Username"] ?? "rabbitmq");
-                    h.Password(configuration["RabbitMq:Password"] ?? "nextstep-rabbitmq-2o2G");
-                    if (useSsl)
-                    {
-                        h.UseSsl(s =>
-                        {
-                            // Supports on-premises outbound AMQPS firewall traversal over port 5671
-                        });
-                    }
-                });
-
-                cfg.ConfigureEndpoints(context);
-            });
-        });
+        services.AddInterop<ApplicationDbContext>(configuration, b => b
+            .Handle<FacilityCreatedEvent, FacilityCreatedHandler>(InteropTypes.FacilityLicenseIssued)
+            .Handle<WorkspaceProfileUpdatedEvent, WorkspaceProfileUpdatedHandler>(InteropTypes.WorkspaceProfileUpdated)
+            .Handle<AppointmentBookedEvent, AppointmentBookedHandler>(InteropTypes.PatientAppointmentBooked)
+            .Handle<DiagnosticReportFinalizedEvent, DiagnosticReportFinalizedHandler>(InteropTypes.LabResultFinalized)
+            .Handle<PrescriptionDispensedEvent, PrescriptionDispensedHandler>(InteropTypes.RxDispensed)
+            .Handle<LabPanicResultAlertEvent, LabPanicResultAlertHandler>(InteropTypes.LabResultPanic));
 
         if (env != null && env.IsDevelopment())
         {

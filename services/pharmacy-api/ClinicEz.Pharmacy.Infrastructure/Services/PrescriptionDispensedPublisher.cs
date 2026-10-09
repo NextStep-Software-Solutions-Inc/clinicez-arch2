@@ -1,45 +1,49 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 using ClinicEz.Pharmacy.Application.Common.Interfaces;
+using ClinicEz.Pharmacy.Domain.Entities;
+using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interoperability;
-using MassTransit;
 using Microsoft.Extensions.Logging;
 
 namespace ClinicEz.Pharmacy.Infrastructure.Services;
 
 public class PrescriptionDispensedPublisher : IPrescriptionDispensedPublisher
 {
-    private readonly IPublishEndpoint _publishEndpoint;
+    private readonly IInteropPublisher _publisher;
     private readonly ILogger<PrescriptionDispensedPublisher> _logger;
 
-    public PrescriptionDispensedPublisher(IPublishEndpoint publishEndpoint, ILogger<PrescriptionDispensedPublisher> logger)
+    public PrescriptionDispensedPublisher(IInteropPublisher publisher, ILogger<PrescriptionDispensedPublisher> logger)
     {
-        _publishEndpoint = publishEndpoint;
+        _publisher = publisher;
         _logger = logger;
     }
 
-    public async Task PublishPrescriptionDispensedAsync(PrescriptionDispensedEvent dispensedEvent, CancellationToken cancellationToken = default)
+    public void Enqueue(PrescriptionOrder order, PrescriptionDispensedEvent dispensedEvent)
     {
-        try
+        if (string.IsNullOrWhiteSpace(order.OrderingTenantId) || string.IsNullOrWhiteSpace(order.OrderingFacilityId))
         {
-            _logger.LogInformation(
-                "[PrescriptionDispensedPublisher] Broadcasting PrescriptionDispensedEvent for Prescription {PrescriptionNo} (Pharmacist {PharmacistName}) to RabbitMQ",
-                dispensedEvent.PrescriptionNumber, dispensedEvent.DispensingPharmacistName);
-
-            await _publishEndpoint.Publish(dispensedEvent, cancellationToken);
-
-            _logger.LogInformation(
-                "[PrescriptionDispensedPublisher] Successfully published PrescriptionDispensedEvent for Prescription {PrescriptionNo}",
-                dispensedEvent.PrescriptionNumber);
+            throw new InvalidOperationException(
+                $"Prescription '{order.PrescriptionNumber}' has no ordering clinic recorded, so its dispense cannot be addressed.");
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "[PrescriptionDispensedPublisher] Failed to publish PrescriptionDispensedEvent for Prescription {PrescriptionNo}. Event will remain in outbox or local database.",
-                dispensedEvent.PrescriptionNumber);
-            // Non-blocking in offline / disconnected mode
-        }
+
+        var from = Party.ForFacility(order.TenantId, order.PharmacyId, FacilityType.Pharmacy);
+        var to = Party.ForFacility(order.OrderingTenantId, order.OrderingFacilityId, FacilityType.Clinic);
+        var correlationId = order.CorrelationId != Guid.Empty ? order.CorrelationId : order.ExternalPrescriptionId;
+
+        _logger.LogInformation(
+            "[PrescriptionDispensedPublisher] Queueing rx.dispensed for Prescription {PrescriptionNo} (Pharmacist {PharmacistName}) to {Recipient}",
+            dispensedEvent.PrescriptionNumber, dispensedEvent.DispensingPharmacistName, to.Address);
+
+        _publisher.Enqueue(
+            InteropTypes.RxDispensed,
+            from,
+            to,
+            correlationId,
+            dispensedEvent with
+            {
+                OrderingTenantId = order.OrderingTenantId,
+                OrderingFacilityId = order.OrderingFacilityId,
+                PatientId = order.PatientId
+            });
     }
 }

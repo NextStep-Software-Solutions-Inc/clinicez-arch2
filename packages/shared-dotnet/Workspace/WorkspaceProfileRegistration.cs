@@ -1,6 +1,7 @@
+using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Shared.Common;
-using MassTransit;
+using ClinicEz.Shared.Interop.Handling;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -8,14 +9,14 @@ namespace ClinicEz.Shared.Workspace;
 
 /// <summary>
 /// Invalidates the cached workspace profile when portal-api announces a change. Register in a service's
-/// MassTransit setup with <c>x.AddConsumer&lt;WorkspaceProfileUpdatedConsumer&gt;()</c>. Best effort: when an
-/// instance does not receive the event it converges through the cache freshness window and ETag revalidation.
+/// interop setup with <c>b.Handle&lt;WorkspaceProfileUpdatedEvent, WorkspaceProfileUpdatedHandler&gt;(InteropTypes.WorkspaceProfileUpdated)</c>.
+/// Best effort: when an instance does not receive the event it converges through the cache freshness window and
+/// ETag revalidation.
 /// </summary>
-public sealed class WorkspaceProfileUpdatedConsumer(IWorkspaceProfileProvider provider) : IConsumer<WorkspaceProfileUpdatedEvent>
+public sealed class WorkspaceProfileUpdatedHandler(IWorkspaceProfileProvider provider) : IInteropHandler<WorkspaceProfileUpdatedEvent>
 {
-    public Task Consume(ConsumeContext<WorkspaceProfileUpdatedEvent> context)
+    public Task HandleAsync(WorkspaceProfileUpdatedEvent message, InteropMessageContext context, CancellationToken ct)
     {
-        var message = context.Message;
         provider.Invalidate(message.TenantSlug);
         provider.Invalidate(message.TenantId);
         return Task.CompletedTask;

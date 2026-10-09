@@ -14,8 +14,14 @@ public sealed class LabRequisition : BaseEntity
     public Guid? ExternalRequisitionId { get; set; }
     public required string AccessionNumber { get; set; }
 
+    /// <summary>Tenant of the ordering clinic (envelope <c>From</c>); with <see cref="OrderingFacilityId"/> it is the reply address.</summary>
+    public string? OrderingTenantId { get; set; }
+    /// <summary>Facility id of the ordering clinic (envelope <c>From</c>).</summary>
     public string OrderingFacilityId { get; set; } = string.Empty;
     public string OrderingFacilityName { get; set; } = string.Empty;
+
+    /// <summary>Workflow correlation id: the ordering clinic's requisition id. Carried on every reply.</summary>
+    public Guid? CorrelationId { get; set; }
 
     public string OrderingDoctorName { get; set; } = string.Empty;
     public string? OrderingDoctorPrc { get; set; }

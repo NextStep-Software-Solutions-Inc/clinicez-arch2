@@ -6,8 +6,10 @@ using ClinicEz.Laboratory.Infrastructure.Services;
 using ClinicEz.Shared.Documents;
 using Hangfire;
 using Hangfire.PostgreSql;
-using MassTransit;
-using ClinicEz.Laboratory.Infrastructure.Consumers;
+using ClinicEz.Laboratory.Application.Interop;
+using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interoperability;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -68,28 +70,10 @@ public static class DependencyInjection
 
         services.AddHangfireServer();
 
-		services.AddMassTransit(x =>
-		{
-			x.SetEndpointNameFormatter(new KebabCaseEndpointNameFormatter("laboratory", false));
-			x.AddConsumer<FacilityCreatedConsumer>();
-			x.AddConsumer<LabRequisitionIssuedConsumer>();
-			x.AddEntityFrameworkOutbox<ApplicationDbContext>(o =>
-			{
-				o.UsePostgres();
-				o.UseBusOutbox();
-			});
-
-			x.UsingRabbitMq((context, cfg) =>
-			{
-				cfg.Host(configuration["RabbitMq:Host"] ?? "localhost", configuration["RabbitMq:VirtualHost"] ?? "/", h =>
-				{
-					h.Username(configuration["RabbitMq:Username"] ?? "rabbitmq");
-					h.Password(configuration["RabbitMq:Password"] ?? "nextstep-rabbitmq-2o2G");
-				});
-
-				cfg.ConfigureEndpoints(context);
-			});
-		});
+        // Interop hub messaging (replaces the message broker): transactional outbox/inbox + typed handlers.
+        services.AddInterop<ApplicationDbContext>(configuration, handlers => handlers
+            .Handle<FacilityCreatedEvent, FacilityLicenseIssuedHandler>(InteropTypes.FacilityLicenseIssued)
+            .Handle<LabRequisitionIssuedEvent, LabOrderIssuedHandler>(InteropTypes.LabOrderIssued));
 
 
         if (env != null && env.IsDevelopment())

@@ -1,45 +1,33 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 using ClinicEz.Laboratory.Application.Common.Interfaces;
+using ClinicEz.Laboratory.Application.Interop;
+using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interoperability;
-using MassTransit;
 using Microsoft.Extensions.Logging;
 
 namespace ClinicEz.Laboratory.Infrastructure.Services;
 
 public class DiagnosticReportPublisher : IDiagnosticReportPublisher
 {
-    private readonly IPublishEndpoint _publishEndpoint;
+    private readonly IInteropPublisher _publisher;
     private readonly ILogger<DiagnosticReportPublisher> _logger;
 
-    public DiagnosticReportPublisher(IPublishEndpoint publishEndpoint, ILogger<DiagnosticReportPublisher> logger)
+    public DiagnosticReportPublisher(IInteropPublisher publisher, ILogger<DiagnosticReportPublisher> logger)
     {
-        _publishEndpoint = publishEndpoint;
+        _publisher = publisher;
         _logger = logger;
     }
 
-    public async Task PublishReportFinalizedAsync(DiagnosticReportFinalizedEvent reportEvent, CancellationToken cancellationToken = default)
+    public void EnqueueReportFinalized(DiagnosticReportFinalizedEvent reportEvent)
     {
-        try
-        {
-            _logger.LogInformation(
-                "[DiagnosticReportPublisher] Broadcasting DiagnosticReportFinalizedEvent for Accession {AccessionNumber} (Requisition {RequisitionId}, Pathologist {PathologistName}) to RabbitMQ",
-                reportEvent.AccessionNumber, reportEvent.RequisitionId, reportEvent.PathologistName);
+        _logger.LogInformation(
+            "[DiagnosticReportPublisher] Queueing {Type} for Accession {AccessionNumber} (Requisition {RequisitionId}, Pathologist {PathologistName}) to the ordering clinic",
+            InteropTypes.LabResultFinalized, reportEvent.AccessionNumber, reportEvent.RequisitionId, reportEvent.PathologistName);
 
-            await _publishEndpoint.Publish(reportEvent, cancellationToken);
-
-            _logger.LogInformation(
-                "[DiagnosticReportPublisher] Successfully published report finalized event for Accession {AccessionNumber}",
-                reportEvent.AccessionNumber);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "[DiagnosticReportPublisher] Failed to publish DiagnosticReportFinalizedEvent for Accession {AccessionNumber}. Event will remain in local database.",
-                reportEvent.AccessionNumber);
-            // Non-blocking in offline / disconnected mode
-        }
+        _publisher.Enqueue(
+            InteropTypes.LabResultFinalized,
+            LabInteropParties.Laboratory(reportEvent.LaboratoryTenantId, reportEvent.LaboratoryFacilityId),
+            LabInteropParties.OrderingClinic(reportEvent.OrderingTenantId, reportEvent.OrderingFacilityId),
+            reportEvent.RequisitionId,
+            reportEvent);
     }
 }

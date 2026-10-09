@@ -125,7 +125,8 @@ public class TenantCustomFieldsAndVerificationTests
         var attachmentRepo = TestDbHelper.CreateRepository<ClinicRecordAttachment>(context, sieve);
 
         var uploadHandler = new UploadRecordAttachmentCommandHandler(attachmentRepo, uow, _clinicContext);
-        var verifyHandler = new VerifyRecordAttachmentCommandHandler(attachmentRepo, uow, _clinicContext);
+        var verifyHandler = new VerifyRecordAttachmentCommandHandler(
+            attachmentRepo, uow, _clinicContext, Substitute.For<ClinicEz.Clinic.Application.Common.Interfaces.IClinicRecordEventPublisher>());
 
         var patientId = Guid.NewGuid();
 

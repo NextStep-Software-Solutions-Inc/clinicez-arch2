@@ -212,6 +212,9 @@ public class StatutoryReportingAndPanicTests
         {
             Id = Guid.NewGuid(),
             TenantId = "tenant-test",
+            OrderingTenantId = "tenant-clinic",
+            OrderingFacilityId = "clinic-1",
+            CorrelationId = Guid.NewGuid(),
             AccessionNumber = "ACC-PANIC-001",
             PatientId = Guid.NewGuid(),
             PatientName = "Manny Pacquiao",
@@ -253,12 +256,14 @@ public class StatutoryReportingAndPanicTests
         logDto.ReadbackConfirmed.Should().BeTrue();
         logDto.CriticalFindings.Should().Contain("Serum Potassium (K) = 6.9 mmol/L");
 
-        // Verify that MassTransit event was published
-        await panicPublisher.Received(1).PublishPanicAlertAsync(
+        // Verify that the panic alert was queued for the ordering clinic
+        panicPublisher.Received(1).EnqueuePanicAlert(
             Arg.Is<LabPanicResultAlertEvent>(e =>
                 e.AccessionNumber == "ACC-PANIC-001" &&
                 e.Urgency == "STAT" &&
-                e.CriticalFindings.Count == 1),
-            Arg.Any<CancellationToken>());
+                e.CriticalFindings.Count == 1 &&
+                e.RequisitionId == req.CorrelationId &&
+                e.OrderingTenantId == "tenant-clinic" &&
+                e.OrderingFacilityId == "clinic-1"));
     }
 }

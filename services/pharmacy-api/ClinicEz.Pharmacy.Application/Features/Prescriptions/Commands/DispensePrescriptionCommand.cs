@@ -220,9 +220,7 @@ public class DispensePrescriptionCommandHandler : IRequestHandler<DispensePrescr
         await _auditRepo.AddAsync(auditRecord, cancellationToken);
         _orderRepo.Update(order);
 
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-        // Broadcast PrescriptionDispensedEvent over MassTransit RabbitMQ
+        // Queue rx.dispensed in the interop outbox BEFORE saving so it commits atomically with the dispense.
         var dispensedEvent = new PrescriptionDispensedEvent
         {
             DispenseId = auditRecord.Id,
@@ -240,7 +238,9 @@ public class DispensePrescriptionCommandHandler : IRequestHandler<DispensePrescr
             Notes = request.Notes
         };
 
-        await _dispensedPublisher.PublishPrescriptionDispensedAsync(dispensedEvent, cancellationToken);
+        _dispensedPublisher.Enqueue(order, dispensedEvent);
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new PrescriptionOrderDto(
             order.Id,

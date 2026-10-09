@@ -57,7 +57,7 @@ public sealed class GetClinicDetailQueryHandler
 
         return new ClinicDetailDto(
             clinic.Id, clinic.Name, clinic.Description, clinic.Address,
-            clinic.IsPublic, clinic.SupportsAppointments, clinic.BaseUrl,
+            clinic.IsPublic, clinic.SupportsAppointments,
             clinic.LogoUrl, clinic.CoverImageUrl, clinic.PrivacyPolicyUrl,
             clinic.TermsAndConditionsUrl, clinic.SpecialtiesJson,
             clinic.RequiredShareFieldsJson, clinic.FeaturedScore,

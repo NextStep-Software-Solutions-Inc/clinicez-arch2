@@ -1,6 +1,6 @@
 using System.Linq.Expressions;
 using ClinicEz.Shared.Interfaces;
-using MassTransit;
+using ClinicEz.Shared.Interop.Persistence;
 using Microsoft.EntityFrameworkCore;
 using ClinicEz.Patient.Domain.Common;
 using ClinicEz.Patient.Domain.Entities;
@@ -9,7 +9,7 @@ namespace ClinicEz.Patient.Infrastructure.Persistence;
 
 using Patient = ClinicEz.Patient.Domain.Entities.Patient;
 
-public sealed class ApplicationDbContext : DbContext
+public sealed class ApplicationDbContext : DbContext, IInteropDbContext
 {
     private readonly ICurrentUserService? _currentUserService;
 
@@ -86,6 +86,10 @@ public sealed class ApplicationDbContext : DbContext
     public DbSet<NotificationPreferences> NotificationPreferences => Set<NotificationPreferences>();
     public DbSet<DocumentType> DocumentTypes => Set<DocumentType>();
 
+    // ── Interop hub outbox / inbox ──────────────────────────────────────────
+    public DbSet<InteropOutboxMessage> InteropOutbox => Set<InteropOutboxMessage>();
+    public DbSet<InteropInboxMessage> InteropInbox => Set<InteropInboxMessage>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ApplicationDbContext).Assembly);
@@ -116,9 +120,7 @@ public sealed class ApplicationDbContext : DbContext
             modelBuilder.Entity(entityType.ClrType).HasQueryFilter(filter);
         }
 
-        modelBuilder.AddInboxStateEntity();
-        modelBuilder.AddOutboxStateEntity();
-        modelBuilder.AddOutboxMessageEntity();
+        modelBuilder.ApplyInteropModel();
 
         base.OnModelCreating(modelBuilder);
     }

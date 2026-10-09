@@ -1,11 +1,15 @@
 using ClinicEz.Pharmacy.Domain.Entities;
+using ClinicEz.Pharmacy.Domain.Interfaces;
+using ClinicEz.Shared.Interop.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
-using MassTransit;
 
 namespace ClinicEz.Pharmacy.Infrastructure.Persistence;
 
-public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options, Microsoft.Extensions.Configuration.IConfiguration configuration) : DbContext(options)
+public class ApplicationDbContext(
+    DbContextOptions<ApplicationDbContext> options,
+    Microsoft.Extensions.Configuration.IConfiguration configuration,
+    IPharmacyContext pharmacyContext) : DbContext(options), IInteropDbContext
 {
     public DbSet<Product> Products { get; set; }
     public DbSet<PharmacyInventoryItem> InventoryItems { get; set; }
@@ -18,6 +22,14 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<PharmacySettings> PharmacySettings { get; set; }
     public DbSet<GamotBeneficiaryLedger> GamotBeneficiaryLedgers { get; set; }
     public DbSet<GamotLedgerTransaction> GamotLedgerTransactions { get; set; }
+    public DbSet<InteropOutboxMessage> InteropOutbox => Set<InteropOutboxMessage>();
+    public DbSet<InteropInboxMessage> InteropInbox => Set<InteropInboxMessage>();
+
+    // Read by the global query filters; EF re-evaluates them per DbContext instance, so every
+    // request / message handler is scoped to its own tenant + pharmacy.
+    private string CurrentTenantId => pharmacyContext.TenantId;
+    private Guid CurrentPharmacyId => pharmacyContext.PharmacyId;
+    private string CurrentPharmacyIdText => pharmacyContext.PharmacyId.ToString();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -79,8 +91,13 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.PrescriptionNumber).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.PharmacyId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.OrderingTenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.OrderingFacilityId).IsRequired().HasMaxLength(100);
             entity.Property(e => e.BranchId).HasMaxLength(100);
             entity.HasIndex(e => e.BranchId);
+            entity.HasIndex(e => new { e.TenantId, e.PharmacyId, e.OrderingTenantId, e.OrderingFacilityId, e.ExternalPrescriptionId }).IsUnique();
             entity.Property(e => e.PatientName).IsRequired().HasMaxLength(255);
             entity.Property(e => e.OrderingDoctorName).HasMaxLength(255);
             entity.Property(e => e.TotalAmount).HasPrecision(18, 2);
@@ -180,9 +197,22 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasOne(e => e.StaffMember).WithMany().HasForeignKey(e => e.StaffMemberId).OnDelete(DeleteBehavior.Cascade);
         });
 
-        modelBuilder.AddInboxStateEntity();
-        modelBuilder.AddOutboxStateEntity();
-        modelBuilder.AddOutboxMessageEntity();
+        // Tenant + pharmacy + soft-delete scoping. There is deliberately no "no scope => everything" bypass:
+        // HTTP requests are scoped by token claims, interop handlers enter an explicit scope from the envelope's
+        // To party (IPharmacyScopeSetter), and pre-authentication paths call IgnoreQueryFilters() explicitly.
+        modelBuilder.Entity<PrescriptionOrder>().HasQueryFilter(e => !e.IsDeleted && e.TenantId == CurrentTenantId && e.PharmacyId == CurrentPharmacyIdText);
+        modelBuilder.Entity<PharmacyInventoryItem>().HasQueryFilter(e => !e.IsDeleted && e.TenantId == CurrentTenantId && e.PharmacyId == CurrentPharmacyIdText);
+        modelBuilder.Entity<InventoryBatch>().HasQueryFilter(e => !e.IsDeleted && e.TenantId == CurrentTenantId && e.PharmacyId == CurrentPharmacyIdText);
+        modelBuilder.Entity<GamotBeneficiaryLedger>().HasQueryFilter(e => !e.IsDeleted && e.TenantId == CurrentTenantId && e.PharmacyId == CurrentPharmacyIdText);
+        modelBuilder.Entity<GamotLedgerTransaction>().HasQueryFilter(e => !e.IsDeleted && e.TenantId == CurrentTenantId && e.PharmacyId == CurrentPharmacyIdText);
+        modelBuilder.Entity<PharmacySettings>().HasQueryFilter(e => !e.IsDeleted && e.TenantId == CurrentTenantId && e.PharmacyId == CurrentPharmacyId);
+        modelBuilder.Entity<PharmacyStaffMember>().HasQueryFilter(e => !e.IsDeleted && e.TenantId == CurrentTenantId && e.PharmacyId == CurrentPharmacyId);
+        modelBuilder.Entity<PharmacyRefreshToken>().HasQueryFilter(e => !e.IsDeleted && e.TenantId == CurrentTenantId && e.PharmacyId == CurrentPharmacyId);
+        modelBuilder.Entity<PrescriptionOrderItem>().HasQueryFilter(e => !e.IsDeleted && e.PrescriptionOrder!.TenantId == CurrentTenantId && e.PrescriptionOrder!.PharmacyId == CurrentPharmacyIdText);
+        modelBuilder.Entity<DispenseAuditRecord>().HasQueryFilter(e => !e.IsDeleted && e.PrescriptionOrder!.TenantId == CurrentTenantId && e.PrescriptionOrder!.PharmacyId == CurrentPharmacyIdText);
+        modelBuilder.Entity<Product>().HasQueryFilter(e => !e.IsDeleted);
+
+        modelBuilder.ApplyInteropModel();
 
         base.OnModelCreating(modelBuilder);
     }

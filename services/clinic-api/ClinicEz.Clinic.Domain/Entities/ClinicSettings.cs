@@ -8,6 +8,13 @@ public sealed class ClinicSettings : BaseEntity
     public required string TenantId { get; set; }
     public Guid ClinicId { get; set; }
 
+    /// <summary>
+    /// Workspace/facility slugs announced by the control plane when the facility is provisioned. They make the
+    /// workspace-by-slug lookup a purely local read (no portal database or HTTP dependency).
+    /// </summary>
+    public string? TenantSlug { get; set; }
+    public string? FacilitySlug { get; set; }
+
     public required string ClinicName { get; set; }
     public string? TaxIdentificationNumber { get; set; } // TIN
     public string? AccreditationNumber { get; set; }     // e.g. PHIC-KONSULTA-09214

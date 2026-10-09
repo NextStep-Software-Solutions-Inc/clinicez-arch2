@@ -23,6 +23,11 @@ public record DiagnosticReportFinalizedEvent
     public string LaboratoryFacilityId { get; init; } = string.Empty;
     public string LaboratoryTenantId { get; init; } = string.Empty;
     public string LaboratoryName { get; init; } = string.Empty;
+    /// <summary>Tenant of the clinic that ordered the test (the envelope destination).</summary>
+    public string? OrderingTenantId { get; init; }
+    /// <summary>Facility id of the clinic that ordered the test (the envelope destination).</summary>
+    public string? OrderingFacilityId { get; init; }
+    public Guid? PatientId { get; init; }
     public string PathologistName { get; init; } = string.Empty;
     public string PathologistPrcLicense { get; init; } = string.Empty;
     public string MedicalTechnologistName { get; init; } = string.Empty;

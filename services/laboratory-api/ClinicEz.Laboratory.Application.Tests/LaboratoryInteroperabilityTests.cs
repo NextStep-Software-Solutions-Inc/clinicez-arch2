@@ -11,12 +11,10 @@ using ClinicEz.Laboratory.Application.Features.Requisitions.Queries;
 using ClinicEz.Laboratory.Domain.Entities;
 using ClinicEz.Laboratory.Domain.Enums;
 using ClinicEz.Laboratory.Domain.Services;
-using ClinicEz.Laboratory.Infrastructure.Consumers;
+using ClinicEz.Shared.Interop.Handling;
 using ClinicEz.Shared.Interoperability;
 using FluentAssertions;
-using MassTransit;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Xunit;
 
@@ -164,6 +162,9 @@ public class LaboratoryInteroperabilityTests
             Id = Guid.NewGuid(),
             ExternalRequisitionId = Guid.NewGuid(),
             TenantId = "tenant-1",
+            OrderingTenantId = "tenant-clinic",
+            OrderingFacilityId = "clinic-1",
+            CorrelationId = Guid.NewGuid(),
             AccessionNumber = "REQ-2026-0003",
             PatientName = "Pedro Penduko",
             Status = RequisitionStatus.InTesting,
@@ -204,21 +205,21 @@ public class LaboratoryInteroperabilityTests
         result.DiagnosticReport.PathologistPrcLicense.Should().Be("PRC-0089123");
         result.DiagnosticReport.IsCriticalResult.Should().BeTrue();
 
-        await reportPublisher.Received(1).PublishReportFinalizedAsync(
+        reportPublisher.Received(1).EnqueueReportFinalized(
             Arg.Is<DiagnosticReportFinalizedEvent>(e =>
                 e.AccessionNumber == "REQ-2026-0003" &&
                 e.IsCriticalResult == true &&
-                e.Observations.Count == 1),
-            Arg.Any<CancellationToken>());
+                e.Observations.Count == 1 &&
+                e.RequisitionId == req.CorrelationId &&
+                e.OrderingTenantId == "tenant-clinic" &&
+                e.OrderingFacilityId == "clinic-1"));
     }
 
     [Fact]
-    public async Task LabRequisitionIssuedConsumer_Should_Ingest_Requisition_And_Specimens()
+    public async Task LabOrderIssuedHandler_Should_Ingest_Requisition_And_Specimens()
     {
         var (db, uow, sieve) = LabTestDbHelper.CreateTestContext();
-        var repo = LabTestDbHelper.CreateRepository<LabRequisition>(db, sieve);
-        var logger = Substitute.For<ILogger<LabRequisitionIssuedConsumer>>();
-        var consumer = new LabRequisitionIssuedConsumer(repo, uow, logger);
+        var handler = await LabInteropTestData.CreateOrderHandlerAsync(db, uow, sieve);
 
         var issuedEvent = new LabRequisitionIssuedEvent
         {
@@ -247,12 +248,9 @@ public class LaboratoryInteroperabilityTests
                 new() { ItemName = "Fasting Blood Sugar", Category = "Clinical Chemistry" }
             }
         };
+        var envelope = LabInteropTestData.OrderEnvelope(issuedEvent, LabInteropTestData.ClinicA);
 
-        var context = Substitute.For<ConsumeContext<LabRequisitionIssuedEvent>>();
-        context.Message.Returns(issuedEvent);
-        context.CancellationToken.Returns(CancellationToken.None);
-
-        await consumer.Consume(context);
+        await handler.HandleAsync(issuedEvent, new InteropMessageContext(envelope), CancellationToken.None);
 
         var saved = await db.LabRequisitions.Include(r => r.Specimens).FirstOrDefaultAsync(r => r.AccessionNumber == "REQ-BUS-9999");
         saved.Should().NotBeNull();
@@ -261,15 +259,22 @@ public class LaboratoryInteroperabilityTests
         saved.Specimens.Should().HaveCount(2); // One EDTA, one SST
         saved.Specimens.Should().Contain(s => s.ContainerType == SpecimenContainerType.Purple_EDTA);
         saved.Specimens.Should().Contain(s => s.ContainerType == SpecimenContainerType.Yellow_SST);
+
+        // The requisition belongs to the addressed laboratory and remembers who ordered it and the correlation.
+        saved.TenantId.Should().Be(LabInteropTestData.LabTenant);
+        saved.LaboratoryId.Should().Be(LabInteropTestData.LabId);
+        saved.OrderingTenantId.Should().Be(LabInteropTestData.ClinicA.TenantId);
+        saved.OrderingFacilityId.Should().Be(LabInteropTestData.ClinicA.FacilityId);
+        saved.CorrelationId.Should().Be(issuedEvent.RequisitionId);
+        saved.ExternalRequisitionId.Should().Be(issuedEvent.RequisitionId);
     }
 
     [Fact]
-    public async Task LabRequisitionIssuedConsumer_Should_Ingest_BranchId_And_Filter_By_Branch()
+    public async Task LabOrderIssuedHandler_Should_Ingest_BranchId_And_Filter_By_Branch()
     {
         var (db, uow, sieve) = LabTestDbHelper.CreateTestContext();
         var repo = LabTestDbHelper.CreateRepository<LabRequisition>(db, sieve);
-        var logger = Substitute.For<ILogger<LabRequisitionIssuedConsumer>>();
-        var consumer = new LabRequisitionIssuedConsumer(repo, uow, logger);
+        var handler = await LabInteropTestData.CreateOrderHandlerAsync(db, uow, sieve);
 
         var branchAId = Guid.NewGuid().ToString();
         var branchBId = Guid.NewGuid().ToString();
@@ -300,15 +305,8 @@ public class LaboratoryInteroperabilityTests
             Items = new List<RequisitionItemDto> { new() { ItemName = "Urinalysis", Category = "Clinical Microscopy" } }
         };
 
-        var contextA = Substitute.For<ConsumeContext<LabRequisitionIssuedEvent>>();
-        contextA.Message.Returns(eventA);
-        contextA.CancellationToken.Returns(CancellationToken.None);
-        await consumer.Consume(contextA);
-
-        var contextB = Substitute.For<ConsumeContext<LabRequisitionIssuedEvent>>();
-        contextB.Message.Returns(eventB);
-        contextB.CancellationToken.Returns(CancellationToken.None);
-        await consumer.Consume(contextB);
+        await handler.HandleAsync(eventA, new InteropMessageContext(LabInteropTestData.OrderEnvelope(eventA, LabInteropTestData.ClinicA)), CancellationToken.None);
+        await handler.HandleAsync(eventB, new InteropMessageContext(LabInteropTestData.OrderEnvelope(eventB, LabInteropTestData.ClinicA)), CancellationToken.None);
 
         var savedA = await db.LabRequisitions.FirstOrDefaultAsync(r => r.AccessionNumber == "REQ-BRANCH-A-01");
         savedA.Should().NotBeNull();

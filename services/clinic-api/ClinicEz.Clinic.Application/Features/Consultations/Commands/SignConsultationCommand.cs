@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common;
 using ClinicEz.Clinic.Application.Common.DTOs;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Consultations.DTOs;
@@ -13,6 +14,7 @@ using ClinicEz.Shared.Exceptions;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Interop = ClinicEz.Shared.Interoperability;
 
 namespace ClinicEz.Clinic.Application.Features.Consultations.Commands;
 
@@ -20,7 +22,9 @@ public sealed record SignConsultationCommand(
     Guid Id,
     string? PrcLicenseNumber = null,
     string? PtrNumber = null,
-    string? S2LicenseNumber = null) : IRequest<ConsultationEncounterDto>;
+    string? S2LicenseNumber = null,
+    string? TargetPharmacyFacilityId = null,
+    string? TargetPharmacyTenantId = null) : IRequest<ConsultationEncounterDto>;
 
 public sealed class SignConsultationCommandValidator : AbstractValidator<SignConsultationCommand>
 {
@@ -36,33 +40,41 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
     private readonly IRepository<StaffMember> _staffRepository;
     private readonly IRepository<QueueItem> _queueRepository;
     private readonly IRepository<Appointment> _appointmentRepository;
+    private readonly IRepository<ClinicPatient> _patientRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
-    private readonly IPatientWebhookNotifier _webhookNotifier;
-    private readonly IPrescriptionPublisher? _prescriptionPublisher;
+    private readonly IClinicIdentityProvider _clinicIdentity;
+    private readonly IPatientAppointmentPublisher _appointmentPublisher;
+    private readonly IPrescriptionPublisher _prescriptionPublisher;
 
     public SignConsultationCommandHandler(
         IRepository<ConsultationEncounter> consultationRepository,
         IRepository<StaffMember> staffRepository,
         IRepository<QueueItem> queueRepository,
         IRepository<Appointment> appointmentRepository,
+        IRepository<ClinicPatient> patientRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
-        IPatientWebhookNotifier webhookNotifier,
-        IPrescriptionPublisher? prescriptionPublisher = null)
+        IClinicIdentityProvider clinicIdentity,
+        IPatientAppointmentPublisher appointmentPublisher,
+        IPrescriptionPublisher prescriptionPublisher)
     {
         _consultationRepository = consultationRepository;
         _staffRepository = staffRepository;
         _queueRepository = queueRepository;
         _appointmentRepository = appointmentRepository;
+        _patientRepository = patientRepository;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
-        _webhookNotifier = webhookNotifier;
+        _clinicIdentity = clinicIdentity;
+        _appointmentPublisher = appointmentPublisher;
         _prescriptionPublisher = prescriptionPublisher;
     }
 
     public async Task<ConsultationEncounterDto> Handle(SignConsultationCommand request, CancellationToken cancellationToken)
     {
+        var targetPharmacy = ParseTargetPharmacy(request);
+
         var encounter = await _consultationRepository.Query(c => c.Id == request.Id && c.ClinicId == _clinicContext.ClinicId)
             .Include(c => c.Diagnoses)
             .Include(c => c.Prescriptions)
@@ -139,102 +151,160 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
             }
         }
 
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        // Messages are queued in the interop outbox and commit in the same SaveChanges as the signed consultation.
+        var clinic = await _clinicIdentity.GetAsync(cancellationToken);
 
-        // Outbound event publishing to RabbitMQ for Partner Pharmacy (Path A)
-        if (encounter.Prescriptions.Any() && _prescriptionPublisher != null)
+        if (targetPharmacy is { } pharmacy && encounter.Prescriptions.Any())
         {
-            var rxEvent = new ClinicEz.Shared.Interoperability.PrescriptionIssuedEvent
-            {
-                PrescriptionId = encounter.Id,
-                PrescriptionNumber = encounter.PrescriptionNumber!,
-                OrderingFacilityId = _clinicContext.ClinicId.ToString(),
-                OrderingFacilityName = "Clinic Operations Hub",
-                TenantId = _clinicContext.TenantId,
-                BranchId = _clinicContext.BranchId?.ToString(),
-                PrescriberDoctor = new ClinicEz.Shared.Interoperability.PrescriberDoctorDto
-                {
-                    DoctorId = encounter.DoctorId.ToString(),
-                    DoctorName = encounter.DoctorName,
-                    PrcLicenseNumber = encounter.DoctorPrcLicense ?? string.Empty,
-                    PtrNumber = encounter.DoctorPtr,
-                    S2LicenseNumber = encounter.DoctorS2License,
-                    Specialization = doctor?.Specialty
-                },
-                Patient = new ClinicEz.Shared.Interoperability.PrescriptionPatientDto
-                {
-                    PatientId = encounter.PatientId,
-                    FullName = encounter.PatientName,
-                    Age = 35
-                },
-                ClinicalDiagnosis = encounter.Assessment,
-                SpecialInstructions = encounter.Plan,
-                PublicVerificationToken = encounter.RxPublicVerificationToken!,
-                PublicVerificationUrl = $"/api/v1/public/rx-verify/{encounter.RxPublicVerificationToken}",
-                QrPayload = $"CLINICEZ:RX:{encounter.PrescriptionNumber}:{encounter.RxPublicVerificationToken}",
-                IssuedAt = encounter.SignedAt ?? DateTime.UtcNow,
-                Items = encounter.Prescriptions.Select(p => new ClinicEz.Shared.Interoperability.PrescriptionItemDto
-                {
-                    ItemId = p.Id,
-                    GenericName = p.GenericName,
-                    BrandName = p.BrandName,
-                    Dosage = p.Dosage,
-                    Form = p.Form,
-                    Sig = p.Sig,
-                    Quantity = p.Quantity,
-                    DurationDays = p.DurationDays,
-                    Refills = p.Refills,
-                    IsDangerousDrug = p.IsDangerousDrug,
-                    Remarks = p.Remarks
-                }).ToList()
-            };
-
-            _ = _prescriptionPublisher.PublishPrescriptionIssuedAsync(rxEvent, CancellationToken.None);
+            var rxEvent = await BuildPrescriptionEventAsync(encounter, doctor, clinic, pharmacy, cancellationToken);
+            _prescriptionPublisher.PublishPrescriptionIssued(rxEvent);
         }
 
-        // Outbound push notification to patient-api
-        var apptId = appointment?.Id ?? encounter.QueueItemId ?? encounter.Id;
-        var scheduledAtStr = (appointment?.ScheduledAt ?? encounter.EncounterDate).ToString("O");
-        var rxSummary = encounter.Prescriptions.Any()
-            ? string.Join("; ", encounter.Prescriptions.Select(p => $"{p.GenericName} {p.Dosage} {p.Form} ({p.Sig}) - Qty: {p.Quantity}".Trim()))
-            : null;
-        var rxUrl = !string.IsNullOrWhiteSpace(encounter.RxPublicVerificationToken)
-            ? $"/api/v1/public/rx-verify/{encounter.RxPublicVerificationToken}"
-            : null;
+        // Patient app notification. A clinic that has not been provisioned yet has no identity to announce.
+        if (clinic != null)
+        {
+            var apptId = appointment?.Id ?? encounter.QueueItemId ?? encounter.Id;
+            var scheduledAtStr = (appointment?.ScheduledAt ?? encounter.EncounterDate).ToString("O");
+            var rxSummary = encounter.Prescriptions.Any()
+                ? string.Join("; ", encounter.Prescriptions.Select(p => $"{p.GenericName} {p.Dosage} {p.Form} ({p.Sig}) - Qty: {p.Quantity}".Trim()))
+                : null;
+            var rxUrl = !string.IsNullOrWhiteSpace(encounter.RxPublicVerificationToken)
+                ? $"/api/v1/public/rx-verify/{encounter.RxPublicVerificationToken}"
+                : null;
 
-        var pushPayload = new ClinicPushAppointmentsPayload(
-            _clinicContext.ClinicId,
-            encounter.PatientId,
-            new List<ClinicAppointmentWebhookDto>
-            {
-                new(
-                    apptId.ToString(),
-                    _clinicContext.ClinicId.ToString(),
-                    "Clinic Operational Facility",
-                    new ClinicProviderSnapshotDto(
-                        encounter.DoctorId.ToString(),
+            var pushPayload = new ClinicPushAppointmentsPayload(
+                _clinicContext.ClinicId,
+                encounter.PatientId,
+                new List<ClinicAppointmentWebhookDto>
+                {
+                    new(
+                        apptId.ToString(),
+                        _clinicContext.ClinicId.ToString(),
+                        clinic.Name,
+                        new ClinicProviderSnapshotDto(
+                            encounter.DoctorId.ToString(),
+                            encounter.DoctorName,
+                            doctor?.Specialty,
+                            null
+                        ),
+                        appointment?.ServiceType ?? "Consultation",
+                        scheduledAtStr,
+                        appointment?.DurationMinutes ?? 30,
+                        AppointmentStatus.Completed.ToString(),
+                        $"Consultation completed and signed by {encounter.DoctorName}",
                         encounter.DoctorName,
-                        doctor?.Specialty,
-                        null
-                    ),
-                    appointment?.ServiceType ?? "Consultation",
-                    scheduledAtStr,
-                    appointment?.DurationMinutes ?? 30,
-                    AppointmentStatus.Completed.ToString(),
-                    $"Consultation completed and signed by {encounter.DoctorName}",
-                    encounter.DoctorName,
-                    encounter.Assessment,
-                    ClinicalAssessment: encounter.Assessment,
-                    DoctorPlan: encounter.Plan,
-                    PrescriptionsSummary: rxSummary,
-                    PrescriptionPublicVerificationUrl: rxUrl
-                )
-            }
-        );
+                        encounter.Assessment,
+                        ClinicalAssessment: encounter.Assessment,
+                        DoctorPlan: encounter.Plan,
+                        PrescriptionsSummary: rxSummary,
+                        PrescriptionPublicVerificationUrl: rxUrl,
+                        DraftId: appointment?.DraftId
+                    )
+                }
+            );
 
-        _ = _webhookNotifier.PushAppointmentUpdateAsync(pushPayload, CancellationToken.None);
+            await _appointmentPublisher.PublishAppointmentUpdatedAsync(pushPayload, cancellationToken);
+        }
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return MapToDto(encounter);
+    }
+
+    private static (string TenantId, Guid FacilityId)? ParseTargetPharmacy(SignConsultationCommand request)
+    {
+        var facility = request.TargetPharmacyFacilityId?.Trim();
+        var tenant = request.TargetPharmacyTenantId?.Trim();
+        if (string.IsNullOrEmpty(facility) && string.IsNullOrEmpty(tenant))
+        {
+            return null;
+        }
+
+        if (string.IsNullOrEmpty(facility) || string.IsNullOrEmpty(tenant))
+        {
+            throw new BadRequestException("TargetPharmacyFacilityId and TargetPharmacyTenantId must be provided together to send a prescription to a pharmacy.");
+        }
+
+        if (!Guid.TryParse(facility, out var facilityId) || facilityId == Guid.Empty)
+        {
+            throw new BadRequestException("TargetPharmacyFacilityId must be a valid pharmacy facility id.");
+        }
+
+        return (tenant, facilityId);
+    }
+
+    private async Task<Interop.PrescriptionIssuedEvent> BuildPrescriptionEventAsync(
+        ConsultationEncounter encounter,
+        StaffMember? doctor,
+        ClinicIdentity? clinic,
+        (string TenantId, Guid FacilityId) pharmacy,
+        CancellationToken cancellationToken)
+    {
+        if (clinic == null)
+        {
+            throw new BadRequestException("This clinic has not been provisioned on this server, so a prescription cannot be sent to a pharmacy.");
+        }
+
+        var patient = await _patientRepository.GetByIdAsync(encounter.PatientId, cancellationToken)
+            ?? throw new BadRequestException($"Patient '{encounter.PatientId}' was not found in this clinic; a prescription sent to a pharmacy needs the patient's demographics.");
+
+        if (string.IsNullOrWhiteSpace(encounter.DoctorPrcLicense))
+        {
+            throw new BadRequestException("The prescribing doctor's PRC license number is required to send a prescription to a pharmacy.");
+        }
+
+        return new Interop.PrescriptionIssuedEvent
+        {
+            PrescriptionId = encounter.Id,
+            PrescriptionNumber = encounter.PrescriptionNumber!,
+            OrderingFacilityId = clinic.ClinicId.ToString(),
+            OrderingFacilityName = clinic.Name,
+            TenantId = clinic.TenantId,
+            BranchId = _clinicContext.BranchId?.ToString(),
+            TargetPharmacyFacilityId = pharmacy.FacilityId.ToString(),
+            TargetPharmacyTenantId = pharmacy.TenantId,
+            PrescriberDoctor = new Interop.PrescriberDoctorDto
+            {
+                DoctorId = encounter.DoctorId.ToString(),
+                DoctorName = encounter.DoctorName,
+                PrcLicenseNumber = encounter.DoctorPrcLicense,
+                PtrNumber = encounter.DoctorPtr,
+                S2LicenseNumber = encounter.DoctorS2License,
+                Specialization = doctor?.Specialty
+            },
+            Patient = new Interop.PrescriptionPatientDto
+            {
+                PatientId = encounter.PatientId,
+                FullName = encounter.PatientName,
+                PhilHealthPin = patient.PhilHealthNumber,
+                NationalId = patient.SeniorCitizenId ?? patient.PwdId,
+                DateOfBirth = patient.DateOfBirth.ToString("yyyy-MM-dd"),
+                Age = PatientAge.InYears(patient.DateOfBirth, DateOnly.FromDateTime(DateTime.UtcNow)),
+                Gender = patient.Gender,
+                ContactNumber = patient.ContactNumber,
+                Allergies = patient.Allergies
+            },
+            ClinicalDiagnosis = encounter.Assessment,
+            SpecialInstructions = encounter.Plan,
+            PublicVerificationToken = encounter.RxPublicVerificationToken!,
+            PublicVerificationUrl = $"/api/v1/public/rx-verify/{encounter.RxPublicVerificationToken}",
+            QrPayload = $"CLINICEZ:RX:{encounter.PrescriptionNumber}:{encounter.RxPublicVerificationToken}",
+            IssuedAt = encounter.SignedAt ?? DateTime.UtcNow,
+            Items = encounter.Prescriptions.Select(p => new Interop.PrescriptionItemDto
+            {
+                ItemId = p.Id,
+                GenericName = p.GenericName,
+                BrandName = p.BrandName,
+                Dosage = p.Dosage,
+                Form = p.Form,
+                Sig = p.Sig,
+                Quantity = p.Quantity,
+                DurationDays = p.DurationDays,
+                Refills = p.Refills,
+                IsDangerousDrug = p.IsDangerousDrug,
+                Remarks = p.Remarks
+            }).ToList()
+        };
     }
 
     private static ConsultationEncounterDto MapToDto(ConsultationEncounter encounter)

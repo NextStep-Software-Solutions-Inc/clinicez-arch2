@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ClinicEz.Pharmacy.Application.Features.Inventory.Commands;
 
-public record SeedInitialInventoryCommand(string PharmacyId = "pharmacy-main", string TenantId = "default") : IRequest<int>;
+public record SeedInitialInventoryCommand(string PharmacyId, string TenantId) : IRequest<int>;
 
 public class SeedInitialInventoryCommandHandler : IRequestHandler<SeedInitialInventoryCommand, int>
 {

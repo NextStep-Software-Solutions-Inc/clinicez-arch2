@@ -1,12 +1,14 @@
 using ClinicEz.Organization.Domain.Entities;
+using ClinicEz.Shared.Interop.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
-using MassTransit;
 
 namespace ClinicEz.Organization.Infrastructure.Persistence;
 
-public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options, Microsoft.Extensions.Configuration.IConfiguration configuration) : DbContext(options)
+public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options, Microsoft.Extensions.Configuration.IConfiguration configuration) : DbContext(options), IInteropDbContext
 {
+    public DbSet<InteropOutboxMessage> InteropOutbox { get; set; }
+    public DbSet<InteropInboxMessage> InteropInbox { get; set; }
     public DbSet<Product> Products { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -42,9 +44,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(e => e.Price).HasPrecision(18, 2);
         });
 
-        modelBuilder.AddInboxStateEntity();
-        modelBuilder.AddOutboxStateEntity();
-        modelBuilder.AddOutboxMessageEntity();
+        modelBuilder.ApplyInteropModel();
 
         base.OnModelCreating(modelBuilder);
     }

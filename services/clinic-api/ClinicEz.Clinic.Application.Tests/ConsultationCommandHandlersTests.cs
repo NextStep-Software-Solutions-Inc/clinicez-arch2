@@ -96,7 +96,7 @@ public class ConsultationCommandHandlersTests
         clinicContext.ClinicId.Returns(clinicId);
         clinicContext.TenantId.Returns(tenantId);
 
-        var webhookNotifier = Substitute.For<IPatientWebhookNotifier>();
+        var appointmentPublisher = Substitute.For<IPatientAppointmentPublisher>();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var consultationRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
@@ -149,8 +149,11 @@ public class ConsultationCommandHandlersTests
         await context.Consultations.AddAsync(encounter);
         await context.SaveChangesAsync();
 
+        var identity = Substitute.For<IClinicIdentityProvider>();
+        identity.GetAsync(Arg.Any<CancellationToken>()).Returns(new ClinicIdentity(tenantId, clinicId, "Apex Clinic"));
         var handler = new SignConsultationCommandHandler(
-            consultationRepo, staffRepo, queueRepo, apptRepo, uow, clinicContext, webhookNotifier);
+            consultationRepo, staffRepo, queueRepo, apptRepo, TestDbHelper.CreateRepository<ClinicPatient>(context, sieve), uow, clinicContext,
+            identity, appointmentPublisher, Substitute.For<IPrescriptionPublisher>());
 
         // Act
         var result = await handler.Handle(new SignConsultationCommand(encounterId), CancellationToken.None);
@@ -166,9 +169,10 @@ public class ConsultationCommandHandlersTests
         updatedQueue.Status.Should().Be(QueueStatus.Completed);
         updatedQueue.CompletedTime.Should().NotBeNull();
 
-        await webhookNotifier.Received(1).PushAppointmentUpdateAsync(
+        await appointmentPublisher.Received(1).PublishAppointmentUpdatedAsync(
             Arg.Is<ClinicPushAppointmentsPayload>(p =>
                 p.PatientId == patientId &&
+                p.Appointments[0].ClinicName == "Apex Clinic" &&
                 p.Appointments[0].Status == AppointmentStatus.Completed.ToString() &&
                 p.Appointments[0].ClinicalAssessment == "I10 Hypertension" &&
                 p.Appointments[0].DoctorPlan == "Plan"),
@@ -188,7 +192,7 @@ public class ConsultationCommandHandlersTests
         clinicContext.ClinicId.Returns(clinicId);
         clinicContext.TenantId.Returns(tenantId);
 
-        var webhookNotifier = Substitute.For<IPatientWebhookNotifier>();
+        var appointmentPublisher = Substitute.For<IPatientAppointmentPublisher>();
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var consultationRepo = TestDbHelper.CreateRepository<ConsultationEncounter>(context, sieve);
         var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
@@ -235,7 +239,8 @@ public class ConsultationCommandHandlersTests
         await context.SaveChangesAsync();
 
         var handler = new SignConsultationCommandHandler(
-            consultationRepo, staffRepo, queueRepo, apptRepo, uow, clinicContext, webhookNotifier);
+            consultationRepo, staffRepo, queueRepo, apptRepo, TestDbHelper.CreateRepository<ClinicPatient>(context, sieve), uow, clinicContext,
+            Substitute.For<IClinicIdentityProvider>(), appointmentPublisher, Substitute.For<IPrescriptionPublisher>());
 
         // Act & Assert
         var act = async () => await handler.Handle(new SignConsultationCommand(encounterId), CancellationToken.None);

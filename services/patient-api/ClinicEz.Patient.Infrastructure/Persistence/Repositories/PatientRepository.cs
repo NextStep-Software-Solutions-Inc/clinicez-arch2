@@ -15,6 +15,10 @@ public sealed class PatientRepository : BaseRepository<Patient>, IPatientReposit
         => Context.Patients
             .FirstOrDefaultAsync(p => p.ClerkUserId == clerkUserId, cancellationToken);
 
+    public Task<bool> IsOwnedByAsync(Guid patientId, string clerkUserId, CancellationToken cancellationToken = default)
+        => Context.Patients
+            .AnyAsync(p => p.Id == patientId && p.ClerkUserId == clerkUserId, cancellationToken);
+
     public Task<Patient?> GetWithProfileAsync(Guid id, CancellationToken cancellationToken = default)
         => Context.Patients
             .Include(p => p.GovernmentIds)

@@ -7,6 +7,7 @@ using ClinicEz.Pharmacy.Application.Features.Inventory.Commands;
 using ClinicEz.Pharmacy.Application.Features.Inventory.DTOs;
 using ClinicEz.Pharmacy.Application.Features.Inventory.Queries;
 using ClinicEz.Pharmacy.Domain.Constants;
+using ClinicEz.Pharmacy.Domain.Interfaces;
 using ClinicEz.Shared.Common;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -18,10 +19,12 @@ namespace ClinicEz.Pharmacy.Api.Controllers;
 public sealed class InventoryController : ControllerBase
 {
     private readonly ISender _sender;
+    private readonly IPharmacyContext _context;
 
-    public InventoryController(ISender sender)
+    public InventoryController(ISender sender, IPharmacyContext context)
     {
         _sender = sender;
+        _context = context;
     }
 
     [HttpGet]
@@ -56,7 +59,7 @@ public sealed class InventoryController : ControllerBase
     [HasPermission(PharmacyPermissions.InventoryManage)]
     public async Task<ActionResult<ApiResponse<int>>> SeedInventory(CancellationToken ct = default)
     {
-        var count = await _sender.Send(new SeedInitialInventoryCommand(), ct);
+        var count = await _sender.Send(new SeedInitialInventoryCommand(_context.PharmacyId.ToString(), _context.TenantId), ct);
         return Ok(ApiResponse<int>.Success(count, $"Pharmacy inventory initialized with {count} medications and FEFO batches."));
     }
 }

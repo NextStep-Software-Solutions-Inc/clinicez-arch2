@@ -22,7 +22,8 @@ public sealed class PatientYakapEndpoints : IEndpoint
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/patients/{id:guid}/yakap")
-            .WithTags("PhilHealth Yakap & GAMOT");
+            .WithTags("PhilHealth Yakap & GAMOT")
+            .RequireAuthorization();
 
         group.MapGet("/profile", GetYakapProfile)
             .WithName("GetPatientYakapProfile")

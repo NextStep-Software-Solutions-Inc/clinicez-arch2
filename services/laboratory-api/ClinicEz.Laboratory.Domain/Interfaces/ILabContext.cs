@@ -5,7 +5,7 @@ namespace ClinicEz.Laboratory.Domain.Interfaces;
 
 /// <summary>
 /// Per-request laboratory scope. Authenticated staff get tenant, laboratory, staff id and permissions ONLY from the
-/// validated session token; client headers are never trusted. Background work (MassTransit consumers, Hangfire)
+/// validated session token; client headers are never trusted. Background work (interop handlers, Hangfire)
 /// has no HTTP principal and runs in system scope (<see cref="TenantId"/> is null → no tenant filter).
 /// </summary>
 public interface ILabContext

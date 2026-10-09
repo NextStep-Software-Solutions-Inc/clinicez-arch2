@@ -57,8 +57,8 @@ public class GamotApplicationFeaturesTests
         var order = new PrescriptionOrder
         {
             Id = orderId,
-            TenantId = "TENANT-NCR",
-            PharmacyId = "PHARM-NCR-01",
+            TenantId = PharmacyTestDbHelper.TenantId,
+            PharmacyId = PharmacyTestDbHelper.PharmacyKey,
             PrescriptionNumber = "RX-2026-GAMOT-001",
             OrderingFacilityId = "FAC-01",
             OrderingFacilityName = "Quezon City Yakap Clinic",
@@ -141,8 +141,8 @@ public class GamotApplicationFeaturesTests
         var ledger = new GamotBeneficiaryLedger
         {
             Id = Guid.NewGuid(),
-            TenantId = "TENANT-01",
-            PharmacyId = "PHARM-01",
+            TenantId = PharmacyTestDbHelper.TenantId,
+            PharmacyId = PharmacyTestDbHelper.PharmacyKey,
             PatientId = Guid.NewGuid(),
             PatientName = "Pedro",
             PhilHealthIdentificationNumber = "123456789012",
@@ -184,8 +184,8 @@ public class GamotApplicationFeaturesTests
         var invItem = new PharmacyInventoryItem
         {
             Id = Guid.NewGuid(),
-            TenantId = "TENANT-01",
-            PharmacyId = "PHARM-01",
+            TenantId = PharmacyTestDbHelper.TenantId,
+            PharmacyId = PharmacyTestDbHelper.PharmacyKey,
             Sku = "SKU-AMLO-5MG",
             GenericName = "Amlodipine",
             Strength = "5mg",
@@ -198,6 +198,8 @@ public class GamotApplicationFeaturesTests
                 {
                     Id = Guid.NewGuid(),
                     BatchNumber = "BATCH-AMLO-2027",
+                    TenantId = PharmacyTestDbHelper.TenantId,
+                    PharmacyId = PharmacyTestDbHelper.PharmacyKey,
                     ExpiryDate = DateTime.UtcNow.AddYears(1),
                     QuantityRemaining = 100,
                     Status = BatchStatus.Active,
@@ -213,9 +215,10 @@ public class GamotApplicationFeaturesTests
         var order = new PrescriptionOrder
         {
             Id = orderId,
-            TenantId = "TENANT-01",
-            PharmacyId = "PHARM-01",
+            TenantId = PharmacyTestDbHelper.TenantId,
+            PharmacyId = PharmacyTestDbHelper.PharmacyKey,
             PrescriptionNumber = "RX-GAMOT-2026-555",
+            OrderingTenantId = "tenant-clinic",
             OrderingFacilityId = "FAC-01",
             OrderingFacilityName = "Manila Yakap Clinic",
             OrderingDoctorName = "Dr. Mabini",
@@ -289,9 +292,9 @@ public class GamotApplicationFeaturesTests
         audits.Should().ContainSingle();
 
         // Check event published
-        await publisher.Received(1).PublishPrescriptionDispensedAsync(
-            Arg.Is<PrescriptionDispensedEvent>(e => e.PrescriptionNumber == "RX-GAMOT-2026-555"),
-            Arg.Any<CancellationToken>());
+        publisher.Received(1).Enqueue(
+            Arg.Is<PrescriptionOrder>(o => o.Id == orderId),
+            Arg.Is<PrescriptionDispensedEvent>(e => e.PrescriptionNumber == "RX-GAMOT-2026-555"));
     }
 
     [Fact]
@@ -306,8 +309,8 @@ public class GamotApplicationFeaturesTests
         var order = new PrescriptionOrder
         {
             Id = orderId,
-            TenantId = "TENANT-01",
-            PharmacyId = "PHARM-01",
+            TenantId = PharmacyTestDbHelper.TenantId,
+            PharmacyId = PharmacyTestDbHelper.PharmacyKey,
             PrescriptionNumber = "RX-REV-TEST",
             OrderingFacilityId = "FAC-01",
             OrderingFacilityName = "Yakap Center",
@@ -345,8 +348,8 @@ public class GamotApplicationFeaturesTests
         var ledger = new GamotBeneficiaryLedger
         {
             Id = Guid.NewGuid(),
-            TenantId = "TENANT-01",
-            PharmacyId = "PHARM-01",
+            TenantId = PharmacyTestDbHelper.TenantId,
+            PharmacyId = PharmacyTestDbHelper.PharmacyKey,
             PatientId = order.PatientId,
             PatientName = order.PatientName,
             PhilHealthIdentificationNumber = "123456789012",

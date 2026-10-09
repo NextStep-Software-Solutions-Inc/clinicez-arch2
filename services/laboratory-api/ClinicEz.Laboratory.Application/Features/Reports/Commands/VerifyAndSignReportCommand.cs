@@ -99,17 +99,20 @@ public class VerifyAndSignReportCommandHandler : IRequestHandler<VerifyAndSignRe
 
         requisition.Status = RequisitionStatus.Verified;
         _requisitionRepository.Update(requisition);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        // Broadcast finalized report over RabbitMQ to clinic EMR & patient app
+        // Finalized report for the ordering clinic EMR & patient app. Queued in the outbox BEFORE the save so the
+        // status change and the message commit atomically (the report id exists once the report is tracked).
         var reportEvent = new DiagnosticReportFinalizedEvent
         {
             ReportId = requisition.DiagnosticReport.Id,
-            RequisitionId = requisition.ExternalRequisitionId ?? requisition.Id,
+            RequisitionId = requisition.CorrelationId ?? requisition.ExternalRequisitionId ?? requisition.Id,
             AccessionNumber = requisition.AccessionNumber,
             LaboratoryFacilityId = requisition.LaboratoryId.ToString(),
             LaboratoryTenantId = requisition.TenantId,
             LaboratoryName = "ClinicEz Diagnostic Laboratory",
+            OrderingTenantId = requisition.OrderingTenantId,
+            OrderingFacilityId = requisition.OrderingFacilityId,
+            PatientId = requisition.PatientId,
             PathologistName = request.PathologistName,
             PathologistPrcLicense = request.PathologistPrcLicense,
             MedicalTechnologistName = request.MedicalTechnologistName,
@@ -131,7 +134,8 @@ public class VerifyAndSignReportCommandHandler : IRequestHandler<VerifyAndSignRe
             }).ToList()
         };
 
-        await _reportPublisher.PublishReportFinalizedAsync(reportEvent, cancellationToken);
+        _reportPublisher.EnqueueReportFinalized(reportEvent);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Requisitions.Queries.GetWorklistQueryHandler.MapToDto(requisition);
     }

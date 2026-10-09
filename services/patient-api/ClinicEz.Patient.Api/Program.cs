@@ -64,6 +64,10 @@ app.UseAuthorization();
 if (app.Configuration.GetValue<bool>("Encryption:Enabled"))
     app.UseMiddleware<PayloadEncryptionMiddleware>();
 
+// Object-level authorisation: callers may only address their own patient record.
+// Runs after authentication/authorisation so the caller identity is known.
+app.UseMiddleware<PatientOwnershipMiddleware>();
+
 // Hangfire dashboard — protected by HTTP Basic Auth (credentials from config)
 var hangfireAuth = app.Services.GetRequiredService<HangfireDashboardBasicAuthFilter>();
 app.UseHangfireDashboard("/hangfire", new DashboardOptions

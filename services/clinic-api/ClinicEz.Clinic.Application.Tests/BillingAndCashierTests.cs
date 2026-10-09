@@ -159,7 +159,14 @@ public class BillingAndCashierTests
         var orderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
         var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
 
-        var handler = new CreateClinicLabOrderCommandHandler(orderRepo, patientRepo, unitOfWork, _clinicContext);
+        var handler = new CreateClinicLabOrderCommandHandler(
+            orderRepo,
+            patientRepo,
+            TestDbHelper.CreateRepository<StaffMember>(db, sieve),
+            unitOfWork,
+            _clinicContext,
+            Substitute.For<ClinicEz.Clinic.Application.Common.Interfaces.IClinicIdentityProvider>(),
+            Substitute.For<ClinicEz.Clinic.Application.Common.Interfaces.ILabRequisitionPublisher>());
         var command = new CreateClinicLabOrderCommand(
             PatientId: Guid.NewGuid(),
             PatientName: "Pedro Penduko",

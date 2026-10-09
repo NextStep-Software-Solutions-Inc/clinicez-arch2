@@ -257,7 +257,6 @@ public class CatalogSeeder : IDataSeeder
                 CoverImageUrl = $"https://picsum.photos/seed/clinic-cover-{i}/400/180",
                 IsPublic = isPublic,
                 SupportsAppointments = supportsAppointments,
-                BaseUrl = $"https://{slug}.Clinic EZ.local",
                 PrivacyPolicyUrl = $"https://Clinic EZ.app/privacy/{slug}",
                 TermsAndConditionsUrl = $"https://Clinic EZ.app/terms/{slug}",
                 SpecialtiesJson = JsonSerializer.Serialize(new[] { specialty, supportsAppointments ? "Telehealth" : "Virtual Follow-Up" }),

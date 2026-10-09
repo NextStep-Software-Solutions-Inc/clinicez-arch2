@@ -21,13 +21,13 @@ public sealed class VerifyRecordAttachmentCommandHandler : IRequestHandler<Verif
     private readonly IRepository<ClinicRecordAttachment> _attachmentRepo;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
-    private readonly IClinicRecordEventPublisher? _eventPublisher;
+    private readonly IClinicRecordEventPublisher _eventPublisher;
 
     public VerifyRecordAttachmentCommandHandler(
         IRepository<ClinicRecordAttachment> attachmentRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
-        IClinicRecordEventPublisher? eventPublisher = null)
+        IClinicRecordEventPublisher eventPublisher)
     {
         _attachmentRepo = attachmentRepo;
         _unitOfWork = unitOfWork;
@@ -52,27 +52,24 @@ public sealed class VerifyRecordAttachmentCommandHandler : IRequestHandler<Verif
         attachment.VerifiedByStaffName = "ClinicStaff";
         attachment.UpdatedAt = DateTime.UtcNow;
 
-        await _unitOfWork.SaveChangesAsync(ct);
-
-        if (_eventPublisher != null)
+        await _eventPublisher.PublishRecordVerifiedAsync(new ClinicRecordVerifiedEvent
         {
-            await _eventPublisher.PublishRecordVerifiedAsync(new ClinicRecordVerifiedEvent
-            {
-                AttachmentId = attachment.Id,
-                TenantId = attachment.TenantId,
-                ClinicId = attachment.ClinicId,
-                PatientId = attachment.PatientId,
-                RecordType = attachment.RecordType,
-                Title = attachment.Title,
-                FileName = attachment.FileName,
-                ContentType = attachment.ContentType,
-                FileSizeBytes = attachment.FileSizeBytes,
-                VerificationStatus = attachment.VerificationStatus,
-                RejectionReason = attachment.RejectionReason,
-                VerifiedAt = attachment.VerifiedAt ?? DateTime.UtcNow,
-                VerifiedByStaffName = attachment.VerifiedByStaffName
-            }, ct);
-        }
+            AttachmentId = attachment.Id,
+            TenantId = attachment.TenantId,
+            ClinicId = attachment.ClinicId,
+            PatientId = attachment.PatientId,
+            RecordType = attachment.RecordType,
+            Title = attachment.Title,
+            FileName = attachment.FileName,
+            ContentType = attachment.ContentType,
+            FileSizeBytes = attachment.FileSizeBytes,
+            VerificationStatus = attachment.VerificationStatus,
+            RejectionReason = attachment.RejectionReason,
+            VerifiedAt = attachment.VerifiedAt ?? DateTime.UtcNow,
+            VerifiedByStaffName = attachment.VerifiedByStaffName
+        }, ct);
+
+        await _unitOfWork.SaveChangesAsync(ct);
 
         return new ClinicRecordAttachmentDto(
             attachment.Id,

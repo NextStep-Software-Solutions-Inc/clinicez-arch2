@@ -11,9 +11,9 @@ using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Clinic.Domain.Services;
-using ClinicEz.Clinic.Infrastructure.Consumers;
+using ClinicEz.Clinic.Infrastructure.Messaging;
+using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interoperability;
-using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
@@ -196,7 +196,7 @@ public class ClinicalDecisionSupportTests
     }
 
     [Fact]
-    public async Task LabPanicResultAlertConsumer_WhenMessageReceived_MarksOrderAsCriticalPanic()
+    public async Task LabPanicResultAlertHandler_WhenMessageReceived_MarksOrderAsCriticalPanic()
     {
         // Arrange
         var clinicId = Guid.NewGuid();
@@ -205,8 +205,9 @@ public class ClinicalDecisionSupportTests
         clinicContext.TenantId.Returns("tenant-default");
 
         var (context, unitOfWork, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        MessagingTestKit.SeedClinic(context, clinicId, "tenant-default");
         var orderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(context, sieve);
-        var consumer = new LabPanicResultAlertConsumer(orderRepo, unitOfWork, NullLogger<LabPanicResultAlertConsumer>.Instance);
+        var handler = new LabPanicResultAlertHandler(context, MessagingTestKit.Recipient(context), NullLogger<LabPanicResultAlertHandler>.Instance);
 
         var existingOrder = new ClinicLabOrder
         {
@@ -244,12 +245,12 @@ public class ClinicalDecisionSupportTests
             }
         };
 
-        var mockContext = Substitute.For<ConsumeContext<LabPanicResultAlertEvent>>();
-        mockContext.Message.Returns(panicEvent);
-        mockContext.CancellationToken.Returns(CancellationToken.None);
+        var delivered = MessagingTestKit.Delivered(
+            InteropTypes.LabResultPanic, MessagingTestKit.LabParty(), MessagingTestKit.ClinicParty("tenant-default", clinicId),
+            existingOrder.Id, panicEvent);
 
         // Act
-        await consumer.Consume(mockContext);
+        await handler.HandleAsync(panicEvent, delivered, CancellationToken.None);
 
         // Assert
         var updatedOrder = await orderRepo.GetByIdAsync(existingOrder.Id);

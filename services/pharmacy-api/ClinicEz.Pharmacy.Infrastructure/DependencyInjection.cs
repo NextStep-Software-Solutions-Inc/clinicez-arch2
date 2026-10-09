@@ -1,12 +1,14 @@
 using ClinicEz.Pharmacy.Application.Common.Interfaces;
+using ClinicEz.Pharmacy.Application.Interop;
 using ClinicEz.Pharmacy.Domain.Interfaces;
-using ClinicEz.Pharmacy.Infrastructure.Consumers;
 using ClinicEz.Pharmacy.Infrastructure.Persistence;
 using ClinicEz.Pharmacy.Infrastructure.Persistence.Repositories;
 using ClinicEz.Pharmacy.Infrastructure.Services;
+using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interoperability;
 using Hangfire;
 using Hangfire.PostgreSql;
-using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -50,7 +52,9 @@ public static class DependencyInjection
         services.AddSingleton<ClinicEz.Pharmacy.Infrastructure.Auth.IStaffAccessCache, ClinicEz.Pharmacy.Infrastructure.Auth.StaffAccessCache>();
         services.AddScoped<ClinicEz.Pharmacy.Infrastructure.Auth.IWorkspaceResolver, ClinicEz.Pharmacy.Infrastructure.Auth.WorkspaceResolver>();
         services.AddScoped<ClinicEz.Pharmacy.Infrastructure.Auth.IPharmacyAuthService, ClinicEz.Pharmacy.Infrastructure.Auth.PharmacyAuthService>();
-        services.AddScoped<ClinicEz.Pharmacy.Domain.Interfaces.IPharmacyContext, ClinicEz.Pharmacy.Infrastructure.Context.PharmacyContext>();
+        services.AddScoped<ClinicEz.Pharmacy.Infrastructure.Context.PharmacyContext>();
+        services.AddScoped<ClinicEz.Pharmacy.Domain.Interfaces.IPharmacyContext>(sp => sp.GetRequiredService<ClinicEz.Pharmacy.Infrastructure.Context.PharmacyContext>());
+        services.AddScoped<ClinicEz.Pharmacy.Domain.Interfaces.IPharmacyScopeSetter>(sp => sp.GetRequiredService<ClinicEz.Pharmacy.Infrastructure.Context.PharmacyContext>());
 
         // Register publishers
         services.AddScoped<IPrescriptionDispensedPublisher, PrescriptionDispensedPublisher>();
@@ -63,40 +67,10 @@ public static class DependencyInjection
 
         services.AddHangfireServer();
 
-        services.AddMassTransit(x =>
-        {
-            x.SetEndpointNameFormatter(new KebabCaseEndpointNameFormatter("pharmacy", false));
-            x.AddConsumer<FacilityCreatedConsumer>();
-            x.AddConsumer<PrescriptionIssuedConsumer>();
-            x.AddEntityFrameworkOutbox<ApplicationDbContext>(o =>
-            {
-                o.UsePostgres();
-                o.UseBusOutbox();
-            });
-
-            x.UsingRabbitMq((context, cfg) =>
-            {
-                var host = configuration["RabbitMq:Host"] ?? "localhost";
-                var portStr = configuration["RabbitMq:Port"];
-                ushort port = !string.IsNullOrEmpty(portStr) && ushort.TryParse(portStr, out var p) ? p : (ushort)5672;
-                var useSsl = configuration.GetValue<bool>("RabbitMq:UseSsl", port == 5671);
-
-                cfg.Host(host, port, configuration["RabbitMq:VirtualHost"] ?? "/", h =>
-                {
-                    h.Username(configuration["RabbitMq:Username"] ?? "rabbitmq");
-                    h.Password(configuration["RabbitMq:Password"] ?? "nextstep-rabbitmq-2o2G");
-                    if (useSsl)
-                    {
-                        h.UseSsl(s =>
-                        {
-                            // Supports on-premises outbound AMQPS firewall traversal over port 5671
-                        });
-                    }
-                });
-
-                cfg.ConfigureEndpoints(context);
-            });
-        });
+        // Interop hub messaging (replaces the broker): inbound handlers + transactional outbox/inbox on this DbContext
+        services.AddInterop<ApplicationDbContext>(configuration, handlers => handlers
+            .Handle<FacilityCreatedEvent, FacilityCreatedHandler>(InteropTypes.FacilityLicenseIssued)
+            .Handle<PrescriptionIssuedEvent, PrescriptionIssuedHandler>(InteropTypes.RxIssued));
 
         if (env != null && env.IsDevelopment())
         {

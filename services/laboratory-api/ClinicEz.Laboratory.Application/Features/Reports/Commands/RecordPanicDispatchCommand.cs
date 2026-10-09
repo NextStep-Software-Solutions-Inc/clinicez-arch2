@@ -84,16 +84,19 @@ public class RecordPanicDispatchCommandHandler : IRequestHandler<RecordPanicDisp
         };
 
         await _panicLogRepository.AddAsync(log, cancellationToken);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        // Broadcast STAT panic event across RabbitMQ to Clinic EMR
+        // STAT panic alert for the ordering clinic EMR. Queued in the outbox BEFORE the save so the dispatch log and
+        // the message commit atomically (the log id exists once the log is tracked).
         var panicEvent = new LabPanicResultAlertEvent
         {
             AlertId = log.Id,
-            RequisitionId = requisition.Id,
+            RequisitionId = requisition.CorrelationId ?? requisition.ExternalRequisitionId ?? requisition.Id,
+            LaboratoryTenantId = requisition.TenantId,
+            LaboratoryFacilityId = requisition.LaboratoryId.ToString(),
             AccessionNumber = requisition.AccessionNumber,
             PatientId = requisition.PatientId,
             PatientName = requisition.PatientName,
+            OrderingTenantId = requisition.OrderingTenantId,
             OrderingFacilityId = requisition.OrderingFacilityId,
             OrderingFacilityName = requisition.OrderingFacilityName,
             OrderingDoctorName = requisition.OrderingDoctorName,
@@ -113,7 +116,8 @@ public class RecordPanicDispatchCommandHandler : IRequestHandler<RecordPanicDisp
                 }).ToList()
         };
 
-        await _panicPublisher.PublishPanicAlertAsync(panicEvent, cancellationToken);
+        _panicPublisher.EnqueuePanicAlert(panicEvent);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new CriticalPanicDispatchLogDto
         {

@@ -9,13 +9,10 @@ using ClinicEz.Pharmacy.Application.Features.Prescriptions.Queries;
 using ClinicEz.Pharmacy.Domain.Entities;
 using ClinicEz.Pharmacy.Domain.Enums;
 using ClinicEz.Pharmacy.Domain.Services;
-using ClinicEz.Pharmacy.Infrastructure.Consumers;
 using ClinicEz.Shared.Exceptions;
 using ClinicEz.Shared.Interoperability;
 using FluentAssertions;
-using MassTransit;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Xunit;
 
@@ -129,84 +126,6 @@ public class PharmacyInteroperabilityAndFefoTests
     }
 
     [Fact]
-    public async Task PrescriptionIssuedConsumer_Should_Ingest_Event_Into_PrescriptionOrder_Queue()
-    {
-        var (db, uow, sieve) = PharmacyTestDbHelper.CreateTestContext();
-        var orderRepo = PharmacyTestDbHelper.CreateRepository<PrescriptionOrder>(db, sieve);
-        var inventoryRepo = PharmacyTestDbHelper.CreateRepository<PharmacyInventoryItem>(db, sieve);
-        var logger = Substitute.For<ILogger<PrescriptionIssuedConsumer>>();
-
-        // Seed inventory catalog
-        var med = new PharmacyInventoryItem
-        {
-            Id = Guid.NewGuid(),
-            Sku = "MED-AML-001",
-            GenericName = "Amlodipine Besylate",
-            DosageForm = "Tablet",
-            Strength = "5mg",
-            CurrentStock = 100,
-            UnitPrice = 8.50m
-        };
-        await db.InventoryItems.AddAsync(med);
-        await db.SaveChangesAsync();
-
-        var consumer = new PrescriptionIssuedConsumer(orderRepo, inventoryRepo, uow, logger);
-
-        var rxEvent = new PrescriptionIssuedEvent
-        {
-            PrescriptionId = Guid.NewGuid(),
-            PrescriptionNumber = "RX-20261001-0081",
-            OrderingFacilityId = "clinic-1",
-            OrderingFacilityName = "Metro Family Clinic",
-            TenantId = "tenant-clinic",
-            PrescriberDoctor = new PrescriberDoctorDto
-            {
-                DoctorId = "doc-001",
-                DoctorName = "Dr. Cruz, MD",
-                PrcLicenseNumber = "PRC-0149281"
-            },
-            Patient = new PrescriptionPatientDto
-            {
-                PatientId = Guid.NewGuid(),
-                FullName = "Maria Santos",
-                Age = 42,
-                Gender = "Female",
-                ContactNumber = "09171234567"
-            },
-            ClinicalDiagnosis = "Essential Hypertension",
-            Items = new List<PrescriptionItemDto>
-            {
-                new()
-                {
-                    GenericName = "Amlodipine Besylate",
-                    Dosage = "5mg",
-                    Form = "Tablet",
-                    Sig = "Take 1 tablet once daily in the morning",
-                    Quantity = 30
-                }
-            }
-        };
-
-        var context = Substitute.For<ConsumeContext<PrescriptionIssuedEvent>>();
-        context.Message.Returns(rxEvent);
-        context.CancellationToken.Returns(CancellationToken.None);
-
-        await consumer.Consume(context);
-
-        var savedOrder = await db.PrescriptionOrders
-            .Include(o => o.Items)
-            .FirstOrDefaultAsync(o => o.PrescriptionNumber == "RX-20261001-0081");
-
-        savedOrder.Should().NotBeNull();
-        savedOrder!.PatientName.Should().Be("Maria Santos");
-        savedOrder.Status.Should().Be(PrescriptionStatus.Pending);
-        savedOrder.Items.Should().HaveCount(1);
-        savedOrder.Items.First().GenericName.Should().Be("Amlodipine Besylate");
-        savedOrder.Items.First().UnitPrice.Should().Be(8.50m);
-        savedOrder.TotalAmount.Should().Be(255.00m); // 30 * 8.50
-    }
-
-    [Fact]
     public async Task DispensePrescriptionCommand_Should_Deduct_Inventory_Via_FEFO_And_Publish_PrescriptionDispensedEvent()
     {
         var (db, uow, sieve) = PharmacyTestDbHelper.CreateTestContext();
@@ -221,6 +140,8 @@ public class PharmacyInteroperabilityAndFefoTests
         var med = new PharmacyInventoryItem
         {
             Id = Guid.NewGuid(),
+            TenantId = PharmacyTestDbHelper.TenantId,
+            PharmacyId = PharmacyTestDbHelper.PharmacyKey,
             Sku = "MED-LOS-002",
             GenericName = "Losartan Potassium",
             DosageForm = "Tablet",
@@ -232,6 +153,8 @@ public class PharmacyInteroperabilityAndFefoTests
                 new()
                 {
                     Id = Guid.NewGuid(),
+                    TenantId = PharmacyTestDbHelper.TenantId,
+                    PharmacyId = PharmacyTestDbHelper.PharmacyKey,
                     BatchNumber = "B-LOS-EARLY",
                     ExpiryDate = now.AddMonths(4), // Expiring sooner
                     QuantityRemaining = 15,
@@ -240,6 +163,8 @@ public class PharmacyInteroperabilityAndFefoTests
                 new()
                 {
                     Id = Guid.NewGuid(),
+                    TenantId = PharmacyTestDbHelper.TenantId,
+                    PharmacyId = PharmacyTestDbHelper.PharmacyKey,
                     BatchNumber = "B-LOS-LATER",
                     ExpiryDate = now.AddMonths(18), // Expiring later
                     QuantityRemaining = 35,
@@ -253,6 +178,8 @@ public class PharmacyInteroperabilityAndFefoTests
         var order = new PrescriptionOrder
         {
             Id = Guid.NewGuid(),
+            TenantId = PharmacyTestDbHelper.TenantId,
+            PharmacyId = PharmacyTestDbHelper.PharmacyKey,
             ExternalPrescriptionId = Guid.NewGuid(),
             PrescriptionNumber = "RX-20261001-0099",
             PatientName = "Juan Dela Cruz",
@@ -302,14 +229,14 @@ public class PharmacyInteroperabilityAndFefoTests
         laterBatch.QuantityRemaining.Should().Be(30); // 5 taken out of 35
         updatedMed.CurrentStock.Should().Be(30); // 50 - 20 = 30
 
-        // Verify event was published over MassTransit
-        await publisher.Received(1).PublishPrescriptionDispensedAsync(
+        // Verify the dispense was queued (before the save) for the ordering clinic
+        publisher.Received(1).Enqueue(
+            Arg.Is<PrescriptionOrder>(o => o.Id == order.Id),
             Arg.Is<PrescriptionDispensedEvent>(e =>
                 e.PrescriptionNumber == "RX-20261001-0099" &&
                 e.DispensingPharmacistName == "Pharmacist Karen Reyes, RPh" &&
                 e.TotalAmount == 240.00m &&
-                e.DispensedItems.Count == 1),
-            Arg.Any<CancellationToken>());
+                e.DispensedItems.Count == 1));
     }
 
     [Fact]
@@ -324,6 +251,8 @@ public class PharmacyInteroperabilityAndFefoTests
         var order = new PrescriptionOrder
         {
             Id = Guid.NewGuid(),
+            TenantId = PharmacyTestDbHelper.TenantId,
+            PharmacyId = PharmacyTestDbHelper.PharmacyKey,
             PrescriptionNumber = "RX-DANGEROUS-001",
             PatientName = "Pedro Penduko",
             DoctorS2License = null, // Missing S2 license!
@@ -354,71 +283,5 @@ public class PharmacyInteroperabilityAndFefoTests
         var act = async () => await handler.Handle(command, CancellationToken.None);
         await act.Should().ThrowAsync<BadRequestException>()
             .WithMessage("*RA 9165*S2 License*");
-    }
-
-    [Fact]
-    public async Task PrescriptionIssuedConsumer_Should_Ingest_BranchId_And_Filter_By_Branch()
-    {
-        var (db, uow, sieve) = PharmacyTestDbHelper.CreateTestContext();
-        var orderRepo = PharmacyTestDbHelper.CreateRepository<PrescriptionOrder>(db, sieve);
-        var inventoryRepo = PharmacyTestDbHelper.CreateRepository<PharmacyInventoryItem>(db, sieve);
-        var logger = Substitute.For<ILogger<PrescriptionIssuedConsumer>>();
-        var consumer = new PrescriptionIssuedConsumer(orderRepo, inventoryRepo, uow, logger);
-
-        var branchAId = Guid.NewGuid().ToString();
-        var branchBId = Guid.NewGuid().ToString();
-
-        var rxEventA = new PrescriptionIssuedEvent
-        {
-            PrescriptionId = Guid.NewGuid(),
-            PrescriptionNumber = "RX-BRANCH-A-01",
-            OrderingFacilityId = "clinic-branch-a",
-            OrderingFacilityName = "Downtown Medical Clinic",
-            TenantId = "tenant-downtown",
-            BranchId = branchAId,
-            PrescriberDoctor = new PrescriberDoctorDto { DoctorName = "Dr. Branch A", PrcLicenseNumber = "PRC-001" },
-            Patient = new PrescriptionPatientDto { PatientId = Guid.NewGuid(), FullName = "Patient Branch A" },
-            Items = new List<PrescriptionItemDto>
-            {
-                new() { GenericName = "Amoxicillin", Dosage = "500mg", Quantity = 21 }
-            }
-        };
-
-        var rxEventB = new PrescriptionIssuedEvent
-        {
-            PrescriptionId = Guid.NewGuid(),
-            PrescriptionNumber = "RX-BRANCH-B-01",
-            OrderingFacilityId = "clinic-branch-b",
-            OrderingFacilityName = "Uptown Medical Clinic",
-            TenantId = "tenant-downtown",
-            BranchId = branchBId,
-            PrescriberDoctor = new PrescriberDoctorDto { DoctorName = "Dr. Branch B", PrcLicenseNumber = "PRC-002" },
-            Patient = new PrescriptionPatientDto { PatientId = Guid.NewGuid(), FullName = "Patient Branch B" },
-            Items = new List<PrescriptionItemDto>
-            {
-                new() { GenericName = "Paracetamol", Dosage = "500mg", Quantity = 10 }
-            }
-        };
-
-        var contextA = Substitute.For<ConsumeContext<PrescriptionIssuedEvent>>();
-        contextA.Message.Returns(rxEventA);
-        contextA.CancellationToken.Returns(CancellationToken.None);
-        await consumer.Consume(contextA);
-
-        var contextB = Substitute.For<ConsumeContext<PrescriptionIssuedEvent>>();
-        contextB.Message.Returns(rxEventB);
-        contextB.CancellationToken.Returns(CancellationToken.None);
-        await consumer.Consume(contextB);
-
-        var savedA = await db.PrescriptionOrders.FirstOrDefaultAsync(p => p.PrescriptionNumber == "RX-BRANCH-A-01");
-        savedA.Should().NotBeNull();
-        savedA!.BranchId.Should().Be(branchAId);
-
-        // Verify GetPrescriptionsQueueQuery filtered by branchAId
-        var queryHandler = new GetPrescriptionsQueueQueryHandler(orderRepo);
-        var queueA = await queryHandler.Handle(new GetPrescriptionsQueueQuery(BranchId: branchAId), CancellationToken.None);
-        queueA.Should().HaveCount(1);
-        queueA[0].PrescriptionNumber.Should().Be("RX-BRANCH-A-01");
-        queueA[0].BranchId.Should().Be(branchAId);
     }
 }

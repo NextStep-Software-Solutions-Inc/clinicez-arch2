@@ -10,9 +10,6 @@ using ClinicEz.Shared.Exceptions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
-using ClinicEz.Clinic.Application.Common.Interfaces;
-using ClinicEz.Shared.Interoperability;
-
 namespace ClinicEz.Clinic.Application.Features.LabOrders.Commands;
 
 public record SubmitPublicLabUploadCommand(
@@ -32,16 +29,13 @@ public class SubmitPublicLabUploadCommandHandler : IRequestHandler<SubmitPublicL
 {
     private readonly IRepository<ClinicLabOrder> _orderRepo;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly ILabRequisitionPublisher? _requisitionPublisher;
 
     public SubmitPublicLabUploadCommandHandler(
         IRepository<ClinicLabOrder> orderRepo,
-        IUnitOfWork unitOfWork,
-        ILabRequisitionPublisher? requisitionPublisher = null)
+        IUnitOfWork unitOfWork)
     {
         _orderRepo = orderRepo;
         _unitOfWork = unitOfWork;
-        _requisitionPublisher = requisitionPublisher;
     }
 
     public async Task<ClinicLabOrderDto> Handle(SubmitPublicLabUploadCommand request, CancellationToken cancellationToken)
@@ -98,24 +92,6 @@ public class SubmitPublicLabUploadCommandHandler : IRequestHandler<SubmitPublicL
 
         _orderRepo.Update(order);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-        if (_requisitionPublisher != null)
-        {
-            await _requisitionPublisher.PublishExternalResultUploadedAsync(new ExternalLabResultUploadedEvent
-            {
-                UploadId = Guid.NewGuid(),
-                RequisitionId = order.Id,
-                AccessionNumber = order.OrderNumber,
-                PatientId = order.PatientId,
-                UploadedBy = request.UploadedBy,
-                ExternalLabName = order.ExternalLabName,
-                DocumentType = order.ExternalReportType,
-                DocumentUrl = order.ExternalReportUrl,
-                FileBase64 = order.ExternalReportFileBase64,
-                Notes = order.Notes,
-                UploadedAt = DateTime.UtcNow
-            }, cancellationToken);
-        }
 
         return CreateClinicLabOrderCommandHandler.MapToDto(order);
     }

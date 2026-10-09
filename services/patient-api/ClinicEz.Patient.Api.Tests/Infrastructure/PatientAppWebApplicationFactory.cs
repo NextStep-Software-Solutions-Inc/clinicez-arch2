@@ -53,6 +53,8 @@ public sealed class PatientAppWebApplicationFactory
         Environment.SetEnvironmentVariable("R2__AccessKeyId", "test-key");
         Environment.SetEnvironmentVariable("R2__SecretAccessKey", "test-secret");
         Environment.SetEnvironmentVariable("R2__PublicUrl", "https://test.r2.dev");
+        Environment.SetEnvironmentVariable("Messaging__Transport", "InProcess");
+        Environment.SetEnvironmentVariable("Messaging__Enabled", "false");
 
         // Trigger host build then run migrations against the test container
         await using var scope = Services.CreateAsyncScope();
@@ -79,6 +81,8 @@ public sealed class PatientAppWebApplicationFactory
         Environment.SetEnvironmentVariable("R2__AccessKeyId", null);
         Environment.SetEnvironmentVariable("R2__SecretAccessKey", null);
         Environment.SetEnvironmentVariable("R2__PublicUrl", null);
+        Environment.SetEnvironmentVariable("Messaging__Transport", null);
+        Environment.SetEnvironmentVariable("Messaging__Enabled", null);
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -104,14 +108,6 @@ public sealed class PatientAppWebApplicationFactory
             var existing = services.SingleOrDefault(d => d.ServiceType == typeof(IBackgroundJobEnqueuer));
             if (existing is not null) services.Remove(existing);
             services.AddScoped<IBackgroundJobEnqueuer, NoOpJobEnqueuer>();
-
-            // Remove ClinicPingBackgroundService so it doesn't query database during startup/migrations
-            var clinicPingService = services.FirstOrDefault(d => d.ImplementationType == typeof(ClinicEz.Patient.Infrastructure.Services.Workers.ClinicPingBackgroundService));
-            if (clinicPingService is not null) services.Remove(clinicPingService);
-
-            // Remove MassTransit hosted service so tests don't fail on missing RabbitMQ broker
-            var massTransitHostedService = services.FirstOrDefault(d => d.ImplementationType?.Name == "MassTransitHostedService");
-            if (massTransitHostedService is not null) services.Remove(massTransitHostedService);
 
             // Remove Hangfire server hosted service so it doesn't poll background tables during tests
             var hangfireServer = services.FirstOrDefault(d => d.ImplementationType?.Name == "BackgroundJobServerHostedService");

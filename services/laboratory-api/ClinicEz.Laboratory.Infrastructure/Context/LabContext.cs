@@ -18,7 +18,7 @@ namespace ClinicEz.Laboratory.Infrastructure.Context;
 ///   minimal service permission set.</item>
 ///   <item>Anonymous requests (public endpoints only): no permissions and no tenant restriction (those endpoints do their
 ///   own workspace resolution).</item>
-///   <item>No HTTP request (MassTransit consumers, Hangfire, seeders): trusted system scope, no tenant restriction.</item>
+///   <item>No HTTP request (interop handlers, Hangfire, seeders): trusted system scope, no tenant restriction.</item>
 /// </list>
 /// </summary>
 public sealed class LabContext : ILabContext

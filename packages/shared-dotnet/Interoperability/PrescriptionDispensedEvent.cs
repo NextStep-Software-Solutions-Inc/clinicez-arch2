@@ -32,4 +32,7 @@ public record PrescriptionDispensedEvent
     public decimal TotalAmount { get; init; }
     public string? ReceiptNumber { get; init; }
     public string? Notes { get; init; }
+    public string? OrderingTenantId { get; init; }
+    public string? OrderingFacilityId { get; init; }
+    public Guid? PatientId { get; init; }
 }

@@ -1,34 +1,28 @@
 using System;
-using System.Threading;
-using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
+using ClinicEz.Clinic.Infrastructure.Messaging;
+using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interoperability;
-using MassTransit;
-using Microsoft.Extensions.Logging;
 
 namespace ClinicEz.Clinic.Infrastructure.Services;
 
 public class PrescriptionPublisher : IPrescriptionPublisher
 {
-    private readonly IPublishEndpoint _publishEndpoint;
-    private readonly ILogger<PrescriptionPublisher> _logger;
+    private readonly IInteropPublisher _publisher;
 
-    public PrescriptionPublisher(IPublishEndpoint publishEndpoint, ILogger<PrescriptionPublisher> logger)
-    {
-        _publishEndpoint = publishEndpoint;
-        _logger = logger;
-    }
+    public PrescriptionPublisher(IInteropPublisher publisher) => _publisher = publisher;
 
-    public async Task PublishPrescriptionIssuedAsync(PrescriptionIssuedEvent prescriptionEvent, CancellationToken cancellationToken = default)
+    public void PublishPrescriptionIssued(PrescriptionIssuedEvent prescriptionEvent)
     {
-        try
-        {
-            await _publishEndpoint.Publish(prescriptionEvent, cancellationToken);
-            _logger.LogInformation("[ClinicEz.Clinic] Successfully published PrescriptionIssuedEvent #{PrescriptionNumber} to RabbitMQ", prescriptionEvent.PrescriptionNumber);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "[ClinicEz.Clinic] RabbitMQ publish notice: Could not dispatch event #{PrescriptionNumber} to broker ({Message}). Prescription remains securely committed in ClinicDb.", prescriptionEvent.PrescriptionNumber, ex.Message);
-        }
+        var to = ClinicParties.Target(
+            prescriptionEvent.TargetPharmacyTenantId, prescriptionEvent.TargetPharmacyFacilityId, FacilityType.Pharmacy, "pharmacy");
+
+        _publisher.Enqueue(
+            InteropTypes.RxIssued,
+            ClinicParties.Clinic(prescriptionEvent.TenantId, prescriptionEvent.OrderingFacilityId),
+            to,
+            prescriptionEvent.PrescriptionId,
+            prescriptionEvent);
     }
 }

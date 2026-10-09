@@ -1,15 +1,17 @@
 using ClinicEz.Laboratory.Domain.Entities;
+using ClinicEz.Shared.Interop.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
-using MassTransit;
 
 namespace ClinicEz.Laboratory.Infrastructure.Persistence;
 
 public class ApplicationDbContext(
     DbContextOptions<ApplicationDbContext> options,
     Microsoft.Extensions.Configuration.IConfiguration configuration,
-    ClinicEz.Laboratory.Domain.Interfaces.ILabContext? labContext = null) : DbContext(options)
+    ClinicEz.Laboratory.Domain.Interfaces.ILabContext? labContext = null) : DbContext(options), IInteropDbContext
 {
+    public DbSet<InteropOutboxMessage> InteropOutbox { get; set; }
+    public DbSet<InteropInboxMessage> InteropInbox { get; set; }
     public DbSet<Product> Products { get; set; }
     public DbSet<LabRequisition> LabRequisitions { get; set; }
     public DbSet<Specimen> Specimens { get; set; }
@@ -67,9 +69,12 @@ public class ApplicationDbContext(
             entity.Property(e => e.AccessionNumber).IsRequired().HasMaxLength(50);
             entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
             entity.Property(e => e.BranchId).HasMaxLength(100);
+            entity.Property(e => e.OrderingTenantId).HasMaxLength(100);
+            entity.Property(e => e.OrderingFacilityId).HasMaxLength(100);
             entity.Property(e => e.PatientName).IsRequired().HasMaxLength(255);
             entity.HasIndex(e => e.AccessionNumber).IsUnique();
             entity.HasIndex(e => e.ExternalRequisitionId);
+            entity.HasIndex(e => new { e.LaboratoryId, e.OrderingTenantId, e.OrderingFacilityId, e.ExternalRequisitionId }).IsUnique();
             entity.HasIndex(e => e.BranchId);
             entity.HasMany(e => e.Specimens).WithOne().HasForeignKey(s => s.LabRequisitionId).OnDelete(DeleteBehavior.Cascade);
             entity.HasMany(e => e.AnalyteResults).WithOne().HasForeignKey(r => r.LabRequisitionId).OnDelete(DeleteBehavior.Cascade);
@@ -161,9 +166,7 @@ public class ApplicationDbContext(
         modelBuilder.Entity<LabRefreshToken>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
         modelBuilder.Entity<LabSettings>().HasQueryFilter(e => CurrentTenantId == null || e.TenantId == CurrentTenantId);
 
-        modelBuilder.AddInboxStateEntity();
-        modelBuilder.AddOutboxStateEntity();
-        modelBuilder.AddOutboxMessageEntity();
+        modelBuilder.ApplyInteropModel();
 
         base.OnModelCreating(modelBuilder);
     }

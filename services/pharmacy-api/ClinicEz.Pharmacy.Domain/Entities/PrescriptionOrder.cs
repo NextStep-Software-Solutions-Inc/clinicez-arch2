@@ -26,6 +26,12 @@ public sealed class PrescriptionOrder : BaseEntity
 
     public string OrderingFacilityId { get; set; } = string.Empty;
 
+    /// <summary>Tenant of the ordering clinic, taken from the rx.issued envelope's From party.</summary>
+    public string OrderingTenantId { get; set; } = string.Empty;
+
+    /// <summary>Envelope correlation id of rx.issued (the clinic's PrescriptionId); reused on rx.dispensed.</summary>
+    public Guid CorrelationId { get; set; }
+
     public string OrderingFacilityName { get; set; } = string.Empty;
 
     public string OrderingDoctorName { get; set; } = string.Empty;
