@@ -100,6 +100,18 @@ public enum PaymentPolicy
     None
 }
 
+/// <summary>A correction billing applied to the invoice behind an order after the fact.</summary>
+public enum PaymentCorrection
+{
+    None,
+
+    /// <summary>The invoice was voided; nothing had been paid.</summary>
+    Voided,
+
+    /// <summary>The payment was reversed at the cashier.</summary>
+    Refunded
+}
+
 /// <summary>
 /// Lifecycle of an order inside this laboratory. Names mirror the shared <c>LabOrderStage</c> wire contract, which
 /// the Domain layer cannot reference; the Application layer maps between the two by name.

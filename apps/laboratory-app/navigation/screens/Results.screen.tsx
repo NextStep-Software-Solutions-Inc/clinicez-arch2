@@ -39,6 +39,8 @@ export default function ResultsScreen() {
   const [analyzerModalVisible, setAnalyzerModalVisible] = useState(false);
   const [panicModalVisible, setPanicModalVisible] = useState(false);
   const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [rejectModalVisible, setRejectModalVisible] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   // Pathologist sign-off fields
@@ -227,6 +229,39 @@ export default function ResultsScreen() {
     }
   };
 
+  const canReject =
+    !!selectedOrder &&
+    selectedOrder.stage !== 'Rejected' &&
+    selectedOrder.stage !== 'Cancelled' &&
+    selectedOrder.stage !== 'ResultFinalized' &&
+    selectedOrder.status !== 'Rejected' &&
+    selectedOrder.status !== 'Verified';
+
+  const closeRejectModal = () => {
+    setRejectModalVisible(false);
+    setRejectReason('');
+  };
+
+  const handleRejectOrder = async () => {
+    if (!selectedOrder) return;
+    const reason = rejectReason.trim();
+    if (!reason) return;
+    setSubmitting(true);
+    const [rejected, err] = await laboratoryService.rejectRequisition(selectedOrder.id, reason);
+    setSubmitting(false);
+
+    if (err) {
+      Alert.alert('Reject Error', describeActionError(err));
+      return;
+    }
+    closeRejectModal();
+    Alert.alert('Order Rejected', `Accession ${selectedOrder.accessionNumber} was rejected. The clinic and patient have been notified.`);
+    if (rejected) {
+      setSelectedOrder(rejected);
+      setOrders(prev => prev.map(o => (o.id === rejected.id ? rejected : o)));
+    }
+  };
+
   // Detect critical values
   const hasCriticalResults = rows.some(r => r.flag === 'Critical');
   const criticalItems = rows.filter(r => r.flag === 'Critical');
@@ -283,6 +318,12 @@ export default function ResultsScreen() {
             {selectedOrder?.diagnosticReport && (
               <Pressable style={styles.previewDohBtn} onPress={() => setReportModalVisible(true)}>
                 <ThemedText style={styles.previewDohBtnText}>📄 View DOH Report</ThemedText>
+              </Pressable>
+            )}
+
+            {selectedOrder && canReject && (
+              <Pressable style={styles.rejectOrderBtn} onPress={() => setRejectModalVisible(true)}>
+                <ThemedText style={styles.rejectOrderBtnText}>Reject order</ThemedText>
               </Pressable>
             )}
           </View>
@@ -505,6 +546,44 @@ export default function ResultsScreen() {
               </Pressable>
               <Pressable style={styles.confirmPanicBtn} onPress={handleLogPanicDispatch} disabled={submitting}>
                 <ThemedText style={styles.confirmPanicText}>Broadcast STAT Alert & Save Audit</ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Reject Order Modal */}
+      <Modal visible={rejectModalVisible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.panicModalCard}>
+            <ThemedText style={styles.panicModalHeading}>Reject order</ThemedText>
+            <ThemedText style={styles.modalSub}>
+              {selectedOrder
+                ? `The clinic and patient will be told that ${selectedOrder.patientName} (${selectedOrder.accessionNumber}) was rejected by the laboratory.`
+                : ''}
+            </ThemedText>
+
+            <View style={styles.formGroup}>
+              <ThemedText style={styles.inputLabel}>Reason *</ThemedText>
+              <TextInput
+                style={[styles.input, { minHeight: 60 }]}
+                value={rejectReason}
+                onChangeText={setRejectReason}
+                placeholder="e.g. Test not offered, unsuitable specimen"
+                multiline
+              />
+            </View>
+
+            <View style={styles.modalActionsRow}>
+              <Pressable style={styles.cancelModalBtn} onPress={closeRejectModal}>
+                <ThemedText style={styles.cancelModalText}>Cancel</ThemedText>
+              </Pressable>
+              <Pressable
+                style={[styles.confirmRejectBtn, !rejectReason.trim() && { opacity: 0.5 }]}
+                onPress={handleRejectOrder}
+                disabled={submitting || !rejectReason.trim()}
+              >
+                <ThemedText style={styles.confirmReleaseText}>Reject order</ThemedText>
               </Pressable>
             </View>
           </View>
@@ -760,6 +839,18 @@ const styles = StyleSheet.create({
   },
   previewDohBtnText: {
     color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  rejectOrderBtn: {
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  rejectOrderBtnText: {
+    color: '#B91C1C',
     fontSize: 11,
     fontWeight: '700',
   },
@@ -1207,6 +1298,12 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 13,
+  },
+  confirmRejectBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#B91C1C',
   },
   rowBetween: {
     flexDirection: 'row',

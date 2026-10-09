@@ -59,6 +59,9 @@ export interface DiagnosticReportItem {
 
 export type PaymentPolicy = 'Prepaid' | 'Postpaid' | 'None';
 
+/** Set when billing voided or refunded the order's invoice after it was raised or paid. */
+export type PaymentCorrection = 'None' | 'Voided' | 'Refunded';
+
 export type RequisitionStage =
   | 'Routed'
   | 'Claimed'
@@ -97,6 +100,8 @@ export interface LabRequisitionItem {
   paid?: boolean;
   paidAtUtc?: string;
   receiptNumber?: string;
+  paymentCorrection?: PaymentCorrection;
+  paymentCorrectedAtUtc?: string;
   invoiceId?: string;
   createdAt: string;
   specimens: SpecimenItem[];

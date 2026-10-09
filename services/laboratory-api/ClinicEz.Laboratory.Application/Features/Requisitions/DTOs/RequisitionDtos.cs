@@ -94,6 +94,9 @@ public record LabRequisitionDto
     public DateTime? PaidAtUtc { get; init; }
     public string? ReceiptNumber { get; init; }
     public Guid? InvoiceId { get; init; }
+    /// <summary>None, Voided or Refunded: billing reversed the payment after the order was accepted.</summary>
+    public string PaymentCorrection { get; init; } = "None";
+    public DateTime? PaymentCorrectedAtUtc { get; init; }
     public DateTime CreatedAt { get; init; }
     public List<SpecimenDto> Specimens { get; init; } = new();
     public List<AnalyteResultDto> AnalyteResults { get; init; } = new();

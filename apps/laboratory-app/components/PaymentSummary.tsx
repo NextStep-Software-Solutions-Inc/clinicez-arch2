@@ -6,7 +6,15 @@ import { formatMoney, paymentChipFor } from '../utils/requisitionPresentation';
 
 type PaymentOrder = Pick<
   LabRequisitionItem,
-  'paymentPolicy' | 'paymentRequired' | 'paid' | 'stage' | 'quotedAmount' | 'currency' | 'receiptNumber' | 'paidAtUtc'
+  | 'paymentPolicy'
+  | 'paymentRequired'
+  | 'paid'
+  | 'stage'
+  | 'quotedAmount'
+  | 'currency'
+  | 'receiptNumber'
+  | 'paidAtUtc'
+  | 'paymentCorrection'
 >;
 
 interface PaymentSummaryProps {
@@ -33,7 +41,7 @@ export default function PaymentSummary({ order, onRefresh }: PaymentSummaryProps
         {amount ? <ThemedText style={styles.amount}>{amount}</ThemedText> : null}
       </View>
 
-      {order.paid && order.receiptNumber ? (
+      {chip.tone === 'paid' && order.receiptNumber ? (
         <ThemedText style={styles.receipt}>Cashier receipt {order.receiptNumber}</ThemedText>
       ) : null}
 

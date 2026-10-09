@@ -59,6 +59,10 @@ public sealed class LabRequisition : BaseEntity, ILabScopedEntity
     public Guid? InvoiceId { get; set; }
     public string? ReceiptNumber { get; set; }
 
+    /// <summary>Set when billing voided the invoice or refunded the payment after the order was accepted.</summary>
+    public PaymentCorrection PaymentCorrection { get; set; } = PaymentCorrection.None;
+    public DateTime? PaymentCorrectedAtUtc { get; set; }
+
     /// <summary>True when <see cref="PatientId"/> is a ClinicEZ patient (patient-api id); <see cref="Guid.Empty"/> means unknown.</summary>
     public bool HasClinicEzPatient => PatientId != Guid.Empty;
 

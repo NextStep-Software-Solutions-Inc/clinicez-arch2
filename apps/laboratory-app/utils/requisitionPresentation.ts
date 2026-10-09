@@ -41,11 +41,21 @@ export function describeActionError(error: ApiError): string {
   return isPaymentRequiredError(error) ? PAYMENT_REQUIRED_MESSAGE : error.message;
 }
 
+const PAYMENT_CORRECTION_LABELS: Readonly<Record<string, string>> = {
+  Voided: 'Payment voided',
+  Refunded: 'Payment refunded',
+};
+
 /** Null when the order carries no payment information (older orders or no payment policy). */
-export function paymentChipFor(order: Pick<LabRequisitionItem, 'paymentPolicy' | 'paymentRequired' | 'paid' | 'stage'>): PaymentChip | null {
+export function paymentChipFor(
+  order: Pick<LabRequisitionItem, 'paymentPolicy' | 'paymentRequired' | 'paid' | 'stage' | 'paymentCorrection'>,
+): PaymentChip | null {
   if (order.stage === 'Rejected' || order.stage === 'Cancelled') return null;
-  if (order.paid) return { label: 'Paid at cashier', tone: 'paid' };
   if (order.paymentRequired) return { label: 'Awaiting payment', tone: 'blocked' };
+  if (order.paymentCorrection && order.paymentCorrection !== 'None') {
+    return { label: PAYMENT_CORRECTION_LABELS[order.paymentCorrection] ?? 'Payment adjusted', tone: 'neutral' };
+  }
+  if (order.paid) return { label: 'Paid at cashier', tone: 'paid' };
   if (order.paymentPolicy === 'Postpaid') return { label: 'Bill after results', tone: 'neutral' };
   return null;
 }

@@ -436,6 +436,12 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
 
+                    b.Property<DateTime?>("PaymentCorrectedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("PaymentCorrection")
+                        .HasColumnType("integer");
+
                     b.Property<int>("PaymentPolicy")
                         .HasColumnType("integer");
 

@@ -44,7 +44,7 @@ public class LabPaymentGateTests
         return 0;
     });
 
-    private static async Task<LabRequisition> OrderAsync(
+    internal static async Task<LabRequisition> OrderAsync(
         LabInteropHost host, PaymentPolicy policy, string accession = "ACC-P1", Guid? patientId = null, bool routed = true)
     {
         await host.SeedLabAsync(policy);
@@ -56,7 +56,7 @@ public class LabPaymentGateTests
         return (await host.RequisitionsAsync()).Single();
     }
 
-    private static Task<int> AccessionAsync(LabInteropHost host, Guid requisitionId) => host.InLabScopeAsync(async sp =>
+    internal static Task<int> AccessionAsync(LabInteropHost host, Guid requisitionId) => host.InLabScopeAsync(async sp =>
     {
         var handler = new AccessionSpecimenCommandHandler(
             sp.GetRequiredService<IRepository<LabRequisition>>(),
@@ -66,7 +66,7 @@ public class LabPaymentGateTests
         return 0;
     });
 
-    private static Task<int> RecordResultAsync(LabInteropHost host, Guid requisitionId) => host.InLabScopeAsync(async sp =>
+    internal static Task<int> RecordResultAsync(LabInteropHost host, Guid requisitionId) => host.InLabScopeAsync(async sp =>
     {
         var handler = new RecordAnalyteResultCommandHandler(
             sp.GetRequiredService<IRepository<LabRequisition>>(),
@@ -90,7 +90,7 @@ public class LabPaymentGateTests
         return 0;
     });
 
-    private static async Task<List<LabOrderStatusChangedPayload>> StatusesToAsync(LabInteropHost host, Party to)
+    internal static async Task<List<LabOrderStatusChangedPayload>> StatusesToAsync(LabInteropHost host, Party to)
     {
         await host.Relay.RunOnceAsync(default);
         return host.Hub.Sent

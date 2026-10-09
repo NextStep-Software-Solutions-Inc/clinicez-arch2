@@ -21,6 +21,13 @@ public interface ILabOrderLifecycle
     /// </summary>
     Task<bool> TransitionAsync(LabRequisition requisition, RequisitionStage stage, string? reason, CancellationToken ct);
 
+    /// <summary>
+    /// The only backward move: billing reversed the payment of an order that is still <see cref="RequisitionStage.Paid"/>
+    /// (no specimen drawn yet), so it goes back to <see cref="RequisitionStage.AwaitingPayment"/> and the move is announced.
+    /// Returns <c>false</c> (and queues nothing) for any other stage: work already started is never un-started.
+    /// </summary>
+    Task<bool> ReopenForPaymentAsync(LabRequisition requisition, string reason, CancellationToken ct);
+
     /// <summary>Display name of the laboratory that owns the order.</summary>
     Task<string> GetLaboratoryNameAsync(LabRequisition requisition, CancellationToken ct);
 }

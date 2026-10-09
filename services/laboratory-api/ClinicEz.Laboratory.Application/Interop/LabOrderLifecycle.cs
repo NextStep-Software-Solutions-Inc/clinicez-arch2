@@ -48,6 +48,17 @@ public sealed class LabOrderLifecycle : ILabOrderLifecycle
         return true;
     }
 
+    public async Task<bool> ReopenForPaymentAsync(LabRequisition requisition, string reason, CancellationToken ct)
+    {
+        if (requisition.Stage != RequisitionStage.Paid)
+        {
+            return false;
+        }
+
+        await ApplyAsync(requisition, RequisitionStage.AwaitingPayment, reason, ct);
+        return true;
+    }
+
     public async Task<string> GetLaboratoryNameAsync(LabRequisition requisition, CancellationToken ct)
     {
         if (_laboratoryNames.TryGetValue(requisition.LaboratoryId, out var cached))

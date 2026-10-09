@@ -103,6 +103,8 @@ public class GetWorklistQueryHandler : IRequestHandler<GetWorklistQuery, List<La
             PaidAtUtc = r.PaidAtUtc,
             ReceiptNumber = r.ReceiptNumber,
             InvoiceId = r.InvoiceId,
+            PaymentCorrection = r.PaymentCorrection.ToString(),
+            PaymentCorrectedAtUtc = r.PaymentCorrectedAtUtc,
             CreatedAt = r.CreatedAt,
             Specimens = r.Specimens.Select(s => new SpecimenDto
             {
