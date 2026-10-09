@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
@@ -10,6 +11,7 @@ namespace ClinicEz.Shared.Interoperability;
 // ---------------------------------------------------------------------------------------------
 
 /// <summary>Lifecycle of a lab order, owned by the performing lab and mirrored to the clinic and the patient.</summary>
+[JsonConverter(typeof(StrictJsonStringEnumConverter))]
 public enum LabOrderStage
 {
     Issued,
@@ -27,15 +29,20 @@ public enum LabOrderStage
 }
 
 /// <summary>Where a result came from. Always derived server-side from the channel, never supplied by a caller.</summary>
+[JsonConverter(typeof(StrictJsonStringEnumConverter))]
 public enum ResultSource { ClinicEzLab, ExternalLab, PatientUploaded }
 
 /// <summary>ClinicEZ-lab results arrive Verified; external and patient uploads stay Unverified until the ordering doctor reviews.</summary>
+[JsonConverter(typeof(StrictJsonStringEnumConverter))]
 public enum VerificationState { Verified, Unverified, Rejected }
 
+[JsonConverter(typeof(StrictJsonStringEnumConverter))]
 public enum RxStage { Issued, Accepted, PartiallyAccepted, Rejected, Dispensed, ExternalDispensed }
 
+[JsonConverter(typeof(StrictJsonStringEnumConverter))]
 public enum PatientDocumentKind { LabRequest, Prescription, LabResult, MedicalCertificate, DispenseReceipt }
 
+[JsonConverter(typeof(StrictJsonStringEnumConverter))]
 public enum UploaderKind { ExternalLab, Patient }
 
 // ---------------------------------------------------------------------------------------------
@@ -210,6 +217,7 @@ public record MedicalCertificateIssuedPayload
 // ---------------------------------------------------------------------------------------------
 
 [Flags]
+[JsonConverter(typeof(StrictJsonStringEnumConverter))]
 public enum SharingScopes
 {
     None = 0,

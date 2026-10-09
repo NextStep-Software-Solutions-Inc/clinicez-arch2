@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using System;
 using ClinicEz.Shared.Common;
 
@@ -12,6 +13,7 @@ namespace ClinicEz.Shared.Interoperability;
 //   billing -> portal (finance rollup, NO PHI): To = Party.Portal, same payload, CorrelationId = InvoiceId.
 // ---------------------------------------------------------------------------------------------
 
+[JsonConverter(typeof(StrictJsonStringEnumConverter))]
 public enum BillingCorrectionKind { Void, Refund }
 
 public record BillingInvoiceVoidedPayload

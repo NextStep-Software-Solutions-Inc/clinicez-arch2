@@ -17,7 +17,9 @@ public sealed class PharmacyHost : ServiceHostBase
 {
     public PharmacyHost(HubFixture hub) : base(InteropServices.Pharmacy)
     {
-        var config = new ConfigurationBuilder().AddInMemoryCollection(BaseConfig(InteropServices.Pharmacy, "pharmacy_dashboard")).Build();
+        var settings = BaseConfig(InteropServices.Pharmacy, "pharmacy_dashboard");
+        settings["Gamot:UpscSecretKey"] = "e2e-pharmacy-upsc-secret-key-0123456789abcdef";
+        var config = new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
 
         var dbName = $"e2e-pharmacy-{Guid.NewGuid():N}";
         var services = new ServiceCollection();

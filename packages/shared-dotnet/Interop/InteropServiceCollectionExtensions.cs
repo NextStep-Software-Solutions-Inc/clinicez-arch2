@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
 namespace ClinicEz.Shared.Interop;
@@ -27,6 +28,8 @@ public static class InteropServiceCollectionExtensions
         Action<InteropHandlerBuilder>? configureHandlers = null)
         where TDbContext : DbContext, IInteropDbContext
     {
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, InteropStartupCheck>());
+
         services.AddOptions<InteropOptions>()
             .Bind(configuration.GetSection(InteropOptions.Section))
             .Validate(o =>
@@ -39,6 +42,13 @@ public static class InteropServiceCollectionExtensions
         var registry = new InteropHandlerRegistry();
         configureHandlers?.Invoke(new InteropHandlerBuilder(services, registry));
         services.AddSingleton(registry);
+
+        services.TryAddSingleton(sp =>
+        {
+            var o = sp.GetRequiredService<IOptions<InteropOptions>>().Value;
+            return o.IsInProcess ? new EnvelopeSigner(null, null) : new EnvelopeSigner(o.SigningKey, o.ClientId);
+        });
+        services.TryAddSingleton<EnvelopeVerifier>();
 
         services.TryAddScoped<IInteropDbContext>(sp => sp.GetRequiredService<TDbContext>());
         services.TryAddScoped<IInteropPublisher, InteropPublisher>();
@@ -59,7 +69,7 @@ public static class InteropServiceCollectionExtensions
             var options = sp.GetRequiredService<IOptions<InteropOptions>>();
             return options.Value.IsInProcess
                 ? sp.GetRequiredService<InProcessHubClaimsClient>()
-                : new HubClaimsHttpClient(sp.GetRequiredService<IHttpClientFactory>().CreateClient(HubHttpClientName), options);
+                : new HubClaimsHttpClient(sp.GetRequiredService<IHttpClientFactory>().CreateClient(HubHttpClientName), options, sp.GetRequiredService<EnvelopeSigner>());
         });
 
         services.TryAddSingleton<InteropRelayService>();

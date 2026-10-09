@@ -16,6 +16,12 @@ public class HubDbContext(DbContextOptions<HubDbContext> options, IConfiguration
     public DbSet<HubClaim> Claims { get; set; }
     public DbSet<HubState> State { get; set; }
 
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        // Every enum is persisted as its name (explicit per-property settings below take precedence).
+        configurationBuilder.Properties<Enum>().HaveConversion<string>().HaveMaxLength(64);
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         var schemaName = configuration["DbSchema"];
@@ -42,6 +48,7 @@ public class HubDbContext(DbContextOptions<HubDbContext> options, IConfiguration
             e.Property(x => x.Service).HasMaxLength(32).IsRequired();
             e.Property(x => x.Kind).HasConversion<string>().HasMaxLength(24);
             e.Property(x => x.SecretHash).HasMaxLength(256).IsRequired();
+            e.Property(x => x.PublicKeyPem).HasMaxLength(1024);
             e.HasIndex(x => x.CellId);
         });
 

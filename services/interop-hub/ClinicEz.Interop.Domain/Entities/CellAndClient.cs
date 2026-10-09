@@ -29,6 +29,11 @@ public class HubClient
     public HubClientKind Kind { get; set; }
     /// <summary><c>pbkdf2-sha256$iterations$salt$hash</c>.</summary>
     public string SecretHash { get; set; } = string.Empty;
+    /// <summary>
+    /// ECDSA P-256 public key (PEM) whose private half the client signs its envelopes with. Null for a client that has no key yet
+    /// (it can only send while <c>Hub:Signing:Required</c> is off).
+    /// </summary>
+    public string? PublicKeyPem { get; set; }
     public bool Revoked { get; set; }
     public DateTime CreatedAtUtc { get; set; }
     public DateTime? SecretRotatedAtUtc { get; set; }

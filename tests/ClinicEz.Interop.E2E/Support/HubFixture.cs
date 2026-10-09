@@ -1,8 +1,9 @@
-﻿using ClinicEz.Interop.Infrastructure.Persistence;
+using ClinicEz.Interop.Infrastructure.Persistence;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Interop.Transport;
+using ClinicEz.Shared.Security;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -41,6 +42,14 @@ public sealed class HubFixture : IAsyncDisposable
 
     public static string Secret(string service) => $"e2e-{service}-secret-0123456789abcdef";
 
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (string PrivateKey, string PublicKey)> SigningPairs = new();
+
+    /// <summary>The service's hub client signing key pair (generated once per test run; the hub is bootstrapped with the public half).</summary>
+    public static (string PrivateKey, string PublicKey) SigningPair(string service) => SigningPairs.GetOrAdd(service, _ => PemKey.GenerateP256Base64());
+
+    /// <summary>The value of <c>Messaging:SigningKey</c> for the service.</summary>
+    public static string SigningKey(string service) => SigningPair(service).PrivateKey;
+
     private static readonly (string Service, HubClientKind Kind)[] Clients =
     [
         (InteropServices.Portal, HubClientKind.ControlPlane),
@@ -59,6 +68,7 @@ public sealed class HubFixture : IAsyncDisposable
             ["Hub:Database:AutoMigrate"] = "true",
             ["Hub:Background:Enabled"] = "false",
             ["Hub:Auth:Pbkdf2Iterations"] = "1000",
+            ["Hub:Signing:Required"] = "true",
             ["Hub:MaxDeliveryAttempts"] = "3",
             ["Hub:VisibilityTimeoutSeconds"] = "30",
             ["Hub:NackDelaySeconds"] = "0",
@@ -76,6 +86,7 @@ public sealed class HubFixture : IAsyncDisposable
             config[$"Hub:Bootstrap:Clients:{i}:CellId"] = CloudCell;
             config[$"Hub:Bootstrap:Clients:{i}:Service"] = service;
             config[$"Hub:Bootstrap:Clients:{i}:Kind"] = kind.ToString();
+            config[$"Hub:Bootstrap:Clients:{i}:PublicKey"] = SigningPair(service).PublicKey;
         }
 
         var dbFile = Path.Combine(Path.GetTempPath(), $"interop-e2e-hub-{Guid.NewGuid():N}.db");
@@ -141,16 +152,33 @@ public sealed class HubFixture : IAsyncDisposable
     }
 
     /// <summary>The SDK's real HTTP client, authenticated as the service's client (for the portal, which has no service host here).</summary>
-    public ClinicEz.Shared.Interop.Transport.HubHttpClient NewSdk(string service)
+    /// <param name="service">The service whose client credentials and signing key are used.</param>
+    /// <param name="sign">When false the client sends exactly the envelopes it is given, so a test can send them unsigned or tampered.</param>
+    public IHubClient NewSdk(string service, bool sign = true)
     {
         var http = _factory.CreateClient();
-        return new ClinicEz.Shared.Interop.Transport.HubHttpClient(http, Microsoft.Extensions.Options.Options.Create(new InteropOptions
+        var client = new HubHttpClient(http, Microsoft.Extensions.Options.Options.Create(new InteropOptions
         {
             HubUrl = "http://localhost",
             ClientId = ClientId(service),
             ClientSecret = Secret(service),
             PollWaitSeconds = 0
         }));
+        return sign ? new SigningHubClient(client, new EnvelopeSigner(SigningKey(service), ClientId(service))) : client;
+    }
+
+    /// <summary>The SDK client of a service that, like the real relay, signs everything it sends with its own key.</summary>
+    private sealed class SigningHubClient(HubHttpClient inner, EnvelopeSigner signer) : IHubClient
+    {
+        public Task<IReadOnlyList<SendResult>> SendAsync(IReadOnlyList<InteropEnvelope> envelopes, CancellationToken ct) =>
+            inner.SendAsync(envelopes.Select(signer.Sign).ToList(), ct);
+
+        public Task<IReadOnlyList<PulledMessage>> PullAsync(string service, int max, int waitSeconds, CancellationToken ct) =>
+            inner.PullAsync(service, max, waitSeconds, ct);
+
+        public Task AckAsync(IReadOnlyList<Guid> deliveryIds, CancellationToken ct) => inner.AckAsync(deliveryIds, ct);
+
+        public Task NackAsync(IReadOnlyList<NackItem> items, CancellationToken ct) => inner.NackAsync(items, ct);
     }
 
     public async ValueTask DisposeAsync()

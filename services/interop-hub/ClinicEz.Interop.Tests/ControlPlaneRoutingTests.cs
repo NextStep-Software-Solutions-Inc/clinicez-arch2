@@ -102,34 +102,63 @@ public class ControlPlaneRoutingTests
     }
 }
 
-/// <summary>A facility type the hub has no default service for must never cause an error: route by <c>To.Service</c> or reject with a reason.</summary>
+/// <summary>
+/// Facility types are strict string enums on the wire: a type name this hub build does not know (a newer service,
+/// say imaging) is a client error at the boundary - never a 500, never a numeric fallback, nothing stored.
+/// </summary>
 public class UnknownFacilityTypeTests
 {
     private const string Ping = "test.ping";
-    private const FacilityType Imaging = (FacilityType)99;
 
-    private static readonly Party FutureFacility = Party.ForFacility("tenant-x", "x-imaging", Imaging);
+    private static readonly Party Lab = Party.ForFacility("tenant-x", "x-lab", FacilityType.Laboratory);
+
+    /// <summary>Serialize with the SDK, then swap one known type name for one this hub has never heard of.</summary>
+    private static string WithFutureType(object body) =>
+        System.Text.RegularExpressions.Regex.Replace(
+            System.Text.Json.JsonSerializer.Serialize(body, InteropJson.Options),
+            "(\"facilityType\"\\s*:\\s*)\"Clinic\"",
+            "$1\"Imaging\"",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    private static StringContent Json(string json) => new(json, System.Text.Encoding.UTF8, "application/json");
 
     [Fact]
-    public async Task Without_a_service_the_message_is_rejected_with_the_unknown_facility_type_reason()
+    public async Task A_message_to_a_type_name_the_hub_does_not_know_is_a_client_error_and_nothing_is_stored()
     {
         await using var hub = await HubApp.StartCloudAsync();
-        await hub.UpsertFacilityAsync(FutureFacility, FacilityVisibility.Network);
-        var to = new Party { Kind = PartyKind.Facility, TenantId = "tenant-x", FacilityId = "x-imaging" };
+        var to = new Party { Kind = PartyKind.Facility, TenantId = "tenant-x", FacilityId = "x-imaging", FacilityType = FacilityType.Clinic };
+        var body = WithFutureType(new HubHttpClient.SendRequest([W.Env(Ping, Party.Portal, to)]));
+        body.Should().Contain("Imaging");
 
-        var result = await hub.SendAsync("portal", W.Env(Ping, Party.Portal, to));
+        var response = await hub.RawAs("portal").PostAsync("/v1/messages", Json(body));
 
-        result.Status.Should().Be(SendResult.Rejected);
-        result.Reason.Should().StartWith(RoutingPolicy.UnknownFacilityType);
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await hub.MessageCountAsync()).Should().Be(0);
     }
 
     [Fact]
-    public async Task With_a_service_the_message_is_routed_by_that_service()
+    public async Task A_numeric_facility_type_is_rejected_too()
     {
         await using var hub = await HubApp.StartCloudAsync();
-        await hub.UpsertFacilityAsync(FutureFacility, FacilityVisibility.Network);
-        var to = new Party { Kind = PartyKind.Facility, TenantId = "tenant-x", FacilityId = "x-imaging", Service = InteropServices.Laboratory };
+        var to = new Party { Kind = PartyKind.Facility, TenantId = "tenant-x", FacilityId = "x-lab", FacilityType = FacilityType.Clinic };
+        var body = System.Text.RegularExpressions.Regex.Replace(
+            System.Text.Json.JsonSerializer.Serialize(new HubHttpClient.SendRequest([W.Env(Ping, Party.Portal, to)]), InteropJson.Options),
+            "(\"facilityType\"\\s*:\\s*)\"Clinic\"",
+            "${1}0",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        var response = await hub.RawAs("portal").PostAsync("/v1/messages", Json(body));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await hub.MessageCountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task A_facility_addressed_with_an_explicit_service_is_routed_by_that_service()
+    {
+        await using var hub = await HubApp.StartCloudAsync();
+        await hub.UpsertFacilityAsync(Lab, FacilityVisibility.Network);
+        var to = new Party { Kind = PartyKind.Facility, TenantId = "tenant-x", FacilityId = "x-lab", Service = InteropServices.Laboratory };
         var envelope = W.Env(Ping, Party.Portal, to);
 
         (await hub.SendAsync("portal", envelope)).Status.Should().Be(SendResult.Accepted);
@@ -138,22 +167,17 @@ public class UnknownFacilityTypeTests
     }
 
     [Fact]
-    public async Task A_claim_for_an_unknown_facility_type_is_a_client_error_not_a_server_error()
+    public async Task A_claim_for_a_type_name_the_hub_does_not_know_is_a_client_error_not_a_server_error()
     {
         await using var hub = await HubApp.StartCloudAsync();
-        await hub.UpsertFacilityAsync(FutureFacility, FacilityVisibility.Network);
-        var order = W.Env(InteropTypes.LabOrderIssued, W.A1Clinic, new Party { Kind = PartyKind.Facility, FacilityType = Imaging });
-        var created = await hub.RawAs("clinic").PostJsonAsync("/v1/claims", new CreateClaimRequest(order));
-        created.StatusCode.Should().Be(HttpStatusCode.Created);
-        var claim = await created.ReadAsync<CreateClaimResponse>();
+        var order = W.Env(InteropTypes.LabOrderIssued, W.A1Clinic, new Party { Kind = PartyKind.Facility, FacilityType = FacilityType.Clinic });
+        var body = WithFutureType(new CreateClaimRequest(order));
 
-        var redeemed = await hub.RawAs("clinic").PostJsonAsync($"/v1/claims/{claim.Token}/redeem", new RedeemClaimRequest("tenant-x", "x-imaging"));
+        var created = await hub.RawAs("clinic").PostAsync("/v1/claims", Json(body));
 
-        redeemed.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await redeemed.Content.ReadAsStringAsync()).Should().Contain(RoutingPolicy.UnknownFacilityType);
+        created.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 }
-
 /// <summary><c>Hub:Upstream:Enabled=false</c>: a single-site / air-gapped local hub that never calls the cloud.</summary>
 public class AirGappedLocalHubTests
 {

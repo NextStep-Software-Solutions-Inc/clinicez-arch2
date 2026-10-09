@@ -1,7 +1,10 @@
+using ClinicEz.Shared.Common;
+using System.Text.Json.Serialization;
 using System;
 
 namespace ClinicEz.Shared.Documents.Configuration;
 
+[JsonConverter(typeof(StrictJsonStringEnumConverter))]
 public enum DocumentPaperSize
 {
     Letter,

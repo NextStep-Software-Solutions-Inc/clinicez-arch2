@@ -9,23 +9,26 @@ namespace ClinicEz.Shared.Interop.Background;
 
 /// <summary>
 /// Long-polls this service's mailbox on the hub and dispatches each message to its handler.
-/// Acks on success, nacks on failure so the hub redelivers (and eventually dead-letters).
+/// Acks on success, nacks on failure so the hub redelivers (and eventually dead-letters). A message whose signature does not\n/// verify (when <see cref="EnvelopeVerifier.Enabled"/>) is nacked without running a handler.
 /// </summary>
 public sealed class InteropInboxPollerService : BackgroundService
 {
     private readonly IServiceScopeFactory _scopes;
     private readonly InteropDispatcher _dispatcher;
     private readonly InteropOptions _options;
+    private readonly EnvelopeVerifier _verifier;
     private readonly ILogger<InteropInboxPollerService> _logger;
 
     public InteropInboxPollerService(
         IServiceScopeFactory scopes,
         InteropDispatcher dispatcher,
+        EnvelopeVerifier verifier,
         IOptions<InteropOptions> options,
         ILogger<InteropInboxPollerService> logger)
     {
         _scopes = scopes;
         _dispatcher = dispatcher;
+        _verifier = verifier;
         _options = options.Value;
         _logger = logger;
     }
@@ -71,6 +74,14 @@ public sealed class InteropInboxPollerService : BackgroundService
         var nacks = new List<NackItem>();
         foreach (var message in batch)
         {
+            var signatureError = await _verifier.VerifyAsync(hub, message.Envelope, ct);
+            if (signatureError is not null)
+            {
+                _logger.LogError("Rejecting interop message {MessageId} ({Type}): {Error}", message.Envelope.MessageId, message.Envelope.Type, signatureError);
+                nacks.Add(new NackItem(message.DeliveryId, signatureError));
+                continue;
+            }
+
             var result = await _dispatcher.DispatchAsync(message.Envelope, ct);
             if (result.ShouldAck) acks.Add(message.DeliveryId);
             else nacks.Add(new NackItem(message.DeliveryId, result.Error ?? result.Outcome.ToString()));

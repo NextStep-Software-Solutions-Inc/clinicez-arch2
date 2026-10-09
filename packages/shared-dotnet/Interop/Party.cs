@@ -4,7 +4,7 @@ using ClinicEz.Shared.Common;
 namespace ClinicEz.Shared.Interop;
 
 /// <summary>Who sits at either end of an interop message.</summary>
-[JsonConverter(typeof(JsonStringEnumConverter))]
+[JsonConverter(typeof(StrictJsonStringEnumConverter))]
 public enum PartyKind
 {
     /// <summary>A clinic, laboratory, pharmacy or organization (or a service acting for it, e.g. billing).</summary>

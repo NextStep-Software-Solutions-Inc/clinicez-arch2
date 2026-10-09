@@ -1,8 +1,10 @@
 using System.Net.Http.Json;
 using System.Text;
+using System.Text.Json;
 using ClinicEz.Interop.Application;
 using ClinicEz.Interop.Application.Abstractions;
 using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Interop.Transport;
 using Microsoft.Extensions.Options;
 
@@ -16,9 +18,11 @@ public sealed class UpstreamHubClient(IHttpClientFactory httpClients, IOptions<H
 {
     public const string HttpClientName = "hub-upstream";
 
+    private readonly EnvelopeSigner _signer = new(options.Value.Upstream.SigningKey, options.Value.Upstream.ClientId);
+
     public async Task<IReadOnlyList<SendResult>> SendAsync(IReadOnlyList<InteropEnvelope> envelopes, CancellationToken ct)
     {
-        using var response = await SendRequestAsync(HttpMethod.Post, "v1/messages", JsonContent.Create(new HubHttpClient.SendRequest(envelopes), options: InteropJson.Options), ct);
+        using var response = await SendRequestAsync(HttpMethod.Post, "v1/messages", JsonContent.Create(new HubHttpClient.SendRequest(envelopes.Select(_signer.Sign).ToList()), options: InteropJson.Options), ct);
         var body = await response.Content.ReadFromJsonAsync<HubHttpClient.SendResponse>(InteropJson.Options, ct)
                    ?? throw new InvalidOperationException("Upstream hub returned an empty send response.");
         return body.Results;
@@ -51,9 +55,20 @@ public sealed class UpstreamHubClient(IHttpClientFactory httpClients, IOptions<H
 
     public async Task<UpstreamResponse> ForwardAsync(HttpMethod method, string pathAndQuery, string? jsonBody, CancellationToken ct)
     {
+        jsonBody = ResignClaim(method, pathAndQuery, jsonBody);
         using var content = jsonBody is null ? null : new StringContent(jsonBody, Encoding.UTF8, "application/json");
         using var response = await SendRawAsync(method, pathAndQuery, content, ct);
         return new UpstreamResponse((int)response.StatusCode, await response.Content.ReadAsStringAsync(ct));
+    }
+
+    /// <summary>A claim the edge hub proxies upstream carries the issuing facility's signature; the cloud hub only knows this edge cell, so sign as it.</summary>
+    private string? ResignClaim(HttpMethod method, string pathAndQuery, string? jsonBody)
+    {
+        if (!_signer.IsEnabled || jsonBody is null || method != HttpMethod.Post || pathAndQuery != "v1/claims") return jsonBody;
+
+        var request = JsonSerializer.Deserialize<CreateClaimRequest>(jsonBody, InteropJson.Options)
+                      ?? throw new InvalidOperationException("Claim request body is empty.");
+        return JsonSerializer.Serialize(request with { Envelope = _signer.Sign(request.Envelope) }, InteropJson.Options);
     }
 
     private async Task<HttpResponseMessage> SendRequestAsync(HttpMethod method, string path, HttpContent? content, CancellationToken ct)

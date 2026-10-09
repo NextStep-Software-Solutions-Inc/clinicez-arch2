@@ -3,6 +3,7 @@ using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Interop.E2E.Support;
 using ClinicEz.Patient.Application.Features.Sharing.Commands.CreateShareToken;
+using ClinicEz.Patient.Domain.Enums;
 using ClinicEz.Shared.Interoperability;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -35,7 +36,7 @@ public class PatientShareFlowTests
         var grant = (await cell.Patient.DbAsync(db => db.PatientAccessGrants.IgnoreQueryFilters().Where(g => g.PatientId == accountId).ToListAsync())).Should().ContainSingle().Subject;
         grant.TenantId.Should().Be(clinic.Tenant);
         grant.FacilityId.Should().Be(clinic.Id);
-        grant.ScopesMask.Should().Be((int)SharingScopes.Demographics);
+        grant.Scopes.Should().Be(AccessScopes.Demographics);
 
         foreach (var host in cell.Hosts) await host.AssertNothingStuckAsync();
     }

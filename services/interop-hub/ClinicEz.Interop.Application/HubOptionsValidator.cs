@@ -1,3 +1,4 @@
+using ClinicEz.Shared.Security;
 using Microsoft.Extensions.Options;
 
 namespace ClinicEz.Interop.Application;
@@ -37,9 +38,26 @@ public sealed class HubOptionsValidator : IValidateOptions<HubOptions>
                 if (!Uri.TryCreate(o.Upstream.Url, UriKind.Absolute, out _)) errors.Add("Hub:Upstream:Url must be an absolute URL in Local mode (or set Hub:Upstream:Enabled=false).");
                 if (string.IsNullOrWhiteSpace(o.Upstream.ClientId)) errors.Add("Hub:Upstream:ClientId is required in Local mode (or set Hub:Upstream:Enabled=false).");
                 if (string.IsNullOrWhiteSpace(o.Upstream.ClientSecret)) errors.Add("Hub:Upstream:ClientSecret is required in Local mode (or set Hub:Upstream:Enabled=false).");
+                if (!IsValidKey(o.Upstream.SigningKey, out var signingError)) errors.Add($"Hub:Upstream:SigningKey {signingError}");
             }
         }
 
         return errors.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errors);
+    }
+
+    private static bool IsValidKey(string? value, out string error)
+    {
+        error = string.Empty;
+        if (string.IsNullOrWhiteSpace(value)) return true;
+        try
+        {
+            PemKey.ImportEcdsa(PemKey.Normalize(value, "Hub:Upstream:SigningKey")!, "Hub:Upstream:SigningKey").Dispose();
+            return true;
+        }
+        catch (InvalidOperationException ex)
+        {
+            error = $"is invalid: {ex.Message}";
+            return false;
+        }
     }
 }

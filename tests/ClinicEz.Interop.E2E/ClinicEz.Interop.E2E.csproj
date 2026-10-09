@@ -46,6 +46,10 @@
     <ProjectReference Include="..\..\services\billing-api\ClinicEz.Billing.Domain\ClinicEz.Billing.Domain.csproj" />
     <ProjectReference Include="..\..\services\billing-api\ClinicEz.Billing.Infrastructure\ClinicEz.Billing.Infrastructure.csproj" />
 
+    <ProjectReference Include="..\..\services\portal-api\ClinicEz.Portal.Application\ClinicEz.Portal.Application.csproj" />
+    <ProjectReference Include="..\..\services\portal-api\ClinicEz.Portal.Domain\ClinicEz.Portal.Domain.csproj" />
+    <ProjectReference Include="..\..\services\portal-api\ClinicEz.Portal.Infrastructure\ClinicEz.Portal.Infrastructure.csproj" />
+
     <ProjectReference Include="..\..\services\patient-api\ClinicEz.Patient.Application\ClinicEz.Patient.Application.csproj" />
     <ProjectReference Include="..\..\services\patient-api\ClinicEz.Patient.Domain\ClinicEz.Patient.Domain.csproj" />
     <ProjectReference Include="..\..\services\patient-api\ClinicEz.Patient.Infrastructure\ClinicEz.Patient.Infrastructure.csproj" />

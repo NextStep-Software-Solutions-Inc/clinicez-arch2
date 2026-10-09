@@ -73,6 +73,8 @@ public abstract class ServiceHostBase : IDisposable
         ["Messaging:HubUrl"] = "http://localhost",
         ["Messaging:ClientId"] = HubFixture.ClientId(service),
         ["Messaging:ClientSecret"] = HubFixture.Secret(service),
+        ["Messaging:SigningKey"] = HubFixture.SigningKey(service),
+        ["Messaging:VerifyInbound"] = "true",
         ["Messaging:Service"] = service,
         ["Messaging:Enabled"] = "false",
         ["Messaging:PollWaitSeconds"] = "0"

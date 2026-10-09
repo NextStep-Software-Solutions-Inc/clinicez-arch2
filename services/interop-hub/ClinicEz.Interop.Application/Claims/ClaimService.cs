@@ -23,6 +23,7 @@ namespace ClinicEz.Interop.Application.Claims;
 /// </summary>
 public sealed class ClaimService(
     OwnershipValidator ownership,
+    EnvelopeSignatureVerifier signatures,
     RoutingPolicy routing,
     IDirectoryStore directory,
     IClaimStore claims,
@@ -41,6 +42,9 @@ public sealed class ClaimService(
 
         var ownershipError = await ownership.ValidateFromAsync(issuer, envelope.From, ct);
         if (ownershipError is not null) throw HubRequestException.Forbidden(ownershipError);
+
+        var signatureError = await signatures.VerifyAsync(issuer, envelope, ct);
+        if (signatureError is not null) throw HubRequestException.Forbidden(signatureError);
 
         if (envelope.To.Kind != PartyKind.Facility || envelope.To.FacilityType is null
             || !string.IsNullOrWhiteSpace(envelope.To.TenantId) || !string.IsNullOrWhiteSpace(envelope.To.FacilityId))
@@ -93,6 +97,7 @@ public sealed class ClaimService(
 
         var delivered = original with
         {
+            SignedTo = original.SignedTo ?? original.To,
             To = Party.ForFacility(facility.TenantId, facility.FacilityId, facility.FacilityType, original.To.Service)
         };
         var json = delivered.ToJson();

@@ -19,12 +19,14 @@ public sealed class InteropRelayService : BackgroundService
 
     private readonly IServiceScopeFactory _scopes;
     private readonly InteropOptions _options;
+    private readonly EnvelopeSigner _signer;
     private readonly ILogger<InteropRelayService> _logger;
     private DateTime _nextCleanupUtc = DateTime.UtcNow;
 
-    public InteropRelayService(IServiceScopeFactory scopes, IOptions<InteropOptions> options, ILogger<InteropRelayService> logger)
+    public InteropRelayService(IServiceScopeFactory scopes, IOptions<InteropOptions> options, EnvelopeSigner signer, ILogger<InteropRelayService> logger)
     {
         _scopes = scopes;
+        _signer = signer;
         _options = options.Value;
         _logger = logger;
     }
@@ -74,7 +76,7 @@ public sealed class InteropRelayService : BackgroundService
             .ToListAsync(ct);
         if (due.Count == 0) return 0;
 
-        var envelopes = due.Select(x => InteropEnvelope.FromJson(x.EnvelopeJson)).ToList();
+        var envelopes = due.Select(x => _signer.Sign(InteropEnvelope.FromJson(x.EnvelopeJson))).ToList();
 
         IReadOnlyList<SendResult> results;
         try

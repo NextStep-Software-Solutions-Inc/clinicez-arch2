@@ -44,6 +44,7 @@ public sealed class HubOptions
     public ClaimOptions Claims { get; set; } = new();
     public DatabaseOptions Database { get; set; } = new();
     public BackgroundOptions Background { get; set; } = new();
+    public SigningOptions Signing { get; set; } = new();
     public UpstreamOptions Upstream { get; set; } = new();
     public BootstrapOptions? Bootstrap { get; set; }
 
@@ -63,6 +64,15 @@ public sealed class AuthOptions
     public int CacheSeconds { get; set; } = 30;
     /// <summary>Minimum secret length accepted from <c>Hub:Bootstrap</c> outside Development.</summary>
     public int MinBootstrapSecretLength { get; set; } = 24;
+}
+
+public sealed class SigningOptions
+{
+    /// <summary>
+    /// Reject envelopes that are not signed with the sending client's registered key. Null (default) means required outside
+    /// Development and optional in Development; set explicitly to override. A present signature is always verified.
+    /// </summary>
+    public bool? Required { get; set; }
 }
 
 public sealed class ClaimOptions
@@ -94,6 +104,13 @@ public sealed class UpstreamOptions
     public string Url { get; set; } = string.Empty;
     public string ClientId { get; set; } = string.Empty;
     public string ClientSecret { get; set; } = string.Empty;
+
+    /// <summary>
+    /// This edge hub's ECDSA P-256 private key (PEM or base64 of PEM) issued by the portal with the edge credentials. Messages forwarded
+    /// to the cloud are re-signed with it (the cloud knows this client, not the individual local services).
+    /// </summary>
+    public string? SigningKey { get; set; }
+
     public int PollWaitSeconds { get; set; } = 20;
     public int BatchSize { get; set; } = 50;
     public int ForwardIntervalMs { get; set; } = 1000;
@@ -123,6 +140,9 @@ public sealed class BootstrapClient
     public string CellId { get; set; } = string.Empty;
     public string Service { get; set; } = string.Empty;
     public HubClientKind Kind { get; set; }
+
+    /// <summary>ECDSA P-256 public key (PEM or base64 of PEM) matching the service's <c>Messaging:SigningKey</c>.</summary>
+    public string? PublicKey { get; set; }
 }
 
 /// <summary>Seeds a facility into the directory (edge bundles that must work before their first cloud sync).</summary>

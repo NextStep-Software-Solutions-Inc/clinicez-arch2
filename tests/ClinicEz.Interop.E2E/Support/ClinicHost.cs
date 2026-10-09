@@ -59,6 +59,7 @@ public sealed class ClinicHost : ServiceHostBase
     {
         var settings = BaseConfig(InteropServices.Clinic, "clinic_dashboard");
         settings["Clinic:PublicUploadBaseUrl"] = "https://clinic.e2e.test/upload/lab";
+        settings["ClinicEncryption:MasterSecret"] = "e2e-clinic-encryption-master-secret-0123456789";
         var config = new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
 
         var dbName = $"e2e-clinic-{Guid.NewGuid():N}";

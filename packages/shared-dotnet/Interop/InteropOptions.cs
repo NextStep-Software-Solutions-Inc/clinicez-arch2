@@ -1,3 +1,5 @@
+using ClinicEz.Shared.Security;
+
 namespace ClinicEz.Shared.Interop;
 
 /// <summary>Bound from the <c>Messaging</c> configuration section. There are no default credentials.</summary>
@@ -13,6 +15,18 @@ public sealed class InteropOptions
 
     public string ClientId { get; set; } = string.Empty;
     public string ClientSecret { get; set; } = string.Empty;
+
+    /// <summary>
+    /// This client's ECDSA P-256 private signing key (PEM or base64 of PEM). Every envelope this service sends is signed with it;
+    /// the hub holds the matching public key. Required outside Development (see <see cref="InteropStartupCheck"/>).
+    /// </summary>
+    public string? SigningKey { get; set; }
+
+    /// <summary>
+    /// Verify the signature of every received envelope against the key the hub publishes for its signer.
+    /// Null (default) means on outside Development, off in Development.
+    /// </summary>
+    public bool? VerifyInbound { get; set; }
 
     /// <summary>The mailbox this service reads: one of <see cref="InteropServices"/> (clinic, laboratory, ...).</summary>
     public string Service { get; set; } = string.Empty;
@@ -43,5 +57,8 @@ public sealed class InteropOptions
         if (missing.Count > 0)
             throw new InvalidOperationException(
                 $"Interop hub is not configured. Missing: {string.Join(", ", missing)}. (There are no built-in fallback credentials.)");
+
+        if (PemKey.Normalize(SigningKey, "Messaging:SigningKey") is { } signingKey)
+            PemKey.ImportEcdsa(signingKey, "Messaging:SigningKey").Dispose();
     }
 }

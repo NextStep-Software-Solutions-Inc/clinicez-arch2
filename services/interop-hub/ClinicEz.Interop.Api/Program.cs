@@ -4,6 +4,7 @@ using ClinicEz.Interop.Api.Security;
 using ClinicEz.Interop.Application;
 using ClinicEz.Interop.Application.Bootstrap;
 using ClinicEz.Interop.Infrastructure;
+using ClinicEz.Shared.Common;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
 using Scalar.AspNetCore;
@@ -12,11 +13,11 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddUserSecrets(typeof(Program).Assembly, true);
 
 // Wire contract: same JSON conventions as ClinicEz.Shared.Interop.InteropJson, so SDK clients and the hub agree byte-for-byte.
-builder.Services.ConfigureHttpJsonOptions(o =>
-{
-    o.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
-    o.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
-});
+builder.Services.AddStrictStringEnums();
+builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull);
+
+// Envelope signatures are mandatory outside Development unless Hub:Signing:Required says otherwise.
+builder.Services.PostConfigure<HubOptions>(o => o.Signing.Required ??= !builder.Environment.IsDevelopment());
 
 builder.Services
     .AddInteropHubApplication()

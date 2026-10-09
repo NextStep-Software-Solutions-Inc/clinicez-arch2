@@ -22,10 +22,12 @@ public interface IHubClaimsClient
 public sealed class HubClaimsHttpClient : IHubClaimsClient
 {
     private readonly HttpClient _http;
+    private readonly EnvelopeSigner _signer;
 
-    public HubClaimsHttpClient(HttpClient http, IOptions<InteropOptions> options)
+    public HubClaimsHttpClient(HttpClient http, IOptions<InteropOptions> options, EnvelopeSigner signer)
     {
         _http = http;
+        _signer = signer;
         var o = options.Value;
         if (_http.BaseAddress is null && !string.IsNullOrWhiteSpace(o.HubUrl))
             _http.BaseAddress = new Uri(o.HubUrl.TrimEnd('/') + "/");
@@ -37,7 +39,7 @@ public sealed class HubClaimsHttpClient : IHubClaimsClient
 
     public async Task<ClaimSlipResult> CreateAsync(ClaimSlipRequest request, CancellationToken ct)
     {
-        using var response = await _http.PostAsJsonAsync("v1/claims", request, InteropJson.Options, ct);
+        using var response = await _http.PostAsJsonAsync("v1/claims", request with { Envelope = _signer.Sign(request.Envelope) }, InteropJson.Options, ct);
         await EnsureAsync(response, ct);
         return await response.Content.ReadFromJsonAsync<ClaimSlipResult>(InteropJson.Options, ct)
                ?? throw new InvalidOperationException("Hub returned an empty claim.");

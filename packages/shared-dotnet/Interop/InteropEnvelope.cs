@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using ClinicEz.Shared.Common;
 
 namespace ClinicEz.Shared.Interop;
 
@@ -8,7 +9,7 @@ public static class InteropJson
 {
     public static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web)
     {
-        Converters = { new JsonStringEnumConverter() },
+        Converters = { new StrictJsonStringEnumConverter() },
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 }
@@ -34,8 +35,21 @@ public sealed record InteropEnvelope
     /// <summary>Reserved for v2 sealed (end-to-end encrypted) payloads. Unused in v1.</summary>
     public string? SealedPayload { get; init; }
 
-    /// <summary>Reserved for per-message signatures. v1 authenticates the sending client instead.</summary>
+    /// <summary>
+    /// ECDSA P-256 / SHA-256 signature (base64) over <see cref="EnvelopeSigning.CanonicalBytes"/>, made with the private key of
+    /// the hub client named in <see cref="SignerKeyId"/>. The sending SDK sets it; the hub verifies it against the key registered
+    /// for that client and forwards it unchanged; receiving SDKs verify it against the key the hub publishes.
+    /// </summary>
     public string? Signature { get; init; }
+
+    /// <summary>Hub client id whose key made <see cref="Signature"/> (a local hub re-signs forwarded messages as itself).</summary>
+    public string? SignerKeyId { get; init; }
+
+    /// <summary>
+    /// Set by the hub when it rewrites <see cref="To"/> (claim redemption turns a type-only address into a concrete
+    /// facility): the address the sender actually signed. Signature checks use this when present.
+    /// </summary>
+    public Party? SignedTo { get; init; }
 
     public static InteropEnvelope Create<T>(
         string type,

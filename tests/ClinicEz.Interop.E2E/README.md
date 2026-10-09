@@ -39,7 +39,8 @@ Test data is created through each service's own commands/services wherever possi
 | C | Prescription: clinic -> pharmacy -> quote -> cashier -> dispense -> clinic and patient | `PrescriptionFlowTests` |
 | D | Cross-tenant denial (private facility, no link, wrong scope) and a positive control | `CrossTenantDenialTests` |
 | E | Patient share / record share / snapshot redeem | `PatientShareFlowTests` |
-| F | Billing corrections: void and refund propagate to the lab and clinic | `BillingCorrectionFlowTests` |
+| F | Billing corrections: void and refund propagate to the lab and clinic, and to the pharmacy | `BillingCorrectionFlowTests`, `PharmacyBillingCorrectionFlowTests` |
+| - | Envelope signing: a tampered, re-addressed, unsigned or wrongly signed envelope is refused by the hub; a message changed in the mailbox is rejected by the receiver | `EnvelopeSigningTests` |
 | G | Idempotency: redelivered and replayed messages change nothing twice | `IdempotencyTests` |
 | H | Two tenants with identical order and accession numbers never cross | `TenantIsolationTests` |
 | - | Message matrix vs. real handler registries | `MessageCoverageTests` |

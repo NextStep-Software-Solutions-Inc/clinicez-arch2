@@ -141,6 +141,10 @@ namespace ClinicEz.Interop.Infrastructure.Migrations
                         .HasMaxLength(24)
                         .HasColumnType("character varying(24)");
 
+                    b.Property<string>("PublicKeyPem")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
                     b.Property<bool>("Revoked")
                         .HasColumnType("boolean");
 
@@ -275,8 +279,10 @@ namespace ClinicEz.Interop.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<int>("Scopes")
-                        .HasColumnType("integer");
+                    b.Property<string>("Scopes")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<string>("SourceFacilityId")
                         .IsRequired()

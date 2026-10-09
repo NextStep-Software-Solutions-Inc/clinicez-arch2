@@ -5,6 +5,7 @@ using ClinicEz.Interop.Application.Admin;
 using ClinicEz.Interop.Application.Claims;
 using ClinicEz.Interop.Application.Directory;
 using ClinicEz.Interop.Application.Messaging;
+using ClinicEz.Interop.Application.Security;
 using ClinicEz.Interop.Infrastructure.Persistence;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
@@ -22,6 +23,7 @@ public static class HubEndpoints
     {
         MapHealth(app);
         MapMessaging(app);
+        MapKeys(app, options);
         MapDirectory(app, options);
         if (options.IsLocal) MapLocalClaimProxy(app, options);
         else
@@ -68,6 +70,31 @@ public static class HubEndpoints
         });
     }
 
+    /// <summary>
+    /// <c>GET /v1/keys/{clientId}</c>: the registered public signing key of a hub client, for receivers verifying envelope
+    /// signatures. A local hub answers for its own clients and asks the cloud hub for everyone else (cloud clients' messages arrive
+    /// through the cell inbox with their original signature).
+    /// </summary>
+    private static void MapKeys(WebApplication app, HubOptions options)
+    {
+        app.MapGet("/v1/keys/{clientId}", async (string clientId, ClientKeyDirectory keys, IUpstreamHub upstream, CancellationToken ct) =>
+        {
+            var key = await keys.GetAsync(clientId, ct);
+            if (key is not null) return Results.Ok(new HubSignerKey(key.ClientId, key.CellId, key.Service, key.Kind, key.PublicKeyPem, key.Revoked));
+
+            if (!options.UpstreamActive) return Results.NotFound();
+            try
+            {
+                var response = await upstream.ForwardAsync(HttpMethod.Get, $"v1/keys/{Uri.EscapeDataString(clientId)}", null, ct);
+                return Results.Content(response.Body, "application/json", statusCode: response.StatusCode);
+            }
+            catch (HttpRequestException ex)
+            {
+                return Results.Problem(statusCode: StatusCodes.Status502BadGateway, detail: $"The cloud hub is unreachable, so the key of '{clientId}' cannot be looked up. ({ex.Message})");
+            }
+        });
+    }
+
     private static void MapCellInbox(WebApplication app)
     {
         app.MapGet("/v1/cell-inbox", async (HttpContext ctx, int? max, int? waitSeconds, InboxService inbox, CancellationToken ct) =>
@@ -96,7 +123,7 @@ public static class HubEndpoints
             FacilityType? facilityType = null;
             if (!string.IsNullOrWhiteSpace(type))
             {
-                if (!Enum.TryParse<FacilityType>(type, true, out var parsed)) throw HubRequestException.BadRequest($"Unknown facility type '{type}'.");
+                if (!char.IsLetter(type[0]) || !Enum.TryParse<FacilityType>(type, true, out var parsed)) throw HubRequestException.BadRequest($"Unknown facility type '{type}'.");
                 facilityType = parsed;
             }
 
@@ -156,15 +183,28 @@ public static class HubEndpoints
             return;
         }
 
-        app.MapPost("/v1/claims", (HttpContext ctx, IUpstreamHub upstream, CancellationToken ct) => ProxyAsync(ctx, upstream, "v1/claims", ct));
-        app.MapPost("/v1/claims/{token}/redeem", (HttpContext ctx, string token, IUpstreamHub upstream, CancellationToken ct) =>
-            ProxyAsync(ctx, upstream, $"v1/claims/{Uri.EscapeDataString(token)}/redeem", ct));
+        app.MapPost("/v1/claims", async (HttpContext ctx, IUpstreamHub upstream, EnvelopeSignatureVerifier signatures, CancellationToken ct) =>
+        {
+            // Verify the facility's own signature here; the upstream client then re-signs the envelope as this edge cell.
+            var body = await ReadBodyAsync(ctx, ct);
+            var request = System.Text.Json.JsonSerializer.Deserialize<CreateClaimRequest>(body, InteropJson.Options);
+            if (request?.Envelope is null) throw HubRequestException.BadRequest("Envelope is required.");
+            var error = await signatures.VerifyAsync(Principal(ctx), request.Envelope, ct);
+            if (error is not null) throw HubRequestException.Forbidden(error);
+            return await ProxyAsync(upstream, "v1/claims", body, ct);
+        });
+        app.MapPost("/v1/claims/{token}/redeem", async (HttpContext ctx, string token, IUpstreamHub upstream, CancellationToken ct) =>
+            await ProxyAsync(upstream, $"v1/claims/{Uri.EscapeDataString(token)}/redeem", await ReadBodyAsync(ctx, ct), ct));
     }
 
-    private static async Task<IResult> ProxyAsync(HttpContext ctx, IUpstreamHub upstream, string path, CancellationToken ct)
+    private static async Task<string> ReadBodyAsync(HttpContext ctx, CancellationToken ct)
     {
         using var reader = new StreamReader(ctx.Request.Body);
-        var body = await reader.ReadToEndAsync(ct);
+        return await reader.ReadToEndAsync(ct);
+    }
+
+    private static async Task<IResult> ProxyAsync(IUpstreamHub upstream, string path, string body, CancellationToken ct)
+    {
         try
         {
             var response = await upstream.ForwardAsync(HttpMethod.Post, path, body, ct);

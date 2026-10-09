@@ -29,12 +29,13 @@ internal sealed class Federation : IAsyncDisposable
     public HubApp Local { get; }
     public UpstreamSwitch Upstream { get; }
 
-    public static async Task<Federation> StartAsync()
+    public static async Task<Federation> StartAsync(bool requireSigning = false)
     {
-        var cloud = await HubApp.StartCloudAsync();
+        Dictionary<string, string?>? overrides = requireSigning ? new() { ["Hub:Signing:Required"] = "true" } : null;
+        var cloud = await HubApp.StartCloudAsync(overrides);
         var upstream = new UpstreamSwitch();
         upstream.ConnectTo(cloud);
-        var local = await HubApp.StartLocalAsync(upstream);
+        var local = await HubApp.StartLocalAsync(upstream, overrides: overrides);
         return new Federation(cloud, local, upstream);
     }
 

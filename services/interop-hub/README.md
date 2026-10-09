@@ -38,6 +38,10 @@ Every endpoint except `/health*` needs `X-Hub-Client: <clientId>` and `X-Hub-Sec
 
 Secrets are stored as salted PBKDF2-SHA256 hashes. A client secret is shown once, at creation or rotation.
 
+### Envelope signing
+
+Each client also has an ECDSA P-256 key pair. The hub stores the **public** key (`Clients.PublicKeyPem`), the service keeps the private key (`Messaging:SigningKey`) and signs every envelope it sends. On `POST /v1/messages` and `POST /v1/claims` the hub checks that `SignerKeyId` is the authenticated client and that the signature matches the registered key; a bad signature is `invalid_signature`, and an unsigned envelope (or a client without a key) is `signature_required` while `Hub:Signing:Required` is on (default: on outside Development). Receivers verify again with the key from `GET /v1/keys/{clientId}`. The admin API generates the pair when it creates or rotates a client and returns the private half once as `signingKey` (or accepts a `publicKey` you generated; a private key is refused). Design, trust model and federation: [docs/architecture/interop-hub.md](../../docs/architecture/interop-hub.md#envelope-signing).
+
 ## Endpoints
 
 Bodies are the raw SDK DTOs (`HubHttpClient.SendRequest`, `SendResponse`, `PullResponse`, `AckRequest`, `NackRequest`), JSON per `InteropJson` (camelCase, string enums), not wrapped in `ApiResponse<T>`.
@@ -50,8 +54,9 @@ Bodies are the raw SDK DTOs (`HubHttpClient.SendRequest`, `SendResponse`, `PullR
 | `GET /v1/directory/facilities?type=&q=&city=` | both | Facilities the caller may see: its own workspace, Public ones, Network ones it has an Active link to. A bare JSON array of `DirectoryFacilityDto`. The workspace comes from the client's cell; a cell that hosts several tenants (the cloud cell) needs `X-Hub-Tenant: <tenant>` (or `tenantId=`), which must belong to that cell. |
 | `GET /v1/directory/snapshot?sinceVersion=` | Cloud | `EdgeCell` only. The authoritative directory slice for the cell; `unchanged: true` when `sinceVersion` is current. |
 | `GET /v1/cell-inbox`, `POST /v1/cell-inbox/ack`, `POST /v1/cell-inbox/nack` | Cloud | `EdgeCell` only. Messages for any facility of the cell. |
-| `PUT /v1/admin/cells/{cellId}`, `POST /v1/admin/cells/{cellId}/clients`, `POST /v1/admin/clients/{clientId}/rotate`, `DELETE /v1/admin/clients/{clientId}` | Cloud | `ControlPlane` only (`IHubAdminClient`). Create returns `201` with the credentials. |
+| `PUT /v1/admin/cells/{cellId}`, `POST /v1/admin/cells/{cellId}/clients`, `POST /v1/admin/clients/{clientId}/rotate`, `DELETE /v1/admin/clients/{clientId}` | Cloud | `ControlPlane` only (`IHubAdminClient`). Create returns `201` with the credentials (`clientSecret` and `signingKey`, shown once; rotate issues new ones). |
 | `POST /v1/claims`, `POST /v1/claims/{token}/redeem` | both | Patient-carried claims. In `Local` mode they are proxied to the cloud hub (they need the internet). |
+| `GET /v1/keys/{clientId}` | both | Any authenticated client. The public signing key of a client (`HubSignerKey`: client id, cell, service, kind, `publicKey`, `revoked`); `404` unknown. A local hub answers for its own clients and asks the cloud hub for the rest. |
 | `GET /health`, `GET /health/ready` | both | Liveness; readiness (database reachable). |
 
 ### Directory feed
@@ -97,6 +102,8 @@ Standard ASP.NET Core configuration: `appsettings*.json`, environment variables 
 | `Hub:Database:AutoMigrate` | `false` | Apply migrations at startup (always on in Development). Safe with several instances starting together. |
 | `Hub:Background:Enabled`, `MaintenanceIntervalSeconds` | `true`, 30 | Background jobs (maintenance, and in Local mode forwarder, puller, directory sync). |
 | `Hub:Upstream:Enabled` | `true` | Local mode: `false` runs the hub air-gapped (single site, no internet). Nothing is forwarded, pulled or synced; messages addressed beyond the edge cell are rejected with a reason starting `upstream_disabled`, and claims answer `503`. Url and credentials are then not required. |
+| `Hub:Signing:Required` | `true` outside Development, `false` in Development | Reject envelopes without a valid signature (`signature_required` / `invalid_signature`). A signature that is present must always verify. Set `false` only while migrating clients that have no key yet. |
+| `Hub:Upstream:SigningKey` | empty | Local mode: the private key issued with the edge-hub client; the local hub re-signs every envelope it forwards to the cloud with it (PEM or base64 of PEM). Required in Local mode outside Development while signing is required and the upstream is enabled. |
 | `Hub:Upstream:Url`, `ClientId`, `ClientSecret` | empty | Local mode: the cloud hub and this site's `EdgeCell` credentials (one client, service `cell`). Required in Local mode while `Hub:Upstream:Enabled` is `true`; the hub refuses to start without them. |
 | `Hub:Upstream:PollWaitSeconds`, `BatchSize`, `ForwardIntervalMs`, `MaxBackoffSeconds`, `DirectorySyncSeconds` | 20, 50, 1000, 300, 60 | Local mode tuning. |
 | `Hub:Bootstrap:Cells`, `Clients`, `Facilities` | empty | Declarative seed, see below. |
@@ -117,15 +124,16 @@ Standard ASP.NET Core configuration: `appsettings*.json`, environment variables 
   Hub__Bootstrap__Clients__0__CellId=cloud
   Hub__Bootstrap__Clients__0__Service=portal
   Hub__Bootstrap__Clients__0__Kind=ControlPlane
+  Hub__Bootstrap__Clients__0__PublicKey=<base64 of the portal client's PEM public key, see scripts/generate-signing-key>
   ```
 
-  A Cloud hub outside Development refuses to start when no active `ControlPlane` client exists. portal-api then creates every other cell and client through the admin API and distributes their credentials. To rotate the bootstrap secret, change the value and redeploy (or call the rotate endpoint).
+  The `PublicKey` setting is required for every bootstrap client outside Development while `Hub:Signing:Required` is on (the matching private key is the service's `Messaging__SigningKey`; changing it re-registers the key). A Cloud hub outside Development refuses to start when no active `ControlPlane` client exists. portal-api then creates every other cell and client through the admin API and distributes their credentials. To rotate the bootstrap secret, change the value and redeploy (or call the rotate endpoint).
 
 ## Edge sites (Local mode)
 
 1. In the portal, create the edge cell (`CellKind.Edge`, with the owning tenant) and an `EdgeCell` client with service `cell` for the local hub's upstream connection. Register the site's facilities in the directory (cell = the edge cell).
-2. On the site server run the same image with `Hub__Mode=Local` (see `deploy/interop-hub/docker-compose.local-hub.yml`): `Hub__LocalCellId`, `Hub__Upstream__Url/ClientId/ClientSecret` (the credentials from step 1), its own PostgreSQL database, and a `Hub:Bootstrap` block with the cell, one `EdgeCell` client per facility service (`clinic`, `laboratory`, ...) and the site's facilities so it can route before its first sync.
-3. Point the facility services at the local hub (`Messaging:HubUrl` = the LAN address, with `Messaging:ClientId` / `Messaging:ClientSecret` of their local client). They keep working when the internet is down.
+2. On the site server run the same image with `Hub__Mode=Local` (see `deploy/interop-hub/docker-compose.local-hub.yml`): `Hub__LocalCellId`, `Hub__Upstream__Url/ClientId/ClientSecret/SigningKey` (the credentials from step 1; the signing key is returned with the client secret), its own PostgreSQL database, and a `Hub:Bootstrap` block with the cell, one `EdgeCell` client per facility service (`clinic`, `laboratory`, ..., each with its `PublicKey`) and the site's facilities so it can route before its first sync.
+3. Point the facility services at the local hub (`Messaging:HubUrl` = the LAN address, with `Messaging:ClientId` / `Messaging:ClientSecret` / `Messaging:SigningKey` of their local client). They keep working when the internet is down.
 
 Client model: the local hub holds exactly one upstream client (the portal-issued `EdgeCell` client, service `cell`); the facility services never see it. They use local clients declared in `Hub:Bootstrap` (generated per site), so cloud credentials stay on the hub. A single-facility site without a local hub instead connects its services straight to the cloud hub, each with its portal-issued per-service `EdgeCell` client.
 

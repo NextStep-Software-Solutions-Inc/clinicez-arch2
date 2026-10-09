@@ -14,11 +14,12 @@ namespace ClinicEz.Interop.Application.Messaging;
 
 /// <summary>
 /// <c>POST /v1/messages</c>: validates each envelope (shape, size, expiry, From-ownership), applies hub-internal
-/// <c>directory.*</c> messages, routes everything else (<see cref="RoutingPolicy"/>) into a mailbox or the local outbound
+/// signature (see <see cref="EnvelopeSignatureVerifier"/>), applies hub-internal\n/// <c>directory.*</c> messages, routes everything else (<see cref="RoutingPolicy"/>) into a mailbox or the local outbound
 /// queue, and de-duplicates on MessageId. Every envelope gets its own verdict; a rejection is final (the SDK never retries it).
 /// </summary>
 public sealed class MessageService(
     OwnershipValidator ownership,
+    EnvelopeSignatureVerifier signatures,
     RoutingPolicy routing,
     DirectoryService directory,
     IMessageStore messages,
@@ -60,6 +61,9 @@ public sealed class MessageService(
 
         var ownershipError = await ownership.ValidateFromAsync(sender, envelope.From, ct);
         if (ownershipError is not null) return Reject(id, ownershipError);
+
+        var signatureError = await signatures.VerifyAsync(sender, envelope, ct);
+        if (signatureError is not null) return Reject(id, signatureError);
 
         if (envelope.To.Service == InteropServices.Hub) return await HandleHubInternalAsync(sender, envelope, ct);
 

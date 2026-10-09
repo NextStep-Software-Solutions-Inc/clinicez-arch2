@@ -43,6 +43,8 @@ public static class DependencyInjection
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IMailboxNotifier, MailboxNotifier>();
         services.AddSingleton<ClientAuthenticator>();
+        services.AddSingleton<ClientKeyDirectory>();
+        services.AddSingleton<EnvelopeSignatureVerifier>();
 
         services.AddScoped<OwnershipValidator>();
         services.AddScoped<RoutingPolicy>();

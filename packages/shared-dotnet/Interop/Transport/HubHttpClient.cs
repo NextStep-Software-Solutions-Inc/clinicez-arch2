@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using ClinicEz.Shared.Interop.Contracts;
 using Microsoft.Extensions.Options;
 
 namespace ClinicEz.Shared.Interop.Transport;
@@ -8,7 +9,7 @@ namespace ClinicEz.Shared.Interop.Transport;
 /// Talks to a hub over HTTPS. Outbound only: this is how on-prem facilities reach the cloud
 /// without opening any inbound port.
 /// </summary>
-public sealed class HubHttpClient : IHubClient
+public sealed class HubHttpClient : IHubClient, IHubKeyClient
 {
     public const string ClientIdHeader = "X-Hub-Client";
     public const string ClientSecretHeader = "X-Hub-Secret";
@@ -60,6 +61,14 @@ public sealed class HubHttpClient : IHubClient
         if (items.Count == 0) return;
         using var response = await _http.PostAsJsonAsync("v1/inbox/nack", new NackRequest(items), InteropJson.Options, ct);
         await EnsureSuccessAsync(response, ct);
+    }
+
+    public async Task<HubSignerKey?> GetSignerKeyAsync(string clientId, CancellationToken ct)
+    {
+        using var response = await _http.GetAsync($"v1/keys/{Uri.EscapeDataString(clientId)}", ct);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+        await EnsureSuccessAsync(response, ct);
+        return await response.Content.ReadFromJsonAsync<HubSignerKey>(InteropJson.Options, ct);
     }
 
     private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken ct)

@@ -1,9 +1,11 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using ClinicEz.Interop.Infrastructure.Persistence;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Interop.Transport;
+using ClinicEz.Shared.Security;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -25,6 +27,17 @@ public sealed class FakeClock : TimeProvider
     public override DateTimeOffset GetUtcNow() => _now;
 
     public void Advance(TimeSpan by) => _now += by;
+}
+
+/// <summary>Signing key pairs of the test clients, generated once per test run (the hub bootstraps the public halves).</summary>
+public static class TestKeys
+{
+    private static readonly ConcurrentDictionary<string, (string PrivateKey, string PublicKey)> Pairs = new();
+
+    public static (string PrivateKey, string PublicKey) For(string clientId) => Pairs.GetOrAdd(clientId, _ => PemKey.GenerateP256Base64());
+
+    /// <summary>The envelope signed the way client <paramref name="clientId"/>'s SDK would sign it.</summary>
+    public static InteropEnvelope Sign(string clientId, InteropEnvelope envelope) => new EnvelopeSigner(For(clientId).PrivateKey, clientId).Sign(envelope);
 }
 
 /// <summary>The same parties and tenants in every test.</summary>
@@ -110,6 +123,7 @@ public sealed class HubApp : IAsyncDisposable
         config["Hub:Upstream:Url"] = "http://cloud.test";
         config["Hub:Upstream:ClientId"] = "edge-hub";
         config["Hub:Upstream:ClientSecret"] = W.Secret("edge-hub");
+        config["Hub:Upstream:SigningKey"] = TestKeys.For("edge-hub").PrivateKey;
         config["Hub:Upstream:MaxBackoffSeconds"] = "60";
         AddBootstrap(config,
             [(W.EdgeCell, "Edge 1", CellKind.Edge, W.TenantE)],
@@ -143,6 +157,7 @@ public sealed class HubApp : IAsyncDisposable
         ["Hub:Database:AutoMigrate"] = "true",
         ["Hub:Background:Enabled"] = "false",
         ["Hub:Auth:Pbkdf2Iterations"] = "1000",
+        ["Hub:Signing:Required"] = "false",
         ["Hub:MaxEnvelopeBytes"] = "8192",
         ["Hub:MaxDeliveryAttempts"] = "3",
         ["Hub:VisibilityTimeoutSeconds"] = "30",
@@ -171,6 +186,7 @@ public sealed class HubApp : IAsyncDisposable
             config[$"Hub:Bootstrap:Clients:{i}:CellId"] = clients[i].CellId;
             config[$"Hub:Bootstrap:Clients:{i}:Service"] = clients[i].Service;
             config[$"Hub:Bootstrap:Clients:{i}:Kind"] = clients[i].Kind.ToString();
+            config[$"Hub:Bootstrap:Clients:{i}:PublicKey"] = TestKeys.For(clients[i].Id).PublicKey;
         }
 
         for (var i = 0; i < facilities.Length; i++)
@@ -239,7 +255,7 @@ public sealed class HubApp : IAsyncDisposable
 
     public async Task SendPortalAsync<T>(string type, T payload)
     {
-        var result = await SendAsync("portal", InteropEnvelope.Create(type, Party.Portal, Party.Hub, Guid.NewGuid(), payload));
+        var result = await SendAsync("portal", TestKeys.Sign("portal", InteropEnvelope.Create(type, Party.Portal, Party.Hub, Guid.NewGuid(), payload)));
         result.Status.Should().Be(SendResult.Accepted, result.Reason);
     }
 

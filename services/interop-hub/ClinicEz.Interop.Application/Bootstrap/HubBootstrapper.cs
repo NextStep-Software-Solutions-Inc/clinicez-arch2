@@ -1,4 +1,5 @@
 using ClinicEz.Interop.Application.Abstractions;
+using ClinicEz.Interop.Application.Admin;
 using ClinicEz.Interop.Application.Security;
 using ClinicEz.Interop.Domain.Entities;
 using ClinicEz.Shared.Interop.Contracts;
@@ -56,6 +57,9 @@ public sealed class HubBootstrapper(
                 await ApplyClientAsync(configured, isDevelopment, ct);
         }
 
+        if (!isDevelopment && opt.UpstreamActive && opt.Signing.Required == true && string.IsNullOrWhiteSpace(opt.Upstream.SigningKey))
+            throw new InvalidOperationException("Hub:Upstream:SigningKey is required: the cloud hub rejects unsigned messages, and a local hub re-signs everything it forwards with the key the portal issued for this edge cell.");
+
         if (!isDevelopment && !opt.IsLocal && !await clients.AnyActiveAsync(HubClientKind.ControlPlane, ct))
             throw new InvalidOperationException(
                 "The hub has no active ControlPlane client, so nothing could manage it. Create the first one by setting " +
@@ -72,6 +76,9 @@ public sealed class HubBootstrapper(
                 $"Hub:Bootstrap client '{configured.ClientId}': the secret must be at least {opt.Auth.MinBootstrapSecretLength} characters outside Development.");
         if (!MailboxNames.IsValidService(configured.Service))
             throw new InvalidOperationException($"Hub:Bootstrap client '{configured.ClientId}': invalid Service '{configured.Service}'.");
+        var publicKey = string.IsNullOrWhiteSpace(configured.PublicKey) ? null : AdminService.RegisterPublicKey(configured.PublicKey);
+        if (publicKey is null && !isDevelopment && opt.Signing.Required == true)
+            throw new InvalidOperationException($"Hub:Bootstrap client '{configured.ClientId}': PublicKey is required (the ECDSA P-256 public key matching the service's Messaging:SigningKey) because envelope signing is required.");
         if (await directory.GetCellAsync(configured.CellId, ct) is null)
             throw new InvalidOperationException($"Hub:Bootstrap client '{configured.ClientId}': cell '{configured.CellId}' is not defined (add it to Hub:Bootstrap:Cells).");
 
@@ -85,6 +92,7 @@ public sealed class HubBootstrapper(
                 Service = configured.Service,
                 Kind = configured.Kind,
                 SecretHash = SecretHasher.Hash(configured.Secret, opt.Auth.Pbkdf2Iterations),
+                PublicKeyPem = publicKey,
                 CreatedAtUtc = time.GetUtcNow().UtcDateTime
             }, ct);
             logger.LogInformation("Bootstrapped hub client {ClientId} ({Kind}, cell {CellId}, service {Service})", configured.ClientId, configured.Kind, configured.CellId, configured.Service);
@@ -101,6 +109,12 @@ public sealed class HubBootstrapper(
         existing.CellId = configured.CellId;
         existing.Service = configured.Service;
         existing.Kind = configured.Kind;
+        if (publicKey is not null && existing.PublicKeyPem != publicKey)
+        {
+            existing.PublicKeyPem = publicKey;
+            changed = true;
+        }
+
         if (!SecretHasher.Verify(configured.Secret, existing.SecretHash))
         {
             existing.SecretHash = SecretHasher.Hash(configured.Secret, opt.Auth.Pbkdf2Iterations);
