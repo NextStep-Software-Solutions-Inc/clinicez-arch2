@@ -39,6 +39,20 @@ public class WorkspaceSettings : BaseEntity
     public string? LogoUrl { get; set; } // https only
     public string? AccentColorHex { get; set; } // #RRGGBB
 
+    // Security policy (portal sign-in). Not part of the facility-facing profile.
+    public bool RequireMfa { get; set; }
+    public int IdleTimeoutMinutes { get; set; } // 0 = disabled
+    /// <summary>Lower-cased email domains staff may be invited from, comma separated. Empty = any domain.</summary>
+    public string? AllowedInviteDomains { get; set; }
+
+    // Compliance & privacy (RA 10173 Data Privacy Act): the Data Protection Officer and the public privacy notice.
+    public string? DpoName { get; set; }
+    public string? DpoEmail { get; set; }
+    public string? PrivacyNoticeUrl { get; set; } // https only
+
     /// <summary>Monotonic version of everything exposed by the workspace profile; drives ETag/cache invalidation.</summary>
     public long ProfileVersion { get; set; } = 1;
+
+    public const int MinIdleTimeoutMinutes = 5;
+    public const int MaxIdleTimeoutMinutes = 480;
 }

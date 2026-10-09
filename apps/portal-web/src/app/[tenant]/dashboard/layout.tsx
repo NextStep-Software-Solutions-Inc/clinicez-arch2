@@ -1,5 +1,7 @@
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
 import { BrandTheme } from "@/components/dashboard/BrandTheme";
+import { IdleSessionGuard } from "@/components/dashboard/IdleSessionGuard";
+import { MfaRequiredGate } from "@/components/dashboard/MfaRequiredGate";
 import CreateResourceDialog from "@/components/dashboard/CreateResourceDialog";
 import TrialCountdownBanner from "@/components/dashboard/TrialCountdownBanner";
 import NavigationProgressBar from "@/components/dashboard/NavigationProgressBar";
@@ -74,9 +76,22 @@ export default async function TenantDashboardLayout({
     const profile = await tenantService.getWorkspaceProfile(routeTenantSlug);
     const brandName = profile?.displayName || workplaceName;
 
+    // Session policy fails open: a lookup problem must never lock people out of their own workspace.
+    const policy = await tenantService.getSessionPolicy(routeTenantSlug, token);
+
+    if (policy?.requireMfa && user && !user.twoFactorEnabled) {
+        return (
+            <>
+                <BrandTheme accentColorHex={profile?.accentColorHex} />
+                <MfaRequiredGate workspaceName={brandName} />
+            </>
+        );
+    }
+
     return (
         <>
             <BrandTheme accentColorHex={profile?.accentColorHex} />
+            <IdleSessionGuard timeoutMinutes={policy?.idleTimeoutMinutes ?? 0} />
             <SidebarProvider
                 style={
                     {

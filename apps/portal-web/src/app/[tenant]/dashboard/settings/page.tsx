@@ -1,12 +1,15 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { IconPalette, IconSettings } from "@tabler/icons-react";
+import { IconBuildingHospital, IconPalette, IconSettings, IconShieldLock, IconShieldCheck } from "@tabler/icons-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useWorkspaceSettings } from "@/hooks/useWorkspaceSettings";
 import { GeneralTab } from "./_components/GeneralTab";
 import { BrandingTab } from "./_components/BrandingTab";
+import { SecurityTab } from "./_components/SecurityTab";
+import { ComplianceTab } from "./_components/ComplianceTab";
+import { FacilitiesTab } from "./_components/FacilitiesTab";
 
 export default function SettingsPage() {
     const params = useParams();
@@ -53,8 +56,19 @@ export default function SettingsPage() {
                                 <IconPalette className="h-3.5 w-3.5 shrink-0" />
                                 Branding
                             </TabsTrigger>
-                        </TabsList>
-                    </div>
+                            <TabsTrigger value="facilities" className="px-4 sm:px-6 py-2 text-xs font-semibold flex items-center gap-1.5 shrink-0 whitespace-nowrap">
+                                <IconBuildingHospital className="h-3.5 w-3.5 shrink-0" />
+                                Facilities
+                            </TabsTrigger>
+                            <TabsTrigger value="security" className="px-4 sm:px-6 py-2 text-xs font-semibold flex items-center gap-1.5 shrink-0 whitespace-nowrap">
+                                <IconShieldLock className="h-3.5 w-3.5 shrink-0" />
+                                Security
+                            </TabsTrigger>
+                            <TabsTrigger value="compliance" className="px-4 sm:px-6 py-2 text-xs font-semibold flex items-center gap-1.5 shrink-0 whitespace-nowrap">
+                                <IconShieldCheck className="h-3.5 w-3.5 shrink-0" />
+                                Compliance
+                            </TabsTrigger>
+                        </TabsList>                    </div>
 
                     <TabsContent value="general" className="outline-none">
                         <GeneralTab key={JSON.stringify(settings.general)} tenantSlug={tenantSlug} general={settings.general} onSaved={() => mutate()} />
@@ -69,8 +83,19 @@ export default function SettingsPage() {
                             onSaved={() => mutate()}
                         />
                     </TabsContent>
-                </Tabs>
-            )}
+
+                    <TabsContent value="facilities" className="outline-none">
+                        <FacilitiesTab tenantSlug={tenantSlug} />
+                    </TabsContent>
+
+                    <TabsContent value="security" className="outline-none">
+                        <SecurityTab key={JSON.stringify(settings.security)} tenantSlug={tenantSlug} security={settings.security} onSaved={() => mutate()} />
+                    </TabsContent>
+
+                    <TabsContent value="compliance" className="outline-none">
+                        <ComplianceTab key={JSON.stringify(settings.compliance)} tenantSlug={tenantSlug} compliance={settings.compliance} onSaved={() => mutate()} />
+                    </TabsContent>
+                </Tabs>            )}
         </div>
     );
 }

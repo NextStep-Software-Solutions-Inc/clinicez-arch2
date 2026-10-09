@@ -1,4 +1,5 @@
 using ClinicEz.Portal.Application.Features.Staff.Queries;
+using ClinicEz.Portal.Application.Features.Workspace;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
 using FluentValidation;
@@ -58,6 +59,17 @@ public class InviteStaffMemberCommandHandler(
         await tenantFeatureGuard.EnsureCanCreateStaffAsync(tenant.Id.ToString(), cancellationToken);
 
         var emailLower = request.Email.Trim().ToLowerInvariant();
+
+        var allowedDomains = await context.WorkspaceSettings
+            .AsNoTracking()
+            .Where(s => s.TenantId == tenant.Id)
+            .Select(s => s.AllowedInviteDomains)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (!InviteDomains.IsAllowed(allowedDomains, emailLower))
+        {
+            throw new InvalidOperationException(
+                $"Invitations are limited to these email domains: {string.Join(", ", InviteDomains.Parse(allowedDomains))}.");
+        }
         var existing = await context.StaffMembers
             .FirstOrDefaultAsync(s => s.TenantId == tenant.Id && s.Email.ToLower() == emailLower, cancellationToken);
 

@@ -131,6 +131,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         {
             entity.Property(e => e.FacilityType).HasConversion<string>();
             entity.Property(e => e.Status).HasConversion<string>();
+            entity.Property(e => e.DeploymentMode).HasConversion<string>().HasMaxLength(16).HasDefaultValue(FacilityDeploymentMode.SharedCloud);
+            entity.Property(e => e.ConsoleBaseUrl).HasMaxLength(2048);
             entity.HasOne(e => e.Tenant)
                 .WithMany()
                 .HasForeignKey(e => e.TenantId)
@@ -185,6 +187,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(e => e.AccentColorHex).HasMaxLength(7);
             entity.Property(e => e.DateFormat).HasMaxLength(32);
             entity.Property(e => e.CurrencyCode).HasMaxLength(3);
+            entity.Property(e => e.AllowedInviteDomains).HasMaxLength(1024);
+            entity.Property(e => e.DpoName).HasMaxLength(120);
+            entity.Property(e => e.DpoEmail).HasMaxLength(254);
+            entity.Property(e => e.PrivacyNoticeUrl).HasMaxLength(2048);
         });
 
         modelBuilder.Entity<WorkspaceAuditEntry>(entity =>

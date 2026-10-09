@@ -24,6 +24,12 @@ public record WorkspaceGeneralDto(
 /// <summary>Brand identity override. Null values mean "not customised" (inherit defaults).</summary>
 public record WorkspaceBrandingDto(string? BrandName, string? LogoUrl, string? AccentColorHex);
 
+/// <summary>Portal sign-in policy. 0 idle timeout = disabled; empty domain list = any domain may be invited.</summary>
+public record WorkspaceSecurityDto(bool RequireMfa, int IdleTimeoutMinutes, IReadOnlyList<string> AllowedInviteDomains);
+
+/// <summary>Data Protection Officer and public privacy notice (RA 10173).</summary>
+public record WorkspaceComplianceDto(string? DpoName, string? DpoEmail, string? PrivacyNoticeUrl);
+
 /// <summary>
 /// Full workspace settings, grouped by section so later sections (security, ...) are added
 /// as new properties without reshaping existing ones.
@@ -32,7 +38,9 @@ public record WorkspaceSettingsDto(
     string TenantSlug,
     string TenantType,
     WorkspaceGeneralDto General,
-    WorkspaceBrandingDto Branding
+    WorkspaceBrandingDto Branding,
+    WorkspaceSecurityDto Security,
+    WorkspaceComplianceDto Compliance
 );
 
 public record GetWorkspaceSettingsQuery(string TenantSlug) : IRequest<WorkspaceSettingsDto?>;
@@ -65,10 +73,18 @@ internal static class WorkspaceSettingsMapper
         tenant.TenantSlug,
         tenant.TenantType,
         ToGeneral(tenant, settings),
-        ToBranding(settings));
+        ToBranding(settings),
+        ToSecurity(settings),
+        ToCompliance(settings));
 
     public static WorkspaceBrandingDto ToBranding(WorkspaceSettings settings) =>
         new(settings.BrandName, settings.LogoUrl, settings.AccentColorHex);
+
+    public static WorkspaceSecurityDto ToSecurity(WorkspaceSettings settings) =>
+        new(settings.RequireMfa, settings.IdleTimeoutMinutes, InviteDomains.Parse(settings.AllowedInviteDomains));
+
+    public static WorkspaceComplianceDto ToCompliance(WorkspaceSettings settings) =>
+        new(settings.DpoName, settings.DpoEmail, settings.PrivacyNoticeUrl);
 
     public static WorkspaceGeneralDto ToGeneral(Tenant tenant, WorkspaceSettings settings)
     {

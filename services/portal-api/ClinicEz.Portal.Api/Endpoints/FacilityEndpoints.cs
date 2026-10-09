@@ -157,7 +157,8 @@ public class FacilityEndpoints : IEndpoint
                 facility.Status,
                 facility.Id,
                 slug,
-                tenant.TenantSlug);
+                tenant.TenantSlug,
+                facility.ConsoleBaseUrl);
 
             return Results.Ok(new 
             { 
@@ -335,7 +336,7 @@ public class FacilityEndpoints : IEndpoint
             var slug = !string.IsNullOrWhiteSpace(facility.Slug)
                 ? facility.Slug
                 : GetFacilitiesQueryHandler.GenerateFacilitySlug(facility.Name);
-            var consoleUrl = GetFacilitiesQueryHandler.ResolveConsoleUrl(configuration, facility.FacilityType, facility.Status, facility.Id, slug, tenant.TenantSlug);
+            var consoleUrl = GetFacilitiesQueryHandler.ResolveConsoleUrl(configuration, facility.FacilityType, facility.Status, facility.Id, slug, tenant.TenantSlug, facility.ConsoleBaseUrl);
 
             await publishEndpoint.Publish(new FacilityCreatedEvent
             {

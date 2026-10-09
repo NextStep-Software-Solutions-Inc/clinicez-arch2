@@ -428,6 +428,10 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                     b.Property<string>("Classification")
                         .HasColumnType("text");
 
+                    b.Property<string>("ConsoleBaseUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
                     b.Property<string>("ContactEmail")
                         .HasColumnType("text");
 
@@ -446,6 +450,13 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
 
                     b.Property<string>("DeletedBy")
                         .HasColumnType("text");
+
+                    b.Property<string>("DeploymentMode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("SharedCloud");
 
                     b.Property<string>("FacilityType")
                         .IsRequired()
@@ -985,6 +996,10 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                         .HasMaxLength(7)
                         .HasColumnType("character varying(7)");
 
+                    b.Property<string>("AllowedInviteDomains")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
                     b.Property<string>("BrandName")
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)");
@@ -1012,6 +1027,17 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                     b.Property<string>("DeletedBy")
                         .HasColumnType("text");
 
+                    b.Property<string>("DpoEmail")
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)");
+
+                    b.Property<string>("DpoName")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<int>("IdleTimeoutMinutes")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
@@ -1024,8 +1050,15 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                         .HasMaxLength(2048)
                         .HasColumnType("character varying(2048)");
 
+                    b.Property<string>("PrivacyNoticeUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
                     b.Property<long>("ProfileVersion")
                         .HasColumnType("bigint");
+
+                    b.Property<bool>("RequireMfa")
+                        .HasColumnType("boolean");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");

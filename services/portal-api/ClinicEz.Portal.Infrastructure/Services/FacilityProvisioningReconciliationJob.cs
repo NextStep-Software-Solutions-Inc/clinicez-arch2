@@ -53,7 +53,7 @@ public class FacilityProvisioningReconciliationJob(
                 var slug = !string.IsNullOrWhiteSpace(facility.Slug)
                     ? facility.Slug
                     : GetFacilitiesQueryHandler.GenerateFacilitySlug(facility.Name);
-                var consoleUrl = GetFacilitiesQueryHandler.ResolveConsoleUrl(configuration, facility.FacilityType, facility.Status, facility.Id, slug, tenant.TenantSlug);
+                var consoleUrl = GetFacilitiesQueryHandler.ResolveConsoleUrl(configuration, facility.FacilityType, facility.Status, facility.Id, slug, tenant.TenantSlug, facility.ConsoleBaseUrl);
 
                 // Re-publish provisioning event to fan out across microservices
                 await publishEndpoint.Publish(new FacilityCreatedEvent

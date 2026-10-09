@@ -1,3 +1,4 @@
+using ClinicEz.Portal.Application.Features.Workspace;
 using ClinicEz.Portal.Application.Interfaces;
 using FluentValidation;
 using MediatR;
@@ -59,6 +60,19 @@ public class AcceptInvitationCommandHandler(IApplicationDbContext context) : IRe
         if (member.InvitationExpiresAt.HasValue && member.InvitationExpiresAt.Value < DateTime.UtcNow)
         {
             throw new InvalidOperationException("This invitation has expired. Please ask your clinic administrator to resend the invitation.");
+        }
+
+        // The allow-list may have been tightened after this invitation was sent; check both the invited
+        // address and the address of the account that is accepting it.
+        var allowedDomains = await context.WorkspaceSettings
+            .AsNoTracking()
+            .Where(s => s.TenantId == member.TenantId)
+            .Select(s => s.AllowedInviteDomains)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (!InviteDomains.IsAllowed(allowedDomains, member.Email) ||
+            (!string.IsNullOrWhiteSpace(request.UserEmail) && !InviteDomains.IsAllowed(allowedDomains, request.UserEmail)))
+        {
+            throw new InvalidOperationException("Your email domain is not permitted to join this workspace. Contact the workspace administrator.");
         }
 
         // Link the authenticated user to the internal staff record

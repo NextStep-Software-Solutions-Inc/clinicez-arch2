@@ -8,9 +8,10 @@ using System.Threading.Tasks;
 namespace ClinicEz.Portal.Application.Features.Workspace;
 
 /// <summary>
-/// The workspace-level identity every facility inherits: brand (name/logo/accent) and regional defaults.
-/// Deliberately contains no contact details or anything private - it is served anonymously and cached
-/// by facility services (which may be on another server, cloud or on-prem).
+/// The workspace-level identity every facility inherits: brand (name/logo/accent), regional defaults and the
+/// DPO / privacy notice. Deliberately contains no workspace contact details or anything private - it is served
+/// anonymously and cached by facility services (which may be on another server, cloud or on-prem). The DPO and
+/// privacy notice are published to data subjects by design (RA 10173).
 /// </summary>
 public record WorkspaceProfileDto(
     string TenantSlug,
@@ -21,7 +22,10 @@ public record WorkspaceProfileDto(
     string TimeZoneId,
     string Locale,
     string DateFormat,
-    string CurrencyCode
+    string CurrencyCode,
+    string? DpoName,
+    string? DpoEmail,
+    string? PrivacyNoticeUrl
 );
 
 public record GetWorkspaceProfileQuery(string TenantSlug) : IRequest<WorkspaceProfileDto?>;
@@ -51,6 +55,9 @@ public class GetWorkspaceProfileQueryHandler(IApplicationDbContext context)
             settings.TimeZoneId,
             settings.Locale,
             settings.DateFormat,
-            settings.CurrencyCode);
+            settings.CurrencyCode,
+            settings.DpoName,
+            settings.DpoEmail,
+            settings.PrivacyNoticeUrl);
     }
 }

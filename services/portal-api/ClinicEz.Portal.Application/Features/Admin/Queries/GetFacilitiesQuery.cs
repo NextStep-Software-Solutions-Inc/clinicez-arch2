@@ -34,7 +34,9 @@ public record FacilityDto(
     string? StreetAddress = null,
     string? ContactNumber = null,
     string? ContactEmail = null,
-    string? NotificationPreferencesJson = null
+    string? NotificationPreferencesJson = null,
+    FacilityDeploymentMode DeploymentMode = FacilityDeploymentMode.SharedCloud,
+    string? ConsoleBaseUrl = null
 );
 
 public record GetFacilitiesQuery(string TenantSlug) : IRequest<List<FacilityDto>>;
@@ -62,7 +64,7 @@ public class GetFacilitiesQueryHandler(
         return rawFacilities.Select(f =>
         {
             var slug = !string.IsNullOrWhiteSpace(f.Slug) ? f.Slug : GenerateFacilitySlug(f.Name);
-            var consoleUrl = ResolveConsoleUrl(configuration, f.FacilityType, f.Status, f.Id, slug, tenant.TenantSlug);
+            var consoleUrl = ResolveConsoleUrl(configuration, f.FacilityType, f.Status, f.Id, slug, tenant.TenantSlug, f.ConsoleBaseUrl);
 
             return new FacilityDto(
                 f.Id,
@@ -85,7 +87,9 @@ public class GetFacilitiesQueryHandler(
                 f.StreetAddress,
                 f.ContactNumber,
                 f.ContactEmail,
-                f.NotificationPreferencesJson
+                f.NotificationPreferencesJson,
+                f.DeploymentMode,
+                f.ConsoleBaseUrl
             );
         }).ToList();
     }
@@ -96,11 +100,18 @@ public class GetFacilitiesQueryHandler(
         FacilityStatus status,
         Guid facilityId,
         string facilitySlug,
-        string? tenantSlug = null)
+        string? tenantSlug = null,
+        string? consoleBaseUrlOverride = null)
     {
         if (status != FacilityStatus.Active)
         {
             return null;
+        }
+
+        // An explicit address (on-premise facilities) wins over the generated subdomain URL.
+        if (!string.IsNullOrWhiteSpace(consoleBaseUrlOverride))
+        {
+            return consoleBaseUrlOverride;
         }
 
         var baseDomain = configuration["Facility:BaseDomain"];

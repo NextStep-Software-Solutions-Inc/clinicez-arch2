@@ -14,6 +14,14 @@ public enum FacilityStatus
     Failed
 }
 
+/// <summary>Where a facility's service is hosted. Each facility is its own deployable service.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum FacilityDeploymentMode
+{
+    SharedCloud,
+    OnPremise
+}
+
 public class Facility : BaseEntity
 {
     public Guid TenantId { get; set; }
@@ -24,6 +32,11 @@ public class Facility : BaseEntity
     public string Slug { get; set; } = string.Empty;
     public FacilityType FacilityType { get; set; }
     public FacilityStatus Status { get; set; } = FacilityStatus.Provisioning;
+
+    // Deployment: shared cloud by default; on-prem facilities keep their own console address.
+    public FacilityDeploymentMode DeploymentMode { get; set; } = FacilityDeploymentMode.SharedCloud;
+    /// <summary>Explicit https console address that replaces the generated subdomain URL (typically on-prem).</summary>
+    public string? ConsoleBaseUrl { get; set; }
 
     // Cryptographic License & Plan Profile
     public string? LicenseToken { get; set; }

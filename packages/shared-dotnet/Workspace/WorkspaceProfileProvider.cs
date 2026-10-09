@@ -16,7 +16,7 @@ namespace ClinicEz.Shared.Workspace;
 
 /// <summary>
 /// The workspace-level identity inherited by every facility (mirrors portal-api's WorkspaceProfileDto).
-/// Contains no contact details or secrets.
+/// Contains no secrets; the DPO contact and privacy notice are published to data subjects by design (RA 10173).
 /// </summary>
 public sealed record WorkspaceProfile(
     string TenantSlug,
@@ -27,7 +27,10 @@ public sealed record WorkspaceProfile(
     string TimeZoneId,
     string Locale,
     string DateFormat,
-    string CurrencyCode);
+    string CurrencyCode,
+    string? DpoName = null,
+    string? DpoEmail = null,
+    string? PrivacyNoticeUrl = null);
 
 /// <summary>
 /// Read access to the workspace profile for a facility service. Implementations must never throw and
