@@ -7,6 +7,7 @@ on:
     paths:
       - 'services/laboratory-api/**'
       - 'deploy/laboratory-api/**'
+      - 'scripts/ci/**'
       - 'packages/shared-dotnet/**'
       - '.github/workflows/deploy-laboratory-api-dev.yml'
   pull_request:
@@ -15,6 +16,7 @@ on:
     paths:
       - 'services/laboratory-api/**'
       - 'deploy/laboratory-api/**'
+      - 'scripts/ci/**'
       - 'packages/shared-dotnet/**'
       - '.github/workflows/deploy-laboratory-api-dev.yml'
   workflow_dispatch:
@@ -86,14 +88,26 @@ jobs:
         MESSAGING_HUB_URL: ${{ vars.MESSAGING_HUB_URL || secrets.MESSAGING_HUB_URL }}
         MESSAGING_CLIENT_ID: ${{ secrets.LABORATORY_MESSAGING_CLIENT_ID }}
         MESSAGING_CLIENT_SECRET: ${{ secrets.LABORATORY_MESSAGING_CLIENT_SECRET }}
+        MESSAGING_SIGNING_KEY: ${{ secrets.LABORATORY_MESSAGING_SIGNING_KEY }}
+        FACILITY_LICENSE_PUBLIC_KEY: ${{ vars.FACILITY_LICENSE_PUBLIC_KEY || secrets.FACILITY_LICENSE_PUBLIC_KEY }}
+        FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS: ${{ vars.FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS || secrets.FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS }}
         DATA_NETWORK: ${{ vars.DATA_NETWORK || 'data-network' }}
         NPM_NETWORK: ${{ vars.NPM_NETWORK || 'npm-default' }}
         HANGFIRE_DASHBOARD_PASSWORD: ${{ secrets.LABORATORYAPP_HANGFIRE_PASSWORD || secrets.LABAPP_HANGFIRE_PASSWORD || secrets.LABORATORY_HANGFIRE_PASSWORD || secrets.LAB_HANGFIRE_PASSWORD || secrets.HANGFIRE_PASSWORD }}
         LAB_JWT_SIGNING_KEY: ${{ secrets.LAB_JWT_SIGNING_KEY }}
+        DOCUMENT_SIGNING_KEY: ${{ secrets.LABORATORY_DOCUMENT_SIGNING_KEY }}
         IMAGE_NAME: ${{ env.IMAGE_NAME }}
         IMAGE_TAG: ${{ env.IMAGE_TAG }}
         BASE_DOMAIN: ${{ secrets.BASE_DOMAIN || vars.BASE_DOMAIN }}
+        CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
+        CORS_ALLOWED_DOMAINS: ${{ vars.CORS_ALLOWED_DOMAINS }}
       run: |
+        . scripts/ci/prepare-key-env.sh
+        prepare_key_env private MESSAGING_SIGNING_KEY
+        prepare_key_env public FACILITY_LICENSE_PUBLIC_KEY
+        prepare_key_env optional-public FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS
+        require_min_length DOCUMENT_SIGNING_KEY 32
+        require_min_length LAB_JWT_SIGNING_KEY 32
         if [ -z "$BASE_DOMAIN" ]; then
           echo "::error::BASE_DOMAIN is not configured. Set it as a GitHub secret or variable (Settings -> Secrets and variables -> Actions)."
           exit 1
@@ -104,7 +118,7 @@ jobs:
             exit 1
           fi
         done
-        for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING MESSAGING_HUB_URL MESSAGING_CLIENT_ID MESSAGING_CLIENT_SECRET HANGFIRE_DASHBOARD_PASSWORD LAB_JWT_SIGNING_KEY IMAGE_NAME IMAGE_TAG BASE_DOMAIN DATA_NETWORK NPM_NETWORK; do
+        for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING MESSAGING_HUB_URL MESSAGING_CLIENT_ID MESSAGING_CLIENT_SECRET HANGFIRE_DASHBOARD_PASSWORD LAB_JWT_SIGNING_KEY IMAGE_NAME IMAGE_TAG BASE_DOMAIN DATA_NETWORK NPM_NETWORK MESSAGING_SIGNING_KEY FACILITY_LICENSE_PUBLIC_KEY FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS DOCUMENT_SIGNING_KEY CORS_ALLOWED_ORIGINS CORS_ALLOWED_DOMAINS; do
           echo "$var=$(printenv $var)" >> deploy/laboratory-api/.env
         done
 

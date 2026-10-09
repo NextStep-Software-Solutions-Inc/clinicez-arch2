@@ -11,6 +11,7 @@ Related: [interop-hub.md](interop-hub.md) · [platform-contract.md](platform-con
 3. **The hub holds no data of record.** It stores transient mailboxes only, purged on ack or TTL.
 4. **The patient is the consent broker** for patient-owned data.
 5. Anything that crosses a boundary is an [`InteropEnvelope`](../../packages/shared-dotnet/Interop/InteropEnvelope.cs) between two parties. The receiver keeps **its own copy**, which it owns from then on.
+6. **Enums are strings.** Every enum is serialised on the wire and stored in each database as its PascalCase member name; numbers are rejected at deserialization (see [platform-contract.md](platform-contract.md#security-configuration-every-service-must-provide)). A copy therefore stays readable by any service version that knows the name.
 
 ## System of record
 
@@ -19,7 +20,7 @@ Related: [interop-hub.md](interop-hub.md) · [platform-contract.md](platform-con
 | Clinical record: encounters, consultations, vitals, diagnoses, orders issued, prescriptions issued, attachments | **clinic-api** of the issuing facility (its own database; on-prem or cloud) | Documents the clinic issues are the clinic's record even if copies exist elsewhere. |
 | Laboratory requisitions, specimens, analyzer data, results, reports | **laboratory-api** of the performing lab | The ordering clinic's copy of a result (`lab.result.finalized`) is a received document, imported into the clinic record. |
 | Prescription orders received, dispense records, inventory | **pharmacy-api** of the dispensing pharmacy | The clinic's copy of a dispense (`rx.dispensed`) is a received notification. |
-| Patient account and patient-owned data (profile, self-reported history, government ids, files) | **patient-api** (cloud) | Plus a **copy of documents the patient received** (patient's right of access): lab slips, prescriptions, lab results, medical certificates. See below. |
+| Patient account and patient-owned data (profile, self-reported history, government ids, files) | **patient-api** (cloud) | Plus a **copy of documents the patient received** (patient's right of access): lab slips, prescriptions, lab results, medical certificates. See below. Patient sessions are per device: a patient may be signed in on any number of devices (one session row per `deviceId` in patient-api's database, no Redis); signing one device out revokes only that session. |
 | Workspace (tenant), memberships, subscription and SaaS billing, plan, entitlements, facility registry, directory authority, licenses (signing) | **portal-api** (cloud) | Directory authority: the hub's directory is a read model fed from here. |
 | Facility invoices, payments, receipts, cashier shifts (per cell) | **billing-api of that cell** (domain and application layers implemented; API and persistence layers still being built, see [billing.md](billing.md)) | Never leaves the cell that took the money; the workspace sees only summaries. |
 | Workspace finance rollup (amounts and counts, no PHI) | **portal-api** read model (planned) | Reporting only, not a book of record. |
@@ -29,7 +30,7 @@ Related: [interop-hub.md](interop-hub.md) · [platform-contract.md](platform-con
 
 ### Patient copy of documents (current state)
 
-patient-api's database now declares `LabRequestSlip`, `PrescriptionDocument`, `LabResultReport`, `MedicalCertificate`, `PatientAccessGrant`, `PatientAccessLog` and `ShareTokenUse`, which is the planned home of the patient's copy of issued documents and of consent grants. At the time of writing these are being built on this branch: pharmacy-api now **produces** `patient.document.issued` (a dispense receipt, only when the order has a patient-app account) but patient-api has **no handler** for it (nor for `lab.order.status.changed` / `rx.status.changed`), so today patient-api actually consumes only the facility catalogue, appointment updates and record-verified notices. Treat the document copy as planned, not working.
+patient-api's database now declares `LabRequestSlip`, `PrescriptionDocument`, `LabResultReport`, `MedicalCertificate`, `PatientAccessGrant`, `PatientAccessLog` and `ShareTokenUse`, which is the planned home of the patient's copy of issued documents and of consent grants. patient-api registers handlers for `patient.document.issued`, `lab.order.status.changed`, `rx.status.changed` and `lab.result.reviewed` (only for patients with a patient-app account); these are the producers of the patient's copy of issued documents and statuses. See [message-matrix.md](message-matrix.md) for the per-type status.
 
 ## What crosses the hub, and in what form
 
@@ -38,7 +39,8 @@ All payloads are JSON records serialised by `InteropJson`, wrapped in an envelop
 | Flow | Direction | Personal data in the payload |
 |---|---|---|
 | `facility.license.issued` | portal to facility | Signed license: facility and tenant ids, owner email and name, limits and features. Delivered only to the facility's own mailbox. |
-| `facility.provisioned`, `workspace.profile.updated`, `directory.*` | facility/portal | No patient data. Facility names, city, visibility. |
+| `facility.provisioned`, `directory.*` | facility/portal | No patient data. Facility names, city, visibility. |
+| `workspace.profile.updated` | portal to every facility | The workspace profile (display name, logo, accent colour, time zone, locale, date format, currency, DPO name and e-mail, privacy notice URL). No PHI, no secrets. Each facility keeps its own copy (table `workspace_profiles`, newest `Version` wins) and never calls the portal for it. |
 | `patient.appointment.booked` | patient-api to clinic | Name, mobile, PhilHealth fields (always); date of birth, sex, email only when the patient's share fields include them; reason, notes, attachment references. Scope filtering is partial today (see [Consent](#patient-consent-and-sharing)). |
 | `clinic.appointment.updated`, `clinic.record.verified` | clinic to patient | Appointment details and clinical summaries the clinic chose to push; attachment metadata. |
 | `lab.order.issued` | clinic to lab | Requisition: patient and ordering details needed to run the test. |
@@ -106,7 +108,7 @@ These map platform behaviours to the Act's principles and obligations. **Not leg
 | **PHI minimisation** | Hub routes on `To`/`Type`/`CorrelationId`; billing rollup to the portal carries **no PHI by design**; the license and directory carry none. | Enforce "no PHI" on `billing.invoice.paid` with a contract test; consider sealed payloads so the hub cannot read PHI. |
 | **Purpose limitation** | Grants carry a `Purpose` (planned); a claim is single-use and limited to one order; replies are limited to a correlation. | Do not reuse shared data for another purpose; log access (planned). |
 | **Retention** | Hub keeps nothing beyond 7 days (undelivered) and 14 days (dead letters). Facilities keep records per their legal duties. | Define and automate retention per data class in each service (none exists in code); define backup retention. |
-| **Security measures** | TLS (deployment), per-client credentials, sender-ownership and link checks, optional AES-256-GCM at rest, facility-local auth, license-bound tenancy, tenant/facility scoping in handlers. | No hub rate limiting; sealed payloads and per-message signatures unused; there is no unified audit log of cross-facility access yet. |
+| **Security measures** | TLS (deployment), per-client credentials, per-envelope ECDSA signatures (hub and receiver verify), sender-ownership and link checks, optional AES-256-GCM at rest, facility-local auth, license-bound tenancy, tenant/facility scoping in handlers. | No hub rate limiting; sealed payloads (end-to-end confidentiality) unused; there is no unified audit log of cross-facility access yet. |
 | **Data subject rights** (access, correction, erasure/blocking, portability, objection) | Patient-api holds the patient's account and (planned) a copy of issued documents for access; export is planned with grants. | Define how an erasure request propagates to facility-held copies; facilities may refuse deletion of records they must retain. Provide an export. |
 | **Breach management** | Hub dead letters and logs can show misdirected mail; credentials can be rotated or revoked centrally. | Write the breach runbook (notification to the NPC and affected patients within the legal timeline), including hub credential rotation and mailbox purge. |
 | **Third-party and cross-border** | The cloud cell, hub and patient-api run wherever the cloud is deployed. Edge sites keep intra-hospital traffic on the LAN. | Choose the cloud region deliberately (ideally in the Philippines or a jurisdiction your counsel accepts) and keep a record of where PHI and backups reside; document sub-processors (hosting, SMTP provider, storage) and data sharing agreements. |

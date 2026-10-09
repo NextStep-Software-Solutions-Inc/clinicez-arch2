@@ -20,16 +20,25 @@ HUB_ENV_FILE=hub-bootstrap.env
 # Every variable the installer manages. Order = order in the generated .env.
 KEYS="GHCR_OWNER_REPO IMAGE_TAG COMPOSE_PROFILES TENANT_ID EDGE_CELL_ID EDGE_CELL_NAME
 CLINIC_FACILITY_ID CLINIC_FACILITY_NAME LABORATORY_FACILITY_ID LABORATORY_FACILITY_NAME
-PHARMACY_FACILITY_ID PHARMACY_FACILITY_NAME ORGANIZATION_FACILITY_ID ORGANIZATION_FACILITY_NAME BASE_DOMAIN
-UPSTREAM_ENABLED UPSTREAM_HUB_URL UPSTREAM_CLIENT_ID UPSTREAM_CLIENT_SECRET PORTAL_API_URL CLINIC_PUBLIC_UPLOAD_BASE_URL MESSAGING_HUB_URL
+PHARMACY_FACILITY_ID PHARMACY_FACILITY_NAME ORGANIZATION_FACILITY_ID ORGANIZATION_FACILITY_NAME BASE_DOMAIN CORS_ALLOWED_ORIGINS
+UPSTREAM_ENABLED UPSTREAM_HUB_URL UPSTREAM_CLIENT_ID UPSTREAM_CLIENT_SECRET CLINIC_PUBLIC_UPLOAD_BASE_URL MESSAGING_HUB_URL
 CLINIC_HUB_CLIENT_ID CLINIC_HUB_CLIENT_SECRET BILLING_HUB_CLIENT_ID BILLING_HUB_CLIENT_SECRET
 LABORATORY_HUB_CLIENT_ID LABORATORY_HUB_CLIENT_SECRET PHARMACY_HUB_CLIENT_ID PHARMACY_HUB_CLIENT_SECRET
 ORGANIZATION_HUB_CLIENT_ID ORGANIZATION_HUB_CLIENT_SECRET HUB_PAYLOAD_ENCRYPTION_KEY HUB_BIND HUB_LAN_PORT
 POSTGRES_USER POSTGRES_PASSWORD INTERNAL_API_KEY PHARMACY_API_KEY HANGFIRE_DASHBOARD_PASSWORD
 CLINIC_JWT_SIGNING_KEY BILLING_JWT_SIGNING_KEY LABORATORY_JWT_SIGNING_KEY PHARMACY_JWT_SIGNING_KEY ORGANIZATION_JWT_SIGNING_KEY
-CLINIC_ENCRYPTION_MASTER_SECRET
+CLINIC_ENCRYPTION_MASTER_SECRET CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_0 CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_1
+CLINIC_DOCUMENT_SIGNING_KEY LABORATORY_DOCUMENT_SIGNING_KEY GAMOT_UPSC_SECRET_KEY
+FACILITY_LICENSE_PUBLIC_KEY FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS HUB_SIGNING_REQUIRED EDGE_HUB_SIGNING_KEY
+CLINIC_HUB_SIGNING_KEY CLINIC_HUB_PUBLIC_KEY BILLING_HUB_SIGNING_KEY BILLING_HUB_PUBLIC_KEY
+LABORATORY_HUB_SIGNING_KEY LABORATORY_HUB_PUBLIC_KEY PHARMACY_HUB_SIGNING_KEY PHARMACY_HUB_PUBLIC_KEY
+ORGANIZATION_HUB_SIGNING_KEY ORGANIZATION_HUB_PUBLIC_KEY
 CLINIC_WEB_PORT LABORATORY_WEB_PORT PHARMACY_WEB_PORT CASHIER_WEB_PORT
 BACKUP_DIR BACKUP_INTERVAL_HOURS BACKUP_RETENTION_DAYS"
+
+# Keys that must be a P-256 PEM (checked, normalized to one-line base64): public / private.
+PUB_KEY_VARS="FACILITY_LICENSE_PUBLIC_KEY FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS CLINIC_HUB_PUBLIC_KEY BILLING_HUB_PUBLIC_KEY LABORATORY_HUB_PUBLIC_KEY PHARMACY_HUB_PUBLIC_KEY ORGANIZATION_HUB_PUBLIC_KEY"
+PRIV_KEY_VARS="EDGE_HUB_SIGNING_KEY CLINIC_HUB_SIGNING_KEY BILLING_HUB_SIGNING_KEY LABORATORY_HUB_SIGNING_KEY PHARMACY_HUB_SIGNING_KEY ORGANIZATION_HUB_SIGNING_KEY"
 
 # service | env prefix | compose profile ('' = always) | hub facility type ('-' = no facility)
 SERVICES="clinic|CLINIC||Clinic
@@ -58,7 +67,6 @@ Install options (all optional: missing values are asked for, or taken from an ex
   --cloud-hub-url <url>            portal HubEdgeCredentials.HubUrl (UPSTREAM_HUB_URL; with --no-local-hub: MESSAGING_HUB_URL)
   --edge-client-id <id>            local hub only: the ONE upstream client the portal issued to the cell (HubEdgeCredentials.ClientId)
   --edge-client-secret <secret>    local hub only: its ClientSecret (prefer the prompt: it keeps it out of shell history)
-  --portal-api-url <url>           cloud portal API (workspace profile fetches; may stay empty with --air-gapped)
   --public-upload-url <url>        public lab-result upload page (a cloud page, printed on lab slips); may stay empty with
                                    --air-gapped, but lab orders cannot be issued until it is set
   --air-gapped                     no cloud link: UPSTREAM_ENABLED=false, same-cell traffic only (cross-cell messages are
@@ -69,6 +77,13 @@ Install options (all optional: missing values are asked for, or taken from an ex
   --billing-hub-client-id <id> --billing-hub-client-secret <secret>    only with --no-local-hub: the portal's billing client
   --license-token <token> | --license-file <path>                    clinic license
   --lab-license-token|--lab-license-file, --pharmacy-license-token|--pharmacy-license-file
+  --license-public-key <key> | --license-public-key-file <pem file>   the portal's license PUBLIC key (required; the file form is for
+                                   air-gapped sites). <key> = base64 of the PEM; a PEM file is encoded to one-line base64 for you
+  --edge-signing-key <key> | --edge-signing-key-file <file>          local hub only: the signing PRIVATE key the portal issued with the
+                                   edge client id/secret (required unless --air-gapped)
+  --clinic-hub-signing-key[-file] <v>  --billing-hub-signing-key[-file] <v>    only with --no-local-hub: the portal-issued signing keys
+                                   of those two clients. With the local hub the installer generates one P-256 key pair per service
+                                   (needs openssl) and keeps it like the other generated secrets
   --backup-dir <path>              host folder for backups (default ./backups)
   --force                          rewrite .env (old file saved as .env.bak.<time>; existing secrets are kept)
   --yes                            never prompt; fail when a required value is missing
@@ -99,6 +114,18 @@ read_license() { # <path> -> token on stdout (raw token text, or JSON with a lic
   printf '%s' "$tok"
 }
 
+read_key_file() { # <path> -> one-line base64 on stdout (a PEM file is encoded; an already base64 file is passed through)
+  [ -f "$1" ] || die "Key file not found: $1"
+  local raw
+  raw=$(cat "$1")
+  case "$raw" in
+    *-----BEGIN*) need_openssl; printf '%s\n' "$raw" | tr -d '\r' | openssl base64 -A ;;
+    *) printf '%s' "$raw" | tr -d '[:space:]' ;;
+  esac
+}
+
+need_openssl() { command -v openssl >/dev/null 2>&1 || die "openssl is required (key generation and checks): apt install openssl / dnf install openssl / brew install openssl."; }
+
 while [ "$#" -gt 0 ]; do
   case "$1" in
     install|apply|upgrade|activate|backup|restore|status|render) COMMAND=$1 ;;
@@ -119,13 +146,20 @@ while [ "$#" -gt 0 ]; do
     --cloud-hub-url) need_arg "$@"; UPSTREAM_HUB_URL=$2; shift ;;
     --edge-client-id) need_arg "$@"; UPSTREAM_CLIENT_ID=$2; shift ;;
     --edge-client-secret) need_arg "$@"; UPSTREAM_CLIENT_SECRET=$2; shift ;;
-    --portal-api-url) need_arg "$@"; PORTAL_API_URL=$2; shift ;;
     --public-upload-url) need_arg "$@"; CLINIC_PUBLIC_UPLOAD_BASE_URL=$2; shift ;;
     --base-domain) need_arg "$@"; BASE_DOMAIN=$2; shift ;;
     --clinic-hub-client-id) need_arg "$@"; CLINIC_HUB_CLIENT_ID=$2; shift ;;
     --clinic-hub-client-secret) need_arg "$@"; CLINIC_HUB_CLIENT_SECRET=$2; shift ;;
     --billing-hub-client-id) need_arg "$@"; BILLING_HUB_CLIENT_ID=$2; shift ;;
     --billing-hub-client-secret) need_arg "$@"; BILLING_HUB_CLIENT_SECRET=$2; shift ;;
+    --license-public-key) need_arg "$@"; FACILITY_LICENSE_PUBLIC_KEY=$2; shift ;;
+    --license-public-key-file) need_arg "$@"; FACILITY_LICENSE_PUBLIC_KEY=$(read_key_file "$2"); shift ;;
+    --edge-signing-key) need_arg "$@"; EDGE_HUB_SIGNING_KEY=$2; shift ;;
+    --edge-signing-key-file) need_arg "$@"; EDGE_HUB_SIGNING_KEY=$(read_key_file "$2"); shift ;;
+    --clinic-hub-signing-key) need_arg "$@"; CLINIC_HUB_SIGNING_KEY=$2; shift ;;
+    --clinic-hub-signing-key-file) need_arg "$@"; CLINIC_HUB_SIGNING_KEY=$(read_key_file "$2"); shift ;;
+    --billing-hub-signing-key) need_arg "$@"; BILLING_HUB_SIGNING_KEY=$2; shift ;;
+    --billing-hub-signing-key-file) need_arg "$@"; BILLING_HUB_SIGNING_KEY=$(read_key_file "$2"); shift ;;
     --license-token) need_arg "$@"; LICENSE_CLINIC=$2; shift ;;
     --license-file) need_arg "$@"; LICENSE_CLINIC=$(read_license "$2"); shift ;;
     --lab-license-token) need_arg "$@"; LICENSE_LABORATORY=$2; shift ;;
@@ -223,6 +257,46 @@ check_guid() { # <KEY>
   fi
 }
 
+norm_key_var() { # <KEY>: a PEM becomes one-line base64 (what .env and the services take); base64 just loses whitespace
+  local k=$1 v=${!1}
+  [ -n "$v" ] || return 0
+  case "$v" in
+    *-----BEGIN*) need_openssl; v=$(printf '%s\n' "$v" | tr -d '\r' | openssl base64 -A) ;;
+    *) v=$(printf '%s' "$v" | tr -d '[:space:]') ;;
+  esac
+  printf -v "$k" '%s' "$v"
+}
+
+check_key() { # <KEY> <priv|pub>: empty is fine here (required-ness is checked elsewhere); otherwise it must be a P-256 PEM key
+  local k=$1 kind=$2 v=${!1} txt pin="" what=private
+  [ -n "$v" ] || return 0
+  need_openssl
+  if [ "$kind" = pub ]; then pin=-pubin; what=public; fi
+  # shellcheck disable=SC2086
+  txt=$(printf '%s' "$v" | openssl base64 -d -A 2>/dev/null | openssl pkey $pin -noout -text 2>/dev/null || true)
+  case "$txt" in *prime256v1*|*P-256*) ;; *) die "$k is not a valid ECDSA P-256 $what key (expected base64 of a PEM; a PEM file can be given with the matching -file option)." ;; esac
+}
+
+gen_keypair() { # <PRIVATE_VAR> <PUBLIC_VAR>: fresh ECDSA P-256 pair (SEC1 private PEM, SubjectPublicKeyInfo public PEM), each one-line base64
+  local pem pub
+  need_openssl
+  pem=$(openssl ecparam -name prime256v1 -genkey -noout 2>/dev/null) || die "openssl could not generate a P-256 key."
+  pub=$(printf '%s\n' "$pem" | openssl ec -pubout 2>/dev/null) || die "openssl could not derive the public key."
+  printf -v "$1" '%s' "$(printf '%s\n' "$pem" | openssl base64 -A)"
+  printf -v "$2" '%s' "$(printf '%s\n' "$pub" | openssl base64 -A)"
+}
+
+ensure_keypair() { # <PRIVATE_VAR> <PUBLIC_VAR>: generate the pair when the private key is missing; derive a lost public half from it
+  local pub
+  if [ -z "${!1}" ]; then
+    gen_keypair "$1" "$2"
+  elif [ -z "${!2}" ]; then
+    need_openssl
+    pub=$(printf '%s' "${!1}" | openssl base64 -d -A 2>/dev/null | openssl ec -pubout 2>/dev/null) || die "$1 is not a usable EC private key: cannot derive $2."
+    printf -v "$2" '%s' "$(printf '%s\n' "$pub" | openssl base64 -A)"
+  fi
+}
+
 trim_url() { local k=$1 v=${!1}; while [ "${v%/}" != "$v" ]; do v=${v%/}; done; printf -v "$k" '%s' "$v"; }
 
 set_env_value() { # <KEY> <value>: replace or append one line in .env
@@ -302,7 +376,7 @@ collect_config() { # <new|reuse>
   #   hub mode B (--no-local-hub): services talk to the cloud hub with the PORTAL-issued per-service clients (clinic, billing).
   local mode=$1 k svc prefix prof ftype hubmode oldmode=none
   local f_cid=$CLINIC_HUB_CLIENT_ID f_csec=$CLINIC_HUB_CLIENT_SECRET f_bid=$BILLING_HUB_CLIENT_ID f_bsec=$BILLING_HUB_CLIENT_SECRET f_url=$UPSTREAM_HUB_URL
-  local f_uid=$UPSTREAM_CLIENT_ID f_usec=$UPSTREAM_CLIENT_SECRET
+  local f_uid=$UPSTREAM_CLIENT_ID f_usec=$UPSTREAM_CLIENT_SECRET f_uks=$EDGE_HUB_SIGNING_KEY f_cks=$CLINIC_HUB_SIGNING_KEY f_bks=$BILLING_HUB_SIGNING_KEY
   if [ -f "$ENV_FILE" ]; then
     case ",$(env_get COMPOSE_PROFILES "$ENV_FILE")," in *,local-hub,*) oldmode=A ;; *) oldmode=B ;; esac
   fi
@@ -327,21 +401,23 @@ collect_config() { # <new|reuse>
   default BACKUP_DIR ./backups
   default BACKUP_INTERVAL_HOURS 24
   default BACKUP_RETENTION_DAYS 14
+  default HUB_SIGNING_REQUIRED true
 
   if [ "$mode" = new ]; then decide_profiles; fi
   hubmode=A
   if ! has_profile local-hub; then hubmode=B; fi
 
   # Flags that belong to the other hub mode are refused instead of silently ignored.
-  if [ "$hubmode" = A ] && [ -n "$f_cid$f_csec$f_bid$f_bsec" ]; then
-    die "--clinic-hub-client-* / --billing-hub-client-* are the portal's per-service clients and only fit --no-local-hub. With the local hub the installer generates the local site-<service> clients."
+  if [ "$hubmode" = A ] && [ -n "$f_cid$f_csec$f_bid$f_bsec$f_cks$f_bks" ]; then
+    die "--clinic-hub-client-* / --billing-hub-client-* / --clinic-hub-signing-key* / --billing-hub-signing-key* are the portal's per-service clients and only fit --no-local-hub. With the local hub the installer generates the local site-<service> clients and their signing keys."
   fi
-  if [ "$hubmode" = B ] && [ -n "$f_uid$f_usec" ]; then
-    die "--edge-client-id/--edge-client-secret are the upstream client of the LOCAL hub. With --no-local-hub use --clinic-hub-client-* and --billing-hub-client-*."
+  if [ "$hubmode" = B ] && [ -n "$f_uid$f_usec$f_uks" ]; then
+    die "--edge-client-id/--edge-client-secret/--edge-signing-key* are the upstream client of the LOCAL hub. With --no-local-hub use --clinic-hub-client-*, --billing-hub-client-* and the matching --*-hub-signing-key*."
   fi
   # Switching hub mode with --force: the old clients are of another kind (local site-<svc> vs portal-issued), never reuse them.
   if [ "$mode" = new ] && [ "$oldmode" != none ] && [ "$oldmode" != "$hubmode" ]; then
     CLINIC_HUB_CLIENT_ID=$f_cid; CLINIC_HUB_CLIENT_SECRET=$f_csec; BILLING_HUB_CLIENT_ID=$f_bid; BILLING_HUB_CLIENT_SECRET=$f_bsec
+    CLINIC_HUB_SIGNING_KEY=$f_cks; BILLING_HUB_SIGNING_KEY=$f_bks; CLINIC_HUB_PUBLIC_KEY=""; BILLING_HUB_PUBLIC_KEY=""
     MESSAGING_HUB_URL=""
   fi
 
@@ -352,6 +428,7 @@ collect_config() { # <new|reuse>
     if has_profile laboratory; then ask LABORATORY_FACILITY_ID "Laboratory facility id (GUID)"; fi
     if has_profile pharmacy; then ask PHARMACY_FACILITY_ID "Pharmacy facility id (GUID)"; fi
     if has_profile organization; then ask ORGANIZATION_FACILITY_ID "Organization facility id (GUID)"; fi
+    ask FACILITY_LICENSE_PUBLIC_KEY "License public key (base64 of PEM, from the portal; or pass --license-public-key-file)"
   fi
 
   case "$UPSTREAM_ENABLED" in true|false) ;; *) die "UPSTREAM_ENABLED must be true or false." ;; esac
@@ -360,6 +437,9 @@ collect_config() { # <new|reuse>
     UPSTREAM_ENABLED=true; UPSTREAM_HUB_URL=""; UPSTREAM_CLIENT_ID=""; UPSTREAM_CLIENT_SECRET=""
     LABORATORY_HUB_CLIENT_ID=""; LABORATORY_HUB_CLIENT_SECRET=""; PHARMACY_HUB_CLIENT_ID=""; PHARMACY_HUB_CLIENT_SECRET=""
     ORGANIZATION_HUB_CLIENT_ID=""; ORGANIZATION_HUB_CLIENT_SECRET=""
+    EDGE_HUB_SIGNING_KEY=""; CLINIC_HUB_PUBLIC_KEY=""; BILLING_HUB_PUBLIC_KEY=""
+    LABORATORY_HUB_SIGNING_KEY=""; LABORATORY_HUB_PUBLIC_KEY=""; PHARMACY_HUB_SIGNING_KEY=""; PHARMACY_HUB_PUBLIC_KEY=""
+    ORGANIZATION_HUB_SIGNING_KEY=""; ORGANIZATION_HUB_PUBLIC_KEY=""
     if [ -n "$f_url" ]; then MESSAGING_HUB_URL=$f_url; fi
     if [ "$mode" = new ]; then
       ask MESSAGING_HUB_URL "Cloud hub URL (portal HubEdgeCredentials.HubUrl)"
@@ -367,7 +447,8 @@ collect_config() { # <new|reuse>
       ask CLINIC_HUB_CLIENT_SECRET "Clinic hub client secret (portal-issued)" secret
       ask BILLING_HUB_CLIENT_ID "Billing hub client id (portal-issued)"
       ask BILLING_HUB_CLIENT_SECRET "Billing hub client secret (portal-issued)" secret
-      ask PORTAL_API_URL "Cloud portal API URL"
+      ask CLINIC_HUB_SIGNING_KEY "Clinic hub signing key (portal-issued, base64 of PEM)" secret
+      ask BILLING_HUB_SIGNING_KEY "Billing hub signing key (portal-issued, base64 of PEM)" secret
       ask CLINIC_PUBLIC_UPLOAD_BASE_URL "Public lab-upload page URL (cloud portal)"
     fi
   else
@@ -376,7 +457,7 @@ collect_config() { # <new|reuse>
       ask UPSTREAM_HUB_URL "Cloud hub URL (portal HubEdgeCredentials.HubUrl)"
       ask UPSTREAM_CLIENT_ID "Upstream edge client id (portal HubEdgeCredentials.ClientId)"
       ask UPSTREAM_CLIENT_SECRET "Upstream edge client secret (portal HubEdgeCredentials.ClientSecret)" secret
-      ask PORTAL_API_URL "Cloud portal API URL"
+      ask EDGE_HUB_SIGNING_KEY "Edge hub signing key (portal-issued with the edge client, base64 of PEM)" secret
       ask CLINIC_PUBLIC_UPLOAD_BASE_URL "Public lab-upload page URL (cloud portal)"
     fi
   fi
@@ -387,12 +468,15 @@ collect_config() { # <new|reuse>
     warn "--air-gapped is ignored on an existing .env: set UPSTREAM_ENABLED=false in .env and run ./install.sh apply (or re-run with --force)."
   fi
 
+  for k in $PUB_KEY_VARS $PRIV_KEY_VARS; do norm_key_var "$k"; done
+
   # Mode A: local hub clients site-<svc>, generated once then kept (resolve() reads them back from .env). Mode B: the clinic and
   # billing clients are the portal's (asked above, never generated) and the other services do not run.
   while IFS='|' read -r svc prefix prof ftype; do
     if [ "$hubmode" = A ]; then
       default "${prefix}_HUB_CLIENT_ID" "site-$svc"
       gen_if_empty "${prefix}_HUB_CLIENT_SECRET" 40
+      ensure_keypair "${prefix}_HUB_SIGNING_KEY" "${prefix}_HUB_PUBLIC_KEY"
     fi
     gen_if_empty "${prefix}_JWT_SIGNING_KEY" 64
   done <<EOF
@@ -402,9 +486,12 @@ EOF
   gen_if_empty INTERNAL_API_KEY 48
   gen_if_empty HANGFIRE_DASHBOARD_PASSWORD 24
   gen_if_empty CLINIC_ENCRYPTION_MASTER_SECRET 64
+  gen_if_empty CLINIC_DOCUMENT_SIGNING_KEY 64
+  gen_if_empty LABORATORY_DOCUMENT_SIGNING_KEY 64
+  gen_if_empty GAMOT_UPSC_SECRET_KEY 64
   if [ -z "$HUB_PAYLOAD_ENCRYPTION_KEY" ]; then HUB_PAYLOAD_ENCRYPTION_KEY=$(rand_b64_32); fi
 
-  for k in UPSTREAM_HUB_URL PORTAL_API_URL CLINIC_PUBLIC_UPLOAD_BASE_URL MESSAGING_HUB_URL; do trim_url "$k"; done
+  for k in UPSTREAM_HUB_URL CLINIC_PUBLIC_UPLOAD_BASE_URL MESSAGING_HUB_URL; do trim_url "$k"; done
   for k in $KEYS; do
     case "$k" in
       EDGE_CELL_NAME|*_FACILITY_NAME) check_safe "$k" spaces ;;
@@ -413,15 +500,18 @@ EOF
   done
   for k in CLINIC_FACILITY_ID LABORATORY_FACILITY_ID PHARMACY_FACILITY_ID ORGANIZATION_FACILITY_ID; do check_guid "$k"; done
   case "$EDGE_CELL_ID" in *:*) die "EDGE_CELL_ID must not contain ':'." ;; esac
+  case "$HUB_SIGNING_REQUIRED" in true|false) ;; *) die "HUB_SIGNING_REQUIRED must be true or false." ;; esac
+  for k in $PUB_KEY_VARS; do check_key "$k" pub; done
+  for k in $PRIV_KEY_VARS; do check_key "$k" priv; done
   if [ "$mode" = reuse ]; then
-    local required="GHCR_OWNER_REPO TENANT_ID EDGE_CELL_ID CLINIC_FACILITY_ID"
+    local required="GHCR_OWNER_REPO TENANT_ID EDGE_CELL_ID CLINIC_FACILITY_ID FACILITY_LICENSE_PUBLIC_KEY"
     if [ "$hubmode" = B ]; then
-      required="$required MESSAGING_HUB_URL CLINIC_HUB_CLIENT_ID CLINIC_HUB_CLIENT_SECRET BILLING_HUB_CLIENT_ID BILLING_HUB_CLIENT_SECRET"
+      required="$required MESSAGING_HUB_URL CLINIC_HUB_CLIENT_ID CLINIC_HUB_CLIENT_SECRET BILLING_HUB_CLIENT_ID BILLING_HUB_CLIENT_SECRET CLINIC_HUB_SIGNING_KEY BILLING_HUB_SIGNING_KEY"
     elif [ "$UPSTREAM_ENABLED" = true ]; then
-      required="$required UPSTREAM_HUB_URL UPSTREAM_CLIENT_ID UPSTREAM_CLIENT_SECRET PORTAL_API_URL"
+      required="$required UPSTREAM_HUB_URL UPSTREAM_CLIENT_ID UPSTREAM_CLIENT_SECRET EDGE_HUB_SIGNING_KEY"
     fi
     for k in $required; do
-      if [ -z "${!k}" ]; then die "$k is empty in $ENV_FILE. Fix it, or re-run with --force and the options."; fi
+      if [ -z "${!k}" ]; then die "$k is empty in $ENV_FILE. Fix it, or re-run with --force and the options (a missing key can also be given with its option on this command: ./install.sh apply|upgrade stores it in $ENV_FILE)."; fi
     done
   fi
 }
@@ -450,6 +540,8 @@ PHARMACY_FACILITY_NAME=$PHARMACY_FACILITY_NAME
 ORGANIZATION_FACILITY_ID=$ORGANIZATION_FACILITY_ID
 ORGANIZATION_FACILITY_NAME=$ORGANIZATION_FACILITY_NAME
 BASE_DOMAIN=$BASE_DOMAIN
+# Optional extra CORS origins (comma separated), e.g. http://192.168.1.10:8080 when a web app is opened by IP. Empty = same-origin only.
+CORS_ALLOWED_ORIGINS=$CORS_ALLOWED_ORIGINS
 
 # Cloud link of the LOCAL hub (mode A): ONE EdgeCell client (Service 'cell') the portal issued = portal HubEdgeCredentials.
 # UPSTREAM_ENABLED=false (--air-gapped): the hub runs without any upstream, same-cell traffic only. Empty values are fine then;
@@ -458,7 +550,6 @@ UPSTREAM_ENABLED=$UPSTREAM_ENABLED
 UPSTREAM_HUB_URL=$UPSTREAM_HUB_URL
 UPSTREAM_CLIENT_ID=$UPSTREAM_CLIENT_ID
 UPSTREAM_CLIENT_SECRET=$UPSTREAM_CLIENT_SECRET
-PORTAL_API_URL=$PORTAL_API_URL
 
 # Public URL of the lab-result upload page printed on lab slips (a cloud page; the site only needs outbound access).
 # Required to issue lab orders. May be empty when air-gapped.
@@ -484,6 +575,26 @@ HUB_PAYLOAD_ENCRYPTION_KEY=$HUB_PAYLOAD_ENCRYPTION_KEY
 HUB_BIND=$HUB_BIND
 HUB_LAN_PORT=$HUB_LAN_PORT
 
+# Keys (ECDSA P-256, one-line base64 of a PEM).
+#   FACILITY_LICENSE_PUBLIC_KEY: the portal's license public key, validates the facility licenses (REQUIRED). _PREVIOUS only while the portal rotates.
+#   EDGE_HUB_SIGNING_KEY: PRIVATE key the portal issued with the edge client (local hub re-signs upstream envelopes; empty only air-gapped).
+#   <SVC>_HUB_SIGNING_KEY / _PUBLIC_KEY: one pair per service client, generated by the installer (local hub); with --no-local-hub the
+#     clinic / billing signing keys are portal-issued and the public keys stay empty. The private keys never leave this host.
+FACILITY_LICENSE_PUBLIC_KEY=$FACILITY_LICENSE_PUBLIC_KEY
+FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS=$FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS
+HUB_SIGNING_REQUIRED=$HUB_SIGNING_REQUIRED
+EDGE_HUB_SIGNING_KEY=$EDGE_HUB_SIGNING_KEY
+CLINIC_HUB_SIGNING_KEY=$CLINIC_HUB_SIGNING_KEY
+CLINIC_HUB_PUBLIC_KEY=$CLINIC_HUB_PUBLIC_KEY
+BILLING_HUB_SIGNING_KEY=$BILLING_HUB_SIGNING_KEY
+BILLING_HUB_PUBLIC_KEY=$BILLING_HUB_PUBLIC_KEY
+LABORATORY_HUB_SIGNING_KEY=$LABORATORY_HUB_SIGNING_KEY
+LABORATORY_HUB_PUBLIC_KEY=$LABORATORY_HUB_PUBLIC_KEY
+PHARMACY_HUB_SIGNING_KEY=$PHARMACY_HUB_SIGNING_KEY
+PHARMACY_HUB_PUBLIC_KEY=$PHARMACY_HUB_PUBLIC_KEY
+ORGANIZATION_HUB_SIGNING_KEY=$ORGANIZATION_HUB_SIGNING_KEY
+ORGANIZATION_HUB_PUBLIC_KEY=$ORGANIZATION_HUB_PUBLIC_KEY
+
 # Database
 POSTGRES_USER=$POSTGRES_USER
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
@@ -499,6 +610,13 @@ PHARMACY_JWT_SIGNING_KEY=$PHARMACY_JWT_SIGNING_KEY
 ORGANIZATION_JWT_SIGNING_KEY=$ORGANIZATION_JWT_SIGNING_KEY
 # Wraps the per-file keys of the clinical records: never change it once records exist and keep a copy of this file.
 CLINIC_ENCRYPTION_MASTER_SECRET=$CLINIC_ENCRYPTION_MASTER_SECRET
+# Only while rotating the master secret: the previous value(s), so old records stay readable (see README).
+CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_0=$CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_0
+CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_1=$CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_1
+# Keys of the document digests (verification QR codes), one per service, and the pharmacy UPSC code key: keep them with this file.
+CLINIC_DOCUMENT_SIGNING_KEY=$CLINIC_DOCUMENT_SIGNING_KEY
+LABORATORY_DOCUMENT_SIGNING_KEY=$LABORATORY_DOCUMENT_SIGNING_KEY
+GAMOT_UPSC_SECRET_KEY=$GAMOT_UPSC_SECRET_KEY
 
 # Web ports
 CLINIC_WEB_PORT=$CLINIC_WEB_PORT
@@ -525,11 +643,12 @@ append_missing() { # keep an older .env working after an upgrade added variables
 }
 
 # hub-bootstrap.env: the cell, one EdgeCell client per enabled service and the site's facilities. The client secrets are the
-# very values the services get as Messaging__ClientSecret (same variables in .env), so the two sides always match. These are the
+# very values the services get as Messaging__ClientSecret (same variables in .env), so the two sides always match; the same goes
+# for the public half of each service's signing key (<SVC>_HUB_PUBLIC_KEY, the private half is its Messaging__SigningKey). These are the
 # LOCAL clients site-<svc>; the portal-issued upstream client (UPSTREAM_*) is deliberately not in here. Without the local hub
 # (--no-local-hub) there is nothing to declare: the file is still written, comment-only, so compose always finds it.
 render_hub_bootstrap() {
-  local svc prefix prof ftype ci=0 fi_=0 id secret fid fname enabled
+  local svc prefix prof ftype ci=0 fi_=0 id secret pubkey fid fname enabled
   umask 077
   if ! has_profile local-hub; then
     echo "# Generated by install.sh (./install.sh render). No local hub on this site (--no-local-hub): nothing to declare." > "$HUB_ENV_FILE"
@@ -538,7 +657,7 @@ render_hub_bootstrap() {
     return 0
   fi
   {
-    echo "# Generated by install.sh from .env (./install.sh render). Do not edit; contains the local hub client secrets."
+    echo "# Generated by install.sh from .env (./install.sh render). Do not edit; contains the local hub client secrets and public keys."
     echo "Hub__Bootstrap__Cells__0__CellId=$EDGE_CELL_ID"
     echo "Hub__Bootstrap__Cells__0__Name=$EDGE_CELL_NAME"
     echo "Hub__Bootstrap__Cells__0__Kind=Edge"
@@ -547,9 +666,10 @@ render_hub_bootstrap() {
       enabled=1
       if [ -n "$prof" ] && ! has_profile "$prof"; then enabled=0; fi
       if [ "$enabled" = 1 ]; then
-        eval "id=\${${prefix}_HUB_CLIENT_ID}; secret=\${${prefix}_HUB_CLIENT_SECRET}"
+        eval "id=\${${prefix}_HUB_CLIENT_ID}; secret=\${${prefix}_HUB_CLIENT_SECRET}; pubkey=\${${prefix}_HUB_PUBLIC_KEY}"
         echo "Hub__Bootstrap__Clients__${ci}__ClientId=$id"
         echo "Hub__Bootstrap__Clients__${ci}__Secret=$secret"
+        echo "Hub__Bootstrap__Clients__${ci}__PublicKey=$pubkey"
         echo "Hub__Bootstrap__Clients__${ci}__CellId=$EDGE_CELL_ID"
         echo "Hub__Bootstrap__Clients__${ci}__Service=$svc"
         echo "Hub__Bootstrap__Clients__${ci}__Kind=EdgeCell"
@@ -670,6 +790,7 @@ next_steps() {
 
 cmd_install() {
   preflight_docker
+  need_openssl
   if [ -f "$ENV_FILE" ] && [ "$FORCE" = 0 ]; then
     log "$ENV_FILE exists: reusing it (--force rewrites it and keeps the generated secrets)."
     collect_config reuse
@@ -691,15 +812,17 @@ cmd_install() {
 }
 
 cmd_apply() {
-  require_env; preflight_docker; collect_config reuse
+  require_env; preflight_docker; need_openssl; collect_config reuse
+  append_missing
   apply_stack
 }
 
 cmd_upgrade() {
-  require_env; preflight_docker
+  require_env; preflight_docker; need_openssl
   local previous
   previous=$(env_get IMAGE_TAG "$ENV_FILE")
   collect_config reuse
+  append_missing
   if [ "$IMAGE_TAG" != "$previous" ]; then set_env_value IMAGE_TAG "$IMAGE_TAG"; fi
   if [ "$NO_BACKUP" = 0 ]; then cmd_backup || warn "Pre-upgrade backup failed; continuing."; fi
   apply_stack
@@ -773,7 +896,7 @@ cmd_status() {
   fi
 }
 
-cmd_render() { require_env; collect_config reuse; render_hub_bootstrap; }
+cmd_render() { require_env; need_openssl; collect_config reuse; append_missing; render_hub_bootstrap; }
 
 case "$COMMAND" in
   install)  cmd_install ;;

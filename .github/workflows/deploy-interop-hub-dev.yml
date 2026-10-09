@@ -7,6 +7,7 @@ on:
     paths:
       - 'services/interop-hub/**'
       - 'deploy/interop-hub/**'
+      - 'scripts/ci/**'
       - 'packages/shared-dotnet/**'
       - '.github/workflows/deploy-interop-hub-dev.yml'
   pull_request:
@@ -15,6 +16,7 @@ on:
     paths:
       - 'services/interop-hub/**'
       - 'deploy/interop-hub/**'
+      - 'scripts/ci/**'
       - 'packages/shared-dotnet/**'
       - '.github/workflows/deploy-interop-hub-dev.yml'
   workflow_dispatch:
@@ -103,16 +105,20 @@ jobs:
         CONNECTION_STRING: ${{ secrets.INTEROP_HUB_DB_CONNECTION_STRING }}
         HUB_PORTAL_CLIENT_SECRET: ${{ secrets.INTEROP_HUB_PORTAL_CLIENT_SECRET }}
         HUB_PAYLOAD_ENCRYPTION_KEY: ${{ secrets.INTEROP_HUB_PAYLOAD_ENCRYPTION_KEY }}
+        HUB_PORTAL_PUBLIC_KEY: ${{ vars.INTEROP_HUB_PORTAL_PUBLIC_KEY || secrets.INTEROP_HUB_PORTAL_PUBLIC_KEY }}
+        HUB_SIGNING_REQUIRED: ${{ vars.HUB_SIGNING_REQUIRED }}
         IMAGE_NAME: ${{ env.IMAGE_NAME }}
         IMAGE_TAG: ${{ env.IMAGE_TAG }}
       run: |
+        . scripts/ci/prepare-key-env.sh
+        prepare_key_env public HUB_PORTAL_PUBLIC_KEY
         for var in CONNECTION_STRING HUB_PORTAL_CLIENT_SECRET; do
           if [ -z "$(printenv $var)" ]; then
             echo "::error::$var is not configured. Set the matching GitHub secret (Settings -> Secrets and variables -> Actions)."
             exit 1
           fi
         done
-        for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING HUB_PORTAL_CLIENT_SECRET HUB_PAYLOAD_ENCRYPTION_KEY IMAGE_NAME IMAGE_TAG; do
+        for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING HUB_PORTAL_CLIENT_SECRET HUB_PAYLOAD_ENCRYPTION_KEY HUB_PORTAL_PUBLIC_KEY HUB_SIGNING_REQUIRED IMAGE_NAME IMAGE_TAG; do
           echo "$var=$(printenv $var)" >> deploy/interop-hub/.env
         done
 

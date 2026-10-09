@@ -110,13 +110,13 @@ The local hub also syncs a read-only **directory/entitlement snapshot** so the c
 | clinic <-> lab <-> pharmacy <-> billing, web apps, native apps on the LAN | works normally |
 | Messages to the patient app, portal, other tenants | online site: wait in the hub (and service outbox), delivered in order on reconnect. Air-gapped site (`UPSTREAM_ENABLED=false`): rejected with `upstream_disabled`, never queued |
 | Messages from the cloud to the cell | wait in the cloud mailbox (TTL 7 days) |
-| Workspace profile (branding, letterheads) | last-known copy from the on-disk cache (`WorkspaceProfile:CachePath` volume) |
+| Workspace profile (branding, letterheads) | the copy each service stored in its own database when the portal pushed it (`workspace.profile.updated`); nothing is fetched, so the site never calls the portal. Before the first message arrives the built-in branding is used |
 | License | valid until it expires; expiry gives a read-only grace period; renewal by heartbeat or file import |
 | Upgrades | need `ghcr.io`, or an air-gapped `docker load` |
 
 ## License, activation and heartbeat
 
-- Each facility has **one license** (decision D7), a signed token `<payload>.<signature>` verified locally against the authority public key (`FacilityLicenseValidator`), so verification needs no network.
+- Each facility has **one license** (decision D7), a signed token `<payload>.<signature>` verified locally against the authority public key configured as `FacilityLicense__PublicKeyPem` (`FACILITY_LICENSE_PUBLIC_KEY`, handed out by the portal operator; `FacilityLicenseValidator`), so verification needs no network.
 - **First-run activation** is `POST /api/v1/license/apply` on the facility API (anonymous bootstrap endpoint, reachable through the web container), done by `install.sh` / `install.ps1` from a token or a license **file**. The API stores the token, plan tier, limits and expiry in its database (`ClinicSettings`/equivalents). `GET /api/v1/license` exposes the state: `Active`, `ActivationRequired`, `Expired`, `Tampered`.
 - **Heartbeat** (online sites): the portal records `LastSeenAt` and `AppVersion` per facility (plan phase 4, "license heartbeat"), which also gives support a health view of on-prem nodes. Renewal rides on it. Air-gapped sites renew by **file import** (decision D6): the same activate command with the new file.
 
@@ -132,9 +132,12 @@ Two kinds of credentials exist and they must not be confused: the ones the **por
 |---|---|---|---|---|
 | Local hub (default) | **Upstream client**, ONE per cell, service `cell`: **`HubEdgeCredentials`** (`HubUrl`, `ClientId`, `ClientSecret`) | **Portal** (`HubOnboardingService`, an `EdgeCell` client of the tenant's cell, shown once, rotatable) | The local hub's **upstream** link to the cloud hub (not used with `UPSTREAM_ENABLED=false`) | `.env`: `UPSTREAM_HUB_URL`, `UPSTREAM_CLIENT_ID`, `UPSTREAM_CLIENT_SECRET` -> `Hub__Upstream__*`. **Not** in `hub-bootstrap.env` |
 | Local hub (default) | **Local clients**, one per service (`site-clinic`, `site-billing`, `site-laboratory`, ...) | **Installer**, generated on the host | Each facility service authenticating to the local hub | `.env`: `<SERVICE>_HUB_CLIENT_ID/SECRET` -> `Messaging__ClientId/ClientSecret`; the same values in `hub-bootstrap.env` -> `Hub__Bootstrap__Clients__N__*` |
-| No local hub (`--no-local-hub`) | **Per-service clients** for clinic and billing, plus the cloud hub URL | **Portal** (ids as returned; no `site-` prefix, never generated or defaulted by the installer) | `clinic-api` / `billing-api` authenticating to the cloud hub | `.env`: `MESSAGING_HUB_URL`, `CLINIC_HUB_CLIENT_ID/SECRET`, `BILLING_HUB_CLIENT_ID/SECRET` -> `Messaging__*`. No `UPSTREAM_*`; `hub-bootstrap.env` is comment-only |
+| Local hub (default) | **License authority public key** (one per portal environment) | **Portal operator** (`scripts/generate-license-keys`; only the public half leaves the portal) | Every service that validates licenses (clinic, laboratory, pharmacy, organization) | `.env`: `FACILITY_LICENSE_PUBLIC_KEY` (+ optional `FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS`) -> `FacilityLicense__PublicKeyPem` / `__PreviousPublicKeyPem`. Required, also with `--air-gapped` and `--no-local-hub` |
+| Local hub (default) | **Edge hub signing key** (ECDSA P-256 private key), issued with the upstream client | **Portal** (its public half is registered at the cloud hub for that client) | Signs the envelopes the local hub sends upstream | `.env`: `EDGE_HUB_SIGNING_KEY` -> `Hub__Upstream__SigningKey`. Not needed with `UPSTREAM_ENABLED=false` |
+| Local hub (default) | **Local client signing key pairs**, one per service | **Installer**, generated on the host | Each service signs its envelopes; the local hub verifies them (`Hub__Signing__Required`) | `.env`: `<SERVICE>_HUB_SIGNING_KEY` (private -> `Messaging__SigningKey`) and `<SERVICE>_HUB_PUBLIC_KEY`; the public half also in `hub-bootstrap.env` -> `Hub__Bootstrap__Clients__N__PublicKey` |
+| No local hub (`--no-local-hub`) | **Per-service clients** for clinic and billing, plus the cloud hub URL | **Portal** (ids as returned; no `site-` prefix, never generated or defaulted by the installer) | `clinic-api` / `billing-api` authenticating to the cloud hub | `.env`: `MESSAGING_HUB_URL`, `CLINIC_HUB_CLIENT_ID/SECRET`, `BILLING_HUB_CLIENT_ID/SECRET` -> `Messaging__*`, plus the portal-issued signing keys `CLINIC_HUB_SIGNING_KEY` / `BILLING_HUB_SIGNING_KEY` -> `Messaging__SigningKey`. No `UPSTREAM_*`; `hub-bootstrap.env` is comment-only |
 
-Also in `.env`: `TENANT_ID`, `EDGE_CELL_ID`, the facility ids, `PORTAL_API_URL`, `CLINIC_PUBLIC_UPLOAD_BASE_URL`, the license (activation step), and generated `POSTGRES_PASSWORD`, `INTERNAL_API_KEY`, per-service `*_JWT_SIGNING_KEY`, `CLINIC_ENCRYPTION_MASTER_SECRET` (wraps the per-file keys of the clinical records: never change it, keep a copy of `.env`), `HANGFIRE_DASHBOARD_PASSWORD`, `HUB_PAYLOAD_ENCRYPTION_KEY`.
+Also in `.env`: `TENANT_ID`, `EDGE_CELL_ID`, the facility ids, `CLINIC_PUBLIC_UPLOAD_BASE_URL`, the license (activation step), and generated `POSTGRES_PASSWORD`, `INTERNAL_API_KEY`, per-service `*_JWT_SIGNING_KEY` (required, no generated-on-disk fallback), `CLINIC_DOCUMENT_SIGNING_KEY` / `LABORATORY_DOCUMENT_SIGNING_KEY` (verification QR codes), `GAMOT_UPSC_SECRET_KEY`, `CLINIC_ENCRYPTION_MASTER_SECRET` (wraps the per-file keys of the clinical records: required, never replace it without moving the old value to `CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_0`, keep a copy of `.env`), `HANGFIRE_DASHBOARD_PASSWORD`, `HUB_PAYLOAD_ENCRYPTION_KEY`. Rotation procedures: [deploy/edge/README.md](../../deploy/edge/README.md#keys-and-rotation).
 
 `CLINIC_PUBLIC_UPLOAD_BASE_URL` (`--public-upload-url`) is the public URL of the lab-result upload page printed on lab slips (`Clinic__PublicUploadBaseUrl`, `{base}/{token}`). That page is a cloud page: the site only needs outbound access, and uploaded results are relayed back to the clinic through the hub. Lab orders cannot be issued without it, so the installer asks for it (it may stay empty only on an air-gapped site, with a warning).
 
@@ -165,7 +168,7 @@ Several facility stacks of one site share **one** hub: expose it with `HUB_BIND=
 
 ## Air-gapped mode
 
-No cloud link at all (decision D6): `--air-gapped` / `-AirGapped` sets `UPSTREAM_ENABLED=false` in `.env` (default `true`), passed to the hub as `Hub__Upstream__Enabled`. In Local mode the hub then needs **no upstream settings** (no placeholders, no dummy secret; `PORTAL_API_URL` may be empty, compose falls back to the unreachable `http://portal.invalid` so the profile fetch fails fast and the cache or built-in branding is used) and never forwards, pulls or syncs.
+No cloud link at all (decision D6): `--air-gapped` / `-AirGapped` sets `UPSTREAM_ENABLED=false` in `.env` (default `true`), passed to the hub as `Hub__Upstream__Enabled`. In Local mode the hub then needs **no upstream settings** (no placeholders, no dummy secret) and never forwards, pulls or syncs.
 
 - Same-cell traffic works as usual on the LAN.
 - Messages for a non-local target (another cell, the portal, a patient) are **rejected with reason `upstream_disabled`, not queued**; nothing waits for a link that will not come.
@@ -173,7 +176,7 @@ No cloud link at all (decision D6): `--air-gapped` / `-AirGapped` sets `UPSTREAM
 - Licenses are imported from file, images by `docker load`.
 - It cannot be combined with `--no-local-hub` (without a hub the services call the cloud hub directly): the installer refuses it.
 
-To connect the site later: `UPSTREAM_ENABLED=true`, the portal's `HubEdgeCredentials` as `UPSTREAM_*`, `PORTAL_API_URL`, then `./install.sh apply`.
+To connect the site later: `UPSTREAM_ENABLED=true`, the portal's `HubEdgeCredentials` as `UPSTREAM_*`, then `./install.sh apply`.
 
 ## Limits and open points
 

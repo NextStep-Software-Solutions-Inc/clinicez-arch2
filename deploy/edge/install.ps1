@@ -22,6 +22,10 @@
   are rejected, not queued); not combinable with -NoLocalHub. -With laboratory,pharmacy,organization,cashier switches optional
   profiles on. -Force rewrites .env (old one saved as .env.bak.<time>, generated secrets kept).
   -Yes never prompts. -NoPull skips the pull (images loaded with `docker load`). -NoStart only writes the configuration.
+  Keys (ECDSA P-256, one-line base64 of a PEM). -LicensePublicKey <key> | -LicensePublicKeyFile <pem file>: the portal's license PUBLIC key
+  (required, also air-gapped; a PEM file is encoded for you). -EdgeSigningKey | -EdgeSigningKeyFile: the signing PRIVATE key the portal issued
+  with the edge client (local hub, not with -AirGapped). With the local hub the installer GENERATES one key pair per service client (CNG, no
+  openssl needed); with -NoLocalHub the portal-issued -ClinicHubSigningKey[File] / -BillingHubSigningKey[File] are used instead.
 #>
 [CmdletBinding()]
 param(
@@ -35,13 +39,17 @@ param(
   [string]$FacilityId = '', [string]$FacilityName = '',
   [string]$LabFacilityId = '', [string]$PharmacyFacilityId = '', [string]$OrgFacilityId = '',
   [string]$With = '',
-  [string]$CloudHubUrl = '', [string]$EdgeClientId = '', [string]$EdgeClientSecret = '', [string]$PortalApiUrl = '', [string]$PublicUploadUrl = '',
+  [string]$CloudHubUrl = '', [string]$EdgeClientId = '', [string]$EdgeClientSecret = '', [string]$PublicUploadUrl = '',
   [string]$BaseDomain = '',
   [string]$ClinicHubClientId = '', [string]$ClinicHubClientSecret = '',
   [string]$BillingHubClientId = '', [string]$BillingHubClientSecret = '',
   [string]$LicenseToken = '', [string]$LicenseFile = '',
   [string]$LabLicenseToken = '', [string]$LabLicenseFile = '',
   [string]$PharmacyLicenseToken = '', [string]$PharmacyLicenseFile = '',
+  [string]$LicensePublicKey = '', [string]$LicensePublicKeyFile = '',
+  [string]$EdgeSigningKey = '', [string]$EdgeSigningKeyFile = '',
+  [string]$ClinicHubSigningKey = '', [string]$ClinicHubSigningKeyFile = '',
+  [string]$BillingHubSigningKey = '', [string]$BillingHubSigningKeyFile = '',
   [string]$BackupDir = '',
 
   [switch]$AirGapped, [switch]$NoLocalHub, [switch]$Force, [switch]$Yes,
@@ -60,16 +68,25 @@ $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $Keys = @(
   'GHCR_OWNER_REPO', 'IMAGE_TAG', 'COMPOSE_PROFILES', 'TENANT_ID', 'EDGE_CELL_ID', 'EDGE_CELL_NAME',
   'CLINIC_FACILITY_ID', 'CLINIC_FACILITY_NAME', 'LABORATORY_FACILITY_ID', 'LABORATORY_FACILITY_NAME',
-  'PHARMACY_FACILITY_ID', 'PHARMACY_FACILITY_NAME', 'ORGANIZATION_FACILITY_ID', 'ORGANIZATION_FACILITY_NAME', 'BASE_DOMAIN',
-  'UPSTREAM_ENABLED', 'UPSTREAM_HUB_URL', 'UPSTREAM_CLIENT_ID', 'UPSTREAM_CLIENT_SECRET', 'PORTAL_API_URL', 'CLINIC_PUBLIC_UPLOAD_BASE_URL', 'MESSAGING_HUB_URL',
+  'PHARMACY_FACILITY_ID', 'PHARMACY_FACILITY_NAME', 'ORGANIZATION_FACILITY_ID', 'ORGANIZATION_FACILITY_NAME', 'BASE_DOMAIN', 'CORS_ALLOWED_ORIGINS',
+  'UPSTREAM_ENABLED', 'UPSTREAM_HUB_URL', 'UPSTREAM_CLIENT_ID', 'UPSTREAM_CLIENT_SECRET', 'CLINIC_PUBLIC_UPLOAD_BASE_URL', 'MESSAGING_HUB_URL',
   'CLINIC_HUB_CLIENT_ID', 'CLINIC_HUB_CLIENT_SECRET', 'BILLING_HUB_CLIENT_ID', 'BILLING_HUB_CLIENT_SECRET',
   'LABORATORY_HUB_CLIENT_ID', 'LABORATORY_HUB_CLIENT_SECRET', 'PHARMACY_HUB_CLIENT_ID', 'PHARMACY_HUB_CLIENT_SECRET',
   'ORGANIZATION_HUB_CLIENT_ID', 'ORGANIZATION_HUB_CLIENT_SECRET', 'HUB_PAYLOAD_ENCRYPTION_KEY', 'HUB_BIND', 'HUB_LAN_PORT',
   'POSTGRES_USER', 'POSTGRES_PASSWORD', 'INTERNAL_API_KEY', 'PHARMACY_API_KEY', 'HANGFIRE_DASHBOARD_PASSWORD',
   'CLINIC_JWT_SIGNING_KEY', 'BILLING_JWT_SIGNING_KEY', 'LABORATORY_JWT_SIGNING_KEY', 'PHARMACY_JWT_SIGNING_KEY', 'ORGANIZATION_JWT_SIGNING_KEY', 'CLINIC_ENCRYPTION_MASTER_SECRET',
+  'CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_0', 'CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_1', 'CLINIC_DOCUMENT_SIGNING_KEY', 'LABORATORY_DOCUMENT_SIGNING_KEY', 'GAMOT_UPSC_SECRET_KEY',
+  'FACILITY_LICENSE_PUBLIC_KEY', 'FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS', 'HUB_SIGNING_REQUIRED', 'EDGE_HUB_SIGNING_KEY',
+  'CLINIC_HUB_SIGNING_KEY', 'CLINIC_HUB_PUBLIC_KEY', 'BILLING_HUB_SIGNING_KEY', 'BILLING_HUB_PUBLIC_KEY',
+  'LABORATORY_HUB_SIGNING_KEY', 'LABORATORY_HUB_PUBLIC_KEY', 'PHARMACY_HUB_SIGNING_KEY', 'PHARMACY_HUB_PUBLIC_KEY',
+  'ORGANIZATION_HUB_SIGNING_KEY', 'ORGANIZATION_HUB_PUBLIC_KEY',
   'CLINIC_WEB_PORT', 'LABORATORY_WEB_PORT', 'PHARMACY_WEB_PORT', 'CASHIER_WEB_PORT',
   'BACKUP_DIR', 'BACKUP_INTERVAL_HOURS', 'BACKUP_RETENTION_DAYS'
 )
+
+# Keys that must be a P-256 PEM (checked, normalized to one-line base64): public / private.
+$PubKeyVars = @('FACILITY_LICENSE_PUBLIC_KEY', 'FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS', 'CLINIC_HUB_PUBLIC_KEY', 'BILLING_HUB_PUBLIC_KEY', 'LABORATORY_HUB_PUBLIC_KEY', 'PHARMACY_HUB_PUBLIC_KEY', 'ORGANIZATION_HUB_PUBLIC_KEY')
+$PrivKeyVars = @('EDGE_HUB_SIGNING_KEY', 'CLINIC_HUB_SIGNING_KEY', 'BILLING_HUB_SIGNING_KEY', 'LABORATORY_HUB_SIGNING_KEY', 'PHARMACY_HUB_SIGNING_KEY', 'ORGANIZATION_HUB_SIGNING_KEY')
 
 # service, env prefix, compose profile ('' = always), hub facility type ('-' = no facility)
 $Services = @(
@@ -180,6 +197,145 @@ function Test-SafeValue([string]$Key, [switch]$AllowSpaces) {
   if (-not $AllowSpaces -and $v -match '\s') { Stop-Install "$Key must not contain spaces." }
 }
 
+# ---- ECDSA P-256 keys. Windows PowerShell 5.1 (.NET Framework) has no ExportPkcs8PrivateKey, so CNG creates the key (ephemeral,
+# plaintext-exportable), X / Y / D are read from the ECCPrivateBlob and the DER is written by hand:
+#   private = SEC1 "EC PRIVATE KEY" (like openssl ecparam -genkey), public = SubjectPublicKeyInfo "PUBLIC KEY" (like openssl ec -pubout).
+# Same code as scripts/lib/ec-keypair.ps1 (this bundle cannot reach scripts/). Values live in .env as one-line base64 of the PEM text.
+function ConvertTo-EcPemText([byte[]]$Der, [string]$Label) {
+  $b64 = [Convert]::ToBase64String($Der)
+  $sb = New-Object System.Text.StringBuilder
+  [void]$sb.Append("-----BEGIN $Label-----`n")
+  for ($i = 0; $i -lt $b64.Length; $i += 64) {
+    [void]$sb.Append($b64.Substring($i, [Math]::Min(64, $b64.Length - $i)))
+    [void]$sb.Append("`n")
+  }
+  [void]$sb.Append("-----END $Label-----`n")
+  return $sb.ToString()
+}
+
+function New-EcP256Raw {
+  $cp = New-Object System.Security.Cryptography.CngKeyCreationParameters
+  $cp.ExportPolicy = [System.Security.Cryptography.CngExportPolicies]::AllowPlaintextExport
+  $cp.KeyUsage = [System.Security.Cryptography.CngKeyUsages]::Signing
+  # [NullString]::Value, not $null: PowerShell would turn $null into "" and CNG would then PERSIST a key named "" in the key store.
+  $key = [System.Security.Cryptography.CngKey]::Create([System.Security.Cryptography.CngAlgorithm]::ECDsaP256, [NullString]::Value, $cp)
+  try { $blob = $key.Export([System.Security.Cryptography.CngKeyBlobFormat]::EccPrivateBlob) } finally { $key.Dispose() }
+  if ([BitConverter]::ToInt32($blob, 4) -ne 32 -or $blob.Length -ne 104) { Stop-Install 'Unexpected ECC private blob layout.' }
+  $x = New-Object byte[] 32; $y = New-Object byte[] 32; $d = New-Object byte[] 32
+  [Array]::Copy($blob, 8, $x, 0, 32); [Array]::Copy($blob, 40, $y, 0, 32); [Array]::Copy($blob, 72, $d, 0, 32)
+  return @{ X = $x; Y = $y; D = $d }
+}
+
+function ConvertTo-EcPrivatePem($Raw) {
+  $der = New-Object System.Collections.Generic.List[byte]
+  $der.AddRange([byte[]](0x30, 0x77, 0x02, 0x01, 0x01, 0x04, 0x20))
+  $der.AddRange([byte[]]$Raw.D)
+  $der.AddRange([byte[]](0xA0, 0x0A, 0x06, 0x08, 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x03, 0x01, 0x07, 0xA1, 0x44, 0x03, 0x42, 0x00, 0x04))
+  $der.AddRange([byte[]]$Raw.X)
+  $der.AddRange([byte[]]$Raw.Y)
+  return (ConvertTo-EcPemText $der.ToArray() 'EC PRIVATE KEY')
+}
+
+function ConvertTo-EcPublicPem($Raw) {
+  $der = New-Object System.Collections.Generic.List[byte]
+  $der.AddRange([byte[]](0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x02, 0x01, 0x06, 0x08, 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x03, 0x01, 0x07, 0x03, 0x42, 0x00, 0x04))
+  $der.AddRange([byte[]]$Raw.X)
+  $der.AddRange([byte[]]$Raw.Y)
+  return (ConvertTo-EcPemText $der.ToArray() 'PUBLIC KEY')
+}
+
+function Test-ByteRun([byte[]]$Data, [int]$Offset, [byte[]]$Expected) {
+  if ($Offset + $Expected.Length -gt $Data.Length) { return $false }
+  for ($i = 0; $i -lt $Expected.Length; $i++) { if ($Data[$Offset + $i] -ne $Expected[$i]) { return $false } }
+  return $true
+}
+
+function ConvertFrom-EcPem([string]$Pem, [string]$Kind) {
+  # Parses the two PEM shapes above (what openssl and the key scripts produce) into @{ X; Y; D }. Throws on anything else.
+  if ($Pem -notmatch '-----BEGIN ([A-Z ]+)-----([^-]+)-----END \1-----') { throw 'Not a PEM block.' }
+  $label = $Matches[1]
+  $der = [Convert]::FromBase64String(($Matches[2] -replace '\s', ''))
+  $x = New-Object byte[] 32; $y = New-Object byte[] 32
+  if ($Kind -eq 'public') {
+    $hdr = [byte[]](0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x02, 0x01, 0x06, 0x08, 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x03, 0x01, 0x07, 0x03, 0x42, 0x00, 0x04)
+    if ($label -ne 'PUBLIC KEY' -or $der.Length -ne 91 -or -not (Test-ByteRun $der 0 $hdr)) { throw 'Not an uncompressed P-256 public key.' }
+    [Array]::Copy($der, 27, $x, 0, 32); [Array]::Copy($der, 59, $y, 0, 32)
+    return @{ X = $x; Y = $y }
+  }
+  $pre = [byte[]](0x30, 0x77, 0x02, 0x01, 0x01, 0x04, 0x20)
+  $mid = [byte[]](0xA0, 0x0A, 0x06, 0x08, 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x03, 0x01, 0x07, 0xA1, 0x44, 0x03, 0x42, 0x00, 0x04)
+  if ($label -ne 'EC PRIVATE KEY' -or $der.Length -ne 121 -or -not (Test-ByteRun $der 0 $pre) -or -not (Test-ByteRun $der 39 $mid)) { throw 'Not a P-256 SEC1 private key.' }
+  $d = New-Object byte[] 32
+  [Array]::Copy($der, 7, $d, 0, 32); [Array]::Copy($der, 57, $x, 0, 32); [Array]::Copy($der, 89, $y, 0, 32)
+  return @{ X = $x; Y = $y; D = $d }
+}
+
+function ConvertTo-CngEcKey($Raw, [bool]$Private) {
+  $ms = New-Object System.IO.MemoryStream
+  $bw = New-Object System.IO.BinaryWriter($ms)
+  if ($Private) { $bw.Write([int]0x32534345) } else { $bw.Write([int]0x31534345) }   # 'ECS2' / 'ECS1' = ECDSA P-256 blobs
+  $bw.Write([int]32)
+  $bw.Write([byte[]]$Raw.X); $bw.Write([byte[]]$Raw.Y)
+  if ($Private) { $bw.Write([byte[]]$Raw.D) }
+  $bw.Flush()
+  $fmt = [System.Security.Cryptography.CngKeyBlobFormat]::EccPublicBlob
+  if ($Private) { $fmt = [System.Security.Cryptography.CngKeyBlobFormat]::EccPrivateBlob }
+  return [System.Security.Cryptography.CngKey]::Import($ms.ToArray(), $fmt)
+}
+
+function Format-KeyValue([string]$Value) {
+  # A PEM (text) becomes one-line base64 of the PEM; base64 just loses whitespace.
+  if ([string]::IsNullOrEmpty($Value)) { return '' }
+  if ($Value -match '-----BEGIN') {
+    $text = (($Value -replace "`r", '').Trim()) + "`n"
+    return [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($text))
+  }
+  return ($Value -replace '\s', '')
+}
+
+function Read-KeyFile([string]$Path) {
+  if (-not (Test-Path -LiteralPath $Path)) { Stop-Install "Key file not found: $Path" }
+  return (Format-KeyValue ([System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $Path).Path)))
+}
+
+function Test-KeyValue([string]$Key, [string]$Kind) {
+  # Empty is fine here (required-ness is checked elsewhere); otherwise it must be a P-256 PEM key.
+  $v = $Cfg[$Key]
+  if ([string]::IsNullOrEmpty($v)) { return }
+  try {
+    $pem = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($v))
+    if ($Kind -eq 'public') {
+      $k = ConvertTo-CngEcKey (ConvertFrom-EcPem $pem 'public') $false
+    } elseif ($pem -match '-----BEGIN PRIVATE KEY-----([^-]+)-----END PRIVATE KEY-----') {
+      $k = [System.Security.Cryptography.CngKey]::Import([Convert]::FromBase64String(($Matches[1] -replace '\s', '')), [System.Security.Cryptography.CngKeyBlobFormat]::Pkcs8PrivateBlob)
+      # A PKCS#8 EC key carries no usage, so CNG imports it as ECDH_P256; both names mean the P-256 curve.
+      if ($k.Algorithm.Algorithm -ne 'ECDSA_P256' -and $k.Algorithm.Algorithm -ne 'ECDH_P256') { throw 'Not P-256.' }
+    } else {
+      $k = ConvertTo-CngEcKey (ConvertFrom-EcPem $pem 'private') $true
+    }
+    $k.Dispose()
+  } catch {
+    Stop-Install "$Key is not a valid ECDSA P-256 $Kind key (expected base64 of a PEM; a PEM file can be given with the matching -...File parameter)."
+  }
+}
+
+function Set-EnsuredKeyPair([string]$PrivKey, [string]$PubKey) {
+  # Generates the pair when the private key is missing; derives a lost public half from it.
+  $utf8 = New-Object System.Text.UTF8Encoding($false)
+  if ([string]::IsNullOrEmpty($Cfg[$PrivKey])) {
+    $raw = New-EcP256Raw
+    $Cfg[$PrivKey] = [Convert]::ToBase64String($utf8.GetBytes((ConvertTo-EcPrivatePem $raw)))
+    $Cfg[$PubKey] = [Convert]::ToBase64String($utf8.GetBytes((ConvertTo-EcPublicPem $raw)))
+  } elseif ([string]::IsNullOrEmpty($Cfg[$PubKey])) {
+    try {
+      $raw = ConvertFrom-EcPem ([System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Cfg[$PrivKey]))) 'private'
+    } catch {
+      Stop-Install "$PrivKey is not a SEC1 EC private key: cannot derive $PubKey. Set both, or remove both to generate a new pair."
+    }
+    $Cfg[$PubKey] = [Convert]::ToBase64String($utf8.GetBytes((ConvertTo-EcPublicPem $raw)))
+  }
+}
+
 function Read-LicenseToken([string]$Path) {
   if (-not (Test-Path -LiteralPath $Path)) { Stop-Install "License file not found: $Path" }
   $raw = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $Path).Path).Trim()
@@ -207,12 +363,18 @@ $FromArgs = @{
   CLINIC_FACILITY_ID = $FacilityId; CLINIC_FACILITY_NAME = $FacilityName
   LABORATORY_FACILITY_ID = $LabFacilityId; PHARMACY_FACILITY_ID = $PharmacyFacilityId; ORGANIZATION_FACILITY_ID = $OrgFacilityId
   UPSTREAM_HUB_URL = $CloudHubUrl; UPSTREAM_CLIENT_ID = $EdgeClientId; UPSTREAM_CLIENT_SECRET = $EdgeClientSecret
-  PORTAL_API_URL = $PortalApiUrl; BASE_DOMAIN = $BaseDomain; CLINIC_PUBLIC_UPLOAD_BASE_URL = $PublicUploadUrl
+  BASE_DOMAIN = $BaseDomain; CLINIC_PUBLIC_UPLOAD_BASE_URL = $PublicUploadUrl
   CLINIC_HUB_CLIENT_ID = $ClinicHubClientId; CLINIC_HUB_CLIENT_SECRET = $ClinicHubClientSecret
   BILLING_HUB_CLIENT_ID = $BillingHubClientId; BILLING_HUB_CLIENT_SECRET = $BillingHubClientSecret
   UPSTREAM_ENABLED = ''
   BACKUP_DIR = $BackupDir
+  FACILITY_LICENSE_PUBLIC_KEY = (Format-KeyValue $LicensePublicKey); EDGE_HUB_SIGNING_KEY = (Format-KeyValue $EdgeSigningKey)
+  CLINIC_HUB_SIGNING_KEY = (Format-KeyValue $ClinicHubSigningKey); BILLING_HUB_SIGNING_KEY = (Format-KeyValue $BillingHubSigningKey)
 }
+if ($LicensePublicKeyFile) { $FromArgs['FACILITY_LICENSE_PUBLIC_KEY'] = Read-KeyFile $LicensePublicKeyFile }
+if ($EdgeSigningKeyFile) { $FromArgs['EDGE_HUB_SIGNING_KEY'] = Read-KeyFile $EdgeSigningKeyFile }
+if ($ClinicHubSigningKeyFile) { $FromArgs['CLINIC_HUB_SIGNING_KEY'] = Read-KeyFile $ClinicHubSigningKeyFile }
+if ($BillingHubSigningKeyFile) { $FromArgs['BILLING_HUB_SIGNING_KEY'] = Read-KeyFile $BillingHubSigningKeyFile }
 if ($AirGapped) { $FromArgs['UPSTREAM_ENABLED'] = 'false' }
 if ($AirGapped -and $NoLocalHub) {
   Stop-Install '-AirGapped cannot be combined with -NoLocalHub: without a local hub the services talk to the cloud hub directly, so nothing could run offline.'
@@ -298,7 +460,7 @@ function Get-Config([string]$Mode) {
     if ((",$($old['COMPOSE_PROFILES']),") -like '*,local-hub,*') { $oldMode = 'A' } else { $oldMode = 'B' }
   }
   $fromFlags = @{}
-  foreach ($k in 'CLINIC_HUB_CLIENT_ID', 'CLINIC_HUB_CLIENT_SECRET', 'BILLING_HUB_CLIENT_ID', 'BILLING_HUB_CLIENT_SECRET', 'UPSTREAM_HUB_URL', 'UPSTREAM_CLIENT_ID', 'UPSTREAM_CLIENT_SECRET') { $fromFlags[$k] = $FromArgs[$k] }
+  foreach ($k in 'CLINIC_HUB_CLIENT_ID', 'CLINIC_HUB_CLIENT_SECRET', 'BILLING_HUB_CLIENT_ID', 'BILLING_HUB_CLIENT_SECRET', 'UPSTREAM_HUB_URL', 'UPSTREAM_CLIENT_ID', 'UPSTREAM_CLIENT_SECRET', 'EDGE_HUB_SIGNING_KEY', 'CLINIC_HUB_SIGNING_KEY', 'BILLING_HUB_SIGNING_KEY') { $fromFlags[$k] = $FromArgs[$k] }
   foreach ($k in $Keys) {
     $v = ''
     if ($FromArgs.ContainsKey($k)) { $v = $FromArgs[$k] }
@@ -326,20 +488,22 @@ function Get-Config([string]$Mode) {
   Set-Default 'BACKUP_DIR' './backups'
   Set-Default 'BACKUP_INTERVAL_HOURS' '24'
   Set-Default 'BACKUP_RETENTION_DAYS' '14'
+  Set-Default 'HUB_SIGNING_REQUIRED' 'true'
 
   if ($Mode -eq 'new') { Select-Profiles }
   $hubB = -not (Test-HasProfile 'local-hub')
 
   # Flags that belong to the other hub mode are refused instead of silently ignored.
-  if ((-not $hubB) -and ($fromFlags['CLINIC_HUB_CLIENT_ID'] -or $fromFlags['CLINIC_HUB_CLIENT_SECRET'] -or $fromFlags['BILLING_HUB_CLIENT_ID'] -or $fromFlags['BILLING_HUB_CLIENT_SECRET'])) {
-    Stop-Install '-ClinicHubClient* / -BillingHubClient* are the portal''s per-service clients and only fit -NoLocalHub. With the local hub the installer generates the local site-<service> clients.'
+  if ((-not $hubB) -and ($fromFlags['CLINIC_HUB_CLIENT_ID'] -or $fromFlags['CLINIC_HUB_CLIENT_SECRET'] -or $fromFlags['BILLING_HUB_CLIENT_ID'] -or $fromFlags['BILLING_HUB_CLIENT_SECRET'] -or $fromFlags['CLINIC_HUB_SIGNING_KEY'] -or $fromFlags['BILLING_HUB_SIGNING_KEY'])) {
+    Stop-Install '-ClinicHubClient* / -BillingHubClient* / -ClinicHubSigningKey* / -BillingHubSigningKey* are the portal''s per-service clients and only fit -NoLocalHub. With the local hub the installer generates the local site-<service> clients and their signing keys.'
   }
-  if ($hubB -and ($fromFlags['UPSTREAM_CLIENT_ID'] -or $fromFlags['UPSTREAM_CLIENT_SECRET'])) {
-    Stop-Install '-EdgeClientId/-EdgeClientSecret are the upstream client of the LOCAL hub. With -NoLocalHub use -ClinicHubClient* and -BillingHubClient*.'
+  if ($hubB -and ($fromFlags['UPSTREAM_CLIENT_ID'] -or $fromFlags['UPSTREAM_CLIENT_SECRET'] -or $fromFlags['EDGE_HUB_SIGNING_KEY'])) {
+    Stop-Install '-EdgeClientId/-EdgeClientSecret/-EdgeSigningKey* are the upstream client of the LOCAL hub. With -NoLocalHub use -ClinicHubClient*, -BillingHubClient* and the matching -*HubSigningKey*.'
   }
   # Switching hub mode with -Force: the old clients are of another kind (local site-<svc> vs portal-issued), never reuse them.
   if ($Mode -eq 'new' -and $oldMode -ne 'none' -and (($oldMode -eq 'B') -ne $hubB)) {
-    foreach ($k in 'CLINIC_HUB_CLIENT_ID', 'CLINIC_HUB_CLIENT_SECRET', 'BILLING_HUB_CLIENT_ID', 'BILLING_HUB_CLIENT_SECRET') { $Cfg[$k] = $fromFlags[$k] }
+    foreach ($k in 'CLINIC_HUB_CLIENT_ID', 'CLINIC_HUB_CLIENT_SECRET', 'BILLING_HUB_CLIENT_ID', 'BILLING_HUB_CLIENT_SECRET', 'CLINIC_HUB_SIGNING_KEY', 'BILLING_HUB_SIGNING_KEY') { $Cfg[$k] = $fromFlags[$k] }
+    $Cfg['CLINIC_HUB_PUBLIC_KEY'] = ''; $Cfg['BILLING_HUB_PUBLIC_KEY'] = ''
     $Cfg['MESSAGING_HUB_URL'] = ''
   }
 
@@ -350,13 +514,14 @@ function Get-Config([string]$Mode) {
     if (Test-HasProfile 'laboratory') { Read-Value 'LABORATORY_FACILITY_ID' 'Laboratory facility id (GUID)' }
     if (Test-HasProfile 'pharmacy') { Read-Value 'PHARMACY_FACILITY_ID' 'Pharmacy facility id (GUID)' }
     if (Test-HasProfile 'organization') { Read-Value 'ORGANIZATION_FACILITY_ID' 'Organization facility id (GUID)' }
+    Read-Value 'FACILITY_LICENSE_PUBLIC_KEY' 'License public key (base64 of PEM, from the portal; or pass -LicensePublicKeyFile)'
   }
 
   if (@('true', 'false') -notcontains $Cfg['UPSTREAM_ENABLED']) { Stop-Install 'UPSTREAM_ENABLED must be true or false.' }
   if ($hubB) {
     # No local hub: no upstream at all. MESSAGING_HUB_URL is the cloud hub; clinic and billing use the portal's own clients.
     $Cfg['UPSTREAM_ENABLED'] = 'true'
-    foreach ($k in 'UPSTREAM_HUB_URL', 'UPSTREAM_CLIENT_ID', 'UPSTREAM_CLIENT_SECRET', 'LABORATORY_HUB_CLIENT_ID', 'LABORATORY_HUB_CLIENT_SECRET', 'PHARMACY_HUB_CLIENT_ID', 'PHARMACY_HUB_CLIENT_SECRET', 'ORGANIZATION_HUB_CLIENT_ID', 'ORGANIZATION_HUB_CLIENT_SECRET') { $Cfg[$k] = '' }
+    foreach ($k in 'UPSTREAM_HUB_URL', 'UPSTREAM_CLIENT_ID', 'UPSTREAM_CLIENT_SECRET', 'LABORATORY_HUB_CLIENT_ID', 'LABORATORY_HUB_CLIENT_SECRET', 'PHARMACY_HUB_CLIENT_ID', 'PHARMACY_HUB_CLIENT_SECRET', 'ORGANIZATION_HUB_CLIENT_ID', 'ORGANIZATION_HUB_CLIENT_SECRET', 'EDGE_HUB_SIGNING_KEY', 'CLINIC_HUB_PUBLIC_KEY', 'BILLING_HUB_PUBLIC_KEY', 'LABORATORY_HUB_SIGNING_KEY', 'LABORATORY_HUB_PUBLIC_KEY', 'PHARMACY_HUB_SIGNING_KEY', 'PHARMACY_HUB_PUBLIC_KEY', 'ORGANIZATION_HUB_SIGNING_KEY', 'ORGANIZATION_HUB_PUBLIC_KEY') { $Cfg[$k] = '' }
     if ($fromFlags['UPSTREAM_HUB_URL']) { $Cfg['MESSAGING_HUB_URL'] = $fromFlags['UPSTREAM_HUB_URL'] }
     if ($Mode -eq 'new') {
       Read-Value 'MESSAGING_HUB_URL' 'Cloud hub URL (portal HubEdgeCredentials.HubUrl)'
@@ -364,7 +529,8 @@ function Get-Config([string]$Mode) {
       Read-Value 'CLINIC_HUB_CLIENT_SECRET' 'Clinic hub client secret (portal-issued)' -Secret
       Read-Value 'BILLING_HUB_CLIENT_ID' 'Billing hub client id (portal-issued)'
       Read-Value 'BILLING_HUB_CLIENT_SECRET' 'Billing hub client secret (portal-issued)' -Secret
-      Read-Value 'PORTAL_API_URL' 'Cloud portal API URL'
+      Read-Value 'CLINIC_HUB_SIGNING_KEY' 'Clinic hub signing key (portal-issued, base64 of PEM)' -Secret
+      Read-Value 'BILLING_HUB_SIGNING_KEY' 'Billing hub signing key (portal-issued, base64 of PEM)' -Secret
       Read-Value 'CLINIC_PUBLIC_UPLOAD_BASE_URL' 'Public lab-upload page URL (cloud portal)'
     }
   } else {
@@ -373,7 +539,7 @@ function Get-Config([string]$Mode) {
       Read-Value 'UPSTREAM_HUB_URL' 'Cloud hub URL (portal HubEdgeCredentials.HubUrl)'
       Read-Value 'UPSTREAM_CLIENT_ID' 'Upstream edge client id (portal HubEdgeCredentials.ClientId)'
       Read-Value 'UPSTREAM_CLIENT_SECRET' 'Upstream edge client secret (portal HubEdgeCredentials.ClientSecret)' -Secret
-      Read-Value 'PORTAL_API_URL' 'Cloud portal API URL'
+      Read-Value 'EDGE_HUB_SIGNING_KEY' 'Edge hub signing key (portal-issued with the edge client, base64 of PEM)' -Secret
       Read-Value 'CLINIC_PUBLIC_UPLOAD_BASE_URL' 'Public lab-upload page URL (cloud portal)'
     }
   }
@@ -384,12 +550,15 @@ function Get-Config([string]$Mode) {
     Write-Warn '-AirGapped is ignored on an existing .env: set UPSTREAM_ENABLED=false in .env and run .\install.ps1 apply (or re-run with -Force).'
   }
 
+  foreach ($k in ($PubKeyVars + $PrivKeyVars)) { $Cfg[$k] = Format-KeyValue $Cfg[$k] }
+
   # Mode A: local hub clients site-<svc>, generated once then kept (read back from .env above). Mode B: the clinic and billing
   # clients are the portal's (asked above, never generated) and the other services do not run.
   foreach ($s in $Services) {
     if (-not $hubB) {
       Set-Default "$($s.Prefix)_HUB_CLIENT_ID" "site-$($s.Svc)"
       Set-GeneratedSecret "$($s.Prefix)_HUB_CLIENT_SECRET" 40
+      Set-EnsuredKeyPair "$($s.Prefix)_HUB_SIGNING_KEY" "$($s.Prefix)_HUB_PUBLIC_KEY"
     }
     Set-GeneratedSecret "$($s.Prefix)_JWT_SIGNING_KEY" 64
   }
@@ -397,9 +566,12 @@ function Get-Config([string]$Mode) {
   Set-GeneratedSecret 'INTERNAL_API_KEY' 48
   Set-GeneratedSecret 'HANGFIRE_DASHBOARD_PASSWORD' 24
   Set-GeneratedSecret 'CLINIC_ENCRYPTION_MASTER_SECRET' 64
+  Set-GeneratedSecret 'CLINIC_DOCUMENT_SIGNING_KEY' 64
+  Set-GeneratedSecret 'LABORATORY_DOCUMENT_SIGNING_KEY' 64
+  Set-GeneratedSecret 'GAMOT_UPSC_SECRET_KEY' 64
   if ([string]::IsNullOrEmpty($Cfg['HUB_PAYLOAD_ENCRYPTION_KEY'])) { $Cfg['HUB_PAYLOAD_ENCRYPTION_KEY'] = New-Base64Key32 }
 
-  foreach ($k in 'UPSTREAM_HUB_URL', 'PORTAL_API_URL', 'CLINIC_PUBLIC_UPLOAD_BASE_URL', 'MESSAGING_HUB_URL') { $Cfg[$k] = $Cfg[$k].TrimEnd('/') }
+  foreach ($k in 'UPSTREAM_HUB_URL', 'CLINIC_PUBLIC_UPLOAD_BASE_URL', 'MESSAGING_HUB_URL') { $Cfg[$k] = $Cfg[$k].TrimEnd('/') }
   foreach ($k in $Keys) {
     if ($k -eq 'EDGE_CELL_NAME' -or $k -like '*_FACILITY_NAME') { Test-SafeValue $k -AllowSpaces } else { Test-SafeValue $k }
   }
@@ -407,12 +579,15 @@ function Get-Config([string]$Mode) {
     if ($Cfg[$k] -and $Cfg[$k] -notmatch '^[0-9A-Fa-f]{8}-([0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12}$') { Stop-Install "$k must be a GUID (got '$($Cfg[$k])')." }
   }
   if ($Cfg['EDGE_CELL_ID'].Contains(':')) { Stop-Install "EDGE_CELL_ID must not contain ':'." }
+  if (@('true', 'false') -notcontains $Cfg['HUB_SIGNING_REQUIRED']) { Stop-Install 'HUB_SIGNING_REQUIRED must be true or false.' }
+  foreach ($k in $PubKeyVars) { Test-KeyValue $k 'public' }
+  foreach ($k in $PrivKeyVars) { Test-KeyValue $k 'private' }
   if ($Mode -eq 'reuse') {
-    $required = @('GHCR_OWNER_REPO', 'TENANT_ID', 'EDGE_CELL_ID', 'CLINIC_FACILITY_ID')
-    if ($hubB) { $required += @('MESSAGING_HUB_URL', 'CLINIC_HUB_CLIENT_ID', 'CLINIC_HUB_CLIENT_SECRET', 'BILLING_HUB_CLIENT_ID', 'BILLING_HUB_CLIENT_SECRET') }
-    elseif ($Cfg['UPSTREAM_ENABLED'] -eq 'true') { $required += @('UPSTREAM_HUB_URL', 'UPSTREAM_CLIENT_ID', 'UPSTREAM_CLIENT_SECRET', 'PORTAL_API_URL') }
+    $required = @('GHCR_OWNER_REPO', 'TENANT_ID', 'EDGE_CELL_ID', 'CLINIC_FACILITY_ID', 'FACILITY_LICENSE_PUBLIC_KEY')
+    if ($hubB) { $required += @('MESSAGING_HUB_URL', 'CLINIC_HUB_CLIENT_ID', 'CLINIC_HUB_CLIENT_SECRET', 'BILLING_HUB_CLIENT_ID', 'BILLING_HUB_CLIENT_SECRET', 'CLINIC_HUB_SIGNING_KEY', 'BILLING_HUB_SIGNING_KEY') }
+    elseif ($Cfg['UPSTREAM_ENABLED'] -eq 'true') { $required += @('UPSTREAM_HUB_URL', 'UPSTREAM_CLIENT_ID', 'UPSTREAM_CLIENT_SECRET', 'EDGE_HUB_SIGNING_KEY') }
     foreach ($k in $required) {
-      if (-not $Cfg[$k]) { Stop-Install "$k is empty in $EnvFile. Fix it, or re-run with -Force and the parameters." }
+      if (-not $Cfg[$k]) { Stop-Install "$k is empty in $EnvFile. Fix it, or re-run with -Force and the parameters (a missing key can also be given with its parameter on this command: .\install.ps1 apply|upgrade stores it in $EnvFile)." }
     }
   }
 }
@@ -427,11 +602,11 @@ function Write-EnvFile {
   )
   $groups = @(
     @('GHCR_OWNER_REPO', 'IMAGE_TAG', 'COMPOSE_PROFILES'),
-    @('# Identity (portal)', 'TENANT_ID', 'EDGE_CELL_ID', 'EDGE_CELL_NAME', 'CLINIC_FACILITY_ID', 'CLINIC_FACILITY_NAME', 'LABORATORY_FACILITY_ID', 'LABORATORY_FACILITY_NAME', 'PHARMACY_FACILITY_ID', 'PHARMACY_FACILITY_NAME', 'ORGANIZATION_FACILITY_ID', 'ORGANIZATION_FACILITY_NAME', 'BASE_DOMAIN'),
+    @('# Identity (portal)', 'TENANT_ID', 'EDGE_CELL_ID', 'EDGE_CELL_NAME', 'CLINIC_FACILITY_ID', 'CLINIC_FACILITY_NAME', 'LABORATORY_FACILITY_ID', 'LABORATORY_FACILITY_NAME', 'PHARMACY_FACILITY_ID', 'PHARMACY_FACILITY_NAME', 'ORGANIZATION_FACILITY_ID', 'ORGANIZATION_FACILITY_NAME', 'BASE_DOMAIN', 'CORS_ALLOWED_ORIGINS'),
     @('# Cloud link of the LOCAL hub (mode A): ONE EdgeCell client (Service ''cell'') the portal issued = portal HubEdgeCredentials.',
       '# UPSTREAM_ENABLED=false (-AirGapped): the hub runs without any upstream, same-cell traffic only. Empty values are fine then;',
       '# to connect later set it to true, fill the three UPSTREAM_* values and run .\install.ps1 apply. Not used with -NoLocalHub.',
-      'UPSTREAM_ENABLED', 'UPSTREAM_HUB_URL', 'UPSTREAM_CLIENT_ID', 'UPSTREAM_CLIENT_SECRET', 'PORTAL_API_URL'),
+      'UPSTREAM_ENABLED', 'UPSTREAM_HUB_URL', 'UPSTREAM_CLIENT_ID', 'UPSTREAM_CLIENT_SECRET'),
     @('# Public URL of the lab-result upload page printed on lab slips (a cloud page; the site only needs outbound access).',
       '# Required to issue lab orders. May be empty when air-gapped.',
       'CLINIC_PUBLIC_UPLOAD_BASE_URL'),
@@ -442,7 +617,20 @@ function Write-EnvFile {
       '#     per-service clients (the other services do not run).',
       'MESSAGING_HUB_URL', 'CLINIC_HUB_CLIENT_ID', 'CLINIC_HUB_CLIENT_SECRET', 'BILLING_HUB_CLIENT_ID', 'BILLING_HUB_CLIENT_SECRET', 'LABORATORY_HUB_CLIENT_ID', 'LABORATORY_HUB_CLIENT_SECRET', 'PHARMACY_HUB_CLIENT_ID', 'PHARMACY_HUB_CLIENT_SECRET', 'ORGANIZATION_HUB_CLIENT_ID', 'ORGANIZATION_HUB_CLIENT_SECRET', 'HUB_PAYLOAD_ENCRYPTION_KEY', 'HUB_BIND', 'HUB_LAN_PORT'),
     @('# Database', 'POSTGRES_USER', 'POSTGRES_PASSWORD'),
-    @('# Service secrets', 'INTERNAL_API_KEY', 'PHARMACY_API_KEY', 'HANGFIRE_DASHBOARD_PASSWORD', 'CLINIC_JWT_SIGNING_KEY', 'BILLING_JWT_SIGNING_KEY', 'LABORATORY_JWT_SIGNING_KEY', 'PHARMACY_JWT_SIGNING_KEY', 'ORGANIZATION_JWT_SIGNING_KEY', 'CLINIC_ENCRYPTION_MASTER_SECRET'),
+    @('# Service secrets', 'INTERNAL_API_KEY', 'PHARMACY_API_KEY', 'HANGFIRE_DASHBOARD_PASSWORD', 'CLINIC_JWT_SIGNING_KEY', 'BILLING_JWT_SIGNING_KEY', 'LABORATORY_JWT_SIGNING_KEY', 'PHARMACY_JWT_SIGNING_KEY', 'ORGANIZATION_JWT_SIGNING_KEY', 'CLINIC_ENCRYPTION_MASTER_SECRET',
+      '# Only while rotating the master secret: the previous value(s), so old records stay readable (see README).',
+      'CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_0', 'CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_1',
+      '# Keys of the document digests (verification QR codes), one per service, and the pharmacy UPSC code key: keep them with this file.',
+      'CLINIC_DOCUMENT_SIGNING_KEY', 'LABORATORY_DOCUMENT_SIGNING_KEY', 'GAMOT_UPSC_SECRET_KEY'),
+    @('# Keys (ECDSA P-256, one-line base64 of a PEM).',
+      '#   FACILITY_LICENSE_PUBLIC_KEY: the portal''s license public key, validates the facility licenses (REQUIRED). _PREVIOUS only while the portal rotates.',
+      '#   EDGE_HUB_SIGNING_KEY: PRIVATE key the portal issued with the edge client (local hub re-signs upstream envelopes; empty only air-gapped).',
+      '#   <SVC>_HUB_SIGNING_KEY / _PUBLIC_KEY: one pair per service client, generated by the installer (local hub); with -NoLocalHub the',
+      '#     clinic / billing signing keys are portal-issued and the public keys stay empty. The private keys never leave this host.',
+      'FACILITY_LICENSE_PUBLIC_KEY', 'FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS', 'HUB_SIGNING_REQUIRED', 'EDGE_HUB_SIGNING_KEY',
+      'CLINIC_HUB_SIGNING_KEY', 'CLINIC_HUB_PUBLIC_KEY', 'BILLING_HUB_SIGNING_KEY', 'BILLING_HUB_PUBLIC_KEY',
+      'LABORATORY_HUB_SIGNING_KEY', 'LABORATORY_HUB_PUBLIC_KEY', 'PHARMACY_HUB_SIGNING_KEY', 'PHARMACY_HUB_PUBLIC_KEY',
+      'ORGANIZATION_HUB_SIGNING_KEY', 'ORGANIZATION_HUB_PUBLIC_KEY'),
     @('# Web ports', 'CLINIC_WEB_PORT', 'LABORATORY_WEB_PORT', 'PHARMACY_WEB_PORT', 'CASHIER_WEB_PORT'),
     @('# Backups', 'BACKUP_DIR', 'BACKUP_INTERVAL_HOURS', 'BACKUP_RETENTION_DAYS')
   )
@@ -490,7 +678,7 @@ function Write-HubBootstrap {
     return
   }
   $out = @(
-    '# Generated by install.ps1 from .env (.\install.ps1 render). Do not edit; contains the local hub client secrets.',
+    '# Generated by install.ps1 from .env (.\install.ps1 render). Do not edit; contains the local hub client secrets and public keys.',
     "Hub__Bootstrap__Cells__0__CellId=$($c['EDGE_CELL_ID'])",
     "Hub__Bootstrap__Cells__0__Name=$($c['EDGE_CELL_NAME'])",
     'Hub__Bootstrap__Cells__0__Kind=Edge',
@@ -501,6 +689,7 @@ function Write-HubBootstrap {
     if ($s.Profile -and -not (Test-HasProfile $s.Profile)) { continue }
     $out += "Hub__Bootstrap__Clients__${ci}__ClientId=$($c["$($s.Prefix)_HUB_CLIENT_ID"])"
     $out += "Hub__Bootstrap__Clients__${ci}__Secret=$($c["$($s.Prefix)_HUB_CLIENT_SECRET"])"
+    $out += "Hub__Bootstrap__Clients__${ci}__PublicKey=$($c["$($s.Prefix)_HUB_PUBLIC_KEY"])"
     $out += "Hub__Bootstrap__Clients__${ci}__CellId=$($c['EDGE_CELL_ID'])"
     $out += "Hub__Bootstrap__Clients__${ci}__Service=$($s.Svc)"
     $out += "Hub__Bootstrap__Clients__${ci}__Kind=EdgeCell"
@@ -652,6 +841,7 @@ function Invoke-Upgrade {
   Require-EnvFile; Test-DockerReady
   $previous = (Read-EnvFile $EnvFile)['IMAGE_TAG']
   Get-Config 'reuse'
+  Add-MissingEnvValues
   if ($Cfg['IMAGE_TAG'] -ne $previous) { Set-EnvValue 'IMAGE_TAG' $Cfg['IMAGE_TAG'] }
   if (-not $NoBackup) { try { Invoke-Backup } catch { Write-Warn "Pre-upgrade backup failed; continuing. $($_.Exception.Message)" } }
   Start-Stack
@@ -714,7 +904,7 @@ function Invoke-Status {
 
 switch ($Command) {
   'install' { Invoke-Install }
-  'apply' { Require-EnvFile; Test-DockerReady; Get-Config 'reuse'; Start-Stack }
+  'apply' { Require-EnvFile; Test-DockerReady; Get-Config 'reuse'; Add-MissingEnvValues; Start-Stack }
   'upgrade' { Invoke-Upgrade }
   'activate' {
     Require-EnvFile; Get-Config 'reuse'
@@ -725,5 +915,5 @@ switch ($Command) {
   'backup' { Test-DockerReady; Invoke-Backup }
   'restore' { Invoke-Restore }
   'status' { Invoke-Status }
-  'render' { Require-EnvFile; Get-Config 'reuse'; Write-HubBootstrap }
+  'render' { Require-EnvFile; Get-Config 'reuse'; Add-MissingEnvValues; Write-HubBootstrap }
 }

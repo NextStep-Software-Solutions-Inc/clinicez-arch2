@@ -20,24 +20,32 @@ services:
       - npm-default
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Production}
-      - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}
-      - Clerk__SecretKey=${CLERK_SECRET_KEY}
+      - ConnectionStrings__DefaultConnection=${CONNECTION_STRING:?CONNECTION_STRING must be set}
+      - Clerk__SecretKey=${CLERK_SECRET_KEY:?CLERK_SECRET_KEY must be set}
       # Clerk issuer the API validates tokens against (JWKS). Required outside Development.
       - Clerk__Authority=${CLERK_AUTHORITY:?CLERK_AUTHORITY must be set}
       # Extra trusted token origins (comma separated). https://<BASE_DOMAIN> and https://*.<BASE_DOMAIN> are added automatically.
       - Clerk__AuthorizedParties=${CLERK_AUTHORIZED_PARTIES:-}
-      - Xendit__SecretKey=${XENDIT_SECRET_KEY}
-      - Xendit__CallbackToken=${XENDIT_CALLBACK_TOKEN}
+      - Xendit__SecretKey=${XENDIT_SECRET_KEY:?XENDIT_SECRET_KEY must be set}
+      - Xendit__CallbackToken=${XENDIT_CALLBACK_TOKEN:?XENDIT_CALLBACK_TOKEN must be set}
       # Interop hub (the cell hub this service's outbox ships to and its inbox polls). No built-in fallback credentials.
       - Messaging__Transport=Hub
       - Messaging__Service=portal
       - Messaging__HubUrl=${MESSAGING_HUB_URL:?MESSAGING_HUB_URL must be set}
       - Messaging__ClientId=${MESSAGING_CLIENT_ID:?MESSAGING_CLIENT_ID must be set}
       - Messaging__ClientSecret=${MESSAGING_CLIENT_SECRET:?MESSAGING_CLIENT_SECRET must be set}
+      # Envelope signing (ECDSA P-256 private key, PEM or base64 of PEM; scripts/generate-signing-key.sh). Its public half must be
+      # the key registered at the hub for this client (Messaging__ClientId). One key pair per client; never shared.
+      - Messaging__SigningKey=${MESSAGING_SIGNING_KEY:?MESSAGING_SIGNING_KEY must be set}
       # Hangfire dashboard Basic Auth password. Empty denies the dashboard to everyone (there is no default).
       - Hangfire__DashboardPassword=${HANGFIRE_DASHBOARD_PASSWORD:-}
       - Facility__BaseDomain=${BASE_DOMAIN:?BASE_DOMAIN must be set}
+      # Extra exact CORS origins (comma separated, * wildcards allowed). Optional: https://<BASE_DOMAIN> and its subdomains are always allowed.
+      - Cors__AllowedOrigins=${CORS_ALLOWED_ORIGINS:-}
+      - Cors__AllowedDomains=${CORS_ALLOWED_DOMAINS:-}
       - Internal__ApiKey=${INTERNAL_API_KEY:?INTERNAL_API_KEY must be set}
+      # Only set during a key rotation: the old key stays accepted until callers are switched, then remove it.
+      - Internal__PreviousApiKey=${INTERNAL_API_KEY_PREVIOUS:-}
       # Public base URL of the cloud hub, handed to on-premise sites with their credentials (Hub:PublicUrl).
       - Hub__PublicUrl=${HUB_PUBLIC_URL:?HUB_PUBLIC_URL must be set}
       # Cell hosting every shared-cloud facility. Must equal the cloud hub's Hub__CloudCellId.
@@ -67,10 +75,26 @@ services:
       - Licensing__TtlDays=${LICENSING_TTL_DAYS:-30}
       - Licensing__GraceDays=${LICENSING_GRACE_DAYS:-14}
       - Licensing__RenewBeforeDays=${LICENSING_RENEW_BEFORE_DAYS:-10}
+      # Facility license keys (ECDSA P-256, PEM or base64 of PEM; scripts/generate-license-keys.sh). The portal signs licenses with
+      # the PRIVATE key (it lives only here) and validates them with the public key. No built-in default keys. The previous public
+      # key is only set during a rotation, until every issued license was renewed.
+      - FacilityLicense__PrivateKeyPem=${FACILITY_LICENSE_PRIVATE_KEY:?FACILITY_LICENSE_PRIVATE_KEY must be set}
+      - FacilityLicense__PublicKeyPem=${FACILITY_LICENSE_PUBLIC_KEY:?FACILITY_LICENSE_PUBLIC_KEY must be set}
+      - FacilityLicense__PreviousPublicKeyPem=${FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS:-}
       # Plan catalog (limits, features, prices) stays in appsettings; these select the default plan and trial length.
       - Billing__DefaultPlanSlug=${BILLING_DEFAULT_PLAN_SLUG:-starter}
       - Billing__TrialDays=${BILLING_TRIAL_DAYS:-14}
+      # ASP.NET Data Protection key ring (protects stored provider secrets). It is persisted on the portal-api-dpkeys volume: keep
+      # that volume, the ring rotates automatically. Optional: a PFX (base64) and its password encrypt the ring at rest.
+      - DataProtection__KeysPath=/var/dpkeys
+      - DataProtection__CertificateBase64=${DATA_PROTECTION_CERT_BASE64:-}
+      - DataProtection__CertificatePassword=${DATA_PROTECTION_CERT_PASSWORD:-}
+    volumes:
+      - portal-api-dpkeys:/var/dpkeys
     restart: unless-stopped
+
+volumes:
+  portal-api-dpkeys:
 
 networks:
   data-network:

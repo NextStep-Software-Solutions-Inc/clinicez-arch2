@@ -7,6 +7,7 @@ on:
     paths:
       - 'services/patient-api/**'
       - 'deploy/patient-api/**'
+      - 'scripts/ci/**'
       - 'packages/shared-dotnet/**'
       - '.github/workflows/deploy-patient-api-dev.yml'
   pull_request:
@@ -15,6 +16,7 @@ on:
     paths:
       - 'services/patient-api/**'
       - 'deploy/patient-api/**'
+      - 'scripts/ci/**'
       - 'packages/shared-dotnet/**'
       - '.github/workflows/deploy-patient-api-dev.yml'
   workflow_dispatch:
@@ -83,8 +85,7 @@ jobs:
         env:
           ASPNETCORE_ENVIRONMENT: ${{ env.ENVIRONMENT }}
           CONNECTION_STRING: ${{ secrets.PATIENT_DB_CONNECTION_STRING }}
-          REDIS_CONNECTION_STRING: ${{ secrets.PATIENT_REDIS_CONNECTION_STRING }}
-          CLERK_AUTHORITY: ${{ secrets.PATIENT_CLERK_AUTHORITY || 'https://amazing-mosquito-75.clerk.accounts.dev' }}
+          CLERK_AUTHORITY: ${{ secrets.PATIENT_CLERK_AUTHORITY || vars.PATIENT_CLERK_AUTHORITY }}
           CLERK_AUDIENCE: ${{ secrets.PATIENT_CLERK_AUDIENCE || '' }}
           CLERK_WEBHOOK_SECRET: ${{ secrets.PATIENT_CLERK_WEBHOOK_SECRET }}
           R2_ACCOUNT_ID: ${{ secrets.PATIENT_R2_ACCOUNT_ID || secrets.R2_ACCOUNT_ID }}
@@ -99,17 +100,22 @@ jobs:
           MESSAGING_HUB_URL: ${{ vars.MESSAGING_HUB_URL || secrets.MESSAGING_HUB_URL }}
           MESSAGING_CLIENT_ID: ${{ secrets.PATIENT_MESSAGING_CLIENT_ID }}
           MESSAGING_CLIENT_SECRET: ${{ secrets.PATIENT_MESSAGING_CLIENT_SECRET }}
+          MESSAGING_SIGNING_KEY: ${{ secrets.PATIENT_MESSAGING_SIGNING_KEY }}
           DATA_NETWORK: ${{ vars.DATA_NETWORK || 'data-network' }}
           NPM_NETWORK: ${{ vars.NPM_NETWORK || 'npm-default' }}
-          SHARING_SIGNING_KEY: ${{ secrets.PATIENT_SHARING_SIGNING_KEY }}
+          SHARING_SIGNING_KEY: ${{ secrets.PATIENT_SHARING_SIGNING_KEY || secrets.SHARING_SIGNING_KEY }}
           PATIENT_ENCRYPTION_KEY: ${{ secrets.PATIENT_ENCRYPTION_KEY }}
           BASE_DOMAIN: ${{ secrets.BASE_DOMAIN || vars.BASE_DOMAIN }}
+          CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
+          CORS_ALLOWED_DOMAINS: ${{ vars.CORS_ALLOWED_DOMAINS }}
         run: |
+          . scripts/ci/prepare-key-env.sh
+          prepare_key_env private MESSAGING_SIGNING_KEY
           if [ -z "$BASE_DOMAIN" ]; then
             echo "::error::BASE_DOMAIN is not configured. Set it as a GitHub secret or variable (Settings -> Secrets and variables -> Actions)."
             exit 1
           fi
-          for var in MESSAGING_HUB_URL MESSAGING_CLIENT_ID MESSAGING_CLIENT_SECRET SHARING_SIGNING_KEY; do
+          for var in CONNECTION_STRING CLERK_AUTHORITY MESSAGING_HUB_URL MESSAGING_CLIENT_ID MESSAGING_CLIENT_SECRET SHARING_SIGNING_KEY PATIENT_ENCRYPTION_KEY; do
             if [ -z "$(printenv $var)" ]; then
               echo "::error::$var is not configured. Set the matching GitHub secret or variable (Settings -> Secrets and variables -> Actions)."
               exit 1
@@ -119,7 +125,13 @@ jobs:
             echo "::error::PATIENT_SHARING_SIGNING_KEY must be at least 32 characters."
             exit 1
           fi
-          for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING REDIS_CONNECTION_STRING CLERK_AUTHORITY CLERK_AUDIENCE CLERK_WEBHOOK_SECRET R2_ACCOUNT_ID R2_BUCKET_NAME R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_PUBLIC_URL HANGFIRE_DASHBOARD_PASSWORD FIREBASE_SERVICE_ACCOUNT_JSON IMAGE_NAME IMAGE_TAG DATA_NETWORK NPM_NETWORK BASE_DOMAIN MESSAGING_HUB_URL MESSAGING_CLIENT_ID MESSAGING_CLIENT_SECRET SHARING_SIGNING_KEY PATIENT_ENCRYPTION_KEY; do
+          # Encryption__Base64Key must be base64 of exactly 32 bytes (AES-256).
+          ENC_BYTES=$(printf '%s' "$PATIENT_ENCRYPTION_KEY" | base64 -d 2>/dev/null | wc -c | tr -d ' ')
+          if [ "$ENC_BYTES" != "32" ]; then
+            echo "::error::PATIENT_ENCRYPTION_KEY must be base64 of exactly 32 random bytes (generate with: openssl rand -base64 32, or scripts/generate-secrets)."
+            exit 1
+          fi
+          for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING CLERK_AUTHORITY CLERK_AUDIENCE CLERK_WEBHOOK_SECRET R2_ACCOUNT_ID R2_BUCKET_NAME R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_PUBLIC_URL HANGFIRE_DASHBOARD_PASSWORD FIREBASE_SERVICE_ACCOUNT_JSON IMAGE_NAME IMAGE_TAG DATA_NETWORK NPM_NETWORK BASE_DOMAIN MESSAGING_HUB_URL MESSAGING_CLIENT_ID MESSAGING_CLIENT_SECRET SHARING_SIGNING_KEY PATIENT_ENCRYPTION_KEY MESSAGING_SIGNING_KEY CORS_ALLOWED_ORIGINS CORS_ALLOWED_DOMAINS; do
             echo "$var=$(printenv $var)" >> deploy/patient-api/.env
           done
 

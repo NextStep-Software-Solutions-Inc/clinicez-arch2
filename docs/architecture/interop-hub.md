@@ -66,13 +66,27 @@ Every endpoint except `/health*` requires `X-Hub-Client` and `X-Hub-Secret`. A w
 
 A message is rejected if `From` is not something the sending client may speak for ([`OwnershipValidator`](../../services/interop-hub/ClinicEz.Interop.Application/Routing/RoutingPolicy.cs)): that is the hub's anti-forgery check. A service handler must still check that the sender is allowed to send *that type*.
 
+## Envelope signing
+
+Client secrets prove *which client is calling*; a **signature proves the envelope itself** (who it is from, who it is for, what it says) survived the trip unchanged. Every hub client has an ECDSA **P-256** key pair:
+
+- The **private key** (`Messaging:SigningKey`, PEM or base64 of PEM) lives only with the sending service. The **public key** is registered on the hub client record (`Clients.PublicKeyPem`) and published at `GET /v1/keys/{clientId}` (any authenticated client; `404` unknown, `revoked: true` when revoked).
+- The hub generates the pair when the admin API creates or rotates a client and returns the private half **once** (`signingKey` next to `clientSecret`). A caller may instead register a key it generated itself (`publicKey` in `CreateHubClientRequest`; a private key or garbage is refused). Bootstrap clients declare `Hub:Bootstrap:Clients:N:PublicKey`.
+- The SDK relay signs every envelope it ships ([`EnvelopeSigner`](../../packages/shared-dotnet/Interop/Signing/EnvelopeSigner.cs)). The signed text ([`EnvelopeSigning`](../../packages/shared-dotnet/Interop/Signing/EnvelopeSigning.cs), format `clinicez-envelope-v1`) is a length-prefixed canonical form of message id, correlation id, type, schema version, `From`, `To` (or `SignedTo`), timestamps, `SignerKeyId`, and the SHA-256 of the **canonical** payload JSON (properties sorted, minimal whitespace) and of `SealedPayload`; the signature field itself is excluded. Re-serialising an envelope between hops therefore never breaks it, while any change to who, what or when does.
+- The hub verifies on `POST /v1/messages` and `POST /v1/claims`: `SignerKeyId` must equal the authenticated sender's client id and the signature must verify against the key registered for that client. A signature that is present **must** verify. A missing signature (or a client without a registered key) is rejected with a reason starting `signature_required` when `Hub:Signing:Required` is on, which is the default outside Development. (Claims answer `403` with the same reason.) A bad signature is `invalid_signature`; like every rejection it is final.
+- Receivers verify too: the SDK poller fetches the sender's public key from the hub (cached 5 minutes, 30 seconds for unknown signers, one forced refresh on a mismatch) and **nacks** an envelope whose signature does not verify (`invalid_signature: ...`), so a message altered inside the hub's database or by a compromised relay is not dispatched to a handler. `Messaging:VerifyInbound` defaults to on outside Development (and is always off for the in-process test transport). Revocation or rotation of a signer reaches receivers within the cache window.
+- **Claims and `SignedTo`.** A claim is addressed by facility type and the hub rewrites `To` to the redeemer. The issuer's signature therefore covers the recipient as the issuer wrote it; the hub keeps that value in `SignedTo` when it redeems, and the signed text uses `SignedTo ?? To`.
+- **Federation.** An edge hub verifies its own facility clients' signatures, then **re-signs every envelope it forwards upstream as the edge client** (`Hub:Upstream:SigningKey` = the private key the portal issued with the edge-hub credentials, client id `Hub:Upstream:ClientId`); the cloud verifies that against the edge client's key. Messages that arrive through the cell inbox keep the cloud-side sender's original signature; the local hub answers `GET /v1/keys/{id}` for its own clients and **proxies the lookup to the cloud hub** for everyone else, so edge services can verify cloud senders.
+- **Key handling.** Rotate a client with the admin API (new secret and new key pair, shown once; update the service's `Messaging__SigningKey` and secret, both effective within `Hub:Auth:CacheSeconds`) or, for bootstrap clients, replace the `PublicKey` setting and the service's private key together. `scripts/generate-signing-key.(sh|ps1)` produces a pair. Keys are never committed or logged.
+
+**What this does and does not buy.** A bit-flip, a database edit or a rogue relay cannot change a message without the signer's private key. The hub still *vouches for which public key belongs to which client*: a compromised hub could publish a different key, and a client whose own private key leaks can sign anything for the facilities its cell owns. End-to-end sealing of the payload (`SealedPayload`) remains reserved and unused. `Hub:Signing:Required=false` (and no `Messaging:SigningKey`) is only for development and for migrating existing services; keep it on in production.
 ## Routing policy and cross-tenant rules
 
 [`RoutingPolicy`](../../services/interop-hub/ClinicEz.Interop.Application/Routing/RoutingPolicy.cs) decides `Reject`, `Deliver` (into a mailbox) or `Forward` (Local mode, to the cloud).
 
 **Control-plane targets** (`Party{ControlPlane, Service}`) are routed by service into the cloud cell: `portal` (the default) and `patient` may be addressed by every client kind (the portal feeding patient-api, a facility asking the patient plane to redeem a share) and land in `{cloud}:portal` and `{cloud}:patient`. `clinic`, `laboratory`, `pharmacy`, `organization` and `billing` may be addressed only by `ControlPlane` and `PatientPlane` clients; a facility client is rejected (`Facility clients may only address the 'portal' and 'patient' control-plane services`). Any other service is rejected. `hub` is not a mailbox: it is the directory feed, open to `ControlPlane` clients only.
 
-**Unknown facility types.** A facility whose type has no default service in this hub build (for example a type added to the platform before the hub was redeployed) is routed by `To.Service` when the sender names one; otherwise the message is rejected with a reason starting `unknown_facility_type`. Claim redemption answers `400` with the same reason. The hub never answers `500` for it.
+**Unknown facility types.** A facility whose type has no default service in this hub build (for example a type added to the platform before the hub was redeployed) is routed by `To.Service` when the sender names one; otherwise the message is rejected with a reason starting `unknown_facility_type`. Claim redemption answers `400` with the same reason. The hub never answers `500` for it. All enums (facility type, client kind, scopes, link status, ...) are **strict strings** on the wire and in the database: `StrictJsonStringEnumConverter` accepts only the member names, a numeric value or a type name this build does not know is a `400` at deserialization (an unparseable envelope or request), never a silent fallback. A newly added facility type therefore needs the hub build that knows it (see [platform-contract.md](platform-contract.md)); `unknown_facility_type` covers a *known* name without a default service.
 
 1. **Same tenant: always allowed.**
 2. **Cross-tenant** is allowed when either
@@ -158,6 +172,7 @@ A patient-carried capability that works across tenants without a prior link (lab
 
 - `POST /v1/claims`: an issuing facility parks an envelope addressed **by facility type only** (`To.FacilityType`, no tenant/facility) with `ttlHours` (default 168, max 720). It receives a one-time token (256 random bits); only the SHA-256 is stored.
 - `POST /v1/claims/{token}/redeem`: any active facility of that type, in the caller's cell, redeems it once. The order is delivered to the redeemer **without a link or visibility check** (the token is the authorisation), a conversation is opened so the redeemer can reply to the issuer on the same correlation, and the stored order is purged; the claim row stays (hash only) until expiry so a second redeem fails.
+- The envelope must be signed by the issuing client when `Hub:Signing:Required` is on (see Envelope signing); the redeemed copy keeps the issuer signature and gains `SignedTo`.
 - Errors: `404` unknown, `409` already redeemed, `410` expired, `403` redeemer not an active facility of the caller's cell, `422` wrong facility type. In Local mode claims are proxied to the cloud and answer `502` while it is unreachable.
 
 ```mermaid
@@ -192,7 +207,7 @@ The local hub is one more container in the edge bundle ([deploy/interop-hub/dock
 - **Directory**: snapshot sync as above.
 - Claims need the internet (proxied).
 - **Air-gapped / single site** (`Hub:Upstream:Enabled=false`): the hub needs no upstream URL or credentials and never calls the cloud. Same-cell traffic works as usual; a message for anything else (portal, patients, other cells) is rejected at once with a reason starting `upstream_disabled` (nothing is queued, so the SDK dead-letters it), the forwarder, cell-inbox puller and directory sync do not run (the directory is the bootstrap seed), and claims answer `503`. Re-enable by setting the flag and the credentials and restarting.
-- **Client model:** the local hub holds one upstream client, the portal-issued `EdgeCell` client (service `cell`); the facility services use local clients generated per site and declared in `Hub:Bootstrap` and never see cloud credentials. A single-facility site without a local hub has no local clients: each of its services connects straight to the cloud hub with a portal-issued per-service `EdgeCell` client.
+- **Client model:** the local hub holds one upstream client, the portal-issued `EdgeCell` client (service `cell`); the facility services use local clients generated per site and declared in `Hub:Bootstrap` (each with its own signing key pair: the installer generates them, the hub gets the public halves) and never see cloud credentials. The local hub re-signs forwarded envelopes with `Hub:Upstream:SigningKey`. A single-facility site without a local hub has no local clients: each of its services connects straight to the cloud hub with a portal-issued per-service `EdgeCell` client.
 
 ```mermaid
 sequenceDiagram
@@ -224,7 +239,7 @@ A hospital keeps working during an internet outage for everything inside the LAN
 
 ## Claim redeem and other hub-only flows
 
-See the Claims section above. Admin flows (`PUT /v1/admin/cells/{id}`, `POST .../clients`, rotate, revoke) are control-plane only and are how portal-api onboards on-prem sites and hands out one-time credentials (`HubEdgeCredentials`).
+See the Claims section above. Admin flows (`PUT /v1/admin/cells/{id}`, `POST .../clients`, rotate, revoke) are control-plane only and are how portal-api onboards on-prem sites and hands out one-time credentials (`HubEdgeCredentials`: client id, secret **and signing key**, shown once; rotate returns a new pair).
 
 ## High availability
 
@@ -239,11 +254,14 @@ See the Claims section above. Admin flows (`PUT /v1/admin/cells/{id}`, `POST ...
 | Control | Today |
 |---|---|
 | Transport | HTTPS is expected from the deployment (reverse proxy); the hub code configures no HSTS or HTTPS redirect. Edge sites only make outbound calls. |
+| Message integrity | ECDSA P-256 signature per envelope, verified by the hub on send and by the receiving SDK on pull (see Envelope signing); `Hub:Signing:Required` defaults to on outside Development. |
 | Client authentication | Per-client id and secret (PBKDF2-SHA256, salted, constant-time compare), cell and service taken from the stored record, secrets rotated or revoked through the admin API (effective within `CacheSeconds`). Production refuses to start without an active `ControlPlane` client; bootstrap secrets must be at least 24 characters. |
 | Authorisation | Sender ownership (`From` must belong to the client's cell/role), routing policy (links, scopes, visibility, conversations), mailbox-read restricted to the client's own service, admin and directory feed restricted to `ControlPlane`, snapshot and cell-inbox restricted to `EdgeCell`. |
 | Data at rest | Optional AES-256-GCM encryption of stored envelopes (`Hub:PayloadEncryptionKey`, 32 bytes base64; keep the key out of DB backups). Acked envelopes are blanked immediately. Claim tokens stored as SHA-256 only. |
-| PHI exposure | The hub carries PHI in transit and in mailboxes. v1 mitigations: TLS, optional encryption at rest, short TTL (7 days), purge on ack. The envelope reserves `SealedPayload` and `Signature` for v2 (end-to-end sealing and per-message signatures); **both are unused today**, so the hub is not a blind relay. |
+| PHI exposure | The hub carries PHI in transit and in mailboxes. v1 mitigations: TLS, optional encryption at rest, short TTL (7 days), purge on ack. Signatures protect integrity and authorship, **not confidentiality**: `SealedPayload` (end-to-end sealing) is reserved and unused today, so the hub is not a blind relay. |
 | Abuse | Size and batch limits and expiry checks exist. There is no rate limiting or per-client quota in the hub code. |
 | Handlers | Must authorise the envelope themselves (type vs sender, `To` vs self) and scope by it; see [platform-contract.md](platform-contract.md). |
+
+Database notes: every enum column is a string (`ConfigureConventions` in `HubDbContext`); migration `ClientSigningKeyAndStringEnums` converts `Links.Scopes` from an integer mask to its flag names (data preserving) and adds `Clients.PublicKeyPem`. Existing clients have no public key until they are rotated or bootstrapped with one; keep `Hub:Signing:Required=false` only until every client has one.
 
 See [data-ownership.md](data-ownership.md) for what data crosses the hub and its retention.

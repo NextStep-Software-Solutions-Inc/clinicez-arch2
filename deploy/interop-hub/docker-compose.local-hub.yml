@@ -43,6 +43,10 @@ services:
       - Hub__Upstream__Url=${UPSTREAM_HUB_URL:-}
       - Hub__Upstream__ClientId=${UPSTREAM_CLIENT_ID:-}
       - Hub__Upstream__ClientSecret=${UPSTREAM_CLIENT_SECRET:-}
+      # P-256 private key (PEM or base64 of PEM) the portal issued with the edge client: the local hub re-signs forwarded
+      # envelopes with it. Required unless air-gapped (UPSTREAM_ENABLED=false).
+      - Hub__Upstream__SigningKey=${EDGE_HUB_SIGNING_KEY:-}
+      - Hub__Signing__Required=${HUB_SIGNING_REQUIRED:-true}
       - Hub__Bootstrap__Cells__0__CellId=${LOCAL_CELL_ID}
       - Hub__Bootstrap__Cells__0__Name=${LOCAL_CELL_NAME:-Edge site}
       - Hub__Bootstrap__Cells__0__Kind=Edge
@@ -52,6 +56,7 @@ services:
       - Hub__Bootstrap__Clients__0__CellId=${LOCAL_CELL_ID}
       - Hub__Bootstrap__Clients__0__Service=clinic
       - Hub__Bootstrap__Clients__0__Kind=EdgeCell
+      - Hub__Bootstrap__Clients__0__PublicKey=${LOCAL_CLINIC_PUBLIC_KEY:?LOCAL_CLINIC_PUBLIC_KEY must be set}
       - Hub__Bootstrap__Facilities__0__TenantId=${LOCAL_TENANT_ID}
       - Hub__Bootstrap__Facilities__0__FacilityId=${LOCAL_CLINIC_FACILITY_ID:?LOCAL_CLINIC_FACILITY_ID must be set}
       - Hub__Bootstrap__Facilities__0__FacilityType=Clinic

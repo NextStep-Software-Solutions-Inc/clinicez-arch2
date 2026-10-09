@@ -1,6 +1,6 @@
 # Message matrix
 
-Every envelope type in [`InteropTypes`](../../packages/shared-dotnet/Interop/InteropTypes.cs), who sends it, who handles it, and how it is addressed. Built by reading the code (publishers: `Enqueue(...)` / `InteropEnvelope.Create(...)`; receivers: `.Handle<TPayload, THandler>(InteropTypes.X)` in each service's `DependencyInjection.cs`). The prose catalog of what each message means lives in [`platform-contract.md`](platform-contract.md); routing and delivery rules are in [`interop-hub.md`](interop-hub.md).
+Every envelope type in [`InteropTypes`](../../packages/shared-dotnet/Interop/InteropTypes.cs), who sends it, who handles it, and how it is addressed. Built by reading the code (publishers: `Enqueue(...)` / `InteropEnvelope.Create(...)`; receivers: `.Handle<TPayload, THandler>(InteropTypes.X)` in each service's `DependencyInjection.cs`). The table is mirrored by an executable one: [`MessageCoverageTests`](../../tests/ClinicEz.Interop.E2E/MessageCoverageTests.cs) lists the same route for every `InteropTypes` constant and asserts that each hosted service's real handler registry equals the rows that name it as receiver, so this document and the code cannot drift silently. Every envelope is also signed, see [Envelope signing](#envelope-signing). The prose catalog of what each message means lives in [`platform-contract.md`](platform-contract.md); routing and delivery rules are in [`interop-hub.md`](interop-hub.md).
 
 Conventions:
 
@@ -16,7 +16,7 @@ Conventions:
 | `facility.license.issued` | portal (`FacilityProvisioningPublisher`) | clinic, laboratory, pharmacy, organization (the new facility) | `FacilityCreatedEvent` | To the facility's mailbox. Correlation = facility id (`ResourceId`). | OK. billing-api registers no handler (it has no license). |
 | `facility.provisioned` | clinic, laboratory, pharmacy, organization (their license-issued handler, same transaction) | portal (`FacilityProvisionedHandler`) | `FacilityProvisionedEvent` | To `Party.Portal`. Correlation = that of the license message (facility id). | OK |
 | `facility.directory.updated` | portal (`FacilityProvisioningPublisher`) | patient (`FacilityDirectoryUpdatedInteropHandler`) | `FacilityCreatedEvent` with `LicenseToken` and `Limits` removed | To the control-plane `patient` mailbox. Correlation = facility id. | OK |
-| `workspace.profile.updated` | portal (`WorkspaceProfilePublisher`) | clinic only (`WorkspaceProfileUpdatedHandler`) | `WorkspaceProfileUpdatedEvent` | One message per routable clinic of the workspace. Correlation = tenant id. | OK for clinics. Laboratory, pharmacy and organization are deliberately not sent it (they would have no handler) and refresh the profile by polling the portal. |
+| `workspace.profile.updated` | portal (`WorkspaceProfilePublisher`, on every profile change; also once when a facility is created) | clinic, laboratory, pharmacy, organization (shared `WorkspaceProfileUpdatedHandler`, registered with `HandleWorkspaceProfileUpdated()`) | `WorkspaceProfileUpdatedEvent` carrying the full `WorkspaceProfile` (brand, regional defaults, DPO contact; no secrets, no PHI) | One message per routable facility of the workspace. Correlation = tenant id. | OK. The handler accepts it only from the portal, only when addressed to a facility of the same tenant, and stores it in the service's own database when `Version` is newer than the held one (redelivery and reordering are harmless). No service calls the portal for the profile any more. |
 | `entitlements.changed` | portal (`EntitlementsPublisher`) | every routable facility (clinic, laboratory, pharmacy, organization) via `AddFacilityEntitlements` | `EntitlementsChangedEvent` (re-minted license token and limits) | One message per facility. Correlation = facility id. | OK. billing-api does not register it. |
 | `facility.heartbeat` | clinic, laboratory, pharmacy, organization (`FacilityHeartbeatService`, `Messaging:HeartbeatMinutes`, default 15) | portal (`FacilityHeartbeatHandler`) | `FacilityHeartbeatPayload` | To `Party.Portal`, one per hosted facility. Correlation = a new GUID per beat. | OK. Only accepted from the facility it describes. |
 | `notification.email.requested` | portal only today (`NotificationService`, addressed to itself) | portal (`NotificationEmailRequestedHandler`) | `NotificationEmailRequestedPayload` | `Party.Portal` to `Party.Portal`. Correlation chosen by the caller. | OK. The contract says any service may send it; no other service does yet. |
@@ -84,6 +84,19 @@ All billing messages stay inside one cell. The facility asks its own `billing` m
 | `billing.invoice.paid` | billing (`BillingMessages.InvoicePaid`, when an invoice becomes fully paid; skipped for a zero total) | portal (`BillingInvoicePaidHandler`) | `BillingInvoicePaidPayload` (no patient data) | To `Party.Portal`. Correlation = invoice id. | OK |
 | `billing.invoice.voided` | billing (`BillingMessages`, void of an unpaid invoice or refund of a paid one) | the requesting clinic, laboratory or pharmacy (`BillingInvoiceVoidedHandler`), and portal | `BillingInvoiceVoidedPayload` | To the facility for invoices that came from a request (correlation = `InvoiceRequestId`), and to `Party.Portal` for a refunded paid invoice (correlation = invoice id). | OK |
 
+## Envelope signing
+
+Every envelope any service sends is signed with that client's ECDSA P-256 key (`Messaging:SigningKey`); the hub and the receiving service both verify. Design and key handling: [`interop-hub.md`](interop-hub.md#envelope-signing).
+
+| Question | Answer |
+|---|---|
+| What is signed | Format `clinicez-envelope-v1`: a length-prefixed canonical text of message id, correlation id, type, schema version, `From`, `To` (or `SignedTo` when the hub rewrote a claim's recipient), sent and expiry timestamps, `SignerKeyId`, the SHA-256 of the canonical payload JSON (properties sorted, minimal whitespace) and the SHA-256 of `SealedPayload`. The signature field itself is excluded. |
+| Who signs | The SDK relay of the sending service, before the envelope leaves its outbox. `SignerKeyId` is the sender's hub client id. An edge hub re-signs forwarded envelopes as its own upstream client. |
+| Who verifies | (1) The hub, on `POST /v1/messages` and `POST /v1/claims`: `SignerKeyId` must equal the authenticated client and the signature must match the key registered for it. (2) The receiving service's SDK poller, with the sender's public key from `GET /v1/keys/{clientId}` (cached 5 minutes): an envelope that fails is nacked and never reaches a handler (`Messaging:VerifyInbound`, default on outside Development). |
+| `signature_required` | The envelope carries no signature, or the client has no registered key, while `Hub:Signing:Required` is on (default outside Development). A rejected message is final; a claim answers `403` with this reason. |
+| `invalid_signature` | A signature is present but does not verify (altered envelope, wrong key, `SignerKeyId` of another client). The hub rejects it (final, never queued); a receiver nacks it (`invalid_signature: ...`), so it is redelivered and finally dead-lettered but never dispatched to a handler. |
+| Not covered | The hub vouches for which public key belongs to which client (a compromised hub could publish another key), and `SealedPayload` (end-to-end sealing) is reserved and unused. Directory feed messages (`directory.*`) are signed by the portal like any other envelope. |
+
 ## Payload records
 
 All payloads live in [`packages/shared-dotnet`](../../packages/shared-dotnet).
@@ -91,6 +104,7 @@ All payloads live in [`packages/shared-dotnet`](../../packages/shared-dotnet).
 | Payload | File |
 |---|---|
 | `FacilityCreatedEvent`, `FacilityProvisionedEvent`, `WorkspaceProfileUpdatedEvent`, `AppointmentBookedEvent`, `ClinicRecordVerifiedEvent` | [`Common/`](../../packages/shared-dotnet/Common) |
+| `WorkspaceProfile` (the `Profile` inside `WorkspaceProfileUpdatedEvent`) | [`Workspace/WorkspaceProfileProvider.cs`](../../packages/shared-dotnet/Workspace/WorkspaceProfileProvider.cs) |
 | `EntitlementsChangedEvent`, `FacilityHeartbeatPayload` | [`Interoperability/EntitlementContracts.cs`](../../packages/shared-dotnet/Interoperability/EntitlementContracts.cs) |
 | `PatientShareRedeemPayload`, `PatientShareSnapshotPayload`, `PatientDocumentIssuedPayload`, `LabOrderStatusChangedPayload`, `LabResultReviewedPayload`, `RxStatusChangedPayload`, `MedicalCertificateIssuedPayload`, `BillingInvoiceRequestedPayload`, `BillingPaymentConfirmedPayload`, `BillingInvoicePaidPayload` | [`Interoperability/ClinicalWorkflowContracts.cs`](../../packages/shared-dotnet/Interoperability/ClinicalWorkflowContracts.cs) |
 | `BillingInvoiceVoidedPayload` | [`Interoperability/BillingVoidContracts.cs`](../../packages/shared-dotnet/Interoperability/BillingVoidContracts.cs) |
@@ -103,4 +117,3 @@ All payloads live in [`packages/shared-dotnet`](../../packages/shared-dotnet).
 1. **Reserved types without producer or handler:** `lab.order.claimed`, `lab.order.accepted`, `lab.order.rejected`, `lab.order.payment.confirmed`, `medcert.issued`. The laboratory lifecycle, including acceptance and rejection, already travels as `lab.order.status.changed`. Remove the constants or implement them before a service starts sending them; until then the hub still lets them through as replies.
 2. **`notification.email.requested` has one producer.** Only portal-api requests mail (to itself). Facility services have no way to send an email request yet.
 3. **billing-api does not take part in provisioning messages.** It registers neither `facility.license.issued`, `entitlements.changed` nor the heartbeat, so a cell's billing service is not license-gated and does not report liveness.
-4. **`workspace.profile.updated` reaches clinics only.** Laboratory, pharmacy and organization pick up profile changes by polling the portal (cached for `WorkspaceProfile:CacheSeconds`, default 300).

@@ -32,6 +32,7 @@ There is no message broker. Every API stack talks to the [Interop Hub](interop-h
 | `Messaging__Service` | Mailbox name of the service (`clinic`, `laboratory`, `pharmacy`, `organization`, `patient`, `portal`, `billing`) |
 | `Messaging__HubUrl` | Base URL of the hub, from `MESSAGING_HUB_URL` |
 | `Messaging__ClientId` / `Messaging__ClientSecret` | Per-service hub credentials, from `MESSAGING_CLIENT_ID` / `MESSAGING_CLIENT_SECRET` |
+| `Messaging__SigningKey` | ECDSA P-256 private key (base64 of the PEM) that signs the service's hub envelopes, from `MESSAGING_SIGNING_KEY`; its public half is registered at the hub |
 
 The compose files refuse to start when a `MESSAGING_*` value is empty. The deploy workflows fill them from GitHub configuration:
 
@@ -39,10 +40,15 @@ The compose files refuse to start when a `MESSAGING_*` value is empty. The deplo
 |---|---|
 | `MESSAGING_HUB_URL` (variable, or secret as fallback) | all API deploy workflows |
 | `<SVC>_MESSAGING_CLIENT_ID`, `<SVC>_MESSAGING_CLIENT_SECRET` (secrets; `<SVC>` = `CLINIC`, `LABORATORY`, `PHARMACY`, `ORGANIZATION`, `PATIENT`, `PORTAL`, `BILLING`) | the matching `deploy-<svc>-api-*.yml` |
+| `<SVC>_MESSAGING_SIGNING_KEY` (secrets, same `<SVC>` list; a private key, PEM or base64 of a PEM) | the matching `deploy-<svc>-api-*.yml` |
 | `DATA_NETWORK`, `NPM_NETWORK` (optional variables, default `data-network` / `npm-default`) | all API deploy workflows |
-| `INTEROP_HUB_DB_CONNECTION_STRING`, `INTEROP_HUB_PORTAL_CLIENT_SECRET` (secrets), optional `INTEROP_HUB_PAYLOAD_ENCRYPTION_KEY` | `deploy-interop-hub-dev.yml` |
+| `INTEROP_HUB_DB_CONNECTION_STRING`, `INTEROP_HUB_PORTAL_CLIENT_SECRET` (secrets), `INTEROP_HUB_PORTAL_PUBLIC_KEY` (the public half of `PORTAL_MESSAGING_SIGNING_KEY`), optional `INTEROP_HUB_PAYLOAD_ENCRYPTION_KEY` and variable `HUB_SIGNING_REQUIRED` (default `true`) | `deploy-interop-hub-dev.yml` |
 
 Each service's client id and secret must match a client in the hub's bootstrap configuration (see [`services/interop-hub/README.md`](../services/interop-hub/README.md)). Service-specific settings (patient sharing key, portal SMTP and hub public URL, clinic public upload URL, billing keys) are listed in [`docs/deployment-configuration.md`](../docs/deployment-configuration.md).
+
+## Secrets and keys
+
+No secret or key has a default in these files: license keys, hub signing keys, document / UPSC / JWT / internal keys, the clinic master secret and the Data Protection settings are all supplied through GitHub secrets, and the compose files and workflows refuse to proceed without the required ones. The full table, the GitHub secrets checklist, rotation and migration notes are in [`docs/deployment-configuration.md`](../docs/deployment-configuration.md#secrets-keys-and-signing). Generate the values with `scripts/generate-license-keys`, `scripts/generate-signing-key` and `scripts/generate-secrets` (`.sh` and `.ps1`). The workflows share `scripts/ci/prepare-key-env.sh` to normalise and validate key values before writing `.env`. The edge bundle generates its own (see [`edge/README.md`](edge/README.md#keys-and-rotation)).
 
 ## Container images
 

@@ -109,7 +109,7 @@ Services never call each other directly and **there is no message broker** (no b
 - **Compose Files**: All compose files live under `deploy/<stack>/docker-compose.yml` (no `.deploy.yml` suffix); see `deploy/README.md`.
 - **Networks**: Services connect to two external networks:
   - `npm-default`: Ingress via Nginx Proxy Manager (routes to container port `8080` without host port exposure).
-  - `data-network`: Internal access to `postgres` and `redis`. Names come from `DATA_NETWORK` / `NPM_NETWORK` (defaults `data-network` / `npm-default`).
+  - `data-network`: Internal access to `postgres`. Names come from `DATA_NETWORK` / `NPM_NETWORK` (defaults `data-network` / `npm-default`).
 - **Container Names & Labels**:
   - `container_name: clinicez-<service>`
   - `labels: ["project=clinicez", "environment=dev"]`

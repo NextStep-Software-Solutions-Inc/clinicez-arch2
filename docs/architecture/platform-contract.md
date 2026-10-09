@@ -38,7 +38,7 @@ flowchart LR
 4. Upsert the local settings row (license token, plan tier, limits, expiry, names). Provisioning is an upsert, so redelivery changes nothing.
 5. Enqueue `facility.provisioned` (`FacilityProvisionedEvent`, `To = Party.Portal`, `CorrelationId = context.CorrelationId`) **before** the `SaveChanges` that persists the settings. The portal marks the facility provisioned when it arrives.
 
-**License verification.** Register `IFacilityLicenseValidator` as a singleton ([FacilityLicenseValidator](../../packages/shared-dotnet/Licensing/FacilityLicenseValidator.cs)). `Validate(token, expectedFacilityId, expectedTenantId)` checks, in order: format `payload.signature` (Base64Url), ECDSA-P256/SHA-256 signature against the authority public key (`FacilityLicense:PublicKeyPem` config, else `FACILITY_LICENSE_PUBLIC_KEY`, else the compiled-in default), facility binding, tenant binding (id or slug), expiry. Results: `Success`, `Expired` (payload still returned; the validator message says "Grace Read-Only mode"), `Tampered`, `Missing`.
+**License verification.** Register `IFacilityLicenseValidator` as a singleton ([FacilityLicenseValidator](../../packages/shared-dotnet/Licensing/FacilityLicenseValidator.cs)). `Validate(token, expectedFacilityId, expectedTenantId)` checks, in order: format `payload.signature` (Base64Url), ECDSA-P256/SHA-256 signature against the authority public key (`FacilityLicense:PublicKeyPem` config, else `FACILITY_LICENSE_PUBLIC_KEY`; PEM or base64 of PEM; **there is no compiled-in key**, a missing key fails the host at startup outside Development; `FacilityLicense:PreviousPublicKeyPem` / `FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS` is accepted next to it while the authority key is rotated), facility binding, tenant binding (id or slug), expiry. Results: `Success`, `Expired` (payload still returned; the validator message says "Grace Read-Only mode"), `Tampered`, `Missing`.
 
 | Item | Today |
 |---|---|
@@ -103,12 +103,14 @@ Bound from section `Messaging` ([InteropOptions](../../packages/shared-dotnet/In
 | `Messaging:HubUrl` | `Messaging__HubUrl` | none | The cell's hub: the cloud hub, or the edge cell's local hub. |
 | `Messaging:ClientId` | `Messaging__ClientId` | none | Hub client of this service. |
 | `Messaging:ClientSecret` | `Messaging__ClientSecret` | none | Shown once at creation; rotate through the portal. |
+| `Messaging:SigningKey` | `Messaging__SigningKey` | none | The client's ECDSA P-256 **private** key (PEM or base64 of PEM) used to sign every outgoing envelope. **Required for `Hub` transport outside Development** (startup fails without it); the hub admin API returns it once with the secret, or generate one with `scripts/generate-signing-key.(sh\|ps1)` and register the public half. See [Envelope signing](interop-hub.md#envelope-signing). |
+| `Messaging:VerifyInbound` | `Messaging__VerifyInbound` | on outside Development | Verify the signature of every pulled envelope against the sender's public key from the hub; failures are nacked. Never applies to `InProcess`. |
 | `Messaging:Service` | `Messaging__Service` | none | Mailbox this service reads (`clinic`, `laboratory`, ...). Must equal the hub client's service. |
 | `Messaging:Enabled` | `Messaging__Enabled` | `true` | `false` registers the SDK without relay/poller (tests, migrations). |
 | `RelayIntervalMs`, `PollWaitSeconds`, `BatchSize` | `Messaging__...` | 1000, 20, 50 | Relay idle delay, long-poll wait, batch. |
 | `OutboxRetentionDays`, `InboxRetentionDays` | `Messaging__...` | 7, 14 | Shipped outbox rows / processed inbox rows are purged after this. |
 
-Deploy compose files map `MESSAGING_HUB_URL`, `MESSAGING_CLIENT_ID`, `MESSAGING_CLIENT_SECRET` to these (see [deploy/clinic-api/docker-compose.yml](../../deploy/clinic-api/docker-compose.yml)); `Messaging__Transport=Hub` and `Messaging__Service=<service>` are fixed in the compose file.
+Deploy compose files map `MESSAGING_HUB_URL`, `MESSAGING_CLIENT_ID`, `MESSAGING_CLIENT_SECRET` and `<SVC>_HUB_SIGNING_KEY` to these (see [deploy/clinic-api/docker-compose.yml](../../deploy/clinic-api/docker-compose.yml)); `Messaging__Transport=Hub` and `Messaging__Service=<service>` are fixed in the compose file.
 
 ### Rules every handler and publisher follows
 
@@ -153,14 +155,14 @@ A new type adds its own limit property and feature key constants there and check
 
 ## Making `FacilityType` extensible
 
-[`FacilityType`](../../packages/shared-dotnet/Common/FacilityType.cs) is a closed enum (`Clinic`, `Organization`, `Laboratory`, `Pharmacy`) serialised as a **string** on the wire (`JsonStringEnumConverter`) and stored as a string in the portal (`HasConversion<string>()`) and in the hub (`HasConversion<string>().HasMaxLength(24)`). Adding a value is a source change, a coordinated deploy, and a handful of switches. Precisely:
+[`FacilityType`](../../packages/shared-dotnet/Common/FacilityType.cs) is a closed enum (`Clinic`, `Organization`, `Laboratory`, `Pharmacy`) serialised as a **strict string** on the wire (`StrictJsonStringEnumConverter`: names only, numbers and unknown names are rejected) and stored as a string in the portal (`HasConversion<string>()`) and in the hub (all hub enum columns are strings, `varchar(64)`). Adding a value is a source change, a coordinated deploy, and a handful of switches. Precisely:
 
 | # | What must change | Where | Why / failure if skipped |
 |---|---|---|---|
-| 1 | Add the enum value (append at the end; keep the name <= 24 characters) | [FacilityType.cs](../../packages/shared-dotnet/Common/FacilityType.cs) | Hub column is `varchar(24)`. |
+| 1 | Add the enum value (append at the end; keep the name <= 64 characters) | [FacilityType.cs](../../packages/shared-dotnet/Common/FacilityType.cs) | Hub enum columns are `varchar(64)`. |
 | 2 | Add a service-name constant and a `ForFacilityType` case | [Party.cs](../../packages/shared-dotnet/Interop/Party.cs) (`InteropServices`) | `ForFacilityType` has a throwing default arm: `Party.ForFacility(...)`/`InteropServices.For` throw `ArgumentOutOfRangeException`. `IInteropPublisher.Enqueue` calls it, so portal's `EnqueueLicenseIssued` (and therefore facility creation) fails; `HubOnboardingService` fails the same way. The hub itself no longer throws: `RoutingPolicy.ServiceFor` routes by `To.Service` or rejects with `unknown_facility_type`. |
 | 3 | Make sure the service name passes `MailboxNames.IsValidService`: starts with `a-z`, then `a-z`, `0-9`, `-`; 1 to 32 characters; not `cell-inbox`, not `hub` | [HubContracts.cs](../../services/interop-hub/ClinicEz.Interop.Application/HubContracts.cs) | Hub refuses to create a client or route to an invalid service name. `billing`, `patient`, `portal` are additional well-known services, not facility types. |
-| 4 | Deploy the **hub first**, then portal, then services | hub, portal | Hub, portal and services share the enum via `ClinicEz.Shared`. An older hub fails to deserialise `directory.facility.upserted` with an unknown `FacilityType`. |
+| 4 | Deploy the **hub first**, then portal, then services | hub, portal | Hub, portal and services share the enum via `ClinicEz.Shared`. An older hub answers `400` to (and cannot deserialise) any envelope or directory feed carrying a `FacilityType` name it does not know. |
 | 5 | Portal: type-specific switches (default subdomain in `GetFacilitiesQuery`, `ProcessTenantWorkspaceWebhookCommand`, any plan/limit rule in `TenantFeatureGuard`) and the portal-web facility type lists/labels | `services/portal-api/**`, `apps/portal-web/**` | `grep -rn "FacilityType\." services apps` finds the rest. |
 | 6 | License: `FacilityLicensePayload.FacilityType` is a free string; extend `FacilityLimits`/`FacilityFeatureKeys`/`PlanTierDefaults` if the type needs its own limits or features | [Licensing](../../packages/shared-dotnet/Licensing) | See [section 5](#5-entitlement-keys). |
 | 7 | Directory: no schema change; the type is just a string column and a query filter (`?type=`) | hub | Directory search and claims (`To.FacilityType`) work for any value. |
@@ -171,6 +173,30 @@ A new type adds its own limit property and feature key constants there and check
 
 ---
 
+## Security configuration every service must provide
+
+The SDK refuses to start (a hosted `InteropStartupCheck` runs first and names the missing setting) outside Development when a key it depends on is absent. There are **no compiled-in keys or secrets**.
+
+| Setting | Env var | Needed by | Notes |
+|---|---|---|---|
+| `Messaging:SigningKey` | `Messaging__SigningKey` | every service using the `Hub` transport | Hub client signing key, see above. |
+| `FacilityLicense:PublicKeyPem` (+ optional `PreviousPublicKeyPem`) | `FACILITY_LICENSE_PUBLIC_KEY` (`_PREVIOUS`) | services that validate licenses (clinic, laboratory, pharmacy, organization, portal) | The authority **public** key. The private key (`FACILITY_LICENSE_PRIVATE_KEY`) exists only in portal-api. |
+| `Documents:SigningKey` | `DOCUMENT_SIGNING_KEY` | services that register `AddClinicEzDocumentEngine()` (clinic, laboratory) | Keys the document digest/verification HMAC; no default outside Development. |
+
+In Development a per-machine license authority key is generated once under `%LOCALAPPDATA%/ClinicEz/dev-license-authority-key.pem` (override the folder with `CLINICEZ_DEV_KEY_DIR`) and a document key is derived from it, so locally running services and tests agree without configuration. `CLINICEZ_DEV_KEYS=true` enables the same behaviour for processes without a Development host environment; the repository sets it for test projects through the root `tests.runsettings` (applied by the root `Directory.Build.targets`). Never set it in a deployed environment.
+
+All shared enums (`FacilityType`, `PartyKind`, `LinkStatus`, `LinkScopes`, ...) serialise as **PascalCase member-name strings only** (`"Laboratory"`, never `2`): `StrictJsonStringEnumConverter` rejects numbers and unknown names with a `400` at deserialization and refuses to write an undefined value. A service registers `services.AddStrictStringEnums()` (HTTP JSON, MVC JSON and the MVC string-enum model binder) and stores its own enum columns as strings; `StringEnumModel.FindNonStringEnumProperties(dbContext.Model)` is the guard for a unit test.
+
+### Workspace profile (branding and regional defaults)
+
+The workspace profile (name, logo, accent colour, time zone, locale, date format, currency, DPO contact) is **pushed by the portal** in `workspace.profile.updated` (full [`WorkspaceProfile`](../../packages/shared-dotnet/Workspace/WorkspaceProfileProvider.cs) in `Profile`, to every routable facility, and once when a facility is created). A service never calls the portal for it. To take part:
+
+1. `ApplicationDbContext` implements `IWorkspaceProfileDbContext` (`DbSet<WorkspaceProfileRecord> WorkspaceProfiles`) and calls `modelBuilder.ApplyWorkspaceProfileModel()`; add a migration for the `workspace_profiles` table (the profile is one JSON column, so new fields need no migration).
+2. `services.AddWorkspaceProfile<ApplicationDbContext>()` and `.HandleWorkspaceProfileUpdated()` inside `AddInterop`.
+3. Read it through `IWorkspaceProfileProvider` (`GetAsync`, or `TryGetCached` for synchronous code such as PDF rendering). It returns null until the first message has arrived, so every caller needs a built-in fallback.
+
+The shared handler accepts the message only from the portal and only when addressed to a facility of the profile's tenant, and applies it only when `Version` is newer than the stored one, which makes redelivery and reordering harmless. `WorkspaceProfile:CacheSeconds` (default 60) is only the in-memory cache lifetime.
+---
 ## Add a new service: checklist
 
 1. **Scaffold** `services/<name>-api` with the Clean Architecture projects used by clinic/lab/pharmacy (`.Api`, `.Application`, `.Domain`, `.Infrastructure`, tests) and a Dockerfile.
@@ -179,8 +205,8 @@ A new type adds its own limit property and feature key constants there and check
 4. **Auth:** `AddFacilityLocalAuth(configuration, "<name>-api")`, claims `tenant_id` + `<name>_id`, a scope middleware that rejects a mismatching `X-Facility-Id`, a context class that takes tenant/facility only from claims, no anonymous endpoints except the public ones you explicitly mark.
 5. **Provisioning handler:** `FacilityLicenseIssued` handler with the four checks and the `facility.provisioned` ack (copy the lab handler); register `IFacilityLicenseValidator`; license/status endpoints like the existing `LicenseController`s.
 6. **Domain handlers/publishers** for your message types: add constants to [`InteropTypes`](../../packages/shared-dotnet/Interop/InteropTypes.cs) (the only place), payload records under `packages/shared-dotnet/Interoperability`, register with `.Handle<TPayload, THandler>(type)`; publish before `SaveChanges`.
-7. **Messaging config:** `Messaging__Transport/Service/HubUrl/ClientId/ClientSecret` in `deploy/<name>-api/docker-compose.yml` and the deploy workflow secrets (`<NAME>_MESSAGING_CLIENT_ID/SECRET`), mirroring [deploy-laboratory-api-dev.yml](../../.github/workflows/deploy-laboratory-api-dev.yml).
-8. **Hub client:** cloud cell: operations create a `CloudService` client with `Service=<name>` in cell `cloud`; on-prem: the portal creates the `EdgeCell` client automatically when it creates the facility (check `HubOnboardingService.CreateClientAsync` resolves your service name).
+7. **Messaging config:** `Messaging__Transport/Service/HubUrl/ClientId/ClientSecret` in `deploy/<name>-api/docker-compose.yml` and the deploy workflow secrets (`<NAME>_MESSAGING_CLIENT_ID/SECRET` plus `<NAME>_HUB_SIGNING_KEY`; license public key and any document key if the service validates licenses or renders documents), mirroring [deploy-laboratory-api-dev.yml](../../.github/workflows/deploy-laboratory-api-dev.yml).
+8. **Hub client:** cloud cell: operations create a `CloudService` client with `Service=<name>` in cell `cloud` (the admin API returns the signing key once; or register a public key you generated); on-prem: the portal creates the `EdgeCell` client automatically when it creates the facility (check `HubOnboardingService.CreateClientAsync` resolves your service name).
 9. **Billing integration (optional):** send `billing.invoice.requested` with `To.Service = "billing"` and wait for `billing.payment.confirmed` (see [billing.md](billing.md); the billing service is still a work in progress).
 10. **Tests:** handler tests on the `InProcess` transport, a cross-tenant isolation test (two tenants, same external id), license validator tests, and the portal-side test that creating the facility stages the license and directory messages.
 11. **Docs and guard:** list the new types in the [message matrix](message-matrix.md); `scripts/check-no-broker.ps1` (run from `backend-ci.yml`) keeps broker or MassTransit references out of the repo.
