@@ -6,6 +6,7 @@ using ClinicEz.Pharmacy.Infrastructure.Persistence.Repositories;
 using ClinicEz.Pharmacy.Infrastructure.Services;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Facility;
 using ClinicEz.Shared.Interoperability;
 using Hangfire;
 using Hangfire.PostgreSql;
@@ -46,6 +47,10 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddSingleton<ClinicEz.Shared.Licensing.IFacilityLicenseValidator, ClinicEz.Shared.Licensing.FacilityLicenseValidator>();
 
+        // Entitlement renewals from the portal and the liveness heartbeat, both on PharmacySettings
+        services.AddFacilityEntitlements<PharmacyLicenseStore>();
+        services.AddFacilityHeartbeat<PharmacyLicenseStore>();
+
         // Facility-local authentication (no external identity provider; works offline/LAN)
         services.AddMemoryCache();
         services.AddHttpContextAccessor();
@@ -73,7 +78,8 @@ public static class DependencyInjection
         services.AddInterop<ApplicationDbContext>(configuration, handlers => handlers
             .Handle<FacilityCreatedEvent, FacilityCreatedHandler>(InteropTypes.FacilityLicenseIssued)
             .Handle<PrescriptionIssuedEvent, PrescriptionIssuedHandler>(InteropTypes.RxIssued)
-            .Handle<BillingPaymentConfirmedPayload, BillingPaymentConfirmedHandler>(InteropTypes.BillingPaymentConfirmed));
+            .Handle<BillingPaymentConfirmedPayload, BillingPaymentConfirmedHandler>(InteropTypes.BillingPaymentConfirmed)
+            .HandleEntitlementsChanged());
 
         if (env != null && env.IsDevelopment())
         {

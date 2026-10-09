@@ -23,7 +23,9 @@ public record PharmacyLicenseStatusDto(
     System.Collections.Generic.List<string> EnabledFeatures,
     DateTime? ExpiresAtUtc,
     bool IsTampered,
-    string? ErrorMessage);
+    string? ErrorMessage,
+    bool IsReadOnlyGrace = false,
+    DateTime? ReadOnlyGraceUntilUtc = null);
 
 [ApiController]
 [Route("api/v1/pharmacy/license")]
@@ -81,7 +83,9 @@ public sealed class LicenseController : ControllerBase
             features,
             validation.Payload?.ExpiresAtUtc ?? settings?.LicenseExpiresAt,
             validation.IsTampered,
-            validation.ErrorMessage);
+            validation.ErrorMessage,
+            validation.IsReadOnlyGrace,
+            validation.ReadOnlyGraceUntilUtc);
 
         return Ok(ApiResponse<PharmacyLicenseStatusDto>.Success(dto));
     }
@@ -121,6 +125,7 @@ public sealed class LicenseController : ControllerBase
                 PharmacyId = targetPharmacyId != Guid.Empty ? targetPharmacyId : (validation.Payload?.FacilityId ?? Guid.NewGuid()),
                 PharmacyName = validation.Payload?.FacilityName ?? "Pharmacy Facility",
                 LicenseToken = request.LicenseToken.Trim(),
+                EntitlementVersion = validation.Payload?.EntitlementVersion ?? 0,
                 PlanTier = validation.Payload?.PlanTier ?? "Community",
                 MaxStaffLimit = validation.Payload?.Limits?.MaxStaff ?? 5,
                 LicenseExpiresAt = validation.Payload?.ExpiresAtUtc,
@@ -132,6 +137,7 @@ public sealed class LicenseController : ControllerBase
         else
         {
             settings.LicenseToken = request.LicenseToken.Trim();
+            settings.EntitlementVersion = validation.Payload?.EntitlementVersion ?? 0;
             settings.PlanTier = validation.Payload?.PlanTier ?? "Community";
             settings.MaxStaffLimit = validation.Payload?.Limits?.MaxStaff ?? 5;
             settings.LicenseExpiresAt = validation.Payload?.ExpiresAtUtc;
@@ -153,7 +159,9 @@ public sealed class LicenseController : ControllerBase
             validation.Payload?.EnabledFeatures ?? PlanTierDefaults.GetFeaturesForTier(settings.PlanTier),
             validation.Payload?.ExpiresAtUtc,
             false,
-            validation.ErrorMessage);
+            validation.ErrorMessage,
+            validation.IsReadOnlyGrace,
+            validation.ReadOnlyGraceUntilUtc);
 
         return Ok(ApiResponse<PharmacyLicenseStatusDto>.Success(dto, "Pharmacy facility license successfully applied and verified."));
     }

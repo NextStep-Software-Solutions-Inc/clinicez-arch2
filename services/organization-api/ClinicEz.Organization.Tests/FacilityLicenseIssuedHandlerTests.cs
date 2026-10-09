@@ -1,9 +1,13 @@
 using ClinicEz.Organization.Application.Interop;
+using ClinicEz.Organization.Domain.Entities;
 using ClinicEz.Organization.Domain.Interfaces;
 using ClinicEz.Organization.Infrastructure.Persistence;
+using ClinicEz.Organization.Infrastructure.Persistence.Repositories;
+using ClinicEz.Organization.Infrastructure.Services;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Background;
+using ClinicEz.Shared.Interop.Facility;
 using ClinicEz.Shared.Interop.Handling;
 using ClinicEz.Shared.Interop.Persistence;
 using ClinicEz.Shared.Interop.Transport;
@@ -42,9 +46,13 @@ internal sealed class OrganizationInteropHost : IDisposable
         services.AddDbContext<ApplicationDbContext>(o => o.UseInMemoryDatabase(dbName));
         services.AddScoped(_ => Substitute.For<ISieveProcessor>());
         services.AddScoped(_ => Substitute.For<IProductRepository>());
+        services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddFacilityEntitlements<OrganizationLicenseStore>();
+        services.AddFacilityHeartbeat<OrganizationLicenseStore>();
         services.AddInterop<ApplicationDbContext>(config, handlers => handlers
-            .Handle<FacilityCreatedEvent, FacilityLicenseIssuedHandler>(InteropTypes.FacilityLicenseIssued));
+            .Handle<FacilityCreatedEvent, FacilityLicenseIssuedHandler>(InteropTypes.FacilityLicenseIssued)
+            .HandleEntitlementsChanged());
         Provider = services.BuildServiceProvider();
     }
 
@@ -124,6 +132,7 @@ public class FacilityLicenseIssuedHandlerTests
         {
             var handler = new FacilityLicenseIssuedHandler(
                 scope.ServiceProvider.GetRequiredService<IInteropPublisher>(),
+                scope.ServiceProvider.GetRequiredService<IRepository<OrganizationFacility>>(),
                 failingUnitOfWork,
                 NullLogger<FacilityLicenseIssuedHandler>.Instance);
 

@@ -15,6 +15,9 @@ public sealed class PharmacySettings : BaseEntity
 
     // Cryptographic License & Hard Limit Profile
     public string? LicenseToken { get; set; }
+
+    /// <summary>Workspace entitlement version of <see cref="LicenseToken"/>; a replacement license older than this is ignored.</summary>
+    public int EntitlementVersion { get; set; }
     public string PlanTier { get; set; } = "Community";
     public int MaxStaffLimit { get; set; } = 5;
     public DateTime? LicenseExpiresAt { get; set; }

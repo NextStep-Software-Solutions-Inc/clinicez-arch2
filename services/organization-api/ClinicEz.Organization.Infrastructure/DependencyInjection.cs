@@ -6,6 +6,8 @@ using Hangfire.PostgreSql;
 using ClinicEz.Organization.Application.Interop;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Facility;
+using ClinicEz.Organization.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -38,6 +40,7 @@ public static class DependencyInjection
         });
         // Register repositories and Unit of Work
         services.AddScoped<IProductRepository, ProductRepository>();
+        services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         // Add Hangfire
@@ -48,10 +51,14 @@ public static class DependencyInjection
 
         services.AddHangfireServer();
 
+        // Facility entitlements (signed license held per organization) and the heartbeat to the portal.
+        services.AddFacilityEntitlements<OrganizationLicenseStore>();
+        services.AddFacilityHeartbeat<OrganizationLicenseStore>();
+
         // Interop hub messaging (replaces the message broker): transactional outbox/inbox + typed handlers.
         services.AddInterop<ApplicationDbContext>(configuration, handlers => handlers
-            .Handle<FacilityCreatedEvent, FacilityLicenseIssuedHandler>(InteropTypes.FacilityLicenseIssued));
-
+            .Handle<FacilityCreatedEvent, FacilityLicenseIssuedHandler>(InteropTypes.FacilityLicenseIssued)
+            .HandleEntitlementsChanged());
 
         if (env != null && env.IsDevelopment())
         {

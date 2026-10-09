@@ -10,6 +10,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<InteropOutboxMessage> InteropOutbox { get; set; }
     public DbSet<InteropInboxMessage> InteropInbox { get; set; }
     public DbSet<Product> Products { get; set; }
+    public DbSet<OrganizationFacility> OrganizationFacilities { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -42,6 +43,15 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(e => e.Name).IsRequired().HasMaxLength(255);
             entity.Property(e => e.Sku).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Price).HasPrecision(18, 2);
+        });
+
+        modelBuilder.Entity<OrganizationFacility>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.PlanTier).IsRequired().HasMaxLength(50);
+            entity.HasIndex(e => new { e.TenantId, e.FacilityId }).IsUnique();
         });
 
         modelBuilder.ApplyInteropModel();
