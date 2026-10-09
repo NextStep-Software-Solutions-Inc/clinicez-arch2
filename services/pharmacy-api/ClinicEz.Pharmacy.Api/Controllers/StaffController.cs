@@ -76,4 +76,13 @@ public sealed class StaffController : ControllerBase
         var result = await _sender.Send(command, ct);
         return CreatedAtAction(nameof(GetStaffMembers), new { id = result.Id }, ApiResponse<PharmacyStaffMemberDto>.Success(result, "Pharmacy staff member created successfully."));
     }
+
+    [HttpDelete("{id:guid}")]
+    [HasPermission(PharmacyPermissions.StaffManage)]
+    public async Task<ActionResult<ApiResponse<bool>>> DeactivateStaffMember(Guid id, CancellationToken ct)
+    {
+        var targetPharmacyId = _context.PharmacyId;
+        var result = await _sender.Send(new DeactivatePharmacyStaffMemberCommand(targetPharmacyId, id), ct);
+        return Ok(ApiResponse<bool>.Success(result, "Pharmacy staff member deactivated successfully."));
+    }
 }
