@@ -1,3 +1,5 @@
+using ClinicEz.Patient.Domain.Entities;
+
 namespace ClinicEz.Patient.Domain.Interfaces;
 
 public interface IPatientRepository : IBaseRepository<ClinicEz.Patient.Domain.Entities.Patient>
@@ -7,4 +9,10 @@ public interface IPatientRepository : IBaseRepository<ClinicEz.Patient.Domain.En
 
     /// <summary>True when the patient <paramref name="patientId"/> exists and is linked to the given Clerk user.</summary>
     Task<bool> IsOwnedByAsync(Guid patientId, string clerkUserId, CancellationToken cancellationToken = default);
+
+    /// <summary>The patient's most recent vital-sign measurements, newest first.</summary>
+    Task<IReadOnlyList<VitalSigns>> GetRecentVitalsAsync(Guid patientId, int take, CancellationToken cancellationToken = default);
+
+    /// <summary>Vaccinations a facility administered to the patient, newest first.</summary>
+    Task<IReadOnlyList<VaccinationAdministered>> GetVaccinationsAdministeredAsync(Guid patientId, CancellationToken cancellationToken = default);
 }

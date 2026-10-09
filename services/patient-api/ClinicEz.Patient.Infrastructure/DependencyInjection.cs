@@ -4,6 +4,9 @@ using ClinicEz.Shared.Interfaces;
 using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interoperability;
 using ClinicEz.Patient.Application.Features.Appointments.Interop;
+using ClinicEz.Patient.Application.Features.Documents.Interop;
+using ClinicEz.Patient.Application.Features.Sharing;
+using ClinicEz.Patient.Application.Features.Sharing.Interop;
 using Hangfire;
 using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -47,6 +50,12 @@ public static class DependencyInjection
         services.Configure<R2Options>(configuration.GetSection("R2"));
         services.Configure<ClerkOptions>(configuration.GetSection("Clerk"));
         services.Configure<EncryptionOptions>(configuration.GetSection("Encryption"));
+        services.AddOptions<SharingOptions>()
+            .Bind(configuration.GetSection(SharingOptions.SectionName))
+            .Validate(
+                o => !string.IsNullOrWhiteSpace(o.SigningKey) && o.SigningKey.Length >= SharingOptions.MinimumSigningKeyLength,
+                $"{SharingOptions.SectionName}:SigningKey must be set to a secret of at least {SharingOptions.MinimumSigningKeyLength} characters.")
+            .ValidateOnStart();
 
         // ── EF Core — PostgreSQL with snake_case naming ───────────────────────
         services.AddDbContext<ApplicationDbContext>(options =>
@@ -87,6 +96,8 @@ public static class DependencyInjection
         services.AddScoped<IFileRecordRepository, FileRecordRepository>();
         services.AddScoped<IDocumentTypeRepository, DocumentTypeRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<IPatientAccessRepository, PatientAccessRepository>();
+        services.AddScoped<IPatientDocumentRepository, PatientDocumentRepository>();
 
         // ── Application Services ──────────────────────────────────────────────
         services.AddSingleton<IStorageService, R2StorageService>();
@@ -160,7 +171,12 @@ public static class DependencyInjection
         services.AddInterop<ApplicationDbContext>(configuration, handlers => handlers
             .Handle<FacilityCreatedEvent, FacilityDirectoryUpdatedInteropHandler>(InteropTypes.FacilityDirectoryUpdated)
             .Handle<ClinicRecordVerifiedEvent, ClinicRecordVerifiedInteropHandler>(InteropTypes.ClinicRecordVerified)
-            .Handle<ClinicAppointmentUpdatedEvent, ClinicAppointmentUpdatedInteropHandler>(InteropTypes.ClinicAppointmentUpdated));
+            .Handle<ClinicAppointmentUpdatedEvent, ClinicAppointmentUpdatedInteropHandler>(InteropTypes.ClinicAppointmentUpdated)
+            .Handle<PatientShareRedeemPayload, PatientShareRedeemInteropHandler>(InteropTypes.PatientShareRedeem)
+            .Handle<PatientDocumentIssuedPayload, PatientDocumentIssuedInteropHandler>(InteropTypes.PatientDocumentIssued)
+            .Handle<LabOrderStatusChangedPayload, LabOrderStatusChangedInteropHandler>(InteropTypes.LabOrderStatusChanged)
+            .Handle<RxStatusChangedPayload, RxStatusChangedInteropHandler>(InteropTypes.RxStatusChanged)
+            .Handle<LabResultReviewedPayload, LabResultReviewedInteropHandler>(InteropTypes.LabResultReviewed));
 
     public static IServiceCollection AddClerkAuthentication(
         this IServiceCollection services,

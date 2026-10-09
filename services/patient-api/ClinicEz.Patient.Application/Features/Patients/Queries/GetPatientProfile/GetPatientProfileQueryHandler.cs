@@ -26,7 +26,8 @@ public sealed class GetPatientProfileQueryHandler : IRequestHandler<GetPatientPr
             patient.EducationLevel?.ToString(),
             patient.Mobile, patient.AltPhone, patient.Email, patient.MessengerHandle,
             patient.AvatarUrl,
-            patient.ConsentToShareInfo);
+            patient.ConsentToShareInfo,
+            patient.ClinicEzId);
 
         var addresses = patient.Addresses
             .Select(a => new PatientAddressDto(

@@ -57,8 +57,6 @@ export interface ClinicServiceDto {
 }
 
 export interface ClinicDetail extends ClinicSummary {
-    /** PatientApp backend will proxy API calls to this URL */
-    baseUrl: string;
     privacyPolicyUrl: string | null;
     termsAndConditionsUrl: string | null;
     linkedOrganizations: OrganizationSummary[];

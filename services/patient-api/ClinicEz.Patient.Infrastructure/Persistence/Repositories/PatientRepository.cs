@@ -44,4 +44,17 @@ public sealed class PatientRepository : BaseRepository<Patient>, IPatientReposit
             .Include(p => p.MentalHealthProfile)
             .Include(p => p.NcdQuestionnaire)
             .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
+
+    public async Task<IReadOnlyList<VitalSigns>> GetRecentVitalsAsync(Guid patientId, int take, CancellationToken cancellationToken = default)
+        => await Context.VitalSigns.AsNoTracking()
+            .Where(v => v.PatientId == patientId)
+            .OrderByDescending(v => v.RecordedAt)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<VaccinationAdministered>> GetVaccinationsAdministeredAsync(Guid patientId, CancellationToken cancellationToken = default)
+        => await Context.VaccinationsAdministered.AsNoTracking()
+            .Where(v => v.PatientId == patientId)
+            .OrderByDescending(v => v.DateAdministered)
+            .ToListAsync(cancellationToken);
 }

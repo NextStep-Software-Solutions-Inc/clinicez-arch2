@@ -27,6 +27,7 @@ import {
 } from '@db/schema/index';
 import { getPatientFullRecord, pushSyncPayload, type SyncItemRequest } from './patientApi';
 import { hydrateFullRecord } from '@db/hydrate';
+import { pullDocumentChanges } from '../sync/documentsSyncService';
 import { eq, inArray, or } from 'drizzle-orm';
 import { randomUUID } from 'expo-crypto';
 import { DeviceEventEmitter } from 'react-native';
@@ -330,6 +331,13 @@ export async function syncFullProfile(
     } catch (pullErr: any) {
       console.warn('[SyncService] Pull phase failed during full sync:', pullErr);
       pullResult = { success: false, synced: 0, failed: 1, skipped: false, reason: pullErr?.message };
+    }
+
+    // 3. Documents: incremental pull of facility-written records (cursor-based, failures are non-fatal)
+    try {
+      await pullDocumentChanges(patientId, getToken);
+    } catch (documentsErr) {
+      console.warn('[SyncService] Document pull failed during full sync:', documentsErr);
     }
 
     return {

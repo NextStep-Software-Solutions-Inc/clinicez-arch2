@@ -320,6 +320,8 @@ public sealed class PatientInteropFlowTests
         using var h = new PatientInteropHarness();
 
         h.Provider.GetRequiredService<InteropHandlerRegistry>().RegisteredTypes.Should().BeEquivalentTo(
-            InteropTypes.FacilityDirectoryUpdated, InteropTypes.ClinicRecordVerified, InteropTypes.ClinicAppointmentUpdated);
+            InteropTypes.FacilityDirectoryUpdated, InteropTypes.ClinicRecordVerified, InteropTypes.ClinicAppointmentUpdated,
+            InteropTypes.PatientShareRedeem, InteropTypes.PatientDocumentIssued, InteropTypes.LabOrderStatusChanged,
+            InteropTypes.RxStatusChanged, InteropTypes.LabResultReviewed);
     }
 }

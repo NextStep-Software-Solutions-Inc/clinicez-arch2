@@ -55,6 +55,7 @@ public sealed class PatientAppWebApplicationFactory
         Environment.SetEnvironmentVariable("R2__PublicUrl", "https://test.r2.dev");
         Environment.SetEnvironmentVariable("Messaging__Transport", "InProcess");
         Environment.SetEnvironmentVariable("Messaging__Enabled", "false");
+        Environment.SetEnvironmentVariable("Sharing__SigningKey", "api-tests-signing-key-api-tests-signing-key");
 
         // Trigger host build then run migrations against the test container
         await using var scope = Services.CreateAsyncScope();
@@ -83,6 +84,7 @@ public sealed class PatientAppWebApplicationFactory
         Environment.SetEnvironmentVariable("R2__PublicUrl", null);
         Environment.SetEnvironmentVariable("Messaging__Transport", null);
         Environment.SetEnvironmentVariable("Messaging__Enabled", null);
+        Environment.SetEnvironmentVariable("Sharing__SigningKey", null);
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

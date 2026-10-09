@@ -19,6 +19,17 @@ export interface RemoteNotification {
     createdAt: string;
 }
 
+/**
+ * Notification as delivered by `GET /patients/{id}/sync/changes`: same as the notifications
+ * endpoint but without `category`, `expiresAt` and `sourceId`. Document notifications carry
+ * `payload` JSON `{ kind, documentId }`.
+ */
+export type SyncNotificationDto = Pick<
+    RemoteNotification,
+    'id' | 'type' | 'title' | 'body' | 'isRead' | 'readAt' | 'payload' | 'createdAt'
+> &
+    Partial<Pick<RemoteNotification, 'category' | 'expiresAt' | 'sourceId'>>;
+
 export interface NotificationListResult {
     items: RemoteNotification[];
     unreadCount: number;

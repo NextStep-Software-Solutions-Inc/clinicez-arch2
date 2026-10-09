@@ -55,3 +55,10 @@ export * from './appointments';
 // Notifications
 export * from './notifications';
 export * from './notificationPreferences';
+
+// Document inbox (read-only, pulled from sync/changes)
+export * from './inboxLabRequests';
+export * from './inboxPrescriptions';
+export * from './inboxLabResults';
+export * from './inboxMedicalCertificates';
+export * from './syncCursors';

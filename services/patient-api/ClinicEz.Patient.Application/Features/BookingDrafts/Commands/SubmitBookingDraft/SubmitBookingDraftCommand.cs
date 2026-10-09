@@ -1,8 +1,12 @@
 using System.Text.Json;
+using ClinicEz.Patient.Application.Common.Interfaces;
+using ClinicEz.Patient.Application.Features.Sharing;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
 using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interoperability;
 using MediatR;
+using Microsoft.Extensions.Options;
 using ClinicEz.Patient.Domain.Enums;
 using ClinicEz.Patient.Domain.Interfaces;
 using ClinicEz.Patient.Domain.Entities;
@@ -20,23 +24,34 @@ public sealed class SubmitBookingDraftCommandHandler : IRequestHandler<SubmitBoo
     private const string ShareEmail = "email";
     private const string SharePhilHealthId = "philhealthId";
 
+    /// <summary>Largest unencrypted attachment shared with the clinic by reference; bigger or encrypted files travel as metadata only.</summary>
+    private const long MaxSharedAttachmentBytes = 10 * 1024 * 1024;
+    private static readonly TimeSpan AttachmentLinkLifetime = TimeSpan.FromHours(24);
+
     private readonly IBookingDraftRepository _draftRepo;
     private readonly IClinicRepository _clinicRepo;
     private readonly IUnitOfWork _uow;
     private readonly IClinicMembershipRepository _membershipRepo;
     private readonly IInteropPublisher _publisher;
     private readonly IPatientRepository _patientRepo;
+    private readonly IPatientAccessRepository _accessRepo;
+    private readonly IStorageService _storage;
+    private readonly SharingOptions _sharingOptions;
     private readonly IFileRecordRepository? _fileRepo;
 
     public SubmitBookingDraftCommandHandler(
         IBookingDraftRepository draftRepo, IClinicRepository clinicRepo, IUnitOfWork uow,
         IClinicMembershipRepository membershipRepo, IInteropPublisher publisher,
-        IPatientRepository patientRepo, IFileRecordRepository? fileRepo = null)
+        IPatientRepository patientRepo, IPatientAccessRepository accessRepo, IStorageService storage,
+        IOptions<SharingOptions> sharingOptions, IFileRecordRepository? fileRepo = null)
     {
         _draftRepo = draftRepo; _clinicRepo = clinicRepo; _uow = uow;
         _membershipRepo = membershipRepo;
         _publisher = publisher;
         _patientRepo = patientRepo;
+        _accessRepo = accessRepo;
+        _storage = storage;
+        _sharingOptions = sharingOptions.Value;
         _fileRepo = fileRepo;
     }
 
@@ -66,6 +81,7 @@ public sealed class SubmitBookingDraftCommandHandler : IRequestHandler<SubmitBoo
             : null;
 
         var attachedItems = new List<BookedAttachmentItem>();
+        var attachedFiles = new List<FileRecord>();
         if (_fileRepo != null && !string.IsNullOrWhiteSpace(draft.AttachedFileIdsJson) && draft.AttachedFileIdsJson != "[]")
         {
             try
@@ -86,6 +102,7 @@ public sealed class SubmitBookingDraftCommandHandler : IRequestHandler<SubmitBoo
                                 MimeType = file.MimeType,
                                 SizeBytes = file.SizeBytes
                             });
+                            attachedFiles.Add(file);
                         }
                     }
                 }
@@ -137,6 +154,10 @@ public sealed class SubmitBookingDraftCommandHandler : IRequestHandler<SubmitBoo
             draft.Id,
             booking);
 
+        var clinicParty = Party.ForFacility(clinic.TenantId, clinic.Id.ToString(), FacilityType.Clinic);
+        var sharedAttachmentCount = await ShareAttachmentsAsync(draft.Id, request.PatientId, clinicParty, attachedFiles, cancellationToken);
+        await RecordGrantAsync(draft, request.PatientId, clinic.TenantId, clinicParty, shared, sharedAttachmentCount, cancellationToken);
+
         var membership = await _membershipRepo.GetByPatientAndClinicAsync(request.PatientId, clinic.Id, cancellationToken);
         if (membership is null && clinic.IsPublic)
         {
@@ -156,6 +177,70 @@ public sealed class SubmitBookingDraftCommandHandler : IRequestHandler<SubmitBoo
         await _uow.SaveChangesAsync(cancellationToken);
 
         return $"PENDING-{draft.Id:N}";
+    }
+
+    // Only unencrypted files of a sensible size can be read by the clinic from a link; the rest are listed in the
+    // booking itself (name, type, size) and the clinic asks the patient for them in person.
+    private async Task<int> ShareAttachmentsAsync(
+        Guid draftId, Guid patientId, Party clinicParty, IReadOnlyList<FileRecord> files, CancellationToken cancellationToken)
+    {
+        var shared = 0;
+        foreach (var file in files.Where(f =>
+                     string.IsNullOrEmpty(f.EncryptionKeyId) && !string.IsNullOrEmpty(f.StorageKey) && f.SizeBytes <= MaxSharedAttachmentBytes))
+        {
+            var url = await _storage.GeneratePresignedDownloadUrlAsync(file.StorageKey, AttachmentLinkLifetime, cancellationToken);
+            _publisher.Enqueue(
+                InteropTypes.PatientRecordShared,
+                Party.ForPatient(patientId.ToString()),
+                clinicParty,
+                draftId,
+                new PatientRecordSharedPayload
+                {
+                    DraftId = draftId,
+                    PatientId = patientId,
+                    FileId = file.Id,
+                    FileName = file.FileName,
+                    MimeType = file.MimeType,
+                    SizeBytes = file.SizeBytes,
+                    DocumentTypeCode = file.DocumentType?.Code,
+                    DownloadUrl = url,
+                    ExpiresAtUtc = DateTime.UtcNow.Add(AttachmentLinkLifetime)
+                });
+            shared++;
+        }
+
+        return shared;
+    }
+
+    private async Task RecordGrantAsync(
+        BookingDraft draft, Guid patientId, string tenantId, Party clinicParty, HashSet<string> shared, int sharedAttachmentCount, CancellationToken cancellationToken)
+    {
+        var grant = new PatientAccessGrant
+        {
+            PatientId = patientId,
+            TenantId = tenantId,
+            FacilityId = draft.ClinicId,
+            ScopesMask = (int)SharingScopes.Demographics,
+            Purpose = "Appointment booking",
+            ExpiresAt = DateTime.UtcNow.AddDays(_sharingOptions.BookingGrantDays),
+            Source = AccessGrantSource.Booking,
+            DraftId = draft.Id
+        };
+        await _accessRepo.AddGrantAsync(grant, cancellationToken);
+
+        var fields = new List<string> { "name", "mobile number" };
+        fields.AddRange(new[] { ShareDateOfBirth, ShareSex, ShareEmail, SharePhilHealthId }.Where(shared.Contains));
+        if (sharedAttachmentCount > 0)
+            fields.Add($"{sharedAttachmentCount} attachment(s)");
+
+        await _accessRepo.AddLogAsync(new PatientAccessLog
+        {
+            PatientId = patientId,
+            GrantId = grant.Id,
+            Actor = clinicParty.Address,
+            Action = "BookingShared",
+            Detail = $"Shared with the booking: {string.Join(", ", fields)}"
+        }, cancellationToken);
     }
 
     private static HashSet<string> ParseShareFields(string shareFieldsJson)

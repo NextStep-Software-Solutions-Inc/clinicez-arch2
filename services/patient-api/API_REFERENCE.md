@@ -1176,6 +1176,9 @@ the fields the patient chose to share (plus name and mobile) are included. The c
 
 The returned `PENDING-{draftId}` reference is a placeholder until the clinic confirms.
 
+Submitting also records a `booking` access grant for that clinic (see [Sharing](#sharing)) and shares each unencrypted
+attachment of at most 10 MB with the clinic by reference (`patient.record.shared`). No clinic is called over HTTP.
+
 **202 Accepted**
 
 ```json
@@ -1230,6 +1233,154 @@ No clinic is contacted at request time.
 ```
 
 **Appointment statuses:** `pending` | `confirmed` | `cancelled` | `completed` | `noShow` | `actionRequired`
+
+---
+
+## Sharing
+
+The patient decides who sees their record. Sharing is pull-based and scoped: the patient signs a short-lived token for
+the categories they tick, a facility redeems it over the Interop hub, and patient-api answers with a snapshot containing
+**only** those categories.
+
+**Scopes** (wire names): `demographics`, `allergies`, `medications`, `conditions`, `immunizations`, `labResults`,
+`prescriptions`, `vitals`.
+
+Every patient has a stable `clinicEzId` (e.g. `CE-7K2M-9QX4`), returned on the profile DTOs and by `share-tokens`.
+
+### `POST /api/v1/patients/{patientId}/share-tokens` — Create a share token
+
+```json
+{ "scopes": ["allergies", "vitals"], "purpose": "Consultation" }
+```
+
+**200** — `data: { token, expiresAt, ttlSeconds, clinicEzId, scopes, purpose }`. `token` is the QR content: an opaque,
+HMAC-signed, single-use string valid for `ttlSeconds` (default 120). Request a new one before `expiresAt`.  
+**400** — `scopes` empty or contains an unknown scope.
+
+### `GET /api/v1/patients/{patientId}/access-grants` — Who has access
+
+Newest first, including expired and revoked grants.
+
+`AccessGrantDto { id, tenantId, facilityId, facilityName, scopes[], purpose, source: qr|booking|manual, status: active|expired|revoked, expiresAt, revokedAt, createdAt }`
+
+A QR redemption creates a grant valid for `Sharing:QrGrantHours`; submitting a booking creates a `booking` grant
+(`demographics` scope) valid for `Sharing:BookingGrantDays`.
+
+### `DELETE /api/v1/patients/{patientId}/access-grants/{grantId}` — Revoke
+
+**200** on success, **404** when the grant is not this patient's. Revoking ends *future* fetches by that facility. Whatever
+the facility already imported into its own chart stays there; tell the patient so.
+
+### `GET /api/v1/patients/{patientId}/access-log?grantId=&skip=0&take=50` — Audit trail
+
+`data: { items: AccessLogDto[], totalCount }` with `AccessLogDto { id, grantId, facilityName, actor, action, detail, at }`,
+newest first. Grant creation, redemptions (with the categories released), denials, revocations and booking shares are logged.
+
+### `GET /api/v1/patients/{patientId}/export` — Export my data
+
+Not wrapped in the API envelope: one JSON attachment (`Content-Disposition`, `Cache-Control: no-store`) with `exportedAt`,
+`clinicEzId`, `patient` (the full record), `appointments`, `labRequests`, `prescriptions`, `labResults`,
+`medicalCertificates`, `grants` and `accessLog`.
+
+---
+
+## Documents from facilities
+
+Clinics, laboratories and pharmacies send everything they issue to the patient (`patient.document.issued`) and keep the
+stage of each order up to date (`lab.order.status.changed`, `rx.status.changed`). The patient-api keeps the patient's own
+copy. Apps read it with the incremental pull below; row ids are stable, so rows are upserts.
+
+### `GET /api/v1/patients/{patientId}/sync/changes?since={cursor}&take=200` — Incremental pull
+
+Omit `since` for the first full pull. `take` is capped at 500.
+
+```json
+{
+  "succeeded": true,
+  "data": {
+    "cursor": "638000000000000000",
+    "hasMore": false,
+    "labRequests": [], "prescriptions": [], "labResults": [], "medicalCertificates": [],
+    "grants": [], "notifications": []
+  },
+  "errors": []
+}
+```
+
+Persist `cursor` and send it back as `since`; keep calling while `hasMore` is `true`. Only rows that changed after the
+cursor are returned. **400** when `since` is not a cursor previously returned.
+
+- `LabRequestDto { id, requisitionId, orderingTenantId, orderingFacilityId, orderingFacilityName, accessionNumber, title, urgency, items[{code,name,category}], stage, quotedAmount, currency, paymentRequired, paymentStatus: none|pending|paid, laboratoryName, claimToken, reason, issuedAt, updatedAt }` —
+  `stage`: `issued routed claimed awaitingPayment paid specimenCollected inProcess resultFinalized externalSubmitted reviewed rejected cancelled`.
+  `claimToken` is the QR content shown at any ClinicEZ laboratory.
+- `PrescriptionDto { id, prescriptionNumber, orderingTenantId, orderingFacilityId, orderingFacilityName, prescriberName, prescriberPrcLicense, diagnosis, instructions, items[{genericName,brandName,dosage,form,sig,quantity,durationDays,remarks}], stage, quotedAmount, pharmacyName, claimToken, verificationUrl, receiptNumber, dispensedAt, externalPharmacyName, issuedAt, updatedAt }` —
+  `stage`: `issued accepted partiallyAccepted rejected dispensed externalDispensed`.
+- `LabResultDto { id, requisitionId, laboratoryName, title, source: clinicEzLab|externalLab|patientUploaded, verification: verified|unverified|rejected, reviewedByName, reviewedAt, remarks, impression, isCritical, resultedAt, fileUrl, observations[{panel,name,value,unit,referenceRange,flag}], updatedAt }` —
+  `fileUrl` is a short-lived download URL. ClinicEZ-lab results arrive `verified`; external and patient-uploaded results stay `unverified` until the ordering doctor reviews them.
+- `MedicalCertificateDto { id, certificateNumber, issuerName, doctorName, doctorPrcLicense, purpose, diagnosis, remarks, restDays, validFrom, validTo, verificationUrl, issuedAt, updatedAt }`
+- `notifications` use the existing notification shape; document notifications carry `payload` JSON `{ "kind": "labRequest|labResult|prescription|medicalCertificate", "documentId": "…" }`.
+
+A status message can arrive before the document it belongs to. The row is then created with only its stage and completed
+when the document arrives; a status older than the recorded one never overwrites a newer one.
+
+### `POST /api/v1/patients/{patientId}/lab-requests/{requisitionId}/results` — Upload a result
+
+`multipart/form-data`: `file` (required; PDF, JPEG, PNG or HEIC, at most 10 MB) and `notes` (optional).
+
+**202** — `data: { resultId, verification: "unverified", source: "patientUploaded" }`. The file is stored by patient-api and
+the ordering clinic is sent a download link (`lab.result.external.submitted`), valid for 7 days. The ordering doctor's
+verdict returns through `sync/changes` (`verification` becomes `verified` or `rejected`).  
+**400** no or empty file · **404** the lab request is not the patient's · **409** the request is closed, or the ordering
+clinic is not known yet · **413** over 10 MB · **415** type not allowed.
+
+### `POST /api/v1/patients/{patientId}/prescriptions/{prescriptionId}/external-dispense` — Filled elsewhere
+
+`multipart/form-data`: `pharmacyName` (required), `branchLocation`, `pharmacistName`, `receiptNumber`, `notes` and an
+optional `receipt` file (same limits as above).
+
+**202** — `data: { prescriptionId, stage: "externalDispensed" }`. The issuing clinic is told (`rx.external.dispensed`) with a
+7-day link to the receipt photo, if one was attached.  
+**404** not the patient's prescription · **409** already dispensed · **413** / **415** as above.
+
+---
+
+## Interop messages
+
+Patient plane address: `Party.ForPatient({patientId})`. Messages are authenticated by the hub; each handler also checks
+that the authenticated sender is the facility the payload names and that the envelope is addressed to the patient the
+payload is about. A message that fails those checks is acknowledged and ignored, never retried.
+
+| Direction | Type | Purpose |
+| --- | --- | --- |
+| in | `patient.share.redeem` | A facility redeems a share token; answered with `patient.share.snapshot` to the same facility |
+| in | `patient.document.issued` | Lab request, prescription, lab result, medical certificate or dispense receipt (upsert by document id) |
+| in | `lab.order.status.changed` | Stage, quote and payment state of a lab request |
+| in | `rx.status.changed` | Stage and quote of a prescription |
+| in | `lab.result.reviewed` | The ordering doctor's verdict on an unverified result (only from the ordering facility) |
+| in | `facility.directory.updated`, `clinic.record.verified`, `clinic.appointment.updated` | Directory, verified records, appointment status |
+| out | `patient.share.snapshot` | Scoped snapshot (or a denial with `denialReason`) in reply to a redeem |
+| out | `patient.appointment.booked` | A submitted booking draft |
+| out | `patient.record.shared` | A booking attachment, by reference: file metadata plus a 24 h presigned download URL |
+| out | `lab.result.external.submitted` | A patient-uploaded lab result, by reference |
+| out | `rx.external.dispensed` | A prescription the patient had filled outside ClinicEZ |
+
+Redemption rules: the token must verify against `Sharing:SigningKey`, be unexpired, be for an existing patient and be
+unused; the first successful redemption by a facility consumes it. A redelivered message is answered again from the grant
+already created, so retries never create a second grant. A denied snapshot (`granted: false`) carries a short
+`denialReason` the facility can show the patient: the code is not valid, has expired, was already used, or the patient is unknown.
+
+**Booking attachments.** At submit time each *unencrypted* attachment of at most 10 MB is shared with the clinic by
+reference in a `patient.record.shared` message. Client-encrypted or larger files are not transferred; only their
+metadata is sent.
+
+### Configuration
+
+| Key | Environment variable | Notes |
+| --- | --- | --- |
+| `Sharing:SigningKey` | `Sharing__SigningKey` | **Required**, at least 32 characters. The service refuses to start without it. Never commit a real value. |
+| `Sharing:ShareTokenTtlSeconds` | `Sharing__ShareTokenTtlSeconds` | Token lifetime, default 120 |
+| `Sharing:QrGrantHours` | `Sharing__QrGrantHours` | Grant length after a QR redemption, default 24 |
+| `Sharing:BookingGrantDays` | `Sharing__BookingGrantDays` | Grant length after a booking, default 30 |
 
 ---
 

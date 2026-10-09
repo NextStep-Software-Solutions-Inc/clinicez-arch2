@@ -61,6 +61,8 @@ public sealed class PrescriptionConfiguration : IEntityTypeConfiguration<Prescri
         builder.HasKey(p => p.Id);
         builder.Property(p => p.MedicationName).HasMaxLength(200).IsRequired();
         builder.Property(p => p.GenericName).HasMaxLength(200);
+        builder.Property(p => p.BrandName).HasMaxLength(200);
+        builder.Property(p => p.Form).HasMaxLength(50);
         builder.Property(p => p.Dosage).HasMaxLength(100);
         builder.Property(p => p.Frequency).HasMaxLength(100);
         builder.Property(p => p.Duration).HasMaxLength(100);
@@ -91,6 +93,8 @@ public sealed class LabResultConfiguration : IEntityTypeConfiguration<LabResult>
         builder.Property(l => l.Result).HasMaxLength(500);
         builder.Property(l => l.ReferenceRange).HasMaxLength(100);
         builder.Property(l => l.Unit).HasMaxLength(50);
+        builder.Property(l => l.Panel).HasMaxLength(200);
+        builder.Property(l => l.Flag).HasMaxLength(20);
         builder.Property(l => l.FileUrl).HasMaxLength(500);
         builder.Property(l => l.CreatedBy).HasMaxLength(128).IsRequired();
         builder.Property(l => l.UpdatedBy).HasMaxLength(128);

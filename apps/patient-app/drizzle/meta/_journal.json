@@ -78,6 +78,13 @@
       "when": 1791396280033,
       "tag": "0011_open_hobgoblin",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1791541373143,
+      "tag": "0012_flowery_wind_dancer",
+      "breakpoints": true
     }
   ]
 }

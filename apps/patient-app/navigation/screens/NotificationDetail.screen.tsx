@@ -13,6 +13,7 @@ import { markAsRead } from '../../services/notifications/notificationService';
 import { useNotificationContext } from '../../contexts/NotificationContext';
 import type { getNotifications } from '../../services/notifications/notificationService';
 import type { NotificationType } from '../../db/schema/notifications';
+import { documentRouteForKind } from '../../services/documents/presentation';
 
 type NotificationRow = Awaited<ReturnType<typeof getNotifications>>[number];
 
@@ -52,6 +53,19 @@ function getDeepLinkAction(notification: NotificationRow): DeepLinkAction | null
   } catch (_) {}
 
   const sid = notification.sourceId;
+
+  const documentRoute = documentRouteForKind(extraData.kind);
+  if (documentRoute && typeof extraData.documentId === 'string') {
+    const id = extraData.documentId;
+    return {
+      label: documentRoute.label,
+      icon: documentRoute.icon,
+      variant: 'primary',
+      navigate: (nav) => {
+        nav.navigate('Main', { screen: documentRoute.screen, params: { id } });
+      },
+    };
+  }
 
   switch (type) {
     case 'appointment_reminder': {

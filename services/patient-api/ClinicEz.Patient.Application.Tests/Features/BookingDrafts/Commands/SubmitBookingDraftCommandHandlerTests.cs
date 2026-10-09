@@ -1,11 +1,15 @@
+using ClinicEz.Patient.Application.Common.Interfaces;
 using ClinicEz.Patient.Application.Features.BookingDrafts.Commands.SubmitBookingDraft;
+using ClinicEz.Patient.Application.Features.Sharing;
 using ClinicEz.Patient.Domain.Entities;
 using ClinicEz.Patient.Domain.Enums;
 using ClinicEz.Patient.Domain.Interfaces;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
 using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interoperability;
 using FluentAssertions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 
 namespace ClinicEz.Patient.Application.Tests.Features.BookingDrafts.Commands;
@@ -21,6 +25,8 @@ public sealed class SubmitBookingDraftCommandHandlerTests
     private readonly IInteropPublisher _publisher = Substitute.For<IInteropPublisher>();
     private readonly IPatientRepository _patientRepo = Substitute.For<IPatientRepository>();
     private readonly IFileRecordRepository _fileRepo = Substitute.For<IFileRecordRepository>();
+    private readonly IPatientAccessRepository _accessRepo = Substitute.For<IPatientAccessRepository>();
+    private readonly IStorageService _storage = Substitute.For<IStorageService>();
 
     private readonly Guid _patientId = Guid.NewGuid();
     private readonly Guid _draftId = Guid.NewGuid();
@@ -50,7 +56,8 @@ public sealed class SubmitBookingDraftCommandHandlerTests
     }
 
     private SubmitBookingDraftCommandHandler CreateHandler() =>
-        new(_draftRepo, _clinicRepo, _uow, _membershipRepo, _publisher, _patientRepo, _fileRepo);
+        new(_draftRepo, _clinicRepo, _uow, _membershipRepo, _publisher, _patientRepo, _accessRepo, _storage,
+            Options.Create(new SharingOptions { BookingGrantDays = 30 }), _fileRepo);
 
     private BookingDraft ArrangeDraft(string shareFieldsJson = "[]", string attachedFileIdsJson = "[]", string? clinicTenant = "tenant-a")
     {
@@ -278,5 +285,89 @@ public sealed class SubmitBookingDraftCommandHandlerTests
         await CreateHandler().Handle(new SubmitBookingDraftCommand(_patientId, _draftId), CancellationToken.None);
 
         _published!.AttachedFiles.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_RecordsABookingGrantForTheClinicAndLogsWhatWasShared()
+    {
+        ArrangeDraft(shareFieldsJson: "[\"fullName\",\"mobile\",\"dateOfBirth\"]");
+        PatientAccessGrant? grant = null;
+        PatientAccessLog? log = null;
+        await _accessRepo.AddGrantAsync(Arg.Do<PatientAccessGrant>(g => grant = g), Arg.Any<CancellationToken>());
+        await _accessRepo.AddLogAsync(Arg.Do<PatientAccessLog>(l => log = l), Arg.Any<CancellationToken>());
+
+        await CreateHandler().Handle(new SubmitBookingDraftCommand(_patientId, _draftId), CancellationToken.None);
+
+        grant.Should().NotBeNull();
+        grant!.PatientId.Should().Be(_patientId);
+        grant.TenantId.Should().Be("tenant-a");
+        grant.FacilityId.Should().Be(_clinicId);
+        grant.Source.Should().Be(AccessGrantSource.Booking);
+        grant.DraftId.Should().Be(_draftId);
+        grant.ScopesMask.Should().Be((int)SharingScopes.Demographics);
+        grant.ExpiresAt.Should().BeCloseTo(DateTime.UtcNow.AddDays(30), TimeSpan.FromMinutes(1));
+        log.Should().NotBeNull();
+        log!.GrantId.Should().Be(grant.Id);
+        log.Action.Should().Be("BookingShared");
+        log.Detail.Should().Contain("name").And.Contain("mobile number").And.Contain("dateOfBirth").And.NotContain("email");
+    }
+
+    private FileRecord Attachment(Guid id, string? encryptionKeyId = null, string storageKey = "patients/p/file.pdf", long size = 1024) => new()
+    {
+        Id = id,
+        PatientId = _patientId,
+        FileName = "chest_xray.pdf",
+        MimeType = "application/pdf",
+        SizeBytes = size,
+        StorageKey = storageKey,
+        EncryptionKeyId = encryptionKeyId,
+        DocumentType = new DocumentType { Code = "xray", Label = "X-Ray" }
+    };
+
+    [Fact]
+    public async Task Handle_SharesAnUnencryptedAttachmentWithTheClinicByReferenceNotByContent()
+    {
+        var fileId = Guid.NewGuid();
+        ArrangeDraft(attachedFileIdsJson: System.Text.Json.JsonSerializer.Serialize(new[] { fileId }));
+        _fileRepo.GetByIdAsync(fileId, Arg.Any<CancellationToken>()).Returns(Attachment(fileId));
+        _storage.GeneratePresignedDownloadUrlAsync("patients/p/file.pdf", Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns("https://files.example.test/signed");
+
+        await CreateHandler().Handle(new SubmitBookingDraftCommand(_patientId, _draftId), CancellationToken.None);
+
+        _publisher.Received(1).Enqueue(
+            InteropTypes.PatientRecordShared,
+            Party.ForPatient(_patientId.ToString()),
+            Party.ForFacility("tenant-a", _clinicId.ToString(), FacilityType.Clinic),
+            _draftId,
+            Arg.Is<PatientRecordSharedPayload>(p =>
+                p.FileId == fileId && p.DraftId == _draftId && p.PatientId == _patientId &&
+                p.DownloadUrl == "https://files.example.test/signed" && p.SizeBytes == 1024 &&
+                p.ExpiresAtUtc > DateTime.UtcNow.AddHours(23)),
+            Arg.Any<int>(), Arg.Any<TimeSpan?>());
+        Received.InOrder(() =>
+        {
+            _publisher.Enqueue(
+                InteropTypes.PatientRecordShared, Arg.Any<Party>(), Arg.Any<Party>(), Arg.Any<Guid>(),
+                Arg.Any<PatientRecordSharedPayload>(), Arg.Any<int>(), Arg.Any<TimeSpan?>());
+            _uow.SaveChangesAsync(Arg.Any<CancellationToken>());
+        });
+    }
+
+    [Fact]
+    public async Task Handle_KeepsEncryptedAndOversizedAttachmentsOutOfTheSharedFiles()
+    {
+        var encryptedId = Guid.NewGuid();
+        var hugeId = Guid.NewGuid();
+        ArrangeDraft(attachedFileIdsJson: System.Text.Json.JsonSerializer.Serialize(new[] { encryptedId, hugeId }));
+        _fileRepo.GetByIdAsync(encryptedId, Arg.Any<CancellationToken>()).Returns(Attachment(encryptedId, encryptionKeyId: "key-1"));
+        _fileRepo.GetByIdAsync(hugeId, Arg.Any<CancellationToken>()).Returns(Attachment(hugeId, size: 10 * 1024 * 1024 + 1));
+
+        await CreateHandler().Handle(new SubmitBookingDraftCommand(_patientId, _draftId), CancellationToken.None);
+
+        _publisher.DidNotReceive().Enqueue(
+            InteropTypes.PatientRecordShared, Arg.Any<Party>(), Arg.Any<Party>(), Arg.Any<Guid>(),
+            Arg.Any<PatientRecordSharedPayload>(), Arg.Any<int>(), Arg.Any<TimeSpan?>());
+        _published!.AttachedFiles.Should().HaveCount(2);
     }
 }

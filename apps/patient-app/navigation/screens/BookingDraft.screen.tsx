@@ -8,7 +8,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Image, Platform, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { FlatList, Image, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { StaticScreenProps } from '@react-navigation/native';
 import { addDays, format } from 'date-fns';
@@ -34,12 +34,7 @@ import {
   saveBookingDraft,
   createBookingDraftOnline,
   submitBookingDraftOnline,
-  uploadSharedFileToClinic,
 } from '../../services/discovery/discoveryService';
-import {
-  preparePreviewFile,
-  cleanupPreviewCache,
-} from '../../services/files/filesService';
 import {
   consumeAttachedFileSelection,
   initAttachedFileSelection,
@@ -622,42 +617,6 @@ export default function BookingDraftScreen(props: Props) {
         setIsSaving(false);
         setIsDraftSaving(false);
         return;
-      }
-
-      // Stream decrypted file copies to the clinic's intake pipeline for re-encryption under clinic CMK
-      if (attachedFileIds && attachedFileIds.length > 0) {
-        for (const fileId of attachedFileIds) {
-          try {
-            const prepared = await preparePreviewFile(patientId, fileId, getToken);
-            if (prepared?.uri) {
-              if (Platform.OS === 'web') {
-                const res = await fetch(prepared.uri);
-                const blob = await res.blob();
-                const rawBaseUrl = selectedClinic?.baseUrl || process.env.EXPO_PUBLIC_CLINIC_API_URL || 'http://localhost:5245';
-                const targetUrl = `${rawBaseUrl.replace(/\/+$/, '')}/records/intake/patient-shared-file`;
-                const formData = new FormData();
-                formData.append('PatientId', patientId);
-                formData.append('FileId', fileId);
-                formData.append('RecordType', 'LabResult');
-                formData.append('Title', prepared.name);
-                formData.append('File', blob, prepared.name);
-                await fetch(targetUrl, { method: 'POST', body: formData });
-              } else {
-                await uploadSharedFileToClinic(
-                  patientId,
-                  selectedClinic?.baseUrl,
-                  fileId,
-                  prepared.name,
-                  prepared.uri,
-                  prepared.mimeType
-                );
-              }
-              await cleanupPreviewCache(patientId, fileId);
-            }
-          } catch (streamErr) {
-            console.warn(`[BookingDraftScreen] Decrypt & stream file ${fileId} to clinic warning:`, streamErr);
-          }
-        }
       }
 
       await safeAwait(saveBookingDraft(patientId, {

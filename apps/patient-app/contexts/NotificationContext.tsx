@@ -19,7 +19,8 @@ import { navigationRef } from 'navigation/Navigation';
 import { mutate } from 'swr';
 import { registerDeviceSessionOnBackend } from 'services/api/notificationsApi';
 import * as SecureStore from 'expo-secure-store';
-import { Platform } from 'react-native';
+import { DeviceEventEmitter, Platform } from 'react-native';
+import { DOCUMENTS_SYNCED_EVENT } from 'services/sync/documentsSyncService';
 import { randomUUID } from 'expo-crypto';
 
 export interface NotificationContextValue {
@@ -167,9 +168,15 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
       }
     });
 
+    // Notifications that arrive with synced documents are stored by the sync layer: refresh the badge.
+    const documentsSub = DeviceEventEmitter.addListener(DOCUMENTS_SYNCED_EVENT, () => {
+      refresh();
+    });
+
     listenerCleanupRef.current = () => {
       receivedSub.remove();
       responseSub.remove();
+      documentsSub.remove();
     };
 
     return () => {

@@ -61,6 +61,17 @@ public sealed class ApplicationDbContext : DbContext, IInteropDbContext
     public DbSet<PatientPhysicalExamProfile> PatientPhysicalExamProfiles => Set<PatientPhysicalExamProfile>();
     public DbSet<PatientNcdQuestionnaire> PatientNcdQuestionnaires => Set<PatientNcdQuestionnaire>();
 
+    // ── Documents issued to the patient by facilities ───────────────────────
+    public DbSet<LabRequestSlip> LabRequestSlips => Set<LabRequestSlip>();
+    public DbSet<PrescriptionDocument> PrescriptionDocuments => Set<PrescriptionDocument>();
+    public DbSet<LabResultReport> LabResultReports => Set<LabResultReport>();
+    public DbSet<MedicalCertificate> MedicalCertificates => Set<MedicalCertificate>();
+
+    // ── Patient-controlled sharing ──────────────────────────────────────────
+    public DbSet<PatientAccessGrant> PatientAccessGrants => Set<PatientAccessGrant>();
+    public DbSet<PatientAccessLog> PatientAccessLogs => Set<PatientAccessLog>();
+    public DbSet<ShareTokenUse> ShareTokenUses => Set<ShareTokenUse>();
+
     // ── Files & Appointments ────────────────────────────────────────────────
     public DbSet<FileFolder> FileFolders => Set<FileFolder>();
     public DbSet<FileRecord> FileRecords => Set<FileRecord>();
@@ -137,6 +148,8 @@ public sealed class ApplicationDbContext : DbContext, IInteropDbContext
                 case EntityState.Added:
                     entry.Entity.CreatedAt = utcNow;
                     entry.Entity.CreatedBy = actor;
+                    if (entry.Entity is Patient { ClinicEzId.Length: 0 } patient)
+                        patient.ClinicEzId = ClinicEzIdGenerator.Generate();
                     break;
                 case EntityState.Modified:
                     entry.Entity.UpdatedAt = utcNow;

@@ -30,7 +30,8 @@ public sealed class GetPatientFullRecordQueryHandler
             p.EducationLevel?.ToString(),
             p.Mobile, p.AltPhone, p.Email, p.MessengerHandle,
             p.AvatarUrl,
-            p.ConsentToShareInfo);
+            p.ConsentToShareInfo,
+            p.ClinicEzId);
 
         // ── Contact & identifiers ────────────────────────────────────────────
         var govIds = p.GovernmentIds

@@ -1,4 +1,7 @@
+using ClinicEz.Patient.Application;
+using ClinicEz.Patient.Application.Common.Interfaces;
 using ClinicEz.Patient.Application.Features.BookingDrafts.Commands.SubmitBookingDraft;
+using ClinicEz.Patient.Application.Features.Sharing;
 using ClinicEz.Patient.Domain.Interfaces;
 using ClinicEz.Patient.Infrastructure;
 using ClinicEz.Patient.Infrastructure.Persistence;
@@ -11,6 +14,7 @@ using ClinicEz.Shared.Interop.Transport;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using NSubstitute;
 
 namespace ClinicEz.Patient.Application.Tests.Interop;
 
@@ -22,12 +26,14 @@ internal sealed class PatientInteropHarness : IDisposable
 {
     public const string TenantA = "tenant-a";
     public const string TenantB = "tenant-b";
+    public const string SigningKey = "test-signing-key-test-signing-key-0123456789";
 
     public ServiceProvider Provider { get; }
     public InProcessHub Hub => Provider.GetRequiredService<InProcessHub>();
     public InteropRelayService Relay => Provider.GetRequiredService<InteropRelayService>();
     public InteropInboxPollerService Poller => Provider.GetRequiredService<InteropInboxPollerService>();
     public InteropDispatcher Dispatcher => Provider.GetRequiredService<InteropDispatcher>();
+    public IStorageService Storage { get; } = Substitute.For<IStorageService>();
 
     public PatientInteropHarness()
     {
@@ -37,6 +43,10 @@ internal sealed class PatientInteropHarness : IDisposable
             ["Messaging:Service"] = InteropServices.Patient,
             ["Messaging:Enabled"] = "false"
         }).Build();
+
+        Storage.UploadAsync(Arg.Any<Stream>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(call => call.ArgAt<string>(1));
+        Storage.GeneratePresignedDownloadUrlAsync(Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(call => $"https://files.example.test/{call.ArgAt<string>(0)}");
 
         var dbName = Guid.NewGuid().ToString();
         var services = new ServiceCollection();
@@ -49,6 +59,12 @@ internal sealed class PatientInteropHarness : IDisposable
         services.AddScoped<IBookingDraftRepository, BookingDraftRepository>();
         services.AddScoped<IClinicMembershipRepository, ClinicMembershipRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<IPatientAccessRepository, PatientAccessRepository>();
+        services.AddScoped<IPatientDocumentRepository, PatientDocumentRepository>();
+        services.AddScoped<INotificationRepository, NotificationRepository>();
+        services.AddSingleton(Storage);
+        services.Configure<SharingOptions>(o => o.SigningKey = SigningKey);
+        services.AddApplicationServices();
         services.AddScoped<SubmitBookingDraftCommandHandler>();
         services.AddPatientInterop(config);
         Provider = services.BuildServiceProvider();

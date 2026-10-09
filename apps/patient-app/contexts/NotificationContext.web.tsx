@@ -7,11 +7,13 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { DeviceEventEmitter } from 'react-native';
 import { useAuth } from 'contexts/AuthContext';
 import {
   getUnreadCount,
   syncNotificationsFromBackend,
 } from 'services/notifications/notificationService';
+import { DOCUMENTS_SYNCED_EVENT } from 'services/sync/documentsSyncService';
 
 /**
  * Web notification context.
@@ -90,8 +92,14 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
     if (typeof window !== 'undefined') {
       window.addEventListener('focus', onFocus);
     }
+    const documentsSub = DeviceEventEmitter.addListener(DOCUMENTS_SYNCED_EVENT, () => {
+      getUnreadCount(patientId)
+        .then(setUnreadCount)
+        .catch(() => undefined);
+    });
     return () => {
       clearInterval(interval);
+      documentsSub.remove();
       if (typeof window !== 'undefined') {
         window.removeEventListener('focus', onFocus);
       }

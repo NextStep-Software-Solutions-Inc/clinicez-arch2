@@ -1,6 +1,5 @@
 import { and, count, desc, eq, inArray, not } from 'drizzle-orm';
 import NetInfo from '@react-native-community/netinfo';
-import { joinApiUrl } from '@shared/safe';
 import { db } from '@db/index';
 import { bookingDrafts } from '@db/schema/bookingDrafts';
 import { clinicMemberships } from '@db/schema/clinicMemberships';
@@ -215,7 +214,6 @@ function buildOrganizationSeed() {
             coverImageUrl: `https://picsum.photos/seed/clinic-cover-${index}/400/180`,
             isPublic,
             supportsAppointments,
-            baseUrl: `https://${slug}.Clinic EZ.local`,
             inviteCode: isPublic ? null : `CLN-${String(index + 1).padStart(4, '0')}`,
             privacyPolicyUrl: `https://Clinic EZ.app/privacy/${slug}`,
             termsAndConditionsUrl: `https://Clinic EZ.app/terms/${slug}`,
@@ -802,7 +800,6 @@ async function updateClinicCache(patientId: string, remoteClinics: RemoteClinicS
             coverImageUrl: clinic.coverImageUrl,
             isPublic: clinic.isPublic,
             supportsAppointments: clinic.supportsAppointments,
-            baseUrl: 'https://Clinic EZ.app',
             privacyPolicyUrl: 'https://Clinic EZ.app/privacy',
             termsAndConditionsUrl: 'https://Clinic EZ.app/terms',
             specialtiesJson: clinic.specialtiesJson,
@@ -1471,44 +1468,6 @@ export async function submitBookingDraftOnline(
     draftId: string,
 ): Promise<string | null> {
     return apiSubmitDraft(getToken, patientId, draftId);
-}
-
-/**
- * Streams an in-memory decrypted external file to the clinic's isolated intake endpoint.
- * The clinic immediately re-encrypts the payload under its Clinic Master Key (CMK) and persists it.
- */
-export async function uploadSharedFileToClinic(
-    patientId: string,
-    clinicBaseUrl: string | undefined,
-    fileId: string,
-    fileName: string,
-    fileUri: string,
-    mimeType?: string,
-    recordType: string = 'LabResult',
-): Promise<boolean> {
-    try {
-        const rawBaseUrl = clinicBaseUrl || process.env.EXPO_PUBLIC_CLINIC_API_URL || 'http://localhost:5245';
-        const targetUrl = joinApiUrl(rawBaseUrl, '/records/intake/patient-shared-file');
-        const formData = new FormData();
-        formData.append('PatientId', patientId);
-        formData.append('FileId', fileId);
-        formData.append('RecordType', recordType);
-        formData.append('Title', fileName);
-        formData.append('File', {
-            uri: fileUri,
-            name: fileName,
-            type: mimeType || 'application/pdf',
-        } as any);
-
-        const response = await fetch(targetUrl, {
-            method: 'POST',
-            body: formData,
-        });
-        return response.ok;
-    } catch (err) {
-        console.warn('[uploadSharedFileToClinic] Failed to stream shared file to clinic intake:', err);
-        return false;
-    }
 }
 
 export async function getClinicDetailOnline(

@@ -21,6 +21,7 @@ import { ensureApiPrefix } from '@shared/safe';
 
 const BASE_URL = ensureApiPrefix(process.env.EXPO_PUBLIC_API_URL ?? '');
 const API_PREFIX = '/api/v1';
+const UPLOAD_TIMEOUT_MS = 120_000;
 
 /** A single structured error from the backend. */
 export interface ApiFieldError {
@@ -92,6 +93,7 @@ const axiosInstance = axios.create({
 axiosInstance.interceptors.response.use(
     (response) => {
         if (response.status === 204) return response;
+        if (response.config.responseType === 'text') return response;
         const envelope = response.data as ApiEnvelope<unknown>;
         if (!envelope.succeeded) {
             throw new ApiError(
@@ -151,6 +153,26 @@ export const api = {
 
     delete: <T>(getToken: () => Promise<string | null>, path: string): Promise<T> =>
         authRequest<T>(getToken, { method: 'DELETE', url: path }),
+
+    /** Multipart upload. Allows longer than the default timeout for file payloads. */
+    postForm: <T>(getToken: () => Promise<string | null>, path: string, form: FormData): Promise<T> =>
+        authRequest<T>(getToken, {
+            method: 'POST',
+            url: path,
+            data: form,
+            headers: { 'Content-Type': 'multipart/form-data' },
+            timeout: UPLOAD_TIMEOUT_MS,
+        }),
+
+    /** GET a response that is NOT wrapped in the ApiResponse envelope, returned verbatim as text. */
+    getText: (getToken: () => Promise<string | null>, path: string): Promise<string> =>
+        authRequest<string>(getToken, {
+            method: 'GET',
+            url: path,
+            responseType: 'text',
+            transformResponse: [(data: string) => data],
+            timeout: UPLOAD_TIMEOUT_MS,
+        }),
 };
 
 // ── SWR integration ───────────────────────────────────────────────────────────

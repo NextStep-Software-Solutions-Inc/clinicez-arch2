@@ -2,7 +2,6 @@
 // Book Appointment — 5-Step Wizard (Web Parity)
 // Desktop (>= 1024): 2-column layout with sticky booking summary card on the right
 // Compact (< 1024): Single column with sticky bottom action bar
-// Web-safe file upload: fetch(blobUrl) -> Blob -> FormData
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useCallback, useEffect, useState } from 'react';
@@ -44,10 +43,6 @@ import {
   createBookingDraftOnline,
   submitBookingDraftOnline,
 } from '../../services/discovery/discoveryService';
-import {
-  preparePreviewFile,
-  cleanupPreviewCache,
-} from '../../services/files/filesService';
 import {
   consumeAttachedFileSelection,
   initAttachedFileSelection,
@@ -602,31 +597,6 @@ export default function BookingDraftScreenWeb(props: Props) {
         setIsSaving(false);
         setIsDraftSaving(false);
         return;
-      }
-
-      // Web-safe attached file streaming: fetch blob URL -> Blob -> FormData
-      if (attachedFileIds && attachedFileIds.length > 0) {
-        for (const fileId of attachedFileIds) {
-          try {
-            const prepared = await preparePreviewFile(patientId, fileId, getToken);
-            if (prepared?.uri) {
-              const res = await fetch(prepared.uri);
-              const blob = await res.blob();
-              const rawBaseUrl = selectedClinic?.baseUrl || process.env.EXPO_PUBLIC_CLINIC_API_URL || 'http://localhost:5245';
-              const targetUrl = `${rawBaseUrl.replace(/\/+$/, '')}/records/intake/patient-shared-file`;
-              const formData = new FormData();
-              formData.append('PatientId', patientId);
-              formData.append('FileId', fileId);
-              formData.append('RecordType', 'LabResult');
-              formData.append('Title', prepared.name);
-              formData.append('File', blob, prepared.name);
-              await fetch(targetUrl, { method: 'POST', body: formData });
-              await cleanupPreviewCache(patientId, fileId);
-            }
-          } catch (streamErr) {
-            console.warn(`[BookingDraftScreenWeb] Decrypt & stream file ${fileId} warning:`, streamErr);
-          }
-        }
       }
 
       await safeAwait(saveBookingDraft(patientId, {
