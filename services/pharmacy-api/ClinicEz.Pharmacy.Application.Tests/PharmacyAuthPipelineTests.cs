@@ -144,6 +144,10 @@ public class PharmacyAuthPipelineTests
     private static readonly object BatchBody = new { inventoryItemId = Guid.NewGuid(), batchNumber = "B-1", expiryDate = DateTime.UtcNow.AddYears(1), quantityReceived = 5 };
     private static readonly object StaffBody = new { firstName = "Sam", lastName = "Staff", role = 3 };
     private static readonly object TempPasswordBody = new { temporaryPassword = "Temp-Pass-12345" };
+    private static readonly object ClaimBody = new { token = "claim-token-1" };
+    private static readonly object PartialAcceptBody = new { acceptedItemIds = new[] { Guid.NewGuid() }, reason = "Out of stock" };
+    private static readonly object RejectBody = new { reason = "Not dispensable here" };
+    private static readonly object PaymentPolicyBody = new { paymentPolicy = "Postpaid" };
 
     private static (HttpMethod Method, string Url, object? Body, string Permission) Route(string method, string url, object? body, string permission) =>
         (new HttpMethod(method), url, body, permission);
@@ -170,7 +174,14 @@ public class PharmacyAuthPipelineTests
         Route("POST", "/api/v1/inventory/seed", null, PharmacyPermissions.InventoryManage),
         Route("GET", "/api/v1/prescriptions", null, PharmacyPermissions.PrescriptionsRead),
         Route("GET", "/api/v1/prescriptions/44444444-4444-4444-4444-444444444444", null, PharmacyPermissions.PrescriptionsRead),
-        Route("POST", "/api/v1/prescriptions/44444444-4444-4444-4444-444444444444/dispense", new { }, PharmacyPermissions.PrescriptionsDispense)
+        Route("POST", "/api/v1/prescriptions/44444444-4444-4444-4444-444444444444/dispense", new { }, PharmacyPermissions.PrescriptionsDispense),
+        Route("GET", "/api/v1/prescriptions/by-prescription/55555555-5555-5555-5555-555555555555", null, PharmacyPermissions.PrescriptionsRead),
+        Route("POST", "/api/v1/prescriptions/claim", ClaimBody, PharmacyPermissions.PrescriptionsClaim),
+        Route("POST", "/api/v1/prescriptions/44444444-4444-4444-4444-444444444444/accept", new { }, PharmacyPermissions.PrescriptionsReview),
+        Route("POST", "/api/v1/prescriptions/44444444-4444-4444-4444-444444444444/partial-accept", PartialAcceptBody, PharmacyPermissions.PrescriptionsReview),
+        Route("POST", "/api/v1/prescriptions/44444444-4444-4444-4444-444444444444/reject", RejectBody, PharmacyPermissions.PrescriptionsReview),
+        Route("GET", "/api/v1/settings", null, PharmacyPermissions.PrescriptionsRead),
+        Route("PUT", "/api/v1/settings/payment-policy", PaymentPolicyBody, PharmacyPermissions.StaffManage)
     };
 
     private static IEnumerable<(HttpMethod Method, string Url, object? Body, string Permission)> AllRoutes => GamotRoutes.Concat(NonGamotRoutes);
@@ -484,5 +495,47 @@ public class PharmacyAuthPipelineTests
         (await app.Client.SendAsync(Req(HttpMethod.Post, "/api/v1/gamot/dispense", clerk, DispenseBody))).StatusCode
             .Should().Be(HttpStatusCode.Forbidden);
         app.Sender.ReceivedCalls().Should().HaveCount(1);
+    }
+
+    // ── prescription review / claim / settings endpoints ────────────────────────────────
+
+    [Fact]
+    public async Task ReviewClaimAndSettingsEndpoints_BuildTheExpectedCommands()
+    {
+        await using var app = await StartAsync();
+        var chief = app.StaffToken(PharmacyStaffRole.ChiefPharmacist);
+        var orderId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        var itemId = Guid.NewGuid();
+
+        await app.Client.SendAsync(Req(HttpMethod.Post, $"/api/v1/prescriptions/{orderId}/accept", chief, new { }));
+        await app.Client.SendAsync(Req(HttpMethod.Post, $"/api/v1/prescriptions/{orderId}/partial-accept", chief, new { acceptedItemIds = new[] { itemId }, reason = "Out of stock" }));
+        await app.Client.SendAsync(Req(HttpMethod.Post, $"/api/v1/prescriptions/{orderId}/reject", chief, new { reason = "Not dispensable" }));
+        await app.Client.SendAsync(Req(HttpMethod.Post, "/api/v1/prescriptions/claim", chief, new { token = "abc123" }));
+        await app.Client.SendAsync(Req(HttpMethod.Put, "/api/v1/settings/payment-policy", chief, new { paymentPolicy = "postpaid" }));
+
+        var commands = app.Sender.ReceivedCalls().Select(c => c.GetArguments()[0]).ToList();
+        commands.OfType<ClinicEz.Pharmacy.Application.Features.Prescriptions.Commands.AcceptPrescriptionCommand>().Single().PrescriptionId.Should().Be(orderId);
+        var partial = commands.OfType<ClinicEz.Pharmacy.Application.Features.Prescriptions.Commands.PartiallyAcceptPrescriptionCommand>().Single();
+        partial.AcceptedItemIds.Should().Equal(itemId);
+        partial.Reason.Should().Be("Out of stock");
+        commands.OfType<ClinicEz.Pharmacy.Application.Features.Prescriptions.Commands.RejectPrescriptionCommand>().Single().Reason.Should().Be("Not dispensable");
+        commands.OfType<ClinicEz.Pharmacy.Application.Features.Prescriptions.Commands.ClaimPrescriptionCommand>().Single().Token.Should().Be("abc123");
+        commands.OfType<ClinicEz.Pharmacy.Application.Features.Settings.UpdatePaymentPolicyCommand>().Single().PaymentPolicy.Should().Be(PharmacyPaymentPolicy.Postpaid);
+    }
+
+    [Theory]
+    [InlineData("Free")]
+    [InlineData("7")]
+    [InlineData("")]
+    public async Task UpdatePaymentPolicy_WithAnUnknownPolicy_IsRejected_AndNeverRunsTheHandler(string policy)
+    {
+        await using var app = await StartAsync();
+        var token = app.StaffToken(PharmacyStaffRole.ChiefPharmacist);
+
+        var act = async () => await app.Client.SendAsync(
+            Req(HttpMethod.Put, "/api/v1/settings/payment-policy", token, new { paymentPolicy = policy }));
+
+        await act.Should().ThrowAsync<ClinicEz.Shared.Exceptions.BadRequestException>();
+        app.Sender.ReceivedCalls().Should().BeEmpty();
     }
 }

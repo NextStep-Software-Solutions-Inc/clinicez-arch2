@@ -118,7 +118,7 @@ public class PharmacyDispenseOutboxTests
 
         await seeded.Handler.Handle(DispenseCommand with { PrescriptionId = seeded.Order.Id }, CancellationToken.None);
 
-        var outbox = await seeded.Db.InteropOutbox.SingleAsync();
+        var outbox = await seeded.Db.InteropOutbox.SingleAsync(m => m.Type == InteropTypes.RxDispensed);
         outbox.Type.Should().Be(InteropTypes.RxDispensed);
         outbox.CorrelationId.Should().Be(seeded.Order.CorrelationId);
 

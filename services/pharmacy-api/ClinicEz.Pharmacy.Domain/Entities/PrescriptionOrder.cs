@@ -32,6 +32,31 @@ public sealed class PrescriptionOrder : BaseEntity
     /// <summary>Envelope correlation id of rx.issued (the clinic's PrescriptionId); reused on rx.dispensed.</summary>
     public Guid CorrelationId { get; set; }
 
+    /// <summary>This pharmacy's display name, copied from its provisioned settings when the order is received.</summary>
+    public string PharmacyName { get; set; } = string.Empty;
+
+    /// <summary>Clinic encounter / queue id used to group this pharmacy's lines into the consolidated visit bill.</summary>
+    public string? VisitKey { get; set; }
+
+    /// <summary>Payment policy in force when the order was received. <c>None</c> for orders that predate the payment gate.</summary>
+    public PharmacyPaymentPolicy PaymentPolicy { get; set; } = PharmacyPaymentPolicy.None;
+
+    public PrescriptionPaymentStatus PaymentStatus { get; set; } = PrescriptionPaymentStatus.NotRequired;
+
+    /// <summary>Quote computed from inventory prices when staff accepted the order (accepted items only).</summary>
+    public decimal? QuotedAmount { get; set; }
+
+    public decimal? PaidAmount { get; set; }
+
+    public DateTime? PaidAt { get; set; }
+
+    public string? PaymentReceiptNumber { get; set; }
+
+    /// <summary>Why the order was rejected or only partially accepted.</summary>
+    public string? StatusReason { get; set; }
+
+    public DateTime? ReviewedAt { get; set; }
+
     public string OrderingFacilityName { get; set; } = string.Empty;
 
     public string OrderingDoctorName { get; set; } = string.Empty;

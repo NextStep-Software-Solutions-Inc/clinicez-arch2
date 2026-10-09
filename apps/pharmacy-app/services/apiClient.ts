@@ -1,30 +1,8 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
-import { safeAwait, ApiResponse, ApiError, extractApiError, ensureApiPrefix } from '@shared/safe';
+import { safeAwait, ApiResponse, ApiError, extractApiError } from '@shared/safe';
+import { PHARMACY_API_BASE_URL } from './apiBaseUrl';
+import { getValidAccessToken, tenantHeaders } from './authSession';
 
-const resolveDefaultPharmacyBaseUrl = (fallbackPort: number = 5245): string => {
-  if (typeof window !== 'undefined' && window.location?.hostname) {
-    const hostname = window.location.hostname.toLowerCase();
-    const protocol = window.location.protocol || 'http:';
-
-    if (
-      hostname === 'localhost' ||
-      hostname.endsWith('.localhost') ||
-      hostname.endsWith('.lvh.me') ||
-      /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)
-    ) {
-      return `${protocol}//${hostname}:${fallbackPort}`;
-    }
-
-    // Default to same-origin for ingress reverse-proxy routing
-    return `${protocol}//${hostname}`;
-  }
-  return `http://localhost:${fallbackPort}`;
-};
-
-const BASE_URL = (
-  process.env.EXPO_PUBLIC_PHARMACY_API_URL ??
-  resolveDefaultPharmacyBaseUrl(5245)
-).replace(/\/+$/, '');
 const API_PREFIX = '/api/v1';
 
 export class PharmacyApiClient {
@@ -32,11 +10,20 @@ export class PharmacyApiClient {
 
   constructor() {
     this.client = axios.create({
-      baseURL: ensureApiPrefix(BASE_URL),
+      baseURL: PHARMACY_API_BASE_URL,
       timeout: 15000,
       headers: {
         'Content-Type': 'application/json',
       },
+    });
+
+    this.client.interceptors.request.use(async (config) => {
+      const token = await getValidAccessToken();
+      if (token) {
+        config.headers.set('Authorization', `Bearer ${token}`);
+      }
+      Object.entries(tenantHeaders()).forEach(([name, value]) => config.headers.set(name, value));
+      return config;
     });
   }
 

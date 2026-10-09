@@ -15,6 +15,8 @@ namespace ClinicEz.Pharmacy.Application.Interop;
 /// here (tenant + facility); the handler then runs inside that pharmacy's scope, so every query is tenant/pharmacy filtered.
 /// The ordering party (the envelope's authenticated <c>From</c>) and correlation id are stored on the order so
 /// <c>rx.dispensed</c> is addressed back to exactly that clinic. Idempotent per (ordering party, clinic prescription id).
+/// A prescription the patient claimed by QR arrives the same way: the hub rewrites <c>To</c> to the redeeming pharmacy and
+/// keeps <c>From</c> as the issuing clinic, so no separate code path is needed.
 /// </summary>
 public sealed class PrescriptionIssuedHandler : IInteropHandler<PrescriptionIssuedEvent>
 {
@@ -71,7 +73,8 @@ public sealed class PrescriptionIssuedHandler : IInteropHandler<PrescriptionIssu
         _scope.Enter(to.TenantId, pharmacyId);
 
         // The scope filter on PharmacySettings makes this "is the addressed (tenant, pharmacy) provisioned here?".
-        if (!await _settingsRepository.Query(s => s.PharmacyId == pharmacyId).AnyAsync(ct))
+        var settings = await _settingsRepository.Query(s => s.PharmacyId == pharmacyId).AsNoTracking().FirstOrDefaultAsync(ct);
+        if (settings is null)
         {
             _logger.LogWarning(
                 "[PrescriptionIssuedHandler] Ignoring {MessageId}: {Recipient} is not a pharmacy provisioned on this server.",
@@ -112,6 +115,9 @@ public sealed class PrescriptionIssuedHandler : IInteropHandler<PrescriptionIssu
             OrderingTenantId = from.TenantId,
             OrderingFacilityId = from.FacilityId,
             CorrelationId = context.CorrelationId != Guid.Empty ? context.CorrelationId : msg.PrescriptionId,
+            PharmacyName = settings.PharmacyName,
+            PaymentPolicy = settings.PaymentPolicy,
+            VisitKey = msg.VisitKey,
             BranchId = msg.BranchId,
             ExternalPrescriptionId = msg.PrescriptionId,
             PrescriptionNumber = msg.PrescriptionNumber,

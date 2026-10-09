@@ -544,6 +544,9 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
                     b.Property<int>("MaxStaffLimit")
                         .HasColumnType("integer");
 
+                    b.Property<int>("PaymentPolicy")
+                        .HasColumnType("integer");
+
                     b.Property<Guid>("PharmacyId")
                         .HasColumnType("uuid");
 
@@ -749,6 +752,13 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<decimal?>("PaidAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime?>("PaidAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("PatientAge")
                         .HasColumnType("integer");
 
@@ -774,10 +784,25 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
 
+                    b.Property<int>("PaymentPolicy")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PaymentReceiptNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("PaymentStatus")
+                        .HasColumnType("integer");
+
                     b.Property<string>("PharmacyId")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<string>("PharmacyName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
 
                     b.Property<string>("PhilHealthIdentificationNumber")
                         .HasMaxLength(30)
@@ -792,11 +817,22 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<decimal?>("QuotedAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("SpecialInstructions")
                         .HasColumnType("text");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
+
+                    b.Property<string>("StatusReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
@@ -812,6 +848,10 @@ namespace ClinicEz.Pharmacy.Infrastructure.Migrations
 
                     b.Property<string>("UpdatedBy")
                         .HasColumnType("text");
+
+                    b.Property<string>("VisitKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.HasKey("Id");
 

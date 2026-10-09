@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Pharmacy.Application.Common;
 using ClinicEz.Pharmacy.Application.Common.Interfaces;
 using ClinicEz.Pharmacy.Application.Features.Prescriptions.DTOs;
 using ClinicEz.Pharmacy.Domain.Entities;
@@ -82,13 +83,15 @@ public class DispensePrescriptionCommandHandler : IRequestHandler<DispensePrescr
             throw new BadRequestException($"Prescription '{order.PrescriptionNumber}' has already been dispensed.");
         }
 
-        if (order.Status == PrescriptionStatus.Cancelled)
+        if (order.Status is PrescriptionStatus.Cancelled or PrescriptionStatus.Rejected)
         {
-            throw new BadRequestException($"Prescription '{order.PrescriptionNumber}' is cancelled and cannot be dispensed.");
+            throw new BadRequestException($"Prescription '{order.PrescriptionNumber}' is {order.Status.ToString().ToLowerInvariant()} and cannot be dispensed.");
         }
 
+        PrescriptionDispenseGate.EnsureCanDispense(order);
+
         // Regulatory enforcement: Check dangerous drugs vs S2 License
-        var hasDangerousDrugs = order.Items.Any(i => i.IsDangerousDrug);
+        var hasDangerousDrugs = order.Items.Any(i => i.IsDangerousDrug && i.Status != ItemDispenseStatus.Rejected);
         if (hasDangerousDrugs && string.IsNullOrWhiteSpace(order.DoctorS2License))
         {
             throw new BadRequestException("Regulatory Compliance Violation (RA 9165): Cannot dispense dangerous drugs because the prescribing physician's S2 License is missing or unverified.");
@@ -97,7 +100,7 @@ public class DispensePrescriptionCommandHandler : IRequestHandler<DispensePrescr
         var allDeductions = new List<object>();
         var dispensedMedications = new List<DispensedMedicationDto>();
 
-        foreach (var item in order.Items)
+        foreach (var item in order.Items.Where(i => i.Status != ItemDispenseStatus.Rejected))
         {
             // Find inventory item
             var searchName = item.GenericName.ToLower();
@@ -190,7 +193,7 @@ public class DispensePrescriptionCommandHandler : IRequestHandler<DispensePrescr
             });
         }
 
-        var totalAmount = order.Items.Sum(i => i.Subtotal);
+        var totalAmount = order.Items.Where(i => i.Status != ItemDispenseStatus.Rejected).Sum(i => i.Subtotal);
 
         // Update prescription order header
         order.Status = PrescriptionStatus.Dispensed;
@@ -227,7 +230,7 @@ public class DispensePrescriptionCommandHandler : IRequestHandler<DispensePrescr
             PrescriptionId = order.ExternalPrescriptionId != Guid.Empty ? order.ExternalPrescriptionId : order.Id,
             PrescriptionNumber = order.PrescriptionNumber,
             PharmacyFacilityId = order.PharmacyId,
-            PharmacyFacilityName = "ClinicEz Partner Pharmacy Hub",
+            PharmacyFacilityName = order.PharmacyName,
             PharmacyTenantId = order.TenantId,
             DispensingPharmacistName = order.DispensingPharmacistName,
             DispensingPharmacistPrcLicense = order.DispensingPharmacistPrc,
@@ -299,7 +302,8 @@ public class DispensePrescriptionCommandHandler : IRequestHandler<DispensePrescr
                     auditRecord.BatchDeductionsJson,
                     auditRecord.Notes
                 )
-            }
-        );
+            },
+            order.BranchId
+        ).WithWorkflow(order);
     }
 }

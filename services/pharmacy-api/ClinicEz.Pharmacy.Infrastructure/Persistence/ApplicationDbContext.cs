@@ -105,6 +105,12 @@ public class ApplicationDbContext(
             entity.Property(e => e.PhilHealthMemberPin).HasMaxLength(30);
             entity.Property(e => e.GamotCoverageAmount).HasPrecision(18, 2);
             entity.Property(e => e.PatientCoPayAmount).HasPrecision(18, 2);
+            entity.Property(e => e.PharmacyName).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.VisitKey).HasMaxLength(100);
+            entity.Property(e => e.QuotedAmount).HasPrecision(18, 2);
+            entity.Property(e => e.PaidAmount).HasPrecision(18, 2);
+            entity.Property(e => e.PaymentReceiptNumber).HasMaxLength(100);
+            entity.Property(e => e.StatusReason).HasMaxLength(1000);
 
             entity.HasMany(e => e.Items)
                 .WithOne(i => i.PrescriptionOrder)

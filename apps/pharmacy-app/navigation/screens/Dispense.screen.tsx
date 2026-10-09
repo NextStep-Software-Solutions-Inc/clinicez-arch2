@@ -1,8 +1,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, Alert } from 'react-native';
 import ThemedText from '@ui/ThemedText';
-import { useRoute, useNavigation } from '@react-navigation/native';
+import StatusChip from '@ui/StatusChip';
+import { useNavigation, type StaticScreenProps } from '@react-navigation/native';
+import PrescriptionReviewPanel from '../../components/PrescriptionReviewPanel';
 import { pharmacyService, PrescriptionOrderDto } from '../../services/pharmacyService';
+import {
+  describeDispenseBlock,
+  describePaymentChip,
+  describeStatusChip,
+  dispenseBlockedMessage,
+  formatPeso,
+  isRejectedItem,
+} from '../../utils/prescriptionPresentation';
 
 export interface PharmacistCdsAlert {
   id: string;
@@ -188,11 +198,12 @@ export function evaluatePharmacyCds(order: PrescriptionOrderDto): PharmacistCdsA
   return alerts;
 }
 
-export default function DispenseScreen() {
-  const route = useRoute<any>();
-  const navigation = useNavigation<any>();
+type DispenseScreenProps = StaticScreenProps<{ orderId?: string } | undefined>;
 
-  const routeParams = route.params as { orderId?: string } | undefined;
+export default function DispenseScreen({ route }: DispenseScreenProps): React.JSX.Element {
+  const navigation = useNavigation();
+
+  const routeParams = route.params;
   const [orderId, setOrderId] = useState<string | null>(routeParams?.orderId ?? null);
   const [order, setOrder] = useState<PrescriptionOrderDto | null>(null);
   const [loading, setLoading] = useState(false);
@@ -283,6 +294,12 @@ export default function DispenseScreen() {
     setDispensing(false);
 
     if (err) {
+      const blockedMessage = dispenseBlockedMessage(err);
+      if (blockedMessage) {
+        await loadOrder(order.id);
+        setErrorMessage(blockedMessage);
+        return;
+      }
       setErrorMessage(err.message || 'Dispensing failed. Please verify stock availability.');
       return;
     }
@@ -292,6 +309,16 @@ export default function DispenseScreen() {
       setSuccessBanner(`✓ Dispense verified! Stock deducted via FEFO and broadcast to Clinic EMR.`);
     }
   };
+
+  const handleReviewed = async (updated: PrescriptionOrderDto) => {
+    setErrorMessage(null);
+    setSuccessBanner(`✓ Prescription ${describeStatusChip(updated.status).label.toLowerCase()}.`);
+    await loadOrder(updated.id);
+  };
+
+  const paymentChip = order ? describePaymentChip(order.paymentStatus, { showNotRequired: true }) : null;
+  const dispenseBlockHint = order ? describeDispenseBlock(order.dispenseBlockedReason) : null;
+  const isFormOpen = order !== null && !['Dispensed', 'Rejected', 'Cancelled'].includes(order.status);
 
   if (loading && !order) {
     return (
@@ -340,6 +367,21 @@ export default function DispenseScreen() {
               <ThemedText style={styles.patientMeta}>Diagnosis: {order.clinicalDiagnosis}</ThemedText>
             ) : null}
 
+            <View style={styles.chipRow}>
+              <StatusChip {...describeStatusChip(order.status)} />
+              {paymentChip ? <StatusChip {...paymentChip} /> : null}
+            </View>
+
+            {order.quotedAmount !== null ? (
+              <ThemedText style={styles.quoteText}>Quoted amount: {formatPeso(order.quotedAmount)}</ThemedText>
+            ) : null}
+
+            {order.statusReason ? (
+              <View style={styles.reasonBox}>
+                <ThemedText style={styles.reasonBoxText}>Reason: {order.statusReason}</ThemedText>
+              </View>
+            ) : null}
+
             <View style={styles.doctorMetaRow}>
               <ThemedText style={styles.doctorMetaText}>
                 Prescribed by: {order.orderingDoctorName} (PRC: {order.doctorPrcLicense || 'N/A'})
@@ -349,6 +391,8 @@ export default function DispenseScreen() {
               ) : null}
             </View>
           </View>
+
+          <PrescriptionReviewPanel order={order} onReviewed={handleReviewed} />
 
           {/* Pharmacist Clinical Decision Support (CDS) Safety Panel */}
           <View style={styles.cdsCard}>
@@ -462,7 +506,7 @@ export default function DispenseScreen() {
                   : 'Auto-allocate via FEFO');
 
               return (
-                <View key={item.id || idx} style={styles.card}>
+                <View key={item.id || idx} style={[styles.card, isRejectedItem(item) && styles.rejectedItemCard]}>
                   <View style={styles.rowBetween}>
                     <View style={{ flex: 1 }}>
                       <ThemedText style={styles.medName}>
@@ -470,6 +514,7 @@ export default function DispenseScreen() {
                       </ThemedText>
                       <ThemedText style={styles.dosage}>{item.dosage} {item.form}</ThemedText>
                     </View>
+                    {isRejectedItem(item) ? <StatusChip label="Not accepted" tone="danger" /> : null}
                     <ThemedText style={styles.qtyBadge}>Qty: {item.quantityPrescribed}</ThemedText>
                   </View>
 
@@ -490,7 +535,7 @@ export default function DispenseScreen() {
           </View>
 
           {/* Pharmacist Dispensing Signature Section */}
-          {order.status !== 'Dispensed' ? (
+          {isFormOpen ? (
             <View style={styles.verificationSection}>
               <ThemedText style={styles.sectionTitle}>Pharmacist Sign-off & Receipt</ThemedText>
 
@@ -534,10 +579,16 @@ export default function DispenseScreen() {
                 />
               </View>
 
+              {dispenseBlockHint ? (
+                <View style={styles.blockedHintBox}>
+                  <ThemedText style={styles.blockedHintText}>{dispenseBlockHint}</ThemedText>
+                </View>
+              ) : null}
+
               <Pressable
-                style={[styles.dispenseButton, dispensing && styles.buttonDisabled]}
+                style={[styles.dispenseButton, (dispensing || dispenseBlockHint !== null) && styles.buttonDisabled]}
                 onPress={handleDispense}
-                disabled={dispensing}
+                disabled={dispensing || dispenseBlockHint !== null}
               >
                 {dispensing ? (
                   <ActivityIndicator color="#FFFFFF" />
@@ -548,7 +599,7 @@ export default function DispenseScreen() {
                 )}
               </Pressable>
             </View>
-          ) : (
+          ) : order.status === 'Dispensed' ? (
             <View style={styles.alreadyDispensedBox}>
               <ThemedText style={styles.alreadyDispensedTitle}>✓ Order Fully Dispensed</ThemedText>
               <ThemedText style={styles.alreadyDispensedText}>
@@ -559,6 +610,11 @@ export default function DispenseScreen() {
                   Timestamp: {new Date(order.dispensedAt).toLocaleString()}
                 </ThemedText>
               )}
+            </View>
+          ) : (
+            <View style={styles.closedBox}>
+              <ThemedText style={styles.closedTitle}>Order {describeStatusChip(order.status).label}</ThemedText>
+              <ThemedText style={styles.closedText}>This order can no longer be dispensed.</ThemedText>
             </View>
           )}
         </>
@@ -996,5 +1052,65 @@ const styles = StyleSheet.create({
     color: '#7F1D1D',
     fontWeight: '600',
     flex: 1,
+  },
+
+  // Review & payment styles
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  quoteText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  reasonBox: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: 8,
+    padding: 10,
+  },
+  reasonBoxText: {
+    fontSize: 12,
+    color: '#7F1D1D',
+    fontWeight: '600',
+  },
+  rejectedItemCard: {
+    opacity: 0.6,
+  },
+  blockedHintBox: {
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+    borderRadius: 8,
+    padding: 10,
+  },
+  blockedHintText: {
+    fontSize: 12,
+    color: '#92400E',
+    fontWeight: '700',
+  },
+  closedBox: {
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 14,
+    padding: 16,
+    alignItems: 'center',
+    gap: 4,
+  },
+  closedTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#374151',
+  },
+  closedText: {
+    fontSize: 12,
+    color: '#4B5563',
+    textAlign: 'center',
   },
 });

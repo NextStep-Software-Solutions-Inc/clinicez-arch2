@@ -58,6 +58,8 @@ public static class DependencyInjection
 
         // Register publishers
         services.AddScoped<IPrescriptionDispensedPublisher, PrescriptionDispensedPublisher>();
+        services.AddScoped<IRxStatusPublisher, RxStatusPublisher>();
+        services.AddScoped<IPharmacyBillingPublisher, PharmacyBillingPublisher>();
 
         // Add Hangfire
         services.AddHangfire(config => config
@@ -70,7 +72,8 @@ public static class DependencyInjection
         // Interop hub messaging (replaces the broker): inbound handlers + transactional outbox/inbox on this DbContext
         services.AddInterop<ApplicationDbContext>(configuration, handlers => handlers
             .Handle<FacilityCreatedEvent, FacilityCreatedHandler>(InteropTypes.FacilityLicenseIssued)
-            .Handle<PrescriptionIssuedEvent, PrescriptionIssuedHandler>(InteropTypes.RxIssued));
+            .Handle<PrescriptionIssuedEvent, PrescriptionIssuedHandler>(InteropTypes.RxIssued)
+            .Handle<BillingPaymentConfirmedPayload, BillingPaymentConfirmedHandler>(InteropTypes.BillingPaymentConfirmed));
 
         if (env != null && env.IsDevelopment())
         {
