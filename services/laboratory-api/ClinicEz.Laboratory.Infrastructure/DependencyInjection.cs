@@ -1,5 +1,7 @@
 using ClinicEz.Laboratory.Domain.Interfaces;
+using ClinicEz.Laboratory.Application.Common;
 using ClinicEz.Laboratory.Application.Common.Interfaces;
+using ClinicEz.Shared.Workspace;
 using ClinicEz.Laboratory.Infrastructure.Persistence;
 using ClinicEz.Laboratory.Infrastructure.Persistence.Repositories;
 using ClinicEz.Laboratory.Infrastructure.Services;
@@ -61,6 +63,8 @@ public static class DependencyInjection
         services.AddScoped<IDiagnosticReportPublisher, DiagnosticReportPublisher>();
         services.AddScoped<IAnalyzerFeedService, AnalyzerFeedService>();
         services.AddScoped<IDiagnosticReportPdfGenerator, DiagnosticReportPdfGenerator>();
+        services.AddWorkspaceProfile<ApplicationDbContext>();
+        services.AddScoped<ILabPrintoutConfigProvider, LabPrintoutConfigProvider>();
         services.AddScoped<IPanicAlertPublisher, PanicAlertPublisher>();
 
         // Add Hangfire
@@ -78,6 +82,7 @@ public static class DependencyInjection
         // Interop hub messaging (replaces the message broker): transactional outbox/inbox + typed handlers.
         services.AddInterop<ApplicationDbContext>(configuration, handlers => handlers
             .Handle<FacilityCreatedEvent, FacilityLicenseIssuedHandler>(InteropTypes.FacilityLicenseIssued)
+            .HandleWorkspaceProfileUpdated()
             .Handle<LabRequisitionIssuedEvent, LabOrderIssuedHandler>(InteropTypes.LabOrderIssued)
             .Handle<BillingPaymentConfirmedPayload, BillingPaymentConfirmedHandler>(InteropTypes.BillingPaymentConfirmed)
             .Handle<BillingInvoiceVoidedPayload, BillingInvoiceVoidedHandler>(InteropTypes.BillingInvoiceVoided)

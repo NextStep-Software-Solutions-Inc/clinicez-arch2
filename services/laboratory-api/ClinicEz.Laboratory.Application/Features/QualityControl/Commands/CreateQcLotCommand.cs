@@ -13,7 +13,7 @@ public record CreateQcLotCommand(
     string TenantId,
     string LotNumber,
     string ControlName,
-    string Level,
+    ControlLevel Level,
     string AnalyteCode,
     string InstrumentName,
     double TargetMean,
@@ -36,14 +36,12 @@ public class CreateQcLotCommandHandler : IRequestHandler<CreateQcLotCommand, QcL
 
     public async Task<QcLotDto> Handle(CreateQcLotCommand request, CancellationToken cancellationToken)
     {
-        Enum.TryParse<ControlLevel>(request.Level, true, out var level);
-
         var lot = new QcLot
         {
             TenantId = !string.IsNullOrWhiteSpace(request.TenantId) ? request.TenantId : "default",
             LotNumber = request.LotNumber.Trim().ToUpperInvariant(),
             ControlName = request.ControlName.Trim(),
-            Level = level,
+            Level = request.Level,
             AnalyteCode = request.AnalyteCode.Trim().ToUpperInvariant(),
             InstrumentName = request.InstrumentName.Trim(),
             TargetMean = request.TargetMean,

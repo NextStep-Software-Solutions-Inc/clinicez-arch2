@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ClinicEz.Laboratory.Domain.Enums;
 
 namespace ClinicEz.Laboratory.Infrastructure.Auth;
 
@@ -51,7 +52,7 @@ public sealed record AuthOutcome(
 
 public sealed record AuthStatusDto(
     bool WorkspaceFound,
-    string LicenseStatus,
+    LabLicenseStatus? LicenseStatus,
     bool RequiresBootstrap,
     string? LaboratoryName);
 

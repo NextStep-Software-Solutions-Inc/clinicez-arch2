@@ -25,4 +25,10 @@ public sealed class LabSettings : BaseEntity, ILabScopedEntity
 
     public string? LicenseToOperateNumber { get; set; }
     public string? TaxIdentificationNumber { get; set; }
+
+    // Letterhead printed on diagnostic reports. Entered by the laboratory; reports omit whatever is blank.
+    public string? PhilHealthAccreditationNumber { get; set; }
+    public string? PhysicalAddress { get; set; }
+    public string? ContactNumbers { get; set; }
+    public string? EmailAndWeb { get; set; }
 }

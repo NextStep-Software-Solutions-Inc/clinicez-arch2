@@ -1,4 +1,5 @@
 using ClinicEz.Laboratory.Api.Middlewares;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Licensing;
 using ClinicEz.Shared.Middlewares;
 
@@ -9,6 +10,7 @@ public static class DependencyInjection
     public static IServiceCollection AddApiServices(this IServiceCollection services)
     {
         services.AddControllers();
+        services.AddStrictStringEnums();
         services.AddOpenApi();
 
         // 3. Add our custom exception handlers: laboratory-specific codes first, then the shared catch-all mapping

@@ -2,14 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, RefreshControl, ActivityIndicator, TextInput, Alert } from 'react-native';
 import ThemedText from '@ui/ThemedText';
 import PaymentSummary from '../../components/PaymentSummary';
-import { laboratoryService, LabRequisitionItem } from '../../services/laboratoryService';
+import { laboratoryService, LabRequisitionItem, RequisitionStatus } from '../../services/laboratoryService';
 import { describeActionError } from '../../utils/requisitionPresentation';
 
 export default function WorklistScreen() {
   const [orders, setOrders] = useState<LabRequisitionItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<RequisitionStatus | ''>('');
 
   const handleRefreshPayment = async (order: LabRequisitionItem) => {
     const [updated, err] = await laboratoryService.refreshPaymentStatus(order.id);
@@ -26,50 +26,7 @@ export default function WorklistScreen() {
   const loadWorklist = async () => {
     setLoading(true);
     const [data] = await laboratoryService.getWorklist(statusFilter || undefined, search || undefined);
-    if (data && data.length > 0) {
-      setOrders(data);
-    } else {
-      // Offline fallback samples if no backend connection
-      setOrders([
-        {
-          id: 'mock-1',
-          accessionNumber: 'ACC-2026-081',
-          orderingFacilityName: 'Metro Health Outpatient Clinic',
-          orderingDoctorName: 'Dr. Roberto Cruz, MD',
-          patientId: 'p-1',
-          patientName: 'Maria Santos',
-          patientAge: 45,
-          patientGender: 'Female',
-          urgency: 'STAT',
-          status: 'PendingAccession',
-          createdAt: new Date().toISOString(),
-          specimens: [
-            { id: 's-1', barcode: 'ACC-2026-081-S01', containerType: 'Purple_EDTA', specimenType: 'WholeBlood', status: 'Pending' },
-            { id: 's-2', barcode: 'ACC-2026-081-S02', containerType: 'Yellow_SST', specimenType: 'Serum', status: 'Pending' },
-          ],
-          analyteResults: [],
-        },
-        {
-          id: 'mock-2',
-          accessionNumber: 'ACC-2026-082',
-          orderingFacilityName: 'St. Luke Community Clinic',
-          orderingDoctorName: 'Dr. Anna Reyes, MD',
-          patientId: 'p-2',
-          patientName: 'Juan Dela Cruz',
-          patientAge: 52,
-          patientGender: 'Male',
-          urgency: 'Routine',
-          status: 'InTesting',
-          createdAt: new Date().toISOString(),
-          specimens: [
-            { id: 's-3', barcode: 'ACC-2026-082-S01', containerType: 'Yellow_SST', specimenType: 'Serum', status: 'Collected' },
-          ],
-          analyteResults: [
-            { id: 'a-1', panelName: 'Clinical Chemistry', analyteCode: 'FBS', analyteName: 'Fasting Blood Sugar', value: '115.0', unit: 'mg/dL', referenceInterval: '70.0 - 99.0', flag: 'High' }
-          ],
-        },
-      ]);
-    }
+    setOrders(data ?? []);
     setLoading(false);
   };
 
@@ -109,12 +66,12 @@ export default function WorklistScreen() {
 
       {/* Filter Tabs */}
       <View style={styles.filterRow}>
-        {[
+        {([
           { label: 'All Orders', val: '' },
           { label: 'Pending Accession', val: 'PendingAccession' },
           { label: 'In Testing', val: 'InTesting' },
           { label: 'Verified', val: 'Verified' },
-        ].map(tab => (
+        ] as { label: string; val: RequisitionStatus | '' }[]).map(tab => (
           <Pressable
             key={tab.label}
             style={[styles.filterChip, statusFilter === tab.val && styles.filterChipActive]}
@@ -130,6 +87,9 @@ export default function WorklistScreen() {
       <View style={styles.section}>
         <ThemedText style={styles.sectionTitle}>Incoming Diagnostic Orders ({orders.length})</ThemedText>
         <View style={styles.list}>
+          {!loading && orders.length === 0 && (
+            <ThemedText style={styles.emptyText}>No diagnostic orders to show.</ThemedText>
+          )}
           {orders.map((item) => (
             <View key={item.id} style={styles.card}>
               <View style={styles.rowBetween}>
@@ -147,7 +107,7 @@ export default function WorklistScreen() {
                 {item.patientName} ({item.patientAge}y • {item.patientGender})
               </ThemedText>
               <ThemedText style={styles.facilityText}>
-                🏥 {item.orderingFacilityName || 'Clinic EZ Partner Clinic'}
+                🏥 {item.orderingFacilityName}
               </ThemedText>
               <ThemedText style={styles.doctor}>Ordered by: {item.orderingDoctorName}</ThemedText>
 
@@ -253,6 +213,12 @@ const styles = StyleSheet.create({
   },
   list: {
     gap: 12,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    paddingVertical: 24,
   },
   card: {
     backgroundColor: '#FFFFFF',

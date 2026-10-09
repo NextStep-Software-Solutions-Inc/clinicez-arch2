@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Laboratory.Domain.Entities;
+using ClinicEz.Laboratory.Domain.Enums;
 using ClinicEz.Laboratory.Domain.Interfaces;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Licensing;
@@ -14,7 +15,7 @@ namespace ClinicEz.Laboratory.Api.Controllers;
 public record ApplyLabLicenseRequest(string LicenseToken);
 
 public record LabLicenseStatusDto(
-    string Status, // "Active", "ActivationRequired", "Expired", "Tampered"
+    LabLicenseStatus Status,
     Guid LaboratoryId,
     string LaboratoryName,
     string PlanTier,
@@ -64,11 +65,11 @@ public sealed class LicenseController : ControllerBase
 
         var validation = _licenseValidator.Validate(settings?.LicenseToken, targetLabId, tenantId ?? settings?.TenantId);
 
-        string status;
-        if (validation.IsMissing) status = "ActivationRequired";
-        else if (validation.IsTampered) status = "Tampered";
-        else if (validation.IsExpired) status = "Expired";
-        else status = "Active";
+        LabLicenseStatus status;
+        if (validation.IsMissing) status = LabLicenseStatus.ActivationRequired;
+        else if (validation.IsTampered) status = LabLicenseStatus.Tampered;
+        else if (validation.IsExpired) status = LabLicenseStatus.Expired;
+        else status = LabLicenseStatus.Active;
 
         var limits = validation.Payload?.Limits ?? PlanTierDefaults.GetLimitsForTier(settings?.PlanTier ?? "Community");
         var features = validation.Payload?.EnabledFeatures ?? PlanTierDefaults.GetFeaturesForTier(settings?.PlanTier ?? "Community");
@@ -76,7 +77,7 @@ public sealed class LicenseController : ControllerBase
         var dto = new LabLicenseStatusDto(
             status,
             targetLabId,
-            settings?.LaboratoryName ?? "Laboratory Facility",
+            settings?.LaboratoryName ?? string.Empty,
             validation.Payload?.PlanTier ?? settings?.PlanTier ?? "Community",
             limits,
             activeStaffCount,
@@ -124,7 +125,7 @@ public sealed class LicenseController : ControllerBase
                 Id = Guid.NewGuid(),
                 TenantId = !string.IsNullOrWhiteSpace(targetTenantId) ? targetTenantId : (validation.Payload?.TenantId ?? "default"),
                 LaboratoryId = targetLabId != Guid.Empty ? targetLabId : (validation.Payload?.FacilityId ?? Guid.NewGuid()),
-                LaboratoryName = validation.Payload?.FacilityName ?? "Laboratory Facility",
+                LaboratoryName = validation.Payload?.FacilityName ?? string.Empty,
                 LicenseToken = request.LicenseToken.Trim(),
                 EntitlementVersion = validation.Payload?.EntitlementVersion ?? 0,
                 PlanTier = validation.Payload?.PlanTier ?? "Community",
@@ -150,7 +151,7 @@ public sealed class LicenseController : ControllerBase
 
         var activeStaffCount = await CountActiveStaffAsync(settings, ct);
 
-        var status = validation.IsExpired ? "Expired" : "Active";
+        var status = validation.IsExpired ? LabLicenseStatus.Expired : LabLicenseStatus.Active;
 
         var dto = new LabLicenseStatusDto(
             status,

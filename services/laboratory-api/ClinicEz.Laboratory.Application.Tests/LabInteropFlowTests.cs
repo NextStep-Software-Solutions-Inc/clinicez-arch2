@@ -20,6 +20,7 @@ using ClinicEz.Shared.Interop.Handling;
 using ClinicEz.Shared.Interop.Persistence;
 using ClinicEz.Shared.Interop.Transport;
 using ClinicEz.Shared.Interoperability;
+using ClinicEz.Shared.Workspace;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -63,8 +64,10 @@ internal sealed class LabInteropHost : IDisposable
         services.AddScoped<ILabOrderBilling, LabOrderBilling>();
         services.AddScoped<IDiagnosticReportPublisher, DiagnosticReportPublisher>();
         services.AddScoped<IPanicAlertPublisher, PanicAlertPublisher>();
+        services.AddWorkspaceProfile<ApplicationDbContext>();
         services.AddInterop<ApplicationDbContext>(config, handlers => handlers
             .Handle<FacilityCreatedEvent, FacilityLicenseIssuedHandler>(InteropTypes.FacilityLicenseIssued)
+            .HandleWorkspaceProfileUpdated()
             .Handle<LabRequisitionIssuedEvent, LabOrderIssuedHandler>(InteropTypes.LabOrderIssued)
             .Handle<BillingPaymentConfirmedPayload, BillingPaymentConfirmedHandler>(InteropTypes.BillingPaymentConfirmed)
             .Handle<BillingInvoiceVoidedPayload, BillingInvoiceVoidedHandler>(InteropTypes.BillingInvoiceVoided)
@@ -237,6 +240,7 @@ public class LabInteropFlowTests
             sp.GetRequiredService<IUnitOfWork>(),
             sp.GetRequiredService<IDiagnosticReportPublisher>(),
             new DiagnosticReportPdfGenerator(),
+            new ClinicEz.Laboratory.Application.Common.LabPrintoutConfigProvider(sp.GetRequiredService<IRepository<LabSettings>>()),
             sp.GetRequiredService<ILabOrderLifecycle>());
         await handler.Handle(new VerifyAndSignReportCommand(
             requisitionId, "Dr. Pathologist", "PRC-1", "Med Tech", "PRC-2", "ok", "JVBERi0xLjQK"), CancellationToken.None);

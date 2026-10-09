@@ -16,7 +16,7 @@ public record StoreSpecimenCommand(
     Guid SpecimenId,
     string RackId,
     string RackPosition,
-    string? Temperature = null
+    StorageTemperature? Temperature = null
 ) : IRequest<LabRequisitionDto>;
 
 public class StoreSpecimenCommandHandler : IRequestHandler<StoreSpecimenCommand, LabRequisitionDto>
@@ -51,11 +51,9 @@ public class StoreSpecimenCommandHandler : IRequestHandler<StoreSpecimenCommand,
             throw new KeyNotFoundException($"Specimen with ID {request.SpecimenId} not found in requisition {requisition.AccessionNumber}.");
         }
 
-        Enum.TryParse<StorageTemperature>(request.Temperature, true, out var temp);
-
         specimen.RackId = request.RackId.Trim();
         specimen.RackPosition = request.RackPosition.Trim().ToUpperInvariant();
-        specimen.StorageTemperature = temp != 0 ? temp : StorageTemperature.Refrigerated_2_8C;
+        specimen.StorageTemperature = request.Temperature ?? StorageTemperature.Refrigerated_2_8C;
         specimen.StorageStatus = SpecimenStorageStatus.StoredInRack;
         specimen.StoredAt = DateTime.UtcNow;
 

@@ -18,6 +18,10 @@ namespace ClinicEz.Laboratory.Infrastructure.Services;
 
 public class DiagnosticReportPdfGenerator : IDiagnosticReportPdfGenerator
 {
+    private const string MedicalTechnologistTitle = "Registered Medical Technologist";
+    private const string PathologistTitle = "Consultant Clinical Pathologist";
+    private const string UnverifiedNotice = "PRELIMINARY - this report has not been verified or signed by a pathologist.";
+
     private readonly IDocumentSecurityService _securityService;
     private readonly IQrCodeService _qrCodeService;
     private readonly string _verificationBaseUrl;
@@ -33,16 +37,12 @@ public class DiagnosticReportPdfGenerator : IDiagnosticReportPdfGenerator
         _verificationBaseUrl = VerificationUrlResolver.Resolve(configuration);
     }
 
-    public byte[] GeneratePdf(LabRequisition requisition, TenantPrintoutConfig? tenantConfig = null)
+    public byte[] GeneratePdf(LabRequisition requisition, TenantPrintoutConfig tenantConfig)
     {
-        var config = tenantConfig ?? CreateDefaultConfig(requisition);
+        var config = tenantConfig;
         var report = requisition.DiagnosticReport;
 
-        var rmtName = report?.MedicalTechnologistName ?? "Carlos Mendoza, RMT";
-        var rmtPrc = report?.MedicalTechnologistPrcLicense ?? "PRC-0045678";
-        var pathName = report?.PathologistName ?? "Dr. Roberto Gomez, MD, FPSP";
-        var pathPrc = report?.PathologistPrcLicense ?? "PRC-0089123";
-        var impression = report?.PathologistImpression ?? "Analyte parameters evaluated and verified under standard laboratory quality controls.";
+        var impression = report?.PathologistImpression;
 
         var releasedDate = report?.ReleasedAt ?? requisition.CreatedAt;
         var digest = _securityService.ComputeDocumentDigest(
@@ -50,7 +50,7 @@ public class DiagnosticReportPdfGenerator : IDiagnosticReportPdfGenerator
             "LAB-REPORT",
             requisition.AccessionNumber,
             requisition.PatientId,
-            pathPrc,
+            report?.PathologistPrcLicense ?? string.Empty,
             releasedDate);
 
         var verifyUrl = _securityService.GenerateVerificationUrl(
@@ -95,8 +95,11 @@ public class DiagnosticReportPdfGenerator : IDiagnosticReportPdfGenerator
                             {
                                 t.Span("Age / Sex: ").SemiBold().FontColor("#4B5563");
                                 t.Span($"{requisition.PatientAge} y • {requisition.PatientGender}").FontColor("#111827");
-                                t.Span("   PhilHealth: ").SemiBold().FontColor("#4B5563");
-                                t.Span(requisition.PhilHealthPin ?? "N/A").FontColor("#111827");
+                                if (!string.IsNullOrWhiteSpace(requisition.PhilHealthPin))
+                                {
+                                    t.Span("   PhilHealth: ").SemiBold().FontColor("#4B5563");
+                                    t.Span(requisition.PhilHealthPin).FontColor("#111827");
+                                }
                             });
                             c.Item().Text(t =>
                             {
@@ -128,11 +131,14 @@ public class DiagnosticReportPdfGenerator : IDiagnosticReportPdfGenerator
                                 var collectTime = requisition.Specimens.FirstOrDefault()?.CollectedAt ?? requisition.CreatedAt;
                                 t.Span(collectTime.ToString("yyyy-MM-dd HH:mm")).FontColor("#111827");
                             });
-                            c.Item().Text(t =>
+                            if (report is not null)
                             {
-                                t.Span("Report Released: ").SemiBold().FontColor("#4B5563");
-                                t.Span(releasedDate.ToString("yyyy-MM-dd HH:mm")).FontColor("#111827");
-                            });
+                                c.Item().Text(t =>
+                                {
+                                    t.Span("Report Released: ").SemiBold().FontColor("#4B5563");
+                                    t.Span(releasedDate.ToString("yyyy-MM-dd HH:mm")).FontColor("#111827");
+                                });
+                            }
                         });
                     });
 
@@ -208,31 +214,41 @@ public class DiagnosticReportPdfGenerator : IDiagnosticReportPdfGenerator
                     });
 
                     // 3. Pathologist Impression Box
-                    col.Item().PaddingTop(10).Border(1).BorderColor("#DDD6FE").Background("#F5F3FF").Padding(8).Column(c =>
+                    if (!string.IsNullOrWhiteSpace(impression))
                     {
-                        c.Item().Text("PATHOLOGIST CLINICAL EVALUATION & IMPRESSION:").FontSize(8).Bold().FontColor(primaryColor);
-                        c.Item().PaddingTop(2).Text(impression).FontSize(8.5f).FontColor("#1F2937");
-                    });
+                        col.Item().PaddingTop(10).Border(1).BorderColor("#DDD6FE").Background("#F5F3FF").Padding(8).Column(c =>
+                        {
+                            c.Item().Text("PATHOLOGIST CLINICAL EVALUATION & IMPRESSION:").FontSize(8).Bold().FontColor(primaryColor);
+                            c.Item().PaddingTop(2).Text(impression).FontSize(8.5f).FontColor("#1F2937");
+                        });
+                    }
 
                     // 4. Signatures Section
-                    col.Item().PaddingTop(16).Row(row =>
+                    if (report is null)
                     {
-                        row.RelativeItem().PaddingRight(20).Column(c =>
+                        col.Item().PaddingTop(16).AlignCenter().Text(UnverifiedNotice).FontSize(8.5f).Bold().FontColor("#B45309");
+                    }
+                    else
+                    {
+                        col.Item().PaddingTop(16).Row(row =>
                         {
-                            c.Item().Height(30); // Signature space
-                            c.Item().LineHorizontal(1).LineColor("#111827");
-                            c.Item().PaddingTop(3).AlignCenter().Text(rmtName).FontSize(9).Bold().FontColor("#111827");
-                            c.Item().AlignCenter().Text($"Registered Medical Technologist • {rmtPrc}").FontSize(7.5f).FontColor("#4B5563");
-                        });
+                            row.RelativeItem().PaddingRight(20).Column(c =>
+                            {
+                                c.Item().Height(30); // Signature space
+                                c.Item().LineHorizontal(1).LineColor("#111827");
+                                c.Item().PaddingTop(3).AlignCenter().Text(report.MedicalTechnologistName).FontSize(9).Bold().FontColor("#111827");
+                                c.Item().AlignCenter().Text(Credential(MedicalTechnologistTitle, report.MedicalTechnologistPrcLicense)).FontSize(7.5f).FontColor("#4B5563");
+                            });
 
-                        row.RelativeItem().PaddingLeft(20).Column(c =>
-                        {
-                            c.Item().Height(30); // Signature space
-                            c.Item().LineHorizontal(1).LineColor("#111827");
-                            c.Item().PaddingTop(3).AlignCenter().Text(pathName).FontSize(9).Bold().FontColor("#111827");
-                            c.Item().AlignCenter().Text($"Consultant Clinical Pathologist • {pathPrc}").FontSize(7.5f).FontColor("#4B5563");
+                            row.RelativeItem().PaddingLeft(20).Column(c =>
+                            {
+                                c.Item().Height(30); // Signature space
+                                c.Item().LineHorizontal(1).LineColor("#111827");
+                                c.Item().PaddingTop(3).AlignCenter().Text(report.PathologistName).FontSize(9).Bold().FontColor("#111827");
+                                c.Item().AlignCenter().Text(Credential(PathologistTitle, report.PathologistPrcLicense)).FontSize(7.5f).FontColor("#4B5563");
+                            });
                         });
-                    });
+                    }
                 });
 
                 page.Footer().Component(new DocumentFooterComponent(config, qrCodeBytes, digest));
@@ -242,16 +258,12 @@ public class DiagnosticReportPdfGenerator : IDiagnosticReportPdfGenerator
         return document.GeneratePdf();
     }
 
-    public string GenerateHtml(LabRequisition requisition, TenantPrintoutConfig? tenantConfig = null)
+    public string GenerateHtml(LabRequisition requisition, TenantPrintoutConfig tenantConfig)
     {
-        var config = tenantConfig ?? CreateDefaultConfig(requisition);
+        var config = tenantConfig;
         var report = requisition.DiagnosticReport;
 
-        var rmtName = report?.MedicalTechnologistName ?? "Carlos Mendoza, RMT";
-        var rmtPrc = report?.MedicalTechnologistPrcLicense ?? "PRC-0045678";
-        var pathName = report?.PathologistName ?? "Dr. Roberto Gomez, MD, FPSP";
-        var pathPrc = report?.PathologistPrcLicense ?? "PRC-0089123";
-        var impression = report?.PathologistImpression ?? "Analyte parameters evaluated and verified under standard laboratory quality controls.";
+        var impression = report?.PathologistImpression;
 
         var primaryColor = config.GetSafePrimaryColorHex();
         var releasedDate = report?.ReleasedAt ?? requisition.CreatedAt;
@@ -260,7 +272,7 @@ public class DiagnosticReportPdfGenerator : IDiagnosticReportPdfGenerator
             "LAB-REPORT",
             requisition.AccessionNumber,
             requisition.PatientId,
-            pathPrc,
+            report?.PathologistPrcLicense ?? string.Empty,
             releasedDate);
 
         var sb = new StringBuilder();
@@ -303,9 +315,27 @@ public class DiagnosticReportPdfGenerator : IDiagnosticReportPdfGenerator
         // Sanitized Header
         sb.AppendLine("<div class='header'>");
         sb.AppendLine($"  <h1 class='lab-title'>{WebUtility.HtmlEncode(config.FacilityName)}</h1>");
-        sb.AppendLine($"  <div class='lab-subtitle'>{WebUtility.HtmlEncode(config.FacilitySubHeader ?? "Clinical Chemistry • Hematology • Immunology • Urinalysis")}</div>");
-        sb.AppendLine($"  <div class='lab-license'>DOH License to Operate: <strong>{WebUtility.HtmlEncode(config.DohLicenseToOperate ?? "DOH-LTO-2026-004412-CL")}</strong> • PhilHealth Laboratory Provider: <strong>{WebUtility.HtmlEncode(config.PhilHealthAccreditationNumber ?? "PHIC-LAB-992140")}</strong></div>");
-        sb.AppendLine($"  <div class='lab-license'>{WebUtility.HtmlEncode(config.PhysicalAddress ?? "Manila, Philippines")} • Trunkline: {WebUtility.HtmlEncode(config.ContactNumbers ?? "(02) 8523-9000")}</div>");
+        if (!string.IsNullOrWhiteSpace(config.FacilitySubHeader))
+            sb.AppendLine($"  <div class='lab-subtitle'>{WebUtility.HtmlEncode(config.FacilitySubHeader)}</div>");
+
+        var licenseParts = new[]
+        {
+            string.IsNullOrWhiteSpace(config.DohLicenseToOperate)
+                ? null
+                : $"DOH License to Operate: <strong>{WebUtility.HtmlEncode(config.DohLicenseToOperate.Trim())}</strong>",
+            string.IsNullOrWhiteSpace(config.PhilHealthAccreditationNumber)
+                ? null
+                : $"PhilHealth Laboratory Provider: <strong>{WebUtility.HtmlEncode(config.PhilHealthAccreditationNumber.Trim())}</strong>"
+        };
+        if (licenseParts.Any(p => p is not null))
+            sb.AppendLine($"  <div class='lab-license'>{JoinPresent(licenseParts)}</div>");
+
+        var contactLine = JoinPresent(
+            WebUtility.HtmlEncode(config.PhysicalAddress ?? string.Empty),
+            WebUtility.HtmlEncode(config.ContactNumbers ?? string.Empty),
+            WebUtility.HtmlEncode(config.EmailAndWeb ?? string.Empty));
+        if (contactLine.Length > 0)
+            sb.AppendLine($"  <div class='lab-license'>{contactLine}</div>");
         sb.AppendLine("</div>");
 
         // Sanitized Metadata Grid
@@ -313,7 +343,8 @@ public class DiagnosticReportPdfGenerator : IDiagnosticReportPdfGenerator
         sb.AppendLine("  <div class='meta-col'>");
         sb.AppendLine($"    <div class='meta-row'><span class='meta-label'>Patient Name:</span><span class='meta-value'>{WebUtility.HtmlEncode(requisition.PatientName)}</span></div>");
         sb.AppendLine($"    <div class='meta-row'><span class='meta-label'>Age / Gender:</span><span class='meta-value'>{requisition.PatientAge} yrs • {WebUtility.HtmlEncode(requisition.PatientGender)}</span></div>");
-        sb.AppendLine($"    <div class='meta-row'><span class='meta-label'>PhilHealth PIN:</span><span class='meta-value'>{WebUtility.HtmlEncode(requisition.PhilHealthPin ?? "N/A")}</span></div>");
+        if (!string.IsNullOrWhiteSpace(requisition.PhilHealthPin))
+            sb.AppendLine($"    <div class='meta-row'><span class='meta-label'>PhilHealth PIN:</span><span class='meta-value'>{WebUtility.HtmlEncode(requisition.PhilHealthPin)}</span></div>");
         sb.AppendLine($"    <div class='meta-row'><span class='meta-label'>Ordering Clinic:</span><span class='meta-value'>{WebUtility.HtmlEncode(requisition.OrderingFacilityName)}</span></div>");
         sb.AppendLine($"    <div class='meta-row'><span class='meta-label'>Requesting Physician:</span><span class='meta-value'>{WebUtility.HtmlEncode(requisition.OrderingDoctorName)} {(string.IsNullOrEmpty(requisition.OrderingDoctorPrc) ? "" : $"({WebUtility.HtmlEncode(requisition.OrderingDoctorPrc)})")}</span></div>");
         sb.AppendLine("  </div>");
@@ -322,8 +353,10 @@ public class DiagnosticReportPdfGenerator : IDiagnosticReportPdfGenerator
         sb.AppendLine($"    <div class='meta-row'><span class='meta-label'>Priority / Urgency:</span><span class='meta-value' style='color:{(requisition.Urgency == "STAT" ? "#dc2626" : "#2563eb")};'>{WebUtility.HtmlEncode(requisition.Urgency)}</span></div>");
         var specCollect = requisition.Specimens.FirstOrDefault()?.CollectedAt ?? requisition.CreatedAt;
         sb.AppendLine($"    <div class='meta-row'><span class='meta-label'>Collection Time:</span><span class='meta-value'>{specCollect:MMM dd, yyyy HH:mm}</span></div>");
-        sb.AppendLine($"    <div class='meta-row'><span class='meta-label'>Report Released:</span><span class='meta-value'>{releasedDate:MMM dd, yyyy HH:mm}</span></div>");
-        sb.AppendLine($"    <div class='meta-row'><span class='meta-label'>Clinical Diagnosis:</span><span class='meta-value'>{WebUtility.HtmlEncode(requisition.ClinicalDiagnosis ?? "Routine Medical Checkup")}</span></div>");
+        if (report is not null)
+            sb.AppendLine($"    <div class='meta-row'><span class='meta-label'>Report Released:</span><span class='meta-value'>{releasedDate:MMM dd, yyyy HH:mm}</span></div>");
+        if (!string.IsNullOrWhiteSpace(requisition.ClinicalDiagnosis))
+            sb.AppendLine($"    <div class='meta-row'><span class='meta-label'>Clinical Diagnosis:</span><span class='meta-value'>{WebUtility.HtmlEncode(requisition.ClinicalDiagnosis)}</span></div>");
         sb.AppendLine("  </div>");
         sb.AppendLine("</div>");
 
@@ -366,24 +399,34 @@ public class DiagnosticReportPdfGenerator : IDiagnosticReportPdfGenerator
         sb.AppendLine("</table>");
 
         // Sanitized Impression
-        sb.AppendLine("<div class='impression-box'>");
-        sb.AppendLine("  <div class='impression-title'>Pathologist Clinical Evaluation & Interpretation</div>");
-        sb.AppendLine($"  <div style='color: #1f2937;'>{WebUtility.HtmlEncode(impression)}</div>");
-        sb.AppendLine("</div>");
+        if (!string.IsNullOrWhiteSpace(impression))
+        {
+            sb.AppendLine("<div class='impression-box'>");
+            sb.AppendLine("  <div class='impression-title'>Pathologist Clinical Evaluation & Interpretation</div>");
+            sb.AppendLine($"  <div style='color: #1f2937;'>{WebUtility.HtmlEncode(impression)}</div>");
+            sb.AppendLine("</div>");
+        }
 
         // Sanitized Signatures
-        sb.AppendLine("<div class='signatures-grid'>");
-        sb.AppendLine("  <div class='sig-block'>");
-        sb.AppendLine("    <div class='sig-line'></div>");
-        sb.AppendLine($"    <div class='sig-name'>{WebUtility.HtmlEncode(rmtName)}</div>");
-        sb.AppendLine($"    <div class='sig-prc'>Registered Medical Technologist • {WebUtility.HtmlEncode(rmtPrc)}</div>");
-        sb.AppendLine("  </div>");
-        sb.AppendLine("  <div class='sig-block'>");
-        sb.AppendLine("    <div class='sig-line'></div>");
-        sb.AppendLine($"    <div class='sig-name'>{WebUtility.HtmlEncode(pathName)}</div>");
-        sb.AppendLine($"    <div class='sig-prc'>Consultant Clinical Pathologist • {WebUtility.HtmlEncode(pathPrc)}</div>");
-        sb.AppendLine("  </div>");
-        sb.AppendLine("</div>");
+        if (report is null)
+        {
+            sb.AppendLine($"<div class='impression-box' style='text-align:center; font-weight:700; color:#b45309;'>{WebUtility.HtmlEncode(UnverifiedNotice)}</div>");
+        }
+        else
+        {
+            sb.AppendLine("<div class='signatures-grid'>");
+            sb.AppendLine("  <div class='sig-block'>");
+            sb.AppendLine("    <div class='sig-line'></div>");
+            sb.AppendLine($"    <div class='sig-name'>{WebUtility.HtmlEncode(report.MedicalTechnologistName)}</div>");
+            sb.AppendLine($"    <div class='sig-prc'>{WebUtility.HtmlEncode(Credential(MedicalTechnologistTitle, report.MedicalTechnologistPrcLicense))}</div>");
+            sb.AppendLine("  </div>");
+            sb.AppendLine("  <div class='sig-block'>");
+            sb.AppendLine("    <div class='sig-line'></div>");
+            sb.AppendLine($"    <div class='sig-name'>{WebUtility.HtmlEncode(report.PathologistName)}</div>");
+            sb.AppendLine($"    <div class='sig-prc'>{WebUtility.HtmlEncode(Credential(PathologistTitle, report.PathologistPrcLicense))}</div>");
+            sb.AppendLine("  </div>");
+            sb.AppendLine("</div>");
+        }
 
         // Legal Footer with Real Cryptographic Digest
         sb.AppendLine("<div class='footer-legal'>");
@@ -397,18 +440,9 @@ public class DiagnosticReportPdfGenerator : IDiagnosticReportPdfGenerator
         return sb.ToString();
     }
 
-    private static TenantPrintoutConfig CreateDefaultConfig(LabRequisition requisition)
-    {
-        return new TenantPrintoutConfig
-        {
-            FacilityName = "ClinicEz Diagnostic Laboratory",
-            FacilitySubHeader = "Tertiary Clinical Laboratory • Clinical Chemistry • Hematology • Immunology",
-            PhysicalAddress = "124 Medical Plaza, Taft Avenue, Manila, Philippines",
-            ContactNumbers = "Trunkline: (02) 8523-9000 • Email: lab@example.com",
-            DohLicenseToOperate = "DOH-LTO-2026-004412-CL",
-            PhilHealthAccreditationNumber = "PHIC-LAB-992140",
-            PrimaryColorHex = "#5B21B6",
-            CustomDisclaimerText = "Republic of the Philippines • Department of Health AO 2007-0027 • PRC Board of Medical Technology RA 5527. Official Electronic Diagnostic Report."
-        };
-    }
+    private static string Credential(string title, string? prcLicense) =>
+        string.IsNullOrWhiteSpace(prcLicense) ? title : $"{title} • {prcLicense.Trim()}";
+
+    private static string JoinPresent(params string?[] parts) =>
+        string.Join(" • ", parts.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p!.Trim()));
 }

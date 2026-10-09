@@ -5,6 +5,7 @@ namespace ClinicEz.Laboratory.Application.Common.Interfaces;
 
 public interface IDiagnosticReportPdfGenerator
 {
-    byte[] GeneratePdf(LabRequisition requisition, TenantPrintoutConfig? tenantConfig = null);
-    string GenerateHtml(LabRequisition requisition, TenantPrintoutConfig? tenantConfig = null);
+    /// <param name="tenantConfig">The laboratory's own letterhead (see <see cref="ILabPrintoutConfigProvider"/>); there is no built-in default.</param>
+    byte[] GeneratePdf(LabRequisition requisition, TenantPrintoutConfig tenantConfig);
+    string GenerateHtml(LabRequisition requisition, TenantPrintoutConfig tenantConfig);
 }

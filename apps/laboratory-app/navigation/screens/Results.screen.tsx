@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, TextInput, Alert, Modal, ActivityIndicator, Linking } from 'react-native';
 import ThemedText from '@ui/ThemedText';
-import { laboratoryService, LabRequisitionItem, AnalyteCatalogSpec } from '../../services/laboratoryService';
+import { laboratoryService, LabRequisitionItem, AnalyteCatalogSpec, NotificationMethod, LabStaffMember, LabProfile } from '../../services/laboratoryService';
 import { describeActionError, isPaymentRequiredError } from '../../utils/requisitionPresentation';
 
 interface AnalyteRow {
@@ -15,24 +15,47 @@ interface AnalyteRow {
   flag?: string;
 }
 
+const staffDisplayName = (s: LabStaffMember) => [s.title, s.firstName, s.lastName].filter(Boolean).join(' ');
+
+interface StaffPickerProps {
+  label: string;
+  staff: LabStaffMember[];
+  selectedId: string;
+  onSelect: (id: string) => void;
+  emptyText: string;
+}
+
+function StaffPicker({ label, staff, selectedId, onSelect, emptyText }: StaffPickerProps) {
+  return (
+    <View>
+      <ThemedText style={styles.inputLabel}>{label}</ThemedText>
+      {staff.length === 0 ? (
+        <ThemedText style={styles.modalSub}>{emptyText}</ThemedText>
+      ) : (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          {staff.map(s => (
+            <Pressable
+              key={s.id}
+              style={[styles.formatChip, selectedId === s.id && styles.formatChipActive]}
+              onPress={() => onSelect(s.id)}
+            >
+              <ThemedText style={[styles.formatChipText, selectedId === s.id && styles.formatChipTextActive]}>
+                {staffDisplayName(s)}{s.prcLicenseNumber ? ` • PRC ${s.prcLicenseNumber}` : ' • no PRC on file'}
+              </ThemedText>
+            </Pressable>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
 export default function ResultsScreen() {
   const [orders, setOrders] = useState<LabRequisitionItem[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<LabRequisitionItem | null>(null);
   const [catalog, setCatalog] = useState<AnalyteCatalogSpec[]>([]);
   const [activePanelFilter, setActivePanelFilter] = useState<string>('All');
 
-  const [rows, setRows] = useState<AnalyteRow[]>([
-    { code: 'HGB', name: 'Hemoglobin', panel: 'Complete Blood Count (CBC)', value: '14.2', unit: 'g/dL', ref: 'M: 13.5-17.5 • F: 12.0-15.5' },
-    { code: 'WBC', name: 'White Blood Cells', panel: 'Complete Blood Count (CBC)', value: '7.8', unit: 'x10^3/uL', ref: '4.5 - 10.0' },
-    { code: 'PLT', name: 'Platelets', panel: 'Complete Blood Count (CBC)', value: '250', unit: 'x10^3/uL', ref: '150 - 450' },
-    { code: 'FBS', name: 'Fasting Blood Sugar', panel: 'Clinical Chemistry', value: '92.0', unit: 'mg/dL', ref: '70.0 - 99.0' },
-    { code: 'CREA', name: 'Serum Creatinine', panel: 'Clinical Chemistry', value: '0.90', unit: 'mg/dL', ref: 'M: 0.7-1.3 • F: 0.6-1.1' },
-    { code: 'K', name: 'Serum Potassium', panel: 'Clinical Chemistry', value: '4.2', unit: 'mmol/L', ref: '3.5 - 5.1' },
-    { code: 'URI_COLOR', name: 'Urine Color', panel: 'Urinalysis', value: 'Straw', unit: '', ref: 'Straw / Light Yellow' },
-    { code: 'URI_PROT', name: 'Urine Protein', panel: 'Urinalysis', value: 'Negative', unit: '', ref: 'Negative' },
-    { code: 'DENGUE_NS1', name: 'Dengue NS1 Antigen', panel: 'Serology & Immunology', value: 'Non-Reactive', unit: '', ref: 'Non-Reactive' },
-    { code: 'TROP_I', name: 'Cardiac Troponin I', panel: 'Immunoassay & Endocrinology', value: '0.01', unit: 'ng/mL', ref: '< 0.04' },
-  ]);
+  const [rows, setRows] = useState<AnalyteRow[]>([]);
 
   // Modals state
   const [signModalVisible, setSignModalVisible] = useState(false);
@@ -43,39 +66,45 @@ export default function ResultsScreen() {
   const [rejectReason, setRejectReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // Pathologist sign-off fields
-  const [pathologistName, setPathologistName] = useState('Dr. Roberto Gomez, MD, FPSP');
-  const [pathologistPrc, setPathologistPrc] = useState('PRC-0089123');
-  const [medTechName, setMedTechName] = useState('Carlos Mendoza, RMT');
-  const [medTechPrc, setMedTechPrc] = useState('PRC-0045678');
-  const [impression, setImpression] = useState('Analyte levels within normal physiological limits for age and gender.');
-
+  // Signatories are chosen from the laboratory's own staff records
+  const [pathologists, setPathologists] = useState<LabStaffMember[]>([]);
+  const [medTechs, setMedTechs] = useState<LabStaffMember[]>([]);
+  const [pathologistId, setPathologistId] = useState('');
+  const [medTechId, setMedTechId] = useState('');
+  const [labProfile, setLabProfile] = useState<LabProfile | null>(null);
+  const [impression, setImpression] = useState('');
   // Analyzer simulator state
   const [analyzerModel, setAnalyzerModel] = useState('Mindray BC-5150');
   const [analyzerFormat, setAnalyzerFormat] = useState('ASTM');
   const [simulatedRawPayload, setSimulatedRawPayload] = useState('');
 
   // Panic dispatch modal state
-  const [notifiedDoctor, setNotifiedDoctor] = useState('Dr. Roberto Cruz, MD');
-  const [readbackNotes, setReadbackNotes] = useState('Dr. Cruz notified via telephone. Verbal readback received and confirmed.');
-  const [notificationMethod, setNotificationMethod] = useState('Telephone');
+  const [notifiedDoctor, setNotifiedDoctor] = useState('');
+  const [readbackNotes, setReadbackNotes] = useState('');
+  const [notificationMethod, setNotificationMethod] = useState<NotificationMethod>('Telephone');
 
   useEffect(() => {
-    laboratoryService.getWorklist().then(([data]) => {
+    Promise.all([
+      laboratoryService.getWorklist(),
+      laboratoryService.getCatalog(),
+      laboratoryService.getStaff('Pathologist', true),
+      laboratoryService.getStaff('MedicalTechnologist', true),
+      laboratoryService.getLabProfile(),
+    ]).then(([[data], [cat], [pathologistStaff], [medTechStaff], [profile]]) => {
+      const specs = cat ?? [];
+      setCatalog(specs);
+      setPathologists(pathologistStaff ?? []);
+      setMedTechs(medTechStaff ?? []);
+      setLabProfile(profile);
       if (data && data.length > 0) {
         setOrders(data);
         setSelectedOrder(data[0]);
-        syncOrderResults(data[0]);
-      }
-    });
-    laboratoryService.getCatalog().then(([cat]) => {
-      if (cat && cat.length > 0) {
-        setCatalog(cat);
+        syncOrderResults(data[0], specs);
       }
     });
   }, []);
 
-  const syncOrderResults = (order: LabRequisitionItem) => {
+  const syncOrderResults = (order: LabRequisitionItem, specs: AnalyteCatalogSpec[] = catalog) => {
     if (order.analyteResults && order.analyteResults.length > 0) {
       setRows(order.analyteResults.map(a => ({
         code: a.analyteCode,
@@ -87,26 +116,55 @@ export default function ResultsScreen() {
         flag: a.flag,
         deltaAlert: a.deltaCheckAlert || (a.interpretation?.includes('DELTA') ? a.interpretation : undefined),
       })));
+    } else {
+      setRows(specs.map(c => ({
+        code: c.analyteCode,
+        name: c.analyteName,
+        panel: c.panelName,
+        value: '',
+        unit: c.unit,
+        ref: c.referenceInterval,
+      })));
     }
   };
 
   const handleSelectOrder = (order: LabRequisitionItem) => {
     setSelectedOrder(order);
     syncOrderResults(order);
-    setNotifiedDoctor(order.orderingDoctorName || 'Attending Physician');
+    setNotifiedDoctor(order.orderingDoctorName || '');
   };
+  const pathologist = pathologists.find(s => s.id === pathologistId);
+  const medTech = medTechs.find(s => s.id === medTechId);
+  const pathologistName = pathologist ? staffDisplayName(pathologist) : '';
+  const pathologistPrc = pathologist?.prcLicenseNumber ?? '';
+  const medTechName = medTech ? staffDisplayName(medTech) : '';
+  const medTechPrc = medTech?.prcLicenseNumber ?? '';
+  const registrationLine = [
+    labProfile?.licenseToOperateNumber ? `DOH LTO: ${labProfile.licenseToOperateNumber}` : '',
+    labProfile?.philHealthAccreditationNumber ? `PhilHealth: ${labProfile.philHealthAccreditationNumber}` : '',
+  ].filter(Boolean).join(' • ');
 
+  const requireMedTech = (): boolean => {
+    if (medTechName) return true;
+    Alert.alert('Technologist Required', 'Select the medical technologist on duty first.');
+    return false;
+  };
   const handleUpdateValue = (code: string, val: string) => {
     setRows(prev => prev.map(r => r.code === code ? { ...r, value: val } : r));
   };
 
   const handleSaveObservations = async () => {
-    if (!selectedOrder) return;
+    if (!selectedOrder || !requireMedTech()) return;
+    const enteredRows = rows.filter(r => r.value.trim() !== '');
+    if (enteredRows.length === 0) {
+      Alert.alert('No Results', 'Enter at least one observed value before saving.');
+      return;
+    }
     setSubmitting(true);
     const [updated, err] = await laboratoryService.recordResults(
       selectedOrder.id,
       medTechName,
-      rows.map(r => ({
+      enteredRows.map(r => ({
         panelName: r.panel,
         analyteCode: r.code,
         analyteName: r.name,
@@ -147,6 +205,7 @@ export default function ResultsScreen() {
       Alert.alert('Error', 'Please generate or enter an analyzer payload first.');
       return;
     }
+    if (!requireMedTech()) return;
     setSubmitting(true);
     const [res, err] = await laboratoryService.ingestAnalyzerFeed(simulatedRawPayload, analyzerFormat, medTechName);
     setSubmitting(false);
@@ -168,7 +227,11 @@ export default function ResultsScreen() {
 
   // Panic Dispatch Trigger
   const handleLogPanicDispatch = async () => {
-    if (!selectedOrder) return;
+    if (!selectedOrder || !requireMedTech()) return;
+    if (!notifiedDoctor.trim() || !readbackNotes.trim()) {
+      Alert.alert('Readback Required', 'Enter the physician notified and the verbal readback confirmation notes.');
+      return;
+    }
     setSubmitting(true);
     const [log, err] = await laboratoryService.recordPanicDispatch(selectedOrder.id, {
       dispatchedByMedTechName: medTechName,
@@ -193,6 +256,10 @@ export default function ResultsScreen() {
   // Statutory Sign and Release
   const handleSignAndRelease = async () => {
     if (!selectedOrder) return;
+    if (!pathologist || !medTech || !pathologistPrc || !medTechPrc) {
+      Alert.alert('Signatories Required', 'Select the pathologist and medical technologist. Both must have a PRC license number on file in Settings.');
+      return;
+    }
     setSubmitting(true);
 
     const [finalOrder, err] = await laboratoryService.verifyAndSignReport(selectedOrder.id, {
@@ -302,12 +369,16 @@ export default function ResultsScreen() {
             <ThemedText style={styles.patientName}>
               {selectedOrder ? `${selectedOrder.patientName} (${selectedOrder.accessionNumber})` : 'Select Active Worklist Order'}
             </ThemedText>
-            <ThemedText style={styles.patientMeta}>
-              Facility: {selectedOrder?.orderingFacilityName || 'Metro Health Outpatient'} • Urgency: {selectedOrder?.urgency || 'Routine'}
-            </ThemedText>
-            <ThemedText style={styles.patientSubMeta}>
-              Status: {selectedOrder?.status || 'Pending'} • Attending: {selectedOrder?.orderingDoctorName || 'Dr. Cruz'}
-            </ThemedText>
+            {selectedOrder && (
+              <>
+                <ThemedText style={styles.patientMeta}>
+                  Facility: {selectedOrder.orderingFacilityName} • Urgency: {selectedOrder.urgency}
+                </ThemedText>
+                <ThemedText style={styles.patientSubMeta}>
+                  Status: {selectedOrder.status} • Attending: {selectedOrder.orderingDoctorName}
+                </ThemedText>
+              </>
+            )}
           </View>
 
           <View style={{ gap: 6 }}>
@@ -329,6 +400,14 @@ export default function ResultsScreen() {
           </View>
         </View>
       </View>
+
+      <StaffPicker
+        label="Medical Technologist on Duty *"
+        staff={medTechs}
+        selectedId={medTechId}
+        onSelect={setMedTechId}
+        emptyText="No active medical technologist on file. Add one under Settings."
+      />
 
       {/* Panel Filters */}
       <View style={styles.filterRow}>
@@ -352,6 +431,12 @@ export default function ResultsScreen() {
           <ThemedText style={[styles.colHeader, { flex: 1.2, textAlign: 'center' }]}>Observed Value</ThemedText>
           <ThemedText style={[styles.colHeader, { flex: 1.5, textAlign: 'right' }]}>Reference Range</ThemedText>
         </View>
+
+        {filteredRows.length === 0 && (
+          <ThemedText style={styles.modalSub}>
+            {selectedOrder ? 'No analytes to enter for this order.' : 'Select a worklist order to enter results.'}
+          </ThemedText>
+        )}
 
         {filteredRows.map((row, idx) => {
           const isCrit = row.flag === 'Critical';
@@ -518,7 +603,7 @@ export default function ResultsScreen() {
             <View style={styles.formGroup}>
               <ThemedText style={styles.inputLabel}>Notification Channel</ThemedText>
               <View style={{ flexDirection: 'row', gap: 8 }}>
-                {['Telephone', 'DirectEMR', 'InPerson'].map(m => (
+                {(['Telephone', 'DirectEMR', 'InPerson'] as const).map(m => (
                   <Pressable
                     key={m}
                     style={[styles.formatChip, notificationMethod === m && styles.formatChipActive]}
@@ -600,42 +685,20 @@ export default function ResultsScreen() {
             </ThemedText>
 
             <View style={styles.modalForm}>
-              <View>
-                <ThemedText style={styles.inputLabel}>Pathologist Full Name *</ThemedText>
-                <TextInput
-                  style={styles.input}
-                  value={pathologistName}
-                  onChangeText={setPathologistName}
-                />
-              </View>
+              <StaffPicker
+                label="Pathologist *"
+                staff={pathologists}
+                selectedId={pathologistId}
+                onSelect={setPathologistId}
+                emptyText="No active pathologist on file. Add one under Settings."
+              />
 
               <View>
-                <ThemedText style={styles.inputLabel}>Pathologist PRC License Number *</ThemedText>
-                <TextInput
-                  style={styles.input}
-                  value={pathologistPrc}
-                  onChangeText={setPathologistPrc}
-                />
+                <ThemedText style={styles.inputLabel}>Medical Technologist *</ThemedText>
+                <ThemedText style={styles.modalSub}>
+                  {medTech ? `${medTechName}${medTechPrc ? ` • PRC ${medTechPrc}` : ' • no PRC on file'}` : 'Select the medical technologist on duty on the results screen.'}
+                </ThemedText>
               </View>
-
-              <View>
-                <ThemedText style={styles.inputLabel}>Medical Technologist Name *</ThemedText>
-                <TextInput
-                  style={styles.input}
-                  value={medTechName}
-                  onChangeText={setMedTechName}
-                />
-              </View>
-
-              <View>
-                <ThemedText style={styles.inputLabel}>MedTech PRC License Number *</ThemedText>
-                <TextInput
-                  style={styles.input}
-                  value={medTechPrc}
-                  onChangeText={setMedTechPrc}
-                />
-              </View>
-
               <View>
                 <ThemedText style={styles.inputLabel}>Pathologist Clinical Impression</ThemedText>
                 <TextInput
@@ -685,9 +748,9 @@ export default function ResultsScreen() {
 
             <ScrollView style={{ maxHeight: 420 }}>
               <View style={styles.dohLetterheadPreview}>
-                <ThemedText style={styles.dohLabTitle}>CLINIC EZ DIAGNOSTIC LABORATORY</ThemedText>
-                <ThemedText style={styles.dohLabSub}>DOH LTO: DOH-LTO-2026-004412-CL • PhilHealth: PHIC-LAB-992140</ThemedText>
-                <ThemedText style={styles.dohLabAddress}>124 Medical Plaza, Taft Avenue, Manila, Philippines</ThemedText>
+                <ThemedText style={styles.dohLabTitle}>{(labProfile?.laboratoryName ?? '').toUpperCase()}</ThemedText>
+                {registrationLine ? <ThemedText style={styles.dohLabSub}>{registrationLine}</ThemedText> : null}
+                {labProfile?.physicalAddress ? <ThemedText style={styles.dohLabAddress}>{labProfile.physicalAddress}</ThemedText> : null}
 
                 <View style={styles.dohMetaBox}>
                   <ThemedText style={styles.dohMetaLine}>Patient: <strong>{selectedOrder?.patientName}</strong> ({selectedOrder?.patientAge}y • {selectedOrder?.patientGender})</ThemedText>
@@ -706,19 +769,21 @@ export default function ResultsScreen() {
                   </View>
                 ))}
 
-                <View style={styles.dohImpressionBox}>
-                  <ThemedText style={{ fontSize: 10, fontWeight: '700', color: '#5B21B6' }}>PATHOLOGIST IMPRESSION:</ThemedText>
-                  <ThemedText style={{ fontSize: 11, color: '#1F2937', marginTop: 2 }}>{selectedOrder?.diagnosticReport?.pathologistImpression || impression}</ThemedText>
-                </View>
+                {selectedOrder?.diagnosticReport?.pathologistImpression ? (
+                  <View style={styles.dohImpressionBox}>
+                    <ThemedText style={{ fontSize: 10, fontWeight: '700', color: '#5B21B6' }}>PATHOLOGIST IMPRESSION:</ThemedText>
+                    <ThemedText style={{ fontSize: 11, color: '#1F2937', marginTop: 2 }}>{selectedOrder.diagnosticReport.pathologistImpression}</ThemedText>
+                  </View>
+                ) : null}
 
                 <View style={styles.dohSigRow}>
                   <View style={{ alignItems: 'center' }}>
-                    <ThemedText style={styles.dohSigName}>{selectedOrder?.diagnosticReport?.medicalTechnologistName || medTechName}</ThemedText>
-                    <ThemedText style={styles.dohSigPrc}>RMT • {selectedOrder?.diagnosticReport?.medicalTechnologistPrcLicense || medTechPrc}</ThemedText>
+                    <ThemedText style={styles.dohSigName}>{selectedOrder?.diagnosticReport?.medicalTechnologistName}</ThemedText>
+                    <ThemedText style={styles.dohSigPrc}>RMT • {selectedOrder?.diagnosticReport?.medicalTechnologistPrcLicense}</ThemedText>
                   </View>
                   <View style={{ alignItems: 'center' }}>
-                    <ThemedText style={styles.dohSigName}>{selectedOrder?.diagnosticReport?.pathologistName || pathologistName}</ThemedText>
-                    <ThemedText style={styles.dohSigPrc}>Consultant Pathologist • {selectedOrder?.diagnosticReport?.pathologistPrcLicense || pathologistPrc}</ThemedText>
+                    <ThemedText style={styles.dohSigName}>{selectedOrder?.diagnosticReport?.pathologistName}</ThemedText>
+                    <ThemedText style={styles.dohSigPrc}>Consultant Pathologist • {selectedOrder?.diagnosticReport?.pathologistPrcLicense}</ThemedText>
                   </View>
                 </View>
               </View>

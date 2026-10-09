@@ -199,6 +199,34 @@ namespace ClinicEz.Organization.Infrastructure.Migrations
 
                     b.ToTable("interop_outbox", "organization_dashboard");
                 });
+
+            modelBuilder.Entity("ClinicEz.Shared.Workspace.WorkspaceProfileRecord", b =>
+                {
+                    b.Property<string>("TenantId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ProfileJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("TenantSlug")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("TenantId");
+
+                    b.HasIndex("TenantSlug");
+
+                    b.ToTable("workspace_profiles", "organization_dashboard");
+                });
 #pragma warning restore 612, 618
         }
     }

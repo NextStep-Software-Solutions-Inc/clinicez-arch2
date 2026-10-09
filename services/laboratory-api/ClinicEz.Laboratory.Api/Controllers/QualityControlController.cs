@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using ClinicEz.Laboratory.Application.Features.QualityControl.Commands;
 using ClinicEz.Laboratory.Application.Features.QualityControl.Queries;
 using ClinicEz.Laboratory.Application.Features.Requisitions.DTOs;
+using ClinicEz.Laboratory.Domain.Enums;
 using ClinicEz.Laboratory.Domain.Interfaces;
 using ClinicEz.Shared.Common;
 using MediatR;
@@ -89,7 +90,7 @@ public sealed class QualityControlController : ControllerBase
     public async Task<ActionResult<ApiResponse<LeveyJenningsChartDto>>> GetChart(
         [FromQuery] Guid? lotId,
         [FromQuery] string? analyteCode,
-        [FromQuery] string? level,
+        [FromQuery] ControlLevel? level,
         CancellationToken ct = default)
     {
         var result = await _sender.Send(new GetLeveyJenningsChartQuery(lotId, analyteCode, level), ct);
@@ -105,7 +106,7 @@ public record CreateLotRequest
     public string? TenantId { get; init; }
     public required string LotNumber { get; init; }
     public required string ControlName { get; init; }
-    public required string Level { get; init; } = "Level2_Normal";
+    public required ControlLevel Level { get; init; } = ControlLevel.Level2_Normal;
     public required string AnalyteCode { get; init; }
     public string InstrumentName { get; init; } = "Main Laboratory Analyzer";
     public double TargetMean { get; init; }

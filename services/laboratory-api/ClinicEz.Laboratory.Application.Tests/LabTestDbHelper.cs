@@ -51,6 +51,9 @@ public static class LabTestDbHelper
             CreateRepository<LabSettings>(context, sieve),
             NullLogger<LabOrderLifecycle>.Instance);
 
+    public static ILabPrintoutConfigProvider CreatePrintoutConfig(ApplicationDbContext context, ISieveProcessor sieve) =>
+        new ClinicEz.Laboratory.Application.Common.LabPrintoutConfigProvider(CreateRepository<LabSettings>(context, sieve));
+
     public static ILabOrderBilling CreateBilling(ApplicationDbContext context, ISieveProcessor sieve, IInteropPublisher publisher) =>
         new LabOrderBilling(
             publisher,

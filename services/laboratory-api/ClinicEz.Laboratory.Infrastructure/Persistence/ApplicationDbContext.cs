@@ -2,6 +2,7 @@ using ClinicEz.Laboratory.Domain.Common;
 using ClinicEz.Laboratory.Domain.Entities;
 using ClinicEz.Laboratory.Domain.Interfaces;
 using ClinicEz.Shared.Interop.Persistence;
+using ClinicEz.Shared.Workspace;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 
@@ -10,7 +11,7 @@ namespace ClinicEz.Laboratory.Infrastructure.Persistence;
 public class ApplicationDbContext(
     DbContextOptions<ApplicationDbContext> options,
     Microsoft.Extensions.Configuration.IConfiguration configuration,
-    ClinicEz.Laboratory.Domain.Interfaces.ILabContext? labContext = null) : DbContext(options), IInteropDbContext
+    ClinicEz.Laboratory.Domain.Interfaces.ILabContext? labContext = null) : DbContext(options), IInteropDbContext, IWorkspaceProfileDbContext
 {
     public DbSet<InteropOutboxMessage> InteropOutbox { get; set; }
     public DbSet<InteropInboxMessage> InteropInbox { get; set; }
@@ -25,6 +26,7 @@ public class ApplicationDbContext(
     public DbSet<LabStaffMember> LabStaffMembers { get; set; }
     public DbSet<LabRefreshToken> LabRefreshTokens { get; set; }
     public DbSet<LabSettings> LabSettings { get; set; }
+    public DbSet<WorkspaceProfileRecord> WorkspaceProfiles => Set<WorkspaceProfileRecord>();
 
     /// <summary>
     /// True only for the explicit <see cref="LabScopeKind.System"/> scope of named administrative jobs. A context built
@@ -85,6 +87,12 @@ public class ApplicationDbContext(
                     $"Refusing to save a {entry.Metadata.ClrType.Name} of tenant '{entity.TenantId}' / laboratory '{entity.LaboratoryId}' from the scope of tenant '{tenantId}' / laboratory '{laboratoryId}'.");
             }
         }
+    }
+
+    /// <summary>Every enum is persisted as its C# name (nullable enums included), never as a number.</summary>
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        configurationBuilder.Properties<Enum>().HaveConversion<string>().HaveMaxLength(64);
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -233,6 +241,7 @@ public class ApplicationDbContext(
         modelBuilder.Entity<LabSettings>().HasQueryFilter(e => UnrestrictedScope || (e.TenantId == ScopeTenantId && e.LaboratoryId == ScopeLaboratoryId));
 
         modelBuilder.ApplyInteropModel();
+        modelBuilder.ApplyWorkspaceProfileModel();
 
         base.OnModelCreating(modelBuilder);
     }

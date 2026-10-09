@@ -27,7 +27,7 @@ export default function SettingsScreen() {
   const [showAddStaffModal, setShowAddStaffModal] = useState(false);
   const [newFirstName, setNewFirstName] = useState('');
   const [newLastName, setNewLastName] = useState('');
-  const [newTitle, setNewTitle] = useState('RMT');
+  const [newTitle, setNewTitle] = useState('');
   const [newRole, setNewRole] = useState<LabStaffRole>('MedicalTechnologist');
   const [newPrc, setNewPrc] = useState('');
   const [newSpecialty, setNewSpecialty] = useState('');
@@ -35,54 +35,42 @@ export default function SettingsScreen() {
   const [addingStaff, setAddingStaff] = useState(false);
   const [staffError, setStaffError] = useState<string | null>(null);
 
+  // Laboratory letterhead profile (printed on released reports)
+  const [ltoNumber, setLtoNumber] = useState('');
+  const [philHealthNumber, setPhilHealthNumber] = useState('');
+  const [physicalAddress, setPhysicalAddress] = useState('');
+  const [contactNumbers, setContactNumbers] = useState('');
+  const [emailAndWeb, setEmailAndWeb] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileMessage, setProfileMessage] = useState<string | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
+
   const loadStaff = useCallback(async () => {
     const [res] = await laboratoryService.getStaff();
-    if (res && res.length > 0) {
-      setStaff(res);
-    } else {
-      // Default initial seeds if freshly initialized
-      setStaff([
-        {
-          id: 'lab-st-1',
-          tenantId: 'tenant-default',
-          laboratoryId: 'lab-default',
-          firstName: 'Manuel',
-          lastName: 'Castro',
-          title: 'Dr.',
-          role: 'Pathologist',
-          prcLicenseNumber: 'PRC-0081294',
-          ptrNumber: 'PTR-9988112',
-          specialty: 'Clinical & Anatomic Pathology',
-          isActive: true,
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: 'lab-st-2',
-          tenantId: 'tenant-default',
-          laboratoryId: 'lab-default',
-          firstName: 'Camille',
-          lastName: 'Mendoza',
-          title: 'RMT',
-          role: 'MedicalTechnologist',
-          prcLicenseNumber: 'PRC-0182334',
-          specialty: 'Clinical Chemistry & Hematology',
-          isActive: true,
-          createdAt: new Date().toISOString(),
-        },
-      ]);
+    setStaff(res ?? []);
+  }, []);
+
+  const loadProfile = useCallback(async () => {
+    const [res] = await laboratoryService.getLabProfile();
+    if (res) {
+      setLtoNumber(res.licenseToOperateNumber ?? '');
+      setPhilHealthNumber(res.philHealthAccreditationNumber ?? '');
+      setPhysicalAddress(res.physicalAddress ?? '');
+      setContactNumbers(res.contactNumbers ?? '');
+      setEmailAndWeb(res.emailAndWeb ?? '');
     }
   }, []);
 
   useEffect(() => {
     setLoading(true);
-    loadStaff().finally(() => setLoading(false));
-  }, [loadStaff]);
+    Promise.all([loadStaff(), loadProfile()]).finally(() => setLoading(false));
+  }, [loadStaff, loadProfile]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([loadStaff(), refreshLicense()]);
+    await Promise.all([loadStaff(), loadProfile(), refreshLicense()]);
     setRefreshing(false);
-  }, [loadStaff, refreshLicense]);
+  }, [loadStaff, loadProfile, refreshLicense]);
 
   const handleAddStaff = async () => {
     if (!newFirstName.trim() || !newLastName.trim()) {
@@ -122,6 +110,25 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleSaveProfile = async () => {
+    setSavingProfile(true);
+    setProfileMessage(null);
+    setProfileError(null);
+    const [, err] = await laboratoryService.updateLabProfile({
+      licenseToOperateNumber: ltoNumber.trim(),
+      philHealthAccreditationNumber: philHealthNumber.trim(),
+      physicalAddress: physicalAddress.trim(),
+      contactNumbers: contactNumbers.trim(),
+      emailAndWeb: emailAndWeb.trim(),
+    });
+    setSavingProfile(false);
+    if (err) {
+      setProfileError(err.message || 'Failed to save the laboratory profile.');
+      return;
+    }
+    setProfileMessage('Laboratory profile saved.');
+  };
+
   const handleDeactivateStaff = async (staffId: string) => {
     const [, err] = await laboratoryService.deactivateStaff(staffId);
     if (!err) {
@@ -131,7 +138,9 @@ export default function SettingsScreen() {
   };
 
   const activeStaffCount = staff.filter((s) => s.isActive).length;
-  const maxStaffLimit = license?.limits?.maxStaff ?? 5;
+  const maxStaffLimit = license?.limits?.maxStaff;
+  const staffQuotaReached = maxStaffLimit !== undefined && activeStaffCount >= maxStaffLimit;
+  const planTierLabel = license?.planTier ?? 'Unlicensed';
 
   return (
     <ScrollView
@@ -155,7 +164,7 @@ export default function SettingsScreen() {
 
         <View style={styles.licenseBannerRow}>
           <View style={styles.licenseTierBadge}>
-            <ThemedText style={styles.licenseTierText}>{license?.planTier ?? 'Community'} Tier</ThemedText>
+            <ThemedText style={styles.licenseTierText}>{planTierLabel} Tier</ThemedText>
           </View>
           <ThemedText style={[styles.licenseStatusText, { color: license?.status === 'Active' ? '#0D9488' : '#DC2626' }]}>
             ● {license?.status === 'Active' ? 'Cryptographically Verified (ECDSA P-256)' : (license?.status ?? 'Unverified')}
@@ -164,17 +173,17 @@ export default function SettingsScreen() {
 
         <View style={styles.row}>
           <ThemedText style={styles.label}>Laboratory Name</ThemedText>
-          <ThemedText style={styles.value}>{license?.laboratoryName ?? 'St. Jude Clinical Laboratory'}</ThemedText>
+          <ThemedText style={styles.value}>{license?.laboratoryName ?? ''}</ThemedText>
         </View>
         <View style={styles.row}>
           <ThemedText style={styles.label}>Staff Quota Allocation</ThemedText>
           <ThemedText style={[styles.value, { color: '#0D9488', fontWeight: '700' }]}>
-            {activeStaffCount} / {maxStaffLimit} active seats used
+            {activeStaffCount} / {maxStaffLimit ?? '—'} active seats used
           </ThemedText>
         </View>
         <View style={styles.row}>
           <ThemedText style={styles.label}>Max Connected Analyzers</ThemedText>
-          <ThemedText style={styles.value}>{license?.limits?.maxAnalyzers ?? 1} Analyzers</ThemedText>
+          <ThemedText style={styles.value}>{license?.limits?.maxAnalyzers ?? '—'} Analyzers</ThemedText>
         </View>
         <View style={styles.row}>
           <ThemedText style={styles.label}>Offline Edge Operation</ThemedText>
@@ -196,14 +205,14 @@ export default function SettingsScreen() {
           <View>
             <ThemedText style={styles.cardTitle}>Autonomous Laboratory Staff</ThemedText>
             <ThemedText style={{ fontSize: 12, color: '#6B7280' }}>
-              Quota: {activeStaffCount} of {maxStaffLimit} seats used
+              Quota: {activeStaffCount} of {maxStaffLimit ?? '—'} seats used
             </ThemedText>
           </View>
           <Pressable
-            style={[styles.addStaffBtn, activeStaffCount >= maxStaffLimit && { backgroundColor: '#9CA3AF' }]}
+            style={[styles.addStaffBtn, staffQuotaReached && { backgroundColor: '#9CA3AF' }]}
             onPress={() => {
-              if (activeStaffCount >= maxStaffLimit) {
-                alert(`Staff quota limit of ${maxStaffLimit} reached for the ${license?.planTier ?? 'Community'} tier. Please upgrade license key.`);
+              if (staffQuotaReached) {
+                alert(`Staff quota limit of ${maxStaffLimit} reached for the ${planTierLabel} tier. Please upgrade license key.`);
                 return;
               }
               setStaffError(null);
@@ -231,7 +240,7 @@ export default function SettingsScreen() {
                       </ThemedText>
                     </View>
                   </View>
-                  <ThemedText style={styles.specialtyText}>{s.specialty ?? 'General Laboratory'}</ThemedText>
+                  {s.specialty ? <ThemedText style={styles.specialtyText}>{s.specialty}</ThemedText> : null}
                   {s.prcLicenseNumber && (
                     <ThemedText style={styles.licenseText}>
                       PRC: {s.prcLicenseNumber} {s.ptrNumber ? `• PTR: ${s.ptrNumber}` : ''}
@@ -247,27 +256,55 @@ export default function SettingsScreen() {
         )}
       </View>
 
-      {/* Laboratory Profile & Interfaces */}
+      {/* Laboratory Profile (report letterhead) */}
       <View style={styles.card}>
-        <ThemedText style={styles.cardTitle}>Laboratory Profile & Interfaces</ThemedText>
-        <View style={styles.row}>
-          <ThemedText style={styles.label}>License to Operate (LTO)</ThemedText>
-          <ThemedText style={styles.value}>DOH-LIS-2026-4412</ThemedText>
-        </View>
-        <View style={styles.row}>
-          <ThemedText style={styles.label}>Category</ThemedText>
-          <ThemedText style={styles.value}>Secondary Clinical Laboratory</ThemedText>
-        </View>
-        <View style={styles.row}>
-          <ThemedText style={styles.label}>ASTM / HL7 Protocol</ThemedText>
-          <ThemedText style={[styles.value, { color: '#16A34A', fontWeight: '700' }]}>Connected (Port 5001)</ThemedText>
-        </View>
-        <View style={styles.row}>
-          <ThemedText style={styles.label}>Local Storage</ThemedText>
-          <ThemedText style={styles.value}>PostgreSQL Edge Database</ThemedText>
-        </View>
-      </View>
+        <ThemedText style={styles.cardTitle}>Laboratory Profile</ThemedText>
+        <ThemedText style={{ fontSize: 12, color: '#6B7280' }}>
+          Printed on the letterhead of every released diagnostic report. Only filled-in fields are printed.
+        </ThemedText>
 
+        {profileError && (
+          <View style={styles.modalErrorBanner}>
+            <ThemedText style={styles.modalErrorBannerText}>{profileError}</ThemedText>
+          </View>
+        )}
+        {profileMessage && <ThemedText style={{ fontSize: 12, color: '#0D9488' }}>{profileMessage}</ThemedText>}
+
+        <View style={{ gap: 8, marginTop: 8 }}>
+          <View>
+            <ThemedText style={styles.fieldLabel}>DOH License to Operate (LTO) Number</ThemedText>
+            <TextInput style={styles.fieldInput} value={ltoNumber} onChangeText={setLtoNumber} />
+          </View>
+          <View>
+            <ThemedText style={styles.fieldLabel}>PhilHealth Accreditation Number</ThemedText>
+            <TextInput style={styles.fieldInput} value={philHealthNumber} onChangeText={setPhilHealthNumber} />
+          </View>
+          <View>
+            <ThemedText style={styles.fieldLabel}>Address</ThemedText>
+            <TextInput style={styles.fieldInput} value={physicalAddress} onChangeText={setPhysicalAddress} />
+          </View>
+          <View>
+            <ThemedText style={styles.fieldLabel}>Contact Numbers</ThemedText>
+            <TextInput style={styles.fieldInput} value={contactNumbers} onChangeText={setContactNumbers} />
+          </View>
+          <View>
+            <ThemedText style={styles.fieldLabel}>Email / Website</ThemedText>
+            <TextInput style={styles.fieldInput} value={emailAndWeb} onChangeText={setEmailAndWeb} />
+          </View>
+        </View>
+
+        <Pressable
+          style={[styles.saveStaffBtn, { marginTop: 12 }, savingProfile && { opacity: 0.6 }]}
+          onPress={handleSaveProfile}
+          disabled={savingProfile}
+        >
+          {savingProfile ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <ThemedText style={styles.saveStaffBtnText}>Save Profile</ThemedText>
+          )}
+        </Pressable>
+      </View>
       {/* Add Staff Modal */}
       <Modal
         visible={showAddStaffModal}
@@ -279,7 +316,7 @@ export default function SettingsScreen() {
           <View style={styles.modalContent}>
             <ThemedText style={styles.modalHeaderTitle}>Add Laboratory Staff</ThemedText>
             <ThemedText style={styles.modalHeaderSub}>
-              Autonomous Edge Roster • Seats: {activeStaffCount}/{maxStaffLimit}
+              Autonomous Edge Roster • Seats: {activeStaffCount}/{maxStaffLimit ?? '—'}
             </ThemedText>
 
             {staffError && (
@@ -306,9 +343,9 @@ export default function SettingsScreen() {
                       [
                         'Pathologist',
                         'MedicalTechnologist',
-                        'LaboratoryTechnician',
                         'Phlebotomist',
-                        'LaboratoryAide',
+                        'LabAdmin',
+                        'LabClerk',
                       ] as const
                     ).map((r) => (
                       <Pressable
@@ -325,7 +362,7 @@ export default function SettingsScreen() {
                             newRole === r && styles.roleSelectChipTextActive,
                           ]}
                         >
-                          {r === 'MedicalTechnologist' ? 'MedTech' : r === 'LaboratoryTechnician' ? 'Lab Tech' : r}
+                          {r === 'MedicalTechnologist' ? 'MedTech' : r}
                         </ThemedText>
                       </Pressable>
                     ))}
@@ -340,7 +377,7 @@ export default function SettingsScreen() {
                     style={styles.fieldInput}
                     value={newFirstName}
                     onChangeText={setNewFirstName}
-                    placeholder="Maria"
+                    placeholder="First name"
                   />
                 </View>
                 <View style={{ flex: 1 }}>
@@ -349,7 +386,7 @@ export default function SettingsScreen() {
                     style={styles.fieldInput}
                     value={newLastName}
                     onChangeText={setNewLastName}
-                    placeholder="Santos"
+                    placeholder="Last name"
                   />
                 </View>
               </View>
@@ -360,7 +397,7 @@ export default function SettingsScreen() {
                   style={styles.fieldInput}
                   value={newPrc}
                   onChangeText={setNewPrc}
-                  placeholder="PRC-0099881"
+                  placeholder="PRC license number"
                 />
               </View>
 
@@ -370,7 +407,7 @@ export default function SettingsScreen() {
                   style={styles.fieldInput}
                   value={newSpecialty}
                   onChangeText={setNewSpecialty}
-                  placeholder="Hematology & Coagulation"
+                  placeholder="e.g. Hematology"
                 />
               </View>
             </View>

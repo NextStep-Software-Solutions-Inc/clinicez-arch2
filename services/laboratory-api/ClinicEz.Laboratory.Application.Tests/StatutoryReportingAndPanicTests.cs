@@ -18,6 +18,13 @@ namespace ClinicEz.Laboratory.Application.Tests;
 
 public class StatutoryReportingAndPanicTests
 {
+    internal static readonly ClinicEz.Shared.Documents.Configuration.TenantPrintoutConfig Letterhead = new()
+    {
+        FacilityName = "Test Diagnostic Laboratory",
+        DohLicenseToOperate = "DOH-LTO-TEST-001",
+        PhilHealthAccreditationNumber = "PHIC-TEST-002"
+    };
+
     [Fact]
     public void DiagnosticReportPdfGenerator_Should_Generate_Valid_PDF_Bytes()
     {
@@ -69,7 +76,7 @@ public class StatutoryReportingAndPanicTests
             }
         };
 
-        var pdfBytes = generator.GeneratePdf(req);
+        var pdfBytes = generator.GeneratePdf(req, Letterhead);
 
         pdfBytes.Should().NotBeNull();
         pdfBytes.Length.Should().BeGreaterThan(500);
@@ -79,9 +86,9 @@ public class StatutoryReportingAndPanicTests
         pdfText.Should().Contain("%%EOF");
 
         // HTML preview retains verifiable full text
-        var html = generator.GenerateHtml(req);
-        html.Should().Contain("ClinicEz Diagnostic Laboratory");
-        html.Should().Contain("DOH-LTO-2026-004412-CL");
+        var html = generator.GenerateHtml(req, Letterhead);
+        html.Should().Contain(Letterhead.FacilityName);
+        html.Should().Contain(Letterhead.DohLicenseToOperate!);
         html.Should().Contain("Liza Soberano");
     }
 
@@ -188,11 +195,11 @@ public class StatutoryReportingAndPanicTests
             }
         };
 
-        var html = generator.GenerateHtml(req);
+        var html = generator.GenerateHtml(req, Letterhead);
 
-        html.Should().Contain("ClinicEz Diagnostic Laboratory");
-        html.Should().Contain("DOH-LTO-2026-004412-CL");
-        html.Should().Contain("PHIC-LAB-992140");
+        html.Should().Contain(Letterhead.FacilityName);
+        html.Should().Contain(Letterhead.DohLicenseToOperate!);
+        html.Should().Contain(Letterhead.PhilHealthAccreditationNumber!);
         html.Should().Contain("Enrique Gil");
         html.Should().Contain("Serum Creatinine");
         html.Should().Contain("Carlos Mendoza, RMT");
@@ -246,7 +253,7 @@ public class StatutoryReportingAndPanicTests
             RequisitionId: req.Id,
             DispatchedByMedTechName: "Anna RMT",
             NotifiedDoctorName: "Dr. Buboy Fernandez",
-            NotificationMethod: "Telephone",
+            NotificationMethod: NotificationMethod.Telephone,
             ReadbackConfirmed: true,
             ReadbackNotes: "Dr. Fernandez verified and repeated back Potassium = 6.9 mmol/L at 16:45."
         ), CancellationToken.None);

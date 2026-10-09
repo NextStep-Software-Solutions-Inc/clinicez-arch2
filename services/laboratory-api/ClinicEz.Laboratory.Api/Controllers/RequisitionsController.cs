@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using ClinicEz.Laboratory.Application.Features.Requisitions.Commands;
 using ClinicEz.Laboratory.Application.Features.Requisitions.DTOs;
 using ClinicEz.Laboratory.Application.Features.Requisitions.Queries;
+using ClinicEz.Laboratory.Domain.Enums;
 using ClinicEz.Shared.Common;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
@@ -27,12 +28,12 @@ public sealed class RequisitionsController : ControllerBase
     [HttpGet]
     [HasPermission(LabPermissions.RequisitionsRead)]
     public async Task<ActionResult<ApiResponse<List<LabRequisitionDto>>>> GetWorklist(
-        [FromQuery] string? status,
+        [FromQuery] RequisitionStatus? status,
         [FromQuery] string? searchTerm,
         [FromQuery] string? branchId = null,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 50,
-        [FromQuery] string? stage = null,
+        [FromQuery] RequisitionStage? stage = null,
         CancellationToken ct = default)
     {
         var result = await _sender.Send(new GetWorklistQuery(status, searchTerm, branchId, pageNumber, pageSize, stage), ct);
@@ -174,7 +175,7 @@ public record AccessionSpecimenRequest
 
 public record RejectSpecimenRequest
 {
-    public required string ReasonCode { get; init; }
+    public required SpecimenRejectionReason ReasonCode { get; init; }
     public string? Notes { get; init; }
     public string? PhlebotomistName { get; init; }
     public string? CorrectiveAction { get; init; }
@@ -184,5 +185,5 @@ public record StoreSpecimenRequest
 {
     public required string RackId { get; init; }
     public required string RackPosition { get; init; }
-    public string? Temperature { get; init; }
+    public StorageTemperature? Temperature { get; init; }
 }

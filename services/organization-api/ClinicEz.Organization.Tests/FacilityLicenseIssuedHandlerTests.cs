@@ -11,6 +11,7 @@ using ClinicEz.Shared.Interop.Facility;
 using ClinicEz.Shared.Interop.Handling;
 using ClinicEz.Shared.Interop.Persistence;
 using ClinicEz.Shared.Interop.Transport;
+using ClinicEz.Shared.Workspace;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -50,9 +51,11 @@ internal sealed class OrganizationInteropHost : IDisposable
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddFacilityEntitlements<OrganizationLicenseStore>();
         services.AddFacilityHeartbeat<OrganizationLicenseStore>();
+        services.AddWorkspaceProfile<ApplicationDbContext>();
         services.AddInterop<ApplicationDbContext>(config, handlers => handlers
             .Handle<FacilityCreatedEvent, FacilityLicenseIssuedHandler>(InteropTypes.FacilityLicenseIssued)
-            .HandleEntitlementsChanged());
+            .HandleEntitlementsChanged()
+            .HandleWorkspaceProfileUpdated());
         Provider = services.BuildServiceProvider();
     }
 

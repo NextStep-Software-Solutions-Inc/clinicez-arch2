@@ -310,7 +310,7 @@ public class LabEntitlementsTests
         seed.LabSettings.Add(Settings(Token(1, facilityId: OtherLabGuid), id: OtherLabGuid));
         await seed.SaveChangesAsync();
 
-        var builder = WebApplication.CreateBuilder();
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Development" });
         builder.WebHost.UseTestServer();
         builder.Services.AddScoped(_ => CreateDb(dbName));
         builder.Services.AddSingleton(scope);

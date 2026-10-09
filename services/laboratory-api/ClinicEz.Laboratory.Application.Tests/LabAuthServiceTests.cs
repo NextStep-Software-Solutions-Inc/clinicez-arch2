@@ -227,7 +227,7 @@ public class LabAuthServiceTests
         var after = await f.Service.GetStatusAsync(null);
 
         after.WorkspaceFound.Should().BeTrue();
-        after.LicenseStatus.Should().Be("Active");
+        after.LicenseStatus.Should().Be(LabLicenseStatus.Active);
         after.RequiresBootstrap.Should().BeFalse();
         after.LaboratoryName.Should().Be("Test Laboratory");
     }

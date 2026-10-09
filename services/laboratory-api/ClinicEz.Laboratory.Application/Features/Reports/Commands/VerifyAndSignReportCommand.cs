@@ -9,6 +9,7 @@ using ClinicEz.Laboratory.Application.Features.Requisitions.DTOs;
 using ClinicEz.Laboratory.Domain.Entities;
 using ClinicEz.Laboratory.Domain.Enums;
 using ClinicEz.Laboratory.Domain.Interfaces;
+using ClinicEz.Shared.Exceptions;
 using ClinicEz.Shared.Interoperability;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -31,6 +32,7 @@ public class VerifyAndSignReportCommandHandler : IRequestHandler<VerifyAndSignRe
     private readonly IUnitOfWork _unitOfWork;
     private readonly IDiagnosticReportPublisher _reportPublisher;
     private readonly IDiagnosticReportPdfGenerator _pdfGenerator;
+    private readonly ILabPrintoutConfigProvider _printoutConfig;
     private readonly ILabOrderLifecycle _lifecycle;
 
     public VerifyAndSignReportCommandHandler(
@@ -38,17 +40,25 @@ public class VerifyAndSignReportCommandHandler : IRequestHandler<VerifyAndSignRe
         IUnitOfWork unitOfWork,
         IDiagnosticReportPublisher reportPublisher,
         IDiagnosticReportPdfGenerator pdfGenerator,
+        ILabPrintoutConfigProvider printoutConfig,
         ILabOrderLifecycle lifecycle)
     {
         _requisitionRepository = requisitionRepository;
         _unitOfWork = unitOfWork;
         _reportPublisher = reportPublisher;
         _pdfGenerator = pdfGenerator;
+        _printoutConfig = printoutConfig;
         _lifecycle = lifecycle;
     }
 
     public async Task<LabRequisitionDto> Handle(VerifyAndSignReportCommand request, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(request.PathologistName) || string.IsNullOrWhiteSpace(request.PathologistPrcLicense) ||
+            string.IsNullOrWhiteSpace(request.MedicalTechnologistName) || string.IsNullOrWhiteSpace(request.MedicalTechnologistPrcLicense))
+        {
+            throw new BadRequestException("The pathologist and the medical technologist must each be named with their PRC license number to release a report.");
+        }
+
         var requisition = await _requisitionRepository.Query()
             .Include(r => r.Specimens)
             .Include(r => r.AnalyteResults)
@@ -100,7 +110,8 @@ public class VerifyAndSignReportCommandHandler : IRequestHandler<VerifyAndSignRe
         // Auto-generate standard PDF if not provided
         if (string.IsNullOrWhiteSpace(requisition.DiagnosticReport.SignedPdfBase64))
         {
-            var pdfBytes = _pdfGenerator.GeneratePdf(requisition);
+            var letterhead = await _printoutConfig.GetAsync(requisition, cancellationToken);
+            var pdfBytes = _pdfGenerator.GeneratePdf(requisition, letterhead);
             requisition.DiagnosticReport.SignedPdfBase64 = Convert.ToBase64String(pdfBytes);
         }
 

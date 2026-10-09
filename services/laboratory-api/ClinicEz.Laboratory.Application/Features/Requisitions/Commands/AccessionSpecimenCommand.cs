@@ -18,7 +18,7 @@ public record SpecimenAccessionInput
 {
     public Guid? SpecimenId { get; init; }
     public string? Barcode { get; init; }
-    public string ContainerType { get; init; } = "Purple_EDTA";
+    public SpecimenContainerType ContainerType { get; init; } = SpecimenContainerType.Purple_EDTA;
     public string SpecimenType { get; init; } = "WholeBlood";
     public DateTime? CollectedAt { get; init; }
     public string? Notes { get; init; }
@@ -89,12 +89,11 @@ public class AccessionSpecimenCommandHandler : IRequestHandler<AccessionSpecimen
             }
             else
             {
-                Enum.TryParse<SpecimenContainerType>(input.ContainerType, true, out var containerType);
                 var newSpecimen = new Specimen
                 {
                     LabRequisitionId = requisition.Id,
                     Barcode = !string.IsNullOrWhiteSpace(input.Barcode) ? input.Barcode.Trim() : $"{requisition.AccessionNumber}-S{requisition.Specimens.Count + 1:D2}",
-                    ContainerType = containerType,
+                    ContainerType = input.ContainerType,
                     SpecimenType = string.IsNullOrWhiteSpace(input.SpecimenType) ? "WholeBlood" : input.SpecimenType,
                     Status = SpecimenStatus.Collected,
                     CollectedAt = input.CollectedAt ?? collectionTime,

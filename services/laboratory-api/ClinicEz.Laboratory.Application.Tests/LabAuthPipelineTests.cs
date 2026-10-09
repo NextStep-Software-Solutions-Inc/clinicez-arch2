@@ -174,7 +174,7 @@ public class LabAuthPipelineTests
         await using var app = await StartAsync();
         var auth = app.App.Services.GetRequiredService<ILabAuthService>();
         auth.GetStatusAsync(Arg.Any<string?>(), Arg.Any<CancellationToken>())
-            .Returns(new AuthStatusDto(true, "Active", false, "Test Laboratory"));
+            .Returns(new AuthStatusDto(true, LabLicenseStatus.Active, false, "Test Laboratory"));
 
         (await StatusAsync(app, Get("/health"))).Should().Be(HttpStatusCode.OK);
         var status = await app.Client.SendAsync(Get("/api/v1/auth/status"));

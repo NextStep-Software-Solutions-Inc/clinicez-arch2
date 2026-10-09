@@ -18,7 +18,7 @@ public record RecordPanicDispatchCommand(
     Guid RequisitionId,
     string DispatchedByMedTechName,
     string NotifiedDoctorName,
-    string NotificationMethod = "Telephone",
+    NotificationMethod NotificationMethod = NotificationMethod.Telephone,
     bool ReadbackConfirmed = true,
     string? ReadbackNotes = null
 ) : IRequest<CriticalPanicDispatchLogDto>;
@@ -62,8 +62,6 @@ public class RecordPanicDispatchCommandHandler : IRequestHandler<RecordPanicDisp
             ? string.Join(" | ", criticalFindings)
             : "Critical threshold alert flagged by clinical evaluation.";
 
-        Enum.TryParse<NotificationMethod>(request.NotificationMethod, true, out var method);
-
         var log = new CriticalPanicDispatchLog
         {
             TenantId = requisition.TenantId,
@@ -78,7 +76,7 @@ public class RecordPanicDispatchCommandHandler : IRequestHandler<RecordPanicDisp
             DispatchedAt = DateTime.UtcNow,
             DispatchedByMedTechName = request.DispatchedByMedTechName,
             NotifiedDoctorName = request.NotifiedDoctorName,
-            NotificationMethod = method != 0 ? method : NotificationMethod.Telephone,
+            NotificationMethod = request.NotificationMethod,
             ReadbackConfirmed = request.ReadbackConfirmed,
             ReadbackNotes = request.ReadbackNotes,
             AcknowledgedAt = request.ReadbackConfirmed ? DateTime.UtcNow : null

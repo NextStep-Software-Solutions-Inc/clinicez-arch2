@@ -2,10 +2,52 @@ import { labApiClient } from './apiClient';
 import { joinApiUrl } from '@shared/safe';
 import { getLabApiBaseUrl } from './runtimeConfig';
 
+/**
+ * Enums travel as their C# names, in both directions. The API rejects numbers and unknown names, so these unions
+ * mirror the backend enums member for member.
+ */
+export type SpecimenContainerType =
+  | 'Purple_EDTA'
+  | 'Yellow_SST'
+  | 'Red_Serum'
+  | 'Grey_Fluoride'
+  | 'LightBlue_Citrate'
+  | 'Urine_Cup'
+  | 'Stool_Vial';
+
+export type SpecimenRejectionReason =
+  | 'None'
+  | 'Hemolyzed'
+  | 'Lipemic'
+  | 'Icteric'
+  | 'Clotted'
+  | 'InsufficientVolume_QNS'
+  | 'WrongContainer'
+  | 'UnlabeledMislabeled'
+  | 'Contaminated';
+
+export type StorageTemperature = 'Ambient_20_25C' | 'Refrigerated_2_8C' | 'Frozen_Minus20C' | 'DeepFreeze_Minus80C';
+
+export type SpecimenStorageStatus = 'InTransit' | 'InTesting' | 'StoredInRack' | 'Disposed';
+
+export type ControlLevel = 'Level1_Low' | 'Level2_Normal' | 'Level3_High';
+
+export type QcRunStatus = 'Passed' | 'Warning' | 'Rejected';
+
+export type NotificationMethod = 'Telephone' | 'DirectEMR' | 'SMS' | 'InPerson';
+
+export type RequisitionStatus =
+  | 'PendingAccession'
+  | 'SpecimenCollected'
+  | 'InTesting'
+  | 'AwaitingReview'
+  | 'Verified'
+  | 'Rejected';
+
 export interface SpecimenItem {
   id: string;
   barcode: string;
-  containerType: string;
+  containerType: SpecimenContainerType;
   specimenType: string;
   status: 'Pending' | 'Collected' | 'ReceivedInLab' | 'Rejected';
   collectedAt?: string;
@@ -14,7 +56,7 @@ export interface SpecimenItem {
   notes?: string;
 
   // Rejection metadata
-  rejectionReason?: string;
+  rejectionReason?: SpecimenRejectionReason;
   rejectionNotes?: string;
   rejectedAt?: string;
   rejectedByPhlebotomistName?: string;
@@ -23,8 +65,8 @@ export interface SpecimenItem {
   // Storage rack metadata
   rackId?: string;
   rackPosition?: string;
-  storageTemperature?: string;
-  storageStatus?: string;
+  storageTemperature?: StorageTemperature;
+  storageStatus?: SpecimenStorageStatus;
   storedAt?: string;
   disposedAt?: string;
 }
@@ -89,7 +131,7 @@ export interface LabRequisitionItem {
   clinicalDiagnosis?: string;
   fastingInstructions?: string;
   urgency: 'Routine' | 'STAT';
-  status: 'PendingAccession' | 'SpecimenCollected' | 'InTesting' | 'AwaitingReview' | 'Verified' | 'Rejected';
+  status: RequisitionStatus;
   stage?: RequisitionStage;
   stageReason?: string;
   paymentPolicy?: PaymentPolicy;
@@ -124,7 +166,7 @@ export interface PrintableTubeStickerItem {
   patientGender: string;
   patientAge: number;
   philHealthPin?: string;
-  containerType: string;
+  containerType: SpecimenContainerType;
   containerColor: string;
   hexColor: string;
   specimenType: string;
@@ -141,12 +183,12 @@ export interface RackInventoryItem {
   barcode: string;
   accessionNumber: string;
   patientName: string;
-  containerType: string;
+  containerType: SpecimenContainerType;
   specimenType: string;
   rackId: string;
   rackPosition: string;
-  storageTemperature: string;
-  storageStatus: string;
+  storageTemperature: StorageTemperature;
+  storageStatus: SpecimenStorageStatus;
   storedAt?: string;
 }
 
@@ -155,7 +197,7 @@ export interface QcLotItem {
   tenantId: string;
   lotNumber: string;
   controlName: string;
-  level: string;
+  level: ControlLevel;
   analyteCode: string;
   instrumentName: string;
   targetMean: number;
@@ -177,7 +219,7 @@ export interface QcRunItem {
   zScore: number;
   runAt: string;
   runByMedTechName: string;
-  status: 'Passed' | 'Warning' | 'Rejected';
+  status: QcRunStatus;
   violationRules: string;
   correctiveAction?: string;
   notes?: string;
@@ -188,7 +230,7 @@ export interface LeveyJenningsPoint {
   runAt: string;
   measuredValue: number;
   zScore: number;
-  status: string;
+  status: QcRunStatus;
   violationRules?: string;
 }
 
@@ -196,7 +238,7 @@ export interface LeveyJenningsChartData {
   lotId: string;
   lotNumber: string;
   controlName: string;
-  level: string;
+  level: ControlLevel;
   analyteCode: string;
   targetMean: number;
   targetSD: number;
@@ -220,7 +262,7 @@ export interface CriticalPanicDispatchLogItem {
   dispatchedAt: string;
   dispatchedByMedTechName: string;
   notifiedDoctorName: string;
-  notificationMethod: string;
+  notificationMethod: NotificationMethod;
   readbackConfirmed: boolean;
   readbackNotes?: string;
   acknowledgedAt?: string;
@@ -249,7 +291,7 @@ export interface ClaimRequisitionResult {
 }
 
 export const laboratoryService = {
-  async getWorklist(status?: string, searchTerm?: string, stage?: RequisitionStage) {
+  async getWorklist(status?: RequisitionStatus, searchTerm?: string, stage?: RequisitionStage) {
     const params = new URLSearchParams();
     if (status) params.append('status', status);
     if (searchTerm) params.append('searchTerm', searchTerm);
@@ -283,7 +325,7 @@ export const laboratoryService = {
   async accessionSpecimen(id: string, phlebotomistName: string, specimens: {
     specimenId?: string;
     barcode?: string;
-    containerType: string;
+    containerType: SpecimenContainerType;
     specimenType: string;
     collectedAt?: string;
     notes?: string;
@@ -300,7 +342,7 @@ export const laboratoryService = {
   },
 
   async rejectSpecimen(requisitionId: string, specimenId: string, payload: {
-    reasonCode: string;
+    reasonCode: SpecimenRejectionReason;
     notes?: string;
     phlebotomistName?: string;
     correctiveAction?: string;
@@ -311,7 +353,7 @@ export const laboratoryService = {
   async storeSpecimen(requisitionId: string, specimenId: string, payload: {
     rackId: string;
     rackPosition: string;
-    temperature?: string;
+    temperature?: StorageTemperature;
   }) {
     return labApiClient.post<LabRequisitionItem>(`/requisitions/${requisitionId}/specimens/${specimenId}/store`, payload);
   },
@@ -368,7 +410,7 @@ export const laboratoryService = {
     tenantId?: string;
     lotNumber: string;
     controlName: string;
-    level: string;
+    level: ControlLevel;
     analyteCode: string;
     instrumentName: string;
     targetMean: number;
@@ -391,7 +433,7 @@ export const laboratoryService = {
     return labApiClient.post<QcRunItem>('/qc/runs', payload);
   },
 
-  async getLeveyJenningsChart(lotId?: string, analyteCode?: string, level?: string) {
+  async getLeveyJenningsChart(lotId?: string, analyteCode?: string, level?: ControlLevel) {
     const params = new URLSearchParams();
     if (lotId) params.append('lotId', lotId);
     if (analyteCode) params.append('analyteCode', analyteCode);
@@ -418,7 +460,7 @@ export const laboratoryService = {
   async recordPanicDispatch(requisitionId: string, payload: {
     dispatchedByMedTechName: string;
     notifiedDoctorName: string;
-    notificationMethod?: string;
+    notificationMethod?: NotificationMethod;
     readbackConfirmed?: boolean;
     readbackNotes?: string;
   }) {
@@ -464,15 +506,35 @@ export const laboratoryService = {
 
   async deactivateStaff(id: string) {
     return labApiClient.delete(`/staff/${id}`);
+  },
+
+  async getLabProfile() {
+    return labApiClient.get<LabProfile>('/profile');
+  },
+
+  async updateLabProfile(payload: UpdateLabProfilePayload) {
+    return labApiClient.put<LabProfile>('/profile', payload);
   }
 };
+
+/** The laboratory's own letterhead facts, printed on every released report. */
+export interface LabProfile {
+  laboratoryName: string;
+  licenseToOperateNumber?: string;
+  philHealthAccreditationNumber?: string;
+  physicalAddress?: string;
+  contactNumbers?: string;
+  emailAndWeb?: string;
+}
+
+export type UpdateLabProfilePayload = Omit<LabProfile, 'laboratoryName'>;
 
 export type LabStaffRole =
   | 'Pathologist'
   | 'MedicalTechnologist'
-  | 'LaboratoryTechnician'
   | 'Phlebotomist'
-  | 'LaboratoryAide';
+  | 'LabAdmin'
+  | 'LabClerk';
 
 export interface LabStaffMember {
   id: string;

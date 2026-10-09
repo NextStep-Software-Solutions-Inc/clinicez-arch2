@@ -84,6 +84,7 @@ public class LabPaymentGateTests
             sp.GetRequiredService<IUnitOfWork>(),
             sp.GetRequiredService<IDiagnosticReportPublisher>(),
             new DiagnosticReportPdfGenerator(),
+            new ClinicEz.Laboratory.Application.Common.LabPrintoutConfigProvider(sp.GetRequiredService<IRepository<LabSettings>>()),
             sp.GetRequiredService<ILabOrderLifecycle>());
         await handler.Handle(new VerifyAndSignReportCommand(
             requisitionId, "Dr. Pathologist", "PRC-1", "Med Tech", "PRC-2", "ok", "JVBERi0xLjQK"), CancellationToken.None);

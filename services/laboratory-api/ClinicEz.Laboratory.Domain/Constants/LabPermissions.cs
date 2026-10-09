@@ -40,6 +40,9 @@ public static class LabPermissions
     public const string StaffRead = "staff:read";
     public const string StaffManage = "staff:manage";
 
+    /// <summary>Edit the laboratory profile printed on reports (license numbers, address, contacts).</summary>
+    public const string SettingsManage = "settings:manage";
+
     /// <summary>
     /// Minimal permission set granted to trusted internal services (authenticated by the shared internal key).
     /// Never includes staff, results or verification permissions.
@@ -65,7 +68,8 @@ public static class LabPermissions
         ReportsVerify,
         ReportsPanicDispatch,
         StaffRead,
-        StaffManage
+        StaffManage,
+        SettingsManage
     }.AsReadOnly();
 }
 

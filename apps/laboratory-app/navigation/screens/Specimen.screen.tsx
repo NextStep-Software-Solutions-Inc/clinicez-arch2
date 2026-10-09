@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, TextInput, Alert, RefreshControl, Modal, ActivityIndicator } from 'react-native';
 import ThemedText from '@ui/ThemedText';
 import PaymentSummary from '../../components/PaymentSummary';
-import { laboratoryService, LabRequisitionItem, SpecimenItem, PrintableTubeStickerItem, RackInventoryItem } from '../../services/laboratoryService';
+import { laboratoryService, LabRequisitionItem, SpecimenItem, PrintableTubeStickerItem, RackInventoryItem, SpecimenContainerType, SpecimenRejectionReason, StorageTemperature } from '../../services/laboratoryService';
 import { describeActionError, isPaymentRequiredError } from '../../utils/requisitionPresentation';
 
 interface SpecimenWithMeta
@@ -23,7 +23,7 @@ interface SpecimenWithMeta
 export default function SpecimenScreen() {
   const [specimens, setSpecimens] = useState<SpecimenWithMeta[]>([]);
   const [loading, setLoading] = useState(false);
-  const [phlebName, setPhlebName] = useState('Sarah Ramos, RMT');
+  const [phlebName, setPhlebName] = useState('');
   const [filter, setFilter] = useState<'All' | 'Pending' | 'Collected' | 'Rejected' | 'Stored'>('All');
 
   // Sticker preview modal
@@ -33,7 +33,7 @@ export default function SpecimenScreen() {
   // Rejection modal
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
   const [targetSpecimen, setTargetSpecimen] = useState<SpecimenWithMeta | null>(null);
-  const [rejectionReason, setRejectionReason] = useState('Hemolyzed');
+  const [rejectionReason, setRejectionReason] = useState<SpecimenRejectionReason>('Hemolyzed');
   const [rejectionNotes, setRejectionNotes] = useState('');
   const [correctiveAction, setCorrectiveAction] = useState('Recall patient for immediate re-collection');
 
@@ -41,7 +41,7 @@ export default function SpecimenScreen() {
   const [rackModalVisible, setRackModalVisible] = useState(false);
   const [rackId, setRackId] = useState('RACK-CHEM-A');
   const [rackPos, setRackPos] = useState('B04');
-  const [storageTemp, setStorageTemp] = useState('Refrigerated_2_8C');
+  const [storageTemp, setStorageTemp] = useState<StorageTemperature>('Refrigerated_2_8C');
 
   // Rack inventory modal
   const [inventoryModalVisible, setInventoryModalVisible] = useState(false);
@@ -76,55 +76,7 @@ export default function SpecimenScreen() {
       }
       setSpecimens(flattened);
     } else {
-      // Fallback demo data
-      setSpecimens([
-        {
-          id: 's-1',
-          requisitionId: 'req-1',
-          accessionNumber: 'ACC-2026-081',
-          patientName: 'Maria Santos',
-          patientAge: 45,
-          patientGender: 'Female',
-          philHealthPin: '01-123456789-0',
-          urgency: 'STAT',
-          barcode: 'ACC-2026-081-S01',
-          containerType: 'Purple_EDTA',
-          specimenType: 'WholeBlood',
-          status: 'Pending',
-        },
-        {
-          id: 's-2',
-          requisitionId: 'req-1',
-          accessionNumber: 'ACC-2026-081',
-          patientName: 'Maria Santos',
-          patientAge: 45,
-          patientGender: 'Female',
-          philHealthPin: '01-123456789-0',
-          urgency: 'STAT',
-          barcode: 'ACC-2026-081-S02',
-          containerType: 'Yellow_SST',
-          specimenType: 'Serum',
-          status: 'Collected',
-          collectedAt: new Date().toISOString(),
-          collectedByPhlebotomistName: 'Sarah Ramos, RMT',
-        },
-        {
-          id: 's-3',
-          requisitionId: 'req-2',
-          accessionNumber: 'ACC-2026-082',
-          patientName: 'Juan Dela Cruz',
-          patientAge: 52,
-          patientGender: 'Male',
-          urgency: 'Routine',
-          barcode: 'ACC-2026-082-S01',
-          containerType: 'LightBlue_Citrate',
-          specimenType: 'Plasma',
-          status: 'Rejected',
-          rejectionReason: 'Clotted',
-          rejectionNotes: 'Microclot detected during pre-analytical check.',
-          correctiveAction: 'Request redraw with fresh citrate tube.',
-        },
-      ]);
+      setSpecimens([]);
     }
     setLoading(false);
   };
@@ -134,6 +86,10 @@ export default function SpecimenScreen() {
   }, []);
 
   const handleCollect = async (item: SpecimenWithMeta) => {
+    if (!phlebName.trim()) {
+      Alert.alert('Phlebotomist Required', 'Enter the name of the phlebotomist on duty before collecting a specimen.');
+      return;
+    }
     const [updated, err] = await laboratoryService.accessionSpecimen(item.requisitionId, phlebName, [
       {
         specimenId: item.id,
@@ -179,7 +135,7 @@ export default function SpecimenScreen() {
     if (typeof window !== 'undefined' && window.print) {
       window.print();
     } else {
-      Alert.alert('Print Sent', 'Label dispatched to thermal barcode sticker printer (Zebra ZD421).');
+      Alert.alert('Printing Unavailable', 'Label printing is not available on this device. Open the app in a browser to print the label.');
     }
   };
 
@@ -193,6 +149,11 @@ export default function SpecimenScreen() {
 
   const handleSubmitRejection = async () => {
     if (!targetSpecimen) return;
+    if (!phlebName.trim()) {
+      setRejectModalVisible(false);
+      Alert.alert('Phlebotomist Required', 'Enter the name of the phlebotomist on duty before rejecting a specimen.');
+      return;
+    }
     const [, err] = await laboratoryService.rejectSpecimen(targetSpecimen.requisitionId, targetSpecimen.id, {
       reasonCode: rejectionReason,
       notes: rejectionNotes,
@@ -240,7 +201,7 @@ export default function SpecimenScreen() {
     if (inv) setRackInventory(inv);
   };
 
-  const resolveCapStyle = (containerType: string) => {
+  const resolveCapStyle = (containerType: SpecimenContainerType) => {
     switch (containerType) {
       case 'Purple_EDTA':
         return { name: 'Lavender / EDTA', color: '#7C3AED', tests: 'CBC, Blood Typing, HbA1c' };
@@ -319,6 +280,9 @@ export default function SpecimenScreen() {
       <View style={styles.section}>
         <ThemedText style={styles.sectionTitle}>Specimens Queue ({filtered.length})</ThemedText>
         <View style={styles.list}>
+          {!loading && filtered.length === 0 && (
+            <ThemedText style={styles.emptyText}>No specimens to show. Specimens appear here once a requisition has been received.</ThemedText>
+          )}
           {filtered.map((item) => {
             const cap = resolveCapStyle(item.containerType);
             const isRejected = item.status === 'Rejected';
@@ -493,7 +457,7 @@ export default function SpecimenScreen() {
             <View style={styles.formGroup}>
               <ThemedText style={styles.inputLabel}>Rejection Reason Code *</ThemedText>
               <View style={styles.reasonChipsWrap}>
-                {[
+                {([
                   { code: 'Hemolyzed', desc: 'Free Hemoglobin' },
                   { code: 'Lipemic', desc: 'Turbid Lipids' },
                   { code: 'Icteric', desc: 'High Bilirubin' },
@@ -501,7 +465,7 @@ export default function SpecimenScreen() {
                   { code: 'InsufficientVolume_QNS', desc: 'QNS / Low Volume' },
                   { code: 'WrongContainer', desc: 'Incorrect Tube' },
                   { code: 'Contaminated', desc: 'IV Dilution / Contam' },
-                ].map(r => (
+                ] as { code: SpecimenRejectionReason; desc: string }[]).map(r => (
                   <Pressable
                     key={r.code}
                     style={[styles.reasonChip, rejectionReason === r.code && styles.reasonChipActive]}
@@ -585,11 +549,11 @@ export default function SpecimenScreen() {
             <View style={styles.formGroup}>
               <ThemedText style={styles.inputLabel}>Storage Temperature Zone *</ThemedText>
               <View style={styles.rackChipsWrap}>
-                {[
+                {([
                   { code: 'Refrigerated_2_8C', label: '2-8°C (Refrigerated)' },
                   { code: 'Ambient_20_25C', label: '20-25°C (Ambient)' },
                   { code: 'Frozen_Minus20C', label: '-20°C (Frozen)' },
-                ].map(t => (
+                ] as { code: StorageTemperature; label: string }[]).map(t => (
                   <Pressable
                     key={t.code}
                     style={[styles.rackChip, storageTemp === t.code && styles.rackChipActive]}
@@ -750,6 +714,12 @@ const styles = StyleSheet.create({
   },
   list: {
     gap: 12,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    paddingVertical: 24,
   },
   card: {
     backgroundColor: '#FFFFFF',
