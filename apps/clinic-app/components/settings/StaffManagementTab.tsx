@@ -11,9 +11,16 @@ import { SkeletonList } from '../ui/Skeleton';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import Icon from '../ui/Icon';
 import { theme } from '../../constants/theme';
-import { notify } from '../../utils/feedback';
+import { notify, Alert } from '../../utils/feedback';
 import { clinicService, StaffMember, StaffRole, ResetStaffPasswordResult, ClinicRole } from '../../services/clinicService';
 import { Chip, FieldGroup } from './common';
+
+import {
+  RoleOption,
+  SYSTEM_ROLE_ORDER,
+  inferStaffRole,
+  FALLBACK_SYSTEM_ROLES,
+} from '../../services/roleUtils';
 
 interface StaffManagementTabProps {
   staff: StaffMember[];
@@ -42,12 +49,41 @@ export default function StaffManagementTab({
   setShowAddModal,
   onStaffAdded,
 }: StaffManagementTabProps) {
+  // Derived role lists: System standard roles + Clinic custom roles defined by admin
+  const rawSystemRoles = (roles || []).filter((r) => r.isSystem);
+  const systemRoleOptions: RoleOption[] =
+    rawSystemRoles.length > 0
+      ? rawSystemRoles
+          .map((r) => ({
+            id: r.id,
+            name: r.name,
+            displayName: r.name,
+            isSystem: true,
+            staffRole: inferStaffRole(r),
+            description: r.description,
+          }))
+          .sort((a, b) => SYSTEM_ROLE_ORDER.indexOf(a.staffRole) - SYSTEM_ROLE_ORDER.indexOf(b.staffRole))
+      : FALLBACK_SYSTEM_ROLES;
+
+  const customRoleOptions: RoleOption[] = (roles || [])
+    .filter((r) => !r.isSystem)
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      displayName: `${r.name} (Custom)`,
+      isSystem: false,
+      staffRole: inferStaffRole(r),
+      description: r.description,
+    }));
+
+  const allRoleOptions = [...systemRoleOptions, ...customRoleOptions];
+
   // Add Staff Form State
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [title, setTitle] = useState('');
   const [role, setRole] = useState<StaffRole>('Doctor');
-  const [selectedClinicRoleId, setSelectedClinicRoleId] = useState<string | null>(null);
+  const [selectedRoleId, setSelectedRoleId] = useState<string>('');
   const [email, setEmail] = useState('');
   const [prc, setPrc] = useState('');
   const [ptr, setPtr] = useState('');
@@ -83,12 +119,33 @@ export default function StaffManagementTab({
     return res;
   };
 
+  const selectedRoleOption =
+    allRoleOptions.find((r) => r.id === selectedRoleId) ||
+    systemRoleOptions[0] ||
+    FALLBACK_SYSTEM_ROLES[0];
+
+  const handleSelectRole = (r: RoleOption) => {
+    setSelectedRoleId(r.id);
+    setRole(r.staffRole);
+    if (r.staffRole === 'Doctor') {
+      if (!title || title === 'RN' || title === 'Ms.' || title === 'Mr.') setTitle('Dr.');
+    } else if (r.staffRole === 'Nurse') {
+      if (!title || title === 'Dr.') setTitle('RN');
+    } else if (title === 'Dr.' || title === 'RN') {
+      setTitle('');
+    }
+  };
+
   const handleOpenAddModal = () => {
     setFirstName('');
     setLastName('');
-    setTitle('');
-    setRole('Doctor');
-    setSelectedClinicRoleId(null);
+    setTitle('Dr.');
+    const defaultDoctor =
+      systemRoleOptions.find((r) => r.staffRole === 'Doctor') ||
+      systemRoleOptions[0] ||
+      FALLBACK_SYSTEM_ROLES[0];
+    setSelectedRoleId(defaultDoctor.id);
+    setRole(defaultDoctor.staffRole);
     setEmail('');
     setPrc('');
     setPtr('');
@@ -125,16 +182,19 @@ export default function StaffManagementTab({
     setAddingStaff(true);
     setAddError(null);
 
+    const effectiveRoleId = selectedRoleId || selectedRoleOption.id;
+    const clinicRoleId = effectiveRoleId.startsWith('sys-') ? undefined : effectiveRoleId;
+
     const [created, err] = await clinicService.createStaff({
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       title: title.trim() || undefined,
       role,
-      clinicRoleId: selectedClinicRoleId || undefined,
+      clinicRoleId: clinicRoleId || undefined,
       email: email.trim() || undefined,
-      prcLicenseNumber: prc.trim() || undefined,
-      ptrNumber: ptr.trim() || undefined,
-      s2LicenseNumber: s2.trim() || undefined,
+      prcLicenseNumber: role === 'Doctor' ? prc.trim() : undefined,
+      ptrNumber: role === 'Doctor' ? ptr.trim() || undefined : undefined,
+      s2LicenseNumber: role === 'Doctor' ? s2.trim() || undefined : undefined,
       specialty: specialty.trim() || undefined,
       initialPassword: provisionLogin ? temporaryPassword : undefined,
       sendInviteEmail: false,
@@ -200,18 +260,43 @@ export default function StaffManagementTab({
     });
   };
 
-  const handleDeactivate = async (staffMember: StaffMember) => {
-    const [_, err] = await clinicService.deactivateStaff(staffMember.id);
-    if (err) {
-      notify.error(err.message || 'Could not deactivate staff member.');
-      return;
+  const handleToggleActive = (staffMember: StaffMember) => {
+    if (staffMember.isActive) {
+      Alert.alert(
+        'Deactivate Staff Member',
+        `Are you sure you want to deactivate ${staffMember.firstName} ${staffMember.lastName}? They will no longer be able to log in or access the workstation.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Deactivate',
+            style: 'destructive',
+            onPress: async () => {
+              const [_, err] = await clinicService.deactivateStaff(staffMember.id);
+              if (err) {
+                notify.error(err.message || 'Could not deactivate staff member.');
+                return;
+              }
+              setStaff((prev) =>
+                prev.map((s) => (s.id === staffMember.id ? { ...s, isActive: false } : s))
+              );
+              notify.success(`${staffMember.firstName} ${staffMember.lastName} deactivated.`);
+            },
+          },
+        ]
+      );
+    } else {
+      (async () => {
+        const [result, err] = await clinicService.activateStaff(staffMember.id);
+        if (err) {
+          notify.error(err.message || 'Could not activate staff member.');
+          return;
+        }
+        setStaff((prev) =>
+          prev.map((s) => (s.id === staffMember.id ? { ...s, isActive: true } : s))
+        );
+        notify.success(`${staffMember.firstName} ${staffMember.lastName} reactivated.`);
+      })();
     }
-    setStaff((prev) =>
-      prev.map((s) => (s.id === staffMember.id ? { ...s, isActive: !s.isActive } : s))
-    );
-    notify.success(
-      `${staffMember.firstName} ${staffMember.lastName} ${staffMember.isActive ? 'deactivated' : 'reactivated'}.`
-    );
   };
 
   const copyToClipboard = async (text: string) => {
@@ -320,7 +405,7 @@ export default function StaffManagementTab({
                         title={s.isActive ? 'Deactivate' : 'Activate'}
                         variant="ghost"
                         size="sm"
-                        onPress={() => handleDeactivate(s)}
+                        onPress={() => handleToggleActive(s)}
                       />
                     </View>
                   </View>
@@ -356,6 +441,96 @@ export default function StaffManagementTab({
           </View>
         ) : null}
 
+        {/* Single unified Role Selection: System standard roles + Clinic custom roles */}
+        <View style={styles.roleSelectionGroup}>
+          <FieldGroup label="Staff Role *">
+            <ThemedText variant="caption" color={theme.colors.textMuted}>
+              Select the system standard role or a clinic custom role.
+            </ThemedText>
+
+            {/* System Standard Roles */}
+            <View style={styles.roleSubgroup}>
+              <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                System Standard Roles
+              </ThemedText>
+              <View style={styles.chipRow}>
+                {systemRoleOptions.map((r) => (
+                  <Chip
+                    key={r.id}
+                    label={r.displayName}
+                    active={selectedRoleOption.id === r.id}
+                    onPress={() => handleSelectRole(r)}
+                  />
+                ))}
+              </View>
+            </View>
+
+            {/* Clinic Custom Roles */}
+            {customRoleOptions.length > 0 ? (
+              <View style={styles.roleSubgroup}>
+                <View style={styles.customRoleHeader}>
+                  <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                    Clinic Custom Roles
+                  </ThemedText>
+                  <Badge label={`${customRoleOptions.length} Custom`} variant="purple" size="sm" />
+                </View>
+                <View style={styles.chipRow}>
+                  {customRoleOptions.map((r) => (
+                    <Chip
+                      key={r.id}
+                      label={r.displayName}
+                      active={selectedRoleOption.id === r.id}
+                      onPress={() => handleSelectRole(r)}
+                    />
+                  ))}
+                </View>
+              </View>
+            ) : null}
+
+            {/* Selected Role Description Banner */}
+            {selectedRoleOption.description ? (
+              <View style={styles.roleDescriptionBox}>
+                <Icon name="info" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+                <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.flex1}>
+                  {selectedRoleOption.description}
+                </ThemedText>
+              </View>
+            ) : null}
+
+            {/* Clinical category override for custom roles only */}
+            {!selectedRoleOption.isSystem ? (
+              <View style={styles.customCategoryRow}>
+                <ThemedText variant="caption" color={theme.colors.textMuted}>
+                  Clinical category:
+                </ThemedText>
+                <View style={styles.categoryChips}>
+                  {(['Doctor', 'Nurse', 'Receptionist', 'Cashier', 'Admin'] as const).map((cat) => (
+                    <Pressable
+                      key={cat}
+                      onPress={() => {
+                        setRole(cat);
+                        if (cat === 'Doctor' && !title) setTitle('Dr.');
+                        if (cat === 'Nurse' && (!title || title === 'Dr.')) setTitle('RN');
+                      }}
+                      style={[
+                        styles.miniChip,
+                        role === cat && styles.miniChipActive,
+                      ]}
+                    >
+                      <ThemedText
+                        variant="captionBold"
+                        color={role === cat ? theme.colors.primary : theme.colors.textMuted}
+                      >
+                        {cat}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+          </FieldGroup>
+        </View>
+
         <View style={styles.formRow}>
           <Input
             containerStyle={styles.flexNarrow}
@@ -364,38 +539,6 @@ export default function StaffManagementTab({
             onChangeText={setTitle}
             placeholder="Dr. / RN / Ms."
           />
-          <FieldGroup label="Staff Category / Role">
-            <View style={styles.chipRow}>
-              {(['Doctor', 'Nurse', 'Receptionist', 'Cashier'] as const).map((r) => (
-                <Chip key={r} label={r} active={role === r} onPress={() => setRole(r)} />
-              ))}
-            </View>
-          </FieldGroup>
-        </View>
-
-        {roles && roles.length > 0 ? (
-          <View style={styles.formRow}>
-            <FieldGroup label="Assigned RBAC Permission Role (Optional)">
-              <View style={styles.chipRow}>
-                <Chip
-                  label="Default System Permissions"
-                  active={!selectedClinicRoleId}
-                  onPress={() => setSelectedClinicRoleId(null)}
-                />
-                {roles.map((r) => (
-                  <Chip
-                    key={r.id}
-                    label={`${r.name}${!r.isSystem ? ' (Custom)' : ''}`}
-                    active={selectedClinicRoleId === r.id}
-                    onPress={() => setSelectedClinicRoleId(r.id)}
-                  />
-                ))}
-              </View>
-            </FieldGroup>
-          </View>
-        ) : null}
-
-        <View style={styles.formRow}>
           <Input
             containerStyle={styles.flexWide}
             label="First name"
@@ -733,6 +876,52 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
     flexWrap: 'wrap',
   },
+  roleSelectionGroup: {
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
+  },
+  roleSubgroup: {
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.xs,
+  },
+  customRoleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  roleDescriptionBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    backgroundColor: theme.colors.surfaceMuted,
+    padding: theme.spacing.sm,
+    borderRadius: theme.radii.sm,
+    marginTop: theme.spacing.xs,
+  },
+  customCategoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.xs,
+    flexWrap: 'wrap',
+  },
+  categoryChips: {
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    flexWrap: 'wrap',
+  },
+  miniChip: {
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radii.full,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderDark,
+    backgroundColor: theme.colors.surface,
+  },
+  miniChipActive: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primaryLight,
+  },
   chipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -747,7 +936,7 @@ const styles = StyleSheet.create({
   },
   flexNarrow: {
     flex: 1,
-    minWidth: 120,
+    minWidth: 100,
   },
   errorBox: {
     flexDirection: 'row',

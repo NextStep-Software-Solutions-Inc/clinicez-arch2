@@ -1,0 +1,38 @@
+import { describe, expect, test } from 'bun:test';
+import { inferStaffRole } from '../services/roleUtils';
+
+describe('inferStaffRole', () => {
+  test('correctly identifies system standard roles', () => {
+    expect(inferStaffRole({ name: 'Attending Physician / Doctor', isSystem: true })).toBe('Doctor');
+    expect(inferStaffRole({ name: 'Triage Nurse', isSystem: true })).toBe('Nurse');
+    expect(inferStaffRole({ name: 'Front Desk Receptionist', isSystem: true })).toBe('Receptionist');
+    expect(inferStaffRole({ name: 'Clinic Cashier / Billing Officer', isSystem: true })).toBe('Cashier');
+    expect(inferStaffRole({ name: 'Clinic Administrator', isSystem: true })).toBe('Admin');
+  });
+
+  test('correctly infers doctor custom roles by name or signing permission', () => {
+    expect(inferStaffRole({ name: 'Pediatric Specialist', isSystem: false, permissions: ['consultations:sign'] })).toBe('Doctor');
+    expect(inferStaffRole({ name: 'Visiting Physician', isSystem: false })).toBe('Doctor');
+    expect(inferStaffRole({ name: 'Resident Medical Officer', isSystem: false, permissions: ['consultations:write', 'consultations:sign'] })).toBe('Doctor');
+  });
+
+  test('correctly infers nurse custom roles by name or triage/procedure permissions', () => {
+    expect(inferStaffRole({ name: 'Head Nurse', isSystem: false })).toBe('Nurse');
+    expect(inferStaffRole({ name: 'IV Therapy Nurse', isSystem: false })).toBe('Nurse');
+    expect(inferStaffRole({ name: 'Clinical Assistant', isSystem: false, permissions: ['triage:write', 'procedures:write'] })).toBe('Nurse');
+  });
+
+  test('correctly infers cashier custom roles by name or billing permissions', () => {
+    expect(inferStaffRole({ name: 'Cashier Lead', isSystem: false })).toBe('Cashier');
+    expect(inferStaffRole({ name: 'Billing Clerk', isSystem: false, permissions: ['billing:write'] })).toBe('Cashier');
+  });
+
+  test('correctly infers administrator custom roles by name or manage permissions', () => {
+    expect(inferStaffRole({ name: 'Clinic Operations Director', isSystem: false })).toBe('Admin');
+    expect(inferStaffRole({ name: 'Facility Admin', isSystem: false, permissions: ['roles:manage'] })).toBe('Admin');
+  });
+
+  test('defaults unmatched roles to Receptionist', () => {
+    expect(inferStaffRole({ name: 'General Clerk', isSystem: false, permissions: ['appointments:read'] })).toBe('Receptionist');
+  });
+});
