@@ -1,46 +1,71 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import useSWR from "swr";
 import { toast } from "sonner";
-import { IconBuildingHospital, IconCloud, IconServer, IconExternalLink } from "@tabler/icons-react";
+import { IconBuildingHospital, IconCloud, IconServer, IconExternalLink, IconKey, IconWorld } from "@tabler/icons-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { apiClient } from "@/transport/apiClient";
+import { useHubCredentials } from "@/components/dashboard/HubCredentialsDialog";
+import { useEntitlements } from "@/hooks/useEntitlements";
 import { branchService, BranchDto } from "@/services/branch.service";
 import { tenantService, FacilityDeploymentMode } from "@/services/tenant.service";
+import {
+    facilityService,
+    hubServiceFor,
+    HUB_ROTATABLE_SERVICES,
+    HubRotatableService,
+    WorkspaceFacility,
+    FacilityVisibility,
+} from "@/services/facility.service";
+import { linkService } from "@/services/link.service";
+import { ENTITLEMENT_KEYS } from "@/services/entitlement.service";
 import { apiErrorMessage } from "@/lib/apiError";
-
-interface WorkspaceFacility {
-    id: string;
-    name: string;
-    facilityType: string;
-    status: string;
-    consoleUrl?: string | null;
-    deploymentMode?: FacilityDeploymentMode;
-    consoleBaseUrl?: string | null;
-}
+import { toastApiError } from "@/lib/apiToast";
 
 const selectClass =
     "h-9 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary";
 
+const VISIBILITY_HELP: Record<FacilityVisibility, string> = {
+    Private: "Only your workspace can see this facility.",
+    Network: "Facilities you link with can see it.",
+    Public: "Listed in the directory so other workspaces can find it.",
+};
+
 interface FacilityRowProps {
     tenantSlug: string;
     facility: WorkspaceFacility;
+    /** Unknown while entitlements load or when the viewer cannot read them; the server enforces either way. */
+    interopAvailable: boolean | undefined;
     onSaved: () => void;
 }
 
-function FacilityRow({ tenantSlug, facility, onSaved }: FacilityRowProps) {
+function FacilityRow({ tenantSlug, facility, interopAvailable, onSaved }: FacilityRowProps) {
+    const { showRotated } = useHubCredentials();
     const [mode, setMode] = useState<FacilityDeploymentMode>(facility.deploymentMode ?? "SharedCloud");
     const [url, setUrl] = useState(facility.consoleBaseUrl ?? "");
     const [saving, setSaving] = useState(false);
 
+    const currentVisibility: FacilityVisibility = facility.visibility ?? "Private";
+    const currentAccepts = facility.acceptsExternalRequests ?? false;
+    const [visibility, setVisibility] = useState<FacilityVisibility>(currentVisibility);
+    const [accepts, setAccepts] = useState(currentAccepts);
+    const [savingVisibility, setSavingVisibility] = useState(false);
+
+    const [rotateService, setRotateService] = useState<HubRotatableService>(hubServiceFor(facility.facilityType));
+    const [confirmingRotate, setConfirmingRotate] = useState(false);
+    const [rotating, setRotating] = useState(false);
+
     const dirty =
         mode !== (facility.deploymentMode ?? "SharedCloud") ||
         (mode === "OnPremise" && url.trim() !== (facility.consoleBaseUrl ?? ""));
+
+    const visibilityDirty = visibility !== currentVisibility || accepts !== currentAccepts;
+    const interopLocked = interopAvailable === false;
 
     const save = async () => {
         setSaving(true);
@@ -55,6 +80,40 @@ function FacilityRow({ tenantSlug, facility, onSaved }: FacilityRowProps) {
             toast.error(apiErrorMessage(err, "Failed to save deployment"));
         } finally {
             setSaving(false);
+        }
+    };
+
+    const changeVisibility = (next: FacilityVisibility) => {
+        setVisibility(next);
+        if (next !== "Public") setAccepts(false);
+    };
+
+    const saveVisibility = async () => {
+        setSavingVisibility(true);
+        try {
+            await linkService.setVisibility(tenantSlug, facility.id, {
+                visibility,
+                acceptsExternalRequests: visibility === "Public" && accepts,
+            });
+            toast.success(`${facility.name} visibility saved`);
+            onSaved();
+        } catch (err: unknown) {
+            toastApiError(err, "Failed to save visibility", tenantSlug);
+        } finally {
+            setSavingVisibility(false);
+        }
+    };
+
+    const rotate = async () => {
+        setRotating(true);
+        try {
+            const rotated = await facilityService.rotateHubCredentials(tenantSlug, facility.id, rotateService);
+            setConfirmingRotate(false);
+            showRotated(facility.name, rotated);
+        } catch (err: unknown) {
+            toastApiError(err, "Failed to rotate hub credentials", tenantSlug);
+        } finally {
+            setRotating(false);
         }
     };
 
@@ -107,6 +166,94 @@ function FacilityRow({ tenantSlug, facility, onSaved }: FacilityRowProps) {
                     {saving ? "Saving..." : "Save"}
                 </Button>
             </div>
+
+            <div className="space-y-2 rounded-xl bg-slate-50 dark:bg-slate-900/40 p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                    <IconWorld className="h-3.5 w-3.5 text-slate-400" />
+                    <span className="text-xs font-bold">Network visibility</span>
+                    <select
+                        aria-label={`${facility.name} visibility`}
+                        value={visibility}
+                        disabled={interopLocked}
+                        onChange={(e) => changeVisibility(e.target.value as FacilityVisibility)}
+                        className={selectClass}
+                    >
+                        <option value="Private">Private</option>
+                        <option value="Network">Network</option>
+                        <option value="Public">Public</option>
+                    </select>
+                    <label className={`flex items-center gap-1.5 text-xs ${interopLocked || visibility !== "Public" ? "text-slate-400" : ""}`}>
+                        <input
+                            type="checkbox"
+                            checked={accepts}
+                            disabled={interopLocked || visibility !== "Public"}
+                            onChange={(e) => setAccepts(e.target.checked)}
+                        />
+                        Accept link requests automatically
+                    </label>
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={!visibilityDirty || savingVisibility || interopLocked}
+                        onClick={saveVisibility}
+                        className="rounded-xl text-xs font-bold ml-auto"
+                    >
+                        {savingVisibility ? "Saving..." : "Save visibility"}
+                    </Button>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                    {VISIBILITY_HELP[visibility]}
+                    {visibility === "Public" && " Automatic acceptance activates incoming links without an admin review."}
+                </p>
+                {interopLocked && (
+                    <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                        Cross-workspace links are not part of your current plan.{" "}
+                        <Link href={`/${tenantSlug}/dashboard/plan`} className="font-semibold underline">
+                            View plans
+                        </Link>
+                    </p>
+                )}
+            </div>
+
+            {facility.deploymentMode === "OnPremise" && (
+                <div className="flex flex-wrap items-center gap-2 rounded-xl bg-slate-50 dark:bg-slate-900/40 p-3">
+                    <IconKey className="h-3.5 w-3.5 text-slate-400" />
+                    <span className="text-xs font-bold">Hub credentials</span>
+                    <select
+                        aria-label={`${facility.name} hub client`}
+                        value={rotateService}
+                        onChange={(e) => {
+                            setRotateService(e.target.value as HubRotatableService);
+                            setConfirmingRotate(false);
+                        }}
+                        className={selectClass}
+                    >
+                        {HUB_ROTATABLE_SERVICES.map((s) => (
+                            <option key={s} value={s}>
+                                {s === "cell" ? "cell (upstream)" : s}
+                            </option>
+                        ))}
+                    </select>
+                    {confirmingRotate ? (
+                        <>
+                            <span className="text-xs text-amber-700 dark:text-amber-400">
+                                The current {rotateService} secret stops working immediately.
+                            </span>
+                            <Button type="button" size="sm" variant="destructive" disabled={rotating} onClick={rotate} className="rounded-xl text-xs font-bold">
+                                {rotating ? "Rotating..." : "Rotate now"}
+                            </Button>
+                            <Button type="button" size="sm" variant="ghost" disabled={rotating} onClick={() => setConfirmingRotate(false)} className="rounded-xl text-xs">
+                                Cancel
+                            </Button>
+                        </>
+                    ) : (
+                        <Button type="button" size="sm" variant="outline" onClick={() => setConfirmingRotate(true)} className="rounded-xl text-xs font-bold">
+                            Rotate hub credentials
+                        </Button>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
@@ -116,12 +263,15 @@ interface FacilitiesTabProps {
 }
 
 export function FacilitiesTab({ tenantSlug }: FacilitiesTabProps) {
+    const { hasFeature } = useEntitlements(tenantSlug);
+    const interopAvailable = hasFeature(ENTITLEMENT_KEYS.crossTenantInterop);
+
     const { data, isLoading, error, mutate } = useSWR(
         `workspace-facilities/${tenantSlug}`,
         async () => {
             const [branches, facilities] = await Promise.all([
                 branchService.getBranches(tenantSlug),
-                apiClient.get<WorkspaceFacility[]>(`/facilities?tenantSlug=${encodeURIComponent(tenantSlug)}`).then((r) => r.data),
+                facilityService.getFacilities(tenantSlug),
             ]);
             return { branches, facilities };
         },
@@ -178,9 +328,10 @@ export function FacilitiesTab({ tenantSlug }: FacilitiesTabProps) {
                                 <div className="divide-y divide-slate-100 dark:divide-slate-800 mt-3">
                                     {g.facilities.map((f) => (
                                         <FacilityRow
-                                            key={`${f.id}:${f.deploymentMode}:${f.consoleBaseUrl}`}
+                                            key={`${f.id}:${f.deploymentMode}:${f.consoleBaseUrl}:${f.visibility}:${f.acceptsExternalRequests}`}
                                             tenantSlug={tenantSlug}
                                             facility={f}
+                                            interopAvailable={interopAvailable}
                                             onSaved={() => mutate()}
                                         />
                                     ))}

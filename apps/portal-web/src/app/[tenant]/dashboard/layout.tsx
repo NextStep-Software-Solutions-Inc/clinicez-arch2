@@ -4,6 +4,8 @@ import { ArchivedWorkspaceNotice } from "@/components/dashboard/ArchivedWorkspac
 import { IdleSessionGuard } from "@/components/dashboard/IdleSessionGuard";
 import { MfaRequiredGate } from "@/components/dashboard/MfaRequiredGate";
 import CreateResourceDialog from "@/components/dashboard/CreateResourceDialog";
+import { HubCredentialsProvider } from "@/components/dashboard/HubCredentialsDialog";
+import OwnershipOfferBanner from "@/components/dashboard/OwnershipOfferBanner";
 import TrialCountdownBanner from "@/components/dashboard/TrialCountdownBanner";
 import NavigationProgressBar from "@/components/dashboard/NavigationProgressBar";
 import { SiteHeader } from "@/components/dashboard/site-header";
@@ -94,7 +96,7 @@ export default async function TenantDashboardLayout({
     }
 
     return (
-        <>
+        <HubCredentialsProvider>
             <BrandTheme accentColorHex={profile?.accentColorHex} />
             <IdleSessionGuard timeoutMinutes={policy?.idleTimeoutMinutes ?? 0} />
             <SidebarProvider
@@ -110,6 +112,7 @@ export default async function TenantDashboardLayout({
                     <NavigationProgressBar />
                     <SiteHeader />
                     <TrialCountdownBanner tenantSlug={routeTenantSlug} />
+                    <OwnershipOfferBanner tenantSlug={routeTenantSlug} role={userRole} />
                     <div className="flex flex-1 flex-col">
                         <div className="@container/main flex flex-1 flex-col gap-2">
                             {children}
@@ -118,6 +121,6 @@ export default async function TenantDashboardLayout({
                 </SidebarInset>
             </SidebarProvider>
             <CreateResourceDialog />
-        </>
+        </HubCredentialsProvider>
     );
 }

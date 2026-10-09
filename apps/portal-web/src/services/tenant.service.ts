@@ -95,6 +95,17 @@ export interface WorkspaceAuditLogPage {
   nextCursor?: string | null;
 }
 
+/** Mirrors `OwnershipTransferDto`: the open offer. Status is "Pending" while it waits for an answer. */
+export interface OwnershipTransfer {
+  id: string;
+  targetMemberId: string;
+  targetName: string;
+  targetEmail: string;
+  status: string;
+  expiresAt: string;
+  createdAt: string;
+}
+
 export interface OwnershipTransferResult {
   newOwnerName: string;
   newOwnerEmail: string;
@@ -188,7 +199,7 @@ export interface TenantDto {
   tenantType: string;
   clinicName?: string;
   facilityType?: string;
-  role?: "Owner" | "Admin" | "Biller" | "Viewer" | string;
+  role?: "Owner" | "Admin" | "Billing" | "Member" | string;
   status?: string;
 }
 
@@ -247,8 +258,8 @@ export const tenantService = {
         role: data.role || "Owner",
         status: data.status || "Active"
       };
-    } catch (error: any) {
-      if (error.response?.status === 404) return null;
+    } catch (error: unknown) {
+      if ((error as { response?: { status?: number } }).response?.status === 404) return null;
       throw error;
     }
   },
@@ -299,16 +310,44 @@ export const tenantService = {
     return response.data;
   },
 
-  /** Owner only. Hands ownership to an active Admin; the caller becomes an Admin. */
-  transferOwnership: async (
+  /**
+   * Owner only. Step one: offers ownership to an active member who owns no workspace (409
+   * `target_already_owns_workspace` otherwise). Nothing changes until they accept; the offer lapses after 7 days.
+   */
+  offerOwnershipTransfer: async (
     tenantSlug: string,
     payload: { targetStaffMemberId: string; confirmSlug: string },
-  ): Promise<OwnershipTransferResult> => {
-    const response = await apiClient.post<OwnershipTransferResult>(
+  ): Promise<OwnershipTransfer> => {
+    const response = await apiClient.post<OwnershipTransfer>(
       `/tenants/${encodeURIComponent(tenantSlug)}/settings/ownership-transfer`,
       payload,
     );
     return response.data;
+  },
+
+  /** The open offer, visible to the owner who made it and the member it is addressed to; null otherwise (204). */
+  getOwnershipTransfer: async (tenantSlug: string): Promise<OwnershipTransfer | null> => {
+    const response = await apiClient.get<OwnershipTransfer | "">(
+      `/tenants/${encodeURIComponent(tenantSlug)}/settings/ownership-transfer`,
+    );
+    return response.status === 204 || response.data === "" ? null : response.data;
+  },
+
+  /** Step two, by the member the offer is addressed to. The previous owner becomes an Admin. */
+  acceptOwnershipTransfer: async (tenantSlug: string): Promise<OwnershipTransferResult> => {
+    const response = await apiClient.post<OwnershipTransferResult>(
+      `/tenants/${encodeURIComponent(tenantSlug)}/settings/ownership-transfer/accept`,
+    );
+    return response.data;
+  },
+
+  declineOwnershipTransfer: async (tenantSlug: string): Promise<void> => {
+    await apiClient.post(`/tenants/${encodeURIComponent(tenantSlug)}/settings/ownership-transfer/decline`);
+  },
+
+  /** Owner only. Withdraws the open offer before it is answered. */
+  cancelOwnershipTransfer: async (tenantSlug: string): Promise<void> => {
+    await apiClient.delete(`/tenants/${encodeURIComponent(tenantSlug)}/settings/ownership-transfer`);
   },
 
   /** Owner only. Closes the workspace in the portal and suspends its facilities. */

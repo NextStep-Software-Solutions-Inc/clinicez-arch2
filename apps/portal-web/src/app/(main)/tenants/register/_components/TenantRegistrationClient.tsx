@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useUser, useAuth } from "@clerk/nextjs";
 import { tenantService } from "@/services/tenant.service";
+import { apiErrorCode, apiErrorMessage } from "@/lib/apiError";
 import { getConsoleBaseDomain } from "@/utils/domain";
 
 export function TenantRegistrationClient() {
@@ -30,6 +31,7 @@ export function TenantRegistrationClient() {
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [existingWorkspace, setExistingWorkspace] = useState<{ slug: string; name: string } | null>(null);
 
   // When signed in, auto-fill credentials from Clerk profile
   useEffect(() => {
@@ -45,7 +47,7 @@ export function TenantRegistrationClient() {
 
   // Generate slug suggestion from name
   const handleNameChange = (val: string) => {
-    const updated: any = { name: val };
+    const updated: { name: string; tenantSlug?: string } = { name: val };
     if (!slugManuallyEdited) {
       const generatedSlug = val
         .toLowerCase()
@@ -85,9 +87,17 @@ export function TenantRegistrationClient() {
 
       // Route authenticated user directly to their new workplace dashboard
       router.push(`/${formData.tenantSlug.trim().toLowerCase()}/dashboard`);
-    } catch (err: any) {
-      const msg = err.response?.data?.message || err.message || "Failed to create workplace. Please try again.";
-      setError(msg);
+    } catch (err: unknown) {
+      if (apiErrorCode(err) === "owner_already_has_workspace" && user) {
+        const owned = await tenantService
+          .getTenantByOwner(user.id, await getToken())
+          .catch(() => null);
+        if (owned) {
+          setExistingWorkspace({ slug: owned.tenantSlug, name: owned.name || owned.tenantSlug });
+          return;
+        }
+      }
+      setError(apiErrorMessage(err, "Failed to create workplace. Please try again."));
     } finally {
       setIsLoading(false);
     }
@@ -108,9 +118,8 @@ export function TenantRegistrationClient() {
       });
 
       router.push("/sign-in?registered=true");
-    } catch (err: any) {
-      const msg = err.response?.data?.message || err.message || "Failed to register workplace.";
-      setError(msg);
+    } catch (err: unknown) {
+      setError(apiErrorMessage(err, "Failed to register workplace."));
       setStep(1);
     } finally {
       setIsLoading(false);
@@ -123,6 +132,30 @@ export function TenantRegistrationClient() {
         <div className="flex flex-col items-center gap-4">
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
           <p className="text-sm font-medium text-muted-foreground">Loading setup...</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (existingWorkspace) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background px-4">
+        <div className="w-full max-w-md rounded-3xl border border-border bg-card/70 p-8 text-center shadow-2xl shadow-primary/5 space-y-5">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <Building2 className="h-6 w-6" />
+          </div>
+          <h1 className="text-2xl font-extrabold tracking-tight">You already own a workspace</h1>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Each account can own one workspace, and yours is <strong className="text-foreground">{existingWorkspace.name}</strong>. Add more
+            clinics, laboratories and pharmacies inside it, or hand it over to someone else before starting a new one.
+          </p>
+          <Link
+            href={`/${existingWorkspace.slug}/dashboard`}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground shadow-sm hover:bg-primary/90"
+          >
+            Open {existingWorkspace.name}
+            <ArrowRight className="h-4 w-4" />
+          </Link>
         </div>
       </main>
     );

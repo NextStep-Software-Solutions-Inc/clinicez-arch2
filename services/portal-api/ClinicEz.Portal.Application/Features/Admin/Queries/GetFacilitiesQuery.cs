@@ -36,7 +36,9 @@ public record FacilityDto(
     string? ContactEmail = null,
     string? NotificationPreferencesJson = null,
     FacilityDeploymentMode DeploymentMode = FacilityDeploymentMode.SharedCloud,
-    string? ConsoleBaseUrl = null
+    string? ConsoleBaseUrl = null,
+    string Visibility = "Private",
+    bool AcceptsExternalRequests = false
 );
 
 public record GetFacilitiesQuery(string TenantSlug) : IRequest<List<FacilityDto>>;
@@ -89,7 +91,9 @@ public class GetFacilitiesQueryHandler(
                 f.ContactEmail,
                 f.NotificationPreferencesJson,
                 f.DeploymentMode,
-                f.ConsoleBaseUrl
+                f.ConsoleBaseUrl,
+                f.Visibility.ToString(),
+                f.AcceptsExternalRequests
             );
         }).ToList();
     }

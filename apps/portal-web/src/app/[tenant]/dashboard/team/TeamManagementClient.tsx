@@ -29,6 +29,8 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { staffService, TenantStaffResultDto, StaffMemberDto } from "@/services/staff.service";
 import { apiClient } from "@/transport/apiClient";
+import { apiErrorMessage } from "@/lib/apiError";
+import { toastApiError } from "@/lib/apiToast";
 import { toast } from "sonner";
 
 interface FacilityOption {
@@ -83,6 +85,16 @@ const ROLE_DETAILS: Record<string, { label: string; badgeClass: string; descript
         badgeClass: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800",
         description: "Can manage subscription plans, checkout sessions, payment methods, and download tax invoices."
     },
+    Billing: {
+        label: "Billing",
+        badgeClass: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800",
+        description: "Can manage the subscription, payment methods and tax invoices, and view finance totals."
+    },
+    Member: {
+        label: "Member",
+        badgeClass: "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700",
+        description: "Belongs to the workspace and works inside the facilities they are assigned to."
+    },
     Viewer: {
         label: "Viewer / Analyst",
         badgeClass: "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700",
@@ -129,9 +141,9 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
             ]);
             setStaffData(staffRes);
             setFacilities(facRes.data || []);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error("Failed to fetch team data", err);
-            toast.error(err.message || "Failed to load team members");
+            toastApiError(err, "Failed to load team members", tenantSlug);
         } finally {
             setLoading(false);
         }
@@ -157,8 +169,8 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
 
             toast.success(`Invitation resent by email. Link copied to clipboard.`);
             await loadData();
-        } catch (err: any) {
-            toast.error(err.message || "Failed to resend invitation");
+        } catch (err: unknown) {
+            toastApiError(err, "Failed to resend invitation", tenantSlug);
         } finally {
             setResendingId(null);
         }
@@ -211,9 +223,8 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
             }
 
             await loadData();
-        } catch (err: any) {
-            const msg = err.message || err.response?.data?.message || "Failed to send staff invitation.";
-            setInviteError(msg);
+        } catch (err: unknown) {
+            setInviteError(apiErrorMessage(err, "Failed to send staff invitation."));
         } finally {
             setSubmittingInvite(false);
         }
@@ -227,8 +238,8 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
             toast.success(`Removed ${revokeTarget.fullName} from workspace`);
             setRevokeTarget(null);
             await loadData();
-        } catch (err: any) {
-            toast.error(err.message || "Failed to revoke staff member");
+        } catch (err: unknown) {
+            toastApiError(err, "Failed to revoke staff member", tenantSlug);
         } finally {
             setSubmittingRevoke(false);
         }
@@ -746,7 +757,7 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
 
                     <div className="space-y-3 py-2">
                         <p className="text-xs text-slate-600 dark:text-slate-400">
-                            An automated invitation email was dispatched via SMTP. You can also directly copy and share this link via WhatsApp, Slack, or SMS:
+                            An invitation email has been sent. You can also directly copy and share this link via WhatsApp, Slack, or SMS:
                         </p>
 
                         <div className="flex items-center gap-2">
