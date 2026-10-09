@@ -13,7 +13,7 @@ This service is built using **Clean Architecture** principles and utilizes ASP.N
 - **Entity Framework Core 10**: ORM for PostgreSQL database access.
 - **Clerk Integration**: Secure authentication and JWT verification.
 - **Xendit Integration**: Subscription and invoicing payment lifecycle.
-- **MassTransit / RabbitMQ**: Event publishing across the microservices mesh.
+- **Interop SDK (`ClinicEz.Shared.Interop`)**: Transactional outbox/inbox messaging with the other services through the cloud interoperability hub.
 - **Shared Package**: References `ClinicEz.Shared` (`packages/shared-dotnet`).
 
 ## Project Structure
@@ -51,3 +51,73 @@ A multi-stage `Dockerfile` is provided at the service root:
 ```bash
 docker build -t portal-api:dev -f services/portal-api/Dockerfile .
 ```
+
+## Messaging, directory and email
+
+portal-api is the control plane of the interoperability hub. All messages go through the SDK outbox, written in the same
+transaction as the business change, and are relayed to the hub.
+
+| Setting | Purpose |
+| --- | --- |
+| `Messaging:Transport` / `HubUrl` / `ClientId` / `ClientSecret` / `Service=portal` | Hub connection and the credentials of portal-api's ControlPlane client. Also used to call the hub admin API. There are no built-in defaults; start-up fails when they are missing. Use `Messaging:Transport=InProcess` and `Messaging:Enabled=false` in tests/tooling. |
+| `Hub:CloudCellId` | Cell that hosts every shared-cloud facility (default `cloud`). On-premise tenants get the cell `edge-{tenantId}`. |
+| `Hub:PublicUrl` | Hub address handed to on-premise sites together with their one-time credentials. |
+| `Smtp:Mode` | `Smtp` (send) or `Log` (write the email to the log; Development only). |
+| `Smtp:Host` / `Port` / `Security` / `User` / `Password` / `FromEmail` / `FromName` / `ReplyTo` | Unified mail server. Provide the password through secrets or environment (`Smtp__Password`). |
+| `Notifications:ContactInbox` | Recipient of the public contact form (`POST /api/v1/contact`). Unset means the endpoint answers 503. |
+| `FrontendBaseUrl` | Portal website address used for links in emails (staff invitations). Falls back to the request's `Origin`/`Referer`. |
+
+- Facility and branch changes are fed to the hub directory (`directory.cell.upserted`, `directory.facility.upserted`,
+  `directory.link.upserted`) automatically on save. `POST /api/v1/admin/hub/resync` (platform admin, `manage:tenants`)
+  re-sends the whole directory; it is idempotent.
+- Creating an on-premise facility returns its hub credentials once (`hubCredentials`); the owner or an admin can issue new ones with
+  `POST /api/v1/facilities/{id}/hub-credentials/rotate?tenantSlug=...`.
+- Services request emails by sending `notification.email.requested` (registered templates only); portal-api renders and sends them,
+  and a failed delivery is retried.
+
+## Workspaces, plans and entitlements
+
+- A **workspace** (tenant) has one `Subscription` (billing is workspace level), `WorkspaceMember`s (Owner/Admin/Billing/Member) and
+  facilities. `StaffMember` is only the per-facility profile of a workspace member. A user owns at most one active workspace
+  (`Workspace:MaxOwnedPerUser`, unique index `UX_Tenants_OwnerId_Active`); ownership moves through a two-step transfer
+  (`POST/GET/DELETE /tenants/{slug}/settings/ownership-transfer`, `POST .../accept`, `POST .../decline`). Owner and memberships are
+  mirrored to Clerk public metadata (`ownedTenantId`, `memberships`).
+- **Plans** (`Plan`, `PlanFeature`, `PlanEntitlement`) are seeded create-if-missing at start-up from the `Billing` section; a trial of
+  `Billing:TrialDays` on `Billing:DefaultPlanSlug` starts lazily. Per-workspace `EntitlementOverride`s win over the plan.
+  `GET /tenants/{slug}/entitlements` returns the effective features and limits (`limit.*`, `feature.*`; `-1` = unlimited).
+- Guards answer with a coded error: `402 subscription_inactive`, `403 feature_unavailable`, `409 limit_reached` or
+  `409 allocation_exceeds_pool`. Branches allow one facility per type (`409 branch_facility_type_taken`).
+- Pool limits (staff, terminals, storage) are split across facilities with `PUT /tenants/{slug}/facilities/{facilityId}/allocation`.
+  The signed facility license (`GET /facilities/{id}/license-key`, activation, reconciliation and the renewal job) is always derived
+  from entitlements and allocations by `ILicenseIssuer`; every change publishes `entitlements.changed`.
+- Cross-tenant links: `GET/POST /tenants/{slug}/links`, `POST .../links/{linkId}/approve|reject`, `DELETE .../links/{linkId}`;
+  facility visibility `PUT /tenants/{slug}/facilities/{facilityId}/visibility` (Private/Network/Public); directory search
+  `GET /tenants/{slug}/directory/facilities?type&q&city` (answers 502 when the hub is unreachable).
+- Finance: facilities publish daily summaries and `billing.invoice.paid/voided` records (no patient data); the portal rolls them up at
+  `GET /tenants/{slug}/finance/summary`.
+- Public lab-result relay: `POST /public/lab-uploads/{token}` validates size/type (`413`/`415`/`400`, independent of the token) and
+  answers `202` otherwise; files are relayed as `lab.result.external.submitted` and never stored by portal-api.
+
+| Setting | Purpose |
+| --- | --- |
+| `Workspace:MaxOwnedPerUser` | Workspaces one user may own (default 1). |
+| `LabUploads:MaxFileBytes` / `AllowedContentTypes` / `RateLimitPermits` / `RateLimitWindowMinutes` | Public lab upload relay limits. |
+| `Licensing:TtlDays` / `GraceDays` / `RenewBeforeDays` | Facility license lifetime, grace period and renewal lead time. |
+| `Billing:DefaultPlanSlug` / `TrialDays` / `Plans` | Plan catalog (limits, features, prices) and trial. |
+
+### Hub credentials and background jobs
+
+- The first on-premise facility of a workspace receives the full credential set once:
+  `{ hubUrl, upstream, services: { <service>: { clientId, clientSecret } } }`; later facilities of the workspace receive none.
+  `POST /facilities/{id}/hub-credentials/rotate?service=` issues a new secret for one service.
+- Hub clients are revoked when a facility is updated or deleted, the workspace is archived, a deployment changes from on-premise to
+  cloud, and by the daily `lapsed-hub-client-revocation` job. A hub `404` on revoke counts as already revoked; other failures are
+  logged and retried later.
+- Recurring jobs: `facility-license-renewal` (re-issues licenses before expiry) and `lapsed-hub-client-revocation` (`30 3 * * *`).
+
+### Migration `Phase1TenancyEntitlements`
+
+Existing staff rows become workspace members (same id; Owner/Admin roles map to `Admin`, others to `Member`, and the tenant
+`OwnerId` becomes `Owner`); a missing owner member is created. Provider subscription ids are not migrated: the old
+`SubscriptionPlans` tables are dropped, plans are re-seeded and trials start lazily. Tenants that share an `OwnerId` must be cleaned up
+before applying, otherwise the unique owner index fails.

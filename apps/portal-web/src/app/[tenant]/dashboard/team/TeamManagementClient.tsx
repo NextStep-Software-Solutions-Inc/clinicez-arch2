@@ -28,7 +28,6 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { staffService, TenantStaffResultDto, StaffMemberDto } from "@/services/staff.service";
-import { sendStaffInvitationMail } from "@/actions/email.action";
 import { apiClient } from "@/transport/apiClient";
 import { toast } from "sonner";
 
@@ -156,17 +155,7 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
             const inviteUrl = `${window.location.origin}/invitations/${updated.invitationToken}`;
             navigator.clipboard.writeText(inviteUrl);
 
-            // Attempt to dispatch email via SMTP (fails gracefully if SMTP not configured)
-            sendStaffInvitationMail({
-                to: member.email,
-                inviteeName: member.fullName,
-                workspaceName: tenantSlug,
-                role: member.role,
-                facilityName: member.facilityName,
-                inviteUrl
-            }).catch((err) => console.warn("[SMTP Resend Warning]", err));
-
-            toast.success(`Invitation refreshed! Link copied to clipboard.`);
+            toast.success(`Invitation resent by email. Link copied to clipboard.`);
             await loadData();
         } catch (err: any) {
             toast.error(err.message || "Failed to resend invitation");
@@ -202,18 +191,6 @@ export default function TeamManagementClient({ tenantSlug }: { tenantSlug: strin
             const inviteUrl = created.invitationToken
                 ? `${window.location.origin}/invitations/${created.invitationToken}`
                 : "";
-
-            // Attempt to dispatch email via SMTP (fails gracefully without interrupting invite flow)
-            if (inviteUrl) {
-                sendStaffInvitationMail({
-                    to: email.trim(),
-                    inviteeName: fullName.trim(),
-                    workspaceName: tenantSlug,
-                    role,
-                    facilityName: facilities.find(f => f.id === facilityId)?.name,
-                    inviteUrl
-                }).catch(err => console.warn("[SMTP Dispatch Warning]", err));
-            }
 
             setInviteOpen(false);
             setFullName("");

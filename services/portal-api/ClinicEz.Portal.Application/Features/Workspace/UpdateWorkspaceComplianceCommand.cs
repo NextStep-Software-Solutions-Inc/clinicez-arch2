@@ -1,6 +1,5 @@
 using ClinicEz.Portal.Application.Interfaces;
 using FluentValidation;
-using MassTransit;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using System.Collections.Generic;
@@ -52,7 +51,7 @@ public class UpdateWorkspaceComplianceCommandValidator : AbstractValidator<Updat
     }
 }
 
-public class UpdateWorkspaceComplianceCommandHandler(IApplicationDbContext context, IPublishEndpoint publishEndpoint)
+public class UpdateWorkspaceComplianceCommandHandler(IApplicationDbContext context, IWorkspaceProfilePublisher profilePublisher)
     : IRequestHandler<UpdateWorkspaceComplianceCommand, WorkspaceComplianceDto>
 {
     public async Task<WorkspaceComplianceDto> Handle(UpdateWorkspaceComplianceCommand request, CancellationToken cancellationToken)
@@ -81,11 +80,10 @@ public class UpdateWorkspaceComplianceCommandHandler(IApplicationDbContext conte
         {
             WorkspaceSettingsStore.BumpProfileVersion(settings);
             changes.Stage(context, tenant.Id, request.Actor, section: "compliance");
+            await profilePublisher.StageUpdatedAsync(tenant, settings, cancellationToken);
         }
 
         await context.SaveChangesAsync(cancellationToken);
-
-        if (changes.HasChanges) await WorkspaceProfileEvents.PublishUpdatedAsync(publishEndpoint, tenant, settings, cancellationToken);
 
         return WorkspaceSettingsMapper.ToCompliance(settings);
     }

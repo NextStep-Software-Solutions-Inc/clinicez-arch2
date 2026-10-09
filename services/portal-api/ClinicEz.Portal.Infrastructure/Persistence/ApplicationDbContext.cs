@@ -1,20 +1,25 @@
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Common;
 using ClinicEz.Portal.Domain.Entities;
+using ClinicEz.Shared.Interop.Contracts;
+using ClinicEz.Shared.Interop.Persistence;
 using Microsoft.EntityFrameworkCore;
-using MassTransit;
 using Microsoft.EntityFrameworkCore.Metadata;
 using System.Linq.Expressions;
 
 namespace ClinicEz.Portal.Infrastructure.Persistence;
 
 public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
-    : DbContext(options), IApplicationDbContext
+    : DbContext(options), IApplicationDbContext, IInteropDbContext
 {
+
     public DbSet<ExampleEntity> ExampleEntities { get; set; }
     public DbSet<Tenant> Tenants { get; set; }
-    public DbSet<SubscriptionPlan> SubscriptionPlans { get; set; }
-    public DbSet<SubscriptionPlanFeature> SubscriptionPlanFeatures { get; set; }
+    public DbSet<Plan> Plans { get; set; }
+    public DbSet<PlanFeature> PlanFeatures { get; set; }
+    public DbSet<PlanEntitlement> PlanEntitlements { get; set; }
+    public DbSet<EntitlementOverride> EntitlementOverrides { get; set; }
+    public DbSet<Subscription> Subscriptions { get; set; }
     public DbSet<PaymentReceipt> PaymentReceipts { get; set; }
     public DbSet<BillingInvoice> BillingInvoices { get; set; }
     public DbSet<BlogArticle> BlogArticles { get; set; }
@@ -22,12 +27,21 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<AdminUser> AdminUsers { get; set; }
     public DbSet<Facility> Facilities { get; set; }
     public DbSet<Branch> Branches { get; set; }
+    public DbSet<WorkspaceMember> WorkspaceMembers { get; set; }
     public DbSet<StaffMember> StaffMembers { get; set; }
+    public DbSet<OwnershipTransfer> OwnershipTransfers { get; set; }
+    public DbSet<FacilityAllocation> FacilityAllocations { get; set; }
+    public DbSet<FacilityLink> FacilityLinks { get; set; }
+    public DbSet<EdgeHubClient> EdgeHubClients { get; set; }
+    public DbSet<FinanceDailySummary> FinanceDailySummaries { get; set; }
+    public DbSet<FinanceInvoiceRecord> FinanceInvoiceRecords { get; set; }
     public DbSet<WorkspaceSettings> WorkspaceSettings { get; set; }
     public DbSet<WorkspaceAuditEntry> WorkspaceAuditEntries { get; set; }
     public DbSet<WorkspaceApiKey> WorkspaceApiKeys { get; set; }
     public DbSet<WebhookEndpoint> WebhookEndpoints { get; set; }
     public DbSet<WebhookDelivery> WebhookDeliveries { get; set; }
+    public DbSet<InteropOutboxMessage> InteropOutbox { get; set; }
+    public DbSet<InteropInboxMessage> InteropInbox { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -74,14 +88,22 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasIndex(t => t.TenantSlug)
             .IsUnique();
 
-        modelBuilder.Entity<SubscriptionPlan>()
-            .HasIndex(p => p.Slug)
+        // One OWNED workspace per user. Archived workspaces still count: only purging (soft delete) frees the slot.
+        modelBuilder.Entity<Tenant>()
+            .HasIndex(t => t.OwnerId)
+            .HasDatabaseName(Tenant.UniqueOwnerIndexName)
+            .HasFilter("\"IsDeleted\" = false")
             .IsUnique();
 
-        modelBuilder.Entity<SubscriptionPlan>()
+        modelBuilder.Entity<Plan>()
+            .HasIndex(p => p.Slug)
+            .HasFilter("\"IsDeleted\" = false")
+            .IsUnique();
+
+        modelBuilder.Entity<Plan>()
             .HasMany(p => p.Features)
-            .WithOne(f => f.SubscriptionPlan)
-            .HasForeignKey(f => f.SubscriptionPlanId)
+            .WithOne(f => f.Plan)
+            .HasForeignKey(f => f.PlanId)
             .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<BillingInvoice>()
@@ -136,6 +158,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(e => e.Status).HasConversion<string>();
             entity.Property(e => e.DeploymentMode).HasConversion<string>().HasMaxLength(16).HasDefaultValue(FacilityDeploymentMode.SharedCloud);
             entity.Property(e => e.ConsoleBaseUrl).HasMaxLength(2048);
+            entity.Property(e => e.Visibility).HasConversion<string>().HasMaxLength(16).HasDefaultValue(FacilityVisibility.Private);
+            entity.Property(e => e.CellId).HasMaxLength(80).HasDefaultValue(string.Empty);
+            entity.Property(e => e.HubClientId).HasMaxLength(128);
             entity.HasOne(e => e.Tenant)
                 .WithMany()
                 .HasForeignKey(e => e.TenantId)
@@ -153,6 +178,33 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.HasIndex(e => e.Slug)
                 .HasFilter("\"IsDeleted\" = false")
                 .IsUnique();
+
+            entity.HasIndex(e => new { e.BranchId, e.FacilityType })
+                .HasFilter("\"IsDeleted\" = false AND \"BranchId\" IS NOT NULL")
+                .IsUnique();
+        });
+
+        modelBuilder.Entity<WorkspaceMember>(entity =>
+        {
+            entity.Property(e => e.Role).HasConversion<string>().HasMaxLength(16);
+            entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(16);
+            entity.Property(e => e.Email).HasMaxLength(254);
+            entity.Property(e => e.UserId).HasMaxLength(128);
+
+            entity.HasOne(e => e.Tenant)
+                .WithMany()
+                .HasForeignKey(e => e.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.TenantId, e.Email })
+                .HasFilter("\"IsDeleted\" = false")
+                .IsUnique();
+
+            entity.HasIndex(e => new { e.TenantId, e.UserId })
+                .HasFilter("\"IsDeleted\" = false AND \"UserId\" IS NOT NULL")
+                .IsUnique();
+
+            entity.HasIndex(e => e.UserId);
         });
 
         modelBuilder.Entity<StaffMember>(entity =>
@@ -162,15 +214,171 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .HasForeignKey(e => e.TenantId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            entity.HasOne(e => e.WorkspaceMember)
+                .WithMany()
+                .HasForeignKey(e => e.WorkspaceMemberId)
+                .OnDelete(DeleteBehavior.Cascade);
+
             entity.HasOne(e => e.Facility)
                 .WithMany()
                 .HasForeignKey(e => e.FacilityId)
                 .OnDelete(DeleteBehavior.SetNull);
 
-            entity.HasIndex(e => new { e.TenantId, e.Email })
+            entity.HasIndex(e => e.WorkspaceMemberId)
                 .HasFilter("\"IsDeleted\" = false")
                 .IsUnique();
         });
+
+        modelBuilder.Entity<OwnershipTransfer>(entity =>
+        {
+            entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(16);
+            entity.Property(e => e.OfferedByUserId).HasMaxLength(128);
+
+            entity.HasOne(e => e.Tenant)
+                .WithMany()
+                .HasForeignKey(e => e.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.TargetMember)
+                .WithMany()
+                .HasForeignKey(e => e.TargetMemberId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.TenantId)
+                .HasFilter("\"IsDeleted\" = false AND \"Status\" = 'Pending'")
+                .IsUnique();
+        });
+
+        modelBuilder.Entity<FacilityAllocation>(entity =>
+        {
+            entity.HasOne(e => e.Facility)
+                .WithMany()
+                .HasForeignKey(e => e.FacilityId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.FacilityId)
+                .HasFilter("\"IsDeleted\" = false")
+                .IsUnique();
+
+            entity.HasIndex(e => e.TenantId);
+        });
+
+        modelBuilder.Entity<FacilityLink>(entity =>
+        {
+            entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(16);
+            entity.Property(e => e.Scopes).HasConversion<int>();
+            entity.Property(e => e.RequestedBy).HasMaxLength(128);
+            entity.Property(e => e.ApprovedBy).HasMaxLength(128);
+
+            entity.HasOne(e => e.SourceFacility)
+                .WithMany()
+                .HasForeignKey(e => e.SourceFacilityId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.TargetFacility)
+                .WithMany()
+                .HasForeignKey(e => e.TargetFacilityId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.SourceFacilityId, e.TargetFacilityId })
+                .HasFilter("\"IsDeleted\" = false")
+                .IsUnique();
+
+            entity.HasIndex(e => e.SourceTenantId);
+            entity.HasIndex(e => e.TargetTenantId);
+        });
+
+        modelBuilder.Entity<EdgeHubClient>(entity =>
+        {
+            entity.Property(e => e.CellId).HasMaxLength(128);
+            entity.Property(e => e.Service).HasMaxLength(32);
+            entity.Property(e => e.ClientId).HasMaxLength(128);
+
+            entity.HasIndex(e => new { e.TenantId, e.Service })
+                .HasFilter("\"IsDeleted\" = false")
+                .IsUnique();
+        });
+
+        modelBuilder.Entity<Subscription>(entity =>
+        {
+            entity.Property(e => e.Status).HasConversion<string>().HasMaxLength(16);
+            entity.Property(e => e.ProviderName).HasMaxLength(32);
+            entity.Property(e => e.ProviderCustomerId).HasMaxLength(128);
+            entity.Property(e => e.ProviderSubscriptionId).HasMaxLength(128);
+
+            entity.HasOne(e => e.Tenant)
+                .WithMany()
+                .HasForeignKey(e => e.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Plan)
+                .WithMany()
+                .HasForeignKey(e => e.PlanId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => e.TenantId)
+                .HasFilter("\"IsDeleted\" = false")
+                .IsUnique();
+
+            entity.HasIndex(e => e.ProviderCustomerId);
+            entity.HasIndex(e => e.ProviderSubscriptionId);
+        });
+
+        modelBuilder.Entity<PlanEntitlement>(entity =>
+        {
+            entity.Property(e => e.Key).HasMaxLength(64);
+            entity.Property(e => e.Kind).HasConversion<string>().HasMaxLength(16);
+
+            entity.HasOne(e => e.Plan)
+                .WithMany(p => p.Entitlements)
+                .HasForeignKey(e => e.PlanId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.PlanId, e.Key })
+                .HasFilter("\"IsDeleted\" = false")
+                .IsUnique();
+        });
+
+        modelBuilder.Entity<EntitlementOverride>(entity =>
+        {
+            entity.Property(e => e.Key).HasMaxLength(64);
+            entity.Property(e => e.Kind).HasConversion<string>().HasMaxLength(16);
+            entity.Property(e => e.Reason).HasMaxLength(256);
+
+            entity.HasOne(e => e.Tenant)
+                .WithMany()
+                .HasForeignKey(e => e.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.TenantId, e.Key })
+                .HasFilter("\"IsDeleted\" = false")
+                .IsUnique();
+        });
+
+        modelBuilder.Entity<FinanceInvoiceRecord>(entity =>
+        {
+            entity.Property(e => e.SourceType).HasMaxLength(64);
+            entity.Property(e => e.Currency).HasMaxLength(3);
+
+            entity.HasIndex(e => e.InvoiceId)
+                .HasFilter("\"IsDeleted\" = false")
+                .IsUnique();
+
+            entity.HasIndex(e => e.TenantId);
+        });
+
+        modelBuilder.Entity<FinanceDailySummary>(entity =>
+        {
+            entity.Property(e => e.SourceType).HasMaxLength(64);
+            entity.Property(e => e.Currency).HasMaxLength(3);
+
+            entity.HasIndex(e => new { e.TenantId, e.FacilityId, e.Day, e.SourceType, e.Currency })
+                .HasFilter("\"IsDeleted\" = false")
+                .IsUnique();
+
+            entity.HasIndex(e => new { e.TenantId, e.Day });
+        });
+
 
         modelBuilder.Entity<WorkspaceSettings>(entity =>
         {
@@ -263,9 +471,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(e => e.LastError).HasMaxLength(300);
         });
 
-        modelBuilder.AddInboxStateEntity();
-        modelBuilder.AddOutboxStateEntity();
-        modelBuilder.AddOutboxMessageEntity();
+        modelBuilder.ApplyInteropModel();
 
         base.OnModelCreating(modelBuilder);
     }

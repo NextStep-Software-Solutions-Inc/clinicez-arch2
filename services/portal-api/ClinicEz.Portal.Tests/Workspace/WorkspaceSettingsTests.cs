@@ -2,7 +2,7 @@ using ClinicEz.Portal.Application.Features.Admin.Queries;
 using ClinicEz.Portal.Application.Features.Workspace;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Portal.Infrastructure.Persistence;
-using MassTransit;
+using ClinicEz.Portal.Tests.Support;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using System;
@@ -20,16 +20,14 @@ public class WorkspaceSettingsTests : IDisposable
     private const string OwnerId = "clerk_owner_111";
     private static readonly WorkspaceActor Actor = new(OwnerId, "Juan Dela Cruz", "Owner");
 
-    private readonly Mock<IPublishEndpoint> _publisher = new();
+    private readonly IWorkspaceProfilePublisher _publisher;
     private readonly ApplicationDbContext _context;
     private readonly Guid _tenantId = Guid.NewGuid();
 
     public WorkspaceSettingsTests()
     {
-        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .Options;
-        _context = new ApplicationDbContext(options);
+        _context = TestSupport.NewContext();
+        _publisher = TestSupport.ProfilePublisher(_context);
 
         _context.Tenants.Add(new Tenant
         {
@@ -43,7 +41,7 @@ public class WorkspaceSettingsTests : IDisposable
             LastName = "Dela Cruz"
         });
 
-        void AddStaff(string userId, string role, string status) => _context.StaffMembers.Add(new StaffMember
+        void AddStaff(string userId, WorkspaceMemberRole role, MemberStatus status) => _context.WorkspaceMembers.Add(new WorkspaceMember
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
@@ -54,9 +52,9 @@ public class WorkspaceSettingsTests : IDisposable
             Status = status
         });
 
-        AddStaff("clerk_admin", "Admin", "Active");
-        AddStaff("clerk_biller", "Biller", "Active");
-        AddStaff("clerk_pending_admin", "Admin", "Pending");
+        AddStaff("clerk_admin", WorkspaceMemberRole.Admin, MemberStatus.Active);
+        AddStaff("clerk_biller", WorkspaceMemberRole.Billing, MemberStatus.Active);
+        AddStaff("clerk_pending_admin", WorkspaceMemberRole.Admin, MemberStatus.Invited);
         _context.SaveChanges();
     }
 
@@ -121,7 +119,7 @@ public class WorkspaceSettingsTests : IDisposable
     [Fact]
     public async Task UpdateGeneral_PersistsTenantAndLocaleDefaults()
     {
-        var handler = new UpdateWorkspaceGeneralCommandHandler(_context, _publisher.Object);
+        var handler = new UpdateWorkspaceGeneralCommandHandler(_context, _publisher);
 
         var result = await handler.Handle(Command(timeZone: "Asia/Singapore", locale: "en-US", currency: "USD"), CancellationToken.None);
 
@@ -151,7 +149,7 @@ public class WorkspaceSettingsTests : IDisposable
     [Fact]
     public async Task UpdateGeneral_BlankOptionalValues_AreCleared_NotIgnored()
     {
-        var handler = new UpdateWorkspaceGeneralCommandHandler(_context, _publisher.Object);
+        var handler = new UpdateWorkspaceGeneralCommandHandler(_context, _publisher);
 
         await handler.Handle(Command(representative: "  ", phone: null), CancellationToken.None);
 
@@ -164,7 +162,7 @@ public class WorkspaceSettingsTests : IDisposable
     [Fact]
     public async Task UpdateGeneral_WritesAuditEntryWithOnlyChangedFields()
     {
-        var handler = new UpdateWorkspaceGeneralCommandHandler(_context, _publisher.Object);
+        var handler = new UpdateWorkspaceGeneralCommandHandler(_context, _publisher);
 
         await handler.Handle(Command(name: "Metro Super Clinic"), CancellationToken.None);
 
@@ -188,7 +186,7 @@ public class WorkspaceSettingsTests : IDisposable
     [Fact]
     public async Task UpdateGeneral_NoEffectiveChange_WritesNoAuditEntry()
     {
-        var handler = new UpdateWorkspaceGeneralCommandHandler(_context, _publisher.Object);
+        var handler = new UpdateWorkspaceGeneralCommandHandler(_context, _publisher);
 
         await handler.Handle(Command(
             name: "Metro Clinic",
@@ -203,7 +201,7 @@ public class WorkspaceSettingsTests : IDisposable
     [Fact]
     public async Task UpdateGeneral_UnknownWorkspace_Throws()
     {
-        var handler = new UpdateWorkspaceGeneralCommandHandler(_context, _publisher.Object);
+        var handler = new UpdateWorkspaceGeneralCommandHandler(_context, _publisher);
         await Assert.ThrowsAsync<ClinicEz.Shared.Exceptions.NotFoundException>(() =>
             handler.Handle(Command() with { TenantSlug = "nope" }, CancellationToken.None));
     }

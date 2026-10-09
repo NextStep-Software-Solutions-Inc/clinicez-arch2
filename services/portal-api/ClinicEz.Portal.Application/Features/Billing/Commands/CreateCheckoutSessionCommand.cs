@@ -28,7 +28,7 @@ public class CreateCheckoutSessionCommand : IRequest<string>
 }
 
 public class CreateCheckoutSessionCommandHandler(
-    IXenditBillingService billingService,
+    IBillingProvider billingService,
     IApplicationDbContext context)
     : IRequestHandler<CreateCheckoutSessionCommand, string>
 {

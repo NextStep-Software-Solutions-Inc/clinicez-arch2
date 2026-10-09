@@ -36,18 +36,18 @@ public class TenantSettingsAndMembershipTests : IDisposable
         };
         _context.Tenants.Add(tenant);
 
-        var staff = new StaffMember
+        var staff = new WorkspaceMember
         {
             Id = Guid.NewGuid(),
             TenantId = _tenantId,
             UserId = "clerk_biller_222",
             Email = "biller@metro.ph",
             FullName = "Bob Biller",
-            Role = "Biller",
-            Status = "Active",
+            Role = WorkspaceMemberRole.Billing,
+            Status = MemberStatus.Active,
             CreatedAt = DateTime.UtcNow
         };
-        _context.StaffMembers.Add(staff);
+        _context.WorkspaceMembers.Add(staff);
 
         _context.SaveChanges();
     }
@@ -78,7 +78,7 @@ public class TenantSettingsAndMembershipTests : IDisposable
 
         Assert.NotNull(result);
         Assert.Equal(TenantSlug, result.TenantSlug);
-        Assert.Equal("Biller", result.Role);
+        Assert.Equal("Billing", result.Role);
         Assert.Equal("Active", result.Status);
     }
 
@@ -90,6 +90,6 @@ public class TenantSettingsAndMembershipTests : IDisposable
 
         Assert.NotNull(result);
         Assert.Equal(TenantSlug, result.TenantSlug);
-        Assert.Equal("Biller", result.Role);
+        Assert.Equal("Billing", result.Role);
     }
 }

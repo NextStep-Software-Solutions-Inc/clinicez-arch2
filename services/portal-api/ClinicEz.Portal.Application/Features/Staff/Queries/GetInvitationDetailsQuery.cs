@@ -1,4 +1,5 @@
 using ClinicEz.Portal.Application.Interfaces;
+using ClinicEz.Portal.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -32,14 +33,17 @@ public class GetInvitationDetailsQueryHandler(IApplicationDbContext context) : I
             throw new KeyNotFoundException("Invitation token cannot be empty.");
         }
 
-        var member = await context.StaffMembers
-            .Include(s => s.Tenant)
-            .Include(s => s.Facility)
-            .FirstOrDefaultAsync(s => s.InvitationToken == request.Token, cancellationToken)
+        var member = await context.WorkspaceMembers
+            .Include(m => m.Tenant)
+            .FirstOrDefaultAsync(m => m.InvitationToken == request.Token, cancellationToken)
             ?? throw new KeyNotFoundException("Invitation was not found or is invalid.");
 
+        var profile = await context.StaffMembers
+            .Include(s => s.Facility)
+            .FirstOrDefaultAsync(s => s.WorkspaceMemberId == member.Id, cancellationToken);
+
         var isExpired = member.InvitationExpiresAt.HasValue && member.InvitationExpiresAt.Value < DateTime.UtcNow;
-        var isAlreadyAccepted = member.Status.Equals("Active", StringComparison.OrdinalIgnoreCase);
+        var isAlreadyAccepted = member.Status == MemberStatus.Active;
 
         return new InvitationDetailsDto(
             member.Id,
@@ -47,8 +51,8 @@ public class GetInvitationDetailsQueryHandler(IApplicationDbContext context) : I
             member.Tenant.TenantSlug,
             member.FullName,
             member.Email,
-            member.Role,
-            member.Facility?.Name,
+            StaffMemberMapping.RoleName(member, profile),
+            profile?.Facility?.Name,
             isExpired,
             isAlreadyAccepted,
             member.InvitationExpiresAt

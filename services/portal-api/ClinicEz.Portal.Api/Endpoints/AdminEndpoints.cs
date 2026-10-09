@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using ClinicEz.Portal.Api.Abstractions;
 using ClinicEz.Portal.Application.Features.Admin.Commands;
 using ClinicEz.Portal.Application.Features.Admin.Queries;
+using ClinicEz.Portal.Application.Features.Hub;
 using ClinicEz.Portal.Domain.Constants;
 using ClinicEz.Portal.Domain.Entities;
 using MediatR;
@@ -112,6 +113,19 @@ public class AdminEndpoints : IEndpoint
         })
         .WithName("UpdateTenantUsage")
         .WithDescription("Updates tenant workspace usage metrics and limits (SuperAdmin scope).")
+        .WithTags("Admin");
+
+        // 5c. POST /admin/hub/resync
+        group.MapPost("/hub/resync", async (HttpContext httpContext, ISender sender, IHubDirectoryResyncService resync, CancellationToken ct) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.ManageTenants, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            var result = await resync.ResyncAsync(ct);
+            return Results.Ok(result);
+        })
+        .WithName("ResyncHubDirectory")
+        .WithDescription("Re-enqueues every cell, facility and link to the hub directory. Idempotent (every message is an upsert); use after the hub directory was reset or restored.")
         .WithTags("Admin");
 
         // 6. BLOG CRUD

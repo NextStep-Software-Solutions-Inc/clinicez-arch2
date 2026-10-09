@@ -1,4 +1,5 @@
 using ClinicEz.Portal.Api.Abstractions;
+using ClinicEz.Portal.Application.Features.Ownership;
 using ClinicEz.Portal.Application.Features.Workspace;
 using ClinicEz.Portal.Domain.Entities;
 using MediatR;
@@ -36,7 +37,7 @@ public record UpdateWorkspaceComplianceRequest(string? DpoName, string? DpoEmail
 /// <summary>Body of PUT /tenants/{slug}/facilities/{facilityId}/deployment.</summary>
 public record UpdateFacilityDeploymentRequest(FacilityDeploymentMode DeploymentMode, string? ConsoleBaseUrl);
 
-/// <summary>Body of POST /tenants/{slug}/settings/ownership-transfer.</summary>
+/// <summary>Body of POST /tenants/{slug}/settings/ownership-transfer (the offer; the target must then accept).</summary>
 public record TransferWorkspaceOwnershipRequest(Guid TargetStaffMemberId, string ConfirmSlug);
 
 /// <summary>Body of POST /tenants/{slug}/settings/archive.</summary>
@@ -148,7 +149,7 @@ public class TenantSettingsEndpoints : IEndpoint
             var denied = await Authorize(access, httpContext, tenantSlug, WorkspaceRole.Owner, ct);
             if (denied.Result != null) return denied.Result;
 
-            var result = await sender.Send(new TransferWorkspaceOwnershipCommand(
+            var result = await sender.Send(new OfferOwnershipTransferCommand(
                 denied.Access!.Tenant.TenantSlug,
                 Actor(httpContext, denied.Access),
                 body.TargetStaffMemberId,
@@ -156,8 +157,81 @@ public class TenantSettingsEndpoints : IEndpoint
 
             return Results.Ok(result);
         })
-        .WithName("TransferWorkspaceOwnership")
-        .WithDescription("Owner only. Immediately makes an active Admin the workspace owner; the previous owner becomes an Admin.");
+        .WithName("OfferWorkspaceOwnershipTransfer")
+        .WithDescription("Owner only. Offers ownership to an active member who owns no workspace (409 target_already_owns_workspace otherwise). Nothing changes until they accept; the offer lapses after 7 days.");
+
+        group.MapGet("/ownership-transfer", async (
+            string tenantSlug,
+            HttpContext httpContext,
+            IWorkspaceAccessService access,
+            ISender sender,
+            CancellationToken ct) =>
+        {
+            var denied = await Authorize(access, httpContext, tenantSlug, WorkspaceRole.Staff, ct);
+            if (denied.Result != null) return denied.Result;
+
+            var offer = await sender.Send(new GetOwnershipTransferQuery(denied.Access!.Tenant.TenantSlug, denied.Access.UserId), ct);
+            return offer is null ? Results.NoContent() : Results.Ok(offer);
+        })
+        .WithName("GetWorkspaceOwnershipTransfer")
+        .WithDescription("The open ownership offer, visible to the owner who made it and the member it is addressed to; 204 otherwise.");
+
+        group.MapPost("/ownership-transfer/accept", async (
+            string tenantSlug,
+            HttpContext httpContext,
+            IWorkspaceAccessService access,
+            ISender sender,
+            CancellationToken ct) =>
+        {
+            var denied = await Authorize(access, httpContext, tenantSlug, WorkspaceRole.Staff, ct);
+            if (denied.Result != null) return denied.Result;
+
+            var result = await sender.Send(new AcceptOwnershipTransferCommand(
+                denied.Access!.Tenant.TenantSlug,
+                Actor(httpContext, denied.Access)), ct);
+
+            return Results.Ok(result);
+        })
+        .WithName("AcceptWorkspaceOwnershipTransfer")
+        .WithDescription("The member the offer is addressed to takes ownership; the previous owner becomes an Admin. 409 target_already_owns_workspace if they own another workspace.");
+
+        group.MapPost("/ownership-transfer/decline", async (
+            string tenantSlug,
+            HttpContext httpContext,
+            IWorkspaceAccessService access,
+            ISender sender,
+            CancellationToken ct) =>
+        {
+            var denied = await Authorize(access, httpContext, tenantSlug, WorkspaceRole.Staff, ct);
+            if (denied.Result != null) return denied.Result;
+
+            await sender.Send(new DeclineOwnershipTransferCommand(
+                denied.Access!.Tenant.TenantSlug,
+                Actor(httpContext, denied.Access)), ct);
+
+            return Results.NoContent();
+        })
+        .WithName("DeclineWorkspaceOwnershipTransfer")
+        .WithDescription("The member the offer is addressed to turns it down.");
+
+        group.MapDelete("/ownership-transfer", async (
+            string tenantSlug,
+            HttpContext httpContext,
+            IWorkspaceAccessService access,
+            ISender sender,
+            CancellationToken ct) =>
+        {
+            var denied = await Authorize(access, httpContext, tenantSlug, WorkspaceRole.Owner, ct);
+            if (denied.Result != null) return denied.Result;
+
+            await sender.Send(new CancelOwnershipTransferCommand(
+                denied.Access!.Tenant.TenantSlug,
+                Actor(httpContext, denied.Access)), ct);
+
+            return Results.NoContent();
+        })
+        .WithName("CancelWorkspaceOwnershipTransfer")
+        .WithDescription("Owner only. Withdraws the open ownership offer.");
 
         group.MapPost("/archive", async (
             string tenantSlug,

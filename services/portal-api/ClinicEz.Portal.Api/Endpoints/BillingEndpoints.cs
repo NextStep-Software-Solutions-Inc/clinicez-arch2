@@ -5,6 +5,7 @@ using ClinicEz.Portal.Api.Abstractions;
 using ClinicEz.Portal.Application.Features.Billing.Commands;
 using ClinicEz.Portal.Application.Features.Billing.Queries;
 using ClinicEz.Portal.Application.Interfaces;
+using ClinicEz.Portal.Domain.Entities;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -28,14 +29,14 @@ public class BillingEndpoints : IEndpoint
 
         if (tenant.OwnerId == clerkUserId) return (true, true);
 
-        var staff = await context.StaffMembers
-            .FirstOrDefaultAsync(s => s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Status == "Active");
+        var staff = await context.WorkspaceMembers
+            .FirstOrDefaultAsync(s => s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Status == MemberStatus.Active);
 
         if (staff == null) return (false, false);
 
-        // Biller and Admin can manage billing (checkout, update info, cancel)
-        var canManage = staff.Role == "Admin" || staff.Role == "Biller";
-        // Any active member (including Viewer) can view billing info
+        // Billing and Admin members can manage billing (checkout, update info, cancel)
+        var canManage = staff.Role is WorkspaceMemberRole.Admin or WorkspaceMemberRole.Billing;
+        // Any active member (any role) can view billing info
         return (true, canManage);
     }
 

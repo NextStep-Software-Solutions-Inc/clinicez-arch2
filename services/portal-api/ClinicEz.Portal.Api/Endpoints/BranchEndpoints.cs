@@ -1,5 +1,7 @@
 using System.Security.Claims;
 using ClinicEz.Portal.Api.Abstractions;
+using ClinicEz.Portal.Application.Features.Branches;
+using ClinicEz.Portal.Application.Features.Entitlements;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Shared.Common;
@@ -100,7 +102,8 @@ public class BranchEndpoints : IEndpoint
         branches.MapPost("", async (
             CreateBranchRequest request,
             HttpContext httpContext,
-            IApplicationDbContext context) =>
+            IApplicationDbContext context,
+            IEntitlementGuard entitlementGuard) =>
         {
             var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(clerkUserId))
@@ -117,13 +120,15 @@ public class BranchEndpoints : IEndpoint
             }
 
             var isOwner = tenant.OwnerId == clerkUserId;
-            var isAdmin = !isOwner && await context.StaffMembers.AnyAsync(s =>
-                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == "Admin" && s.Status == "Active");
+            var isAdmin = !isOwner && await context.WorkspaceMembers.AnyAsync(s =>
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == WorkspaceMemberRole.Admin && s.Status == MemberStatus.Active);
 
             if (!isOwner && !isAdmin)
             {
                 return Results.Forbid();
             }
+
+            await entitlementGuard.EnsureCanCreateBranchAsync(tenant.Id);
 
             var branch = new Branch
             {
@@ -152,6 +157,8 @@ public class BranchEndpoints : IEndpoint
                 var facilitiesToLink = await context.Facilities
                     .Where(f => f.TenantId == tenant.Id && request.FacilityIds.Contains(f.Id))
                     .ToListAsync();
+
+                await BranchFacilityRules.EnsureCanLinkAsync(context, branch, facilitiesToLink, CancellationToken.None);
 
                 foreach (var facility in facilitiesToLink)
                 {
@@ -211,8 +218,8 @@ public class BranchEndpoints : IEndpoint
             }
 
             var isOwner = tenant.OwnerId == clerkUserId;
-            var isStaff = !isOwner && await context.StaffMembers.AnyAsync(s =>
-                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Status == "Active");
+            var isStaff = !isOwner && await context.WorkspaceMembers.AnyAsync(s =>
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Status == MemberStatus.Active);
 
             if (!isOwner && !isStaff)
             {
@@ -285,8 +292,8 @@ public class BranchEndpoints : IEndpoint
             }
 
             var isOwner = tenant.OwnerId == clerkUserId;
-            var isStaff = !isOwner && await context.StaffMembers.AnyAsync(s =>
-                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Status == "Active");
+            var isStaff = !isOwner && await context.WorkspaceMembers.AnyAsync(s =>
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Status == MemberStatus.Active);
 
             if (!isOwner && !isStaff)
             {
@@ -351,8 +358,8 @@ public class BranchEndpoints : IEndpoint
             }
 
             var isOwner = tenant.OwnerId == clerkUserId;
-            var isAdmin = !isOwner && await context.StaffMembers.AnyAsync(s =>
-                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == "Admin" && s.Status == "Active");
+            var isAdmin = !isOwner && await context.WorkspaceMembers.AnyAsync(s =>
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == WorkspaceMemberRole.Admin && s.Status == MemberStatus.Active);
 
             if (!isOwner && !isAdmin)
             {
@@ -408,8 +415,8 @@ public class BranchEndpoints : IEndpoint
             }
 
             var isOwner = tenant.OwnerId == clerkUserId;
-            var isAdmin = !isOwner && await context.StaffMembers.AnyAsync(s =>
-                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == "Admin" && s.Status == "Active");
+            var isAdmin = !isOwner && await context.WorkspaceMembers.AnyAsync(s =>
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == WorkspaceMemberRole.Admin && s.Status == MemberStatus.Active);
 
             if (!isOwner && !isAdmin)
             {
@@ -472,8 +479,8 @@ public class BranchEndpoints : IEndpoint
             }
 
             var isOwner = tenant.OwnerId == clerkUserId;
-            var isAdmin = !isOwner && await context.StaffMembers.AnyAsync(s =>
-                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == "Admin" && s.Status == "Active");
+            var isAdmin = !isOwner && await context.WorkspaceMembers.AnyAsync(s =>
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == WorkspaceMemberRole.Admin && s.Status == MemberStatus.Active);
 
             if (!isOwner && !isAdmin)
             {
@@ -483,6 +490,8 @@ public class BranchEndpoints : IEndpoint
             var facilities = await context.Facilities
                 .Where(f => f.TenantId == branch.TenantId && facilityIds.Contains(f.Id))
                 .ToListAsync();
+
+            await BranchFacilityRules.EnsureCanLinkAsync(context, branch, facilities, CancellationToken.None);
 
             foreach (var fac in facilities)
             {
@@ -555,8 +564,8 @@ public class BranchEndpoints : IEndpoint
             }
 
             var isOwner = tenant.OwnerId == clerkUserId;
-            var isAdmin = !isOwner && await context.StaffMembers.AnyAsync(s =>
-                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == "Admin" && s.Status == "Active");
+            var isAdmin = !isOwner && await context.WorkspaceMembers.AnyAsync(s =>
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == WorkspaceMemberRole.Admin && s.Status == MemberStatus.Active);
 
             if (!isOwner && !isAdmin)
             {

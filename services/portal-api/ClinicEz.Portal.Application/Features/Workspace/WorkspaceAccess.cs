@@ -17,7 +17,7 @@ public enum WorkspaceRole
 }
 
 /// <summary>Result of resolving who a user is inside a workspace.</summary>
-public sealed record WorkspaceAccess(Tenant Tenant, string UserId, WorkspaceRole Role)
+public sealed record WorkspaceAccess(Tenant Tenant, string UserId, WorkspaceRole Role, bool IsBilling = false)
 {
     public bool HasAtLeast(WorkspaceRole required) => Role >= required;
 
@@ -57,20 +57,20 @@ public sealed class WorkspaceAccessService(IApplicationDbContext context) : IWor
             return new WorkspaceAccess(tenant, userId, WorkspaceRole.Owner);
         }
 
-        var membership = string.IsNullOrEmpty(userId)
+        WorkspaceMemberRole? membership = string.IsNullOrEmpty(userId)
             ? null
-            : await context.StaffMembers
-                .Where(s => s.TenantId == tenant.Id && s.UserId == userId && s.Status == "Active")
-                .Select(s => s.Role)
+            : await context.WorkspaceMembers
+                .Where(m => m.TenantId == tenant.Id && m.UserId == userId && m.Status == MemberStatus.Active)
+                .Select(m => (WorkspaceMemberRole?)m.Role)
                 .FirstOrDefaultAsync(cancellationToken);
 
         var role = membership switch
         {
             null => WorkspaceRole.None,
-            "Admin" => WorkspaceRole.Admin,
+            WorkspaceMemberRole.Owner or WorkspaceMemberRole.Admin => WorkspaceRole.Admin,
             _ => WorkspaceRole.Staff
         };
 
-        return new WorkspaceAccess(tenant, userId ?? string.Empty, role);
+        return new WorkspaceAccess(tenant, userId ?? string.Empty, role, membership == WorkspaceMemberRole.Billing);
     }
 }

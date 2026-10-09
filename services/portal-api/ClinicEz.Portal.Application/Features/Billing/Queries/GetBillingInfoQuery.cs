@@ -1,6 +1,7 @@
 using MediatR;
 using ClinicEz.Portal.Application.Interfaces;
-using ClinicEz.Portal.Domain.Constants;
+using ClinicEz.Portal.Application.Features.Entitlements;
+using ClinicEz.Portal.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
@@ -76,7 +77,7 @@ public class GetBillingInfoQuery : IRequest<BillingInfoDto?>
     }
 }
 
-public class GetBillingInfoQueryHandler(IApplicationDbContext context) : IRequestHandler<GetBillingInfoQuery, BillingInfoDto?>
+public class GetBillingInfoQueryHandler(IApplicationDbContext context, IEntitlementService entitlementsService) : IRequestHandler<GetBillingInfoQuery, BillingInfoDto?>
 {
     public async Task<BillingInfoDto?> Handle(GetBillingInfoQuery request, CancellationToken cancellationToken)
     {
@@ -122,67 +123,47 @@ public class GetBillingInfoQueryHandler(IApplicationDbContext context) : IReques
             );
         }).ToList();
 
+        var subscription = await entitlementsService.ResolveAsync(tenant.Id, cancellationToken);
+        var stored = await context.Subscriptions.AsNoTracking().FirstAsync(s => s.TenantId == tenant.Id, cancellationToken);
+
         var latestReceipt = dbReceipts.OrderByDescending(r => r.PaidAt).FirstOrDefault();
-        bool isAnnual = latestReceipt != null 
-            ? (dbInvoices.FirstOrDefault(i => i.Id == latestReceipt.InvoiceId)?.IsAnnual ?? false)
-            : false;
-        
-        if (latestReceipt == null && dbInvoices.Count > 0)
+        var isAnnual = stored.IsAnnual;
+        if (latestReceipt != null)
         {
-            isAnnual = dbInvoices.First().IsAnnual;
+            isAnnual = dbInvoices.FirstOrDefault(i => i.Id == latestReceipt.InvoiceId)?.IsAnnual ?? isAnnual;
         }
 
-        var subscriptionStatus = tenant.SubscriptionStatus;
-        DateTime? subscriptionExpiresAt = latestReceipt?.ExpiryDate;
-
-        var effectivePlanId = tenant.SubscriptionPlanId;
-        if (string.IsNullOrEmpty(effectivePlanId) && subscriptionStatus == "TRIALING")
+        // The legacy wire format of this endpoint: upper-case status, plan slug as the plan id.
+        var subscriptionStatus = subscription.Status switch
         {
-            effectivePlanId = "starter";
-        }
-
-        // If trialing without paid receipts, calculate trial expiration as 14 days from tenant creation
-        if (subscriptionExpiresAt == null && subscriptionStatus == "TRIALING")
-        {
-            subscriptionExpiresAt = tenant.CreatedAt.AddDays(14);
-        }
-
-        // If trial has passed its 14-day evaluation window, mark status as EXPIRED
-        if (subscriptionStatus == "TRIALING" && subscriptionExpiresAt.HasValue && DateTime.UtcNow > subscriptionExpiresAt.Value)
-        {
-            subscriptionStatus = "EXPIRED";
-        }
+            SubscriptionStatus.PastDue => "PAST_DUE",
+            var status => status.ToString().ToUpperInvariant()
+        };
 
         PlanLimitsDto? planLimitsDto = null;
-        if (subscriptionStatus != "EXPIRED" && !string.IsNullOrEmpty(effectivePlanId))
+        if (subscription.IsActive)
         {
-            var planLimits = PlanFeaturesConfig.GetLimitsForPlan(effectivePlanId);
-            if (planLimits != null)
-            {
-                planLimitsDto = new PlanLimitsDto(
-                    planLimits.PlanTitle,
-                    planLimits.MaxClinics,
-                    planLimits.MaxStaff,
-                    planLimits.MaxPatients,
-                    planLimits.MonthlyApiQuotaLimit
-                );
-            }
+            planLimitsDto = new PlanLimitsDto(
+                subscription.PlanName,
+                DisplayLimit(subscription, EntitlementKeys.LimitClinics),
+                DisplayLimit(subscription, EntitlementKeys.LimitMembers),
+                DisplayLimit(subscription, EntitlementKeys.LimitPatients),
+                DisplayLimit(subscription, EntitlementKeys.LimitApiRequestsMonthly));
         }
 
-        var actualStaffCount = await context.StaffMembers
-            .CountAsync(s => s.TenantId == tenant.Id, cancellationToken);
-        var effectiveStaffCount = actualStaffCount > 0 ? actualStaffCount : Math.Max(tenant.StaffAccountsCount, 1);
+        var memberCount = await context.WorkspaceMembers
+            .CountAsync(m => m.TenantId == tenant.Id && m.Status != MemberStatus.Suspended, cancellationToken);
 
         var usageDto = new TenantUsageDto(
             tenant.FacilitiesCount,
-            effectiveStaffCount,
+            Math.Max(memberCount, 1),
             tenant.ActivePatientRecordsCount,
             tenant.MonthlyApiQuotaUsed
         );
 
         return new BillingInfoDto(
             subscriptionStatus,
-            effectivePlanId,
+            subscription.PlanSlug,
             invoices,
             tenant.Name,
             tenant.TradingName,
@@ -196,9 +177,16 @@ public class GetBillingInfoQueryHandler(IApplicationDbContext context) : IReques
             tenant.PostalCode,
             tenant.TaxId,
             isAnnual,
-            subscriptionExpiresAt,
+            subscription.PeriodEnd,
             planLimitsDto,
             usageDto
         );
+    }
+
+    /// <summary>Unlimited plans are shown with the large sentinel numbers the dashboard already treats as unlimited.</summary>
+    private static int DisplayLimit(EntitlementSnapshot snapshot, string key)
+    {
+        var limit = snapshot.Limit(key);
+        return limit >= 999999 ? 999999 : (int)limit;
     }
 }

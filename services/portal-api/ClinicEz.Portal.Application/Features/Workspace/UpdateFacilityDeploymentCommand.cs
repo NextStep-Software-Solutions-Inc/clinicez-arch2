@@ -1,3 +1,4 @@
+using ClinicEz.Portal.Application.Features.Hub;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
 using FluentValidation;
@@ -66,7 +67,7 @@ public class UpdateFacilityDeploymentCommandValidator : AbstractValidator<Update
     }
 }
 
-public class UpdateFacilityDeploymentCommandHandler(IApplicationDbContext context)
+public class UpdateFacilityDeploymentCommandHandler(IApplicationDbContext context, IHubOnboardingService hubOnboarding)
     : IRequestHandler<UpdateFacilityDeploymentCommand, FacilityDeploymentDto>
 {
     public async Task<FacilityDeploymentDto> Handle(UpdateFacilityDeploymentCommand request, CancellationToken cancellationToken)
@@ -88,11 +89,17 @@ public class UpdateFacilityDeploymentCommandHandler(IApplicationDbContext contex
         changes.Track($"{facility.Name}.deploymentMode", facility.DeploymentMode.ToString(), request.DeploymentMode.ToString());
         changes.Track($"{facility.Name}.consoleBaseUrl", facility.ConsoleBaseUrl, url);
 
+        var leftEdgeCell = FacilityCells.RequiresHubClient(facility) && request.DeploymentMode == FacilityDeploymentMode.SharedCloud;
+
         facility.DeploymentMode = request.DeploymentMode;
         facility.ConsoleBaseUrl = url;
 
         changes.Stage(context, tenant.Id, request.Actor, section: "facilities");
         await context.SaveChangesAsync(cancellationToken);
+        if (leftEdgeCell)
+        {
+            await hubOnboarding.RevokeForFacilityAsync(facility, cancellationToken, leftEdgeCell: true);
+        }
 
         return new FacilityDeploymentDto(facility.Id, facility.DeploymentMode, facility.ConsoleBaseUrl);
     }

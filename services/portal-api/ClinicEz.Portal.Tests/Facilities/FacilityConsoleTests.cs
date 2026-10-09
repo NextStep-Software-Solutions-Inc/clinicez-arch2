@@ -1,13 +1,19 @@
+using ClinicEz.Portal.Application.Features.Entitlements;
 using ClinicEz.Portal.Application.Features.Admin.Commands;
 using ClinicEz.Portal.Application.Features.Admin.Consumers;
 using ClinicEz.Portal.Application.Features.Admin.Queries;
+using ClinicEz.Portal.Application.Features.Integrations;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Portal.Infrastructure.Persistence;
+using ClinicEz.Portal.Tests.Support;
 using ClinicEz.Shared.Common;
-using MassTransit;
+using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Contracts;
+using ClinicEz.Shared.Interop.Handling;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using System;
 using System.Collections.Generic;
@@ -25,11 +31,7 @@ public class FacilityConsoleTests : IDisposable
 
     public FacilityConsoleTests()
     {
-        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
-            .Options;
-
-        _context = new ApplicationDbContext(options);
+        _context = TestSupport.NewContext();
 
         _context.Tenants.Add(new Tenant
         {
@@ -172,12 +174,11 @@ public class FacilityConsoleTests : IDisposable
         Assert.Null(dto.ConsoleUrl);
     }
 
+
     [Fact]
-    public async Task CreateFacilityCommand_PublishesConsoleUrl()
+    public async Task CreateFacilityCommand_LicenseMessageCarriesConsoleUrl_AndGoesToTheFacilityMailbox()
     {
-        var mockPublish = new Mock<IPublishEndpoint>();
-        var mockGuard = new Mock<ITenantFeatureGuard>();
-        var licenseSigner = new ClinicEz.Shared.Licensing.FacilityLicenseSigner();
+        var mockGuard = new Mock<IEntitlementGuard>();
 
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -187,57 +188,130 @@ public class FacilityConsoleTests : IDisposable
             })
             .Build();
 
-        var handler = new CreateFacilityCommandHandler(_context, mockPublish.Object, mockGuard.Object, licenseSigner, config);
+        var handler = TestSupport.CreateFacilityHandler(_context, mockGuard.Object, config);
         var command = new CreateFacilityCommand(_tenantId.ToString(), FacilityType.Clinic, "Metro Urgent Care", Slug: "metro-urgent");
 
         var result = await handler.Handle(command, CancellationToken.None);
 
-        Assert.True(result);
-        mockPublish.Verify(p => p.Publish(
-            It.Is<FacilityCreatedEvent>(e =>
-                e.Slug == "metro-urgent" &&
-                e.ConsoleUrl == "https://metro-urgent.clinic.customdomain.net"),
-            It.IsAny<CancellationToken>()), Times.Once);
+        Assert.True(result.Success);
+        var facility = await _context.Facilities.SingleAsync(f => f.Slug == "metro-urgent");
+
+        var license = Assert.Single(TestSupport.Outbox(_context, InteropTypes.FacilityLicenseIssued));
+        Assert.Equal(PartyKind.Facility, license.To.Kind);
+        Assert.Equal(facility.Id.ToString(), license.To.FacilityId);
+        Assert.Equal(_tenantId.ToString(), license.To.TenantId);
+        Assert.Equal(facility.Id, license.CorrelationId);
+        var payload = license.GetPayload<FacilityCreatedEvent>();
+        Assert.Equal("metro-urgent", payload.Slug);
+        Assert.Equal("https://metro-urgent.clinic.customdomain.net", payload.ConsoleUrl);
+        Assert.False(string.IsNullOrEmpty(payload.LicenseToken));
+    }
+
+    [Fact]
+    public async Task CreateFacilityCommand_PatientCatalogCopyNeverCarriesTheLicense()
+    {
+        var handler = TestSupport.CreateFacilityHandler(_context, new Mock<IEntitlementGuard>().Object);
+
+        await handler.Handle(new CreateFacilityCommand(_tenantId.ToString(), FacilityType.Clinic, "Catalog Clinic"), CancellationToken.None);
+
+        var directory = Assert.Single(TestSupport.Outbox(_context, InteropTypes.FacilityDirectoryUpdated));
+        Assert.Equal(InteropServices.Patient, directory.To.Service);
+        var payload = directory.GetPayload<FacilityCreatedEvent>();
+        Assert.Equal("Catalog Clinic", payload.Name);
+        Assert.Null(payload.LicenseToken);
+        Assert.Null(payload.Limits);
+    }
+
+    [Fact]
+    public async Task CreateFacilityCommand_StagesFacilityMessagesAtomicallyWithTheFacility()
+    {
+        var handler = TestSupport.CreateFacilityHandler(_context, new Mock<IEntitlementGuard>().Object);
+
+        await handler.Handle(new CreateFacilityCommand(_tenantId.ToString(), FacilityType.Clinic, "Atomic Clinic"), CancellationToken.None);
+
+        // One SaveChanges produced the facility and every message about it (licence, catalogue copy, directory feed).
+        Assert.Single(_context.Facilities);
+        Assert.NotEmpty(_context.InteropOutbox);
+        Assert.All(_context.InteropOutbox, m => Assert.Null(m.DispatchedAtUtc));
     }
 
     [Fact]
     public async Task CreateFacilityCommand_InitialStatusIsProvisioning()
     {
-        var mockPublish = new Mock<IPublishEndpoint>();
-        var mockGuard = new Mock<ITenantFeatureGuard>();
-        var licenseSigner = new ClinicEz.Shared.Licensing.FacilityLicenseSigner();
-
-        var handler = new CreateFacilityCommandHandler(_context, mockPublish.Object, mockGuard.Object, licenseSigner);
+        await TestSupport.SeedSubscriptionAsync(_context, _tenantId, planSlug: "starter");
+        var handler = TestSupport.CreateFacilityHandler(_context, new Mock<IEntitlementGuard>().Object);
         var command = new CreateFacilityCommand(_tenantId.ToString(), FacilityType.Clinic, "Brand New Clinic");
 
         var result = await handler.Handle(command, CancellationToken.None);
 
-        Assert.True(result);
+        Assert.True(result.Success);
         var facility = await _context.Facilities.FirstOrDefaultAsync(f => f.Name == "Brand New Clinic");
         Assert.NotNull(facility);
         Assert.Equal(FacilityStatus.Provisioning, facility.Status);
         Assert.Equal("brand-new-clinic", facility.Slug);
         Assert.NotNull(facility.LicenseToken);
-        Assert.Equal(5, facility.MaxStaffLimit);
+        Assert.Equal(10, facility.MaxStaffLimit);
+        Assert.Equal(FacilityVisibility.Private, facility.Visibility);
+    }
+
+    [Theory]
+    [InlineData("starter")]
+    [InlineData("pro")]
+    public async Task CreateFacilityCommand_DerivesPlanTierFromTheWorkspaceSubscription(string planSlug)
+    {
+        await TestSupport.SeedSubscriptionAsync(_context, _tenantId, planSlug: planSlug);
+
+        var handler = TestSupport.CreateFacilityHandler(_context, new Mock<IEntitlementGuard>().Object);
+        await handler.Handle(new CreateFacilityCommand(_tenantId.ToString(), FacilityType.Clinic, "Tiered Clinic"), CancellationToken.None);
+
+        var facility = await _context.Facilities.SingleAsync();
+        Assert.Equal(planSlug, facility.PlanTier);
+        var license = TestSupport.Outbox(_context, InteropTypes.FacilityLicenseIssued).Single().GetPayload<FacilityCreatedEvent>();
+        Assert.Equal(planSlug, license.PlanTier);
+    }
+
+    [Fact]
+    public void CreateFacilityCommand_HasNoCallerSuppliedPlanTier()
+    {
+        Assert.DoesNotContain(typeof(CreateFacilityCommand).GetProperties(), p => p.Name == "PlanTier");
+    }
+
+    [Fact]
+    public async Task CreateFacilityCommand_StagesFacilityCreatedWebhookWithoutTheLicense()
+    {
+        _context.WebhookEndpoints.Add(new WebhookEndpoint
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            Url = "https://hooks.metro.ph/clinicez",
+            SigningSecret = "signing-secret",
+            Events = IntegrationCatalog.EventFacilityCreated,
+            IsActive = true
+        });
+        await _context.SaveChangesAsync();
+
+        var handler = TestSupport.CreateFacilityHandler(_context, new Mock<IEntitlementGuard>().Object);
+        await handler.Handle(new CreateFacilityCommand(_tenantId.ToString(), FacilityType.Clinic, "Hooked Clinic"), CancellationToken.None);
+
+        var delivery = await _context.WebhookDeliveries.SingleAsync();
+        Assert.Equal(IntegrationCatalog.EventFacilityCreated, delivery.EventType);
+        Assert.Contains("Hooked Clinic", delivery.Payload);
+        Assert.DoesNotContain("licenseToken", delivery.Payload, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public async Task CreateFacilityCommand_WithCustomSlug_AssignsCustomSlug()
     {
-        var mockPublish = new Mock<IPublishEndpoint>();
-        var mockGuard = new Mock<ITenantFeatureGuard>();
-        var licenseSigner = new ClinicEz.Shared.Licensing.FacilityLicenseSigner();
-
-        var handler = new CreateFacilityCommandHandler(_context, mockPublish.Object, mockGuard.Object, licenseSigner);
+        var handler = TestSupport.CreateFacilityHandler(_context, new Mock<IEntitlementGuard>().Object);
         var command = new CreateFacilityCommand(
-            _tenantId.ToString(), 
-            FacilityType.Clinic, 
-            "Apex Health Manila", 
+            _tenantId.ToString(),
+            FacilityType.Clinic,
+            "Apex Health Manila",
             Slug: "apex-mnl");
 
         var result = await handler.Handle(command, CancellationToken.None);
 
-        Assert.True(result);
+        Assert.True(result.Success);
         var facility = await _context.Facilities.FirstOrDefaultAsync(f => f.Name == "Apex Health Manila");
         Assert.NotNull(facility);
         Assert.Equal("apex-mnl", facility.Slug);
@@ -259,15 +333,11 @@ public class FacilityConsoleTests : IDisposable
         _context.Facilities.Add(facility);
         await _context.SaveChangesAsync();
 
-        var mockPublish = new Mock<IPublishEndpoint>();
-        var mockGuard = new Mock<ITenantFeatureGuard>();
-        var licenseSigner = new ClinicEz.Shared.Licensing.FacilityLicenseSigner();
-
-        var handler = new CreateFacilityCommandHandler(_context, mockPublish.Object, mockGuard.Object, licenseSigner);
+        var handler = TestSupport.CreateFacilityHandler(_context, new Mock<IEntitlementGuard>().Object);
         var command = new CreateFacilityCommand(
-            _tenantId.ToString(), 
-            FacilityType.Clinic, 
-            "Another Clinic", 
+            _tenantId.ToString(),
+            FacilityType.Clinic,
+            "Another Clinic",
             Slug: "taken-subdomain");
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => handler.Handle(command, CancellationToken.None));
@@ -275,7 +345,7 @@ public class FacilityConsoleTests : IDisposable
     }
 
     [Fact]
-    public async Task FacilityProvisionedEventConsumer_SuccessEvent_TransitionsStatusToActive()
+    public async Task FacilityProvisionedHandler_SuccessEvent_TransitionsStatusToActive()
     {
         var facility = new Facility
         {
@@ -289,22 +359,94 @@ public class FacilityConsoleTests : IDisposable
         _context.Facilities.Add(facility);
         await _context.SaveChangesAsync();
 
-        var consumer = new FacilityProvisionedEventConsumer(_context);
+        var handler = new FacilityProvisionedHandler(_context, NullLogger<FacilityProvisionedHandler>.Instance);
 
-        var contextMock = new Mock<ConsumeContext<FacilityProvisionedEvent>>();
-        contextMock.Setup(c => c.Message).Returns(new FacilityProvisionedEvent
-        {
-            ResourceId = facility.Id,
-            TenantId = _tenantId.ToString(),
-            Success = true,
-            Message = "Pharmacy successfully provisioned"
-        });
-        contextMock.Setup(c => c.CancellationToken).Returns(CancellationToken.None);
-
-        await consumer.Consume(contextMock.Object);
+        await handler.HandleAsync(
+            new FacilityProvisionedEvent
+            {
+                ResourceId = facility.Id,
+                TenantId = _tenantId.ToString(),
+                Success = true,
+                Message = "Pharmacy successfully provisioned"
+            },
+            Report(facility),
+            CancellationToken.None);
 
         var updatedFacility = await _context.Facilities.FirstOrDefaultAsync(f => f.Id == facility.Id);
         Assert.NotNull(updatedFacility);
         Assert.Equal(FacilityStatus.Active, updatedFacility.Status);
     }
+
+    [Fact]
+    public async Task FacilityProvisionedHandler_FailureEvent_MarksFacilityFailed()
+    {
+        var facility = await AddFacilityAsync(FacilityStatus.Provisioning);
+        var handler = new FacilityProvisionedHandler(_context, NullLogger<FacilityProvisionedHandler>.Instance);
+
+        await handler.HandleAsync(new FacilityProvisionedEvent { ResourceId = facility.Id, TenantId = _tenantId.ToString(), Success = false },
+            Report(facility), CancellationToken.None);
+
+        Assert.Equal(FacilityStatus.Failed, (await _context.Facilities.SingleAsync()).Status);
+    }
+
+    [Fact]
+    public async Task FacilityProvisionedHandler_IsIdempotent_AndDoesNotRevertASettledFacility()
+    {
+        var facility = await AddFacilityAsync(FacilityStatus.Suspended);
+        var handler = new FacilityProvisionedHandler(_context, NullLogger<FacilityProvisionedHandler>.Instance);
+        var message = new FacilityProvisionedEvent { ResourceId = facility.Id, TenantId = _tenantId.ToString(), Success = true };
+
+        await handler.HandleAsync(message, Report(facility), CancellationToken.None);
+        await handler.HandleAsync(message, Report(facility), CancellationToken.None);
+
+        Assert.Equal(FacilityStatus.Suspended, (await _context.Facilities.SingleAsync()).Status);
+    }
+
+    [Fact]
+    public async Task FacilityProvisionedHandler_IgnoresReportsFromAnotherFacility()
+    {
+        var facility = await AddFacilityAsync(FacilityStatus.Provisioning);
+        var handler = new FacilityProvisionedHandler(_context, NullLogger<FacilityProvisionedHandler>.Instance);
+        var message = new FacilityProvisionedEvent { ResourceId = facility.Id, TenantId = _tenantId.ToString(), Success = true };
+
+        var foreignSender = Party.ForFacility(Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), FacilityType.Clinic);
+        await handler.HandleAsync(message, ContextFrom(foreignSender), CancellationToken.None);
+
+        Assert.Equal(FacilityStatus.Provisioning, (await _context.Facilities.SingleAsync()).Status);
+    }
+
+    [Fact]
+    public async Task FacilityProvisionedHandler_IgnoresReportsFromTheSameTenantsOtherFacility()
+    {
+        var facility = await AddFacilityAsync(FacilityStatus.Provisioning);
+        var handler = new FacilityProvisionedHandler(_context, NullLogger<FacilityProvisionedHandler>.Instance);
+        var message = new FacilityProvisionedEvent { ResourceId = facility.Id, TenantId = _tenantId.ToString(), Success = true };
+
+        var sibling = Party.ForFacility(_tenantId.ToString(), Guid.NewGuid().ToString(), FacilityType.Clinic);
+        await handler.HandleAsync(message, ContextFrom(sibling), CancellationToken.None);
+
+        Assert.Equal(FacilityStatus.Provisioning, (await _context.Facilities.SingleAsync()).Status);
+    }
+
+    private async Task<Facility> AddFacilityAsync(FacilityStatus status)
+    {
+        var facility = new Facility
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            Name = "Subject Clinic",
+            FacilityType = FacilityType.Clinic,
+            Status = status,
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.Facilities.Add(facility);
+        await _context.SaveChangesAsync();
+        return facility;
+    }
+
+    private InteropMessageContext Report(Facility facility) =>
+        ContextFrom(Party.ForFacility(facility.TenantId.ToString(), facility.Id.ToString(), facility.FacilityType));
+
+    private static InteropMessageContext ContextFrom(Party from) =>
+        new(InteropEnvelope.Create(InteropTypes.FacilityProvisioned, from, Party.Portal, Guid.NewGuid(), new FacilityProvisionedEvent()));
 }

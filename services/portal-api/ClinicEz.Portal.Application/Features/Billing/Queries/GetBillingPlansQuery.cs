@@ -1,5 +1,6 @@
 using MediatR;
 using ClinicEz.Portal.Application.Interfaces;
+using ClinicEz.Portal.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using System.Collections.Generic;
 using System.Linq;
@@ -16,7 +17,10 @@ public record BillingPlanDto(
     object PriceAnnually,
     List<string> Features,
     bool Highlighted,
-    bool RequiresCheckout
+    bool RequiresCheckout,
+    int Rank,
+    Dictionary<string, long> Limits,
+    List<string> EnabledFeatures
 );
 
 public class GetBillingPlansQuery : IRequest<List<BillingPlanDto>> { }
@@ -25,9 +29,10 @@ public class GetBillingPlansQueryHandler(IApplicationDbContext context) : IReque
 {
     public async Task<List<BillingPlanDto>> Handle(GetBillingPlansQuery request, CancellationToken cancellationToken)
     {
-        var plans = await context.SubscriptionPlans
+        var plans = await context.Plans
             .Include(p => p.Features)
-            .OrderBy(p => p.PriceMonthly == 0 ? 999999 : p.PriceMonthly)
+            .Include(p => p.Entitlements)
+            .OrderBy(p => p.Rank)
             .ToListAsync(cancellationToken);
 
         return plans.Select(p => new BillingPlanDto(
@@ -38,7 +43,15 @@ public class GetBillingPlansQueryHandler(IApplicationDbContext context) : IReque
             p.PriceAnnually == 0 ? "Custom" : p.PriceAnnually,
             p.Features.OrderBy(f => f.DisplayOrder).Select(f => f.Name).ToList(),
             p.IsHighlighted,
-            p.RequiresCheckout
+            p.RequiresCheckout,
+            p.Rank,
+            p.Entitlements
+                .Where(e => e.Kind == EntitlementKind.Limit)
+                .ToDictionary(e => e.Key, e => e.Limit ?? PlanSeedOptions.UnlimitedMarker),
+            p.Entitlements
+                .Where(e => e.Kind == EntitlementKind.Feature && e.Enabled == true)
+                .Select(e => e.Key)
+                .ToList()
         )).ToList();
     }
 }

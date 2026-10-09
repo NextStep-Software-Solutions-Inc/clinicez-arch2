@@ -118,9 +118,12 @@ KWkfi0XuuzOnWSELSo2NW474YcOHecbnhfLn+hHQeQmfFyGoOqkXUSbudQ==
         // Expiration check
         if (payload.ExpiresAtUtc.HasValue && payload.ExpiresAtUtc.Value < DateTime.UtcNow)
         {
+            var graceUntil = payload.ReadOnlyGraceUntil ?? payload.ExpiresAtUtc.Value.AddDays(payload.GraceDays);
             return LicenseValidationResult.Expired(
                 payload,
-                $"License expired on {payload.ExpiresAtUtc.Value:yyyy-MM-dd HH:mm:ss} UTC. The facility is operating in Grace Read-Only mode.");
+                $"License expired on {payload.ExpiresAtUtc.Value:yyyy-MM-dd HH:mm:ss} UTC. The facility is operating in Grace Read-Only mode.",
+                isReadOnlyGrace: graceUntil >= DateTime.UtcNow,
+                readOnlyGraceUntilUtc: graceUntil);
         }
 
         return LicenseValidationResult.Success(payload);

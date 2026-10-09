@@ -1,11 +1,14 @@
+using ClinicEz.Portal.Application.Features.Entitlements;
 using ClinicEz.Portal.Application.Features.Admin.Queries;
+using ClinicEz.Portal.Application.Features.Hub;
 using ClinicEz.Portal.Application.Features.Staff.Commands;
 using ClinicEz.Portal.Application.Features.Workspace;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Portal.Infrastructure.Persistence;
+using ClinicEz.Portal.Tests.Support;
+using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Common;
-using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Moq;
@@ -23,17 +26,15 @@ public class WorkspaceSecurityComplianceTests : IDisposable
     private const string Slug = "metro-clinic";
     private static readonly WorkspaceActor Actor = new("clerk_owner_111", "Juan Dela Cruz", "Owner");
 
-    private readonly Mock<IPublishEndpoint> _publisher = new();
-    private readonly Mock<ITenantFeatureGuard> _guard = new();
+    private readonly IWorkspaceProfilePublisher _publisher;
+    private readonly Mock<IEntitlementGuard> _guard = new();
     private readonly ApplicationDbContext _context;
     private readonly Guid _tenantId = Guid.NewGuid();
 
     public WorkspaceSecurityComplianceTests()
     {
-        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .Options;
-        _context = new ApplicationDbContext(options);
+        _context = TestSupport.NewContext();
+        _publisher = TestSupport.ProfilePublisher(_context);
         _context.Tenants.Add(new Tenant
         {
             Id = _tenantId,
@@ -139,7 +140,7 @@ public class WorkspaceSecurityComplianceTests : IDisposable
     public async Task Invite_WithAllowList_RejectsOtherDomains_AndAcceptsListed()
     {
         await new UpdateWorkspaceSecurityCommandHandler(_context).Handle(Security(false, 0, "metro.ph"), CancellationToken.None);
-        var handler = new InviteStaffMemberCommandHandler(_context, _guard.Object);
+        var handler = new InviteStaffMemberCommandHandler(_context, _guard.Object, TestSupport.InvitationNotifier(_context), TimeProvider.System);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             handler.Handle(new InviteStaffMemberCommand(Slug, "nurse@gmail.com", "Nurse Joy", "Viewer"), CancellationToken.None));
@@ -152,7 +153,7 @@ public class WorkspaceSecurityComplianceTests : IDisposable
     [Fact]
     public async Task Invite_WithoutAllowList_AcceptsAnyDomain()
     {
-        var handler = new InviteStaffMemberCommandHandler(_context, _guard.Object);
+        var handler = new InviteStaffMemberCommandHandler(_context, _guard.Object, TestSupport.InvitationNotifier(_context), TimeProvider.System);
 
         var ok = await handler.Handle(new InviteStaffMemberCommand(Slug, "nurse@gmail.com", "Nurse Joy", "Viewer"), CancellationToken.None);
 
@@ -162,37 +163,37 @@ public class WorkspaceSecurityComplianceTests : IDisposable
     [Fact]
     public async Task AcceptInvitation_AfterAllowListTightened_IsRejected_AndExistingMembersUntouched()
     {
-        var invited = new StaffMember
+        var invited = new WorkspaceMember
         {
             TenantId = _tenantId,
             Email = "nurse@gmail.com",
             FullName = "Nurse Joy",
-            Status = "PendingInvitation",
+            Status = MemberStatus.Invited,
             InvitationToken = "tok123",
             InvitationExpiresAt = DateTime.UtcNow.AddDays(1)
         };
-        var existing = new StaffMember { TenantId = _tenantId, Email = "doc@gmail.com", FullName = "Doc", Status = "Active", UserId = "u1" };
-        _context.StaffMembers.AddRange(invited, existing);
+        var existing = new WorkspaceMember { TenantId = _tenantId, Email = "doc@gmail.com", FullName = "Doc", Status = MemberStatus.Active, UserId = "u1" };
+        _context.WorkspaceMembers.AddRange(invited, existing);
         await _context.SaveChangesAsync();
 
         await new UpdateWorkspaceSecurityCommandHandler(_context).Handle(Security(false, 0, "metro.ph"), CancellationToken.None);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            new AcceptInvitationCommandHandler(_context).Handle(new AcceptInvitationCommand("tok123", "u2", "nurse@gmail.com"), CancellationToken.None));
+            new AcceptInvitationCommandHandler(_context, TestSupport.NoClerkSync(), TimeProvider.System).Handle(new AcceptInvitationCommand("tok123", "u2", "nurse@gmail.com"), CancellationToken.None));
 
-        Assert.Equal("PendingInvitation", (await _context.StaffMembers.SingleAsync(s => s.Id == invited.Id)).Status);
-        Assert.Equal("Active", (await _context.StaffMembers.SingleAsync(s => s.Id == existing.Id)).Status);
+        Assert.Equal(MemberStatus.Invited, (await _context.WorkspaceMembers.SingleAsync(s => s.Id == invited.Id)).Status);
+        Assert.Equal(MemberStatus.Active, (await _context.WorkspaceMembers.SingleAsync(s => s.Id == existing.Id)).Status);
     }
 
     [Fact]
     public async Task AcceptInvitation_RejectsAccountEmailOutsideAllowList()
     {
-        _context.StaffMembers.Add(new StaffMember
+        _context.WorkspaceMembers.Add(new WorkspaceMember
         {
             TenantId = _tenantId,
             Email = "nurse@metro.ph",
             FullName = "Nurse Joy",
-            Status = "PendingInvitation",
+            Status = MemberStatus.Invited,
             InvitationToken = "tok456",
             InvitationExpiresAt = DateTime.UtcNow.AddDays(1)
         });
@@ -200,9 +201,9 @@ public class WorkspaceSecurityComplianceTests : IDisposable
         await new UpdateWorkspaceSecurityCommandHandler(_context).Handle(Security(false, 0, "metro.ph"), CancellationToken.None);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            new AcceptInvitationCommandHandler(_context).Handle(new AcceptInvitationCommand("tok456", "u3", "someone@gmail.com"), CancellationToken.None));
+            new AcceptInvitationCommandHandler(_context, TestSupport.NoClerkSync(), TimeProvider.System).Handle(new AcceptInvitationCommand("tok456", "u3", "someone@gmail.com"), CancellationToken.None));
 
-        var result = await new AcceptInvitationCommandHandler(_context)
+        var result = await new AcceptInvitationCommandHandler(_context, TestSupport.NoClerkSync(), TimeProvider.System)
             .Handle(new AcceptInvitationCommand("tok456", "u3", "nurse@metro.ph"), CancellationToken.None);
         Assert.Equal(Slug, result.TenantSlug);
     }
@@ -228,7 +229,8 @@ public class WorkspaceSecurityComplianceTests : IDisposable
     [Fact]
     public async Task Compliance_Update_PersistsBumpsVersionPublishesAndAudits()
     {
-        var handler = new UpdateWorkspaceComplianceCommandHandler(_context, _publisher.Object);
+        await AddFacilityAsync();
+        var handler = new UpdateWorkspaceComplianceCommandHandler(_context, _publisher);
 
         var result = await handler.Handle(Compliance(email: "DPO@Metro.ph"), CancellationToken.None);
 
@@ -237,20 +239,33 @@ public class WorkspaceSecurityComplianceTests : IDisposable
         Assert.Equal("https://metro.ph/privacy", result.PrivacyNoticeUrl);
         Assert.Equal(2, (await _context.WorkspaceSettings.SingleAsync()).ProfileVersion);
         Assert.Equal("compliance", (await _context.WorkspaceAuditEntries.SingleAsync()).Section);
-        _publisher.Verify(p => p.Publish(It.IsAny<ClinicEz.Shared.Common.WorkspaceProfileUpdatedEvent>(), It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Single(TestSupport.Outbox(_context, InteropTypes.WorkspaceProfileUpdated));
     }
 
     [Fact]
     public async Task Compliance_Unchanged_DoesNotBumpOrPublish()
     {
-        var handler = new UpdateWorkspaceComplianceCommandHandler(_context, _publisher.Object);
+        await AddFacilityAsync();
+        var handler = new UpdateWorkspaceComplianceCommandHandler(_context, _publisher);
         await handler.Handle(Compliance(), CancellationToken.None);
-        _publisher.Invocations.Clear();
 
         await handler.Handle(Compliance(), CancellationToken.None);
 
         Assert.Equal(2, (await _context.WorkspaceSettings.SingleAsync()).ProfileVersion);
-        _publisher.Verify(p => p.Publish(It.IsAny<ClinicEz.Shared.Common.WorkspaceProfileUpdatedEvent>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Single(TestSupport.Outbox(_context, InteropTypes.WorkspaceProfileUpdated));
+    }
+
+    private async Task AddFacilityAsync()
+    {
+        _context.Facilities.Add(new Facility
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            Name = "Metro Clinic Main",
+            FacilityType = FacilityType.Clinic,
+            Status = FacilityStatus.Active
+        });
+        await _context.SaveChangesAsync();
     }
 
     [Theory]
@@ -271,7 +286,7 @@ public class WorkspaceSecurityComplianceTests : IDisposable
     [Fact]
     public async Task Profile_ExposesDpoAndPrivacyNotice()
     {
-        await new UpdateWorkspaceComplianceCommandHandler(_context, _publisher.Object).Handle(Compliance(), CancellationToken.None);
+        await new UpdateWorkspaceComplianceCommandHandler(_context, _publisher).Handle(Compliance(), CancellationToken.None);
 
         var profile = await new GetWorkspaceProfileQueryHandler(_context).Handle(new GetWorkspaceProfileQuery(Slug), CancellationToken.None);
 
@@ -284,7 +299,7 @@ public class WorkspaceSecurityComplianceTests : IDisposable
     public async Task SettingsDto_IncludesSecurityAndCompliance()
     {
         await new UpdateWorkspaceSecurityCommandHandler(_context).Handle(Security(true, 20, "metro.ph"), CancellationToken.None);
-        await new UpdateWorkspaceComplianceCommandHandler(_context, _publisher.Object).Handle(Compliance(), CancellationToken.None);
+        await new UpdateWorkspaceComplianceCommandHandler(_context, _publisher).Handle(Compliance(), CancellationToken.None);
 
         var dto = await new GetWorkspaceSettingsQueryHandler(_context).Handle(new GetWorkspaceSettingsQuery(Slug), CancellationToken.None);
 
@@ -315,7 +330,7 @@ public class WorkspaceSecurityComplianceTests : IDisposable
     public async Task Deployment_OnPremise_StoresNormalizedUrl_AndAudits()
     {
         var facility = SeedFacility();
-        var handler = new UpdateFacilityDeploymentCommandHandler(_context);
+        var handler = new UpdateFacilityDeploymentCommandHandler(_context, new Mock<IHubOnboardingService>().Object);
 
         var result = await handler.Handle(
             new UpdateFacilityDeploymentCommand(Slug, Actor, facility.Id, FacilityDeploymentMode.OnPremise, " https://lab.hospital.local/ "),
@@ -330,7 +345,7 @@ public class WorkspaceSecurityComplianceTests : IDisposable
     public async Task Deployment_BackToSharedCloud_ClearsUrl()
     {
         var facility = SeedFacility();
-        var handler = new UpdateFacilityDeploymentCommandHandler(_context);
+        var handler = new UpdateFacilityDeploymentCommandHandler(_context, new Mock<IHubOnboardingService>().Object);
         await handler.Handle(new UpdateFacilityDeploymentCommand(Slug, Actor, facility.Id, FacilityDeploymentMode.OnPremise, "https://lab.hospital.local"), CancellationToken.None);
 
         var result = await handler.Handle(new UpdateFacilityDeploymentCommand(Slug, Actor, facility.Id, FacilityDeploymentMode.SharedCloud, null), CancellationToken.None);
@@ -348,7 +363,7 @@ public class WorkspaceSecurityComplianceTests : IDisposable
         var foreign = SeedFacility(otherTenant, "Foreign Lab");
 
         await Assert.ThrowsAsync<ClinicEz.Shared.Exceptions.NotFoundException>(() =>
-            new UpdateFacilityDeploymentCommandHandler(_context).Handle(
+            new UpdateFacilityDeploymentCommandHandler(_context, new Mock<IHubOnboardingService>().Object).Handle(
                 new UpdateFacilityDeploymentCommand(Slug, Actor, foreign.Id, FacilityDeploymentMode.OnPremise, "https://lab.hospital.local"),
                 CancellationToken.None));
     }
@@ -390,7 +405,7 @@ public class WorkspaceSecurityComplianceTests : IDisposable
     public async Task GetFacilities_ReturnsDeploymentFields_AndOverrideConsoleUrl()
     {
         var facility = SeedFacility();
-        await new UpdateFacilityDeploymentCommandHandler(_context).Handle(
+        await new UpdateFacilityDeploymentCommandHandler(_context, new Mock<IHubOnboardingService>().Object).Handle(
             new UpdateFacilityDeploymentCommand(Slug, Actor, facility.Id, FacilityDeploymentMode.OnPremise, "https://lab.hospital.local"),
             CancellationToken.None);
 

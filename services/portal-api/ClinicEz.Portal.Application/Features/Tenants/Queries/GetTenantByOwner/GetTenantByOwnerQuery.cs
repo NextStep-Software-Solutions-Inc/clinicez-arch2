@@ -1,4 +1,5 @@
 using ClinicEz.Portal.Application.Interfaces;
+using ClinicEz.Portal.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using System.Threading;
@@ -33,13 +34,13 @@ public class GetTenantByOwnerQueryHandler(IApplicationDbContext context) : IRequ
                 return new TenantDto(ownedTenant.TenantSlug, ownedTenant.Name, ownedTenant.TenantType, "Owner", StatusOf(ownedTenant, "Active"));
             }
 
-            var staffMember = await context.StaffMembers
-                .Include(s => s.Tenant)
-                .FirstOrDefaultAsync(s => s.UserId == request.OwnerId && s.Status == "Active" && (s.Tenant.TenantSlug.ToLower() == slugLower || s.TenantId.ToString() == slugLower), cancellationToken);
+            var staffMember = await context.WorkspaceMembers
+                .Include(m => m.Tenant)
+                .FirstOrDefaultAsync(m => m.UserId == request.OwnerId && m.Status == MemberStatus.Active && (m.Tenant.TenantSlug.ToLower() == slugLower || m.TenantId.ToString() == slugLower), cancellationToken);
 
             if (staffMember != null && staffMember.Tenant != null)
             {
-                return new TenantDto(staffMember.Tenant.TenantSlug, staffMember.Tenant.Name, staffMember.Tenant.TenantType, staffMember.Role, StatusOf(staffMember.Tenant, staffMember.Status));
+                return new TenantDto(staffMember.Tenant.TenantSlug, staffMember.Tenant.Name, staffMember.Tenant.TenantType, staffMember.Role.ToString(), StatusOf(staffMember.Tenant, "Active"));
             }
 
             return null;
@@ -54,14 +55,14 @@ public class GetTenantByOwnerQueryHandler(IApplicationDbContext context) : IRequ
             return new TenantDto(tenant.TenantSlug, tenant.Name, tenant.TenantType, "Owner", StatusOf(tenant, "Active"));
         }
 
-        // 3. Fallback: check any active staff membership for user
-        var anyStaff = await context.StaffMembers
-            .Include(s => s.Tenant)
-            .FirstOrDefaultAsync(s => s.UserId == request.OwnerId && s.Status == "Active", cancellationToken);
+        // 3. Fallback: check any active membership for user
+        var anyStaff = await context.WorkspaceMembers
+            .Include(m => m.Tenant)
+            .FirstOrDefaultAsync(m => m.UserId == request.OwnerId && m.Status == MemberStatus.Active, cancellationToken);
 
         if (anyStaff != null && anyStaff.Tenant != null)
         {
-            return new TenantDto(anyStaff.Tenant.TenantSlug, anyStaff.Tenant.Name, anyStaff.Tenant.TenantType, anyStaff.Role, StatusOf(anyStaff.Tenant, anyStaff.Status));
+            return new TenantDto(anyStaff.Tenant.TenantSlug, anyStaff.Tenant.Name, anyStaff.Tenant.TenantType, anyStaff.Role.ToString(), StatusOf(anyStaff.Tenant, "Active"));
         }
 
         return null;

@@ -29,8 +29,7 @@ public class LookupTenantEndpointTests : IDisposable
             OwnerId = "clerk_owner_tenant1",
             Email = "owner@tenant1.ph",
             FirstName = "First",
-            LastName = "User",
-            SubscriptionStatus = "Active"
+            LastName = "User"
         };
         _context.Tenants.Add(tenant);
         _context.SaveChanges();

@@ -5,7 +5,6 @@ using ClinicEz.Portal.Infrastructure.Persistence;
 using ClinicEz.Portal.Infrastructure.Webhooks;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
-using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using System;
@@ -384,27 +383,18 @@ public class WorkspaceIntegrationsTests : IDisposable
     }
 
     [Fact]
-    public async Task FacilityCreatedConsumer_ForwardsFacilityMetadata_ButNeverTheLicense()
+    public async Task Dispatcher_Stage_AddsDeliveriesWithoutSaving_SoTheCallersTransactionOwnsThem()
     {
         await CreateHook("https://a.example.com/in", IntegrationCatalog.EventFacilityCreated);
-        var consume = new Mock<ConsumeContext<FacilityCreatedEvent>>();
-        consume.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
-        consume.SetupGet(c => c.Message).Returns(new FacilityCreatedEvent
-        {
-            TenantId = _tenantId.ToString(),
-            TenantSlug = Slug,
-            ResourceId = Guid.NewGuid(),
-            Name = "North Clinic",
-            Slug = "north-clinic",
-            PlanTier = "Community",
-            LicenseToken = "SUPER-SECRET-LICENSE-TOKEN"
-        });
 
-        await new FacilityCreatedWebhookConsumer(new WebhookDispatcher(_context)).Consume(consume.Object);
+        var staged = await new WebhookDispatcher(_context).StageAsync(
+            _tenantId, Slug, IntegrationCatalog.EventFacilityCreated, new { name = "North Clinic" }, CancellationToken.None);
 
-        var delivery = await _context.WebhookDeliveries.SingleAsync();
-        Assert.Contains("north-clinic", delivery.Payload);
-        Assert.DoesNotContain("SUPER-SECRET-LICENSE-TOKEN", delivery.Payload);
+        Assert.Equal(1, staged);
+        Assert.Empty(_context.WebhookDeliveries.AsNoTracking());
+
+        await _context.SaveChangesAsync();
+        Assert.Single(_context.WebhookDeliveries.AsNoTracking());
     }
 
     // ---------- delivery job ----------

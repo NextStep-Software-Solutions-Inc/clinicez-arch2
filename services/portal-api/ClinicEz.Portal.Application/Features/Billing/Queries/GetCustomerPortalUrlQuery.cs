@@ -10,7 +10,7 @@ public class GetCustomerPortalUrlQuery : IRequest<string>
     public string TenantId { get; set; } = string.Empty;
 }
 
-public class GetCustomerPortalUrlQueryHandler(IXenditBillingService billingService)
+public class GetCustomerPortalUrlQueryHandler(IBillingProvider billingService)
     : IRequestHandler<GetCustomerPortalUrlQuery, string>
 {
     public async Task<string> Handle(GetCustomerPortalUrlQuery request, CancellationToken cancellationToken)

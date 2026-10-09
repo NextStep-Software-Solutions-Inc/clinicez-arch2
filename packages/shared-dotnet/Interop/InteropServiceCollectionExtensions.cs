@@ -53,6 +53,14 @@ public static class InteropServiceCollectionExtensions
                 ? new InProcessHubClient(sp.GetRequiredService<InProcessHub>())
                 : new HubHttpClient(sp.GetRequiredService<IHttpClientFactory>().CreateClient(HubHttpClientName), options);
         });
+        services.TryAddSingleton<InProcessHubClaimsClient>();
+        services.TryAddScoped<IHubClaimsClient>(sp =>
+        {
+            var options = sp.GetRequiredService<IOptions<InteropOptions>>();
+            return options.Value.IsInProcess
+                ? sp.GetRequiredService<InProcessHubClaimsClient>()
+                : new HubClaimsHttpClient(sp.GetRequiredService<IHttpClientFactory>().CreateClient(HubHttpClientName), options);
+        });
 
         services.TryAddSingleton<InteropRelayService>();
         services.TryAddSingleton<InteropInboxPollerService>();

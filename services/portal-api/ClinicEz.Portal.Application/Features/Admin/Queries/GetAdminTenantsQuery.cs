@@ -1,5 +1,7 @@
 using MediatR;
+using ClinicEz.Portal.Application.Features.Billing;
 using ClinicEz.Portal.Application.Interfaces;
+using ClinicEz.Portal.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
@@ -36,15 +38,15 @@ public class GetAdminTenantsQueryHandler(IApplicationDbContext context) : IReque
         var tenants = await context.Tenants
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync(cancellationToken);
+        var subscriptions = await context.Subscriptions
+            .AsNoTracking()
+            .Include(s => s.Plan)
+            .ToDictionaryAsync(s => s.TenantId, cancellationToken);
 
         var result = new List<AdminTenantResponseDto>();
         foreach (var t in tenants)
         {
-            var latestInvoice = await context.BillingInvoices
-                .Where(i => i.TenantId == t.Id)
-                .OrderByDescending(i => i.CreatedAt)
-                .FirstOrDefaultAsync(cancellationToken);
-
+            var subscription = subscriptions.GetValueOrDefault(t.Id);
             result.Add(new AdminTenantResponseDto(
                 t.Id,
                 t.Name,
@@ -53,9 +55,9 @@ public class GetAdminTenantsQueryHandler(IApplicationDbContext context) : IReque
                 $"{t.FirstName} {t.LastName}".Trim(),
                 t.Email,
                 t.CreatedAt,
-                t.SubscriptionStatus,
-                t.SubscriptionPlanId ?? "None",
-                latestInvoice?.IsAnnual ?? false,
+                SubscriptionWire.Status(subscription?.Status ?? SubscriptionStatus.Trialing),
+                subscription?.Plan.Slug ?? SubscriptionWire.NoPlan,
+                subscription?.IsAnnual ?? false,
                 t.FacilitiesCount,
                 t.StaffAccountsCount,
                 t.ActivePatientRecordsCount,

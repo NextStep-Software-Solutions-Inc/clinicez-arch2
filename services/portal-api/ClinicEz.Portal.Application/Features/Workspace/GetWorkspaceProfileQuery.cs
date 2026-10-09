@@ -30,6 +30,23 @@ public record WorkspaceProfileDto(
 
 public record GetWorkspaceProfileQuery(string TenantSlug) : IRequest<WorkspaceProfileDto?>;
 
+public static class WorkspaceProfileMapper
+{
+    public static WorkspaceProfileDto From(Tenant tenant, WorkspaceSettings settings) => new(
+        tenant.TenantSlug,
+        settings.ProfileVersion,
+        settings.BrandName ?? tenant.Name,
+        settings.LogoUrl,
+        settings.AccentColorHex,
+        settings.TimeZoneId,
+        settings.Locale,
+        settings.DateFormat,
+        settings.CurrencyCode,
+        settings.DpoName,
+        settings.DpoEmail,
+        settings.PrivacyNoticeUrl);
+}
+
 public class GetWorkspaceProfileQueryHandler(IApplicationDbContext context)
     : IRequestHandler<GetWorkspaceProfileQuery, WorkspaceProfileDto?>
 {
@@ -46,18 +63,6 @@ public class GetWorkspaceProfileQueryHandler(IApplicationDbContext context)
             .FirstOrDefaultAsync(s => s.TenantId == tenant.Id, cancellationToken)
             ?? new WorkspaceSettings { TenantId = tenant.Id };
 
-        return new WorkspaceProfileDto(
-            tenant.TenantSlug,
-            settings.ProfileVersion,
-            settings.BrandName ?? tenant.Name,
-            settings.LogoUrl,
-            settings.AccentColorHex,
-            settings.TimeZoneId,
-            settings.Locale,
-            settings.DateFormat,
-            settings.CurrencyCode,
-            settings.DpoName,
-            settings.DpoEmail,
-            settings.PrivacyNoticeUrl);
+        return WorkspaceProfileMapper.From(tenant, settings);
     }
 }

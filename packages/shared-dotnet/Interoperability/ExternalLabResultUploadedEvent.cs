@@ -9,6 +9,11 @@ public record ExternalLabResultUploadedEvent
     public string AccessionNumber { get; init; } = string.Empty;
     public Guid PatientId { get; init; }
     public string UploadedBy { get; init; } = "Patient"; // Patient, ExternalLab, ClinicStaff
+    /// <summary>Set when the portal relays an anonymous external-lab upload: the clinic validates it against its hashed UploadGrant. Format: <c>{facilityId:N}.{random}</c>.</summary>
+    public string? UploadToken { get; init; }
+    public UploaderKind? UploaderKind { get; init; }
+    public string? FileName { get; init; }
+    public string? ContentType { get; init; }
     public string? ExternalLabName { get; init; }
     public string DocumentType { get; init; } = "Photo"; // Photo, PDF
     public string? DocumentUrl { get; init; }

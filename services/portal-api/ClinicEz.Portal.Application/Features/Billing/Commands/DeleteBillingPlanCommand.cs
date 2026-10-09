@@ -16,11 +16,16 @@ public class DeleteBillingPlanCommandHandler(IApplicationDbContext context) : IR
 {
     public async Task<bool> Handle(DeleteBillingPlanCommand request, CancellationToken cancellationToken)
     {
-        var plan = await context.SubscriptionPlans.FindAsync(new object[] { request.Id }, cancellationToken);
+        var plan = await context.Plans.FindAsync(new object[] { request.Id }, cancellationToken);
 
         if (plan == null) return false;
 
-        context.SubscriptionPlans.Remove(plan);
+        if (await context.Subscriptions.AnyAsync(s => s.PlanId == plan.Id, cancellationToken))
+        {
+            throw new InvalidOperationException("Plan is in use by a workspace subscription and cannot be deleted.");
+        }
+
+        context.Plans.Remove(plan);
         await context.SaveChangesAsync(cancellationToken);
         return true;
     }

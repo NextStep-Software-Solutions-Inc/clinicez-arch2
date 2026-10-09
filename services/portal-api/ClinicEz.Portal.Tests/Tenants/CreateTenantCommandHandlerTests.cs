@@ -1,130 +1,100 @@
+using ClinicEz.Portal.Application.Common;
+using ClinicEz.Portal.Application.Features.Entitlements;
+using ClinicEz.Portal.Application.Features.Licensing;
 using ClinicEz.Portal.Application.Features.Tenants.Commands.CreateTenant;
+using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
-using ClinicEz.Portal.Domain.Interfaces;
+using ClinicEz.Portal.Infrastructure.Persistence;
+using ClinicEz.Portal.Tests.Support;
 using FluentValidation;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Moq;
 using System;
-using System.Linq.Expressions;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 
 namespace ClinicEz.Portal.Tests.Tenants;
 
-public class CreateTenantCommandHandlerTests
+public class CreateTenantCommandHandlerTests : IDisposable
 {
-    private readonly Mock<IUnitOfWork> _unitOfWorkMock;
-    private readonly Mock<ITenantRepository> _tenantRepoMock;
+    private readonly ApplicationDbContext _context = TestSupport.NewContext();
+    private readonly Mock<IClerkMetadataSync> _clerk = new();
     private readonly CreateTenantCommandHandler _handler;
 
     public CreateTenantCommandHandlerTests()
     {
-        _unitOfWorkMock = new Mock<IUnitOfWork>();
-        _tenantRepoMock = new Mock<ITenantRepository>();
-
-        _unitOfWorkMock.Setup(u => u.TenantRepository).Returns(_tenantRepoMock.Object);
-        _handler = new CreateTenantCommandHandler(_unitOfWorkMock.Object);
+        TestSupport.Entitlements(_context);
+        var subscriptions = new SubscriptionService(
+            _context,
+            Options.Create(TestSupport.Plans()),
+            TimeProvider.System,
+            new Mock<IEntitlementsPublisher>().Object);
+        _handler = new CreateTenantCommandHandler(_context, TestSupport.OwnershipPolicy(_context), subscriptions, _clerk.Object, TimeProvider.System);
     }
 
-    [Fact]
-    public async Task Handle_ValidRequest_CreatesTenantSuccessfully()
+    public void Dispose()
     {
-        // Arrange
-        var command = new CreateTenantCommand(
-            OwnerId: "user_clerk_123",
-            Name: "Metro Health Practice",
-            TenantSlug: "metro-health",
-            TenantType: "Workplace",
-            FirstName: "Jane",
-            LastName: "Doe",
-            Email: "jane@metro.com"
-        );
+        _context.Database.EnsureDeleted();
+        _context.Dispose();
+    }
 
-        // No existing owner tenant, no existing slug
-        _tenantRepoMock
-            .Setup(r => r.FindAsync(It.IsAny<Expression<Func<Tenant, bool>>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Tenant?)null);
+    private static CreateTenantCommand Command(string ownerId = "user_clerk_123", string slug = "metro-health") =>
+        new(OwnerId: ownerId, Name: "Metro Health Practice", TenantSlug: slug, TenantType: "Workplace", FirstName: "Jane", LastName: "Doe", Email: "Jane@Metro.com");
 
-        // Act
-        var result = await _handler.Handle(command, CancellationToken.None);
+    [Fact]
+    public async Task Handle_ValidRequest_CreatesTenantOwnerMembershipAndTrial()
+    {
+        var result = await _handler.Handle(Command(), CancellationToken.None);
 
-        // Assert
-        Assert.NotNull(result);
         Assert.Equal("metro-health", result.TenantSlug);
         Assert.Equal("Metro Health Practice", result.Name);
         Assert.Equal("Workplace", result.TenantType);
 
-        _tenantRepoMock.Verify(r => r.AddAsync(It.Is<Tenant>(t => 
-            t.OwnerId == "user_clerk_123" && 
-            t.Name == "Metro Health Practice" &&
-            t.TenantSlug == "metro-health" &&
-            t.TenantType == "Workplace"
-        ), It.IsAny<CancellationToken>()), Times.Once);
+        var tenant = await _context.Tenants.SingleAsync();
+        Assert.Equal("user_clerk_123", tenant.OwnerId);
 
-        _unitOfWorkMock.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+        var owner = await _context.WorkspaceMembers.SingleAsync();
+        Assert.Equal(WorkspaceMemberRole.Owner, owner.Role);
+        Assert.Equal(MemberStatus.Active, owner.Status);
+        Assert.Equal("user_clerk_123", owner.UserId);
+        Assert.Equal("jane@metro.com", owner.Email);
+
+        var subscription = await _context.Subscriptions.SingleAsync();
+        Assert.Equal(tenant.Id, subscription.TenantId);
+        Assert.Equal(SubscriptionStatus.Trialing, subscription.Status);
     }
 
     [Fact]
-    public async Task Handle_UserAlreadyHasTenant_ReturnsExistingTenantIdempotently()
+    public async Task Handle_ValidRequest_MirrorsTheOwnershipIntoClerkMetadata()
     {
-        // Arrange
-        var existingTenant = new Tenant
-        {
-            OwnerId = "user_clerk_123",
-            Name = "Existing Workplace",
-            TenantSlug = "existing-workplace",
-            TenantType = "Workplace"
-        };
+        await _handler.Handle(Command(), CancellationToken.None);
 
-        var command = new CreateTenantCommand(
-            OwnerId: "user_clerk_123",
-            Name: "New Workplace Attempt",
-            TenantSlug: "new-workplace"
-        );
+        _clerk.Verify(c => c.SyncAsync("user_clerk_123", It.IsAny<CancellationToken>()), Times.Once);
+    }
 
-        _tenantRepoMock
-            .Setup(r => r.FindAsync(It.IsAny<Expression<Func<Tenant, bool>>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(existingTenant);
+    [Fact]
+    public async Task Handle_UserAlreadyOwnsAWorkspace_ThrowsCodedConflict_AndCreatesNothing()
+    {
+        await _handler.Handle(Command(), CancellationToken.None);
 
-        // Act
-        var result = await _handler.Handle(command, CancellationToken.None);
+        var ex = await Assert.ThrowsAsync<CodedConflictException>(() => _handler.Handle(Command(slug: "second-workplace"), CancellationToken.None));
 
-        // Assert
-        Assert.NotNull(result);
-        Assert.Equal("existing-workplace", result.TenantSlug);
-        Assert.Equal("Existing Workplace", result.Name);
-
-        _tenantRepoMock.Verify(r => r.AddAsync(It.IsAny<Tenant>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Equal(ConflictCodes.OwnerAlreadyHasWorkspace, ex.Code);
+        Assert.Single(_context.Tenants);
+        Assert.Single(_context.Subscriptions);
     }
 
     [Fact]
     public async Task Handle_SlugAlreadyTaken_ThrowsValidationException()
     {
-        // Arrange
-        var command = new CreateTenantCommand(
-            OwnerId: "user_clerk_456",
-            Name: "Another Practice",
-            TenantSlug: "taken-slug"
-        );
+        await _handler.Handle(Command(ownerId: "different_user", slug: "taken-slug"), CancellationToken.None);
 
-        var existingSlugTenant = new Tenant
-        {
-            OwnerId = "different_user",
-            Name = "Taken Workplace",
-            TenantSlug = "taken-slug"
-        };
-
-        // First call for OwnerId check returns null, second call for Slug check returns existing
-        _tenantRepoMock
-            .SetupSequence(r => r.FindAsync(It.IsAny<Expression<Func<Tenant, bool>>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Tenant?)null)
-            .ReturnsAsync(existingSlugTenant);
-
-        // Act & Assert
-        var ex = await Assert.ThrowsAsync<ValidationException>(() => 
-            _handler.Handle(command, CancellationToken.None));
+        var ex = await Assert.ThrowsAsync<ValidationException>(() => _handler.Handle(Command(ownerId: "user_clerk_456", slug: "TAKEN-slug"), CancellationToken.None));
 
         Assert.Contains("Workplace URL slug is already taken", ex.Message);
-        _tenantRepoMock.Verify(r => r.AddAsync(It.IsAny<Tenant>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Single(_context.Tenants);
     }
 }

@@ -157,6 +157,9 @@ using (var scope = app.Services.CreateScope())
         Console.WriteLine("[ClinicEz.Portal] Warning: Migration encountered an issue during startup; continuing application execution.");
     }
 
+    // The plan catalogue (Billing:Plans) is production data: seeded in every environment, creating only plans that are missing.
+    scope.ServiceProvider.GetRequiredService<ClinicEz.Portal.Infrastructure.Persistence.Seeders.PlanSeeder>().SeedAsync().GetAwaiter().GetResult();
+
     if (isDevelopment)
     {
         var seeders = scope.ServiceProvider.GetServices<IBaseSeeder>();
@@ -216,6 +219,20 @@ RecurringJob.AddOrUpdate<ClinicEz.Portal.Infrastructure.Webhooks.IWebhookDeliver
     "* * * * *"
 );
 
+// Facility licenses are short-lived: re-mint and re-send (entitlements.changed) those about to expire
+RecurringJob.AddOrUpdate<ClinicEz.Portal.Infrastructure.Services.IEntitlementRenewalJob>(
+    "facility-license-renewal",
+    job => job.RenewExpiringAsync(CancellationToken.None),
+    "0 * * * *"
+);
+
+// Once a workspace's subscription has lapsed past the read-only grace period its on-premise hub clients are revoked
+RecurringJob.AddOrUpdate<ClinicEz.Portal.Infrastructure.Services.IEntitlementRenewalJob>(
+    "lapsed-hub-client-revocation",
+    job => job.RevokeLapsedHubClientsAsync(CancellationToken.None),
+    "30 3 * * *"
+);
+
 // Support root /api/internal requests from internal microservices (e.g. philhealth-proxy)
 app.Use(async (context, next) =>
 {
@@ -229,6 +246,7 @@ app.Use(async (context, next) =>
 // IMPORTANT: Authentication MUST run before Authorization
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 // 5. Tell the app to use controllers
 app.MapApiEndpoints();

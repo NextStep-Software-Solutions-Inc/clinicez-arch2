@@ -1,31 +1,36 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Portal.Application.Features.Billing.Commands;
+using ClinicEz.Portal.Application.Features.Entitlements;
+using ClinicEz.Portal.Application.Features.Licensing;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Portal.Infrastructure.Persistence;
+using ClinicEz.Portal.Tests.Support;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using Moq;
 using Xunit;
 
 namespace ClinicEz.Portal.Tests.Xendit;
 
 public class ProcessXenditWebhookCommandHandlerTests : IDisposable
 {
-    private readonly ApplicationDbContext _context;
+    private readonly ApplicationDbContext _context = TestSupport.NewContext();
     private readonly ProcessXenditWebhookCommandHandler _sut;
 
     public ProcessXenditWebhookCommandHandlerTests()
     {
-        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
-            .Options;
-
-        _context = new ApplicationDbContext(options);
-        _context.Database.EnsureCreated();
-
-        _sut = new ProcessXenditWebhookCommandHandler(_context);
+        var subscriptions = new SubscriptionService(
+            _context,
+            Options.Create(TestSupport.Plans()),
+            TimeProvider.System,
+            new Mock<IEntitlementsPublisher>().Object);
+        _sut = new ProcessXenditWebhookCommandHandler(_context, subscriptions, TimeProvider.System, NullLogger<ProcessXenditWebhookCommandHandler>.Instance);
     }
 
     public void Dispose()
@@ -34,103 +39,102 @@ public class ProcessXenditWebhookCommandHandlerTests : IDisposable
         _context.Dispose();
     }
 
-    [Fact]
-    public async Task Handle_SubscriptionActive_UpdatesTenantStatus()
+    private async Task<(Tenant Tenant, Subscription Subscription)> SeedWorkspaceAsync(
+        string slug,
+        string planSlug,
+        SubscriptionStatus status,
+        string? customerId = null,
+        string? providerSubscriptionId = null)
     {
-        // Arrange
-        var tenant = new Tenant
-        {
-            Id = Guid.NewGuid(),
-            Name = "Test Workplace",
-            TenantSlug = "test-clinic",
-            Email = "test@clinic.com",
-            SubscriptionStatus = "TRIALING"
-        };
+        var tenant = new Tenant { Id = Guid.NewGuid(), Name = slug, TenantSlug = slug, Email = $"{slug}@clinic.com", OwnerId = $"owner-{slug}" };
         _context.Tenants.Add(tenant);
         await _context.SaveChangesAsync();
 
-        var payload = new XenditWebhookPayload
+        var subscription = await TestSupport.SeedSubscriptionAsync(_context, tenant.Id, status, planSlug, trialEndsAt: DateTime.UtcNow.AddDays(7));
+        subscription.ProviderCustomerId = customerId;
+        subscription.ProviderSubscriptionId = providerSubscriptionId;
+        await _context.SaveChangesAsync();
+        return (tenant, subscription);
+    }
+
+    private async Task<Subscription> ReloadAsync(Guid tenantId) =>
+        await _context.Subscriptions.AsNoTracking().Include(s => s.Plan).SingleAsync(s => s.TenantId == tenantId);
+
+    private static XenditWebhookPayload Payload(string eventName, params (string Key, object Value)[] data) =>
+        new()
         {
-            Event = "recurring.subscription.active",
-            Data = new Dictionary<string, JsonElement>
-            {
-                { "id", JsonSerializer.SerializeToElement("sub_active_123") },
-                {
-                    "metadata",
-                    JsonSerializer.SerializeToElement(new Dictionary<string, string>
-                    {
-                        { "tenantId", tenant.Id.ToString() },
-                        { "planSlug", "pro" }
-                    })
-                }
-            }
+            Event = eventName,
+            Data = data.ToDictionary(d => d.Key, d => JsonSerializer.SerializeToElement(d.Value))
         };
 
-        var command = new ProcessXenditWebhookCommand(payload);
+    [Fact]
+    public async Task Handle_SubscriptionActive_ActivatesTheWorkspaceSubscriptionOnTheMetadataPlan()
+    {
+        var (tenant, _) = await SeedWorkspaceAsync("test-clinic", "starter", SubscriptionStatus.Trialing);
+        var payload = Payload(
+            "recurring.subscription.active",
+            ("id", "sub_active_123"),
+            ("metadata", new Dictionary<string, string> { ["tenantId"] = tenant.Id.ToString(), ["planSlug"] = "pro" }));
 
-        // Act
-        var result = await _sut.Handle(command, CancellationToken.None);
+        var result = await _sut.Handle(new ProcessXenditWebhookCommand(payload), CancellationToken.None);
 
-        // Assert
         Assert.True(result);
-        var updatedTenant = await _context.Tenants.FindAsync(tenant.Id);
-        Assert.NotNull(updatedTenant);
-        Assert.Equal("ACTIVE", updatedTenant.SubscriptionStatus);
-        Assert.Equal("sub_active_123", updatedTenant.SubscriptionId);
-        Assert.Equal("pro", updatedTenant.SubscriptionPlanId);
+        var subscription = await ReloadAsync(tenant.Id);
+        Assert.Equal(SubscriptionStatus.Active, subscription.Status);
+        Assert.Equal("sub_active_123", subscription.ProviderSubscriptionId);
+        Assert.Equal("pro", subscription.Plan.Slug);
     }
 
     [Fact]
-    public async Task Handle_InvoicePaid_CreatesPaymentReceipt()
+    public async Task Handle_CallbackThatCannotBeTiedToAWorkspace_IsRejected_AndTouchesNothing()
     {
-        // Arrange
-        var tenant = new Tenant
-        {
-            Id = Guid.NewGuid(),
-            Name = "Paid Workplace",
-            TenantSlug = "paid-clinic",
-            XenditCustomerId = "cust_paid_999",
-            SubscriptionPlanId = "pro",
-            SubscriptionStatus = "TRIALING"
-        };
-        _context.Tenants.Add(tenant);
-        await _context.SaveChangesAsync();
+        var (tenant, _) = await SeedWorkspaceAsync("test-clinic", "starter", SubscriptionStatus.Trialing);
+        var payload = Payload("recurring.subscription.active", ("id", "sub_unknown_1"), ("customer_id", "cust_unknown"));
 
-        var payload = new XenditWebhookPayload
-        {
-            Event = "recurring.invoice.paid",
-            Data = new Dictionary<string, JsonElement>
-            {
-                { "id", JsonSerializer.SerializeToElement("inv_paid_456") },
-                { "amount", JsonSerializer.SerializeToElement(12900) },
-                { "currency", JsonSerializer.SerializeToElement("PHP") },
-                { "customer_id", JsonSerializer.SerializeToElement("cust_paid_999") },
-                { "external_id", JsonSerializer.SerializeToElement("sub-12345") }
-            }
-        };
+        var result = await _sut.Handle(new ProcessXenditWebhookCommand(payload), CancellationToken.None);
 
-        var command = new ProcessXenditWebhookCommand(payload);
+        Assert.False(result);
+        var subscription = await ReloadAsync(tenant.Id);
+        Assert.Equal(SubscriptionStatus.Trialing, subscription.Status);
+        Assert.Null(subscription.ProviderSubscriptionId);
+    }
 
-        // Act
-        var result = await _sut.Handle(command, CancellationToken.None);
+    [Fact]
+    public async Task Handle_SubscriptionCancelled_CancelsTheSubscriptionMatchedByProviderId()
+    {
+        var (tenant, _) = await SeedWorkspaceAsync("test-clinic", "pro", SubscriptionStatus.Active, providerSubscriptionId: "sub_cancel_1");
 
-        // Assert
+        var result = await _sut.Handle(new ProcessXenditWebhookCommand(Payload("recurring.subscription.cancelled", ("id", "sub_cancel_1"))), CancellationToken.None);
+
         Assert.True(result);
+        Assert.Equal(SubscriptionStatus.Cancelled, (await ReloadAsync(tenant.Id)).Status);
+    }
 
-        var updatedTenant = await _context.Tenants.FindAsync(tenant.Id);
-        Assert.NotNull(updatedTenant);
-        Assert.Equal("ACTIVE", updatedTenant.SubscriptionStatus);
+    [Fact]
+    public async Task Handle_InvoicePaid_CreatesPaymentReceipt_AndActivatesTheSubscription()
+    {
+        var (tenant, _) = await SeedWorkspaceAsync("paid-clinic", "pro", SubscriptionStatus.Trialing, customerId: "cust_paid_999");
+        var payload = Payload(
+            "recurring.invoice.paid",
+            ("id", "inv_paid_456"),
+            ("amount", 12900),
+            ("currency", "PHP"),
+            ("customer_id", "cust_paid_999"),
+            ("external_id", "sub-12345"));
 
-        var invoice = await _context.BillingInvoices.FirstOrDefaultAsync(i => i.TenantId == tenant.Id);
-        Assert.NotNull(invoice);
+        var result = await _sut.Handle(new ProcessXenditWebhookCommand(payload), CancellationToken.None);
+
+        Assert.True(result);
+        Assert.Equal(SubscriptionStatus.Active, (await ReloadAsync(tenant.Id)).Status);
+
+        var invoice = await _context.BillingInvoices.SingleAsync(i => i.TenantId == tenant.Id);
         Assert.Equal("inv_paid_456", invoice.XenditInvoiceId);
         Assert.Equal(12900, invoice.Amount);
         Assert.Equal("PHP", invoice.Currency);
         Assert.Equal("pro", invoice.PlanSlug);
         Assert.Equal("Paid", invoice.Status);
 
-        var receipt = await _context.PaymentReceipts.FirstOrDefaultAsync(r => r.TenantId == tenant.Id);
-        Assert.NotNull(receipt);
+        var receipt = await _context.PaymentReceipts.SingleAsync(r => r.TenantId == tenant.Id);
         Assert.Equal(invoice.Id, receipt.InvoiceId);
         Assert.Equal(12900, receipt.AmountPaid);
         Assert.Equal("PHP", receipt.Currency);
@@ -138,118 +142,75 @@ public class ProcessXenditWebhookCommandHandlerTests : IDisposable
     }
 
     [Fact]
-    public async Task Handle_InvoicePaid_WithPlanSlugMetadata_UpdatesSubscriptionPlanId()
+    public async Task Handle_InvoicePaid_Twice_RecordsOneReceipt()
     {
-        // Arrange
-        var tenant = new Tenant
-        {
-            Id = Guid.NewGuid(),
-            Name = "Upgrade Workplace",
-            TenantSlug = "upgrade-clinic",
-            XenditCustomerId = "cust_upgrade_111",
-            SubscriptionPlanId = "starter",
-            SubscriptionStatus = "TRIALING"
-        };
-        _context.Tenants.Add(tenant);
-        await _context.SaveChangesAsync();
+        var (tenant, _) = await SeedWorkspaceAsync("paid-clinic", "pro", SubscriptionStatus.Trialing, customerId: "cust_paid_999");
+        XenditWebhookPayload Paid() => Payload(
+            "recurring.invoice.paid",
+            ("id", "inv_paid_456"),
+            ("amount", 12900),
+            ("currency", "PHP"),
+            ("customer_id", "cust_paid_999"));
 
-        var payload = new XenditWebhookPayload
-        {
-            Event = "recurring.invoice.paid",
-            Data = new Dictionary<string, JsonElement>
-            {
-                { "id", JsonSerializer.SerializeToElement("inv_upgrade_789") },
-                { "amount", JsonSerializer.SerializeToElement(24900) },
-                { "currency", JsonSerializer.SerializeToElement("PHP") },
-                { "customer_id", JsonSerializer.SerializeToElement("cust_upgrade_111") },
-                { "external_id", JsonSerializer.SerializeToElement("checkout-" + tenant.Id.ToString()) },
-                {
-                    "metadata",
-                    JsonSerializer.SerializeToElement(new Dictionary<string, string>
-                    {
-                        { "tenantId", tenant.Id.ToString() },
-                        { "planSlug", "enterprise" }
-                    })
-                }
-            }
-        };
+        await _sut.Handle(new ProcessXenditWebhookCommand(Paid()), CancellationToken.None);
+        await _sut.Handle(new ProcessXenditWebhookCommand(Paid()), CancellationToken.None);
 
-        var command = new ProcessXenditWebhookCommand(payload);
+        Assert.Single(_context.BillingInvoices.Where(i => i.TenantId == tenant.Id));
+        Assert.Single(_context.PaymentReceipts.Where(r => r.TenantId == tenant.Id));
+    }
 
-        // Act
-        var result = await _sut.Handle(command, CancellationToken.None);
+    [Fact]
+    public async Task Handle_InvoicePaid_WithPlanSlugMetadata_MovesTheSubscriptionToThatPlan()
+    {
+        var (tenant, _) = await SeedWorkspaceAsync("upgrade-clinic", "starter", SubscriptionStatus.Trialing, customerId: "cust_upgrade_111");
+        var payload = Payload(
+            "recurring.invoice.paid",
+            ("id", "inv_upgrade_789"),
+            ("amount", 24900),
+            ("currency", "PHP"),
+            ("customer_id", "cust_upgrade_111"),
+            ("external_id", "checkout-" + tenant.Id),
+            ("metadata", new Dictionary<string, string> { ["tenantId"] = tenant.Id.ToString(), ["planSlug"] = "pro" }));
 
-        // Assert
+        var result = await _sut.Handle(new ProcessXenditWebhookCommand(payload), CancellationToken.None);
+
         Assert.True(result);
-        var updatedTenant = await _context.Tenants.FindAsync(tenant.Id);
-        Assert.NotNull(updatedTenant);
-        Assert.Equal("ACTIVE", updatedTenant.SubscriptionStatus);
-        Assert.Equal("enterprise", updatedTenant.SubscriptionPlanId);
+        var subscription = await ReloadAsync(tenant.Id);
+        Assert.Equal(SubscriptionStatus.Active, subscription.Status);
+        Assert.Equal("pro", subscription.Plan.Slug);
 
-        var invoice = await _context.BillingInvoices.FirstOrDefaultAsync(i => i.TenantId == tenant.Id);
-        Assert.NotNull(invoice);
-        Assert.Equal("enterprise", invoice.PlanSlug);
+        var invoice = await _context.BillingInvoices.SingleAsync(i => i.TenantId == tenant.Id);
+        Assert.Equal("pro", invoice.PlanSlug);
         Assert.Equal("Paid", invoice.Status);
 
-        var receipt = await _context.PaymentReceipts.FirstOrDefaultAsync(r => r.TenantId == tenant.Id);
-        Assert.NotNull(receipt);
+        var receipt = await _context.PaymentReceipts.SingleAsync(r => r.TenantId == tenant.Id);
         Assert.Equal(invoice.Id, receipt.InvoiceId);
         Assert.Equal(24900, receipt.AmountPaid);
     }
 
     [Fact]
-    public async Task Handle_CycleSucceeded_WithPlanSlugMetadata_UpdatesSubscriptionPlanId()
+    public async Task Handle_CycleSucceeded_WithPlanSlugMetadata_MovesTheSubscriptionToThatPlan()
     {
-        // Arrange
-        var tenant = new Tenant
-        {
-            Id = Guid.NewGuid(),
-            Name = "Cycle Workplace",
-            TenantSlug = "cycle-clinic",
-            SubscriptionId = "sub_cycle_888",
-            SubscriptionPlanId = "starter",
-            SubscriptionStatus = "ACTIVE"
-        };
-        _context.Tenants.Add(tenant);
-        await _context.SaveChangesAsync();
+        var (tenant, _) = await SeedWorkspaceAsync("cycle-clinic", "starter", SubscriptionStatus.Active, providerSubscriptionId: "sub_cycle_888");
+        var payload = Payload(
+            "recurring.cycle.succeeded",
+            ("subscription_id", "sub_cycle_888"),
+            ("id", "inv_cycle_555"),
+            ("amount", 12900),
+            ("currency", "PHP"),
+            ("metadata", new Dictionary<string, string> { ["planSlug"] = "pro" }));
 
-        var payload = new XenditWebhookPayload
-        {
-            Event = "recurring.cycle.succeeded",
-            Data = new Dictionary<string, JsonElement>
-            {
-                { "subscription_id", JsonSerializer.SerializeToElement("sub_cycle_888") },
-                { "id", JsonSerializer.SerializeToElement("inv_cycle_555") },
-                { "amount", JsonSerializer.SerializeToElement(12900) },
-                { "currency", JsonSerializer.SerializeToElement("PHP") },
-                {
-                    "metadata",
-                    JsonSerializer.SerializeToElement(new Dictionary<string, string>
-                    {
-                        { "planSlug", "pro" }
-                    })
-                }
-            }
-        };
+        var result = await _sut.Handle(new ProcessXenditWebhookCommand(payload), CancellationToken.None);
 
-        var command = new ProcessXenditWebhookCommand(payload);
-
-        // Act
-        var result = await _sut.Handle(command, CancellationToken.None);
-
-        // Assert
         Assert.True(result);
-        var updatedTenant = await _context.Tenants.FindAsync(tenant.Id);
-        Assert.NotNull(updatedTenant);
-        Assert.Equal("ACTIVE", updatedTenant.SubscriptionStatus);
-        Assert.Equal("pro", updatedTenant.SubscriptionPlanId);
+        var subscription = await ReloadAsync(tenant.Id);
+        Assert.Equal(SubscriptionStatus.Active, subscription.Status);
+        Assert.Equal("pro", subscription.Plan.Slug);
 
-        var invoice = await _context.BillingInvoices.FirstOrDefaultAsync(i => i.TenantId == tenant.Id);
-        Assert.NotNull(invoice);
+        var invoice = await _context.BillingInvoices.SingleAsync(i => i.TenantId == tenant.Id);
         Assert.Equal("pro", invoice.PlanSlug);
 
-        var receipt = await _context.PaymentReceipts.FirstOrDefaultAsync(r => r.TenantId == tenant.Id);
-        Assert.NotNull(receipt);
+        var receipt = await _context.PaymentReceipts.SingleAsync(r => r.TenantId == tenant.Id);
         Assert.Equal(invoice.Id, receipt.InvoiceId);
         Assert.Equal(12900, receipt.AmountPaid);
     }

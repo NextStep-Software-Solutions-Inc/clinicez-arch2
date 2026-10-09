@@ -1,10 +1,24 @@
 using Clerk.BackendAPI;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interfaces;
+using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Contracts;
+using ClinicEz.Shared.Interoperability;
 using ClinicEz.Portal.Domain.Interfaces;
 using Microsoft.AspNetCore.DataProtection;
-using MassTransit;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Application.Features.Admin.Consumers;
+using ClinicEz.Portal.Application.Features.Admin.Services;
+using ClinicEz.Portal.Application.Features.Billing;
+using ClinicEz.Portal.Application.Features.Entitlements;
+using ClinicEz.Portal.Application.Features.Finance;
+using ClinicEz.Portal.Application.Features.Licensing;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using ClinicEz.Portal.Application.Features.Hub;
+using ClinicEz.Portal.Application.Features.Notifications;
+using ClinicEz.Portal.Application.Features.Workspace;
+using ClinicEz.Portal.Infrastructure.Hub;
+using ClinicEz.Portal.Infrastructure.Notifications;
 using ClinicEz.Portal.Infrastructure.Persistence;
 using ClinicEz.Portal.Infrastructure.Persistence.Interceptors;
 using ClinicEz.Portal.Infrastructure.Persistence.Repositories;
@@ -15,6 +29,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using ClinicEz.Portal.Infrastructure.Xendit;
 
 namespace ClinicEz.Portal.Infrastructure;
@@ -40,25 +55,39 @@ public static class DependencyInjection
             });
 
             options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
-            options.AddInterceptors(sp.GetRequiredService<SoftDeleteInterceptor>());
+            options.AddInterceptors(sp.GetRequiredService<SoftDeleteInterceptor>(), sp.GetRequiredService<FacilityDirectoryInterceptor>());
         });
 
         // Register seeders for runtime database initialization
-        services.AddScoped<ClinicEz.Portal.Domain.Interfaces.IBaseSeeder, ClinicEz.Portal.Infrastructure.Persistence.Seeders.SubscriptionPlanSeeder>();
+        // The plan catalogue is seeded explicitly at startup in every environment (see Program.cs), not through IBaseSeeder.
+        services.AddScoped<ClinicEz.Portal.Infrastructure.Persistence.Seeders.PlanSeeder>();
         services.AddScoped<ClinicEz.Portal.Domain.Interfaces.IBaseSeeder, ClinicEz.Portal.Infrastructure.Persistence.Seeders.AdminRBACSeeder>();
         services.AddScoped<ClinicEz.Portal.Domain.Interfaces.IBaseSeeder, ClinicEz.Portal.Infrastructure.Persistence.Seeders.BlogSeeder>();
 
         // Current user service backed by IHttpContextAccessor
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<SoftDeleteInterceptor>();
+        services.AddScoped<FacilityDirectoryInterceptor>();
 
         // Register repositories and Unit of Work
         services.AddScoped<IApplicationDbContext>(provider => provider.GetRequiredService<ApplicationDbContext>());
         services.AddScoped<IExampleRepository, ExampleRepository>();
         services.AddScoped<ITenantRepository, TenantRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
-        services.AddScoped<IXenditBillingService, XenditBillingService>();
-        services.AddScoped<ITenantFeatureGuard, TenantFeatureGuard>();
+        services.AddScoped<IBillingProvider, XenditBillingProvider>();
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddOptions<BillingOptions>().Bind(configuration.GetSection(BillingOptions.SectionName));
+        services.AddOptions<LicenseOptions>().Bind(configuration.GetSection(LicenseOptions.SectionName));
+        services.AddOptions<ClinicEz.Portal.Application.Features.PublicUploads.LabUploadOptions>().Bind(configuration.GetSection(ClinicEz.Portal.Application.Features.PublicUploads.LabUploadOptions.SectionName));
+        services.AddScoped<IEntitlementService, EntitlementService>();
+        services.AddScoped<IEntitlementGuard, EntitlementGuard>();
+        services.AddScoped<ISubscriptionService, SubscriptionService>();
+        services.AddScoped<IFacilityAllocationService, FacilityAllocationService>();
+        services.AddScoped<ILicenseIssuer, LicenseIssuer>();
+        services.AddScoped<IEntitlementsPublisher, EntitlementsPublisher>();
+        services.AddScoped<IEntitlementRenewalJob, EntitlementRenewalJob>();
+        services.AddScoped<ClinicEz.Portal.Application.Features.Ownership.IOwnershipPolicy, ClinicEz.Portal.Application.Features.Ownership.OwnershipPolicy>();
+        services.AddScoped<IClerkMetadataSync, ClerkMetadataSync>();
         services.AddDataProtection()
             .SetApplicationName("ClinicEz.Portal");
 
@@ -112,36 +141,38 @@ public static class DependencyInjection
             });
         services.AddScoped<ClinicEz.Portal.Infrastructure.Webhooks.IWebhookDeliveryJob, ClinicEz.Portal.Infrastructure.Webhooks.WebhookDeliveryJob>();
 
-        services.AddMassTransit(x =>
-        {
-            x.SetEndpointNameFormatter(new KebabCaseEndpointNameFormatter("portal", false));
-            x.AddConsumer<FacilityProvisionedEventConsumer>();
-            x.AddConsumer<ClinicEz.Portal.Application.Features.Integrations.WorkspaceProfileUpdatedWebhookConsumer>();
-            x.AddConsumer<ClinicEz.Portal.Application.Features.Integrations.FacilityCreatedWebhookConsumer>();
+        // Interop SDK: transactional outbox/inbox on ApplicationDbContext; Messaging:* configures the hub connection.
+        services.AddInterop<ApplicationDbContext>(configuration, handlers => handlers
+            .Handle<FacilityProvisionedEvent, FacilityProvisionedHandler>(InteropTypes.FacilityProvisioned)
+            .Handle<FacilityHeartbeatPayload, FacilityHeartbeatHandler>(InteropTypes.FacilityHeartbeat)
+            .Handle<BillingInvoicePaidPayload, BillingInvoicePaidHandler>(InteropTypes.BillingInvoicePaid)
+            .Handle<BillingInvoiceVoidedPayload, BillingInvoiceVoidedHandler>(InteropTypes.BillingInvoiceVoided)
+            .Handle<NotificationEmailRequestedPayload, NotificationEmailRequestedHandler>(InteropTypes.NotificationEmailRequested));
 
-            x.AddEntityFrameworkOutbox<ApplicationDbContext>(o =>
-            {
-                o.UsePostgres();
-                o.UseBusOutbox();
-            });
+        // Hub directory feed and onboarding
+        services.AddOptions<HubOptions>().Bind(configuration.GetSection(HubOptions.Section));
+        services.AddScoped<IFacilityLinkService, SameBranchFacilityLinkService>();
+        services.AddScoped<IHubDirectoryResyncService, HubDirectoryResyncService>();
+        services.AddScoped<IHubOnboardingService, HubOnboardingService>();
+        services.AddScoped<IFacilityProvisioningPublisher, FacilityProvisioningPublisher>();
+        services.AddScoped<IWorkspaceProfilePublisher, WorkspaceProfilePublisher>();
 
-            x.UsingRabbitMq((context, cfg) =>
-            {
-                var host = configuration["RabbitMq:Host"];
-                if (string.IsNullOrWhiteSpace(host) || host == "localhost")
-                {
-                    host = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true" ? "rabbitmq" : (string.IsNullOrWhiteSpace(host) ? "localhost" : host);
-                }
+        // portal-api acts as a ControlPlane client of the hub admin API, using the same Messaging credentials.
+        services.AddHttpClient<IHubAdminClient, HubAdminHttpClient>(client => client.Timeout = TimeSpan.FromSeconds(30));
+        services.AddHttpClient<IHubDirectoryClient, HubDirectoryHttpClient>(client => client.Timeout = TimeSpan.FromSeconds(15));
 
-                cfg.Host(host, configuration["RabbitMq:VirtualHost"] ?? "/", h =>
-                {
-                    h.Username(configuration["RabbitMq:Username"] ?? "rabbitmq");
-					h.Password(configuration["RabbitMq:Password"] ?? "nextstep-rabbitmq-2o2G");
-                });
-
-                cfg.ConfigureEndpoints(context);
-            });
-        });
+        // Notifications: templated email requests are handled asynchronously and sent through the unified mail server.
+        services.AddSingleton<IValidateOptions<SmtpOptions>, SmtpOptionsValidator>();
+        services.AddOptions<SmtpOptions>()
+            .Bind(configuration.GetSection(SmtpOptions.SectionName))
+            .ValidateOnStart();
+        services.AddSingleton<IEmailTemplateRenderer, EmailTemplateRenderer>();
+        services.AddScoped<INotificationService, NotificationService>();
+        services.AddScoped<IStaffInvitationNotifier, StaffInvitationNotifier>();
+        services.AddScoped<IFrontendUrlProvider, FrontendUrlProvider>();
+        services.AddScoped<IEmailSender>(sp => sp.GetRequiredService<IOptions<SmtpOptions>>().Value.Mode == SmtpMode.Log
+            ? ActivatorUtilities.CreateInstance<LogEmailSender>(sp)
+            : ActivatorUtilities.CreateInstance<SmtpEmailSender>(sp));
 
         return services;
     }

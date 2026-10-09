@@ -1,8 +1,12 @@
+using ClinicEz.Portal.Application.Common;
+using ClinicEz.Portal.Application.Features.Entitlements;
+using ClinicEz.Portal.Application.Features.Ownership;
 using ClinicEz.Portal.Application.Features.Tenants.Queries.GetTenantByOwner;
+using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
-using ClinicEz.Portal.Domain.Interfaces;
 using FluentValidation;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,61 +23,78 @@ public record CreateTenantCommand(
     string? Email = null
 ) : IRequest<TenantDto>;
 
-public class CreateTenantCommandHandler : IRequestHandler<CreateTenantCommand, TenantDto>
+/// <summary>
+/// Creates the workspace the caller will own. A person owns at most one workspace: asking for a second is a 409
+/// (<see cref="ConflictCodes.OwnerAlreadyHasWorkspace"/>), never a silent return of the existing one.
+/// </summary>
+public class CreateTenantCommandHandler(
+    IApplicationDbContext context,
+    IOwnershipPolicy ownership,
+    ISubscriptionService subscriptions,
+    IClerkMetadataSync clerkMetadata,
+    TimeProvider timeProvider) : IRequestHandler<CreateTenantCommand, TenantDto>
 {
-    private readonly IUnitOfWork _unitOfWork;
-
-    public CreateTenantCommandHandler(IUnitOfWork unitOfWork)
-    {
-        _unitOfWork = unitOfWork;
-    }
-
     public async Task<TenantDto> Handle(CreateTenantCommand request, CancellationToken cancellationToken)
     {
-        // 1. Check if the user already has a tenant (idempotent / safeguard)
-        var existingOwnerTenant = await _unitOfWork.TenantRepository.FindAsync(
-            t => t.OwnerId == request.OwnerId, 
-            cancellationToken);
+        await ownership.EnsureCanOwnAsync(request.OwnerId, ConflictCodes.OwnerAlreadyHasWorkspace, cancellationToken);
 
-        if (existingOwnerTenant != null)
-        {
-            return new TenantDto(
-                existingOwnerTenant.TenantSlug, 
-                existingOwnerTenant.Name, 
-                existingOwnerTenant.TenantType);
-        }
-
-        // 2. Validate TenantSlug uniqueness across all tenants
-        var existingSlugTenant = await _unitOfWork.TenantRepository.FindAsync(
-            t => t.TenantSlug.ToLower() == request.TenantSlug.ToLower(), 
-            cancellationToken);
-
-        if (existingSlugTenant != null)
+        var slug = request.TenantSlug.Trim().ToLowerInvariant();
+        if (await context.Tenants.AnyAsync(t => t.TenantSlug.ToLower() == slug, cancellationToken))
         {
             throw new ValidationException("Workplace URL slug is already taken. Please choose a different URL.");
         }
 
-        // 3. Provision Tenant directly without creating duplicate Clerk account
         var tenantType = string.IsNullOrWhiteSpace(request.TenantType) ? "Workplace" : request.TenantType;
+        var now = timeProvider.GetUtcNow().UtcDateTime;
 
         var newTenant = new Tenant
         {
+            Id = Guid.NewGuid(),
             OwnerId = request.OwnerId,
             Name = request.Name.Trim(),
-            TenantSlug = request.TenantSlug.Trim().ToLowerInvariant(),
+            TenantSlug = slug,
             TenantType = tenantType,
             FirstName = request.FirstName ?? string.Empty,
             LastName = request.LastName ?? string.Empty,
             Email = request.Email ?? string.Empty,
-            SubscriptionStatus = "TRIALING",
-            SubscriptionPlanId = "starter",
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = now,
             CreatedBy = request.OwnerId
         };
+        context.Tenants.Add(newTenant);
+        context.WorkspaceMembers.Add(OwnerMembership.For(newTenant, now));
 
-        await _unitOfWork.TenantRepository.AddAsync(newTenant);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await ownership.SaveAsync(ConflictCodes.OwnerAlreadyHasWorkspace, cancellationToken);
+
+        await subscriptions.StartTrialAsync(newTenant.Id, cancellationToken);
+        await clerkMetadata.SyncAsync(request.OwnerId, cancellationToken);
 
         return new TenantDto(newTenant.TenantSlug, newTenant.Name, newTenant.TenantType);
+    }
+}
+
+/// <summary>The Owner membership row every workspace is created with.</summary>
+internal static class OwnerMembership
+{
+    public static WorkspaceMember For(Tenant tenant, DateTime now)
+    {
+        var fullName = $"{tenant.FirstName} {tenant.LastName}".Trim();
+        if (string.IsNullOrWhiteSpace(fullName))
+        {
+            fullName = string.IsNullOrWhiteSpace(tenant.Name) ? "Workspace Owner" : tenant.Name;
+        }
+
+        return new WorkspaceMember
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant.Id,
+            UserId = tenant.OwnerId,
+            Email = tenant.Email.Trim().ToLowerInvariant(),
+            FullName = fullName,
+            Role = WorkspaceMemberRole.Owner,
+            Status = MemberStatus.Active,
+            JoinedAt = now,
+            CreatedAt = now,
+            CreatedBy = tenant.OwnerId
+        };
     }
 }

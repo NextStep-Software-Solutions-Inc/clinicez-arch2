@@ -1,5 +1,6 @@
 using ClinicEz.Portal.Domain.Common;
 using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Interop.Contracts;
 using System;
 using System.Text.Json.Serialization;
 
@@ -38,11 +39,26 @@ public class Facility : BaseEntity
     /// <summary>Explicit https console address that replaces the generated subdomain URL (typically on-prem).</summary>
     public string? ConsoleBaseUrl { get; set; }
 
+    // Interop hub directory: who may address this facility and which cell (hub) serves it.
+    public FacilityVisibility Visibility { get; set; } = FacilityVisibility.Private;
+    public bool AcceptsExternalRequests { get; set; }
+    /// <summary>
+    /// Routing cell: the shared cloud cell for SharedCloud facilities, <c>edge-{tenantId}</c> for on-premise ones.
+    /// Derived from <see cref="DeploymentMode"/> whenever the facility is saved.
+    /// </summary>
+    public string CellId { get; set; } = string.Empty;
+    /// <summary>Hub client created for an on-premise facility. The secret is never stored (the hub keeps only a hash).</summary>
+    public string? HubClientId { get; set; }
+
     // Cryptographic License & Plan Profile
     public string? LicenseToken { get; set; }
     public string PlanTier { get; set; } = "Community";
     public int MaxStaffLimit { get; set; } = 5;
     public DateTime? LicenseExpiresAt { get; set; }
+
+    /// <summary>Last <c>facility.heartbeat</c> received from the facility itself; null until it first reports.</summary>
+    public DateTime? LastSeenAt { get; set; }
+    public string? AppVersion { get; set; }
 
     // Regulatory & Classification Profile
     public string? Classification { get; set; } // Ambulatory Clinic, Primary Lab, Community Pharmacy, etc.

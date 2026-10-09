@@ -1,3 +1,5 @@
+using ClinicEz.Portal.Application.Features.Hub;
+using ClinicEz.Portal.Application.Features.Links;
 using ClinicEz.Portal.Application.Interfaces;
 using FluentValidation;
 using MediatR;
@@ -22,7 +24,7 @@ public class DeleteFacilityCommandValidator : AbstractValidator<DeleteFacilityCo
     }
 }
 
-public class DeleteFacilityCommandHandler(IApplicationDbContext context) : IRequestHandler<DeleteFacilityCommand, bool>
+public class DeleteFacilityCommandHandler(IApplicationDbContext context, IHubOnboardingService hubOnboarding) : IRequestHandler<DeleteFacilityCommand, bool>
 {
     public async Task<bool> Handle(DeleteFacilityCommand request, CancellationToken cancellationToken)
     {
@@ -36,6 +38,7 @@ public class DeleteFacilityCommandHandler(IApplicationDbContext context) : IRequ
 
         if (facility == null) return false;
 
+        await FacilityLinkLifecycle.RevokeAllForFacilityAsync(context, facility.Id, cancellationToken);
         context.Facilities.Remove(facility);
         if (tenant.FacilitiesCount > 0)
         {
@@ -44,6 +47,7 @@ public class DeleteFacilityCommandHandler(IApplicationDbContext context) : IRequ
 
         tenant.UpdatedAt = DateTime.UtcNow;
         await context.SaveChangesAsync(cancellationToken);
+        await hubOnboarding.RevokeForFacilityAsync(facility, cancellationToken);
         return true;
     }
 }

@@ -9,9 +9,9 @@ public record CancelSubscriptionCommand(string TenantId) : IRequest<bool>;
 
 public class CancelSubscriptionCommandHandler : IRequestHandler<CancelSubscriptionCommand, bool>
 {
-    private readonly IXenditBillingService _billingService;
+    private readonly IBillingProvider _billingService;
 
-    public CancelSubscriptionCommandHandler(IXenditBillingService billingService)
+    public CancelSubscriptionCommandHandler(IBillingProvider billingService)
     {
         _billingService = billingService;
     }

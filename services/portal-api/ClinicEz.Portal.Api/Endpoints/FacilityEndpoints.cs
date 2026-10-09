@@ -1,17 +1,23 @@
 using ClinicEz.Portal.Application.Features.Admin.Queries;
+using ClinicEz.Portal.Application.Features.Admin.Services;
+using ClinicEz.Portal.Application.Features.Hub;
 using System;
+using System.Net.Http;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using ClinicEz.Portal.Api.Abstractions;
 using ClinicEz.Portal.Application.Features.Admin.Commands;
 using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Shared.Common;
+using ClinicEz.Portal.Domain.Entities;
+using ClinicEz.Portal.Application.Features.Entitlements;
 using MediatR;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using ClinicEz.Shared.Licensing;
 
 namespace ClinicEz.Portal.Api.Endpoints;
@@ -42,8 +48,8 @@ public class FacilityEndpoints : IEndpoint
             }
 
             var isOwner = tenant.OwnerId == clerkUserId;
-            var isAdmin = !isOwner && await context.StaffMembers.AnyAsync(s => 
-                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == "Admin" && s.Status == "Active");
+            var isAdmin = !isOwner && await context.WorkspaceMembers.AnyAsync(s => 
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == WorkspaceMemberRole.Admin && s.Status == MemberStatus.Active);
 
             if (!isOwner && !isAdmin)
             {
@@ -53,12 +59,18 @@ public class FacilityEndpoints : IEndpoint
             Console.WriteLine($"[API] Creating facility '{command.Name}' of type {command.FacilityType} for tenant {command.TenantId}");
             try
             {
-                var success = await sender.Send(command);
-                return success 
-                    ? Results.Ok(new { Success = true, Message = "Facility created and provisioning event published" }) 
+                var result = await sender.Send(command);
+                return result.Success
+                    ? Results.Ok(new
+                    {
+                        Success = true,
+                        Message = "Facility created and provisioning event published",
+                        result.HubCredentials,
+                        result.HubOnboardingPending
+                    })
                     : Results.BadRequest(new { Message = "Failed to create facility. Verify tenant details and names." });
             }
-            catch (InvalidOperationException ex)
+            catch (InvalidOperationException ex) when (ex is not EntitlementException)
             {
                 return Results.BadRequest(new { Message = ex.Message });
             }
@@ -94,8 +106,8 @@ public class FacilityEndpoints : IEndpoint
             }
 
             var isOwner = tenant.OwnerId == clerkUserId;
-            var isStaff = !isOwner && await context.StaffMembers.AnyAsync(s => 
-                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Status == "Active");
+            var isStaff = !isOwner && await context.WorkspaceMembers.AnyAsync(s => 
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Status == MemberStatus.Active);
 
             if (!isOwner && !isStaff)
             {
@@ -133,8 +145,8 @@ public class FacilityEndpoints : IEndpoint
             }
 
             var isOwner = tenant.OwnerId == clerkUserId;
-            var isStaff = !isOwner && await context.StaffMembers.AnyAsync(s => 
-                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Status == "Active");
+            var isStaff = !isOwner && await context.WorkspaceMembers.AnyAsync(s => 
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Status == MemberStatus.Active);
 
             if (!isOwner && !isStaff)
             {
@@ -228,8 +240,8 @@ public class FacilityEndpoints : IEndpoint
             if (tenant == null) return Results.NotFound(new { Message = "Workspace not found." });
 
             var isOwner = tenant.OwnerId == clerkUserId;
-            var isAdmin = !isOwner && await context.StaffMembers.AnyAsync(s => 
-                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == "Admin" && s.Status == "Active");
+            var isAdmin = !isOwner && await context.WorkspaceMembers.AnyAsync(s => 
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == WorkspaceMemberRole.Admin && s.Status == MemberStatus.Active);
 
             if (!isOwner && !isAdmin) return Results.Forbid();
 
@@ -238,7 +250,7 @@ public class FacilityEndpoints : IEndpoint
                 var success = await sender.Send(new UpdateFacilityCommand(id, tenant.TenantSlug, request.Name, request.Status, request.Slug));
                 return success ? Results.Ok(new { Success = true }) : Results.NotFound(new { Message = "Facility not found." });
             }
-            catch (InvalidOperationException ex)
+            catch (InvalidOperationException ex) when (ex is not EntitlementException)
             {
                 return Results.BadRequest(new { Message = ex.Message });
             }
@@ -284,9 +296,12 @@ public class FacilityEndpoints : IEndpoint
             string tenantSlug,
             HttpContext httpContext,
             IApplicationDbContext context,
-            MassTransit.IPublishEndpoint publishEndpoint,
-            IFacilityLicenseSigner licenseSigner,
-            IConfiguration configuration) =>
+            ClinicEz.Portal.Application.Features.Admin.Services.IFacilityProvisioningPublisher provisioningPublisher,
+            ClinicEz.Portal.Application.Features.Entitlements.IEntitlementService entitlements,
+            ClinicEz.Portal.Application.Features.Licensing.IFacilityAllocationService allocations,
+            ClinicEz.Portal.Application.Features.Licensing.ILicenseIssuer licenseIssuer,
+            IConfiguration configuration,
+            CancellationToken ct) =>
         {
             var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(clerkUserId)) return Results.Unauthorized();
@@ -297,48 +312,36 @@ public class FacilityEndpoints : IEndpoint
             if (tenant == null) return Results.NotFound(new { Message = "Workspace not found." });
 
             var isOwner = tenant.OwnerId == clerkUserId;
-            var isAdmin = !isOwner && await context.StaffMembers.AnyAsync(s => 
-                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == "Admin" && s.Status == "Active");
+            var isAdmin = !isOwner && await context.WorkspaceMembers.AnyAsync(s => 
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == WorkspaceMemberRole.Admin && s.Status == MemberStatus.Active);
 
             if (!isOwner && !isAdmin) return Results.Forbid();
 
             var facility = await context.Facilities.FirstOrDefaultAsync(f => f.Id == id && f.TenantId == tenant.Id);
             if (facility == null) return Results.NotFound(new { Message = "Facility not found." });
 
-            var planTier = facility.PlanTier ?? "Community";
-            var limits = PlanTierDefaults.GetLimitsForTier(planTier);
-            var features = PlanTierDefaults.GetFeaturesForTier(planTier);
-            var expiresAt = facility.LicenseExpiresAt ?? DateTime.UtcNow.AddYears(1);
-
-            var payload = new FacilityLicensePayload
-            {
-                FacilityId = facility.Id,
-                TenantId = tenant.Id.ToString(),
-                TenantSlug = tenant.TenantSlug,
-                FacilityName = facility.Name,
-                FacilityType = facility.FacilityType.ToString(),
-                PlanTier = planTier,
-                Limits = limits,
-                EnabledFeatures = features,
-                IssuedAtUtc = DateTime.UtcNow,
-                ExpiresAtUtc = expiresAt,
-                OwnerEmail = string.IsNullOrWhiteSpace(facility.ContactEmail) ? null : facility.ContactEmail.Trim()
-            };
-
-            var licenseToken = licenseSigner.SignLicense(payload);
-
-            facility.LicenseToken = licenseToken;
-            facility.MaxStaffLimit = limits.MaxStaff;
-            facility.LicenseExpiresAt = expiresAt;
             facility.Status = ClinicEz.Portal.Domain.Entities.FacilityStatus.Active;
             facility.UpdatedAt = DateTime.UtcNow;
+
+            var snapshot = await entitlements.ResolveAsync(tenant.Id, ct);
+            var shares = await allocations.ComputeSharesAsync(tenant.Id, snapshot, facility.Id, ct);
+            var license = licenseIssuer.Issue(tenant, facility, snapshot, shares[facility.Id]);
+            var limits = license.Payload.Limits;
+            var planTier = snapshot.PlanSlug;
+            var expiresAt = license.Payload.ExpiresAtUtc!.Value;
+            var licenseToken = license.Token;
+
+            facility.LicenseToken = licenseToken;
+            facility.PlanTier = planTier;
+            facility.MaxStaffLimit = limits.MaxStaff;
+            facility.LicenseExpiresAt = expiresAt;
 
             var slug = !string.IsNullOrWhiteSpace(facility.Slug)
                 ? facility.Slug
                 : GetFacilitiesQueryHandler.GenerateFacilitySlug(facility.Name);
             var consoleUrl = GetFacilitiesQueryHandler.ResolveConsoleUrl(configuration, facility.FacilityType, facility.Status, facility.Id, slug, tenant.TenantSlug, facility.ConsoleBaseUrl);
 
-            await publishEndpoint.Publish(new FacilityCreatedEvent
+            provisioningPublisher.EnqueueLicenseIssued(new FacilityCreatedEvent
             {
                 TenantId = tenant.Id.ToString(),
                 TenantSlug = tenant.TenantSlug,
@@ -368,13 +371,15 @@ public class FacilityEndpoints : IEndpoint
         .WithDescription("Activates a facility, mints a cryptographic license, and re-publishes the provisioning event.")
         .WithTags("Facilities");
 
-        // 6b. Export or fetch facility license key for offline / on-premise installation
-        app.MapGet("/facilities/{id:guid}/license-key", async (
+        // 6a. Rotate (or first issue) one hub client of an on-premise workspace: ?service= is cell|clinic|laboratory|pharmacy|organization|billing, default the facility's own service
+        app.MapPost("/facilities/{id:guid}/hub-credentials/rotate", async (
             Guid id,
             string tenantSlug,
+            string? service,
             HttpContext httpContext,
             IApplicationDbContext context,
-            IFacilityLicenseSigner licenseSigner) =>
+            IHubOnboardingService hubOnboarding,
+            ILogger<FacilityEndpoints> logger) =>
         {
             var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (string.IsNullOrEmpty(clerkUserId)) return Results.Unauthorized();
@@ -385,43 +390,74 @@ public class FacilityEndpoints : IEndpoint
             if (tenant == null) return Results.NotFound(new { Message = "Workspace not found." });
 
             var isOwner = tenant.OwnerId == clerkUserId;
-            var isAdmin = !isOwner && await context.StaffMembers.AnyAsync(s => 
-                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == "Admin" && s.Status == "Active");
+            var isAdmin = !isOwner && await context.WorkspaceMembers.AnyAsync(s =>
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == WorkspaceMemberRole.Admin && s.Status == MemberStatus.Active);
 
             if (!isOwner && !isAdmin) return Results.Forbid();
 
             var facility = await context.Facilities.FirstOrDefaultAsync(f => f.Id == id && f.TenantId == tenant.Id);
             if (facility == null) return Results.NotFound(new { Message = "Facility not found." });
 
+            try
+            {
+                var credentials = await hubOnboarding.RotateAsync(facility, tenant, service, httpContext.RequestAborted);
+                return Results.Ok(new { Success = true, HubCredentials = credentials });
+            }
+            catch (InvalidOperationException ex) when (ex is not EntitlementException)
+            {
+                return Results.BadRequest(new { Message = ex.Message });
+            }
+            catch (HttpRequestException ex)
+            {
+                logger.LogWarning(ex, "Hub credential rotation for facility {FacilityId} failed.", facility.Id);
+                return Results.Json(new { Message = "The hub could not be reached. Try again shortly." }, statusCode: StatusCodes.Status502BadGateway);
+            }
+        })
+        .RequireAuthorization()
+        .WithName("RotateFacilityHubCredentials")
+        .WithDescription("Issues a new secret for one hub client of an on-premise workspace, selected by the service query parameter (cell, clinic, laboratory, pharmacy, organization, billing; default the facility's own service). The old secret stops working and the new one is returned once.")
+        .WithTags("Facilities");
+
+        // 6b. Export or fetch facility license key for offline / on-premise installation
+        app.MapGet("/facilities/{id:guid}/license-key", async (
+            Guid id,
+            string tenantSlug,
+            HttpContext httpContext,
+            IApplicationDbContext context,
+            ClinicEz.Portal.Application.Features.Entitlements.IEntitlementService entitlements,
+            ClinicEz.Portal.Application.Features.Licensing.IFacilityAllocationService allocations,
+            ClinicEz.Portal.Application.Features.Licensing.ILicenseIssuer licenseIssuer,
+            CancellationToken ct) =>
+        {
+            var clerkUserId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(clerkUserId)) return Results.Unauthorized();
+
+            var tenant = await context.Tenants
+                .FirstOrDefaultAsync(t => t.TenantSlug.ToLower() == tenantSlug.ToLower() || t.Id.ToString() == tenantSlug);
+
+            if (tenant == null) return Results.NotFound(new { Message = "Workspace not found." });
+
+            var isOwner = tenant.OwnerId == clerkUserId;
+            var isAdmin = !isOwner && await context.WorkspaceMembers.AnyAsync(s => 
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Role == WorkspaceMemberRole.Admin && s.Status == MemberStatus.Active);
+
+            if (!isOwner && !isAdmin) return Results.Forbid();
+
+            var facility = await context.Facilities.FirstOrDefaultAsync(f => f.Id == id && f.TenantId == tenant.Id);
+            if (facility == null) return Results.NotFound(new { Message = "Facility not found." });
+
+            var snapshot = await entitlements.ResolveAsync(tenant.Id, ct);
+            var shares = await allocations.ComputeSharesAsync(tenant.Id, snapshot, facility.Id, ct);
+            var license = licenseIssuer.Issue(tenant, facility, snapshot, shares[facility.Id]);
+
             if (string.IsNullOrWhiteSpace(facility.LicenseToken))
             {
-                var planTier = facility.PlanTier ?? "Community";
-                var limits = PlanTierDefaults.GetLimitsForTier(planTier);
-                var features = PlanTierDefaults.GetFeaturesForTier(planTier);
-                var expiresAt = facility.LicenseExpiresAt ?? DateTime.UtcNow.AddYears(1);
-
-                var payload = new FacilityLicensePayload
-                {
-                    FacilityId = facility.Id,
-                    TenantId = tenant.Id.ToString(),
-                    TenantSlug = tenant.TenantSlug,
-                    FacilityName = facility.Name,
-                    FacilityType = facility.FacilityType.ToString(),
-                    PlanTier = planTier,
-                    Limits = limits,
-                    EnabledFeatures = features,
-                    IssuedAtUtc = DateTime.UtcNow,
-                    ExpiresAtUtc = expiresAt,
-                    OwnerEmail = string.IsNullOrWhiteSpace(facility.ContactEmail) ? null : facility.ContactEmail.Trim()
-                };
-
-                facility.LicenseToken = licenseSigner.SignLicense(payload);
-                facility.MaxStaffLimit = limits.MaxStaff;
-                facility.LicenseExpiresAt = expiresAt;
-                await context.SaveChangesAsync(default);
+                facility.LicenseToken = license.Token;
+                facility.PlanTier = snapshot.PlanSlug;
+                facility.MaxStaffLimit = license.Payload.Limits.MaxStaff;
+                facility.LicenseExpiresAt = license.Payload.ExpiresAtUtc;
+                await context.SaveChangesAsync(ct);
             }
-
-            var activeLimits = PlanTierDefaults.GetLimitsForTier(facility.PlanTier);
 
             return Results.Ok(new
             {
@@ -430,7 +466,7 @@ public class FacilityEndpoints : IEndpoint
                 FacilityType = facility.FacilityType.ToString(),
                 PlanTier = facility.PlanTier,
                 LicenseToken = facility.LicenseToken,
-                Limits = activeLimits,
+                Limits = license.Payload.Limits,
                 ExpiresAt = facility.LicenseExpiresAt
             });
         })
@@ -455,8 +491,9 @@ public class FacilityEndpoints : IEndpoint
             if (tenant == null) return Results.NotFound(new { Message = "Workspace not found." });
 
             var isOwner = tenant.OwnerId == clerkUserId;
-            var isAdmin = !isOwner && await context.StaffMembers.AnyAsync(s => 
-                s.TenantId == tenant.Id && s.UserId == clerkUserId && (s.Role == "Admin" || s.Role == "Facility Administrator") && s.Status == "Active");
+            var isAdmin = !isOwner && await context.WorkspaceMembers.AnyAsync(s => 
+                s.TenantId == tenant.Id && s.UserId == clerkUserId && s.Status == MemberStatus.Active &&
+                (s.Role == WorkspaceMemberRole.Admin || context.StaffMembers.Any(p => p.WorkspaceMemberId == s.Id && p.Role == "Facility Administrator")));
 
             if (!isOwner && !isAdmin) return Results.Forbid();
 

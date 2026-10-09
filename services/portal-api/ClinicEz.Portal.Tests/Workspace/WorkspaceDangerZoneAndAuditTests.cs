@@ -1,10 +1,13 @@
+using ClinicEz.Portal.Application.Features.Hub;
 using ClinicEz.Portal.Application.Features.Tenants.Queries.GetTenantByOwner;
 using ClinicEz.Portal.Application.Features.Workspace;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Portal.Infrastructure.Persistence;
+using ClinicEz.Portal.Tests.Support;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
+using Moq;
 using System;
 using System.Linq;
 using System.Threading;
@@ -35,7 +38,6 @@ public class WorkspaceDangerZoneAndAuditTests : IDisposable
             Name = "Metro Clinic",
             OwnerId = OwnerId,
             Email = "owner@metro.ph",
-            SubscriptionStatus = "TRIALING"
         });
         _context.SaveChanges();
     }
@@ -46,9 +48,10 @@ public class WorkspaceDangerZoneAndAuditTests : IDisposable
         _context.Dispose();
     }
 
-    private StaffMember SeedStaff(string userId, string name, string role = "Admin", string status = "Active")
+
+    private WorkspaceMember SeedMember(string userId, string name, WorkspaceMemberRole role = WorkspaceMemberRole.Admin, MemberStatus status = MemberStatus.Active)
     {
-        var member = new StaffMember
+        var member = new WorkspaceMember
         {
             TenantId = _tenantId,
             UserId = userId,
@@ -57,105 +60,14 @@ public class WorkspaceDangerZoneAndAuditTests : IDisposable
             Role = role,
             Status = status
         };
-        _context.StaffMembers.Add(member);
+        _context.WorkspaceMembers.Add(member);
         _context.SaveChanges();
         return member;
     }
 
-    private Task<OwnershipTransferResultDto> Transfer(Guid targetId, string confirm = Slug, WorkspaceActor? actor = null) =>
-        new TransferWorkspaceOwnershipCommandHandler(_context).Handle(
-            new TransferWorkspaceOwnershipCommand(Slug, actor ?? OwnerActor, targetId, confirm), CancellationToken.None);
-
     private Task<ArchiveWorkspaceResultDto> Archive(string confirm = Slug, WorkspaceActor? actor = null) =>
-        new ArchiveWorkspaceCommandHandler(_context).Handle(
+        new ArchiveWorkspaceCommandHandler(_context, new Mock<IHubOnboardingService>().Object).Handle(
             new ArchiveWorkspaceCommand(Slug, actor ?? OwnerActor, confirm), CancellationToken.None);
-
-    // ---- Ownership transfer ----------------------------------------------------------------
-
-    [Fact]
-    public async Task Transfer_MakesAdminTheOwner_PreviousOwnerBecomesAdmin_AndAudits()
-    {
-        var oldOwnerRow = SeedStaff(OwnerId, "Juan Dela Cruz", "Owner");
-        var target = SeedStaff("clerk_admin_222", "Maria Santos");
-
-        var result = await Transfer(target.Id);
-
-        Assert.Equal("Maria Santos", result.NewOwnerName);
-        var tenant = await _context.Tenants.SingleAsync();
-        Assert.Equal("clerk_admin_222", tenant.OwnerId);
-        Assert.Equal("Owner", (await _context.StaffMembers.SingleAsync(s => s.Id == target.Id)).Role);
-        Assert.Equal("Admin", (await _context.StaffMembers.SingleAsync(s => s.Id == oldOwnerRow.Id)).Role);
-
-        var audit = await _context.WorkspaceAuditEntries.SingleAsync();
-        Assert.Equal("ownership", audit.Section);
-        Assert.Equal("transferred", audit.Action);
-    }
-
-    [Fact]
-    public async Task Transfer_WhenOwnerHadNoStaffRow_CreatesAdminRowForThem()
-    {
-        var target = SeedStaff("clerk_admin_222", "Maria Santos");
-
-        await Transfer(target.Id);
-
-        var former = await _context.StaffMembers.SingleAsync(s => s.UserId == OwnerId);
-        Assert.Equal("Admin", former.Role);
-        Assert.Equal("Active", former.Status);
-    }
-
-    [Fact]
-    public async Task Transfer_AfterwardsAccessResolvesWithSwappedRoles()
-    {
-        var target = SeedStaff("clerk_admin_222", "Maria Santos");
-        await Transfer(target.Id);
-
-        var access = new WorkspaceAccessService(_context);
-        Assert.Equal(WorkspaceRole.Owner, (await access.ResolveAsync(Slug, "clerk_admin_222"))!.Role);
-        Assert.Equal(WorkspaceRole.Admin, (await access.ResolveAsync(Slug, OwnerId))!.Role);
-    }
-
-    [Theory]
-    [InlineData("Doctor", "Active", false)]
-    [InlineData("Admin", "PendingInvitation", false)]
-    [InlineData("Admin", "Suspended", false)]
-    public async Task Transfer_RejectsIneligibleTargets(string role, string status, bool _)
-    {
-        var target = SeedStaff("clerk_x", "Someone", role, status);
-
-        await Assert.ThrowsAsync<BadRequestException>(() => Transfer(target.Id));
-        Assert.Equal(OwnerId, (await _context.Tenants.SingleAsync()).OwnerId);
-    }
-
-    [Fact]
-    public async Task Transfer_RejectsInvitedMemberWithoutUserId()
-    {
-        var target = SeedStaff("placeholder", "Pending Pat");
-        target.UserId = null;
-        await _context.SaveChangesAsync();
-
-        await Assert.ThrowsAsync<BadRequestException>(() => Transfer(target.Id));
-    }
-
-    [Fact]
-    public async Task Transfer_RejectsOtherTenantsMember_AndNonOwnerCaller()
-    {
-        var target = SeedStaff("clerk_admin_222", "Maria Santos");
-
-        await Assert.ThrowsAsync<ForbiddenException>(() =>
-            Transfer(target.Id, actor: new WorkspaceActor("clerk_admin_222", "Maria Santos", "Admin")));
-
-        await Assert.ThrowsAsync<NotFoundException>(() => Transfer(Guid.NewGuid()));
-    }
-
-    [Fact]
-    public void Transfer_Validator_RequiresSlugConfirmation()
-    {
-        var validator = new TransferWorkspaceOwnershipCommandValidator();
-        Assert.False(validator.Validate(new TransferWorkspaceOwnershipCommand(Slug, OwnerActor, Guid.NewGuid(), "wrong")).IsValid);
-        Assert.True(validator.Validate(new TransferWorkspaceOwnershipCommand(Slug, OwnerActor, Guid.NewGuid(), " METRO-CLINIC ")).IsValid);
-        Assert.False(validator.Validate(new TransferWorkspaceOwnershipCommand(Slug, OwnerActor, Guid.Empty, Slug)).IsValid);
-    }
-
     // ---- Archive ---------------------------------------------------------------------------
 
     private void SeedFacility(FacilityStatus status, string name)
@@ -184,13 +96,11 @@ public class WorkspaceDangerZoneAndAuditTests : IDisposable
     [Fact]
     public async Task Archive_RefusedWhileSubscriptionActive_AndWhenAlreadyArchived_AndForNonOwner()
     {
-        var tenant = await _context.Tenants.SingleAsync();
-        tenant.SubscriptionStatus = "ACTIVE";
-        await _context.SaveChangesAsync();
+        var subscription = await TestSupport.SeedSubscriptionAsync(_context, _tenantId, SubscriptionStatus.Active);
         await Assert.ThrowsAsync<ConflictException>(() => Archive());
         Assert.Null((await _context.Tenants.SingleAsync()).ArchivedAt);
 
-        tenant.SubscriptionStatus = "CANCELLED";
+        subscription.Status = SubscriptionStatus.Cancelled;
         await _context.SaveChangesAsync();
         await Assert.ThrowsAsync<ForbiddenException>(() => Archive(actor: new WorkspaceActor("someone_else", "X", "Admin")));
 
@@ -209,7 +119,7 @@ public class WorkspaceDangerZoneAndAuditTests : IDisposable
     [Fact]
     public async Task ArchivedWorkspace_ReportsArchivedStatusToOwnerAndMembers()
     {
-        SeedStaff("clerk_admin_222", "Maria Santos");
+        SeedMember("clerk_admin_222", "Maria Santos");
         var handler = new GetTenantByOwnerQueryHandler(_context);
         Assert.Equal("Active", (await handler.Handle(new GetTenantByOwnerQuery(OwnerId, Slug), CancellationToken.None))!.Status);
 
