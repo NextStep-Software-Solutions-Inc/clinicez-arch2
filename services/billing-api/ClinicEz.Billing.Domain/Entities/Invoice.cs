@@ -59,8 +59,11 @@ public class Invoice
 
     public decimal Balance => Status is InvoiceStatus.Open or InvoiceStatus.PartiallyPaid ? Total - NetPaid : 0m;
 
-    /// <summary>Lines and discounts are frozen once anything has been paid, or the invoice was closed.</summary>
-    public bool IsLocked => Status != InvoiceStatus.Open || PaidTotal > 0m;
+    /// <summary>
+    /// Lines and discounts are frozen once money is held against the invoice (net of refunds), or the invoice was closed.
+    /// A reopened invoice whose earlier payments were refunded holds nothing, so it is editable again.
+    /// </summary>
+    public bool IsLocked => Status != InvoiceStatus.Open || NetPaid > 0m;
 
     public static Invoice Create(
         string tenantId,
@@ -128,6 +131,41 @@ public class Invoice
         ApplyDetails(branchId, sourceType, sourceId, patientId, patientName, visitKey, currencyCode);
         Lines.Clear();
         Lines.AddRange(built);
+        Recalculate();
+        Touch(nowUtc);
+    }
+
+    /// <summary>
+    /// A new <c>billing.invoice.requested</c> for an invoice that was voided or fully refunded brings the same invoice back to
+    /// Open with the new lines and total. Payments and refunds stay on record; only money still held (<see cref="NetPaid"/>, zero
+    /// after a refund) counts against the new total. Discounts of the old charge do not carry over.
+    /// </summary>
+    public void Reopen(
+        string? branchId,
+        string sourceType,
+        Guid sourceId,
+        Guid? patientId,
+        string patientName,
+        string? visitKey,
+        string? currency,
+        IEnumerable<InvoiceLineInput> lines,
+        DateTime nowUtc)
+    {
+        if (Origin != InvoiceOrigin.Requested) throw new ConflictException($"Invoice {InvoiceNumber} was not requested by a facility and cannot be reopened.");
+        if (Status is not (InvoiceStatus.Void or InvoiceStatus.Refunded))
+            throw new ConflictException($"Invoice {InvoiceNumber} is {Status} and cannot be reopened.");
+
+        var currencyCode = ValidateDetails(patientName, sourceType, currency);
+        var built = BuildLines(lines);
+
+        ApplyDetails(branchId, sourceType, sourceId, patientId, patientName, visitKey, currencyCode);
+        Lines.Clear();
+        Lines.AddRange(built);
+        Discounts.Clear();
+        Status = InvoiceStatus.Open;
+        PaidAtUtc = null;
+        VoidedAtUtc = null;
+        VoidReason = null;
         Recalculate();
         Touch(nowUtc);
     }
@@ -246,7 +284,7 @@ public class Invoice
     public void Void(string reason, DateTime nowUtc)
     {
         if (string.IsNullOrWhiteSpace(reason)) throw new BadRequestException("A reason is required to void an invoice.");
-        if (PaidTotal > 0m) throw new ConflictException($"Invoice {InvoiceNumber} has payments; refund it instead of voiding.");
+        if (NetPaid > 0m) throw new ConflictException($"Invoice {InvoiceNumber} has payments; refund it instead of voiding.");
         if (Status != InvoiceStatus.Open) throw new ConflictException($"Invoice {InvoiceNumber} is {Status} and cannot be voided.");
 
         Status = InvoiceStatus.Void;

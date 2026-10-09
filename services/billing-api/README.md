@@ -86,7 +86,7 @@ Invoices of the same **tenant + patient + `VisitKey`** (same branch) form one *v
 * `Idempotency-Key` makes a retry return the original payment (`200`, `isReplay: true`); the same key with a different body is a `409`.
 * Partial payments are allowed; each allocated invoice moves `Open → PartiallyPaid → Paid`.
 * Cash needs an open shift for the cashier; `tendered` produces `change`. Insurance (PhilHealth/HMO) is recorded as *external*: reported apart and never counted in the drawer.
-* Discounts: senior citizen / PWD are a fixed 20 % and need the ID number; promo/other need supervisor approval and a reason. Discounts only apply while nothing has been paid on an invoice. A visit-wide fixed discount is split in proportion to the invoice totals (`Money.Distribute`, left-over cents on the last invoice).
+* Discounts: senior citizen / PWD are a fixed 20 % and need the ID number; promo/other need supervisor approval and a reason. Discounts only apply while no money is held on an invoice (paid, net of refunds). A visit-wide fixed discount is split in proportion to the invoice totals (`Money.Distribute`, left-over cents on the last invoice).
 * Voids apply to unpaid invoices, refunds to paid ones (full refunds only). Both need a reason and are written to the append-only audit trail.
 * Money is `decimal` with two places; percentages round half-up (away from zero) per invoice.
 
@@ -96,12 +96,23 @@ All sends go through the transactional outbox in the **same save** as the busine
 
 | Direction | Type | To | Notes |
 |---|---|---|---|
-| in | `billing.invoice.requested` | — | creates one invoice per `InvoiceRequestId` (replay-safe; a zero-total invoice is settled on arrival) |
+| in | `billing.invoice.requested` | — | creates one invoice per `InvoiceRequestId` (replay-safe; a zero-total invoice is settled on arrival). A re-send replaces the lines of an unpaid invoice. A re-send for a **Void** or **Refunded** invoice **reopens** that same invoice (see below); one that is part-paid or **Paid** is ignored |
 | out | `billing.payment.confirmed` | the requesting facility | one per allocated invoice, including partial payments (`FullyPaid=false`); not sent for walk-in invoices |
 | out | `billing.invoice.paid` | `Party.Portal` | when an invoice becomes fully paid; **no PHI** (amounts, facility, method mix only) |
 | out | `billing.invoice.voided` | the requesting facility (+ portal if it had been fully paid) | payload `BillingInvoiceVoidedPayload` (`Kind` = void or refund) |
 
 Addressing: `From = Party.ForFacility(tenant, facility, type, "billing")`, `To = Party.ForFacility(tenant, facility, type)`, `CorrelationId = InvoiceRequestId`.
+
+### Reopening a voided or refunded invoice
+
+When the facility re-sends `billing.invoice.requested` for an `InvoiceRequestId` whose invoice (same tenant + facility, requested origin) is **Void** or **Refunded**, the same invoice is brought back to **Open**:
+
+* Same invoice id and number; lines, details and totals are replaced by the new request, and discounts of the old charge are dropped.
+* Earlier payments, allocations, receipts and refunds stay on record. The balance is the new total less the money still held (`PaidTotal − RefundedTotal`), which is zero after a full refund, so the whole new total is owed.
+* Audited as `invoice.reopened` (previous status, previous total, refunded total, previous reason).
+* No `billing.payment.confirmed` is sent until it is paid again (except a zero-total reopen, which settles on arrival like any free invoice). Each later payment confirms as usual, the final one with `FullyPaid=true`.
+* A **Paid** or part-paid invoice is never changed by a re-send. Another tenant's or facility's request never matches the invoice.
+* The portal keeps the earlier `billing.invoice.voided` and receives `billing.invoice.paid` again once the reopened invoice is fully paid, so its rollup stays consistent. No new message type is involved.
 
 ## Reports
 

@@ -16,8 +16,9 @@ namespace ClinicEz.Billing.Application.Interop;
 /// <list type="bullet">
 /// <item>The sender (<c>From</c>) must be a facility and must be exactly the tenant/facility named in the payload, and the
 /// message must be addressed to that same facility's billing mailbox. Anything else is a spoof or a misroute and is ignored.</item>
-/// <item>Upsert by <c>(tenant, facility, InvoiceRequestId)</c>: a re-send replaces the lines while the invoice is unpaid; once
-/// anything was paid (or the invoice was voided) re-sends are ignored, never rewriting a ledger record.</item>
+/// <item>Upsert by <c>(tenant, facility, InvoiceRequestId)</c>: a re-send replaces the lines while no money is held; a request for a
+/// voided or refunded invoice REOPENS it (same invoice, new lines, status Open, prior payments and refunds stay on record);
+/// a paid or part-paid invoice is never rewritten, the re-send is ignored.</item>
 /// <item>Malformed lines can never succeed on retry, so they are logged and acknowledged instead of redelivered.</item>
 /// <item>An invoice with nothing to collect is settled on arrival and the facility is told right away.</item>
 /// </list>
@@ -114,6 +115,7 @@ public sealed class InvoiceRequestedHandler : IInteropHandler<BillingInvoiceRequ
             .FirstOrDefaultAsync(i => i.TenantId == tenantId && i.FacilityId == facilityId && i.InvoiceRequestId == payload.InvoiceRequestId, ct);
 
         string action;
+        object? reopened = null;
         if (invoice is null)
         {
             invoice = Invoice.Create(
@@ -124,6 +126,12 @@ public sealed class InvoiceRequestedHandler : IInteropHandler<BillingInvoiceRequ
             invoice.AssignNumber(number);
             _db.Invoices.Add(invoice);
             action = "invoice.requested";
+        }
+        else if (invoice.Status is InvoiceStatus.Void or InvoiceStatus.Refunded)
+        {
+            reopened = new { PreviousStatus = invoice.Status, PreviousTotal = invoice.Total, invoice.RefundedTotal, PreviousReason = invoice.VoidReason, DiscountsDropped = invoice.Discounts.Count };
+            invoice.Reopen(payload.BranchId, payload.SourceType, payload.SourceId, payload.PatientId, patientName, payload.VisitKey, payload.Currency, lines, now);
+            action = "invoice.reopened";
         }
         else if (invoice.IsLocked)
         {
@@ -147,8 +155,10 @@ public sealed class InvoiceRequestedHandler : IInteropHandler<BillingInvoiceRequ
             action += ".settled-no-charge";
         }
 
-        _audit.Record(null, tenantId, facilityId, action, nameof(Invoice), invoice.Id,
-            new { invoice.InvoiceNumber, invoice.SourceType, invoice.SourceId, invoice.Total, Lines = invoice.Lines.Count });
+        object details = reopened is null
+            ? new { invoice.InvoiceNumber, invoice.SourceType, invoice.SourceId, invoice.Total, Lines = invoice.Lines.Count }
+            : new { invoice.InvoiceNumber, invoice.SourceType, invoice.SourceId, invoice.Total, Lines = invoice.Lines.Count, Reopened = reopened };
+        _audit.Record(null, tenantId, facilityId, action, nameof(Invoice), invoice.Id, details);
 
         await _db.SaveChangesAsync(ct);
     }
