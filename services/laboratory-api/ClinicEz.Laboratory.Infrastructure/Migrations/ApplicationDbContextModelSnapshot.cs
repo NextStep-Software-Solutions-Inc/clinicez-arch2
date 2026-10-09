@@ -383,6 +383,21 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                     b.Property<string>("DeletedBy")
                         .HasColumnType("text");
 
+                    b.Property<int>("DoctorReviewOutcome")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DoctorReviewRemarks")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DoctorReviewedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DoctorReviewedByName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DoctorReviewedByPrc")
+                        .HasColumnType("text");
+
                     b.Property<Guid?>("ExternalRequisitionId")
                         .HasColumnType("uuid");
 

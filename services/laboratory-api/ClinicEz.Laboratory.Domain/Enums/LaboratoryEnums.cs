@@ -112,6 +112,18 @@ public enum PaymentCorrection
     Refunded
 }
 
+/// <summary>The ordering doctor's verdict on a result, sent back by the clinic (<c>lab.result.reviewed</c>).</summary>
+public enum DoctorReviewOutcome
+{
+    None,
+
+    /// <summary>The doctor accepted the result.</summary>
+    Accepted,
+
+    /// <summary>The doctor rejected the result.</summary>
+    Rejected
+}
+
 /// <summary>
 /// Lifecycle of an order inside this laboratory. Names mirror the shared <c>LabOrderStage</c> wire contract, which
 /// the Domain layer cannot reference; the Application layer maps between the two by name.

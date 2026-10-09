@@ -81,6 +81,7 @@ public static class DependencyInjection
             .Handle<LabRequisitionIssuedEvent, LabOrderIssuedHandler>(InteropTypes.LabOrderIssued)
             .Handle<BillingPaymentConfirmedPayload, BillingPaymentConfirmedHandler>(InteropTypes.BillingPaymentConfirmed)
             .Handle<BillingInvoiceVoidedPayload, BillingInvoiceVoidedHandler>(InteropTypes.BillingInvoiceVoided)
+            .Handle<LabResultReviewedPayload, LabResultReviewedHandler>(InteropTypes.LabResultReviewed)
             .HandleEntitlementsChanged());
 
 

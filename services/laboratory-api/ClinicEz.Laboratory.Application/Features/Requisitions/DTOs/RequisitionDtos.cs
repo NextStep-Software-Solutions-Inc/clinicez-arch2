@@ -97,6 +97,11 @@ public record LabRequisitionDto
     /// <summary>None, Voided or Refunded: billing reversed the payment after the order was accepted.</summary>
     public string PaymentCorrection { get; init; } = "None";
     public DateTime? PaymentCorrectedAtUtc { get; init; }
+    /// <summary>None, Accepted or Rejected: the ordering doctor's verdict on the result, once the clinic sent it.</summary>
+    public string DoctorReviewOutcome { get; init; } = "None";
+    public DateTime? DoctorReviewedAtUtc { get; init; }
+    public string? DoctorReviewedByName { get; init; }
+    public string? DoctorReviewRemarks { get; init; }
     public DateTime CreatedAt { get; init; }
     public List<SpecimenDto> Specimens { get; init; } = new();
     public List<AnalyteResultDto> AnalyteResults { get; init; } = new();

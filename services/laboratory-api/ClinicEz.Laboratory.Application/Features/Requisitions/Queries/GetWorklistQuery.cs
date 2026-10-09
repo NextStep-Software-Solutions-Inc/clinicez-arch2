@@ -105,6 +105,10 @@ public class GetWorklistQueryHandler : IRequestHandler<GetWorklistQuery, List<La
             InvoiceId = r.InvoiceId,
             PaymentCorrection = r.PaymentCorrection.ToString(),
             PaymentCorrectedAtUtc = r.PaymentCorrectedAtUtc,
+            DoctorReviewOutcome = r.DoctorReviewOutcome.ToString(),
+            DoctorReviewedAtUtc = r.DoctorReviewedAtUtc,
+            DoctorReviewedByName = r.DoctorReviewedByName,
+            DoctorReviewRemarks = r.DoctorReviewRemarks,
             CreatedAt = r.CreatedAt,
             Specimens = r.Specimens.Select(s => new SpecimenDto
             {
