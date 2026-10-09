@@ -322,7 +322,7 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
             },
             Patient = new Interop.PrescriptionPatientDto
             {
-                PatientId = encounter.PatientId,
+                PatientId = patient.SyncPatientId ?? Guid.Empty,
                 FullName = encounter.PatientName,
                 PhilHealthPin = patient.PhilHealthNumber,
                 NationalId = patient.SeniorCitizenId ?? patient.PwdId,

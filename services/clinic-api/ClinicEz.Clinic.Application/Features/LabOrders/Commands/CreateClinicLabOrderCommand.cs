@@ -273,7 +273,7 @@ public class CreateClinicLabOrderCommandHandler : IRequestHandler<CreateClinicLa
             },
             Patient = new RequisitionPatientDto
             {
-                PatientId = request.PatientId,
+                PatientId = patient.SyncPatientId ?? Guid.Empty,
                 FullName = request.PatientName.Trim(),
                 PhilHealthPin = patient.PhilHealthNumber,
                 NationalId = patient.SeniorCitizenId ?? patient.PwdId,

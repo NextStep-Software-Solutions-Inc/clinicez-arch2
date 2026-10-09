@@ -238,7 +238,7 @@ public class LabOrdersAndInteroperabilityTests
         requisition.RequisitionId.Should().Be(order.Id);
         requisition.OrderingFacilityName.Should().Be("Apex Clinic");
         requisition.OrderingDoctor.PrcLicenseNumber.Should().Be("0123456");
-        requisition.Patient.PatientId.Should().Be(patientId);
+        requisition.Patient.PatientId.Should().Be(Guid.Empty, "a walk-in patient has no patient-app account for the lab to address");
         requisition.Patient.PhilHealthPin.Should().Be("12-050412345-6");
     }
 

@@ -60,6 +60,8 @@ public sealed class PrescriptionDispensedHandler : IInteropHandler<PrescriptionD
             return;
         }
 
+        encounter.RxStage = RxStage.Dispensed;
+        encounter.RxStageReportedAt = message.DispensedAt;
         encounter.RxDispenseStatus = PrescriptionDispenseStatus.DispensedAtPartnerPharmacy;
         encounter.RxDispensedPharmacyName = message.PharmacyFacilityName;
         encounter.RxDispensedPharmacistName = message.DispensingPharmacistName;
