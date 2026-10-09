@@ -100,6 +100,8 @@ public sealed class DirectoryService(IDirectoryStore store)
                 return string.IsNullOrWhiteSpace(tenantId) ? null : [tenantId];
             case HubClientKind.PatientPlane:
                 return [];
+            case HubClientKind.PlatformService:
+                throw HubRequestException.Forbidden("Platform-service clients cannot read the directory.");
         }
 
         var cellTenants = await store.GetTenantsOfCellAsync(caller.CellId, ct);

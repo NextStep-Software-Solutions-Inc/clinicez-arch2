@@ -60,21 +60,6 @@ public sealed class CreateAppointmentCommandHandler : IRequestHandler<CreateAppo
         await _appointmentRepo.AddAsync(appointment, ct);
         await _unitOfWork.SaveChangesAsync(ct);
 
-        return new AppointmentDto(
-            appointment.Id,
-            appointment.TenantId,
-            appointment.ClinicId,
-            appointment.DraftId,
-            appointment.PatientId,
-            appointment.PatientName,
-            appointment.DoctorId,
-            appointment.DoctorName,
-            appointment.ScheduledAt,
-            appointment.DurationMinutes,
-            appointment.Status,
-            appointment.ServiceType,
-            appointment.Reason,
-            appointment.Notes,
-            appointment.CreatedAt);
+        return AppointmentDto.From(appointment);
     }
 }

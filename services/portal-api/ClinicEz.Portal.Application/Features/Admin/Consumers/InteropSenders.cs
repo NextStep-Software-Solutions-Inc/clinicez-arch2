@@ -18,4 +18,9 @@ internal static class InteropSenders
 
     public static bool IsFacility(Party sender, Facility facility, string? service = null) =>
         IsFacility(sender, facility.TenantId, facility.Id, service);
+
+    /// <summary>The sender is the PhilHealth proxy, the platform service that holds the workspaces' PhilHealth credentials.</summary>
+    public static bool IsPhilHealthProxy(Party sender) =>
+        sender.Kind == PartyKind.ControlPlane
+        && string.Equals(sender.Service, InteropServices.Philhealth, StringComparison.OrdinalIgnoreCase);
 }

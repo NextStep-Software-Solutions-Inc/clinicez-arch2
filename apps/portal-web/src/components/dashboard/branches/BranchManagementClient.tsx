@@ -83,7 +83,6 @@ export default function BranchManagementClient() {
   const [phCipherKey, setPhCipherKey] = useState("");
   const [phEndpoint, setPhEndpoint] = useState("https://staging.philhealth.gov.ph/KONSULTA/SOAP");
   const [savingPh, setSavingPh] = useState(false);
-  const [testingConnection, setTestingConnection] = useState(false);
 
   // Link Facilities state
   const [selectedFacilityIds, setSelectedFacilityIds] = useState<string[]>([]);
@@ -233,22 +232,6 @@ export default function BranchManagementClient() {
       toast.error("Failed to configure PhilHealth: " + (err.response?.data?.message || err.message));
     } finally {
       setSavingPh(false);
-    }
-  };
-
-  // Test PhilHealth Connection
-  const handleTestConnection = async () => {
-    setTestingConnection(true);
-    try {
-      const res = await apiClient.post<any>(`/internal/branches/${philhealthBranch?.id}/test-connection`).catch(async () => {
-        // Fallback test via proxy
-        return await apiClient.post<any>("/tenants/test-connection");
-      });
-      toast.success("PhilHealth connection test successful! Gateway handshake verified.");
-    } catch (err: any) {
-      toast.error("Connection check failed: " + (err.response?.data?.message || err.message || "Endpoint unreachable"));
-    } finally {
-      setTestingConnection(false);
     }
   };
 
@@ -768,18 +751,7 @@ export default function BranchManagementClient() {
             </div>
           </div>
 
-          <DialogFooter className="gap-2 sm:justify-between">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleTestConnection}
-              disabled={testingConnection}
-              className="rounded-xl text-xs gap-1 border-primary/30 text-primary"
-            >
-              {testingConnection ? <IconLoader className="h-3.5 w-3.5 animate-spin" /> : <IconRefresh className="h-3.5 w-3.5" />}
-              Test Gateway Handshake
-            </Button>
-
+          <DialogFooter className="gap-2">
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"

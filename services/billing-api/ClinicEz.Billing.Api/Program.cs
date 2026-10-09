@@ -4,6 +4,7 @@ using ClinicEz.Billing.Application;
 using ClinicEz.Billing.Infrastructure;
 using ClinicEz.Billing.Infrastructure.Auth;
 using ClinicEz.Billing.Infrastructure.Persistence;
+using ClinicEz.Shared.Licensing;
 using ClinicEz.Shared.LocalAuth;
 using ClinicEz.Shared.Middlewares;
 using Microsoft.AspNetCore.RateLimiting;
@@ -14,6 +15,8 @@ var builder = WebApplication.CreateBuilder(args);
 var env = builder.Environment;
 builder.Configuration.AddJsonFile("appsettings.json", false, true);
 builder.Configuration.AddJsonFile($"appsettings.{env.EnvironmentName}.json", true, true);
+// CreateBuilder put the environment variables before the files added here, so the files would override them; re-add them last.
+builder.Configuration.AddEnvironmentVariables();
 builder.Configuration.AddUserSecrets(typeof(Program).Assembly, true);
 
 // 1. Add services from our other layers
@@ -64,6 +67,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseInternalServiceGuard(); // internal-key principal is default-denied except on permission-guarded endpoints
 app.UseMiddleware<BillingScopeMiddleware>();
+app.UseReadOnlyGrace();
 
 // 4. Tell the app to use controllers
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" })).AllowAnonymous();

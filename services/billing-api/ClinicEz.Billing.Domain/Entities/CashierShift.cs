@@ -95,6 +95,12 @@ public class BillingFacility
     public ClinicEz.Shared.Common.FacilityType FacilityType { get; set; }
     public DateTime FirstSeenUtc { get; set; }
     public DateTime LastSeenUtc { get; set; }
+    /// <summary>The signed license the control plane issued for this facility (<c>facility.license.issued</c> / <c>entitlements.changed</c>); <c>null</c> until one arrives. Only facilities holding one are license-gated.</summary>
+    public string? LicenseToken { get; set; }
+    /// <summary>Workspace entitlement version of <see cref="LicenseToken"/>; a replacement license older than this is ignored.</summary>
+    public int EntitlementVersion { get; set; }
+    public string? PlanTier { get; set; }
+    public DateTime? LicenseExpiresAt { get; set; }
 }
 
 /// <summary>Gap-free per-counter document numbers (receipts, invoices). Concurrent writers collide on <see cref="Version"/> and retry.</summary>

@@ -57,9 +57,11 @@ public sealed class SubmitBookingDraftCommandHandlerTests
 
     private SubmitBookingDraftCommandHandler CreateHandler() =>
         new(_draftRepo, _clinicRepo, _uow, _membershipRepo, _publisher, _patientRepo, _accessRepo, _storage,
-            Options.Create(new SharingOptions { BookingGrantDays = 30 }), _fileRepo);
+            Options.Create(new SharingOptions { BookingGrantDays = 30 }),
+            new PatientShareSnapshotBuilder(_patientRepo, Substitute.For<IPatientDocumentRepository>()), _fileRepo);
 
-    private BookingDraft ArrangeDraft(string shareFieldsJson = "[]", string attachedFileIdsJson = "[]", string? clinicTenant = "tenant-a")
+    private BookingDraft ArrangeDraft(
+        string shareFieldsJson = "[]", string attachedFileIdsJson = "[]", string? clinicTenant = "tenant-a", AccessScopes shareSections = AccessScopes.None)
     {
         var draft = new BookingDraft
         {
@@ -71,6 +73,7 @@ public sealed class SubmitBookingDraftCommandHandlerTests
             PreferredTime = "14:00",
             Reason = "General Checkup",
             ShareFieldsJson = shareFieldsJson,
+            ShareSections = shareSections,
             AttachedFileIdsJson = attachedFileIdsJson
         };
         var clinic = new Clinic { Id = _clinicId, Name = "City Health Clinic", TenantId = clinicTenant, IsPublic = true };
@@ -83,6 +86,8 @@ public sealed class SubmitBookingDraftCommandHandlerTests
             Email = "juan@example.test",
             DateOfBirth = new DateOnly(1990, 1, 2),
             Sex = SexType.Male,
+            Allergies = [new PatientAllergy { AllergenName = "Penicillin", Severity = AllergySeverity.Severe }],
+            Medications = [new PatientMedication { MedicationName = "Metformin", Dosage = "500 mg", IsCurrentlyTaking = true }],
             GovernmentIds = new List<PatientGovernmentId>
             {
                 new()
@@ -310,6 +315,38 @@ public sealed class SubmitBookingDraftCommandHandlerTests
         log!.GrantId.Should().Be(grant.Id);
         log.Action.Should().Be("BookingShared");
         log.Detail.Should().Contain("name").And.Contain("mobile number").And.Contain("dateOfBirth").And.NotContain("email");
+    }
+
+    [Fact]
+    public async Task Handle_WithNoChosenSections_SendsNoRecordItemsAndGrantsOnlyDemographics()
+    {
+        ArrangeDraft();
+        PatientAccessGrant? grant = null;
+        await _accessRepo.AddGrantAsync(Arg.Do<PatientAccessGrant>(g => grant = g), Arg.Any<CancellationToken>());
+
+        await CreateHandler().Handle(new SubmitBookingDraftCommand(_patientId, _draftId), CancellationToken.None);
+
+        _published!.SharedItems.Should().BeEmpty();
+        _published.SharedScopes.Should().Be(SharingScopes.Demographics);
+        grant!.Scopes.Should().Be(AccessScopes.Demographics);
+    }
+
+    [Fact]
+    public async Task Handle_SendsOnlyTheSectionsThePatientChose_AndGrantsExactlyThose()
+    {
+        ArrangeDraft(shareSections: AccessScopes.Allergies);
+        PatientAccessGrant? grant = null;
+        PatientAccessLog? log = null;
+        await _accessRepo.AddGrantAsync(Arg.Do<PatientAccessGrant>(g => grant = g), Arg.Any<CancellationToken>());
+        await _accessRepo.AddLogAsync(Arg.Do<PatientAccessLog>(l => log = l), Arg.Any<CancellationToken>());
+
+        await CreateHandler().Handle(new SubmitBookingDraftCommand(_patientId, _draftId), CancellationToken.None);
+
+        _published!.SharedItems.Should().ContainSingle().Which.Should().Match<ShareItemDto>(i => i.Kind == "allergy" && i.Name == "Penicillin");
+        _published.SharedItems.Select(i => i.Kind).Should().NotContain("medication");
+        _published.SharedScopes.Should().Be(SharingScopes.Demographics | SharingScopes.Allergies);
+        grant!.Scopes.Should().Be(AccessScopes.Demographics | AccessScopes.Allergies);
+        log!.Detail.Should().Contain("Allergies").And.NotContain("Medications");
     }
 
     private FileRecord Attachment(Guid id, string? encryptionKeyId = null, string storageKey = "patients/p/file.pdf", long size = 1024) => new()

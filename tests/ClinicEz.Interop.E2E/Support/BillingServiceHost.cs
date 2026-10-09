@@ -94,6 +94,6 @@ public sealed class BillingServiceHost : ServiceHostBase
     public Task<InvoiceDto> VoidAsync(Guid invoiceId, string reason) =>
         WithAsync<CorrectionService, InvoiceDto>(c => c.VoidAsync(invoiceId, new VoidRequest(reason), default));
 
-    public Task<RefundDto> RefundAsync(Guid invoiceId, string reason) =>
-        WithAsync<CorrectionService, RefundDto>(c => c.RefundAsync(invoiceId, new RefundRequest(reason, null), default));
+    public Task<RefundDto> RefundAsync(Guid invoiceId, string reason, decimal? amount = null) =>
+        WithAsync<CorrectionService, RefundDto>(c => c.RefundAsync(invoiceId, new RefundRequest(reason, amount, null, null), default));
 }

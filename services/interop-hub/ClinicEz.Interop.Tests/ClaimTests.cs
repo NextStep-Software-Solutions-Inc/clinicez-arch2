@@ -55,10 +55,10 @@ public class ClaimTests
         var claim = await CreateAsync(hub, "clinic", Order(W.A1Clinic, correlation: correlation));
         (await RedeemAsync(hub, "lab", claim.Token, W.B1Lab)).StatusCode.Should().Be(HttpStatusCode.OK);
 
-        (await hub.SendAsync("lab", W.Env(InteropTypes.LabOrderClaimed, W.B1Lab, W.A1Clinic, correlation))).Status.Should().Be(SendResult.Accepted);
+        (await hub.SendAsync("lab", W.Env(InteropTypes.LabOrderStatusChanged, W.B1Lab, W.A1Clinic, correlation))).Status.Should().Be(SendResult.Accepted);
         (await hub.SendAsync("lab", W.Env(InteropTypes.LabResultFinalized, W.B1Lab, W.A1Clinic, correlation))).Status.Should().Be(SendResult.Accepted);
         (await hub.SendAsync("lab", W.Env(InteropTypes.LabResultFinalized, W.B1Lab, W.A1Clinic, Guid.NewGuid()))).Status.Should().Be(SendResult.Rejected);
-        (await hub.PullAsync("clinic", "clinic")).Select(m => m.Envelope.Type).Should().Equal(InteropTypes.LabOrderClaimed, InteropTypes.LabResultFinalized);
+        (await hub.PullAsync("clinic", "clinic")).Select(m => m.Envelope.Type).Should().Equal(InteropTypes.LabOrderStatusChanged, InteropTypes.LabResultFinalized);
     }
 
     [Fact]

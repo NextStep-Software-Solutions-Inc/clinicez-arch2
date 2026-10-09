@@ -16,7 +16,7 @@ namespace ClinicEz.Interop.Application.Claims;
 /// (<c>POST /v1/claims/{token}/redeem</c>). Redeeming
 /// <list type="number">
 /// <item>delivers the order to the redeemer's mailbox without any partner link or visibility check (the token is the authorization),</item>
-/// <item>opens the correlation so the redeemer may reply to the issuer (<c>lab.order.claimed</c>, results, ...), and</item>
+/// <item>opens the correlation so the redeemer may reply to the issuer (<c>lab.order.status.changed</c>, results, ...), and</item>
 /// <item>purges the stored order; the claim row stays (hash only) until it expires so a second redeem is refused.</item>
 /// </list>
 /// The token is 256 random bits shown once; only its SHA-256 is stored.

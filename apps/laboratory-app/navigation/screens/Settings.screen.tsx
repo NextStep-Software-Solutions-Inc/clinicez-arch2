@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import ThemedText from '@ui/ThemedText';
 import { useFacilityLicense } from '../../components/FacilityActivationGate';
+import { useConnection } from '../../components/ConnectionGate';
 import {
   laboratoryService,
   LabStaffMember,
@@ -19,6 +20,7 @@ import {
 
 export default function SettingsScreen() {
   const { license, openActivationModal, refreshLicense } = useFacilityLicense();
+  const { serverLabel, changeServer } = useConnection();
   const [staff, setStaff] = useState<LabStaffMember[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -198,6 +200,22 @@ export default function SettingsScreen() {
           </View>
         )}
       </View>
+
+      {/* Laboratory server (phones/tablets only) */}
+      {changeServer && (
+        <View style={styles.card}>
+          <View style={styles.cardHeaderRow}>
+            <ThemedText style={styles.cardTitle}>Laboratory Server</ThemedText>
+            <Pressable style={styles.licenseActionBtn} onPress={changeServer}>
+              <ThemedText style={styles.licenseActionBtnText}>Change server</ThemedText>
+            </Pressable>
+          </View>
+          <View style={styles.row}>
+            <ThemedText style={styles.label}>Connected to</ThemedText>
+            <ThemedText style={styles.value}>{serverLabel}</ThemedText>
+          </View>
+        </View>
+      )}
 
       {/* Staff & Healthcare Providers Roster Card */}
       <View style={styles.card}>

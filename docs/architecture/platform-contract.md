@@ -196,6 +196,45 @@ The workspace profile (name, logo, accent colour, time zone, locale, date format
 3. Read it through `IWorkspaceProfileProvider` (`GetAsync`, or `TryGetCached` for synchronous code such as PDF rendering). It returns null until the first message has arrived, so every caller needs a built-in fallback.
 
 The shared handler accepts the message only from the portal and only when addressed to a facility of the profile's tenant, and applies it only when `Version` is newer than the stored one, which makes redelivery and reordering harmless. `WorkspaceProfile:CacheSeconds` (default 60) is only the in-memory cache lifetime.
+
+### Request-reply
+
+A service never calls another service over HTTP. When it needs an answer (GAMOT lookups clinic -> pharmacy, PhilHealth operations clinic -> proxy, PhilHealth credentials proxy -> portal) it sends a request envelope and awaits the reply envelope that carries the same `CorrelationId`. Both halves are normal outbox/hub messages, so signing, routing rules, at-least-once delivery and the edge store-and-forward path apply unchanged.
+
+Requester (the type pair is declared in [`InteropTypes`](../../packages/shared-dotnet/Interop/InteropTypes.cs), payloads in [`PlatformServiceContracts.cs`](../../packages/shared-dotnet/Interoperability/PlatformServiceContracts.cs)):
+
+```csharp
+// registration: the reply type must be accepted by this service
+services.AddInterop<ApplicationDbContext>(config, h => h.HandleReply(InteropTypes.GamotLookupResponded));
+
+// call site (IInteropRequestClient from DI)
+var reply = await client.RequestAsync<GamotLookupRequestedPayload, GamotLookupRespondedPayload>(
+    InteropTypes.GamotLookupRequested, InteropTypes.GamotLookupResponded,
+    from: facilityParty, to: pharmacyParty, payload, timeout: TimeSpan.FromSeconds(30), ct);
+```
+
+Responder:
+
+```csharp
+public sealed class GamotResponder : IInteropResponder<GamotLookupRequestedPayload, GamotLookupRespondedPayload>
+{
+    public Task<GamotLookupRespondedPayload> RespondAsync(GamotLookupRequestedPayload request, InteropMessageContext context, CancellationToken ct) { /* authorise context.From, do the work, return the payload */ }
+}
+// registration
+h.Respond<GamotLookupRequestedPayload, GamotLookupRespondedPayload, GamotResponder>(InteropTypes.GamotLookupRequested, InteropTypes.GamotLookupResponded);
+```
+
+| Aspect | Behaviour |
+|---|---|
+| Reply routing | The SDK enqueues the returned payload as the reply type, `From` = the request's `To` (the responder's own identity), `To` = the request's `From`, same `CorrelationId`, in the **same `SaveChanges`** as whatever the responder changed on its DbContext (leave changes tracked, do not call `SaveChanges` in the responder). A reply is a reply on an open correlation, so the hub delivers it even when a cross-tenant link was revoked meanwhile. |
+| Authorisation | The SDK does **not** authorise the sender. The responder checks `context.From` (tenant, facility, platform party) before touching data and answers with a failure status in its payload (for example `StatusCode` 403). The requester checks that the reply's `From` is the party it addressed and that its type is the awaited reply type; anything else is ignored. |
+| Timeouts | `RequestAsync` throws `InteropRequestTimeoutException` (`TimeoutException`; carries request type, correlation id, timeout; never payload data) when no reply arrives within `timeout` (default `Messaging:RequestTimeoutSeconds`, 30). Cancellation throws `OperationCanceledException`. A request expires on the hub shortly after its timeout (`ExpiresAtUtc`), so a peer that comes back online does not act on stale requests. A reply that arrives after the caller gave up is acknowledged and dropped. |
+| Idempotency | The reply id is derived from the request id. A redelivered request finds its reply already in the outbox and is not handled twice. A responder that throws leaves the request to be redelivered (and finally dead-lettered); the caller times out meanwhile. Report business failures in the response payload instead of throwing. |
+| Latency | The relay is woken as soon as a request or reply is committed and both sides long-poll their mailbox, so a healthy round trip costs four hub hops (about a few hundred milliseconds in one region). Over an edge hub the cloud leg adds the forwarder and cell-inbox pull intervals. One slow responder blocks the other messages of its own mailbox poll batch, so keep responders short. |
+| Instances | The requester keeps pending calls in memory: run **one instance per service mailbox** (the compose files do). Behind several replicas a reply can be consumed by an instance that did not ask. |
+| Logging | The SDK logs message type, ids and timeouts only. Do not log request or reply payloads (PHI, credentials). |
+
+**Platform services.** A few services are not facilities: the PhilHealth proxy (`philhealth`, `Party.PhilHealth`) is a hub client of kind `PlatformService` in the cloud cell. Facilities may address it only with `philhealth.request`; the proxy answers with `philhealth.response`; its credential traffic with the portal is closed to everyone else. The proxy derives the tenant and facility from the verified `From`, never from the payload. Rules: [`interop-hub.md`](interop-hub.md#platform-services); messages: [`message-matrix.md`](message-matrix.md#platform-services-requestreply).
 ---
 ## Add a new service: checklist
 
@@ -206,7 +245,7 @@ The shared handler accepts the message only from the portal and only when addres
 5. **Provisioning handler:** `FacilityLicenseIssued` handler with the four checks and the `facility.provisioned` ack (copy the lab handler); register `IFacilityLicenseValidator`; license/status endpoints like the existing `LicenseController`s.
 6. **Domain handlers/publishers** for your message types: add constants to [`InteropTypes`](../../packages/shared-dotnet/Interop/InteropTypes.cs) (the only place), payload records under `packages/shared-dotnet/Interoperability`, register with `.Handle<TPayload, THandler>(type)`; publish before `SaveChanges`.
 7. **Messaging config:** `Messaging__Transport/Service/HubUrl/ClientId/ClientSecret` in `deploy/<name>-api/docker-compose.yml` and the deploy workflow secrets (`<NAME>_MESSAGING_CLIENT_ID/SECRET` plus `<NAME>_HUB_SIGNING_KEY`; license public key and any document key if the service validates licenses or renders documents), mirroring [deploy-laboratory-api-dev.yml](../../.github/workflows/deploy-laboratory-api-dev.yml).
-8. **Hub client:** cloud cell: operations create a `CloudService` client with `Service=<name>` in cell `cloud` (the admin API returns the signing key once; or register a public key you generated); on-prem: the portal creates the `EdgeCell` client automatically when it creates the facility (check `HubOnboardingService.CreateClientAsync` resolves your service name).
+8. **Hub client:** cloud cell: operations create a `CloudService` client with `Service=<name>` (`PlatformService` for a platform service such as the PhilHealth proxy) in cell `cloud` (the admin API returns the signing key once; or register a public key you generated); on-prem: the portal creates the `EdgeCell` client automatically when it creates the facility (check `HubOnboardingService.CreateClientAsync` resolves your service name).
 9. **Billing integration (optional):** send `billing.invoice.requested` with `To.Service = "billing"` and wait for `billing.payment.confirmed` (see [billing.md](billing.md); the billing service is still a work in progress).
 10. **Tests:** handler tests on the `InProcess` transport, a cross-tenant isolation test (two tenants, same external id), license validator tests, and the portal-side test that creating the facility stages the license and directory messages.
 11. **Docs and guard:** list the new types in the [message matrix](message-matrix.md); `scripts/check-no-broker.ps1` (run from `backend-ci.yml`) keeps broker or MassTransit references out of the repo.

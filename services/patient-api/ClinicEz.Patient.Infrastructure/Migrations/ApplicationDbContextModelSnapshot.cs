@@ -210,6 +210,12 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("share_fields_json");
 
+                    b.Property<string>("ShareSections")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("share_sections");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -5611,6 +5617,164 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                     b.ToTable("provider_availabilities", (string)null);
                 });
 
+            modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.ShareCode", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CodeHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("code_hash");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("PatientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("patient_id");
+
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("purpose");
+
+                    b.Property<string>("Scopes")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("scopes");
+
+                    b.Property<string>("TokenId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("token_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("updated_by");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_share_codes");
+
+                    b.HasIndex("TokenId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_share_codes_token_id");
+
+                    b.HasIndex("PatientId", "CodeHash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_share_codes_patient_id_code_hash");
+
+                    b.ToTable("share_codes", (string)null);
+                });
+
+            modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.ShareCodeFailure", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Actor")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("actor");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DeletedBy")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid?>("PatientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("patient_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("updated_by");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_share_code_failures");
+
+                    b.HasIndex("Actor", "CreatedAt")
+                        .HasDatabaseName("ix_share_code_failures_actor_created_at");
+
+                    b.HasIndex("PatientId", "CreatedAt")
+                        .HasDatabaseName("ix_share_code_failures_patient_id_created_at");
+
+                    b.ToTable("share_code_failures", (string)null);
+                });
+
             modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.ShareTokenUse", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5637,6 +5801,10 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("deleted_by");
 
+                    b.Property<Guid>("FacilityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("facility_id");
+
                     b.Property<Guid>("GrantId")
                         .HasColumnType("uuid")
                         .HasColumnName("grant_id");
@@ -5652,6 +5820,10 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                     b.Property<Guid>("PatientId")
                         .HasColumnType("uuid")
                         .HasColumnName("patient_id");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer")
+                        .HasColumnName("sequence");
 
                     b.Property<string>("TokenId")
                         .IsRequired()
@@ -5677,9 +5849,13 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("pk_share_token_uses");
 
-                    b.HasIndex("TokenId")
+                    b.HasIndex("TokenId", "MessageId")
                         .IsUnique()
-                        .HasDatabaseName("ix_share_token_uses_token_id");
+                        .HasDatabaseName("ix_share_token_uses_token_id_message_id");
+
+                    b.HasIndex("TokenId", "Sequence")
+                        .IsUnique()
+                        .HasDatabaseName("ix_share_token_uses_token_id_sequence");
 
                     b.ToTable("share_token_uses", (string)null);
                 });
@@ -6822,6 +6998,18 @@ namespace ClinicEz.Patient.Infrastructure.Migrations
                         .HasConstraintName("fk_provider_availabilities_clinic_healthcare_providers_clinic_");
 
                     b.Navigation("ClinicHealthcareProvider");
+                });
+
+            modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.ShareCode", b =>
+                {
+                    b.HasOne("ClinicEz.Patient.Domain.Entities.Patient", "Patient")
+                        .WithMany()
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_share_codes_patients_patient_id");
+
+                    b.Navigation("Patient");
                 });
 
             modelBuilder.Entity("ClinicEz.Patient.Domain.Entities.SyncLog", b =>

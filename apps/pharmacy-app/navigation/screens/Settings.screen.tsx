@@ -12,6 +12,7 @@ import {
 import ThemedText from '@ui/ThemedText';
 import { useFacilityLicense } from '../../components/FacilityActivationGate';
 import { useAuth, usePermission } from '../../components/AuthGate';
+import { useConnection } from '../../components/ConnectionGate';
 import { PERMISSIONS } from '../../constants/permissions';
 import {
   pharmacyService,
@@ -25,6 +26,7 @@ const PAYMENT_POLICIES: readonly PaymentPolicy[] = ['Prepaid', 'Postpaid', 'None
 export default function SettingsScreen() {
   const { license, openActivationModal, refreshLicense } = useFacilityLicense();
   const { user, signOut } = useAuth();
+  const { serverLabel, changeServer } = useConnection();
   const canManagePolicy = usePermission(PERMISSIONS.staffManage);
   const [staff, setStaff] = useState<PharmacyStaffMember[]>([]);
   const [loading, setLoading] = useState(false);
@@ -256,6 +258,21 @@ export default function SettingsScreen() {
         ) : null}
         {policyError ? <ThemedText style={styles.policyError}>{policyError}</ThemedText> : null}
       </View>
+
+      {serverLabel && changeServer ? (
+        <View style={styles.card}>
+          <View style={styles.cardHeaderRow}>
+            <ThemedText style={styles.cardTitle}>Server</ThemedText>
+            <Pressable style={styles.licenseActionBtn} onPress={changeServer}>
+              <ThemedText style={styles.licenseActionBtnText}>Change server</ThemedText>
+            </Pressable>
+          </View>
+          <View style={styles.row}>
+            <ThemedText style={styles.label}>Connected to</ThemedText>
+            <ThemedText style={styles.value}>{serverLabel}</ThemedText>
+          </View>
+        </View>
+      ) : null}
 
       {/* Account Card */}
       <View style={styles.card}>

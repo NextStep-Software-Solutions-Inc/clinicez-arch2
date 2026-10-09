@@ -57,7 +57,8 @@ public sealed class HubFixture : IAsyncDisposable
         (InteropServices.Laboratory, HubClientKind.CloudService),
         (InteropServices.Pharmacy, HubClientKind.CloudService),
         (InteropServices.Billing, HubClientKind.CloudService),
-        (InteropServices.Patient, HubClientKind.PatientPlane)
+        (InteropServices.Patient, HubClientKind.PatientPlane),
+        (InteropServices.Philhealth, HubClientKind.PlatformService)
     ];
 
     public static HubFixture Start()

@@ -21,6 +21,8 @@ namespace ClinicEz.Pharmacy.Application.Interop;
 /// reopen the voided invoice for payment.</item>
 /// <item>Already dispensed: the correction is only recorded (<see cref="PrescriptionPaymentStatus.Voided"/> /
 /// <see cref="PrescriptionPaymentStatus.Refunded"/>) and logged; nothing is reopened.</item>
+/// <item>Partial refund (<c>IsPartial</c>): the invoice stays settled, so the order is neither reopened nor marked unpaid and keeps
+/// its payment status; only the cumulative refunded total is recorded.</item>
 /// </list>
 /// The prescription's clinical status does not change, so no <c>rx.status.changed</c> is sent. Idempotent: a correction that
 /// is not newer than the one already recorded, or that predates the recorded payment, changes nothing.
@@ -124,7 +126,15 @@ public sealed class BillingInvoiceVoidedHandler : IInteropHandler<BillingInvoice
             return;
         }
 
-        if (order.Status == PrescriptionStatus.Dispensed)
+        var reversed = msg.RefundedTotal > 0 ? msg.RefundedTotal : msg.AmountReversed;
+
+        if (msg.IsPartial && msg.Kind == BillingCorrectionKind.Refund)
+        {
+            _logger.LogInformation(
+                "[BillingInvoiceVoidedHandler] Prescription {PrescriptionNo} was partially refunded by billing ({AmountReversed} now, {RefundedTotal} in total); the order stays {PaymentStatus}.",
+                order.PrescriptionNumber, msg.AmountReversed, msg.RefundedTotal, order.PaymentStatus);
+        }
+        else if (order.Status == PrescriptionStatus.Dispensed)
         {
             order.PaymentStatus = msg.Kind == BillingCorrectionKind.Refund
                 ? PrescriptionPaymentStatus.Refunded
@@ -146,7 +156,7 @@ public sealed class BillingInvoiceVoidedHandler : IInteropHandler<BillingInvoice
         }
 
         order.PaymentCorrectedAt = msg.CorrectedAtUtc;
-        order.PaymentReversedAmount = msg.AmountReversed;
+        order.PaymentReversedAmount = reversed;
         order.UpdatedAt = DateTime.UtcNow;
         order.UpdatedBy = "SystemInterop";
 

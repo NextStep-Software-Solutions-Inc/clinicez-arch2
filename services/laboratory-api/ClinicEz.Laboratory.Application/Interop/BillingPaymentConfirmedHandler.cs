@@ -107,6 +107,7 @@ public sealed class BillingPaymentConfirmedHandler : IInteropHandler<BillingPaym
         requisition.ReceiptNumber = msg.ReceiptNumber;
         requisition.PaymentCorrection = PaymentCorrection.None;
         requisition.PaymentCorrectedAtUtc = null;
+        requisition.RefundedAmount = 0m;
 
         // Queued before the save: the payment and its announcement commit together. A postpaid order that is already
         // being worked on is past this stage, so only the payment fields change for it.

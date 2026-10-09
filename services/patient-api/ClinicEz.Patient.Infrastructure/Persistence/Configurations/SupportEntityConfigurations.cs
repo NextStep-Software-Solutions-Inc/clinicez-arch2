@@ -120,6 +120,7 @@ public sealed class BookingDraftConfiguration : IEntityTypeConfiguration<Booking
         builder.Property(e => e.Reason).HasMaxLength(500);
         builder.Property(e => e.Notes).HasMaxLength(1000);
         builder.Property(e => e.ShareFieldsJson).HasColumnType("text").IsRequired();
+        builder.Property(e => e.ShareSections).HasConversion<string>().HasMaxLength(200);
         builder.Property(e => e.Status).HasConversion<string>().HasMaxLength(20);
         builder.Property(e => e.CreatedBy).HasMaxLength(128).IsRequired();
         builder.Property(e => e.UpdatedBy).HasMaxLength(128);

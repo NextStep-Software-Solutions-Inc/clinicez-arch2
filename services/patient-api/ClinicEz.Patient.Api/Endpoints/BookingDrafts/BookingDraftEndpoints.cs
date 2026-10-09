@@ -15,7 +15,8 @@ public sealed record CreateBookingDraftRequest(
     string? Reason,
     string? Notes,
     string ShareFieldsJson,
-    string AttachedFileIdsJson);
+    string AttachedFileIdsJson,
+    IReadOnlyList<string>? ShareSections = null);
 
 public sealed class CreateBookingDraftEndpoint : IEndpoint
 {
@@ -28,7 +29,7 @@ public sealed class CreateBookingDraftEndpoint : IEndpoint
                 var id = await sender.Send(new CreateBookingDraftCommand(
                     patientId, request.ClinicId, request.OrganizationId,
                     request.PreferredDate, request.PreferredTime,
-                    request.Reason, request.Notes, request.ShareFieldsJson, request.AttachedFileIdsJson ?? "[]"), ct);
+                    request.Reason, request.Notes, request.ShareFieldsJson, request.AttachedFileIdsJson ?? "[]", request.ShareSections), ct);
 
                 return Results.Created(
                     $"/api/v1/patients/{patientId}/booking-drafts/{id}",

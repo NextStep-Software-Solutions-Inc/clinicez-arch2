@@ -10,7 +10,7 @@ namespace ClinicEz.Interop.Application.Routing;
 /// <summary>
 /// Checks that the sending client may speak for the envelope's <c>From</c>:
 /// facility clients (CloudService / EdgeCell) only for facilities registered in their own cell; the control plane only as
-/// portal/hub; the patient plane only as patients (it relays on their behalf).
+/// portal/hub; the patient plane only as patients (it relays on their behalf); a platform service only as itself.
 /// </summary>
 public sealed class OwnershipValidator(IDirectoryStore directory)
 {
@@ -23,6 +23,11 @@ public sealed class OwnershipValidator(IDirectoryStore directory)
                 return from.Kind == PartyKind.ControlPlane && (from.Service is null or InteropServices.Portal or InteropServices.Hub)
                     ? null
                     : "A control-plane client may only send as the portal or the hub.";
+
+            case HubClientKind.PlatformService:
+                return from.Kind == PartyKind.ControlPlane && string.Equals(from.Service, client.Service, StringComparison.Ordinal)
+                    ? null
+                    : $"A platform-service client may only send as its own service '{client.Service}'.";
 
             case HubClientKind.PatientPlane:
                 var asPatient = from.Kind == PartyKind.Patient && !string.IsNullOrWhiteSpace(from.PatientId);
@@ -61,7 +66,7 @@ public sealed record RouteDecision(RouteKind Kind, string? Mailbox = null, strin
 /// Routing and cross-tenant policy (plan 4.4 / 4.5 / 4.5.1).
 /// <list type="bullet">
 /// <item>Facility target: facility -> cell -> mailbox <c>{cell}:{service}</c> (service = <c>To.Service</c> or the facility type's default); an Edge cell's facilities are reached via <c>{cell}:cell-inbox</c>.</item>
-/// <item>Patient target: <c>{cloud}:patient</c>. Control-plane target: <c>{cloud}:portal</c> or <c>{cloud}:patient</c> (any client); other cloud-cell services only from control-plane / patient-plane clients.</item>
+/// <item>Patient target: <c>{cloud}:patient</c>. Control-plane target: <c>{cloud}:portal</c> or <c>{cloud}:patient</c> (any client); a platform service (<c>{cloud}:philhealth</c>) from any client but only for its own message types (<see cref="PlatformMessageRules"/>); other cloud-cell services only from control-plane / patient-plane clients.</item>
 /// <item>Same tenant: always allowed. Cross-tenant: allowed when the target previously addressed the sender in this correlation (a reply; permitted even if the link was later revoked so in-flight workflows finish), or when an Active link from sender to target covers the message kind and the target is not Private.</item>
 /// <item>Control-plane and patient-plane clients are trusted relays and are not link-checked.</item>
 /// <item>Local mode: facilities of the local cell are delivered on the LAN; everything else is forwarded to the cloud hub, which is the policy authority (rejected with <c>upstream_disabled</c> when <c>Hub:Upstream:Enabled=false</c>).</item>
@@ -80,6 +85,9 @@ public sealed class RoutingPolicy(IDirectoryStore directory, IMessageStore messa
     private static readonly string[] OpenControlPlaneServices = [InteropServices.Portal, InteropServices.Patient];
 
     /// <summary>Facility-plane services the control plane / patient plane may address in the cloud cell (never facility clients).</summary>
+    /// <summary>Platform services (control-plane parties with a client of their own). Every client may address them, but only with the message types <see cref="PlatformMessageRules"/> allow.</summary>
+    private static readonly string[] PlatformServices = [.. InteropServices.PlatformServices];
+
     private static readonly string[] FacilityPlaneServices =
         [InteropServices.Clinic, InteropServices.Laboratory, InteropServices.Pharmacy, InteropServices.Organization, InteropServices.Billing];
 
@@ -87,6 +95,9 @@ public sealed class RoutingPolicy(IDirectoryStore directory, IMessageStore messa
     {
         var opt = options.Value;
         var to = envelope.To;
+
+        if (PlatformMessageRules.Check(sender, envelope) is { } platformViolation)
+            return RouteDecision.Reject(platformViolation);
 
         switch (to.Kind)
         {
@@ -120,7 +131,8 @@ public sealed class RoutingPolicy(IDirectoryStore directory, IMessageStore messa
 
         var open = OpenControlPlaneServices.Contains(service, StringComparer.Ordinal);
         var facilityPlane = FacilityPlaneServices.Contains(service, StringComparer.Ordinal);
-        if (!open && !facilityPlane) return RouteDecision.Reject($"Unknown control-plane service '{to.Service}'.");
+        var platform = PlatformServices.Contains(service, StringComparer.Ordinal);
+        if (!open && !facilityPlane && !platform) return RouteDecision.Reject($"Unknown control-plane service '{to.Service}'.");
 
         if (facilityPlane && sender.Kind is not (HubClientKind.ControlPlane or HubClientKind.PatientPlane))
             return RouteDecision.Reject($"Facility clients may only address the 'portal' and 'patient' control-plane services, not '{service}'.");

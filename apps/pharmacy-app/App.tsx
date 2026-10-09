@@ -4,6 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Navigation } from './navigation/Navigation';
 import { FacilityActivationGate } from './components/FacilityActivationGate';
 import { AuthGate } from './components/AuthGate';
+import { ConnectionGate } from './components/ConnectionGate';
 import { loadRuntimeConfig } from './services/runtimeConfig';
 
 export default function App() {
@@ -18,11 +19,13 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <StatusBar style="auto" />
-      <FacilityActivationGate>
-        <AuthGate>
-          <Navigation />
-        </AuthGate>
-      </FacilityActivationGate>
+      <ConnectionGate>
+        <FacilityActivationGate>
+          <AuthGate>
+            <Navigation />
+          </AuthGate>
+        </FacilityActivationGate>
+      </ConnectionGate>
     </SafeAreaProvider>
   );
 }

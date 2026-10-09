@@ -170,7 +170,8 @@ public class LicenseIssuerAndPublisherTests : IDisposable
         await Publisher().StageForWorkspaceAsync(_tenant.Id, CancellationToken.None);
         await _context.SaveChangesAsync();
 
-        var messages = TestSupport.Outbox(_context, InteropTypes.EntitlementsChanged);
+        var all = TestSupport.Outbox(_context, InteropTypes.EntitlementsChanged);
+        var messages = all.Where(m => m.To.Service is null).ToList();
         Assert.Equal(2, messages.Count);
         Assert.Equivalent(
             new[] { clinic.Id, lab.Id },
@@ -185,6 +186,18 @@ public class LicenseIssuerAndPublisherTests : IDisposable
         Assert.Equal("pro", payload.PlanSlug);
         Assert.Equal(Now.AddDays(30), payload.LicenseExpiresAtUtc);
         Assert.Equal(Now.AddDays(44), payload.ReadOnlyGraceUntilUtc);
+
+        // The billing service of each facility's cell gets the identical message from its own mailbox.
+        var billing = all.Where(m => m.To.Service == InteropServices.Billing).ToList();
+        Assert.Equal(2, billing.Count);
+        var clinicBilling = billing.Single(m => m.GetPayload<EntitlementsChangedEvent>().FacilityId == clinic.Id);
+        Assert.Equal(clinicMessage.To with { Service = InteropServices.Billing }, clinicBilling.To);
+        Assert.Equal(clinicMessage.CorrelationId, clinicBilling.CorrelationId);
+        var billingPayload = clinicBilling.GetPayload<EntitlementsChangedEvent>();
+        Assert.Equal(payload.LicenseToken, billingPayload.LicenseToken);
+        Assert.Equal(payload.EntitlementVersion, billingPayload.EntitlementVersion);
+        Assert.Equal(payload.MaxStaff, billingPayload.MaxStaff);
+        Assert.Equal(payload.EnabledFeatures, billingPayload.EnabledFeatures);
 
         var stored = await _context.Facilities.AsNoTracking().SingleAsync(f => f.Id == clinic.Id);
         Assert.Equal(payload.LicenseToken, stored.LicenseToken);
@@ -203,7 +216,9 @@ public class LicenseIssuerAndPublisherTests : IDisposable
         await Publisher().StageForWorkspaceAsync(_tenant.Id, CancellationToken.None);
         await _context.SaveChangesAsync();
 
-        var total = TestSupport.OutboxPayloads<EntitlementsChangedEvent>(_context, InteropTypes.EntitlementsChanged).Sum(p => p.MaxStaff);
+        var total = TestSupport.Outbox(_context, InteropTypes.EntitlementsChanged)
+            .Where(m => m.To.Service is null)
+            .Sum(m => m.GetPayload<EntitlementsChangedEvent>().MaxStaff);
         Assert.Equal(10, total);
     }
 

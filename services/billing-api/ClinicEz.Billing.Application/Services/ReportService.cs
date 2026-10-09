@@ -1,5 +1,6 @@
 using ClinicEz.Billing.Application.Abstractions;
 using ClinicEz.Billing.Application.Dtos;
+using ClinicEz.Billing.Domain.Enums;
 using ClinicEz.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
@@ -63,7 +64,10 @@ public sealed class ReportService
             .Select(p => new Entry(p.PaidAtUtc, p.Method.ToString(), p.CashierName, p.BranchId, p.FacilityId, p.IsExternal ? 0m : p.Amount, p.IsExternal ? p.Amount : 0m, 0m, 1))
             .ToListAsync(ct);
         var refunds = await refundQuery
-            .Select(r => new Entry(r.RefundedAtUtc, r.Method.ToString(), r.ApprovedByName, r.BranchId, r.FacilityId, 0m, 0m, r.Amount, 0))
+            .Join(_db.RefundLines.Where(l => l.TenantId == caller.TenantId), r => r.Id, l => l.RefundId,
+                (r, l) => new Entry(
+                    r.RefundedAtUtc, l.Method.ToString(), r.ApprovedByName, r.BranchId, r.FacilityId,
+                    0m, l.Method == PaymentMethod.Insurance ? -l.Amount : 0m, l.Method == PaymentMethod.Insurance ? 0m : l.Amount, 0))
             .ToListAsync(ct);
         var entries = payments.Concat(refunds).ToList();
 

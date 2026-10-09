@@ -63,6 +63,7 @@ import NcdQuestionnaireScreen from '../screens/profile/NcdQuestionnaire.screen';
 import ShareRecordsScreen from '../screens/sharing/ShareRecords.screen';
 import AccessGrantsScreen from '../screens/sharing/AccessGrants.screen';
 import AccessLogScreen from '../screens/sharing/AccessLog.screen';
+import ShareCodeScreen from '../screens/sharing/ShareCode.screen';
 import MyDevicesScreen from '../screens/settings/MyDevices.screen';
 
 // Document inbox
@@ -327,6 +328,10 @@ const MainStack = createNativeStackNavigator({
     ShareRecordsScreen: createNativeStackScreen({
       screen: ShareRecordsScreen,
       options: { title: 'Share my records', headerLargeTitleEnabled: true },
+    }),
+    ShareCodeScreen: createNativeStackScreen({
+      screen: ShareCodeScreen,
+      options: { title: 'Share with a code' },
     }),
     AccessGrantsScreen: createNativeStackScreen({
       screen: AccessGrantsScreen,

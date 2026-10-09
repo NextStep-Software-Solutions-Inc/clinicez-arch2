@@ -446,9 +446,14 @@ export interface ClinicLabOrderRecord {
   isPanicAcknowledged?: boolean;
 }
 
-/** Redeem a patient's share token (scanned QR / pasted token). */
+/**
+ * Redeem a patient's share: a scanned QR / pasted token, or (leave `shareToken` out) the patient's ClinicEZ ID plus the
+ * one-time code they read out.
+ */
 export interface RedeemShareTokenRequest {
-  shareToken: string;
+  shareToken?: string;
+  clinicEzId?: string;
+  code?: string;
   purpose?: string;
   addToQueue?: boolean;
   chiefComplaint?: string;
@@ -460,10 +465,14 @@ export interface RedeemShareTokenResult {
 
 export type ShareImportState = 'Pending' | 'Imported' | 'Denied' | 'Failed';
 
+/** Why the patient plane refused a redeem; only present on `Denied`. */
+export type ShareDenialCode = 'Invalid' | 'Expired' | 'Exhausted' | 'PatientUnknown' | 'RateLimited' | 'Revoked';
+
 export interface ShareImportStatusDto {
   correlationId: string;
   status: ShareImportState;
   denialReason?: string | null;
+  denialCode?: ShareDenialCode | null;
   /** Clinic patient id (use to open the patient). */
   patientId?: string | null;
   patientName?: string | null;
@@ -472,6 +481,11 @@ export interface ShareImportStatusDto {
   scopes: string[];
   expiresAtUtc?: string | null;
   itemsImported: number;
+  /** Which use of the share this was (1-based), when the patient plane reports it. */
+  redemptionNumber?: number | null;
+  maxRedemptions?: number | null;
+  /** True when this clinic had already redeemed the same grant and the chart was refreshed. */
+  isRefresh: boolean;
   queueItemId?: string | null;
   queueNumber?: string | null;
   requestedAtUtc: string;

@@ -419,6 +419,47 @@ public class ShareRedeemFlowTests
     }
 
     [Fact]
+    public async Task Redeeming_By_Manual_Code_Sends_An_Empty_Token_With_The_ClinicEz_Id_And_Code()
+    {
+        var (db, uow, _) = TestDbHelper.CreateTestContext(_clinicContext);
+
+        var accepted = await Handler(db, uow).Handle(
+            new RedeemPatientShareCommand(null, "Consultation", false, null, " CEZ-0001 ", " ab12-cd34 "), CancellationToken.None);
+
+        var row = await db.InteropOutbox.SingleAsync();
+        row.CorrelationId.Should().Be(accepted.CorrelationId);
+        var payload = InteropEnvelope.FromJson(row.EnvelopeJson).GetPayload<PatientShareRedeemPayload>();
+        payload.ShareToken.Should().BeEmpty();
+        payload.ClinicEzId.Should().Be("CEZ-0001");
+        payload.Code.Should().Be("ab12-cd34");
+    }
+
+    [Theory]
+    [InlineData("CEZ-0001", "ABCD-1234", true)]
+    [InlineData("CEZ-0001", "abcd 1234", true)]
+    [InlineData("CEZ-0001", "ABCD1234", true)]
+    [InlineData("CEZ-0001", "ABC", false)]
+    [InlineData("CEZ-0001", "ABCD-12!4", false)]
+    [InlineData("", "ABCD-1234", false)]
+    [InlineData("CEZ-0001", "", false)]
+    public void The_Validator_Checks_A_Manual_Code_Redeem(string clinicEzId, string code, bool valid)
+    {
+        var result = new RedeemPatientShareCommandValidator().Validate(
+            new RedeemPatientShareCommand(null, "Consultation", false, null, clinicEzId, code));
+
+        result.IsValid.Should().Be(valid);
+    }
+
+    [Fact]
+    public void The_Validator_Rejects_A_Token_Combined_With_A_Manual_Code()
+    {
+        var result = new RedeemPatientShareCommandValidator().Validate(
+            new RedeemPatientShareCommand("SHARE-TOKEN-12345", "Consultation", false, null, "CEZ-0001", "ABCD-1234"));
+
+        result.IsValid.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task The_Status_Query_Returns_Only_This_Clinics_Import()
     {
         var (db, _, sieve) = TestDbHelper.CreateTestContext(_clinicContext);

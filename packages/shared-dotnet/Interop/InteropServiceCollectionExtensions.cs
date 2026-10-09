@@ -1,6 +1,7 @@
 using ClinicEz.Shared.Interop.Background;
 using ClinicEz.Shared.Interop.Handling;
 using ClinicEz.Shared.Interop.Persistence;
+using ClinicEz.Shared.Interop.Requests;
 using ClinicEz.Shared.Interop.Transport;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -74,6 +75,8 @@ public static class InteropServiceCollectionExtensions
 
         services.TryAddSingleton<InteropRelayService>();
         services.TryAddSingleton<InteropInboxPollerService>();
+        services.TryAddSingleton<InteropRequestClient>();
+        services.TryAddSingleton<IInteropRequestClient>(sp => sp.GetRequiredService<InteropRequestClient>());
         services.AddHostedService(sp => sp.GetRequiredService<InteropRelayService>());
         services.AddHostedService(sp => sp.GetRequiredService<InteropInboxPollerService>());
 

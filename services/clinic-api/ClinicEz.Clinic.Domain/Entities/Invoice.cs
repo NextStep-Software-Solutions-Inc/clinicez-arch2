@@ -27,6 +27,9 @@ public sealed class Invoice : BaseEntity
     public decimal DiscountAmount { get; set; }
     public decimal NetAmount { get; set; }
     public decimal AmountPaid { get; set; }
+
+    /// <summary>Everything given back at the shared billing counter so far (partial refunds accumulate; a full refund also zeroes <see cref="AmountPaid"/>).</summary>
+    public decimal RefundedAmount { get; set; }
     public decimal BalanceDue { get; set; }
 
     public InvoiceStatus Status { get; set; } = InvoiceStatus.Draft;

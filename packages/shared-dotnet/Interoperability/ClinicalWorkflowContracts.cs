@@ -232,11 +232,22 @@ public enum SharingScopes
     All = Demographics | Allergies | Medications | Conditions | Immunizations | LabResults | Prescriptions | Vitals
 }
 
+/// <summary>
+/// Redeems either a QR share token (<see cref="ShareToken"/>) or a manually entered one-time code
+/// (<see cref="ClinicEzId"/> + <see cref="Code"/>, <see cref="ShareToken"/> left empty). A QR token may allow several
+/// redemptions (each returns a fresh snapshot); a code is single use and lives for minutes.
+/// </summary>
 public record PatientShareRedeemPayload
 {
-    /// <summary>The short-lived signed token rendered as a QR by the patient app (or the ClinicEzId + one-time code for manual entry).</summary>
+    /// <summary>The short-lived signed token rendered as a QR by the patient app. Empty when redeeming by code.</summary>
     public string ShareToken { get; init; } = string.Empty;
     public string Purpose { get; init; } = "Consultation";
+
+    /// <summary>The patient's ClinicEzId, typed by the facility when redeeming by <see cref="Code"/>.</summary>
+    public string? ClinicEzId { get; init; }
+
+    /// <summary>The one-time short code the patient reads out (case and hyphen insensitive), typed with <see cref="ClinicEzId"/>.</summary>
+    public string? Code { get; init; }
 }
 
 public record ShareItemDto
@@ -258,15 +269,45 @@ public record ShareDemographicsDto
     public string? PhilHealthPin { get; init; }
 }
 
+/// <summary>Why a redeem was answered with <c>Granted = false</c>; <see cref="PatientShareSnapshotPayload.DenialReason"/> carries the human text.</summary>
+[JsonConverter(typeof(StrictJsonStringEnumConverter))]
+public enum ShareDenialCode
+{
+    /// <summary>Malformed or forged token, or a code that matches nothing.</summary>
+    Invalid,
+    /// <summary>The token or code is past its lifetime.</summary>
+    Expired,
+    /// <summary>The token or code has used up all its redemptions.</summary>
+    Exhausted,
+    /// <summary>The patient behind the token or ClinicEzId does not exist.</summary>
+    PatientUnknown,
+    /// <summary>Too many wrong codes were tried; wait and ask the patient for a new code.</summary>
+    RateLimited,
+    /// <summary>The patient revoked this facility's access that the token had created.</summary>
+    Revoked
+}
+
 public record PatientShareSnapshotPayload
 {
     public bool Granted { get; init; }
     public string? DenialReason { get; init; }
+
+    /// <summary>Set whenever <see cref="Granted"/> is false.</summary>
+    public ShareDenialCode? DenialCode { get; init; }
     public Guid? GrantId { get; init; }
     public Guid PatientId { get; init; }
     public string ClinicEzId { get; init; } = string.Empty;
     public SharingScopes Scopes { get; init; }
     public DateTime? ExpiresAtUtc { get; init; }
+
+    /// <summary>1-based count of this redemption of the token (always 1 for a code).</summary>
+    public int RedemptionNumber { get; init; }
+
+    /// <summary>How many times the token may be redeemed in all (1 for a code).</summary>
+    public int MaxRedemptions { get; init; }
+
+    /// <summary>True when this facility already held a grant from the same token: <see cref="GrantId"/> is unchanged and the content is a fresh snapshot to merge over the earlier import.</summary>
+    public bool IsRefresh { get; init; }
     public ShareDemographicsDto? Demographics { get; init; }
     public List<ShareItemDto> Items { get; init; } = new();
 }

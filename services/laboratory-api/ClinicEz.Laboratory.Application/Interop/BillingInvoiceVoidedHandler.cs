@@ -22,6 +22,8 @@ namespace ClinicEz.Laboratory.Application.Interop;
 /// <c>Paid</c> order goes back to <c>AwaitingPayment</c> (announced to the clinic and the patient) and the invoice is requested
 /// again under the same request id, which billing uses to reopen the corrected invoice. Work that already started
 /// keeps its payment (a drawn specimen is not un-drawn): the flag is recorded and logged only.</item>
+/// <item>A partial refund (<c>IsPartial</c>) never withdraws the payment: it only records the cumulative refunded amount on the
+/// order, which stays paid.</item>
 /// <item>Idempotent: a redelivery, or a correction older than the one recorded or than a newer payment, changes nothing.</item>
 /// </list>
 /// </summary>
@@ -112,6 +114,12 @@ public sealed class BillingInvoiceVoidedHandler : IInteropHandler<BillingInvoice
             return;
         }
 
+        if (msg.IsPartial)
+        {
+            await RecordPartialRefundAsync(requisition, msg, ct);
+            return;
+        }
+
         var alreadyRecorded = requisition.PaymentCorrection != PaymentCorrection.None
             && requisition.PaymentCorrectedAtUtc >= msg.CorrectedAtUtc;
         var supersededByLaterPayment = requisition.PaidAtUtc is { } paidAt && paidAt > msg.CorrectedAtUtc;
@@ -130,6 +138,7 @@ public sealed class BillingInvoiceVoidedHandler : IInteropHandler<BillingInvoice
 
         if (HasStarted(requisition.Stage))
         {
+            requisition.RefundedAmount = msg.RefundedTotal;
             _logger.LogWarning(
                 "[BillingInvoiceVoidedHandler] Order {RequisitionId} is already {Stage}: the {Correction} is recorded but the work continues.",
                 requisition.Id, requisition.Stage, correction);
@@ -142,6 +151,7 @@ public sealed class BillingInvoiceVoidedHandler : IInteropHandler<BillingInvoice
         requisition.PaidAtUtc = null;
         requisition.InvoiceId = null;
         requisition.ReceiptNumber = null;
+        requisition.RefundedAmount = 0m;
 
         var reopened = await _lifecycle.ReopenForPaymentAsync(
             requisition, correction == PaymentCorrection.Refunded ? "Payment refunded" : "Payment voided", ct);
@@ -153,6 +163,37 @@ public sealed class BillingInvoiceVoidedHandler : IInteropHandler<BillingInvoice
             requisition.Id, correction, requisition.Stage,
             reopened ? " (back to awaiting payment)" : string.Empty,
             reinvoiced ? ", invoice requested again" : string.Empty);
+    }
+
+    /// <summary>
+    /// A partial refund keeps the order paid: only the cumulative refunded amount is recorded. Nothing is reopened,
+    /// re-invoiced or announced. The total is cumulative, so a redelivery or an older message changes nothing, and a
+    /// partial refund for an order that is not paid (any more) is ignored.
+    /// </summary>
+    private async Task RecordPartialRefundAsync(LabRequisition requisition, BillingInvoiceVoidedPayload msg, CancellationToken ct)
+    {
+        if (requisition.PaidAtUtc == null)
+        {
+            _logger.LogWarning(
+                "[BillingInvoiceVoidedHandler] Ignoring partial refund of invoice {InvoiceId}: order {RequisitionId} is not paid.",
+                msg.InvoiceId, requisition.Id);
+            return;
+        }
+
+        if (msg.RefundedTotal <= requisition.RefundedAmount)
+        {
+            _logger.LogInformation(
+                "[BillingInvoiceVoidedHandler] Order {RequisitionId}: refunded total {RefundedTotal} is already recorded. Skipping.",
+                requisition.Id, msg.RefundedTotal);
+            return;
+        }
+
+        requisition.RefundedAmount = msg.RefundedTotal;
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        _logger.LogInformation(
+            "[BillingInvoiceVoidedHandler] Order {RequisitionId}: partial refund recorded, {RefundedTotal} of {Total} refunded; the order stays paid.",
+            requisition.Id, msg.RefundedTotal, msg.Total);
     }
 
     /// <summary>A drawn specimen, processing, a finished or a closed order is past the point where payment can be withdrawn.</summary>

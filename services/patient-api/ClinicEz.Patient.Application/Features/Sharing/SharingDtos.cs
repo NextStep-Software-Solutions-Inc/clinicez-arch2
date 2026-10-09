@@ -6,6 +6,16 @@ public sealed record ShareTokenDto(
     int TtlSeconds,
     string ClinicEzId,
     IReadOnlyList<string> Scopes,
+    string Purpose,
+    int MaxRedemptions);
+
+/// <summary>A one-time code the patient reads out; <see cref="Code"/> is shown as grouped characters, e.g. <c>K7QM-X4NP</c>.</summary>
+public sealed record ShareCodeDto(
+    string Code,
+    DateTime ExpiresAt,
+    int TtlSeconds,
+    string ClinicEzId,
+    IReadOnlyList<string> Scopes,
     string Purpose);
 
 /// <summary>Lifecycle of an access grant; serialised by member name in <see cref="AccessGrantDto.Status"/>.</summary>

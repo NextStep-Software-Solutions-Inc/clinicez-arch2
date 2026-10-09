@@ -17,8 +17,8 @@ public class VoidAndRefundTests
     private static Task<InvoiceDto> VoidAsync(BillingHost host, Guid invoiceId, string reason) =>
         host.With<CorrectionService, InvoiceDto>(c => c.VoidAsync(invoiceId, new VoidRequest(reason), default));
 
-    private static Task<RefundDto> RefundAsync(BillingHost host, Guid invoiceId, string reason, PaymentMethod? method = null) =>
-        host.With<CorrectionService, RefundDto>(c => c.RefundAsync(invoiceId, new RefundRequest(reason, method), default));
+    private static Task<RefundDto> RefundAsync(BillingHost host, Guid invoiceId, string reason, PaymentMethod? method = null, decimal? amount = null) =>
+        host.With<CorrectionService, RefundDto>(c => c.RefundAsync(invoiceId, new RefundRequest(reason, amount, null, method), default));
 
     [Fact]
     public async Task Voiding_an_unpaid_invoice_removes_it_from_the_visit_audits_it_and_tells_only_the_requesting_facility()
@@ -77,7 +77,9 @@ public class VoidAndRefundTests
         var refund = await RefundAsync(host, visit.Clinic.Id, "Service not rendered");
 
         refund.Amount.Should().Be(500m);
-        refund.Method.Should().Be(PaymentMethod.Cash);
+        refund.IsPartial.Should().BeFalse();
+        refund.Number.Should().Be("RF-000001");
+        refund.Lines.Should().ContainSingle().Which.Method.Should().Be(PaymentMethod.Cash);
         refund.ApprovedByName.Should().Be("Sup Visor");
         var invoice = await host.InvoiceAsync(visit.Clinic.Id);
         invoice.Status.Should().Be(InvoiceStatus.Refunded);
@@ -132,7 +134,7 @@ public class VoidAndRefundTests
         (await host.InvoiceAsync(visit.Clinic.Id)).Status.Should().Be(InvoiceStatus.Paid);
 
         var gcash = await RefundAsync(host, visit.Lab.Id, "Duplicate charge");
-        gcash.Method.Should().Be(PaymentMethod.GCash);
+        gcash.Lines.Should().ContainSingle().Which.Method.Should().Be(PaymentMethod.GCash);
     }
 
     [Fact]

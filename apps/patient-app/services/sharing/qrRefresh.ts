@@ -60,7 +60,7 @@ export function remainingSeconds(session: QrSession<QrToken>, now: number): numb
   return Math.max(0, Math.ceil((session.expiresAt - now) / 1000));
 }
 
-const defaultTimers: TimerApi = {
+export const defaultTimers: TimerApi = {
   setTimeout: (callback, delayMs) => setTimeout(callback, delayMs),
   clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
 };

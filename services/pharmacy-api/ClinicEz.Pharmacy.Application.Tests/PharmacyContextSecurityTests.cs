@@ -43,7 +43,6 @@ public class PharmacyContextSecurityTests
         ctx.TenantId.Should().BeEmpty();
         ctx.PharmacyId.Should().Be(PharmacyContext.UnauthenticatedPharmacyId);
         ctx.PharmacyId.Should().NotBe(Guid.Empty);
-        ctx.IsInternalService.Should().BeFalse();
     }
 
     [Fact]
@@ -70,7 +69,6 @@ public class PharmacyContextSecurityTests
         ctx.TenantId.Should().Be("tenant-real");
         ctx.PharmacyId.Should().Be(pharmacy);
         ctx.StaffId.Should().Be(staff);
-        ctx.IsInternalService.Should().BeFalse();
         ctx.HasPermission(PharmacyPermissions.InventoryRead).Should().BeTrue();
         ctx.HasPermission(PharmacyPermissions.InventoryManage).Should().BeFalse();
         ctx.HasPermission(PharmacyPermissions.GamotDispense).Should().BeFalse();
@@ -88,47 +86,21 @@ public class PharmacyContextSecurityTests
     }
 
     [Fact]
-    public void InternalService_GetsOnlyTheGamotPermissionSet_AndHonoursScopeHeaders()
+    public void ServicePrincipalWithoutStaffClaims_FailsClosed_EvenWithForgedScopeHeaders()
     {
-        var pharmacy = Guid.NewGuid();
         var http = new DefaultHttpContext
         {
             User = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim(FacilityAuthSchemes.InternalClaim, "true") }, "Internal"))
         };
         http.Request.Headers["X-Tenant-Id"] = "tenant-x";
-        http.Request.Headers["X-Facility-Id"] = pharmacy.ToString();
+        http.Request.Headers["X-Facility-Id"] = Guid.NewGuid().ToString();
 
         var ctx = Create(http);
 
-        ctx.IsInternalService.Should().BeTrue();
-        ctx.TenantId.Should().Be("tenant-x");
-        ctx.PharmacyId.Should().Be(pharmacy);
+        ctx.TenantId.Should().BeEmpty();
+        ctx.PharmacyId.Should().Be(PharmacyContext.UnauthenticatedPharmacyId);
         ctx.StaffId.Should().BeNull();
-        ctx.Permissions.Should().BeEquivalentTo(PharmacyPermissions.InternalService);
-        ctx.HasPermission(PharmacyPermissions.GamotDispense).Should().BeTrue();
-        ctx.HasPermission(PharmacyPermissions.GamotReverse).Should().BeTrue();
-        ctx.HasPermission(PharmacyPermissions.StaffManage).Should().BeFalse();
-        ctx.HasPermission(PharmacyPermissions.StaffRead).Should().BeFalse();
-        ctx.HasPermission(PharmacyPermissions.InventoryRead).Should().BeFalse();
-        ctx.HasPermission(PharmacyPermissions.InventoryManage).Should().BeFalse();
-        ctx.HasPermission(PharmacyPermissions.PrescriptionsDispense).Should().BeFalse();
-    }
-
-    [Fact]
-    public void InternalService_PrefersScopeResolvedByMiddleware()
-    {
-        var pharmacy = Guid.NewGuid();
-        var http = new DefaultHttpContext
-        {
-            User = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim(FacilityAuthSchemes.InternalClaim, "true") }, "Internal"))
-        };
-        http.Items[PharmacyContext.InternalTenantItemKey] = "tenant-resolved";
-        http.Items[PharmacyContext.InternalPharmacyItemKey] = pharmacy;
-
-        var ctx = Create(http);
-
-        ctx.TenantId.Should().Be("tenant-resolved");
-        ctx.PharmacyId.Should().Be(pharmacy);
+        ctx.Permissions.Should().BeEmpty();
     }
 
     [Fact]
@@ -164,12 +136,5 @@ public class PharmacyContextSecurityTests
             PharmacyRolePermissions.For(role).Should().NotContain(PharmacyPermissions.StaffManage)
                 .And.NotContain(PharmacyPermissions.InventoryManage);
         }
-    }
-
-    [Fact]
-    public void InternalServicePermissions_AreExactlyTheGamotOnes()
-    {
-        PharmacyPermissions.InternalService.Should().OnlyContain(p => p.StartsWith("gamot:"));
-        PharmacyPermissions.InternalService.Should().HaveCount(5);
     }
 }

@@ -10,8 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace ClinicEz.Pharmacy.Api.Authorization;
 
 /// <summary>
-/// Requires a pharmacy permission. Staff permissions come from the validated token (role-derived); the trusted internal
-/// service principal only holds the GAMOT permission set (see <c>PharmacyPermissions.InternalService</c>).
+/// Requires a pharmacy permission. Staff permissions come from the validated token (role-derived).
 /// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true)]
 public sealed class HasPermissionAttribute : Attribute, IAsyncActionFilter, ClinicEz.Shared.LocalAuth.IPermissionGuarded

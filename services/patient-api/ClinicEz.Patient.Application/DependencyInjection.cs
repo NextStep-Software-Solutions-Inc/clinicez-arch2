@@ -25,6 +25,7 @@ public static class DependencyInjection
 
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<IShareTokenService, ShareTokenService>();
+        services.AddSingleton<IShareCodeService, ShareCodeService>();
         services.AddScoped<PatientShareSnapshotBuilder>();
         services.AddScoped<PatientDocumentMapper>();
         services.AddScoped<PatientDocumentNotifier>();

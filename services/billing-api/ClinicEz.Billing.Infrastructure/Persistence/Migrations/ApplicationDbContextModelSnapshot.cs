@@ -645,6 +645,10 @@ namespace ClinicEz.Billing.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("PaymentId")
                         .HasColumnType("uuid");
 
+                    b.Property<decimal>("RefundedAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -737,7 +741,7 @@ namespace ClinicEz.Billing.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("InvoiceId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("Method")
+                    b.Property<string>("Number")
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
@@ -749,6 +753,9 @@ namespace ClinicEz.Billing.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTime>("RefundedAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer");
 
                     b.Property<Guid?>("ShiftId")
                         .HasColumnType("uuid");
@@ -764,7 +771,47 @@ namespace ClinicEz.Billing.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "ShiftId");
 
+                    b.HasIndex("TenantId", "FacilityId", "Number")
+                        .IsUnique();
+
                     b.ToTable("refunds", "billing");
+                });
+
+            modelBuilder.Entity("ClinicEz.Billing.Domain.Entities.RefundLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("PaymentAllocationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PaymentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("RefundId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TenantId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PaymentAllocationId");
+
+                    b.HasIndex("RefundId");
+
+                    b.ToTable("refund_lines", "billing");
                 });
 
             modelBuilder.Entity("ClinicEz.Shared.Interop.Persistence.InteropInboxMessage", b =>
@@ -861,6 +908,15 @@ namespace ClinicEz.Billing.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("ClinicEz.Billing.Domain.Entities.RefundLine", b =>
+                {
+                    b.HasOne("ClinicEz.Billing.Domain.Entities.Refund", null)
+                        .WithMany("Lines")
+                        .HasForeignKey("RefundId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ClinicEz.Billing.Domain.Entities.Invoice", b =>
                 {
                     b.Navigation("Discounts");
@@ -871,6 +927,11 @@ namespace ClinicEz.Billing.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("ClinicEz.Billing.Domain.Entities.Payment", b =>
                 {
                     b.Navigation("Allocations");
+                });
+
+            modelBuilder.Entity("ClinicEz.Billing.Domain.Entities.Refund", b =>
+                {
+                    b.Navigation("Lines");
                 });
 #pragma warning restore 612, 618
         }

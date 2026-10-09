@@ -293,20 +293,39 @@ public class Invoice
         Touch(nowUtc);
     }
 
-    /// <summary>Reverses everything paid on the invoice. Returns the refunded amount.</summary>
-    public decimal Refund(string reason, DateTime nowUtc)
+    /// <summary>
+    /// Gives back <paramref name="amount"/> of the money held on the invoice (all of it when <c>null</c>). Refunding everything closes
+    /// the invoice as <see cref="InvoiceStatus.Refunded"/>; refunding less leaves it <see cref="InvoiceStatus.PartiallyRefunded"/>, which
+    /// is still settled and locked and can be refunded further. A partly paid invoice can only be refunded in full. Returns the amount.
+    /// </summary>
+    public decimal Refund(decimal? amount, string reason, DateTime nowUtc)
     {
         if (string.IsNullOrWhiteSpace(reason)) throw new BadRequestException("A reason is required to refund an invoice.");
-        if (Status is not (InvoiceStatus.PartiallyPaid or InvoiceStatus.Paid) || NetPaid <= 0m)
+        if (Status is not (InvoiceStatus.PartiallyPaid or InvoiceStatus.Paid or InvoiceStatus.PartiallyRefunded) || NetPaid <= 0m)
             throw new ConflictException($"Invoice {InvoiceNumber} has no payment to refund.");
 
-        var amount = NetPaid;
-        RefundedTotal += amount;
-        Status = InvoiceStatus.Refunded;
-        VoidedAtUtc = nowUtc;
-        VoidReason = reason.Trim();
+        var refunded = amount ?? NetPaid;
+        if (refunded < 0.01m || Money.Round(refunded) != refunded)
+            throw new BadRequestException("A refund amount must be positive with at most two decimals.");
+        if (refunded > NetPaid)
+            throw new BadRequestException($"The amount {refunded:0.00} is more than the {NetPaid:0.00} still held on invoice {InvoiceNumber}.");
+        if (refunded < NetPaid && Status == InvoiceStatus.PartiallyPaid)
+            throw new ConflictException($"Invoice {InvoiceNumber} is only partly paid; refund it in full.");
+
+        RefundedTotal += refunded;
+        if (NetPaid == 0m)
+        {
+            Status = InvoiceStatus.Refunded;
+            VoidedAtUtc = nowUtc;
+            VoidReason = reason.Trim();
+        }
+        else
+        {
+            Status = InvoiceStatus.PartiallyRefunded;
+        }
+
         Touch(nowUtc);
-        return amount;
+        return refunded;
     }
 
     private void EnsureUnlocked()

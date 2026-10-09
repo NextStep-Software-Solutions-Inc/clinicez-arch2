@@ -67,7 +67,9 @@ public sealed class BillingInvoicePaidHandler(
 
 /// <summary>
 /// Reverses what <c>billing.invoice.paid</c> added when billing voids or refunds an invoice (<c>billing.invoice.voided</c>). Only
-/// fully paid invoices are ever reported; the reversal lands on the day the money was originally counted, and repeating it does nothing.
+/// fully paid invoices are ever reported; the reversal lands on the day the money was originally counted. Corrections carry the
+/// cumulative refunded amount, so the handler applies only the difference to what it already took back: repeating or reordering
+/// messages changes nothing, and a partial refund leaves the invoice open for further refunds until all of it is given back.
 /// </summary>
 public sealed class BillingInvoiceVoidedHandler(
     IApplicationDbContext dbContext,
@@ -85,36 +87,55 @@ public sealed class BillingInvoiceVoidedHandler(
 
         if (!payload.WasFullyPaid) return;
 
+        var cumulative = Math.Max(payload.RefundedTotal > 0m ? payload.RefundedTotal : payload.IsPartial ? 0m : payload.AmountReversed, 0m);
+        var currency = string.IsNullOrWhiteSpace(payload.Currency) ? "PHP" : payload.Currency.Trim().ToUpperInvariant();
+        var branchId = Guid.TryParse(payload.BranchId, out var branch) ? branch : (Guid?)null;
+
         var record = await dbContext.FinanceInvoiceRecords.FirstOrDefaultAsync(r => r.InvoiceId == payload.InvoiceId && r.TenantId == tenantId, ct);
         if (record is null)
         {
-            // The correction overtook the payment report: remember the invoice as settled so the late report is not counted.
-            dbContext.FinanceInvoiceRecords.Add(new FinanceInvoiceRecord
+            var overtakesPaymentReport = cumulative >= payload.Total;
+            record = new FinanceInvoiceRecord
             {
                 Id = Guid.NewGuid(),
                 InvoiceId = payload.InvoiceId,
                 TenantId = tenantId,
                 FacilityId = facilityId,
-                BranchId = Guid.TryParse(payload.BranchId, out var branch) ? branch : null,
+                BranchId = branchId,
                 PaidDay = DateOnly.FromDateTime(payload.CorrectedAtUtc),
                 SourceType = payload.SourceType,
-                Currency = string.IsNullOrWhiteSpace(payload.Currency) ? "PHP" : payload.Currency.Trim().ToUpperInvariant(),
-                Reversed = true
-            });
+                Currency = currency
+            };
+            dbContext.FinanceInvoiceRecords.Add(record);
+
+            if (overtakesPaymentReport)
+            {
+                // Everything was given back before the payment report arrived: remember the invoice as settled so the late report is not counted.
+                record.Reversed = true;
+                await dbContext.SaveChangesAsync(ct);
+                return;
+            }
+
+            // Only part was given back, so the payment still counts: take it now (the late report is then recognised as already counted).
+            var paidSummary = await FinanceSummaries.GetOrAddAsync(
+                dbContext, tenantId, facilityId, branchId, record.PaidDay, record.SourceType, currency, ct);
+            paidSummary.TotalPaid += payload.Total;
+            paidSummary.PaidInvoiceCount += 1;
+            record.PaidAmount = payload.Total;
             await dbContext.SaveChangesAsync(ct);
-            return;
         }
 
-        if (record.Reversed) return;
+        var target = Math.Min(cumulative, record.PaidAmount);
+        var delta = target - record.ReversedAmount;
+        if (delta <= 0m) return;
 
         var summary = await FinanceSummaries.GetOrAddAsync(
             dbContext, record.TenantId, record.FacilityId, record.BranchId, record.PaidDay, record.SourceType, record.Currency, ct);
 
-        var amount = Math.Min(Math.Max(payload.AmountReversed, 0m), record.PaidAmount);
-        summary.TotalReversed += amount;
-        summary.ReversedInvoiceCount += 1;
-        record.ReversedAmount = amount;
-        record.Reversed = true;
+        summary.TotalReversed += delta;
+        if (record.ReversedAmount == 0m) summary.ReversedInvoiceCount += 1;
+        record.ReversedAmount = target;
+        record.Reversed = target >= record.PaidAmount;
 
         await dbContext.SaveChangesAsync(ct);
     }

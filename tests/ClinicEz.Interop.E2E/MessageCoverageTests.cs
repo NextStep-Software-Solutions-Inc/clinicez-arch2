@@ -20,17 +20,18 @@ public class MessageCoverageTests
     private const string Patient = InteropServices.Patient;
     private const string Portal = InteropServices.Portal;
     private const string Organization = InteropServices.Organization;
+    private const string PhilHealth = InteropServices.Philhealth;
     private const string Hub = InteropServices.Hub;
 
     private sealed record Route(string Type, string[] Senders, string[] Receivers);
 
     private static readonly Route[] Matrix =
     [
-        new(InteropTypes.FacilityLicenseIssued, [Portal], [Clinic, Lab, Pharmacy, Organization]),
+        new(InteropTypes.FacilityLicenseIssued, [Portal], [Clinic, Lab, Pharmacy, Billing, Organization]),
         new(InteropTypes.FacilityProvisioned, [Lab, Pharmacy, Organization], [Portal]),
         new(InteropTypes.FacilityDirectoryUpdated, [Portal], [Patient]),
         new(InteropTypes.WorkspaceProfileUpdated, [Portal], [Clinic, Lab, Pharmacy, Organization]),
-        new(InteropTypes.EntitlementsChanged, [Portal], [Clinic, Lab, Pharmacy, Organization]),
+        new(InteropTypes.EntitlementsChanged, [Portal], [Clinic, Lab, Pharmacy, Billing, Organization]),
         new(InteropTypes.FacilityHeartbeat, [Clinic, Lab, Pharmacy, Organization], [Portal]),
 
         new(InteropTypes.DirectoryCellUpserted, [Portal], [Hub]),
@@ -46,11 +47,7 @@ public class MessageCoverageTests
         new(InteropTypes.PatientDocumentIssued, [Clinic, Lab, Pharmacy], [Patient]),
 
         new(InteropTypes.LabOrderIssued, [Clinic], [Lab]),
-        new(InteropTypes.LabOrderClaimed, [], []),
-        new(InteropTypes.LabOrderAccepted, [], []),
-        new(InteropTypes.LabOrderRejected, [], []),
         new(InteropTypes.LabOrderStatusChanged, [Lab], [Clinic, Patient]),
-        new(InteropTypes.LabOrderPaymentConfirmed, [], []),
         new(InteropTypes.LabResultFinalized, [Lab], [Clinic]),
         new(InteropTypes.LabResultPanic, [Lab], [Clinic]),
         new(InteropTypes.LabResultExternalSubmitted, [Patient, Portal], [Clinic]),
@@ -61,7 +58,15 @@ public class MessageCoverageTests
         new(InteropTypes.RxDispensed, [Pharmacy], [Clinic]),
         new(InteropTypes.RxExternalDispensed, [Patient], [Clinic]),
 
-        new(InteropTypes.MedcertIssued, [], []),
+        new(InteropTypes.GamotLookupRequested, [Clinic], [Pharmacy]),
+        new(InteropTypes.GamotLookupResponded, [Pharmacy], [Clinic]),
+
+        new(InteropTypes.PhilHealthRequest, [Clinic], [PhilHealth]),
+        new(InteropTypes.PhilHealthResponse, [PhilHealth], [Clinic]),
+        new(InteropTypes.PhilHealthConfigRequested, [PhilHealth], [Portal]),
+        new(InteropTypes.PhilHealthConfigResponded, [Portal], [PhilHealth]),
+        new(InteropTypes.PhilHealthConfigUpsertRequested, [PhilHealth], [Portal]),
+        new(InteropTypes.PhilHealthConfigUpsertResponded, [Portal], [PhilHealth]),
 
         new(InteropTypes.BillingInvoiceRequested, [Clinic, Lab, Pharmacy], [Billing]),
         new(InteropTypes.BillingPaymentConfirmed, [Billing], [Clinic, Lab, Pharmacy]),
@@ -81,7 +86,7 @@ public class MessageCoverageTests
             .ToList();
 
         Matrix.Select(r => r.Type).Should().OnlyHaveUniqueItems("a message type is routed once");
-        Matrix.Select(r => r.Type).Should().BeEquivalentTo(declared, "every catalogued message type needs a route (or an explicit reserved row)");
+        Matrix.Select(r => r.Type).Should().BeEquivalentTo(declared, "every catalogued message type needs a route");
     }
 
     [Fact]
@@ -104,21 +109,5 @@ public class MessageCoverageTests
 
             host.Registry.RegisteredTypes.Should().BeEquivalentTo(expected, $"the {host.Service} handler registry must match the message matrix");
         }
-    }
-
-    [Fact]
-    public void ReservedTypes_AreDeclaredButNeitherSentNorHandled()
-    {
-        var reserved = Matrix.Where(r => r.Senders.Length == 0 && r.Receivers.Length == 0).Select(r => r.Type);
-
-        reserved.Should().BeEquivalentTo(
-        [
-            InteropTypes.LabOrderClaimed,
-            InteropTypes.LabOrderAccepted,
-            InteropTypes.LabOrderRejected,
-            InteropTypes.LabOrderPaymentConfirmed,
-            InteropTypes.MedcertIssued
-        ]);
-        Matrix.Where(r => (r.Senders.Length == 0) != (r.Receivers.Length == 0)).Should().BeEmpty("a message is either fully wired or reserved");
     }
 }

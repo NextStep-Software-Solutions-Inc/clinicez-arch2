@@ -484,6 +484,10 @@ namespace ClinicEz.Laboratory.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<decimal>("RefundedAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<string>("Stage")
                         .IsRequired()
                         .HasMaxLength(64)

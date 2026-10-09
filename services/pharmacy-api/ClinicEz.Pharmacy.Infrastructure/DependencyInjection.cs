@@ -88,7 +88,9 @@ public static class DependencyInjection
             .Handle<BillingPaymentConfirmedPayload, BillingPaymentConfirmedHandler>(InteropTypes.BillingPaymentConfirmed)
             .Handle<BillingInvoiceVoidedPayload, BillingInvoiceVoidedHandler>(InteropTypes.BillingInvoiceVoided)
             .HandleEntitlementsChanged()
-            .HandleWorkspaceProfileUpdated());
+            .HandleWorkspaceProfileUpdated()
+            .Respond<GamotLookupRequestedPayload, GamotLookupRespondedPayload, GamotLookupResponder>(
+                InteropTypes.GamotLookupRequested, InteropTypes.GamotLookupResponded));
 
         if (env != null && env.IsDevelopment())
         {

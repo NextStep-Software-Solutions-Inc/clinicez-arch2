@@ -41,20 +41,4 @@ public static class LabResultUploadFiles
             throw new BadRequestException("The file is not valid base64.");
         }
     }
-
-    /// <summary>Folds the optional free-text details an uploader supplied into one note kept with the result.</summary>
-    public static string? ComposeNotes(string? notes, string? contactNumber, string? pathologistName, string? pathologistPrcLicense)
-    {
-        var parts = new System.Collections.Generic.List<string>();
-        if (!string.IsNullOrWhiteSpace(contactNumber)) parts.Add($"Facility contact: {contactNumber.Trim()}");
-        if (!string.IsNullOrWhiteSpace(pathologistName))
-        {
-            parts.Add(string.IsNullOrWhiteSpace(pathologistPrcLicense)
-                ? $"Pathologist: {pathologistName.Trim()}"
-                : $"Pathologist: {pathologistName.Trim()} (PRC {pathologistPrcLicense.Trim()})");
-        }
-
-        if (!string.IsNullOrWhiteSpace(notes)) parts.Add(notes.Trim());
-        return parts.Count == 0 ? null : string.Join(" • ", parts);
-    }
 }

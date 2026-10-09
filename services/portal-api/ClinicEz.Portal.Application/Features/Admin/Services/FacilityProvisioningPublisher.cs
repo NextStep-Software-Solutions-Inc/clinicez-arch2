@@ -10,7 +10,7 @@ namespace ClinicEz.Portal.Application.Features.Admin.Services;
 
 /// <summary>
 /// Announces a new or re-activated facility over the hub: its licence and the current workspace profile go to the
-/// facility itself and a licence-free copy goes to patient-api for the patient-facing facility catalogue.
+/// facility itself (the licence also to the cell's billing service) and a licence-free copy goes to patient-api for the patient-facing facility catalogue.
 /// </summary>
 public interface IFacilityProvisioningPublisher
 {
@@ -35,6 +35,14 @@ public sealed class FacilityProvisioningPublisher(IApplicationDbContext context,
             InteropTypes.FacilityLicenseIssued,
             Party.Portal,
             facility,
+            correlationId,
+            facilityCreated);
+
+        // The cell's billing service is licensed with the facility, so it receives the same license from its own mailbox.
+        publisher.Enqueue(
+            InteropTypes.FacilityLicenseIssued,
+            Party.Portal,
+            Party.ForFacility(facilityCreated.TenantId, facilityCreated.ResourceId.ToString(), facilityCreated.FacilityType, InteropServices.Billing),
             correlationId,
             facilityCreated);
 

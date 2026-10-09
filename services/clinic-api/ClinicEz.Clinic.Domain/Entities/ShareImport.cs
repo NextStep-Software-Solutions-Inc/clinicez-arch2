@@ -23,6 +23,7 @@ public sealed class ShareImport : BaseEntity
 
     public ShareImportStatus Status { get; set; } = ShareImportStatus.Pending;
     public string? DenialReason { get; set; }
+    public ShareDenialCode? DenialCode { get; set; }
 
     public Guid? ClinicPatientId { get; set; }
     public string? PatientName { get; set; }
@@ -31,6 +32,13 @@ public sealed class ShareImport : BaseEntity
     public SharingScopes Scopes { get; set; }
     public DateTime? GrantExpiresAt { get; set; }
     public int ItemsImported { get; set; }
+
+    /// <summary>1-based count of this redemption of the token, and how many the patient allowed in all.</summary>
+    public int? RedemptionNumber { get; set; }
+    public int? MaxRedemptions { get; set; }
+
+    /// <summary>True when this clinic already held a grant from the same token and the import refreshed the chart.</summary>
+    public bool IsRefresh { get; set; }
 
     /// <summary>Granted-scope items that have no field on the clinic patient (medications, vitals, ...), kept as the imported snapshot.</summary>
     public string? ItemsJson { get; set; }

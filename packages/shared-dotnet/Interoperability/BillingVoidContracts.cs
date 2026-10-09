@@ -33,6 +33,13 @@ public record BillingInvoiceVoidedPayload
     public decimal AmountReversed { get; init; }
     /// <summary>True when the invoice had been fully paid (and therefore had been reported with <c>billing.invoice.paid</c>).</summary>
     public bool WasFullyPaid { get; init; }
+    /// <summary>
+    /// True for a <see cref="BillingCorrectionKind.Refund"/> that gave back only part of what was paid: the invoice stays settled
+    /// (billing status <c>PartiallyRefunded</c>) and later corrections may follow. <see cref="AmountReversed"/> is then only this refund.
+    /// </summary>
+    public bool IsPartial { get; init; }
+    /// <summary>Everything refunded on the invoice so far, including this correction. Cumulative, so applying it twice changes nothing.</summary>
+    public decimal RefundedTotal { get; init; }
     public string Currency { get; init; } = "PHP";
     public DateTime CorrectedAtUtc { get; init; } = DateTime.UtcNow;
 }

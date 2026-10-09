@@ -1,43 +1,43 @@
 using System;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
-using ClinicEz.Clinic.Domain.Interfaces;
-using ClinicEz.Shared.LocalAuth;
+using ClinicEz.Clinic.Infrastructure.Messaging;
+using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Requests;
+using ClinicEz.Shared.Interoperability;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace ClinicEz.Clinic.Infrastructure.Services;
 
 /// <summary>
-/// Forwards GAMOT calls to the pharmacy API with the shared internal key. The pharmacy address is configuration
-/// (<c>Services:PharmacyApiUrl</c>); the key is <c>Services:PharmacyApiKey</c> or, when the whole site shares one,
-/// <c>Internal:ApiKey</c>. Nothing from the caller's own credentials is forwarded.
+/// Asks the pharmacy for GAMOT reference data through the interop hub (<c>gamot.lookup.requested</c>, answered with
+/// <c>gamot.lookup.responded</c>); there is no direct HTTP call to the pharmacy. The pharmacy is the facility named by
+/// <c>Gamot:PharmacyFacilityId</c> in this clinic's own tenant. When it is not set, the clinic is not provisioned, or the
+/// pharmacy does not answer in time, the caller gets a 503/504 with the usual error body.
 /// </summary>
 public sealed class PharmacyGamotGateway : IPharmacyGamotGateway
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(45);
 
-    private readonly HttpClient _http;
-    private readonly IClinicContext _clinic;
+    private readonly IInteropRequestClient _requests;
+    private readonly IClinicIdentityProvider _identity;
     private readonly ILogger<PharmacyGamotGateway> _logger;
-    private readonly string? _baseUrl;
-    private readonly string? _key;
+    private readonly string? _pharmacyFacilityId;
 
     public PharmacyGamotGateway(
-        HttpClient http,
+        IInteropRequestClient requests,
+        IClinicIdentityProvider identity,
         IConfiguration configuration,
-        IClinicContext clinic,
         ILogger<PharmacyGamotGateway> logger)
     {
-        _http = http;
-        _clinic = clinic;
+        _requests = requests;
+        _identity = identity;
         _logger = logger;
-        _baseUrl = NullIfBlank(configuration["Services:PharmacyApiUrl"])?.TrimEnd('/');
-        _key = NullIfBlank(configuration["Services:PharmacyApiKey"]) ?? NullIfBlank(configuration["Internal:ApiKey"]);
+        _pharmacyFacilityId = NullIfBlank(configuration["Gamot:PharmacyFacilityId"]);
     }
 
     public async Task<GamotGatewayResult> SendAsync(
@@ -47,44 +47,47 @@ public sealed class PharmacyGamotGateway : IPharmacyGamotGateway
         string? jsonBody,
         CancellationToken ct)
     {
-        if (_baseUrl is null || _key is null)
+        if (_pharmacyFacilityId is null)
         {
-            return Unavailable("GAMOT is not configured on this server. Set Services:PharmacyApiUrl and the internal service key.");
+            return Failure(503, "GAMOT is not available: no pharmacy is configured for this clinic. Set Gamot:PharmacyFacilityId.");
         }
 
-        var url = $"{_baseUrl}/api/v1/gamot/{relativePath.TrimStart('/')}{queryString}";
-        using var request = new HttpRequestMessage(new HttpMethod(method), url);
-        request.Headers.TryAddWithoutValidation(FacilityAuthSchemes.InternalKeyHeader, _key);
-        if (!string.IsNullOrWhiteSpace(_clinic.TenantId))
+        var clinic = await _identity.GetAsync(ct);
+        if (clinic is null)
         {
-            request.Headers.TryAddWithoutValidation("X-Tenant-Id", _clinic.TenantId);
+            return Failure(503, "GAMOT is not available: this clinic has not been provisioned on this server.");
         }
 
-        if (jsonBody is not null)
+        var request = new GamotLookupRequestedPayload
         {
-            request.Content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
-        }
+            Method = method.ToUpperInvariant(),
+            Path = relativePath.TrimStart('/'),
+            Query = NullIfBlank(queryString.TrimStart('?')),
+            Body = jsonBody
+        };
 
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(Timeout);
         try
         {
-            using var response = await _http.SendAsync(request, timeout.Token);
-            var body = await response.Content.ReadAsStringAsync(timeout.Token);
-            return new GamotGatewayResult((int)response.StatusCode, response.Content.Headers.ContentType?.ToString(), body);
+            var reply = await _requests.RequestAsync<GamotLookupRequestedPayload, GamotLookupRespondedPayload>(
+                InteropTypes.GamotLookupRequested,
+                InteropTypes.GamotLookupResponded,
+                ClinicParties.Clinic(clinic.TenantId, clinic.ClinicId.ToString()),
+                ClinicParties.Target(clinic.TenantId, _pharmacyFacilityId, FacilityType.Pharmacy, "pharmacy"),
+                request,
+                Timeout,
+                ct);
+            return new GamotGatewayResult(reply.StatusCode, reply.ContentType, reply.Body ?? string.Empty);
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
+        catch (InteropRequestTimeoutException ex)
         {
-            _logger.LogWarning(ex, "GAMOT request to the pharmacy failed ({Method} {Path}).", method, relativePath);
-            return Unavailable("The pharmacy could not be reached. Try again in a moment.");
+            _logger.LogWarning(ex, "GAMOT request to the pharmacy timed out ({Method} {Path}).", method, relativePath);
+            return Failure(504, "The pharmacy did not answer in time. Try again in a moment.");
         }
     }
 
-    private static GamotGatewayResult Unavailable(string message)
-    {
-        var json = System.Text.Json.JsonSerializer.Serialize(new { succeeded = false, message, errors = Array.Empty<string>() });
-        return new GamotGatewayResult(503, new MediaTypeHeaderValue("application/json").ToString(), json);
-    }
+    private static GamotGatewayResult Failure(int statusCode, string message) =>
+        new(statusCode, "application/json",
+            JsonSerializer.Serialize(new { succeeded = false, message, errors = Array.Empty<string>() }));
 
     private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

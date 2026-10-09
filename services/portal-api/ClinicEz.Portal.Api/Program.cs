@@ -1,5 +1,4 @@
 using ClinicEz.Shared.Common;
-using ClinicEz.Shared.LocalAuth;
 using ClinicEz.Shared.Middlewares;
 using ClinicEz.Portal.Api;
 using ClinicEz.Portal.Application;
@@ -20,6 +19,8 @@ var builder = WebApplication.CreateBuilder(args);
 var env = builder.Environment;
 builder.Configuration.AddJsonFile("appsettings.json", false, true);
 builder.Configuration.AddJsonFile($"appsettings.{env.EnvironmentName}.json", true, true);
+// CreateBuilder put the environment variables before the files added here, so the files would override them; re-add them last.
+builder.Configuration.AddEnvironmentVariables();
 builder.Configuration.AddUserSecrets(typeof(Program).Assembly, true);
 
 // 0. Add Authentication and Authorization Services
@@ -76,16 +77,9 @@ builder.Services
         };
     })
     .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, ClinicEz.Portal.Api.Auth.ApiKeyAuthenticationHandler>(
-        ClinicEz.Portal.Api.Auth.ApiKeyAuthenticationHandler.SchemeName, null)
-    .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, InternalKeyAuthenticationHandler>(FacilityAuthSchemes.Internal, null);
-builder.Services.AddOptions<InternalKeyOptions>().Bind(builder.Configuration.GetSection(InternalKeyOptions.SectionName));
+        ClinicEz.Portal.Api.Auth.ApiKeyAuthenticationHandler.SchemeName, null);
 builder.Services.AddAuthorization(options =>
 {
-    // Service-to-service endpoints (philhealth-proxy reading credentials): the shared internal key only.
-    options.AddPolicy(ClinicEz.Portal.Api.Auth.InternalServiceAuth.Policy, policy => policy
-        .AddAuthenticationSchemes(FacilityAuthSchemes.Internal)
-        .RequireClaim(FacilityAuthSchemes.InternalClaim, "true"));
-
     // Integration (workspace API key) endpoints: one policy per scope, bound to the ApiKey scheme only.
     foreach (var scope in ClinicEz.Portal.Application.Features.Integrations.IntegrationCatalog.Scopes)
     {
@@ -238,16 +232,6 @@ RecurringJob.AddOrUpdate<ClinicEz.Portal.Infrastructure.Services.IEntitlementRen
     job => job.RevokeLapsedHubClientsAsync(CancellationToken.None),
     "30 3 * * *"
 );
-
-// Support root /api/internal requests from internal microservices (e.g. philhealth-proxy)
-app.Use(async (context, next) =>
-{
-    if (context.Request.Path.StartsWithSegments("/api/internal", out var remaining))
-    {
-        context.Request.Path = "/api/v1/internal" + remaining;
-    }
-    await next();
-});
 
 // IMPORTANT: Authentication MUST run before Authorization
 app.UseAuthentication();

@@ -84,6 +84,7 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
         if (!message.Granted)
         {
             import.Status = ShareImportStatus.Denied;
+            import.DenialCode = message.DenialCode;
             import.DenialReason = string.IsNullOrWhiteSpace(message.DenialReason)
                 ? "The patient did not grant access."
                 : message.DenialReason;
@@ -142,6 +143,9 @@ public sealed class PatientShareSnapshotHandler : IInteropHandler<PatientShareSn
         import.Scopes = message.Scopes;
         import.GrantExpiresAt = message.ExpiresAtUtc;
         import.ItemsImported = items.Count + (demographicsShared ? 1 : 0);
+        import.RedemptionNumber = message.RedemptionNumber > 0 ? message.RedemptionNumber : null;
+        import.MaxRedemptions = message.MaxRedemptions > 0 ? message.MaxRedemptions : null;
+        import.IsRefresh = message.IsRefresh;
         import.ItemsJson = kept.Count == 0 ? null : JsonSerializer.Serialize(kept);
         import.CompletedAt = now;
         import.UpdatedAt = now;

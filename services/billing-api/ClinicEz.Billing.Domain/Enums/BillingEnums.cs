@@ -6,7 +6,9 @@ public enum InvoiceStatus
     PartiallyPaid,
     Paid,
     Void,
-    Refunded
+    Refunded,
+    /// <summary>Settled, then part of the money was given back. Locked like a paid invoice; the rest can still be refunded.</summary>
+    PartiallyRefunded
 }
 
 /// <summary>Where an invoice came from: another facility's <c>billing.invoice.requested</c> message, or the cashier's own counter.</summary>

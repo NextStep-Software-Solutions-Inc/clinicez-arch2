@@ -126,7 +126,7 @@ public class CrossTenantPolicyTests
 
         await hub.UpsertLinkAsync(Guid.NewGuid(), W.A1Clinic, W.B1Lab, LinkStatus.Active, LinkScopes.Result);
         (await OrderAsync(hub, W.B1Lab, W.A1Clinic, type: InteropTypes.LabResultFinalized)).Status.Should().Be(SendResult.Accepted, "the clinic holds the link (source)");
-        (await OrderAsync(hub, W.B1Lab, W.A1Clinic, type: InteropTypes.LabOrderAccepted)).Status.Should().Be(SendResult.Rejected, "the link only covers results");
+        (await OrderAsync(hub, W.B1Lab, W.A1Clinic, type: InteropTypes.LabOrderStatusChanged)).Status.Should().Be(SendResult.Rejected, "the link only covers results");
     }
 
     [Fact]
@@ -150,12 +150,12 @@ public class CrossTenantPolicyTests
 
         await hub.UpsertLinkAsync(linkId, W.A1Clinic, W.B1Lab, LinkStatus.Revoked);
 
-        var reply = await OrderAsync(hub, W.B1Lab, W.A1Clinic, correlation, InteropTypes.LabOrderAccepted);
+        var reply = await OrderAsync(hub, W.B1Lab, W.A1Clinic, correlation, InteropTypes.LabOrderStatusChanged);
         reply.Status.Should().Be(SendResult.Accepted, "the clinic started this conversation, so the lab may finish it");
         var result = await OrderAsync(hub, W.B1Lab, W.A1Clinic, correlation, InteropTypes.LabResultFinalized);
         result.Status.Should().Be(SendResult.Accepted);
 
-        (await OrderAsync(hub, W.B1Lab, W.A1Clinic, Guid.NewGuid(), InteropTypes.LabOrderAccepted)).Status.Should().Be(SendResult.Rejected, "another correlation is not a reply");
+        (await OrderAsync(hub, W.B1Lab, W.A1Clinic, Guid.NewGuid(), InteropTypes.LabOrderStatusChanged)).Status.Should().Be(SendResult.Rejected, "another correlation is not a reply");
         (await OrderAsync(hub, W.A1Clinic, W.B1Lab, Guid.NewGuid())).Status.Should().Be(SendResult.Rejected, "new work needs an active link");
     }
 
@@ -168,7 +168,7 @@ public class CrossTenantPolicyTests
         var correlation = Guid.NewGuid();
         (await OrderAsync(hub, W.A1Clinic, W.B1Lab, correlation)).Status.Should().Be(SendResult.Accepted);
 
-        var otherParty = await OrderAsync(hub, W.B1Lab, W.A3Pharmacy, correlation, InteropTypes.LabOrderAccepted);
+        var otherParty = await OrderAsync(hub, W.B1Lab, W.A3Pharmacy, correlation, InteropTypes.LabOrderStatusChanged);
 
         otherParty.Status.Should().Be(SendResult.Rejected);
     }
@@ -224,7 +224,7 @@ public class RoutingUnitTests
 {
     [Theory]
     [InlineData("lab.order.issued", LinkScopes.LabOrder)]
-    [InlineData("lab.order.accepted", LinkScopes.LabOrder)]
+    [InlineData("lab.order.status.changed", LinkScopes.LabOrder)]
     [InlineData("rx.issued", LinkScopes.Prescription)]
     [InlineData("clinic.referral.sent", LinkScopes.Referral)]
     [InlineData("lab.result.finalized", LinkScopes.Result)]

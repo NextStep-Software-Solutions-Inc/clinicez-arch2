@@ -62,6 +62,7 @@ public sealed record VisitBillDto(
     decimal DiscountTotal,
     decimal Total,
     decimal Paid,
+    decimal Refunded,
     decimal Balance,
     IReadOnlyList<VisitFacilityDto> Facilities,
     IReadOnlyList<InvoiceDto> Invoices);
@@ -126,6 +127,7 @@ public sealed record ReceiptInvoiceDto(
     decimal DiscountTotal,
     decimal Total,
     decimal AppliedByThisPayment,
+    decimal RefundedFromThisPayment,
     decimal BalanceNow);
 
 /// <summary>Everything needed to print the official receipt.</summary>
@@ -141,6 +143,7 @@ public sealed record ReceiptDto(
     bool IsExternal,
     string? Reference,
     decimal Amount,
+    decimal RefundedAmount,
     decimal? Tendered,
     decimal Change,
     string CashierName,
@@ -149,9 +152,27 @@ public sealed record ReceiptDto(
 
 public sealed record VoidRequest(string Reason);
 
-public sealed record RefundRequest(string Reason, PaymentMethod? Method);
+/// <summary>
+/// <see cref="Amount"/> is what to give back (everything still held when omitted). <see cref="PaymentId"/> or <see cref="Method"/> limit
+/// the refund to one payment / to payments made with one method; otherwise it is taken from the newest payments first.
+/// </summary>
+public sealed record RefundRequest(string Reason, decimal? Amount, Guid? PaymentId, PaymentMethod? Method);
 
-public sealed record RefundDto(Guid Id, Guid InvoiceId, decimal Amount, PaymentMethod Method, string Reason, string ApprovedByName, DateTime RefundedAtUtc);
+public sealed record RefundLineDto(Guid PaymentId, string ReceiptNumber, PaymentMethod Method, decimal Amount);
+
+public sealed record RefundDto(
+    Guid Id,
+    string Number,
+    Guid InvoiceId,
+    decimal Amount,
+    bool IsPartial,
+    InvoiceStatus InvoiceStatus,
+    decimal InvoiceRefundedTotal,
+    decimal InvoiceNetPaid,
+    string Reason,
+    string ApprovedByName,
+    DateTime RefundedAtUtc,
+    IReadOnlyList<RefundLineDto> Lines);
 
 public sealed record OpenShiftRequest(decimal OpeningFloat);
 

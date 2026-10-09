@@ -14,6 +14,8 @@ var builder = WebApplication.CreateBuilder(args);
 var env = builder.Environment;
 builder.Configuration.AddJsonFile("appsettings.json", false, true);
 builder.Configuration.AddJsonFile($"appsettings.{env.EnvironmentName}.json", true, true);
+// CreateBuilder put the environment variables before the files added here, so the files would override them; re-add them last.
+builder.Configuration.AddEnvironmentVariables();
 builder.Configuration.AddUserSecrets(typeof(Program).Assembly, true);
 
 // 1. Add services from our other layers
@@ -25,7 +27,7 @@ builder.Services
 
 // 2. Facility-local authentication: JWT issued and validated by this service (no internet / identity provider required).
 //    The pharmacy has its own audience, issuer and signing key, so a clinic token is never accepted here.
-//    Secure by default: every endpoint requires a valid session (or the internal service key) unless explicitly [AllowAnonymous].
+//    Secure by default: every endpoint requires a valid session unless explicitly [AllowAnonymous].
 builder.Services.AddFacilityLocalAuth(
     builder.Configuration,
     audience: "clinicez-pharmacy",
@@ -60,7 +62,7 @@ app.UseExceptionHandler(); // Use our global exception handler
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseInternalServiceGuard(); // internal-key principal is default-denied except on permission-guarded endpoints
+app.UseInternalServiceGuard(); // no internal key is configured for the pharmacy (clinic lookups arrive over the hub); the guard keeps any such principal from reaching an endpoint
 app.UseMiddleware<PharmacyScopeMiddleware>();
 app.UseReadOnlyGrace(); // expired subscription: GET only inside the grace window, nothing after it
 app.UseHangfireDashboard("/hangfire", new DashboardOptions { Authorization = [new HangfireDashboardAuthFilter(app.Configuration)] }); // Basic Auth; denied when no password is configured

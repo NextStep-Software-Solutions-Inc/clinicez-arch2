@@ -62,6 +62,11 @@ public sealed class LabRequisition : BaseEntity, ILabScopedEntity
     /// <summary>Set when billing voided the invoice or refunded the payment after the order was accepted.</summary>
     public PaymentCorrection PaymentCorrection { get; set; } = PaymentCorrection.None;
     public DateTime? PaymentCorrectedAtUtc { get; set; }
+    /// <summary>
+    /// Everything billing has given back on the paying invoice so far (cumulative, so recording it twice changes nothing).
+    /// A partial refund only raises this: the order stays paid and <see cref="PaymentCorrection"/> is untouched.
+    /// </summary>
+    public decimal RefundedAmount { get; set; }
     public DoctorReviewOutcome DoctorReviewOutcome { get; set; } = DoctorReviewOutcome.None;
     public DateTime? DoctorReviewedAtUtc { get; set; }
     public string? DoctorReviewedByName { get; set; }

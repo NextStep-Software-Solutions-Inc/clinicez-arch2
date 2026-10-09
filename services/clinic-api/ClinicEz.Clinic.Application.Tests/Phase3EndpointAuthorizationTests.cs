@@ -75,17 +75,4 @@ public class Phase3EndpointAuthorizationTests
 
         unguarded.Should().BeEmpty();
     }
-
-    [Fact]
-    public void Every_Public_Lab_Upload_Route_Is_Addressed_By_A_Grant_Token()
-    {
-        var routes = typeof(PublicLabUploadController)
-            .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
-            .Where(m => m.IsDefined(typeof(HttpMethodAttribute), true))
-            .Select(m => m.GetCustomAttributes<HttpMethodAttribute>().Single().Template ?? string.Empty)
-            .ToList();
-
-        routes.Should().NotBeEmpty();
-        routes.Should().OnlyContain(t => t.Contains("{token}"));
-    }
 }

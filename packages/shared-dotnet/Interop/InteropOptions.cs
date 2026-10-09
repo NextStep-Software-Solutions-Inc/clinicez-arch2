@@ -37,6 +37,9 @@ public sealed class InteropOptions
     public int RelayIntervalMs { get; set; } = 1000;
     public int PollWaitSeconds { get; set; } = 20;
     public int BatchSize { get; set; } = 50;
+
+    /// <summary>Default time <see cref="Requests.IInteropRequestClient"/> waits for a reply before throwing a timeout.</summary>
+    public int RequestTimeoutSeconds { get; set; } = 30;
     public int OutboxRetentionDays { get; set; } = 7;
     public int InboxRetentionDays { get; set; } = 14;
 
@@ -45,6 +48,8 @@ public sealed class InteropOptions
     /// <summary>Throws with an actionable message if a Hub transport is not fully configured.</summary>
     public void Validate()
     {
+        if (RequestTimeoutSeconds <= 0)
+            throw new InvalidOperationException("Messaging:RequestTimeoutSeconds must be positive.");
         if (IsInProcess) return;
         if (!string.Equals(Transport, "Hub", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException($"Messaging:Transport must be 'Hub' or 'InProcess' (was '{Transport}').");

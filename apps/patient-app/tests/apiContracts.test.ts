@@ -5,7 +5,7 @@ import {
   labResultUploadAckSchema,
   syncChangesPageSchema,
 } from '../services/api/documentsSchemas';
-import { accessGrantListSchema, shareTokenResponseSchema } from '../services/api/sharingApi';
+import { accessGrantListSchema, shareCodeResponseSchema, shareTokenResponseSchema } from '../services/api/sharingApi';
 import { syncNotificationSchema } from '../services/api/notificationsApi';
 
 const NOW = '2026-01-01T08:00:00.000Z';
@@ -168,10 +168,22 @@ describe('sharing contract', () => {
     expect(accessGrantListSchema.safeParse([{ ...grant, status: 0 }]).success).toBe(false);
   });
 
-  test('share token response carries PascalCase scopes', () => {
-    const response = { token: 'abc', expiresAt: NOW, ttlSeconds: 60, clinicEzId: 'CEZ-1', scopes: ['Vitals'], purpose: 'Care' };
+  test('share token response carries PascalCase scopes and maxRedemptions', () => {
+    const response = { token: 'abc', expiresAt: NOW, ttlSeconds: 60, clinicEzId: 'CEZ-1', scopes: ['Vitals'], purpose: 'Care', maxRedemptions: 3 };
     expect(shareTokenResponseSchema.safeParse(response).success).toBe(true);
     expect(shareTokenResponseSchema.safeParse({ ...response, scopes: ['vitals'] }).success).toBe(false);
+    expect(shareTokenResponseSchema.safeParse({ ...response, maxRedemptions: 1.5 }).success).toBe(false);
+    const { maxRedemptions: _omitted, ...withoutMax } = response;
+    expect(shareTokenResponseSchema.safeParse(withoutMax).success).toBe(false);
+  });
+
+  test('share code response carries the code and PascalCase scopes', () => {
+    const response = { code: 'ABCD-EFGH', expiresAt: NOW, ttlSeconds: 600, clinicEzId: 'CEZ-1', scopes: ['Allergies', 'LabResults'], purpose: 'Care' };
+    expect(shareCodeResponseSchema.safeParse(response).success).toBe(true);
+    expect(shareCodeResponseSchema.safeParse({ ...response, scopes: ['labResults'] }).success).toBe(false);
+    expect(shareCodeResponseSchema.safeParse({ ...response, ttlSeconds: '600' }).success).toBe(false);
+    const { code: _omitted, ...withoutCode } = response;
+    expect(shareCodeResponseSchema.safeParse(withoutCode).success).toBe(false);
   });
 });
 

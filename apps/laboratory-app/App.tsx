@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Navigation } from './navigation/Navigation';
 import { FacilityActivationGate } from './components/FacilityActivationGate';
+import { ConnectionGate } from './components/ConnectionGate';
 import { loadRuntimeConfig } from './services/runtimeConfig';
 
 export default function App() {
@@ -17,9 +18,11 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <StatusBar style="auto" />
-      <FacilityActivationGate>
-        <Navigation />
-      </FacilityActivationGate>
+      <ConnectionGate>
+        <FacilityActivationGate>
+          <Navigation />
+        </FacilityActivationGate>
+      </ConnectionGate>
     </SafeAreaProvider>
   );
 }

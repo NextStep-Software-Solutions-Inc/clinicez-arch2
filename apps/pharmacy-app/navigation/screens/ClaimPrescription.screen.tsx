@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, Platform } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, Platform, Modal } from 'react-native';
 import ThemedText from '@ui/ThemedText';
 import { useNavigation } from '@react-navigation/native';
+import { QrScanner } from '../../components/QrScanner';
 import { pharmacyService } from '../../services/pharmacyService';
 import { claimErrorMessage } from '../../utils/prescriptionPresentation';
 import { pollForOrder } from '../../utils/claimFlow';
@@ -17,6 +18,7 @@ export default function ClaimPrescriptionScreen(): React.JSX.Element {
   const [phase, setPhase] = useState<ClaimPhase>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
   const cancelled = useRef(false);
 
   useEffect(() => {
@@ -27,9 +29,10 @@ export default function ClaimPrescriptionScreen(): React.JSX.Element {
   }, []);
 
   const busy = phase !== 'idle';
+  const canScan = Platform.OS !== 'web';
 
-  const handleClaim = async () => {
-    const trimmed = token.trim();
+  const claimCode = async (code: string) => {
+    const trimmed = code.trim();
     if (!trimmed) {
       setErrorMessage('Scan or paste the prescription code first.');
       return;
@@ -64,6 +67,14 @@ export default function ClaimPrescriptionScreen(): React.JSX.Element {
       return;
     }
     setErrorMessage(result.error.message || 'Could not load the claimed prescription.');
+  };
+
+  const handleClaim = () => claimCode(token);
+
+  const handleScanned = (code: string) => {
+    setScanning(false);
+    setToken(code);
+    void claimCode(code);
   };
 
   return (
@@ -108,6 +119,12 @@ export default function ClaimPrescriptionScreen(): React.JSX.Element {
           editable={!busy}
         />
 
+        {canScan ? (
+          <Pressable style={[styles.scanBtn, busy && styles.btnDisabled]} onPress={() => setScanning(true)} disabled={busy}>
+            <ThemedText style={styles.scanBtnText}>Scan prescription QR with camera</ThemedText>
+          </Pressable>
+        ) : null}
+
         <Pressable style={[styles.primaryBtn, busy && styles.btnDisabled]} onPress={handleClaim} disabled={busy}>
           {busy ? (
             <View style={styles.busyRow}>
@@ -121,6 +138,10 @@ export default function ClaimPrescriptionScreen(): React.JSX.Element {
           )}
         </Pressable>
       </View>
+
+      <Modal visible={scanning} animationType="slide" onRequestClose={() => setScanning(false)}>
+        <QrScanner onScanned={handleScanned} onClose={() => setScanning(false)} />
+      </Modal>
     </ScrollView>
   );
 }
@@ -210,6 +231,19 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  scanBtn: {
+    borderWidth: 1.5,
+    borderColor: '#0D9488',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scanBtnText: {
+    color: '#0D9488',
+    fontWeight: '700',
+    fontSize: 15,
   },
   primaryBtnText: {
     color: '#FFFFFF',

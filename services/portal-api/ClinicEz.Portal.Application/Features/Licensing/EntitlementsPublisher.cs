@@ -51,12 +51,7 @@ public sealed class EntitlementsPublisher(
             facility.PlanTier = snapshot.PlanSlug;
             facility.MaxStaffLimit = share.MaxStaff;
 
-            publisher.Enqueue(
-                InteropTypes.EntitlementsChanged,
-                Party.Portal,
-                Party.ForFacility(tenant.Id.ToString(), facility.Id.ToString(), facility.FacilityType),
-                facility.Id,
-                new EntitlementsChangedEvent
+            var changed = new EntitlementsChangedEvent
                 {
                     TenantId = tenant.Id.ToString(),
                     FacilityId = facility.Id,
@@ -74,7 +69,18 @@ public sealed class EntitlementsPublisher(
                     LicenseExpiresAtUtc = payload.ExpiresAtUtc!.Value,
                     GraceDays = payload.GraceDays,
                     ReadOnlyGraceUntilUtc = payload.ReadOnlyGraceUntil!.Value
-                });
+                };
+
+            // The facility's own service and the billing service of the same cell each hold the license.
+            foreach (var service in new[] { null, InteropServices.Billing })
+            {
+                publisher.Enqueue(
+                    InteropTypes.EntitlementsChanged,
+                    Party.Portal,
+                    Party.ForFacility(tenant.Id.ToString(), facility.Id.ToString(), facility.FacilityType, service),
+                    facility.Id,
+                    changed);
+            }
         }
     }
 }

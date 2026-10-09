@@ -1203,9 +1203,14 @@ Creates an appointment request. The draft can be submitted to the clinic later.
   "preferredTime": "09:00",
   "reason": "Annual physical exam",
   "notes": "Please prepare CBC and lipid panel results if available.",
-  "shareFieldsJson": "[\"fullName\",\"dateOfBirth\",\"mobile\",\"philhealthId\"]"
+  "shareFieldsJson": "[\"fullName\",\"dateOfBirth\",\"mobile\",\"philhealthId\"]",
+  "shareSections": ["Allergies", "Medications"]
 }
 ```
+
+`shareSections` (optional) lists the extra record categories the patient agrees to send with this booking, using the
+[sharing scope](#sharing) wire names. `Demographics` is always shared and is rejected here; an unknown name is a **400**.
+Nothing is shared unless it is listed. The choice is stored on the draft and enforced when the draft is submitted.
 
 **201 Created** — `data` is the new booking draft UUID.
 
@@ -1230,6 +1235,10 @@ The returned `PENDING-{draftId}` reference is a placeholder until the clinic con
 
 Submitting also records a `booking` access grant for that clinic (see [Sharing](#sharing)) and shares each unencrypted
 attachment of at most 10 MB with the clinic by reference (`patient.record.shared`). No clinic is called over HTTP.
+
+The grant and the event are limited to `Demographics` plus the draft's `shareSections`. The server builds the event's
+`sharedItems` only for those sections (`sharedScopes` names them), so a client cannot widen what is released after the
+patient chose; the access log lists the sections shared.
 
 **202 Accepted**
 
@@ -1302,12 +1311,35 @@ Every patient has a stable `clinicEzId` (e.g. `CE-7K2M-9QX4`), returned on the p
 ### `POST /api/v1/patients/{patientId}/share-tokens` — Create a share token
 
 ```json
+{ "scopes": ["Allergies", "Vitals"], "purpose": "Consultation", "maxRedemptions": 3 }
+```
+
+`maxRedemptions` is optional (default 1, at most `Sharing:MaxShareRedemptions`).
+
+**200** — `data: { token, expiresAt, ttlSeconds, clinicEzId, scopes, purpose, maxRedemptions }`. `token` is the QR content:
+an opaque, HMAC-signed string valid for `ttlSeconds` (default 120) that can be redeemed `maxRedemptions` times (default
+once). Request a new one before `expiresAt`.  
+**400** — `scopes` empty or contains an unknown scope, or `maxRedemptions` is outside `1..Sharing:MaxShareRedemptions`.
+
+### `POST /api/v1/patients/{patientId}/share-codes` — Create a one-time code
+
+For a facility that cannot scan: the patient reads out a short code, and the facility types it with the patient's
+`clinicEzId`.
+
+```json
 { "scopes": ["Allergies", "Vitals"], "purpose": "Consultation" }
 ```
 
-**200** — `data: { token, expiresAt, ttlSeconds, clinicEzId, scopes, purpose }`. `token` is the QR content: an opaque,
-HMAC-signed, single-use string valid for `ttlSeconds` (default 120). Request a new one before `expiresAt`.  
-**400** — `scopes` empty or contains an unknown scope.
+**200** — `data: { code, expiresAt, ttlSeconds, clinicEzId, scopes, purpose }`. `code` looks like `K7QM-X4NP` (eight
+characters from an alphabet without `0 O 1 I L`; the hyphen and case are ignored when typed). It lives
+`Sharing:ShareCodeTtlMinutes` (default 10) and works once. Only an HMAC of the code is stored, never the code itself.  
+**400** — `scopes` empty or contains an unknown scope.  
+**409** — the patient already has `Sharing:MaxLiveShareCodes` unexpired, unused codes.
+
+Redeeming a code by hand is throttled: after `Sharing:MaxShareCodeFailuresPerFacility` wrong attempts by one facility
+(or `Sharing:MaxShareCodeFailuresPerPatient` against one patient) within `Sharing:ShareCodeFailureWindowMinutes`, further
+attempts are answered `RateLimited` even when correct. A wrong code and an unknown `clinicEzId` get the same `Invalid`
+answer so the response does not reveal which patients exist.
 
 ### `GET /api/v1/patients/{patientId}/access-grants` — Who has access
 
@@ -1315,8 +1347,9 @@ Newest first, including expired and revoked grants.
 
 `AccessGrantDto { id, tenantId, facilityId, facilityName, scopes[], purpose, source: Qr|Booking|Manual, status: Active|Expired|Revoked, expiresAt, revokedAt, createdAt }`
 
-A QR redemption creates a grant valid for `Sharing:QrGrantHours`; submitting a booking creates a `Booking` grant
-(`Demographics` scope) valid for `Sharing:BookingGrantDays`.
+A QR redemption creates a grant valid for `Sharing:QrGrantHours`; a code redemption creates a `Manual` grant of the same
+length; submitting a booking creates a `Booking` grant (`Demographics` plus the draft's `shareSections`) valid for
+`Sharing:BookingGrantDays`.
 
 ### `DELETE /api/v1/patients/{patientId}/access-grants/{grantId}` — Revoke
 
@@ -1327,6 +1360,8 @@ the facility already imported into its own chart stays there; tell the patient s
 
 `data: { items: AccessLogDto[], totalCount }` with `AccessLogDto { id, grantId, facilityName, actor, action, detail, at }`,
 newest first. Grant creation, redemptions (with the categories released), denials, revocations and booking shares are logged.
+Every redemption of a multi-use token is its own entry: `Redeemed` or `Refreshed` with "(use n of m)", suffixed "by code"
+for manual codes.
 
 ### `GET /api/v1/patients/{patientId}/export` — Export my data
 
@@ -1404,7 +1439,7 @@ payload is about. A message that fails those checks is acknowledged and ignored,
 
 | Direction | Type | Purpose |
 | --- | --- | --- |
-| in | `patient.share.redeem` | A facility redeems a share token; answered with `patient.share.snapshot` to the same facility |
+| in | `patient.share.redeem` | A facility redeems a share token, or a one-time code with the patient's `clinicEzId`; answered with `patient.share.snapshot` to the same facility |
 | in | `patient.document.issued` | Lab request, prescription, lab result, medical certificate or dispense receipt (upsert by document id) |
 | in | `lab.order.status.changed` | Stage, quote and payment state of a lab request |
 | in | `rx.status.changed` | Stage and quote of a prescription |
@@ -1416,10 +1451,23 @@ payload is about. A message that fails those checks is acknowledged and ignored,
 | out | `lab.result.external.submitted` | A patient-uploaded lab result, by reference |
 | out | `rx.external.dispensed` | A prescription the patient had filled outside ClinicEZ |
 
-Redemption rules: the token must verify against `Sharing:SigningKey`, be unexpired, be for an existing patient and be
-unused; the first successful redemption by a facility consumes it. A redelivered message is answered again from the grant
-already created, so retries never create a second grant. A denied snapshot (`granted: false`) carries a short
-`denialReason` the facility can show the patient: the code is not valid, has expired, was already used, or the patient is unknown.
+Redemption rules: the token must verify against `Sharing:SigningKey`, be unexpired, be for an existing patient and have
+redemptions left. A token carries the number of redemptions the patient allowed (`maxRedemptions`, default 1); each
+redemption, by any facility, is numbered and a fresh snapshot is built from the patient's current record every time. When
+the same facility redeems again it keeps its existing grant and the snapshot is marked `isRefresh: true`; a different
+facility gets its own grant. If the patient revoked that facility's grant, the redemption is denied as `Revoked`. A
+redelivered message is answered again from the use already recorded, so retries never create a second grant or consume
+another redemption. Redemptions are serialised by a unique `(token, sequence)` key.
+
+A redeem may instead carry `clinicEzId` and `code` (with an empty `shareToken`) to redeem a one-time code; the same
+checks apply, the grant source is `Manual`, and the facility is throttled as described under
+[share codes](#post-apiv1patientspatientidshare-codes--create-a-one-time-code).
+
+`PatientShareSnapshotPayload` additions: `denialCode` (`Invalid`, `Expired`, `Exhausted`, `PatientUnknown`, `RateLimited`,
+`Revoked`; PascalCase string, null when granted), `redemptionNumber`, `maxRedemptions` and `isRefresh`. A denied snapshot
+(`granted: false`) still carries a short `denialReason` the facility can show the patient, now alongside `denialCode` for
+machine handling. `PatientShareRedeemPayload` additions: `clinicEzId` and `code`. The `patient.appointment.booked`
+payload gains `sharedScopes` and `sharedItems` (the sections the patient chose for the booking).
 
 **Booking attachments.** At submit time each *unencrypted* attachment of at most 10 MB is shared with the clinic by
 reference in a `patient.record.shared` message. Client-encrypted or larger files are not transferred; only their
@@ -1433,6 +1481,12 @@ metadata is sent.
 | `Sharing:ShareTokenTtlSeconds` | `Sharing__ShareTokenTtlSeconds` | Token lifetime, default 120 |
 | `Sharing:QrGrantHours` | `Sharing__QrGrantHours` | Grant length after a QR redemption, default 24 |
 | `Sharing:BookingGrantDays` | `Sharing__BookingGrantDays` | Grant length after a booking, default 30 |
+| `Sharing:MaxShareRedemptions` | `Sharing__MaxShareRedemptions` | Upper bound a patient may set on a token's `maxRedemptions`, default 10 |
+| `Sharing:ShareCodeTtlMinutes` | `Sharing__ShareCodeTtlMinutes` | Lifetime of a one-time code, default 10 |
+| `Sharing:MaxLiveShareCodes` | `Sharing__MaxLiveShareCodes` | Unexpired, unused codes a patient may hold, default 5 |
+| `Sharing:ShareCodeFailureWindowMinutes` | `Sharing__ShareCodeFailureWindowMinutes` | Window over which wrong code attempts are counted, default 10 |
+| `Sharing:MaxShareCodeFailuresPerFacility` | `Sharing__MaxShareCodeFailuresPerFacility` | Wrong attempts one facility may make in the window, default 5 |
+| `Sharing:MaxShareCodeFailuresPerPatient` | `Sharing__MaxShareCodeFailuresPerPatient` | Wrong attempts against one patient in the window, default 15 |
 
 ---
 
@@ -1553,7 +1607,7 @@ patient-api has **no default secrets**. The connection string, `Clerk__Authority
 | `ConnectionStrings__DefaultConnection` | PostgreSQL (also used by Hangfire) |
 | `Clerk__Authority` | Clerk JWT issuer (`Clerk__Audience` optional) |
 | `Encryption__Base64Key` | Payload encryption key, 32 random bytes in base64 (see above) |
-| `Sharing__SigningKey` | HMAC key (≥ 32 characters) for share tokens |
+| `Sharing__SigningKey` | HMAC key (≥ 32 characters) for share tokens and one-time codes |
 | `Facility__BaseDomain` and/or `Cors__AllowedDomains__0…`, `Cors__AllowedOrigins__0…` | Browser origins trusted for CORS. **Required outside Development** — the service refuses to start without at least one, and `Cors__AllowAnyOrigin=true` is refused. Native mobile clients do not use CORS. Development allows any origin. |
 | `Messaging__HubUrl`, `Messaging__ClientId`, `Messaging__ClientSecret` | Interop hub client credentials |
 | `Messaging__SigningKey` | This service's envelope-signing private key; required wherever the hub enforces signatures (the default outside Development, see `docs/architecture/interop-hub.md`) |

@@ -66,6 +66,55 @@ public class AppointmentBookedHandlerTests
     }
 
     [Fact]
+    public async Task Handle_StoresTheScopesAndItemsThePatientSharedWithTheBooking()
+    {
+        using var db = MessagingTestKit.CreateDbContext();
+        var clinicId = Guid.NewGuid();
+        MessagingTestKit.SeedClinic(db, clinicId, TenantId);
+        var booked = new AppointmentBookedEvent
+        {
+            DraftId = Guid.NewGuid(),
+            PatientId = Guid.NewGuid(),
+            ClinicId = clinicId,
+            TenantId = TenantId,
+            PreferredDate = new DateOnly(2026, 9, 25),
+            SharedScopes = SharingScopes.Demographics | SharingScopes.Allergies,
+            SharedItems = [new ShareItemDto { Kind = "allergy", Name = "Penicillin", Detail = "Rash" }]
+        };
+
+        await CreateHandler(db).HandleAsync(booked, Delivered(booked, MessagingTestKit.ClinicParty(TenantId, clinicId)), CancellationToken.None);
+
+        var appt = await db.Appointments.IgnoreQueryFilters().SingleAsync();
+        appt.SharedScopes.Should().Be(SharingScopes.Demographics | SharingScopes.Allergies);
+        var dto = Features.Appointments.AppointmentDto.From(appt);
+        dto.SharedScopes.Should().BeEquivalentTo("Demographics", "Allergies");
+        dto.SharedItems.Should().ContainSingle()
+            .Which.Should().Match<ShareItemDto>(i => i.Kind == "allergy" && i.Name == "Penicillin" && i.Detail == "Rash");
+    }
+
+    [Fact]
+    public async Task Handle_ABookingFromAnOlderPublisherSharesNothing()
+    {
+        using var db = MessagingTestKit.CreateDbContext();
+        var clinicId = Guid.NewGuid();
+        MessagingTestKit.SeedClinic(db, clinicId, TenantId);
+        var booked = new AppointmentBookedEvent
+        {
+            DraftId = Guid.NewGuid(),
+            PatientId = Guid.NewGuid(),
+            ClinicId = clinicId,
+            TenantId = TenantId,
+            PreferredDate = new DateOnly(2026, 9, 25)
+        };
+
+        await CreateHandler(db).HandleAsync(booked, Delivered(booked, MessagingTestKit.ClinicParty(TenantId, clinicId)), CancellationToken.None);
+
+        var dto = Features.Appointments.AppointmentDto.From(await db.Appointments.IgnoreQueryFilters().SingleAsync());
+        dto.SharedScopes.Should().BeEmpty();
+        dto.SharedItems.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Handle_MatchingClinic_ConfirmsBookingToPatientThroughOutbox()
     {
         using var db = MessagingTestKit.CreateDbContext();

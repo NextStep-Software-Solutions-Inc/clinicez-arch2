@@ -32,7 +32,9 @@ public class LabInvoiceVoidedTests
         DateTime? correctedAtUtc = null,
         string? tenantId = null,
         string? facilityId = null,
-        FacilityType facilityType = FacilityType.Laboratory) =>
+        FacilityType facilityType = FacilityType.Laboratory,
+        bool isPartial = false,
+        decimal? refundedTotal = null) =>
         InteropEnvelope.Create(
             InteropTypes.BillingInvoiceVoided,
             from ?? LabInteropTestData.LabBilling,
@@ -49,8 +51,10 @@ public class LabInvoiceVoidedTests
                 SourceId = Guid.NewGuid(),
                 Kind = kind,
                 Total = 150m,
-                AmountReversed = kind == BillingCorrectionKind.Refund ? 150m : 0m,
+                AmountReversed = kind == BillingCorrectionKind.Refund ? refundedTotal ?? 150m : 0m,
                 WasFullyPaid = kind == BillingCorrectionKind.Refund,
+                IsPartial = isPartial,
+                RefundedTotal = kind == BillingCorrectionKind.Refund ? refundedTotal ?? 150m : 0m,
                 CorrectedAtUtc = correctedAtUtc ?? DateTime.UtcNow.AddMinutes(1)
             });
 
@@ -160,6 +164,115 @@ public class LabInvoiceVoidedTests
         var recorded = (await host.RequisitionsAsync()).Single();
         recorded.Stage.Should().Be(RequisitionStage.AwaitingPayment);
         recorded.PaymentCorrectedAtUtc.Should().Be(correctedAt);
+    }
+
+    [Fact]
+    public async Task Partial_refund_only_records_the_amount_and_the_order_stays_paid_and_workable()
+    {
+        using var host = new LabInteropHost();
+        var order = await LabPaymentGateTests.OrderAsync(host, PaymentPolicy.Prepaid);
+        var invoiceId = Guid.NewGuid();
+        await PayAsync(host, order.Id, invoiceId);
+        var outbox = (await host.OutboxAsync()).Count;
+
+        var result = await host.Dispatcher.DispatchAsync(VoidEnvelope(order.Id, invoiceId, isPartial: true, refundedTotal: 40m), default);
+
+        result.Outcome.Should().Be(DispatchOutcome.Handled);
+        var recorded = (await host.RequisitionsAsync()).Single();
+        recorded.RefundedAmount.Should().Be(40m);
+        recorded.Stage.Should().Be(RequisitionStage.Paid);
+        recorded.PaidAtUtc.Should().NotBeNull();
+        recorded.InvoiceId.Should().Be(invoiceId);
+        recorded.PaymentCorrection.Should().Be(PaymentCorrection.None);
+        recorded.PaymentCorrectedAtUtc.Should().BeNull();
+        recorded.IsPaymentBlocking.Should().BeFalse();
+        (await host.OutboxAsync()).Should().HaveCount(outbox, "a partial refund is not announced and never re-requests the invoice");
+        await LabPaymentGateTests.AccessionAsync(host, order.Id);
+    }
+
+    [Fact]
+    public async Task Partial_refunds_are_recorded_by_their_cumulative_total_so_redelivery_and_stale_messages_change_nothing()
+    {
+        using var host = new LabInteropHost();
+        var order = await LabPaymentGateTests.OrderAsync(host, PaymentPolicy.Prepaid);
+        var invoiceId = Guid.NewGuid();
+        await PayAsync(host, order.Id, invoiceId);
+
+        await host.Dispatcher.DispatchAsync(VoidEnvelope(order.Id, invoiceId, isPartial: true, refundedTotal: 40m), default);
+        await host.Dispatcher.DispatchAsync(VoidEnvelope(order.Id, invoiceId, isPartial: true, refundedTotal: 40m), default);
+        await host.Dispatcher.DispatchAsync(VoidEnvelope(order.Id, invoiceId, isPartial: true, refundedTotal: 100m), default);
+        await host.Dispatcher.DispatchAsync(VoidEnvelope(order.Id, invoiceId, isPartial: true, refundedTotal: 40m), default);
+
+        var recorded = (await host.RequisitionsAsync()).Single();
+        recorded.RefundedAmount.Should().Be(100m, "the larger cumulative total wins and the older 40 arriving late changes nothing");
+        recorded.Stage.Should().Be(RequisitionStage.Paid);
+        recorded.PaidAtUtc.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Partial_refund_of_an_order_that_is_not_paid_is_ignored()
+    {
+        using var host = new LabInteropHost();
+        var order = await LabPaymentGateTests.OrderAsync(host, PaymentPolicy.Prepaid);
+
+        var result = await host.Dispatcher.DispatchAsync(VoidEnvelope(order.Id, isPartial: true, refundedTotal: 40m), default);
+
+        result.ShouldAck.Should().BeTrue();
+        var unchanged = (await host.RequisitionsAsync()).Single();
+        unchanged.RefundedAmount.Should().Be(0m);
+        unchanged.Stage.Should().Be(RequisitionStage.AwaitingPayment);
+    }
+
+    [Fact]
+    public async Task A_full_refund_after_a_partial_one_still_withdraws_the_payment_and_clears_the_amount()
+    {
+        using var host = new LabInteropHost();
+        var order = await LabPaymentGateTests.OrderAsync(host, PaymentPolicy.Prepaid);
+        var invoiceId = Guid.NewGuid();
+        await PayAsync(host, order.Id, invoiceId);
+        await host.Dispatcher.DispatchAsync(VoidEnvelope(order.Id, invoiceId, isPartial: true, refundedTotal: 40m), default);
+
+        await host.Dispatcher.DispatchAsync(VoidEnvelope(order.Id, invoiceId, correctedAtUtc: DateTime.UtcNow.AddMinutes(2)), default);
+
+        var reopened = (await host.RequisitionsAsync()).Single();
+        reopened.Stage.Should().Be(RequisitionStage.AwaitingPayment);
+        reopened.PaymentCorrection.Should().Be(PaymentCorrection.Refunded);
+        reopened.PaidAtUtc.Should().BeNull();
+        reopened.RefundedAmount.Should().Be(0m, "the refund history belonged to the withdrawn payment");
+    }
+
+    [Fact]
+    public async Task A_full_refund_after_the_specimen_was_drawn_records_the_refunded_total_and_keeps_the_payment()
+    {
+        using var host = new LabInteropHost();
+        var order = await LabPaymentGateTests.OrderAsync(host, PaymentPolicy.Prepaid);
+        var invoiceId = Guid.NewGuid();
+        await PayAsync(host, order.Id, invoiceId);
+        await LabPaymentGateTests.AccessionAsync(host, order.Id);
+
+        await host.Dispatcher.DispatchAsync(VoidEnvelope(order.Id, invoiceId), default);
+
+        var recorded = (await host.RequisitionsAsync()).Single();
+        recorded.PaymentCorrection.Should().Be(PaymentCorrection.Refunded);
+        recorded.RefundedAmount.Should().Be(150m);
+        recorded.PaidAtUtc.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task A_new_payment_after_a_full_refund_starts_with_no_refunded_amount()
+    {
+        using var host = new LabInteropHost();
+        var order = await LabPaymentGateTests.OrderAsync(host, PaymentPolicy.Prepaid);
+        var firstInvoice = Guid.NewGuid();
+        await PayAsync(host, order.Id, firstInvoice);
+        await host.Dispatcher.DispatchAsync(VoidEnvelope(order.Id, firstInvoice, isPartial: true, refundedTotal: 40m), default);
+        await host.Dispatcher.DispatchAsync(VoidEnvelope(order.Id, firstInvoice, correctedAtUtc: DateTime.UtcNow.AddMinutes(2)), default);
+
+        await PayAsync(host, order.Id, Guid.NewGuid());
+
+        var repaid = (await host.RequisitionsAsync()).Single();
+        repaid.PaidAtUtc.Should().NotBeNull();
+        repaid.RefundedAmount.Should().Be(0m);
     }
 
     [Fact]

@@ -71,6 +71,8 @@ public sealed class ApplicationDbContext : DbContext, IInteropDbContext
     public DbSet<PatientAccessGrant> PatientAccessGrants => Set<PatientAccessGrant>();
     public DbSet<PatientAccessLog> PatientAccessLogs => Set<PatientAccessLog>();
     public DbSet<ShareTokenUse> ShareTokenUses => Set<ShareTokenUse>();
+    public DbSet<ShareCode> ShareCodes => Set<ShareCode>();
+    public DbSet<ShareCodeFailure> ShareCodeFailures => Set<ShareCodeFailure>();
 
     // ── Files & Appointments ────────────────────────────────────────────────
     public DbSet<FileFolder> FileFolders => Set<FileFolder>();

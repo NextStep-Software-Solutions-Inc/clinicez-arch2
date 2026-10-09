@@ -110,40 +110,6 @@ public class LabOrdersAndInteroperabilityTests
     }
 
     [Fact]
-    public async Task SubmitPublicLabUpload_AcceptsResultViaGrantToken()
-    {
-        var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);
-        var orderRepo = TestDbHelper.CreateRepository<ClinicLabOrder>(db, sieve);
-        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(db, sieve);
-
-        var createHandler = NewCreateHandler(db, sieve, unitOfWork, orderRepo, patientRepo);
-        var createdOrder = await createHandler.Handle(new CreateClinicLabOrderCommand(
-            PatientId: Guid.NewGuid(),
-            PatientName: "Elena Ramos"
-        ), CancellationToken.None);
-        var token = createdOrder.PublicUploadUrl![(Phase3TestKit.UploadBaseUrl.Length + 1)..];
-
-        var publicUploadHandler = new SubmitPublicLabUploadCommandHandler(Phase3TestKit.Grants(db), Phase3TestKit.Intake(db));
-        var uploadCommand = new SubmitPublicLabUploadCommand(
-            Token: token,
-            ExternalLabName: "St. Luke's Diagnostic Lab",
-            Content: new byte[] { 37, 80, 68, 70 },
-            ContentType: "application/pdf",
-            FileName: "report-001.pdf",
-            Notes: "Official certified PDF attached by lab staff"
-        );
-
-        var receipt = await publicUploadHandler.Handle(uploadCommand, CancellationToken.None);
-
-        receipt.OrderNumber.Should().Be(createdOrder.OrderNumber);
-        var result = await db.LabResults.IgnoreQueryFilters().SingleAsync();
-        result.Id.Should().Be(receipt.ResultId);
-        result.Source.Should().Be(ResultSource.ExternalLab);
-        result.Verification.Should().Be(VerificationState.Unverified);
-        (await db.LabOrders.IgnoreQueryFilters().SingleAsync()).Stage.Should().Be(LabOrderStage.ExternalSubmitted);
-    }
-
-    [Fact]
     public async Task GetClinicLabOrderSlip_ReturnsCompleteSlipDataWithQrPayload()
     {
         var (db, unitOfWork, sieve) = TestDbHelper.CreateTestContext(_clinicContext);

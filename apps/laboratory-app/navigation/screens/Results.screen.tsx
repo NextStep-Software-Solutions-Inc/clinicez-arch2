@@ -77,11 +77,18 @@ export default function ResultsScreen() {
   const [analyzerModel, setAnalyzerModel] = useState('Mindray BC-5150');
   const [analyzerFormat, setAnalyzerFormat] = useState('ASTM');
   const [simulatedRawPayload, setSimulatedRawPayload] = useState('');
+  const [simulatorEnabled, setSimulatorEnabled] = useState(false);
 
   // Panic dispatch modal state
   const [notifiedDoctor, setNotifiedDoctor] = useState('');
   const [readbackNotes, setReadbackNotes] = useState('');
   const [notificationMethod, setNotificationMethod] = useState<NotificationMethod>('Telephone');
+
+  useEffect(() => {
+    laboratoryService.getAnalyzerCapabilities().then(([capabilities]) => {
+      setSimulatorEnabled(capabilities?.simulatorEnabled === true);
+    });
+  }, []);
 
   useEffect(() => {
     Promise.all([
@@ -382,9 +389,11 @@ export default function ResultsScreen() {
           </View>
 
           <View style={{ gap: 6 }}>
-            <Pressable style={styles.analyzerSimBtn} onPress={() => { handleGenerateSimulation(); setAnalyzerModalVisible(true); }}>
-              <ThemedText style={styles.analyzerSimBtnText}>🤖 Analyzer Data Feed</ThemedText>
-            </Pressable>
+            {simulatorEnabled && (
+              <Pressable style={styles.analyzerSimBtn} onPress={() => { handleGenerateSimulation(); setAnalyzerModalVisible(true); }}>
+                <ThemedText style={styles.analyzerSimBtnText}>🤖 Analyzer Data Feed</ThemedText>
+              </Pressable>
+            )}
 
             {selectedOrder?.diagnosticReport && (
               <Pressable style={styles.previewDohBtn} onPress={() => setReportModalVisible(true)}>

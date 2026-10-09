@@ -1,15 +1,12 @@
 using System;
 using System.Collections.Generic;
-using System.Net;
-using System.Net.Http;
 using System.Text.Json;
-using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
 using ClinicEz.Clinic.Infrastructure.Services;
 using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Interoperability;
 using FluentAssertions;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
@@ -20,30 +17,19 @@ public sealed class YakapSimulationTests
     /// <summary>The proxy writes enums as strings, like every platform API.</summary>
     private static readonly JsonSerializerOptions ProxyJson = new JsonSerializerOptions().UseStrictStringEnums();
 
-    private class MockHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> handlerFunc) : HttpMessageHandler
+    private static (PhilHealthProxyClient Client, StubInteropRequestClient Hub) CreateClient(PhilHealthResponsePayload reply)
     {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            return Task.FromResult(handlerFunc(request));
-        }
+        var hub = new StubInteropRequestClient(_ => reply);
+        var client = new PhilHealthProxyClient(
+            hub, Phase3TestKit.Identity(Guid.NewGuid(), "tenant-sim"), NullLogger<PhilHealthProxyClient>.Instance);
+        return (client, hub);
     }
 
-    private static PhilHealthProxyClient CreateClient(Func<HttpRequestMessage, HttpResponseMessage> handler)
-    {
-        var httpClient = new HttpClient(new MockHttpMessageHandler(handler))
-        {
-            BaseAddress = new Uri("http://localhost:5025")
-        };
+    private static PhilHealthResponsePayload Ok<T>(T data) =>
+        new() { StatusCode = 200, Body = JsonSerializer.Serialize(ApiResponse<T>.Success(data), ProxyJson) };
 
-        var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["PhilHealthProxy:BaseUrl"] = "http://localhost:5025"
-            })
-            .Build();
-
-        return new PhilHealthProxyClient(httpClient, config, NullLogger<PhilHealthProxyClient>.Instance);
-    }
+    private static string OperationOf(StubInteropRequestClient hub) =>
+        ((PhilHealthRequestPayload)hub.Calls.Single().Payload).Operation;
 
     [Fact]
     public async Task RunSoapSimulationAsync_WhenSuccessful_Deserializes7StepsReport()
@@ -66,17 +52,7 @@ public sealed class YakapSimulationTests
                 new(7, "checkUploadStatus", SoapSimulationStepStatusDto.Passed, 14, "PROCESSED")
             },
             Timestamp: DateTime.UtcNow);
-
-        var client = CreateClient(req =>
-        {
-            req.Method.Should().Be(HttpMethod.Post);
-            req.RequestUri!.PathAndQuery.Should().Be("/api/soap-sandbox/run-e2e");
-            var json = JsonSerializer.Serialize(ApiResponse<SoapSimulationReportDto>.Success(sampleReport), ProxyJson);
-            return new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")
-            };
-        });
+        var (client, hub) = CreateClient(Ok(sampleReport));
 
         var result = await client.RunSoapSimulationAsync(new RunSoapSimulationProxyRequest("HCI-NCR-00921"));
 
@@ -86,6 +62,8 @@ public sealed class YakapSimulationTests
         result.Data.TotalSteps.Should().Be(7);
         result.Data.Steps.Should().HaveCount(7);
         result.Data.Steps[4].ActionName.Should().Be("validateReport");
+        OperationOf(hub).Should().Be(PhilHealthOperations.SoapSandboxRun);
+        ((PhilHealthRequestPayload)hub.Calls.Single().Payload).Body.Should().Contain("HCI-NCR-00921");
     }
 
     [Fact]
@@ -97,17 +75,7 @@ public sealed class YakapSimulationTests
             EndpointUrl: "/soap/konsulta",
             TotalSimulatedCalls: 42,
             AvailableScenarios: new[] { "HappyPath", "SoapFault500" });
-
-        var client = CreateClient(req =>
-        {
-            req.Method.Should().Be(HttpMethod.Get);
-            req.RequestUri!.PathAndQuery.Should().Be("/api/soap-sandbox/status");
-            var json = JsonSerializer.Serialize(ApiResponse<SoapSandboxStatusDto>.Success(sampleStatus), ProxyJson);
-            return new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")
-            };
-        });
+        var (client, hub) = CreateClient(Ok(sampleStatus));
 
         var result = await client.GetSoapSandboxStatusAsync();
 
@@ -115,6 +83,7 @@ public sealed class YakapSimulationTests
         result.Data!.ActiveScenario.Should().Be(SoapSimulationScenarioDto.HappyPath);
         result.Data.TotalSimulatedCalls.Should().Be(42);
         result.Data.AvailableScenarios.Should().Contain("HappyPath");
+        OperationOf(hub).Should().Be(PhilHealthOperations.SoapSandboxStatus);
     }
 
     [Fact]
@@ -126,22 +95,14 @@ public sealed class YakapSimulationTests
             EndpointUrl: "/soap/konsulta",
             TotalSimulatedCalls: 43,
             AvailableScenarios: new[] { "HappyPath", "SoapFault500" });
-
-        var client = CreateClient(req =>
-        {
-            req.Method.Should().Be(HttpMethod.Post);
-            req.RequestUri!.PathAndQuery.Should().Be("/api/soap-sandbox/scenario");
-            var json = JsonSerializer.Serialize(ApiResponse<SoapSandboxStatusDto>.Success(updatedStatus), ProxyJson);
-            return new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")
-            };
-        });
+        var (client, hub) = CreateClient(Ok(updatedStatus));
 
         var result = await client.SetSoapSandboxScenarioAsync(new SetSimulationScenarioRequest(SoapSimulationScenarioDto.SoapFault500));
 
         result.Succeeded.Should().BeTrue();
         result.Data!.ActiveScenario.Should().Be(SoapSimulationScenarioDto.SoapFault500);
+        OperationOf(hub).Should().Be(PhilHealthOperations.SoapSandboxScenario);
+        ((PhilHealthRequestPayload)hub.Calls.Single().Payload).Body.Should().Contain("SoapFault500", "enums travel as strings");
     }
 
     [Fact]
@@ -153,33 +114,35 @@ public sealed class YakapSimulationTests
             EndpointUrl: "/soap/konsulta",
             TotalSimulatedCalls: 0,
             AvailableScenarios: new[] { "HappyPath" });
-
-        var client = CreateClient(req =>
-        {
-            req.Method.Should().Be(HttpMethod.Post);
-            req.RequestUri!.PathAndQuery.Should().Be("/api/soap-sandbox/reset");
-            var json = JsonSerializer.Serialize(ApiResponse<SoapSandboxStatusDto>.Success(resetStatus), ProxyJson);
-            return new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")
-            };
-        });
+        var (client, hub) = CreateClient(Ok(resetStatus));
 
         var result = await client.ResetSoapSandboxAsync();
 
         result.Succeeded.Should().BeTrue();
         result.Data!.TotalSimulatedCalls.Should().Be(0);
         result.Data.ActiveScenario.Should().Be(SoapSimulationScenarioDto.HappyPath);
+        OperationOf(hub).Should().Be(PhilHealthOperations.SoapSandboxReset);
     }
 
     [Fact]
-    public async Task RunSoapSimulationAsync_WhenHttpError_ReturnsFailure()
+    public async Task ValidatePinAsync_PassesThePinAsTheArgument()
     {
-        var client = CreateClient(req =>
-            new HttpResponseMessage(HttpStatusCode.InternalServerError)
-            {
-                Content = new StringContent("Server Error")
-            });
+        var (client, hub) = CreateClient(Ok(true));
+
+        var result = await client.ValidatePinAsync("12-345678901-2");
+
+        result.Succeeded.Should().BeTrue();
+        result.Data.Should().BeTrue();
+        var payload = (PhilHealthRequestPayload)hub.Calls.Single().Payload;
+        payload.Operation.Should().Be(PhilHealthOperations.YakapPinValidate);
+        payload.Argument.Should().Be("12-345678901-2");
+        payload.Body.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RunSoapSimulationAsync_WhenTheServiceErrors_ReturnsFailure()
+    {
+        var (client, _) = CreateClient(new PhilHealthResponsePayload { StatusCode = 500, Body = "Server Error" });
 
         var result = await client.RunSoapSimulationAsync(new RunSoapSimulationProxyRequest());
 

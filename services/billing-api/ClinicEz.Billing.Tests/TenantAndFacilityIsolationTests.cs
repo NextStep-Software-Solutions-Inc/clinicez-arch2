@@ -55,7 +55,7 @@ public class TenantAndFacilityIsolationTests
         await FluentActions.Awaiting(() => host.With<DiscountService, InvoiceDto>(s => s.ApplyToInvoiceAsync(
             b.Clinic.Id, new ApplyDiscountRequest(DiscountKind.Senior, null, null, "Senior", "SC-1"), default))).Should().ThrowAsync<NotFoundException>();
         await FluentActions.Awaiting(() => host.With<CorrectionService, InvoiceDto>(s => s.VoidAsync(b.Clinic.Id, new VoidRequest("x"), default))).Should().ThrowAsync<NotFoundException>();
-        await FluentActions.Awaiting(() => host.With<CorrectionService, RefundDto>(s => s.RefundAsync(b.Clinic.Id, new RefundRequest("x", null), default))).Should().ThrowAsync<NotFoundException>();
+        await FluentActions.Awaiting(() => host.With<CorrectionService, RefundDto>(s => s.RefundAsync(b.Clinic.Id, new RefundRequest("x", null, null, null), default))).Should().ThrowAsync<NotFoundException>();
 
         (await host.InvoicesAsync()).Where(i => i.TenantId == BillingHost.TenantB).Should().OnlyContain(i => i.Status == InvoiceStatus.Open && i.PaidTotal == 0m && i.Discounts.Count == 0);
     }

@@ -99,7 +99,7 @@ public sealed class UploadGrantService : IUploadGrantService
         {
             throw new InvalidOperationException(
                 "Clinic:PublicUploadBaseUrl (environment variable Clinic__PublicUploadBaseUrl) must be set to the absolute public URL of "
-                + "the upload page, for example https://upload.example.com/lab-upload, before lab orders can be issued.");
+                + "the upload page, for example https://portal.example.com/upload/lab, before lab orders can be issued.");
         }
 
         return configured.TrimEnd('/');

@@ -9,7 +9,8 @@ namespace ClinicEz.Shared.Interop.Background;
 
 /// <summary>
 /// Long-polls this service's mailbox on the hub and dispatches each message to its handler.
-/// Acks on success, nacks on failure so the hub redelivers (and eventually dead-letters). A message whose signature does not\n/// verify (when <see cref="EnvelopeVerifier.Enabled"/>) is nacked without running a handler.
+/// Acks on success, nacks on failure so the hub redelivers (and eventually dead-letters). A message whose signature does not
+/// verify (when <see cref="EnvelopeVerifier.Enabled"/>) is nacked without running a handler.
 /// </summary>
 public sealed class InteropInboxPollerService : BackgroundService
 {

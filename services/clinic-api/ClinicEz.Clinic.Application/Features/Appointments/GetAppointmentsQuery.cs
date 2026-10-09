@@ -1,11 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Common;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Interoperability;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -27,8 +30,37 @@ public sealed record AppointmentDto(
     string? Reason,
     string? Notes,
     DateTime CreatedAt,
-    string AttachedFileIdsJson = "[]",
-    string ShareFieldsJson = "[]");
+    string AttachedFileIdsJson,
+    string ShareFieldsJson,
+    IReadOnlyList<string> SharedScopes,
+    IReadOnlyList<ShareItemDto> SharedItems)
+{
+    public static AppointmentDto From(Appointment a) => new(
+        a.Id,
+        a.TenantId,
+        a.ClinicId,
+        a.DraftId,
+        a.PatientId,
+        a.PatientName,
+        a.DoctorId,
+        a.DoctorName,
+        a.ScheduledAt,
+        a.DurationMinutes,
+        a.Status,
+        a.ServiceType,
+        a.Reason,
+        a.Notes,
+        a.CreatedAt,
+        a.AttachedFileIdsJson ?? "[]",
+        a.ShareFieldsJson ?? "[]",
+        SharingScopeNames.Of(a.SharedScopes),
+        ParseItems(a.SharedItemsJson));
+
+    private static IReadOnlyList<ShareItemDto> ParseItems(string? json) =>
+        string.IsNullOrWhiteSpace(json)
+            ? []
+            : JsonSerializer.Deserialize<List<ShareItemDto>>(json) ?? [];
+}
 
 public sealed record GetAppointmentsQuery(
     DateOnly? Date = null,
@@ -68,24 +100,6 @@ public sealed class GetAppointmentsQueryHandler : IRequestHandler<GetAppointment
             .OrderBy(a => a.ScheduledAt)
             .ToListAsync(cancellationToken);
 
-        return list.Select(a => new AppointmentDto(
-            a.Id,
-            a.TenantId,
-            a.ClinicId,
-            a.DraftId,
-            a.PatientId,
-            a.PatientName,
-            a.DoctorId,
-            a.DoctorName,
-            a.ScheduledAt,
-            a.DurationMinutes,
-            a.Status,
-            a.ServiceType,
-            a.Reason,
-            a.Notes,
-            a.CreatedAt,
-            a.AttachedFileIdsJson ?? "[]",
-            a.ShareFieldsJson ?? "[]"
-        )).ToList();
+        return list.Select(AppointmentDto.From).ToList();
     }
 }

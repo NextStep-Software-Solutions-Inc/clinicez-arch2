@@ -4,7 +4,7 @@ Every envelope type in [`InteropTypes`](../../packages/shared-dotnet/Interop/Int
 
 Conventions:
 
-- Services are mailbox names: `clinic`, `laboratory`, `pharmacy`, `organization`, `patient`, `portal`, `billing`. "Facility" means the clinic, laboratory, pharmacy or organization service.
+- Services are mailbox names: `clinic`, `laboratory`, `pharmacy`, `organization`, `patient`, `portal`, `billing`. "Facility" means the clinic, laboratory, pharmacy or organization service. philhealth is the platform mailbox of the PhilHealth proxy (cloud cell only).
 - **Correlation** is the `CorrelationId` the sender puts on the envelope. A reply uses the correlation of the message it answers; the hub opens a conversation on the first message (and on a claim) and only lets the other side answer on it (see the cross-tenant rules in [`interop-hub.md`](interop-hub.md)).
 - **Cross-tenant scope**: when sender and receiver belong to different workspaces the hub needs an Active link whose scope covers the type, or a reply on an open conversation. The scope is derived from the type string in [`HubContracts.cs`](../../services/interop-hub/ClinicEz.Interop.Application/HubContracts.cs): `lab.order.*` = `LabOrder`, `rx.*` = `Prescription`, `*referral*` = `Referral`, `lab.result.*` = `Result`; every other type has no scope, so it can only cross tenants as a reply. Control-plane (`portal`) and patient-plane (`patient`) senders are not subject to links.
 - **Handler status** `OK` means every intended receiver registers a handler. Anything else is called out, because the hub redelivers an unhandled message and finally dead-letters it.
@@ -13,11 +13,11 @@ Conventions:
 
 | Type | Sender | Receiver | Payload | Addressing and correlation | Handler status |
 |---|---|---|---|---|---|
-| `facility.license.issued` | portal (`FacilityProvisioningPublisher`) | clinic, laboratory, pharmacy, organization (the new facility) | `FacilityCreatedEvent` | To the facility's mailbox. Correlation = facility id (`ResourceId`). | OK. billing-api registers no handler (it has no license). |
+| `facility.license.issued` | portal (`FacilityProvisioningPublisher`) | clinic, laboratory, pharmacy, organization (the new facility) and the facility's billing service | `FacilityCreatedEvent` | To the facility's mailbox and, with the same payload and correlation, to the same facility party with `service: billing`. Correlation = facility id (`ResourceId`). | Portal side done. billing-api registers its handler in the billing round. |
 | `facility.provisioned` | clinic, laboratory, pharmacy, organization (their license-issued handler, same transaction) | portal (`FacilityProvisionedHandler`) | `FacilityProvisionedEvent` | To `Party.Portal`. Correlation = that of the license message (facility id). | OK |
 | `facility.directory.updated` | portal (`FacilityProvisioningPublisher`) | patient (`FacilityDirectoryUpdatedInteropHandler`) | `FacilityCreatedEvent` with `LicenseToken` and `Limits` removed | To the control-plane `patient` mailbox. Correlation = facility id. | OK |
 | `workspace.profile.updated` | portal (`WorkspaceProfilePublisher`, on every profile change; also once when a facility is created) | clinic, laboratory, pharmacy, organization (shared `WorkspaceProfileUpdatedHandler`, registered with `HandleWorkspaceProfileUpdated()`) | `WorkspaceProfileUpdatedEvent` carrying the full `WorkspaceProfile` (brand, regional defaults, DPO contact; no secrets, no PHI) | One message per routable facility of the workspace. Correlation = tenant id. | OK. The handler accepts it only from the portal, only when addressed to a facility of the same tenant, and stores it in the service's own database when `Version` is newer than the held one (redelivery and reordering are harmless). No service calls the portal for the profile any more. |
-| `entitlements.changed` | portal (`EntitlementsPublisher`) | every routable facility (clinic, laboratory, pharmacy, organization) via `AddFacilityEntitlements` | `EntitlementsChangedEvent` (re-minted license token and limits) | One message per facility. Correlation = facility id. | OK. billing-api does not register it. |
+| `entitlements.changed` | portal (`EntitlementsPublisher`) | every routable facility (clinic, laboratory, pharmacy, organization) via `AddFacilityEntitlements`, and each facility's billing service | `EntitlementsChangedEvent` (re-minted license token and limits) | One message per facility, plus an identical copy to the same facility party with `service: billing`. Correlation = facility id. | Portal side done. billing-api registers its handler in the billing round. |
 | `facility.heartbeat` | clinic, laboratory, pharmacy, organization (`FacilityHeartbeatService`, `Messaging:HeartbeatMinutes`, default 15) | portal (`FacilityHeartbeatHandler`) | `FacilityHeartbeatPayload` | To `Party.Portal`, one per hosted facility. Correlation = a new GUID per beat. | OK. Only accepted from the facility it describes. |
 | `notification.email.requested` | portal only today (`NotificationService`, addressed to itself) | portal (`NotificationEmailRequestedHandler`) | `NotificationEmailRequestedPayload` | `Party.Portal` to `Party.Portal`. Correlation chosen by the caller. | OK. The contract says any service may send it; no other service does yet. |
 
@@ -41,7 +41,7 @@ Portal to hub. Handled inside the hub (`DirectoryService`), never stored in a ma
 | `patient.record.shared` | patient (`SubmitBookingDraftCommand`, one per attached file) | clinic (`PatientRecordSharedHandler`) | `PatientRecordSharedPayload` (presigned download link, no file bytes) | Patient to the clinic. Correlation = booking draft id. | OK |
 | `patient.share.redeem` | clinic (`PatientRecordGateway`) | patient (`PatientShareRedeemInteropHandler`) | `PatientShareRedeemPayload` | From the clinic to the control-plane `patient` mailbox. Correlation = request id; the reply copies it. | OK |
 | `patient.share.snapshot` | patient (reply from `PatientShareRedeemInteropHandler`) | clinic (`PatientShareSnapshotHandler`) | `PatientShareSnapshotPayload` | To the redeeming facility. Correlation = the request's. | OK |
-| `patient.document.issued` | clinic (`PatientDocumentPublisher`), laboratory (`DiagnosticReportPublisher`, results), pharmacy (`PrescriptionDispensedPublisher`, dispense receipts) | patient (`PatientDocumentIssuedInteropHandler`) | `PatientDocumentIssuedPayload` (`Kind`, issuer, `Body`) | To the patient's mailbox, only when the patient has a patient-app account. Correlation = document id (clinic), requisition id (laboratory), order correlation id (pharmacy). | OK. No producer yet for `MedicalCertificate` documents (see `medcert.issued`). |
+| `patient.document.issued` | clinic (`PatientDocumentPublisher`), laboratory (`DiagnosticReportPublisher`, results), pharmacy (`PrescriptionDispensedPublisher`, dispense receipts) | patient (`PatientDocumentIssuedInteropHandler`) | `PatientDocumentIssuedPayload` (`Kind`, issuer, `Body`) | To the patient's mailbox, only when the patient has a patient-app account. Correlation = document id (clinic), requisition id (laboratory), order correlation id (pharmacy). | OK. Medical certificates travel as the `Body` of this message (`MedicalCertificateIssuedPayload`). |
 
 ## Laboratory
 
@@ -53,10 +53,6 @@ Portal to hub. Handled inside the hub (`DirectoryService`), never stored in a ma
 | `lab.result.panic` | laboratory (`PanicAlertPublisher`) | clinic (`LabPanicResultAlertHandler`) | `LabPanicResultAlertEvent` | To the ordering clinic. Correlation = requisition id. | OK |
 | `lab.result.external.submitted` | patient (`UploadLabResultCommand`), portal (`LabUploadRelay`, public upload page) | clinic (`LabResultExternalSubmittedHandler`) | `ExternalLabResultUploadedEvent` | To the ordering clinic. Correlation = requisition id from the patient, a new upload id from the portal. | OK |
 | `lab.result.reviewed` | clinic (`LabResultReviewedPublisher`) | patient (`LabResultReviewedInteropHandler`) and the laboratory the order went to | `LabResultReviewedPayload` | One message to the patient (if they have an account) and one to the laboratory. Correlation = order id. | laboratory-api `LabResultReviewedHandler` records the doctor verdict on the requisition (only from the ordering clinic; idempotent). |
-| `lab.order.claimed` | (no producer) | (no handler) | none defined | Intended: the redeemer tells the issuer it took a claimed order. Correlation = requisition id. | Reserved. The hub accepts it as a reply on a claim conversation (hub tests). |
-| `lab.order.accepted` | (no producer) | (no handler) | none defined | Intended reply on the order's conversation. | Reserved. The laboratory reports acceptance with `lab.order.status.changed`. |
-| `lab.order.rejected` | (no producer) | (no handler) | none defined | As above. | Reserved. Rejection travels as a `lab.order.status.changed` stage. |
-| `lab.order.payment.confirmed` | (no producer) | (no handler) | none defined | Intended payment gate message. | Reserved. The payment gate follows `billing.payment.confirmed`. |
 
 ## Pharmacy
 
@@ -66,12 +62,6 @@ Portal to hub. Handled inside the hub (`DirectoryService`), never stored in a ma
 | `rx.status.changed` | pharmacy (`RxStatusPublisher`) | clinic (`RxStatusChangedHandler`) and patient (`RxStatusChangedInteropHandler`, only with an account) | `RxStatusChangedPayload` | One message to the ordering clinic and one to the patient. Correlation = the order's correlation id. | OK |
 | `rx.dispensed` | pharmacy (`PrescriptionDispensedPublisher`) | clinic (`PrescriptionDispensedHandler`) | `PrescriptionDispensedEvent` | To the ordering clinic. Correlation = the order's correlation id, else its external prescription id. | OK |
 | `rx.external.dispensed` | patient (`MarkPrescriptionExternallyDispensedCommand`) | clinic (`ExternalPrescriptionDispensedHandler`) | `ExternalPrescriptionDispensedEvent` | Patient to the ordering clinic. Correlation = prescription id. | OK |
-
-## Medical certificate
-
-| Type | Sender | Receiver | Payload | Addressing and correlation | Handler status |
-|---|---|---|---|---|---|
-| `medcert.issued` | (no producer) | (no handler) | `MedicalCertificateIssuedPayload` (the record exists; certificates are meant to travel as the `Body` of `patient.document.issued`) | Intended: to the patient's mailbox. | Reserved |
 
 ## Billing
 
@@ -84,6 +74,20 @@ All billing messages stay inside one cell. The facility asks its own `billing` m
 | `billing.invoice.paid` | billing (`BillingMessages.InvoicePaid`, when an invoice becomes fully paid; skipped for a zero total) | portal (`BillingInvoicePaidHandler`) | `BillingInvoicePaidPayload` (no patient data) | To `Party.Portal`. Correlation = invoice id. | OK |
 | `billing.invoice.voided` | billing (`BillingMessages`, void of an unpaid invoice or refund of a paid one) | the requesting clinic, laboratory or pharmacy (`BillingInvoiceVoidedHandler`), and portal | `BillingInvoiceVoidedPayload` | To the facility for invoices that came from a request (correlation = `InvoiceRequestId`), and to `Party.Portal` for a refunded paid invoice (correlation = invoice id). | OK |
 
+## Platform services (request/reply)
+
+Request/reply replaces direct service-to-service HTTP: a request is an ordinary envelope, the answer is another envelope with the same `CorrelationId`, sent back to the requester's `From`. The SDK pieces are `IInteropRequestClient` (send and await, typed `InteropRequestTimeoutException`), `.HandleReply(type)` on the requester and `IInteropResponder<TRequest, TResponse>` registered with `.Respond<...>(requestType, replyType)` on the responder (see [`platform-contract.md`](platform-contract.md#request-reply)). Nothing here needs a cross-tenant link: GAMOT stays inside one workspace and the proxy and portal are trusted platform parties. The hub enforces who may send what to the `philhealth` platform service (`PlatformMessageRules`, see [`interop-hub.md`](interop-hub.md#platform-services)).
+
+| Type | Sender | Receiver | Payload | Addressing and correlation | Handler status |
+|---|---|---|---|---|---|
+| `gamot.lookup.requested` | clinic (`PharmacyGamotGateway`) | pharmacy (responder, answers only senders of its own tenant) | `GamotLookupRequestedPayload` (`Method`, `Path`, `Query`, `Body`: the HTTP call it replaces) | From the clinic facility to the tenant's pharmacy facility. Correlation = new GUID per call. | Responder in pharmacy-api, requester in clinic-api (W1 round) |
+| `gamot.lookup.responded` | pharmacy (reply) | clinic (`HandleReply`) | `GamotLookupRespondedPayload` (`StatusCode`, `ContentType`, `Body`) | To the requesting clinic. Correlation = the request's. | as above |
+| `philhealth.request` | clinic (`PhilHealthProxyClient`) | philhealth proxy (platform service, `{cloud}:philhealth`) | `PhilHealthRequestPayload` (`Operation` from `PhilHealthOperations`, `Argument`, `Body`) | From a facility to `Party.PhilHealth`. The proxy takes tenant and facility from the verified `From`, never from the payload. Correlation = new GUID per call. | Responder in philhealth-proxy, requester in clinic-api |
+| `philhealth.response` | philhealth proxy (reply) | the requesting facility (`HandleReply`) | `PhilHealthResponsePayload` (`StatusCode`, `Body` = the endpoint's JSON) | To the requesting facility (an edge facility receives it through its cell-inbox). Correlation = the request's. | as above |
+| `philhealth.config.requested` | philhealth proxy | portal (responder, accepts only the proxy) | `PhilHealthConfigRequestedPayload` (`TenantId`, `BranchId`) | `Party.PhilHealth` to `Party.Portal`. | Responder in portal-api, requester in the proxy |
+| `philhealth.config.responded` | portal (reply) | philhealth proxy (`HandleReply`) | `PhilHealthConfigRespondedPayload` (`Found`, `Config` with the credentials) | `Party.Portal` to `Party.PhilHealth`. The only message that carries PhilHealth secrets; the hub lets only the portal send it, only to the proxy. | as above |
+| `philhealth.config.upsert.requested` | philhealth proxy (on `tenant.configure`) | portal (responder, accepts only the proxy) | `PhilHealthConfigPayload` | `Party.PhilHealth` to `Party.Portal`. | as above |
+| `philhealth.config.upsert.responded` | portal (reply) | philhealth proxy (`HandleReply`) | `PhilHealthConfigUpsertRespondedPayload` (`Succeeded`, `Message`) | `Party.Portal` to `Party.PhilHealth`. | as above |
 ## Envelope signing
 
 Every envelope any service sends is signed with that client's ECDSA P-256 key (`Messaging:SigningKey`); the hub and the receiving service both verify. Design and key handling: [`interop-hub.md`](interop-hub.md#envelope-signing).
@@ -109,11 +113,12 @@ All payloads live in [`packages/shared-dotnet`](../../packages/shared-dotnet).
 | `PatientShareRedeemPayload`, `PatientShareSnapshotPayload`, `PatientDocumentIssuedPayload`, `LabOrderStatusChangedPayload`, `LabResultReviewedPayload`, `RxStatusChangedPayload`, `MedicalCertificateIssuedPayload`, `BillingInvoiceRequestedPayload`, `BillingPaymentConfirmedPayload`, `BillingInvoicePaidPayload` | [`Interoperability/ClinicalWorkflowContracts.cs`](../../packages/shared-dotnet/Interoperability/ClinicalWorkflowContracts.cs) |
 | `BillingInvoiceVoidedPayload` | [`Interoperability/BillingVoidContracts.cs`](../../packages/shared-dotnet/Interoperability/BillingVoidContracts.cs) |
 | `NotificationEmailRequestedPayload` | [`Interoperability/NotificationContracts.cs`](../../packages/shared-dotnet/Interoperability/NotificationContracts.cs) |
+| `GamotLookupRequestedPayload`, `GamotLookupRespondedPayload`, `PhilHealthRequestPayload`, `PhilHealthResponsePayload`, `PhilHealthConfigPayload`, `PhilHealthConfigRequestedPayload`, `PhilHealthConfigRespondedPayload`, `PhilHealthConfigUpsertRespondedPayload`, `PhilHealthOperations` | [`Interoperability/PlatformServiceContracts.cs`](../../packages/shared-dotnet/Interoperability/PlatformServiceContracts.cs) |
 | `ClinicAppointmentUpdatedEvent`, `PatientRecordSharedPayload`, `LabRequisitionIssuedEvent`, `DiagnosticReportFinalizedEvent`, `LabPanicResultAlertEvent`, `ExternalLabResultUploadedEvent`, `PrescriptionIssuedEvent`, `PrescriptionDispensedEvent`, `ExternalPrescriptionDispensedEvent` | one file per record in [`Interoperability/`](../../packages/shared-dotnet/Interoperability) |
 | `DirectoryCellUpsertedPayload`, `DirectoryFacilityUpsertedPayload`, `DirectoryLinkUpsertedPayload` | [`Interop/Contracts/DirectoryContracts.cs`](../../packages/shared-dotnet/Interop/Contracts/DirectoryContracts.cs) |
 
 ## Gaps found
 
-1. **Reserved types without producer or handler:** `lab.order.claimed`, `lab.order.accepted`, `lab.order.rejected`, `lab.order.payment.confirmed`, `medcert.issued`. The laboratory lifecycle, including acceptance and rejection, already travels as `lab.order.status.changed`. Remove the constants or implement them before a service starts sending them; until then the hub still lets them through as replies.
-2. **`notification.email.requested` has one producer.** Only portal-api requests mail (to itself). Facility services have no way to send an email request yet.
-3. **billing-api does not take part in provisioning messages.** It registers neither `facility.license.issued`, `entitlements.changed` nor the heartbeat, so a cell's billing service is not license-gated and does not report liveness.
+1. **`notification.email.requested` has one producer.** Only portal-api requests mail (to itself). Facility services have no way to send an email request yet.
+2. **billing-api does not handle provisioning messages yet.** The portal already sends `facility.license.issued` and `entitlements.changed` to each facility's `billing` service, but billing-api registers neither handler nor the heartbeat, so a cell's billing service is not yet license-gated and does not report liveness.
+3. **Request/reply replies are matched in memory.** The service that asked must read its mailbox from a single instance, or a reply is dropped by the instance that did not ask and the caller times out. Run one replica per service mailbox (true of every compose file in `deploy/`).

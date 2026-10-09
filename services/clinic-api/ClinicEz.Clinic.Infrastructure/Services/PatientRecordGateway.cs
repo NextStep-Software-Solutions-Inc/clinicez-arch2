@@ -31,8 +31,7 @@ public sealed class PatientRecordGateway : IPatientRecordGateway
         _publisher = publisher;
     }
 
-    public async Task<Guid> RequestRedeemAsync(
-        string shareToken, string purpose, bool addToQueue, string? chiefComplaint, CancellationToken ct)
+    public async Task<Guid> RequestRedeemAsync(PatientShareRedeemInput input, CancellationToken ct)
     {
         var clinic = await _clinicIdentity.GetAsync(ct)
             ?? throw new BadRequestException("This clinic has not been provisioned on this server, so it cannot read a shared patient record.");
@@ -46,9 +45,9 @@ public sealed class PatientRecordGateway : IPatientRecordGateway
             TenantId = clinic.TenantId,
             ClinicId = clinic.ClinicId,
             RequestedByStaffId = _clinicContext.StaffId,
-            Purpose = purpose,
-            AddToQueue = addToQueue,
-            ChiefComplaint = chiefComplaint,
+            Purpose = input.Purpose,
+            AddToQueue = input.AddToQueue,
+            ChiefComplaint = input.ChiefComplaint,
             Status = ShareImportStatus.Pending,
             RequestedAt = now,
             CreatedAt = now,
@@ -60,7 +59,13 @@ public sealed class PatientRecordGateway : IPatientRecordGateway
             ClinicParties.Clinic(clinic.TenantId, clinic.ClinicId.ToString()),
             new Party { Kind = PartyKind.ControlPlane, Service = InteropServices.Patient },
             requestId,
-            new PatientShareRedeemPayload { ShareToken = shareToken, Purpose = purpose });
+            new PatientShareRedeemPayload
+            {
+                ShareToken = input.ShareToken,
+                ClinicEzId = input.ClinicEzId,
+                Code = input.Code,
+                Purpose = input.Purpose
+            });
 
         return requestId;
     }

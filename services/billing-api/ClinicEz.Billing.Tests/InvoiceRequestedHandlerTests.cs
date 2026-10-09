@@ -228,6 +228,6 @@ public class InvoiceRequestedHandlerTests
         using var host = new BillingHost();
 
         host.Provider.GetService(typeof(InteropHandlerRegistry)).Should().BeOfType<InteropHandlerRegistry>()
-            .Which.RegisteredTypes.Should().Equal(InteropTypes.BillingInvoiceRequested);
+            .Which.RegisteredTypes.Should().Contain(InteropTypes.BillingInvoiceRequested);
     }
 }

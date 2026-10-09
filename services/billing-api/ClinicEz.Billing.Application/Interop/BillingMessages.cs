@@ -72,7 +72,8 @@ public static class BillingMessages
             });
     }
 
-    public static void Voided(IInteropPublisher publisher, Invoice invoice, BillingCorrectionKind kind, decimal amountReversed, bool wasFullyPaid, DateTime nowUtc)
+    public static void Voided(
+        IInteropPublisher publisher, Invoice invoice, BillingCorrectionKind kind, decimal amountReversed, bool wasFullyPaid, bool isPartial, DateTime nowUtc)
     {
         var payload = new BillingInvoiceVoidedPayload
         {
@@ -88,6 +89,8 @@ public static class BillingMessages
             Total = invoice.Total,
             AmountReversed = amountReversed,
             WasFullyPaid = wasFullyPaid,
+            IsPartial = isPartial,
+            RefundedTotal = invoice.RefundedTotal,
             Currency = invoice.Currency,
             CorrectedAtUtc = nowUtc
         };

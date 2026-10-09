@@ -191,6 +191,71 @@ public class FinanceRollupTests : IDisposable
         Assert.Equal(400m, record.ReversedAmount);
     }
 
+    private BillingInvoiceVoidedPayload PartialRefund(Facility facility, Guid invoiceId, decimal total, decimal thisRefund, decimal refundedTotal) =>
+        Voided(facility, invoiceId, thisRefund) with { Total = total, IsPartial = true, RefundedTotal = refundedTotal };
+
+    [Fact]
+    public async Task PartialRefund_ReversesOnlyTheDelta_AndLeavesTheInvoiceOpen()
+    {
+        var invoice = Guid.NewGuid();
+        await ReportPaid(_clinic, Paid(_clinic, invoice, 400m));
+
+        await ReportVoided(_clinic, PartialRefund(_clinic, invoice, 400m, 100m, 100m));
+        await ReportVoided(_clinic, PartialRefund(_clinic, invoice, 400m, 100m, 100m));
+        await ReportVoided(_clinic, PartialRefund(_clinic, invoice, 400m, 50m, 150m));
+
+        var summary = await _context.FinanceDailySummaries.SingleAsync();
+        Assert.Equal(150m, summary.TotalReversed);
+        Assert.Equal(1, summary.ReversedInvoiceCount);
+        var record = await _context.FinanceInvoiceRecords.SingleAsync();
+        Assert.Equal(150m, record.ReversedAmount);
+        Assert.False(record.Reversed);
+    }
+
+    [Fact]
+    public async Task PartialRefund_ReachingThePaidAmount_ClosesTheInvoice_AndLaterCorrectionsChangeNothing()
+    {
+        var invoice = Guid.NewGuid();
+        await ReportPaid(_clinic, Paid(_clinic, invoice, 400m));
+        await ReportVoided(_clinic, PartialRefund(_clinic, invoice, 400m, 100m, 100m));
+
+        await ReportVoided(_clinic, PartialRefund(_clinic, invoice, 400m, 300m, 400m));
+        await ReportVoided(_clinic, PartialRefund(_clinic, invoice, 400m, 500m, 900m));
+        await ReportVoided(_clinic, PartialRefund(_clinic, invoice, 400m, 100m, 100m));
+
+        Assert.Equal(400m, (await _context.FinanceDailySummaries.SingleAsync()).TotalReversed);
+        var record = await _context.FinanceInvoiceRecords.SingleAsync();
+        Assert.Equal(400m, record.ReversedAmount);
+        Assert.True(record.Reversed);
+    }
+
+    [Fact]
+    public async Task PartialRefund_ArrivingOutOfOrder_NeverTakesBackLess()
+    {
+        var invoice = Guid.NewGuid();
+        await ReportPaid(_clinic, Paid(_clinic, invoice, 400m));
+
+        await ReportVoided(_clinic, PartialRefund(_clinic, invoice, 400m, 50m, 150m));
+        await ReportVoided(_clinic, PartialRefund(_clinic, invoice, 400m, 100m, 100m));
+
+        Assert.Equal(150m, (await _context.FinanceDailySummaries.SingleAsync()).TotalReversed);
+    }
+
+    [Fact]
+    public async Task PartialRefund_BeforeThePaymentReport_CountsThePaymentOnce_AndTheRefundOnce()
+    {
+        var invoice = Guid.NewGuid();
+
+        await ReportVoided(_clinic, PartialRefund(_clinic, invoice, 400m, 100m, 100m));
+        await ReportPaid(_clinic, Paid(_clinic, invoice, 400m));
+
+        var summary = await _context.FinanceDailySummaries.SingleAsync();
+        Assert.Equal(400m, summary.TotalPaid);
+        Assert.Equal(1, summary.PaidInvoiceCount);
+        Assert.Equal(100m, summary.TotalReversed);
+        Assert.False((await _context.FinanceInvoiceRecords.SingleAsync()).Reversed);
+    }
+
     [Fact]
     public async Task Voided_CannotReverseMoreThanWasPaid()
     {

@@ -133,6 +133,7 @@ public sealed class VisitBillService
             group.Sum(i => i.DiscountTotal),
             group.Sum(i => i.Total),
             group.Sum(i => i.NetPaid),
+            group.Sum(i => i.RefundedTotal),
             group.Sum(i => i.Balance),
             group.GroupBy(i => (i.FacilityId, i.FacilityType))
                 .Select(f => new VisitFacilityDto(f.Key.FacilityId, f.Key.FacilityType, f.Sum(i => i.Total), f.Sum(i => i.Balance)))

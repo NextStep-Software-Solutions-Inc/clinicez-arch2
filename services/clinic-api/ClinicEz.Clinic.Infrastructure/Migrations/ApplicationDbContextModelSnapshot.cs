@@ -90,6 +90,15 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("SharedItemsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SharedScopes")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -1732,6 +1741,10 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<Guid?>("QueueItemId")
                         .HasColumnType("uuid");
 
+                    b.Property<decimal>("RefundedAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -2570,6 +2583,10 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<string>("DeletedBy")
                         .HasColumnType("text");
 
+                    b.Property<string>("DenialCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<string>("DenialReason")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
@@ -2583,11 +2600,17 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsRefresh")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("ItemsImported")
                         .HasColumnType("integer");
 
                     b.Property<string>("ItemsJson")
                         .HasColumnType("text");
+
+                    b.Property<int?>("MaxRedemptions")
+                        .HasColumnType("integer");
 
                     b.Property<string>("PatientName")
                         .HasMaxLength(200)
@@ -2604,6 +2627,9 @@ namespace ClinicEz.Clinic.Infrastructure.Migrations
                     b.Property<string>("QueueNumber")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
+
+                    b.Property<int?>("RedemptionNumber")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime>("RequestedAt")
                         .HasColumnType("timestamp with time zone");

@@ -245,10 +245,10 @@ public class LocalModeTests
         await f.PullCellInboxAsync();
         (await f.Local.PullAsync("local-lab", "laboratory")).Should().ContainSingle();
 
-        (await f.Local.SendAsync("local-lab", W.Env(InteropTypes.LabOrderAccepted, W.E2Lab, W.A1Clinic, correlation))).Status.Should().Be(SendResult.Accepted);
+        (await f.Local.SendAsync("local-lab", W.Env(InteropTypes.LabOrderStatusChanged, W.E2Lab, W.A1Clinic, correlation))).Status.Should().Be(SendResult.Accepted);
         (await f.ForwardAsync()).Should().Be(1);
 
-        (await f.Cloud.PullAsync("clinic", "clinic")).Should().ContainSingle().Which.Envelope.Type.Should().Be(InteropTypes.LabOrderAccepted);
+        (await f.Cloud.PullAsync("clinic", "clinic")).Should().ContainSingle().Which.Envelope.Type.Should().Be(InteropTypes.LabOrderStatusChanged);
     }
 
     [Fact]

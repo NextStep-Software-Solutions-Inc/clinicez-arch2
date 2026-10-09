@@ -9,11 +9,13 @@ import { SectionHeader } from '@ui/Primitives';
 import { dialog } from '@utils/dialog';
 import Screen from 'components/layout/Screen';
 import ProfileToggle from 'components/profile/ProfileToggle';
+import RedemptionPicker from 'components/sharing/RedemptionPicker';
 import RotatingQr from 'components/sharing/RotatingQr';
 import { useAppTheme } from 'contexts/ThemeContext';
 import { usePatientId } from 'hooks/usePatientId';
 import { useShareQr } from 'hooks/useShareQr';
 import type { SharingScope } from 'services/api/wireEnums';
+import { DEFAULT_SHARE_REDEMPTIONS, type ShareRedemptions } from 'services/sharing/redemptions';
 import {
   SHARING_SCOPES,
   countSelectedScopes,
@@ -27,9 +29,10 @@ export default function ShareRecordsScreen() {
   const navigation = useNavigation();
   const { spacing } = useAppTheme();
   const [selection, setSelection] = useState<ScopeSelection>(defaultScopeSelection);
+  const [maxRedemptions, setMaxRedemptions] = useState<ShareRedemptions>(DEFAULT_SHARE_REDEMPTIONS);
 
   const scopes = toApiScopes(selection);
-  const qr = useShareQr(patientId, scopes);
+  const qr = useShareQr(patientId, scopes, maxRedemptions);
   const clinicEzId = qr.session?.token.clinicEzId ?? null;
 
   const toggleScope = useCallback((scope: SharingScope, enabled: boolean) => {
@@ -63,6 +66,8 @@ export default function ShareRecordsScreen() {
         <Button label="Copy" icon="copy" variant="outline" size="sm" disabled={!clinicEzId} onPress={copyClinicEzId} />
       </Card>
 
+      <RedemptionPicker value={maxRedemptions} onChange={setMaxRedemptions} />
+
       <View>
         <SectionHeader
           title="What to share"
@@ -80,6 +85,14 @@ export default function ShareRecordsScreen() {
           ))}
         </View>
       </View>
+
+      <Button
+        label="Can't scan? Share by code"
+        icon="key"
+        variant="outline"
+        fullWidth
+        onPress={() => navigation.navigate('Main', { screen: 'ShareCodeScreen' })}
+      />
 
       <Button
         label="Manage access and activity"

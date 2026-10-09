@@ -36,7 +36,6 @@ namespace ClinicEz.Pharmacy.Application.Tests;
 /// </summary>
 public class PharmacyAuthPipelineTests
 {
-    private const string InternalKey = "internal-service-secret-key";
     private const string Audience = "clinicez-pharmacy";
     private static readonly Guid PharmacyA = Guid.Parse("11111111-aaaa-aaaa-aaaa-111111111111");
 
@@ -96,8 +95,7 @@ public class PharmacyAuthPipelineTests
         {
             ["Jwt:SigningKey"] = signingKey ?? Convert.ToBase64String(RandomNumberGenerator.GetBytes(64)),
             ["Jwt:Audience"] = audience,
-            ["Jwt:Issuer"] = audience,
-            ["Internal:ApiKey"] = InternalKey
+            ["Jwt:Issuer"] = audience
         });
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddFacilityLocalAuth(builder.Configuration, audience, PharmacyTokenEvents.OnTokenValidated);
@@ -105,7 +103,6 @@ public class PharmacyAuthPipelineTests
         builder.Services.AddSingleton(cache);
         builder.Services.AddSingleton(sender);
         builder.Services.AddSingleton(auth);
-        builder.Services.AddSingleton(Substitute.For<IWorkspaceResolver>());
         builder.Services.AddControllers().AddApplicationPart(typeof(HasPermissionAttribute).Assembly);
 
         var app = builder.Build();
@@ -118,7 +115,6 @@ public class PharmacyAuthPipelineTests
             tenant = ctx.TenantId,
             pharmacy = ctx.PharmacyId,
             staff = ctx.StaffId,
-            internalService = ctx.IsInternalService,
             canInventory = ctx.HasPermission(PharmacyPermissions.InventoryRead),
             canManageStaff = ctx.HasPermission(PharmacyPermissions.StaffManage)
         }));
@@ -381,7 +377,6 @@ public class PharmacyAuthPipelineTests
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         json.Should().Contain("tenant-a").And.Contain(PharmacyA.ToString());
         json.Should().NotContain("victim-tenant");
-        json.Should().Contain("\"internalService\":false");
     }
 
     [Fact]
@@ -418,67 +413,24 @@ public class PharmacyAuthPipelineTests
         await app.Auth.Received(1).SetTemporaryPasswordAsync(Guid.Parse("33333333-3333-3333-3333-333333333333"), PharmacyA, "Temp-Pass-12345", Arg.Any<System.Threading.CancellationToken>());
     }
 
-    // ── internal service key ────────────────────────────────────────────────────────────
+    // ── internal service key (retired: clinic GAMOT lookups arrive over the hub) ────────
 
     [Fact]
-    public async Task InternalKey_AuthenticatesServices_AndWrongKeyIsRejected()
+    public async Task InternalKeyHeader_NoLongerAuthenticatesAnything()
     {
         await using var app = await StartAsync();
 
-        (await app.Client.SendAsync(Req(HttpMethod.Get, "/whoami", null, null, (FacilityAuthSchemes.InternalKeyHeader, InternalKey))))
-            .StatusCode.Should().Be(HttpStatusCode.OK);
-        (await app.Client.SendAsync(Req(HttpMethod.Get, "/whoami", null, null, (FacilityAuthSchemes.InternalKeyHeader, "wrong-key"))))
-            .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        (await app.Client.SendAsync(Req(HttpMethod.Get, "/api/v1/gamot/formulary", null, null, (FacilityAuthSchemes.InternalKeyHeader, "wrong-key"))))
-            .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-    }
-
-    [Fact]
-    public async Task InternalKey_CanCallEveryGamotEndpoint()
-    {
-        await using var app = await StartAsync();
-
-        foreach (var (method, url, body, _) in GamotRoutes)
+        foreach (var (method, url, body, _) in GamotRoutes.Concat(NonGamotRoutes))
         {
             var response = await app.Client.SendAsync(Req(method, url, null, body,
-                (FacilityAuthSchemes.InternalKeyHeader, InternalKey), ("X-Tenant-Id", "tenant-from-clinic"), ("X-Facility-Id", PharmacyA.ToString())));
-            Reached(response).Should().BeTrue($"the internal service must reach {method} {url} (got {(int)response.StatusCode})");
-        }
-    }
-
-    [Fact]
-    public async Task InternalKey_IsDeniedOnStaffAuthInventoryAndPrescriptionEndpoints()
-    {
-        await using var app = await StartAsync();
-
-        foreach (var (method, url, body, _) in NonGamotRoutes)
-        {
-            var response = await app.Client.SendAsync(Req(method, url, null, body, (FacilityAuthSchemes.InternalKeyHeader, InternalKey)));
-            response.StatusCode.Should().Be(HttpStatusCode.Forbidden, $"the internal key must not unlock {method} {url}");
+                (FacilityAuthSchemes.InternalKeyHeader, "any-key"), ("X-Tenant-Id", "tenant-from-clinic"), ("X-Facility-Id", PharmacyA.ToString())));
+            response.StatusCode.Should().Be(HttpStatusCode.Unauthorized, $"{method} {url} must not accept a service key");
         }
 
-        // Personal-session endpoints are meaningless for a service principal.
-        (await app.Client.SendAsync(Req(HttpMethod.Get, "/api/v1/auth/me", null, null, (FacilityAuthSchemes.InternalKeyHeader, InternalKey))))
-            .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        (await app.Client.SendAsync(Req(HttpMethod.Post, "/api/v1/auth/change-password", null, new { currentPassword = "a", newPassword = "b" }, (FacilityAuthSchemes.InternalKeyHeader, InternalKey))))
+        (await app.Client.SendAsync(Req(HttpMethod.Get, "/whoami", null, null, (FacilityAuthSchemes.InternalKeyHeader, "any-key"))))
             .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         app.Sender.ReceivedCalls().Should().BeEmpty();
         app.Auth.ReceivedCalls().Should().BeEmpty();
-    }
-
-    [Fact]
-    public async Task InternalKey_HonoursTenantAndFacilityHeaders_AndHasGamotPermissionsOnly()
-    {
-        await using var app = await StartAsync();
-
-        var response = await app.Client.SendAsync(Req(HttpMethod.Get, "/whoami", null, null,
-            (FacilityAuthSchemes.InternalKeyHeader, InternalKey),
-            ("X-Tenant-Id", "tenant-from-clinic"),
-            ("X-Facility-Id", "44444444-dddd-dddd-dddd-444444444444")));
-        var json = await response.Content.ReadAsStringAsync();
-
-        json.Should().Contain("tenant-from-clinic").And.Contain("44444444-dddd");
-        json.Should().Contain("\"internalService\":true").And.Contain("\"canInventory\":false").And.Contain("\"canManageStaff\":false");
     }
 
     [Fact]

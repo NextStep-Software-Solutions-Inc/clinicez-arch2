@@ -2,6 +2,7 @@ using ClinicEz.Interop.Application.Abstractions;
 using ClinicEz.Interop.Application.Admin;
 using ClinicEz.Interop.Application.Security;
 using ClinicEz.Interop.Domain.Entities;
+using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Contracts;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -76,6 +77,10 @@ public sealed class HubBootstrapper(
                 $"Hub:Bootstrap client '{configured.ClientId}': the secret must be at least {opt.Auth.MinBootstrapSecretLength} characters outside Development.");
         if (!MailboxNames.IsValidService(configured.Service))
             throw new InvalidOperationException($"Hub:Bootstrap client '{configured.ClientId}': invalid Service '{configured.Service}'.");
+        if ((configured.Kind == HubClientKind.PlatformService) != InteropServices.IsPlatformService(configured.Service))
+            throw new InvalidOperationException($"Hub:Bootstrap client '{configured.ClientId}': Kind=PlatformService is for exactly the platform services ({string.Join(", ", InteropServices.PlatformServices)}) and only they may use those service names.");
+        if (configured.Kind == HubClientKind.PlatformService && opt.IsLocal)
+            throw new InvalidOperationException($"Hub:Bootstrap client '{configured.ClientId}': platform services run in the cloud cell, not behind a local hub.");
         var publicKey = string.IsNullOrWhiteSpace(configured.PublicKey) ? null : AdminService.RegisterPublicKey(configured.PublicKey);
         if (publicKey is null && !isDevelopment && opt.Signing.Required == true)
             throw new InvalidOperationException($"Hub:Bootstrap client '{configured.ClientId}': PublicKey is required (the ECDSA P-256 public key matching the service's Messaging:SigningKey) because envelope signing is required.");

@@ -196,7 +196,13 @@ public class FacilityConsoleTests : IDisposable
         Assert.True(result.Success);
         var facility = await _context.Facilities.SingleAsync(f => f.Slug == "metro-urgent");
 
-        var license = Assert.Single(TestSupport.Outbox(_context, InteropTypes.FacilityLicenseIssued));
+        var licenses = TestSupport.Outbox(_context, InteropTypes.FacilityLicenseIssued);
+        Assert.Equal(2, licenses.Count);
+        var license = licenses.Single(m => m.To.Service is null);
+        var billingLicense = licenses.Single(m => m.To.Service == InteropServices.Billing);
+        Assert.Equal(license.To with { Service = InteropServices.Billing }, billingLicense.To);
+        Assert.Equal(license.CorrelationId, billingLicense.CorrelationId);
+        Assert.Equal(license.GetPayload<FacilityCreatedEvent>(), billingLicense.GetPayload<FacilityCreatedEvent>());
         Assert.Equal(PartyKind.Facility, license.To.Kind);
         Assert.Equal(facility.Id.ToString(), license.To.FacilityId);
         Assert.Equal(_tenantId.ToString(), license.To.TenantId);
@@ -266,7 +272,7 @@ public class FacilityConsoleTests : IDisposable
 
         var facility = await _context.Facilities.SingleAsync();
         Assert.Equal(planSlug, facility.PlanTier);
-        var license = TestSupport.Outbox(_context, InteropTypes.FacilityLicenseIssued).Single().GetPayload<FacilityCreatedEvent>();
+        var license = TestSupport.Outbox(_context, InteropTypes.FacilityLicenseIssued).Single(m => m.To.Service is null).GetPayload<FacilityCreatedEvent>();
         Assert.Equal(planSlug, license.PlanTier);
     }
 

@@ -42,11 +42,7 @@ public static class InteropTypes
 
     // Laboratory
     public const string LabOrderIssued = "lab.order.issued";
-    public const string LabOrderClaimed = "lab.order.claimed";
-    public const string LabOrderAccepted = "lab.order.accepted";
-    public const string LabOrderRejected = "lab.order.rejected";
     public const string LabOrderStatusChanged = "lab.order.status.changed";
-    public const string LabOrderPaymentConfirmed = "lab.order.payment.confirmed";
     public const string LabResultFinalized = "lab.result.finalized";
     public const string LabResultPanic = "lab.result.panic";
     public const string LabResultExternalSubmitted = "lab.result.external.submitted";
@@ -58,8 +54,23 @@ public static class InteropTypes
     public const string RxDispensed = "rx.dispensed";
     public const string RxExternalDispensed = "rx.external.dispensed";
 
-    // Medical certificate
-    public const string MedcertIssued = "medcert.issued";
+    // Platform services (request/reply through the hub; replace direct service-to-service HTTP)
+    /// <summary>Clinic -> pharmacy. Payload: <c>GamotLookupRequestedPayload</c>. Reply type: <see cref="GamotLookupResponded"/>.</summary>
+    public const string GamotLookupRequested = "gamot.lookup.requested";
+    /// <summary>Pharmacy -> clinic. Payload: <c>GamotLookupRespondedPayload</c>.</summary>
+    public const string GamotLookupResponded = "gamot.lookup.responded";
+    /// <summary>Facility -> PhilHealth proxy (<c>Party.PhilHealth</c>). Payload: <c>PhilHealthRequestPayload</c>. Reply type: <see cref="PhilHealthResponse"/>.</summary>
+    public const string PhilHealthRequest = "philhealth.request";
+    /// <summary>PhilHealth proxy -> requesting facility. Payload: <c>PhilHealthResponsePayload</c>.</summary>
+    public const string PhilHealthResponse = "philhealth.response";
+    /// <summary>PhilHealth proxy -> portal. Payload: <c>PhilHealthConfigRequestedPayload</c>. Reply type: <see cref="PhilHealthConfigResponded"/>.</summary>
+    public const string PhilHealthConfigRequested = "philhealth.config.requested";
+    /// <summary>Portal -> PhilHealth proxy. Payload: <c>PhilHealthConfigRespondedPayload</c> (carries credentials; addressed to the proxy only).</summary>
+    public const string PhilHealthConfigResponded = "philhealth.config.responded";
+    /// <summary>PhilHealth proxy -> portal. Payload: <c>PhilHealthConfigPayload</c>. Reply type: <see cref="PhilHealthConfigUpsertResponded"/>.</summary>
+    public const string PhilHealthConfigUpsertRequested = "philhealth.config.upsert.requested";
+    /// <summary>Portal -> PhilHealth proxy. Payload: <c>PhilHealthConfigUpsertRespondedPayload</c>.</summary>
+    public const string PhilHealthConfigUpsertResponded = "philhealth.config.upsert.responded";
 
     // Billing (per-cell cashiering)
     public const string BillingInvoiceRequested = "billing.invoice.requested";

@@ -1,5 +1,6 @@
 using ClinicEz.Patient.Api.Abstractions;
 using ClinicEz.Patient.Application.Features.Sharing;
+using ClinicEz.Patient.Application.Features.Sharing.Commands.CreateShareCode;
 using ClinicEz.Patient.Application.Features.Sharing.Commands.CreateShareToken;
 using ClinicEz.Patient.Application.Features.Sharing.Commands.RevokeAccessGrant;
 using ClinicEz.Patient.Application.Features.Sharing.Queries.ExportPatientData;
@@ -10,7 +11,9 @@ using MediatR;
 
 namespace ClinicEz.Patient.Api.Endpoints.Sharing;
 
-public sealed record CreateShareTokenRequest(IReadOnlyList<string>? Scopes, string? Purpose);
+public sealed record CreateShareTokenRequest(IReadOnlyList<string>? Scopes, string? Purpose, int? MaxRedemptions = null);
+
+public sealed record CreateShareCodeRequest(IReadOnlyList<string>? Scopes, string? Purpose);
 
 public sealed class CreateShareTokenEndpoint : IEndpoint
 {
@@ -19,15 +22,36 @@ public sealed class CreateShareTokenEndpoint : IEndpoint
         app.MapPost("/patients/{patientId:guid}/share-tokens", async (
                 Guid patientId, CreateShareTokenRequest request, ISender sender, CancellationToken ct) =>
             {
-                var token = await sender.Send(new CreateShareTokenCommand(patientId, request.Scopes ?? [], request.Purpose), ct);
+                var token = await sender.Send(new CreateShareTokenCommand(patientId, request.Scopes ?? [], request.Purpose, request.MaxRedemptions), ct);
                 return Results.Ok(ApiResponse<ShareTokenDto>.Success(token));
             })
             .WithTags("Sharing")
             .WithName("CreateShareToken")
-            .WithSummary("Create a short-lived, single-use share token to render as a QR code")
-            .WithDescription("Signs a token for the chosen categories (demographics, allergies, medications, conditions, immunizations, labResults, prescriptions, vitals). A facility that scans it receives a snapshot limited to those categories.")
+            .WithSummary("Create a short-lived share token to render as a QR code")
+            .WithDescription("Signs a token for the chosen categories (Demographics, Allergies, Medications, Conditions, Immunizations, LabResults, Prescriptions, Vitals). A facility that scans it receives a fresh snapshot limited to those categories; maxRedemptions (default 1) is how many scans the QR allows before it expires.")
             .Produces<ApiResponse<ShareTokenDto>>(StatusCodes.Status200OK)
             .Produces<ApiResponse<object>>(StatusCodes.Status400BadRequest)
+            .RequireAuthorization();
+    }
+}
+
+public sealed class CreateShareCodeEndpoint : IEndpoint
+{
+    public void MapEndpoint(IEndpointRouteBuilder app)
+    {
+        app.MapPost("/patients/{patientId:guid}/share-codes", async (
+                Guid patientId, CreateShareCodeRequest request, ISender sender, CancellationToken ct) =>
+            {
+                var code = await sender.Send(new CreateShareCodeCommand(patientId, request.Scopes ?? [], request.Purpose), ct);
+                return Results.Ok(ApiResponse<ShareCodeDto>.Success(code));
+            })
+            .WithTags("Sharing")
+            .WithName("CreateShareCode")
+            .WithSummary("Create a short one-time code to read out instead of showing a QR")
+            .WithDescription("Returns a code such as K7QM-X4NP, valid for minutes and usable once. A facility redeems it by typing it together with the patient ClinicEzId; it receives a snapshot limited to the chosen categories.")
+            .Produces<ApiResponse<ShareCodeDto>>(StatusCodes.Status200OK)
+            .Produces<ApiResponse<object>>(StatusCodes.Status400BadRequest)
+            .Produces<ApiResponse<object>>(StatusCodes.Status409Conflict)
             .RequireAuthorization();
     }
 }

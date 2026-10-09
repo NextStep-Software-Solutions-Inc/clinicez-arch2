@@ -22,5 +22,17 @@ public interface IBillingRequestPublisher
 public interface IPatientRecordGateway
 {
     /// <returns>The request id (also the interop correlation id) to poll for the import status.</returns>
-    Task<Guid> RequestRedeemAsync(string shareToken, string purpose, bool addToQueue, string? chiefComplaint, CancellationToken ct);
+    Task<Guid> RequestRedeemAsync(PatientShareRedeemInput input, CancellationToken ct);
 }
+
+/// <summary>
+/// What staff entered to read a shared record: a scanned <see cref="ShareToken"/>, or the patient's
+/// <see cref="ClinicEzId"/> with the one-time <see cref="Code"/> they read out (<see cref="ShareToken"/> then empty).
+/// </summary>
+public sealed record PatientShareRedeemInput(
+    string ShareToken,
+    string? ClinicEzId,
+    string? Code,
+    string Purpose,
+    bool AddToQueue,
+    string? ChiefComplaint);

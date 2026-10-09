@@ -43,8 +43,12 @@ public sealed class PatientAccessRepository : IPatientAccessRepository
         return (items, total);
     }
 
-    public Task<ShareTokenUse?> GetTokenUseAsync(string tokenId, CancellationToken cancellationToken = default) =>
-        _context.ShareTokenUses.FirstOrDefaultAsync(u => u.TokenId == tokenId, cancellationToken);
+    public async Task<IReadOnlyList<ShareTokenUse>> GetTokenUsesAsync(string tokenId, CancellationToken cancellationToken = default) =>
+        await _context.ShareTokenUses
+            .AsNoTracking()
+            .Where(u => u.TokenId == tokenId)
+            .OrderBy(u => u.Sequence)
+            .ToListAsync(cancellationToken);
 
     public async Task AddTokenUseAsync(ShareTokenUse use, CancellationToken cancellationToken = default) =>
         await _context.ShareTokenUses.AddAsync(use, cancellationToken);

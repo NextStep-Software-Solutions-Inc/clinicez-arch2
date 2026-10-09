@@ -182,7 +182,7 @@ public class InvoiceRulesTests
 
         FluentActions.Invoking(() => invoice.Void("mistake", Now)).Should().Throw<ConflictException>();
 
-        invoice.Refund("customer request", Now).Should().Be(300m);
+        invoice.Refund(null, "customer request", Now).Should().Be(300m);
         invoice.Status.Should().Be(InvoiceStatus.Refunded);
         invoice.NetPaid.Should().Be(0m);
         invoice.Balance.Should().Be(0m);
@@ -195,7 +195,7 @@ public class InvoiceRulesTests
         invoice.AssignNumber("INV-000001");
 
         FluentActions.Invoking(() => invoice.Void(" ", Now)).Should().Throw<BadRequestException>();
-        FluentActions.Invoking(() => invoice.Refund("because", Now)).Should().Throw<ConflictException>();
+        FluentActions.Invoking(() => invoice.Refund(null, "because", Now)).Should().Throw<ConflictException>();
     }
 
     [Fact]

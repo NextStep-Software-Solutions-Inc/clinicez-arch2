@@ -40,6 +40,8 @@ public sealed class PatientHost : ServiceHostBase
         services.AddScoped<IClinicMembershipRepository, ClinicMembershipRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IPatientAccessRepository, PatientAccessRepository>();
+        services.AddScoped<IShareCodeRepository, ShareCodeRepository>();
+        services.AddScoped<IShareCodeService, ShareCodeService>();
         services.AddScoped<IPatientDocumentRepository, PatientDocumentRepository>();
         services.AddScoped<INotificationRepository, NotificationRepository>();
         services.AddSingleton<IStorageService>(new InMemoryStorage());

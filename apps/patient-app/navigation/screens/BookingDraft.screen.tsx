@@ -45,6 +45,12 @@ import {
   fetchServiceOptions,
 } from '../../services/appointments/appointmentsService';
 import type { ClinicView, ShareableFieldKey } from '../../services/discovery/types';
+import BookingSectionsPicker from 'components/sharing/BookingSectionsPicker';
+import {
+  clinicRequestedSections,
+  shareSectionsSummary,
+  type BookingShareSection,
+} from '../../services/sharing/bookingSections';
 import type {
   AvailableSlot,
   BookingProviderOption,
@@ -350,9 +356,23 @@ export default function BookingDraftScreen(props: Props) {
   const [isSaving, setIsSaving] = useState(false);
   const [isDraftSaving, setIsDraftSaving] = useState(false);
   const [hasPaid, setHasPaid] = useState(false);
+  const [shareSections, setShareSections] = useState<BookingShareSection[]>([]);
+  const [requestedSections, setRequestedSections] = useState<BookingShareSection[]>([]);
 
   // Validation errors
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  // Hint only: which record sections the selected clinic asks for.
+  useEffect(() => {
+    if (step !== 5 || !selectedClinicId) return;
+    let mounted = true;
+    getClinicDetail(patientId, selectedClinicId)
+      .then(detail => {
+        if (mounted) setRequestedSections(clinicRequestedSections(detail?.requiredShareFields ?? []));
+      })
+      .catch(err => console.warn('[BookingDraftScreen] getClinicDetail error:', err));
+    return () => { mounted = false; };
+  }, [step, selectedClinicId, patientId]);
 
   // ── Load clinics on mount ──────────────────────────────────────────────────
   useEffect(() => {
@@ -578,6 +598,7 @@ export default function BookingDraftScreen(props: Props) {
       reason: reasonValue,
       notes: notesValue,
       shareFieldsJson: shareFieldsJsonValue,
+      shareSections: shareSections.length > 0 ? shareSections : undefined,
       attachedFileIdsJson: JSON.stringify(attachedFileIds),
     }));
 
@@ -597,6 +618,7 @@ export default function BookingDraftScreen(props: Props) {
         reason: reasonValue,
         notes: notesValue || undefined,
         shareFields: consentedShareFields,
+        shareSections,
       }, serverDraftId));
 
       setIsSaving(false);
@@ -627,6 +649,7 @@ export default function BookingDraftScreen(props: Props) {
         reason: reasonValue,
         notes: notesValue || undefined,
         shareFields: consentedShareFields,
+        shareSections,
       }, serverDraftId));
 
       await safeAwait(db
@@ -1005,6 +1028,10 @@ export default function BookingDraftScreen(props: Props) {
         <SummaryRow
           label="Chief Complaint"
           value={chiefComplaint.trim() || '—'}
+        />
+        <SummaryRow
+          label="Records shared"
+          value={shareSectionsSummary(shareSections)}
           last={!hasPayment}
         />
         {hasPayment ? (
@@ -1015,6 +1042,12 @@ export default function BookingDraftScreen(props: Props) {
           />
         ) : null}
       </View>
+
+      <BookingSectionsPicker
+        selected={shareSections}
+        requested={requestedSections}
+        onChange={setShareSections}
+      />
 
       {/* Payment notice */}
       {hasPayment ? (

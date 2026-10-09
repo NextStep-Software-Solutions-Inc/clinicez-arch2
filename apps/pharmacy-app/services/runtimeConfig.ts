@@ -1,8 +1,11 @@
 import { Platform } from 'react-native';
 import { ensureApiPrefix } from '@shared/safe';
+import { getDeviceItem, setDeviceItem } from '../utils/deviceStorage';
+import { normalizeServerUrl } from './serverUrl';
 
 /**
  * Where the pharmacy API lives. Resolution order:
+ *  0. native phones/tablets: the server address entered once on the device (`EXPO_PUBLIC_PHARMACY_API_URL` pre-seeds it),
  *  1. `/config.json` published next to the web build at run time (`EXPO_PUBLIC_PHARMACY_API_URL`),
  *  2. the build-time `EXPO_PUBLIC_PHARMACY_API_URL`,
  *  3. local development: the page's own host on the dev port 5245,
@@ -10,6 +13,7 @@ import { ensureApiPrefix } from '@shared/safe';
  * The value `/` explicitly means "same origin as the page".
  */
 const PHARMACY_API_URL_KEY = 'EXPO_PUBLIC_PHARMACY_API_URL';
+const SERVER_URL_KEY = 'clinicez.pharmacy.serverUrl';
 const DEV_PORT = 5245;
 
 let runtimeUrl: string | null = null;
@@ -54,8 +58,39 @@ export async function loadRuntimeConfig(): Promise<void> {
   }
 }
 
+/** Server address entered on this device (native only), as a clean origin without `/api/v1`. */
+export function getStoredServerUrl(): string | null {
+  return normalizeServerUrl(getDeviceItem(SERVER_URL_KEY));
+}
+
+/** Saves (or clears with `null`) the server address entered on this device. */
+export function setStoredServerUrl(url: string | null): string | null {
+  if (url === null) {
+    setDeviceItem(SERVER_URL_KEY, null);
+    return null;
+  }
+  const normalized = normalizeServerUrl(url);
+  if (!normalized) throw new Error('Enter a valid server address, for example 192.168.1.20:5245.');
+  setDeviceItem(SERVER_URL_KEY, normalized);
+  return normalized;
+}
+
+/**
+ * Whether the app knows where its pharmacy server is. The web build always does (config.json, build-time value or the
+ * page's own origin); a phone or tablet must be pointed at a server once, unless the build pre-seeds one.
+ */
+export function isServerConfigured(): boolean {
+  if (!isNative) return true;
+  return getStoredServerUrl() !== null || normalizeServerUrl(readUrl(process.env.EXPO_PUBLIC_PHARMACY_API_URL)) !== null;
+}
+
 /** Base URL of the API including the `/api/v1` prefix. Resolved on every call, so it reflects `loadRuntimeConfig`. */
 export function getPharmacyApiBaseUrl(): string {
+  if (isNative) {
+    const native = getStoredServerUrl() ?? normalizeServerUrl(readUrl(process.env.EXPO_PUBLIC_PHARMACY_API_URL));
+    if (native) return ensureApiPrefix(native);
+  }
+
   const page = pageLocation();
   const configured = runtimeUrl ?? readUrl(process.env.EXPO_PUBLIC_PHARMACY_API_URL);
 

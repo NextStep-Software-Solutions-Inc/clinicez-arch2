@@ -103,7 +103,9 @@ public enum HubClientKind
     /// <summary>portal-api: may call the hub admin API and publish <c>directory.*</c>.</summary>
     ControlPlane,
     /// <summary>patient-api: may address any <see cref="PartyKind.Patient"/> mailbox and relay to facilities for patients.</summary>
-    PatientPlane
+    PatientPlane,
+    /// <summary>A platform service of the cloud cell (the PhilHealth proxy): reads its own mailbox and may send only as its own service party (<c>Party.PhilHealth</c>). Never in an edge cell.</summary>
+    PlatformService
 }
 
 /// <summary>
@@ -122,7 +124,8 @@ public sealed record HubClientCredentials(string ClientId, string ClientSecret, 
 /// <summary>
 /// Control-plane client of the hub admin API (used by portal-api to onboard cells/clients). HTTP mapping:
 /// <c>PUT /v1/admin/cells/{cellId}</c>, <c>POST /v1/admin/cells/{cellId}/clients</c>,
-/// <c>POST /v1/admin/clients/{clientId}/rotate</c> (new secret and new signing key pair), <c>DELETE /v1/admin/clients/{clientId}</c>.\n/// Requires a ControlPlane client.
+/// <c>POST /v1/admin/clients/{clientId}/rotate</c> (new secret and new signing key pair), <c>DELETE /v1/admin/clients/{clientId}</c>.
+/// Requires a ControlPlane client.
 /// </summary>
 public interface IHubAdminClient
 {

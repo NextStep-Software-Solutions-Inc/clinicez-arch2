@@ -345,7 +345,10 @@ public class PatientShareSnapshotHandlerTests
 
     private ShareImport SeedImport(bool addToQueue = false, string? complaint = null)
     {
-        MessagingTestKit.SeedClinic(_db, _clinicId, Tenant);
+        if (!_db.ClinicSettings.IgnoreQueryFilters().Any(c => c.ClinicId == _clinicId))
+        {
+            MessagingTestKit.SeedClinic(_db, _clinicId, Tenant);
+        }
         var import = new ShareImport
         {
             Id = Guid.NewGuid(),
@@ -359,12 +362,24 @@ public class PatientShareSnapshotHandlerTests
         return import;
     }
 
-    private PatientShareSnapshotPayload Snapshot(SharingScopes scopes, bool granted = true, bool withDemographics = true) =>
+    private PatientShareSnapshotPayload Snapshot(
+        SharingScopes scopes,
+        bool granted = true,
+        bool withDemographics = true,
+        ShareDenialCode? denialCode = null,
+        Guid? grantId = null,
+        int redemptionNumber = 0,
+        int maxRedemptions = 0,
+        bool isRefresh = false) =>
         new()
         {
             Granted = granted,
             DenialReason = granted ? null : "Patient declined",
-            GrantId = Guid.NewGuid(),
+            DenialCode = denialCode,
+            RedemptionNumber = redemptionNumber,
+            MaxRedemptions = maxRedemptions,
+            IsRefresh = isRefresh,
+            GrantId = grantId ?? Guid.NewGuid(),
             PatientId = _patientPlaneId,
             ClinicEzId = "CEZ-1234",
             Scopes = scopes,
@@ -560,5 +575,70 @@ public class PatientShareSnapshotHandlerTests
         await Deliver(import, snapshot);
 
         (await _db.Patients.IgnoreQueryFilters().CountAsync()).Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(ShareDenialCode.Invalid)]
+    [InlineData(ShareDenialCode.Expired)]
+    [InlineData(ShareDenialCode.Exhausted)]
+    [InlineData(ShareDenialCode.PatientUnknown)]
+    [InlineData(ShareDenialCode.RateLimited)]
+    [InlineData(ShareDenialCode.Revoked)]
+    public async Task A_Denial_Stores_The_Machine_Readable_Code(ShareDenialCode code)
+    {
+        var import = SeedImport();
+
+        await Deliver(import, Snapshot(SharingScopes.None, granted: false, denialCode: code));
+
+        var saved = await Reload(import);
+        saved.Status.Should().Be(ShareImportStatus.Denied);
+        saved.DenialCode.Should().Be(code);
+    }
+
+    [Fact]
+    public async Task An_Import_Keeps_The_Redemption_Counters_And_Leaves_The_Denial_Code_Empty()
+    {
+        var import = SeedImport();
+
+        await Deliver(import, Snapshot(SharingScopes.Demographics, redemptionNumber: 2, maxRedemptions: 3));
+
+        var saved = await Reload(import);
+        saved.RedemptionNumber.Should().Be(2);
+        saved.MaxRedemptions.Should().Be(3);
+        saved.IsRefresh.Should().BeFalse();
+        saved.DenialCode.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task An_Older_Publisher_Without_Counters_Leaves_Them_Empty()
+    {
+        var import = SeedImport();
+
+        await Deliver(import, Snapshot(SharingScopes.Demographics));
+
+        var saved = await Reload(import);
+        saved.RedemptionNumber.Should().BeNull();
+        saved.MaxRedemptions.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task A_Same_Grant_Refresh_Merges_Into_The_Existing_Chart_Without_Duplicating_Items()
+    {
+        var grantId = Guid.NewGuid();
+        var scopes = SharingScopes.Demographics | SharingScopes.Allergies;
+        var first = SeedImport();
+        await Deliver(first, Snapshot(scopes, grantId: grantId, redemptionNumber: 1, maxRedemptions: 3));
+        var second = SeedImport();
+
+        await Deliver(second, Snapshot(scopes, grantId: grantId, redemptionNumber: 2, maxRedemptions: 3, isRefresh: true));
+
+        var refreshed = await Reload(second);
+        refreshed.Status.Should().Be(ShareImportStatus.Imported);
+        refreshed.IsRefresh.Should().BeTrue();
+        refreshed.GrantId.Should().Be(grantId);
+        (await Reload(first)).ClinicPatientId.Should().Be(refreshed.ClinicPatientId);
+        var patient = await _db.Patients.IgnoreQueryFilters().SingleAsync();
+        patient.ShareGrantId.Should().Be(grantId);
+        patient.Allergies.Should().Be("Penicillin");
     }
 }

@@ -1,4 +1,5 @@
 import { api } from './apiClient';
+import type { BookingShareSection } from '../sharing/bookingSections';
 
 export interface CreateBookingDraftRequest {
     clinicId: string;
@@ -11,6 +12,8 @@ export interface CreateBookingDraftRequest {
     notes?: string | null;
     /** JSON array of ShareableFieldKey values */
     shareFieldsJson: string;
+    /** PascalCase sharing scope names, never Demographics (the API answers 400 otherwise) */
+    shareSections?: BookingShareSection[];
     attachedFileIdsJson?: string;
 }
 

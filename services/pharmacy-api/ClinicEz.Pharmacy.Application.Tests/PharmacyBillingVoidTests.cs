@@ -233,6 +233,48 @@ public class PharmacyBillingVoidTests
         (await InvoiceRequestsAsync(f.Db)).Should().ContainSingle();
     }
 
+    [Theory]
+    [InlineData(PrescriptionStatus.Accepted)]
+    [InlineData(PrescriptionStatus.Dispensed)]
+    public async Task PartialRefund_KeepsTheOrderPaid_RecordsTheCumulativeTotal_AndReopensNothing(PrescriptionStatus status)
+    {
+        var f = await CreateFixtureAsync();
+        var order = await SeedAsync(f, status: status);
+
+        await VoidAsync(f, Voided(order.Id) with { IsPartial = true, AmountReversed = 50m, RefundedTotal = 50m });
+
+        var saved = await ReadAsync(f);
+        saved.PaymentStatus.Should().Be(PrescriptionPaymentStatus.Paid);
+        saved.PaidAmount.Should().Be(255m);
+        saved.PaidAt.Should().Be(PaidAt);
+        saved.PaymentReceiptNumber.Should().Be("OR-0001");
+        saved.PaymentCorrectedAt.Should().Be(VoidedAt);
+        saved.PaymentReversedAmount.Should().Be(50m);
+        saved.Status.Should().Be(status);
+        PrescriptionDispenseGate.BlockedReason(saved).Should().BeNull("a partial refund does not unpay the order");
+        (await InvoiceRequestsAsync(f.Db)).Should().BeEmpty("the invoice stays settled, so nothing is re-requested");
+    }
+
+    [Fact]
+    public async Task PartialRefund_Redelivered_OrFollowedByAnotherOne_RecordsTheLatestCumulativeTotal_Once()
+    {
+        var f = await CreateFixtureAsync();
+        var order = await SeedAsync(f);
+        var first = Voided(order.Id) with { IsPartial = true, AmountReversed = 50m, RefundedTotal = 50m };
+
+        await VoidAsync(f, first);
+        var afterFirst = await ReadAsync(f);
+        await VoidAsync(f, first);
+        (await ReadAsync(f)).UpdatedAt.Should().Be(afterFirst.UpdatedAt, "the same correction applied twice changes nothing");
+
+        await VoidAsync(f, first with { AmountReversed = 30m, RefundedTotal = 80m, CorrectedAtUtc = VoidedAt.AddMinutes(10) });
+
+        var saved = await ReadAsync(f);
+        saved.PaymentStatus.Should().Be(PrescriptionPaymentStatus.Paid);
+        saved.PaymentReversedAmount.Should().Be(80m);
+        saved.PaymentCorrectedAt.Should().Be(VoidedAt.AddMinutes(10));
+    }
+
     [Fact]
     public async Task Correction_Redelivered_OrOlderThanTheRecordedOne_ChangesNothing()
     {

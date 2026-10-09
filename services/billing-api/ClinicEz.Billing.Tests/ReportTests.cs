@@ -94,7 +94,7 @@ public class ReportTests
 
         host.As(BillingHost.TenantA, BillingHost.Clinic, StaffRole.Supervisor);
         await host.OpenShiftAsync();
-        await host.With<CorrectionService, RefundDto>(c => c.RefundAsync(visit.Clinic.Id, new RefundRequest("Duplicate charge", null), default));
+        await host.With<CorrectionService, RefundDto>(c => c.RefundAsync(visit.Clinic.Id, new RefundRequest("Duplicate charge", null, null, null), default));
 
         var report = await ReportAsync(host, Mar10, Mar10);
 

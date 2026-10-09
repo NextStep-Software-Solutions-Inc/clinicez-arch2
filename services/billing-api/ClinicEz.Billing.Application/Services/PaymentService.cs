@@ -260,13 +260,13 @@ public sealed class PaymentService
             return new ReceiptInvoiceDto(
                 invoice.Id, invoice.InvoiceNumber, invoice.FacilityId, invoice.FacilityType, invoice.SourceType,
                 invoice.Lines.OrderBy(l => l.LineNo).Select(InvoiceMapper.ToDto).ToList(),
-                invoice.Subtotal, invoice.DiscountTotal, invoice.Total, a.Amount, invoice.Balance);
+                invoice.Subtotal, invoice.DiscountTotal, invoice.Total, a.Amount, a.RefundedAmount, invoice.Balance);
         }).ToList();
 
         return new ReceiptDto(
             receipt.Id, receipt.Number, receipt.FacilityId, receipt.IssuedAtUtc, payment.PatientName, payment.Currency, payment.Method,
-            payment.InsurerKind, payment.IsExternal, payment.Reference, payment.Amount, payment.Tendered, payment.Change,
-            payment.CashierName, lines, lines.Sum(l => l.BalanceNow));
+            payment.InsurerKind, payment.IsExternal, payment.Reference, payment.Amount, allocations.Sum(a => a.RefundedAmount), payment.Tendered,
+            payment.Change, payment.CashierName, lines, lines.Sum(l => l.BalanceNow));
     }
 
     private static string Hash(TakePaymentRequest request)

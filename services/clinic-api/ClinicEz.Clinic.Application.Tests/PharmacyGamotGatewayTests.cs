@@ -1,7 +1,9 @@
-using System.Net;
-using System.Text;
-using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Infrastructure.Services;
+using ClinicEz.Shared.Common;
+using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Requests;
+using ClinicEz.Shared.Interoperability;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -11,99 +13,102 @@ namespace ClinicEz.Clinic.Application.Tests;
 
 public class PharmacyGamotGatewayTests
 {
-    private sealed class StubHandler : HttpMessageHandler
-    {
-        public HttpRequestMessage? Seen { get; private set; }
-        public string? SeenBody { get; private set; }
-        public Func<HttpResponseMessage> Respond { get; set; } =
-            () => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"succeeded\":true}", Encoding.UTF8, "application/json") };
+    private const string Tenant = "tenant-a";
+    private readonly Guid _clinicId = Guid.NewGuid();
+    private readonly Guid _pharmacyId = Guid.NewGuid();
 
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            Seen = request;
-            SeenBody = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
-            return Respond();
-        }
+    private static GamotLookupRespondedPayload Answer(int status = 200, string body = "{\"succeeded\":true}") =>
+        new() { StatusCode = status, ContentType = "application/json", Body = body };
+
+    private PharmacyGamotGateway Create(StubInteropRequestClient hub, bool configured = true, bool provisioned = true)
+    {
+        var settings = new Dictionary<string, string?>();
+        if (configured) settings["Gamot:PharmacyFacilityId"] = _pharmacyId.ToString();
+        var identity = provisioned ? Phase3TestKit.Identity(_clinicId, Tenant) : Substitute.For<IClinicIdentityProvider>();
+        return new PharmacyGamotGateway(
+            hub, identity, new ConfigurationBuilder().AddInMemoryCollection(settings).Build(), NullLogger<PharmacyGamotGateway>.Instance);
     }
-
-    private static PharmacyGamotGateway Create(StubHandler handler, Dictionary<string, string?> settings)
-    {
-        var clinic = Substitute.For<IClinicContext>();
-        clinic.TenantId.Returns("tenant-a");
-        var config = new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
-        return new PharmacyGamotGateway(new HttpClient(handler), config, clinic, NullLogger<PharmacyGamotGateway>.Instance);
-    }
-
-    private static readonly Dictionary<string, string?> Configured = new()
-    {
-        ["Services:PharmacyApiUrl"] = "http://pharmacy.test:8080/",
-        ["Internal:ApiKey"] = "shared-secret",
-    };
 
     [Fact]
-    public async Task Forwards_to_the_gamot_route_with_the_internal_key_and_the_clinic_tenant()
+    public async Task Asks_the_tenants_pharmacy_through_the_hub_from_this_clinic()
     {
-        var handler = new StubHandler();
-        var result = await Create(handler, Configured).SendAsync("GET", "formulary", "?search=para", null, CancellationToken.None);
+        var hub = new StubInteropRequestClient(_ => Answer());
+
+        var result = await Create(hub).SendAsync("GET", "formulary", "?search=para", null, CancellationToken.None);
 
         result.StatusCode.Should().Be(200);
         result.Body.Should().Contain("succeeded");
-        handler.Seen!.RequestUri!.ToString().Should().Be("http://pharmacy.test:8080/api/v1/gamot/formulary?search=para");
-        handler.Seen.Headers.GetValues("X-Internal-Key").Should().ContainSingle("shared-secret");
-        handler.Seen.Headers.GetValues("X-Tenant-Id").Should().ContainSingle("tenant-a");
-        handler.Seen.Headers.Authorization.Should().BeNull("the caller's own credentials are never forwarded");
+        var call = hub.Calls.Should().ContainSingle().Subject;
+        call.RequestType.Should().Be(InteropTypes.GamotLookupRequested);
+        call.ReplyType.Should().Be(InteropTypes.GamotLookupResponded);
+        call.From.Should().Be(Party.ForFacility(Tenant, _clinicId.ToString(), FacilityType.Clinic));
+        call.To.Should().Be(Party.ForFacility(Tenant, _pharmacyId.ToString(), FacilityType.Pharmacy));
+        var payload = (GamotLookupRequestedPayload)call.Payload;
+        payload.Method.Should().Be("GET");
+        payload.Path.Should().Be("formulary");
+        payload.Query.Should().Be("search=para", "the leading question mark is not part of the query");
+        payload.Body.Should().BeNull();
     }
 
     [Fact]
-    public async Task Posts_the_json_body_unchanged()
+    public async Task Sends_the_json_body_unchanged_and_no_query_when_there_is_none()
     {
-        var handler = new StubHandler();
-        await Create(handler, Configured).SendAsync("POST", "dispense", "", "{\"pin\":\"1\"}", CancellationToken.None);
+        var hub = new StubInteropRequestClient(_ => Answer());
 
-        handler.Seen!.Method.Should().Be(HttpMethod.Post);
-        handler.SeenBody.Should().Be("{\"pin\":\"1\"}");
-    }
+        await Create(hub).SendAsync("post", "/dispense", "", "{\"pin\":\"1\"}", CancellationToken.None);
 
-    [Fact]
-    public async Task A_dedicated_pharmacy_key_wins_over_the_shared_one()
-    {
-        var handler = new StubHandler();
-        var settings = new Dictionary<string, string?>(Configured) { ["Services:PharmacyApiKey"] = "pharmacy-only" };
-        await Create(handler, settings).SendAsync("GET", "formulary", "", null, CancellationToken.None);
-
-        handler.Seen!.Headers.GetValues("X-Internal-Key").Should().ContainSingle("pharmacy-only");
+        var payload = (GamotLookupRequestedPayload)hub.Calls.Single().Payload;
+        payload.Method.Should().Be("POST");
+        payload.Path.Should().Be("dispense");
+        payload.Query.Should().BeNull();
+        payload.Body.Should().Be("{\"pin\":\"1\"}");
     }
 
     [Fact]
     public async Task Relays_pharmacy_errors_as_they_are()
     {
-        var handler = new StubHandler
-        {
-            Respond = () => new HttpResponseMessage(HttpStatusCode.Conflict) { Content = new StringContent("{\"succeeded\":false,\"message\":\"Already dispensed\"}", Encoding.UTF8, "application/json") },
-        };
-        var result = await Create(handler, Configured).SendAsync("POST", "dispense", "", "{}", CancellationToken.None);
+        var hub = new StubInteropRequestClient(_ => Answer(409, "{\"succeeded\":false,\"message\":\"Already dispensed\"}"));
+
+        var result = await Create(hub).SendAsync("POST", "dispense", "", "{}", CancellationToken.None);
 
         result.StatusCode.Should().Be(409);
         result.Body.Should().Contain("Already dispensed");
     }
 
     [Fact]
-    public async Task Is_unavailable_when_the_pharmacy_is_not_configured()
+    public async Task Is_unavailable_when_no_pharmacy_is_configured()
     {
-        var handler = new StubHandler();
-        var result = await Create(handler, new Dictionary<string, string?>()).SendAsync("GET", "formulary", "", null, CancellationToken.None);
+        var hub = new StubInteropRequestClient(_ => Answer());
+
+        var result = await Create(hub, configured: false).SendAsync("GET", "formulary", "", null, CancellationToken.None);
 
         result.StatusCode.Should().Be(503);
-        handler.Seen.Should().BeNull("nothing may be sent without an address and a key");
+        result.Body.Should().Contain("no pharmacy is configured");
+        hub.Calls.Should().BeEmpty("nothing may be sent without a pharmacy to address");
     }
 
     [Fact]
-    public async Task Is_unavailable_when_the_pharmacy_cannot_be_reached()
+    public async Task Is_unavailable_when_the_clinic_is_not_provisioned()
     {
-        var handler = new StubHandler { Respond = () => throw new HttpRequestException("connection refused") };
-        var result = await Create(handler, Configured).SendAsync("GET", "formulary", "", null, CancellationToken.None);
+        var hub = new StubInteropRequestClient(_ => Answer());
+
+        var result = await Create(hub, provisioned: false).SendAsync("GET", "formulary", "", null, CancellationToken.None);
 
         result.StatusCode.Should().Be(503);
-        result.Body.Should().Contain("could not be reached");
+        hub.Calls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Times_out_with_a_clear_gateway_timeout_when_the_pharmacy_does_not_answer()
+    {
+        var hub = new StubInteropRequestClient(_ => Answer())
+        {
+            Failure = new InteropRequestTimeoutException(InteropTypes.GamotLookupRequested, Guid.NewGuid(), TimeSpan.FromSeconds(45))
+        };
+
+        var result = await Create(hub).SendAsync("GET", "formulary", "", null, CancellationToken.None);
+
+        result.StatusCode.Should().Be(504);
+        result.Body.Should().Contain("did not answer in time");
     }
 }

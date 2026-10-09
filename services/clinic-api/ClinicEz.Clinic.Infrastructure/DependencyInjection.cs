@@ -78,9 +78,9 @@ public static class DependencyInjection
         // Workspace brand/regional defaults: fed by workspace.profile.updated messages and held in this service's own database
         services.AddWorkspaceProfile<ApplicationDbContext>();
 
-        // Outbound PhilHealth Yakap integration client
-        services.AddHttpClient<IPhilHealthProxyClient, PhilHealthProxyClient>();
-        services.AddHttpClient<IPharmacyGamotGateway, PharmacyGamotGateway>();
+        // PhilHealth Yakap and GAMOT lookups are hub request/reply calls, not HTTP clients
+        services.AddScoped<IPhilHealthProxyClient, PhilHealthProxyClient>();
+        services.AddScoped<IPharmacyGamotGateway, PharmacyGamotGateway>();
         services.AddScoped<ClinicEz.Clinic.Application.Features.Yakap.Services.IPhilHealthSequenceGenerator, PhilHealthSequenceGenerator>();
 
         // Interoperability: outbound messages are queued in the transactional interop outbox; inbound ones are
@@ -124,8 +124,8 @@ public static class DependencyInjection
         services.AddFacilityHeartbeat<ClinicLicenseStore>();
 
         // Catalog types the clinic deliberately does not handle: the laboratory reports every stage of an order (accepted,
-        // rejected, payment confirmed included) through lab.order.status.changed only, so lab.order.accepted, lab.order.rejected
-        // and lab.order.payment.confirmed are never sent to a clinic and are intentionally not registered here.
+        // rejected, payment confirmed included) through lab.order.status.changed only, so no other lab.order.* type is
+        // ever sent to a clinic. GAMOT and PhilHealth answers are replies to this clinic's own requests.
         services.AddInterop<ApplicationDbContext>(configuration, b => b
             .Handle<FacilityCreatedEvent, FacilityCreatedHandler>(InteropTypes.FacilityLicenseIssued)
             .HandleWorkspaceProfileUpdated()
@@ -141,6 +141,8 @@ public static class DependencyInjection
             .Handle<ExternalPrescriptionDispensedEvent, ExternalPrescriptionDispensedHandler>(InteropTypes.RxExternalDispensed)
             .Handle<RxStatusChangedPayload, RxStatusChangedHandler>(InteropTypes.RxStatusChanged)
             .Handle<BillingInvoiceVoidedPayload, BillingInvoiceVoidedHandler>(InteropTypes.BillingInvoiceVoided)
+            .HandleReply(InteropTypes.GamotLookupResponded)
+            .HandleReply(InteropTypes.PhilHealthResponse)
             .HandleEntitlementsChanged());
 
         if (env != null && env.IsDevelopment())

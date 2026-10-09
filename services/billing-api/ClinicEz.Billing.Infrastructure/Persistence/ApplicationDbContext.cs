@@ -20,6 +20,7 @@ public class ApplicationDbContext(
     public DbSet<PaymentAllocation> PaymentAllocations { get; set; }
     public DbSet<Receipt> Receipts { get; set; }
     public DbSet<Refund> Refunds { get; set; }
+    public DbSet<RefundLine> RefundLines { get; set; }
     public DbSet<CashierShift> CashierShifts { get; set; }
     public DbSet<AuditEntry> AuditEntries { get; set; }
     public DbSet<BillingFacility> BillingFacilities { get; set; }
@@ -172,6 +173,8 @@ public class ApplicationDbContext(
             b.Property(x => x.InvoiceFacilityType);
             b.Property(x => x.BranchId).HasMaxLength(100);
             b.Property(x => x.Amount).HasPrecision(18, 2);
+            b.Property(x => x.RefundedAmount).HasPrecision(18, 2);
+            b.Ignore(x => x.Refundable);
             b.HasIndex(x => new { x.TenantId, x.InvoiceId });
             b.HasQueryFilter(x => CurrentTenantId == null || x.TenantId == CurrentTenantId);
         });
@@ -196,15 +199,30 @@ public class ApplicationDbContext(
             b.Property(x => x.Id).ValueGeneratedNever();
             b.Property(x => x.TenantId).HasMaxLength(100).IsRequired();
             b.Property(x => x.FacilityId).HasMaxLength(100).IsRequired();
+            b.Property(x => x.Number).HasMaxLength(32).IsRequired();
             b.Property(x => x.InvoiceFacilityId).HasMaxLength(100).IsRequired();
             b.Property(x => x.BranchId).HasMaxLength(100);
             b.Property(x => x.Currency).HasMaxLength(3).IsRequired();
             b.Property(x => x.Amount).HasPrecision(18, 2);
-            b.Property(x => x.Method);
             b.Property(x => x.Reason).HasMaxLength(500).IsRequired();
             b.Property(x => x.ApprovedByName).HasMaxLength(200).IsRequired();
+            b.HasMany(x => x.Lines).WithOne().HasForeignKey(x => x.RefundId).OnDelete(DeleteBehavior.Cascade);
+            b.HasIndex(x => new { x.TenantId, x.FacilityId, x.Number }).IsUnique();
             b.HasIndex(x => new { x.TenantId, x.InvoiceId });
             b.HasIndex(x => new { x.TenantId, x.ShiftId });
+            b.HasQueryFilter(x => CurrentTenantId == null || x.TenantId == CurrentTenantId);
+        });
+
+        modelBuilder.Entity<RefundLine>(b =>
+        {
+            b.ToTable("refund_lines");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Id).ValueGeneratedNever();
+            b.Property(x => x.TenantId).HasMaxLength(100).IsRequired();
+            b.Property(x => x.Method);
+            b.Property(x => x.Amount).HasPrecision(18, 2);
+            b.HasIndex(x => x.RefundId);
+            b.HasIndex(x => x.PaymentAllocationId);
             b.HasQueryFilter(x => CurrentTenantId == null || x.TenantId == CurrentTenantId);
         });
 
@@ -254,6 +272,7 @@ public class ApplicationDbContext(
             b.Property(x => x.TenantId).HasMaxLength(100).IsRequired();
             b.Property(x => x.FacilityId).HasMaxLength(100).IsRequired();
             b.Property(x => x.FacilityType);
+            b.Property(x => x.PlanTier).HasMaxLength(64);
             b.HasIndex(x => new { x.TenantId, x.FacilityId }).IsUnique();
             b.HasQueryFilter(x => CurrentTenantId == null || x.TenantId == CurrentTenantId);
         });

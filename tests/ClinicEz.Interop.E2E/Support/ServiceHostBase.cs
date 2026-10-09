@@ -107,4 +107,28 @@ public static class Cell
 
         throw new InvalidOperationException($"The cell did not become quiescent within {maxRounds} pump rounds (a message ping-pong?).");
     }
+
+    /// <summary>
+    /// Drives <paramref name="hosts"/> while <paramref name="call"/> is awaited, the way running services would: an SDK request
+    /// blocks its caller until the reply has travelled through the hub and the peer's mailbox. Hosts left out of
+    /// <paramref name="hosts"/> are "down": they neither send nor read their mailbox.
+    /// </summary>
+    public static async Task<T> PumpUntilAsync<T>(IEnumerable<ServiceHostBase> hosts, Task<T> call, TimeSpan limit)
+    {
+        var all = hosts.ToList();
+        using var deadline = new CancellationTokenSource(limit);
+        while (!call.IsCompleted)
+        {
+            deadline.Token.ThrowIfCancellationRequested();
+            foreach (var host in all)
+            {
+                await host.RelayOnceAsync();
+                await host.PollOnceAsync();
+            }
+
+            await Task.Delay(20, deadline.Token);
+        }
+
+        return await call;
+    }
 }

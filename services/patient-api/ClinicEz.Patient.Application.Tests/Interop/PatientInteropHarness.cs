@@ -62,6 +62,7 @@ internal sealed class PatientInteropHarness : IDisposable
         services.AddScoped<IClinicMembershipRepository, ClinicMembershipRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IPatientAccessRepository, PatientAccessRepository>();
+        services.AddScoped<IShareCodeRepository, ShareCodeRepository>();
         services.AddScoped<IPatientDocumentRepository, PatientDocumentRepository>();
         services.AddScoped<INotificationRepository, NotificationRepository>();
         services.AddSingleton(Storage);

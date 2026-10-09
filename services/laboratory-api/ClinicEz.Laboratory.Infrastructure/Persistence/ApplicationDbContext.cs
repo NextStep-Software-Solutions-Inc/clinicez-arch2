@@ -140,6 +140,7 @@ public class ApplicationDbContext(
             entity.Property(e => e.Currency).IsRequired().HasMaxLength(3);
             entity.Property(e => e.ReceiptNumber).HasMaxLength(100);
             entity.Property(e => e.QuotedAmount).HasPrecision(18, 2);
+            entity.Property(e => e.RefundedAmount).HasPrecision(18, 2);
             entity.HasIndex(e => e.InvoiceId);
             entity.Property(e => e.OrderingTenantId).HasMaxLength(100);
             entity.Property(e => e.OrderingFacilityId).HasMaxLength(100);

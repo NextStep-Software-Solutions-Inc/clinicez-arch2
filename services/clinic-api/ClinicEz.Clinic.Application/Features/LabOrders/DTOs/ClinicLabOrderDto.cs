@@ -94,22 +94,3 @@ public record AttachExternalLabResultRequest(
     string? ContentType = null,
     string? FileName = null
 );
-
-public record PublicLabUploadInfoResponse(
-    string OrderNumber,
-    string PatientInitials,
-    int PatientAge,
-    string PatientGender,
-    string OrderingDoctorName,
-    string OrderingFacilityName,
-    string? ClinicalDiagnosis,
-    List<string> RequestedTests,
-    DateTime OrderDate,
-    string? DoctorPrcLicense = null,
-    DateTime? ExpiresAt = null,
-    bool IsExpired = false,
-    string? Status = null
-);
-
-/// <summary>What an anonymous uploader gets back: a receipt, never the order or any patient data.</summary>
-public record PublicLabUploadReceipt(Guid ResultId, string OrderNumber, DateTime ReceivedAtUtc);

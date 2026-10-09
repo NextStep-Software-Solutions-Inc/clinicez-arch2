@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
@@ -203,6 +204,8 @@ public sealed class AppointmentBookedHandler : IInteropHandler<AppointmentBooked
             Notes = message.Notes,
             ShareFieldsJson = message.ShareFieldsJson,
             AttachedFileIdsJson = message.AttachedFileIdsJson,
+            SharedScopes = message.SharedScopes,
+            SharedItemsJson = JsonSerializer.Serialize(message.SharedItems),
             CreatedAt = message.CreatedAt,
             CreatedBy = "System:PatientBookingEvent"
         };

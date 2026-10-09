@@ -3,7 +3,7 @@ using ClinicEz.Shared.Interoperability;
 namespace ClinicEz.Patient.Application.Common.Interfaces;
 
 /// <summary>What a valid share token asserts.</summary>
-public sealed record ShareTokenClaims(string TokenId, Guid PatientId, SharingScopes Scopes, string Purpose, DateTime ExpiresAtUtc);
+public sealed record ShareTokenClaims(string TokenId, Guid PatientId, SharingScopes Scopes, string Purpose, DateTime ExpiresAtUtc, int MaxRedemptions);
 
 public sealed record IssuedShareToken(string Value, string TokenId, DateTime ExpiresAtUtc);
 
@@ -17,7 +17,7 @@ public sealed record ShareTokenValidation(ShareTokenFailure Failure, ShareTokenC
 /// <summary>Mints and verifies the short-lived signed tokens a patient shows as a QR code.</summary>
 public interface IShareTokenService
 {
-    IssuedShareToken Issue(Guid patientId, SharingScopes scopes, string purpose);
+    IssuedShareToken Issue(Guid patientId, SharingScopes scopes, string purpose, int maxRedemptions = 1);
 
     ShareTokenValidation Validate(string token);
 }

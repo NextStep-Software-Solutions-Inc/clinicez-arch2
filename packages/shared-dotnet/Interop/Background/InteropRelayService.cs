@@ -21,6 +21,7 @@ public sealed class InteropRelayService : BackgroundService
     private readonly InteropOptions _options;
     private readonly EnvelopeSigner _signer;
     private readonly ILogger<InteropRelayService> _logger;
+    private readonly SemaphoreSlim _wake = new(0, 1);
     private DateTime _nextCleanupUtc = DateTime.UtcNow;
 
     public InteropRelayService(IServiceScopeFactory scopes, IOptions<InteropOptions> options, EnvelopeSigner signer, ILogger<InteropRelayService> logger)
@@ -57,8 +58,15 @@ public sealed class InteropRelayService : BackgroundService
             }
 
             if (shipped == 0)
-                await Task.Delay(_options.RelayIntervalMs, stoppingToken);
+                await _wake.WaitAsync(_options.RelayIntervalMs, stoppingToken);
         }
+    }
+
+    /// <summary>Wakes the relay now instead of at its next interval: used after a request or reply is committed to the outbox.</summary>
+    public void Signal()
+    {
+        try { _wake.Release(); }
+        catch (SemaphoreFullException) { /* a wake-up is already pending */ }
     }
 
     /// <summary>Ship one batch of due outbox rows. Returns how many were handled. Public for tests.</summary>

@@ -1,6 +1,7 @@
 using System;
 using ClinicEz.Clinic.Domain.Common;
 using ClinicEz.Clinic.Domain.Enums;
+using ClinicEz.Shared.Interoperability;
 
 namespace ClinicEz.Clinic.Domain.Entities;
 
@@ -27,4 +28,10 @@ public sealed class Appointment : BaseEntity
     public string? Notes { get; set; }
     public string ShareFieldsJson { get; set; } = "[]";
     public string AttachedFileIdsJson { get; set; } = "[]";
+
+    /// <summary>The record sections the patient's booking grant covers (<c>None</c> when the booking carried no share).</summary>
+    public SharingScopes SharedScopes { get; set; }
+
+    /// <summary>The record items the patient shared with the booking, as a JSON array of <c>ShareItemDto</c>.</summary>
+    public string SharedItemsJson { get; set; } = "[]";
 }

@@ -16,8 +16,20 @@ export const shareTokenResponseSchema = z.object({
     clinicEzId: z.string(),
     scopes: z.array(sharingScopeSchema),
     purpose: z.string(),
+    maxRedemptions: z.number().int(),
 });
 export type ShareTokenResponse = z.infer<typeof shareTokenResponseSchema>;
+
+/** One-time code: `ABCD-EFGH` (8 characters and a hyphen), valid for `ttlSeconds` (600). */
+export const shareCodeResponseSchema = z.object({
+    code: z.string(),
+    expiresAt: z.string(),
+    ttlSeconds: z.number(),
+    clinicEzId: z.string(),
+    scopes: z.array(sharingScopeSchema),
+    purpose: z.string(),
+});
+export type ShareCodeResponse = z.infer<typeof shareCodeResponseSchema>;
 
 export const accessGrantSchema = z.object({
     id: z.string(),
@@ -59,13 +71,27 @@ export async function createShareToken(
     getToken: () => Promise<string | null>,
     patientId: string,
     scopes: SharingScope[],
-    purpose?: string,
+    options: { purpose?: string; maxRedemptions?: number } = {},
 ): Promise<ShareTokenResponse> {
     const data = await api.post<unknown>(getToken, `/patients/${patientId}/share-tokens`, {
         scopes,
-        ...(purpose ? { purpose } : {}),
+        ...(options.purpose ? { purpose: options.purpose } : {}),
+        ...(options.maxRedemptions ? { maxRedemptions: options.maxRedemptions } : {}),
     });
     return shareTokenResponseSchema.parse(data);
+}
+
+export async function createShareCode(
+    getToken: () => Promise<string | null>,
+    patientId: string,
+    scopes: SharingScope[],
+    purpose?: string,
+): Promise<ShareCodeResponse> {
+    const data = await api.post<unknown>(getToken, `/patients/${patientId}/share-codes`, {
+        scopes,
+        ...(purpose ? { purpose } : {}),
+    });
+    return shareCodeResponseSchema.parse(data);
 }
 
 export async function fetchAccessGrants(

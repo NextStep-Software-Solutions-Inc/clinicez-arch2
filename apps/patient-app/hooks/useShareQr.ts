@@ -29,9 +29,13 @@ export interface ShareQrState {
 /**
  * Keeps a fresh, rotating share token for the selected scopes. The QR stops rotating while the
  * screen is blurred/unmounted, the app is backgrounded or the device is offline, and restarts
- * (with a brand-new token) when any of those end or the scope selection changes.
+ * (with a brand-new token) when any of those end or the scope selection or scan limit changes.
  */
-export function useShareQr(patientId: string, scopes: readonly SharingScope[]): ShareQrState {
+export function useShareQr(
+  patientId: string,
+  scopes: readonly SharingScope[],
+  maxRedemptions: number,
+): ShareQrState {
   const { getToken } = useAuth();
   const isFocused = useIsFocused();
   const [appActive, setAppActive] = useState(AppState.currentState === 'active');
@@ -56,7 +60,7 @@ export function useShareQr(patientId: string, scopes: readonly SharingScope[]): 
     if (!active) return undefined;
 
     const refresher = createQrRefresher<ShareTokenResponse>({
-      request: () => createShareToken(getToken, patientId, stableScopes),
+      request: () => createShareToken(getToken, patientId, stableScopes, { maxRedemptions }),
       onSession: (next) => {
         setError(null);
         setNow(Date.now());
@@ -71,7 +75,7 @@ export function useShareQr(patientId: string, scopes: readonly SharingScope[]): 
       clearTimeout(startTimer);
       refresher.stop();
     };
-  }, [active, getToken, patientId, stableScopes]);
+  }, [active, getToken, patientId, stableScopes, maxRedemptions]);
 
   useEffect(() => {
     if (!session) return undefined;

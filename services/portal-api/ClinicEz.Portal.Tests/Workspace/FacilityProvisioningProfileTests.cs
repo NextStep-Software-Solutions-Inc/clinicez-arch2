@@ -87,6 +87,23 @@ public class FacilityProvisioningProfileTests : IDisposable
     }
 
     [Fact]
+    public async Task Provisioning_SendsTheSameLicenseToTheBillingServiceOfTheFacility()
+    {
+        var facilityId = Guid.NewGuid();
+
+        await StageAsync(facilityId);
+        await _context.SaveChangesAsync();
+
+        var licenses = TestSupport.Outbox(_context, InteropTypes.FacilityLicenseIssued);
+        var own = licenses.Single(m => m.To.Service is null);
+        var billing = licenses.Single(m => m.To.Service == InteropServices.Billing);
+        Assert.Equal(own.To with { Service = InteropServices.Billing }, billing.To);
+        Assert.Equal(own.CorrelationId, billing.CorrelationId);
+        Assert.Equal(facilityId, billing.CorrelationId);
+        Assert.Equal("token", billing.GetPayload<FacilityCreatedEvent>().LicenseToken);
+    }
+
+    [Fact]
     public async Task Provisioning_CreatesDefaultSettings_WhenTheWorkspaceHasNone()
     {
         await StageAsync(Guid.NewGuid());

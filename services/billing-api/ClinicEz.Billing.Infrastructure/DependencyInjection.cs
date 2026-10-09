@@ -1,8 +1,11 @@
 using ClinicEz.Billing.Application.Abstractions;
 using ClinicEz.Billing.Application.Interop;
 using ClinicEz.Billing.Infrastructure.Auth;
+using ClinicEz.Billing.Infrastructure.Licensing;
 using ClinicEz.Billing.Infrastructure.Persistence;
+using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Facility;
 using ClinicEz.Shared.Interoperability;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -52,9 +55,16 @@ public static class DependencyInjection
         services.AddScoped<BillingAuthService>();
         services.AddScoped<StaffAdminService>();
 
+        // Facility licenses: the signed token the control plane issues per facility, kept on BillingFacility. Facilities holding one are
+        // enforced by the read-only grace middleware and heartbeated to the portal.
+        services.AddFacilityEntitlements<BillingLicenseStore>();
+        services.AddFacilityHeartbeat<BillingLicenseStore>();
+
         // Interop hub messaging: transactional outbox/inbox + typed handlers.
         services.AddInterop<ApplicationDbContext>(configuration, handlers => handlers
-            .Handle<BillingInvoiceRequestedPayload, InvoiceRequestedHandler>(InteropTypes.BillingInvoiceRequested));
+            .Handle<BillingInvoiceRequestedPayload, InvoiceRequestedHandler>(InteropTypes.BillingInvoiceRequested)
+            .Handle<FacilityCreatedEvent, FacilityLicenseIssuedHandler>(InteropTypes.FacilityLicenseIssued)
+            .HandleEntitlementsChanged());
 
         return services;
     }

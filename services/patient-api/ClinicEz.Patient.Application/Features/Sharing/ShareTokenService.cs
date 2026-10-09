@@ -11,7 +11,7 @@ namespace ClinicEz.Patient.Application.Features.Sharing;
 /// <summary>
 /// Share tokens are <c>base64url(payload).base64url(HMAC-SHA256(payload))</c>. The payload names the patient, the scopes the
 /// patient picked and an expiry; it is readable by whoever scans the QR, but cannot be altered or forged without the key.
-/// Single use is enforced separately by recording the token id when it is redeemed.
+/// How many times it may be redeemed is part of the signed payload; each redemption is recorded against the token id.
 /// </summary>
 public sealed class ShareTokenService : IShareTokenService
 {
@@ -34,12 +34,12 @@ public sealed class ShareTokenService : IShareTokenService
         _clock = clock;
     }
 
-    public IssuedShareToken Issue(Guid patientId, SharingScopes scopes, string purpose)
+    public IssuedShareToken Issue(Guid patientId, SharingScopes scopes, string purpose, int maxRedemptions = 1)
     {
         var tokenId = Convert.ToHexString(RandomNumberGenerator.GetBytes(TokenIdBytes)).ToLowerInvariant();
         var expiresAt = _clock.GetUtcNow().UtcDateTime.AddSeconds(_ttlSeconds);
 
-        var payload = new Payload(FormatVersion, tokenId, patientId, (int)scopes, purpose, new DateTimeOffset(expiresAt).ToUnixTimeSeconds());
+        var payload = new Payload(FormatVersion, tokenId, patientId, (int)scopes, purpose, new DateTimeOffset(expiresAt).ToUnixTimeSeconds(), maxRedemptions);
         var encodedPayload = Base64Url(JsonSerializer.SerializeToUtf8Bytes(payload));
         var token = $"{encodedPayload}.{Base64Url(Sign(encodedPayload))}";
 
@@ -64,7 +64,7 @@ public sealed class ShareTokenService : IShareTokenService
         catch (Exception ex) when (ex is JsonException or FormatException) { return Fail(ShareTokenFailure.Malformed); }
 
         if (payload is null || payload.Version != FormatVersion || string.IsNullOrEmpty(payload.TokenId)
-            || payload.PatientId == Guid.Empty || payload.Scopes == 0)
+            || payload.PatientId == Guid.Empty || payload.Scopes == 0 || payload.MaxRedemptions < 1)
             return Fail(ShareTokenFailure.Malformed);
 
         var expiresAt = DateTimeOffset.FromUnixTimeSeconds(payload.ExpiresAtUnix).UtcDateTime;
@@ -73,7 +73,7 @@ public sealed class ShareTokenService : IShareTokenService
 
         return new ShareTokenValidation(
             ShareTokenFailure.None,
-            new ShareTokenClaims(payload.TokenId, payload.PatientId, (SharingScopes)payload.Scopes, payload.Purpose, expiresAt));
+            new ShareTokenClaims(payload.TokenId, payload.PatientId, (SharingScopes)payload.Scopes, payload.Purpose, expiresAt, payload.MaxRedemptions));
     }
 
     private byte[] Sign(string encodedPayload) => HMACSHA256.HashData(_key, Encoding.ASCII.GetBytes(encodedPayload));
@@ -96,5 +96,6 @@ public sealed class ShareTokenService : IShareTokenService
         [property: JsonPropertyName("pid")] Guid PatientId,
         [property: JsonPropertyName("sc")] int Scopes,
         [property: JsonPropertyName("pu")] string Purpose,
-        [property: JsonPropertyName("exp")] long ExpiresAtUnix);
+        [property: JsonPropertyName("exp")] long ExpiresAtUnix,
+        [property: JsonPropertyName("mr")] int MaxRedemptions);
 }

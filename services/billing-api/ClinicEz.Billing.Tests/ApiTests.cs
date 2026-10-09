@@ -16,6 +16,7 @@ using ClinicEz.Billing.Infrastructure.Auth;
 using ClinicEz.Billing.Tests.TestSupport;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interop.Handling;
+using ClinicEz.Shared.Licensing;
 using ClinicEz.Shared.LocalAuth;
 using FluentAssertions;
 using Microsoft.AspNetCore.Authorization;
@@ -29,6 +30,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace ClinicEz.Billing.Tests;
 
@@ -139,7 +141,7 @@ public class ApiTests
 
     private static async Task<TestApp> StartAsync(string audience = "clinicez-billing", string? signingKey = null, int rateLimit = 100)
     {
-        var builder = WebApplication.CreateBuilder();
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = Environments.Development });
         builder.WebHost.UseTestServer();
         var config = new Dictionary<string, string?>
         {
@@ -178,6 +180,7 @@ public class ApiTests
         app.UseAuthorization();
         app.UseInternalServiceGuard();
         app.UseMiddleware<BillingScopeMiddleware>();
+        app.UseReadOnlyGrace();
         app.MapGet("/health", () => Results.Ok(new { status = "healthy" })).AllowAnonymous();
         app.MapControllers();
         await app.StartAsync();

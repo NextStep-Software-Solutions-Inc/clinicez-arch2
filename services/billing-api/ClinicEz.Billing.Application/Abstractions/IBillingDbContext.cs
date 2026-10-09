@@ -13,6 +13,7 @@ public interface IBillingDbContext : IInteropDbContext
     DbSet<PaymentAllocation> PaymentAllocations { get; }
     DbSet<Receipt> Receipts { get; }
     DbSet<Refund> Refunds { get; }
+    DbSet<RefundLine> RefundLines { get; }
     DbSet<CashierShift> CashierShifts { get; }
     DbSet<AuditEntry> AuditEntries { get; }
     DbSet<BillingFacility> BillingFacilities { get; }

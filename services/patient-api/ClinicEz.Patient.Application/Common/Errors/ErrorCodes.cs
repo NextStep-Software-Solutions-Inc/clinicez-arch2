@@ -18,6 +18,7 @@ public static class ErrorCodes
     public const string CollectionTooLarge      = "COLLECTION_TOO_LARGE";
     public const string FutureDateNotAllowed    = "FUTURE_DATE_NOT_ALLOWED";
     public const string DuplicateItem           = "DUPLICATE_ITEM";
+    public const string OutOfRange              = "OUT_OF_RANGE";
 
     // ── Patient ───────────────────────────────────────────────────────────────
     public const string PatientNotFound         = "PATIENT_NOT_FOUND";

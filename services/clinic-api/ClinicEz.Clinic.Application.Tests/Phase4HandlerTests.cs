@@ -244,7 +244,15 @@ public class BillingInvoiceVoidedHandlerTests
         return invoice;
     }
 
-    private Task Deliver(Invoice invoice, BillingCorrectionKind kind, Party from, decimal reversed = 0m, Guid? correlation = null, Guid? clinicId = null)
+    private Task Deliver(
+        Invoice invoice,
+        BillingCorrectionKind kind,
+        Party from,
+        decimal reversed = 0m,
+        Guid? correlation = null,
+        Guid? clinicId = null,
+        bool partial = false,
+        decimal refundedTotal = 0m)
     {
         var payload = new BillingInvoiceVoidedPayload
         {
@@ -258,7 +266,9 @@ public class BillingInvoiceVoidedHandlerTests
             Kind = kind,
             Total = invoice.NetAmount,
             AmountReversed = reversed,
-            WasFullyPaid = reversed >= invoice.NetAmount
+            WasFullyPaid = reversed >= invoice.NetAmount,
+            IsPartial = partial,
+            RefundedTotal = refundedTotal
         };
         return Handler().HandleAsync(payload,
             MessagingTestKit.Delivered(InteropTypes.BillingInvoiceVoided, from, MessagingTestKit.ClinicParty(Tenant, clinicId ?? _clinicId),
@@ -324,6 +334,65 @@ public class BillingInvoiceVoidedHandlerTests
         var saved = await Reload(invoice);
         saved.AmountPaid.Should().Be(0m);
         saved.Payments.Sum(p => p.Amount).Should().Be(0m);
+    }
+
+    [Fact]
+    public async Task A_Partial_Refund_Records_The_Amount_And_Keeps_The_Invoice_Paid()
+    {
+        var invoice = SeedInvoice(paid: 1000m);
+
+        await Deliver(invoice, BillingCorrectionKind.Refund, Counter(), reversed: 300m, partial: true, refundedTotal: 300m);
+
+        var saved = await Reload(invoice);
+        saved.Status.Should().Be(InvoiceStatus.Paid);
+        saved.RefundedAmount.Should().Be(300m);
+        saved.AmountPaid.Should().Be(1000m);
+        saved.BalanceDue.Should().Be(0m);
+        saved.Payments.Sum(p => p.Amount).Should().Be(700m, "the give-back nets out of collections");
+    }
+
+    [Fact]
+    public async Task A_Redelivered_Or_Older_Partial_Refund_Changes_Nothing()
+    {
+        var invoice = SeedInvoice(paid: 1000m);
+
+        await Deliver(invoice, BillingCorrectionKind.Refund, Counter(), reversed: 200m, partial: true, refundedTotal: 200m);
+        await Deliver(invoice, BillingCorrectionKind.Refund, Counter(), reversed: 300m, partial: true, refundedTotal: 500m);
+        await Deliver(invoice, BillingCorrectionKind.Refund, Counter(), reversed: 200m, partial: true, refundedTotal: 200m);
+        await Deliver(invoice, BillingCorrectionKind.Refund, Counter(), reversed: 300m, partial: true, refundedTotal: 500m);
+
+        var saved = await Reload(invoice);
+        saved.Status.Should().Be(InvoiceStatus.Paid);
+        saved.RefundedAmount.Should().Be(500m);
+        saved.Payments.Should().HaveCount(3);
+    }
+
+    [Fact]
+    public async Task A_Partial_Refund_Never_Exceeds_What_Is_Still_Paid()
+    {
+        var invoice = SeedInvoice(paid: 400m);
+
+        await Deliver(invoice, BillingCorrectionKind.Refund, Counter(), reversed: 5000m, partial: true, refundedTotal: 5000m);
+
+        var saved = await Reload(invoice);
+        saved.RefundedAmount.Should().Be(400m);
+        saved.Payments.Sum(p => p.Amount).Should().Be(0m);
+    }
+
+    [Fact]
+    public async Task The_Final_Refund_After_Partial_Ones_Closes_The_Invoice_Without_Double_Booking()
+    {
+        var invoice = SeedInvoice(paid: 1000m);
+        await Deliver(invoice, BillingCorrectionKind.Refund, Counter(), reversed: 300m, partial: true, refundedTotal: 300m);
+
+        await Deliver(invoice, BillingCorrectionKind.Refund, Counter(), reversed: 700m, refundedTotal: 1000m);
+
+        var saved = await Reload(invoice);
+        saved.Status.Should().Be(InvoiceStatus.Refunded);
+        saved.RefundedAmount.Should().Be(1000m);
+        saved.AmountPaid.Should().Be(0m);
+        saved.Payments.Sum(p => p.Amount).Should().Be(0m);
+        saved.Payments.Should().HaveCount(3);
     }
 
     [Fact]

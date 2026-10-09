@@ -302,6 +302,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.DiscountAmount).HasPrecision(18, 2);
             entity.Property(e => e.NetAmount).HasPrecision(18, 2);
             entity.Property(e => e.AmountPaid).HasPrecision(18, 2);
+            entity.Property(e => e.RefundedAmount).HasPrecision(18, 2);
             entity.Property(e => e.BalanceDue).HasPrecision(18, 2);
 
             entity.HasMany(e => e.LineItems)

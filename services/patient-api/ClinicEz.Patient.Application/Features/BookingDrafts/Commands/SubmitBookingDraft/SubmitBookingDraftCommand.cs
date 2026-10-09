@@ -37,13 +37,14 @@ public sealed class SubmitBookingDraftCommandHandler : IRequestHandler<SubmitBoo
     private readonly IPatientAccessRepository _accessRepo;
     private readonly IStorageService _storage;
     private readonly SharingOptions _sharingOptions;
+    private readonly PatientShareSnapshotBuilder _snapshots;
     private readonly IFileRecordRepository? _fileRepo;
 
     public SubmitBookingDraftCommandHandler(
         IBookingDraftRepository draftRepo, IClinicRepository clinicRepo, IUnitOfWork uow,
         IClinicMembershipRepository membershipRepo, IInteropPublisher publisher,
         IPatientRepository patientRepo, IPatientAccessRepository accessRepo, IStorageService storage,
-        IOptions<SharingOptions> sharingOptions, IFileRecordRepository? fileRepo = null)
+        IOptions<SharingOptions> sharingOptions, PatientShareSnapshotBuilder snapshots, IFileRecordRepository? fileRepo = null)
     {
         _draftRepo = draftRepo; _clinicRepo = clinicRepo; _uow = uow;
         _membershipRepo = membershipRepo;
@@ -52,6 +53,7 @@ public sealed class SubmitBookingDraftCommandHandler : IRequestHandler<SubmitBoo
         _accessRepo = accessRepo;
         _storage = storage;
         _sharingOptions = sharingOptions.Value;
+        _snapshots = snapshots;
         _fileRepo = fileRepo;
     }
 
@@ -113,6 +115,10 @@ public sealed class SubmitBookingDraftCommandHandler : IRequestHandler<SubmitBoo
             }
         }
 
+        // Only the sections the patient ticked are read, so nothing else can leave in the booking.
+        var sections = (SharingScopes)(int)draft.ShareSections & ~SharingScopes.Demographics;
+        var sharedContent = sections == SharingScopes.None ? null : await _snapshots.BuildAsync(patient.Id, sections, cancellationToken);
+
         var booking = new AppointmentBookedEvent
         {
             DraftId = draft.Id,
@@ -143,7 +149,9 @@ public sealed class SubmitBookingDraftCommandHandler : IRequestHandler<SubmitBoo
             SponsorMiddleName = philhealth?.SponsorMiddleName,
             SponsorSuffix = philhealth?.SponsorSuffix,
             SponsorDob = philhealth?.SponsorDob,
-            SponsorRelationship = philhealth?.SponsorRelationship
+            SponsorRelationship = philhealth?.SponsorRelationship,
+            SharedScopes = SharingScopes.Demographics | sections,
+            SharedItems = sharedContent?.Items ?? []
         };
 
         // Enqueued before the save below, so the outbox row and the booking commit atomically.
@@ -156,7 +164,7 @@ public sealed class SubmitBookingDraftCommandHandler : IRequestHandler<SubmitBoo
 
         var clinicParty = Party.ForFacility(clinic.TenantId, clinic.Id.ToString(), FacilityType.Clinic);
         var sharedAttachmentCount = await ShareAttachmentsAsync(draft.Id, request.PatientId, clinicParty, attachedFiles, cancellationToken);
-        await RecordGrantAsync(draft, request.PatientId, clinic.TenantId, clinicParty, shared, sharedAttachmentCount, cancellationToken);
+        await RecordGrantAsync(draft, request.PatientId, clinic.TenantId, clinicParty, shared, sections, sharedAttachmentCount, cancellationToken);
 
         var membership = await _membershipRepo.GetByPatientAndClinicAsync(request.PatientId, clinic.Id, cancellationToken);
         if (membership is null && clinic.IsPublic)
@@ -213,14 +221,15 @@ public sealed class SubmitBookingDraftCommandHandler : IRequestHandler<SubmitBoo
     }
 
     private async Task RecordGrantAsync(
-        BookingDraft draft, Guid patientId, string tenantId, Party clinicParty, HashSet<string> shared, int sharedAttachmentCount, CancellationToken cancellationToken)
+        BookingDraft draft, Guid patientId, string tenantId, Party clinicParty, HashSet<string> shared, SharingScopes sections,
+        int sharedAttachmentCount, CancellationToken cancellationToken)
     {
         var grant = new PatientAccessGrant
         {
             PatientId = patientId,
             TenantId = tenantId,
             FacilityId = draft.ClinicId,
-            Scopes = AccessScopes.Demographics,
+            Scopes = AccessScopes.Demographics | (AccessScopes)(int)sections,
             Purpose = "Appointment booking",
             ExpiresAt = DateTime.UtcNow.AddDays(_sharingOptions.BookingGrantDays),
             Source = AccessGrantSource.Booking,
@@ -230,6 +239,7 @@ public sealed class SubmitBookingDraftCommandHandler : IRequestHandler<SubmitBoo
 
         var fields = new List<string> { "name", "mobile number" };
         fields.AddRange(new[] { ShareDateOfBirth, ShareSex, ShareEmail, SharePhilHealthId }.Where(shared.Contains));
+        fields.AddRange(SharingScopeMap.ToNames(sections));
         if (sharedAttachmentCount > 0)
             fields.Add($"{sharedAttachmentCount} attachment(s)");
 

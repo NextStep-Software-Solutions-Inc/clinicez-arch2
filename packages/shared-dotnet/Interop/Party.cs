@@ -25,7 +25,14 @@ public static class InteropServices
     public const string Billing = "billing";
     public const string Patient = "patient";
     public const string Portal = "portal";
+    /// <summary>Platform service (control plane, cloud cell): the PhilHealth proxy. A hub client of its own.</summary>
+    public const string Philhealth = "philhealth";
     public const string Hub = "hub";
+
+    /// <summary>Platform services: cloud-cell services with a hub client of their own that are neither a facility service nor the portal.</summary>
+    public static readonly IReadOnlyList<string> PlatformServices = [Philhealth];
+
+    public static bool IsPlatformService(string? service) => service is not null && PlatformServices.Contains(service);
 
     /// <summary>Default service that serves a facility type.</summary>
     public static string ForFacilityType(FacilityType type) => type switch
@@ -71,6 +78,9 @@ public sealed record Party
     public static Party Portal { get; } = new() { Kind = PartyKind.ControlPlane, Service = InteropServices.Portal };
 
     public static Party Hub { get; } = new() { Kind = PartyKind.ControlPlane, Service = InteropServices.Hub };
+
+    /// <summary>The PhilHealth proxy, a platform service that runs in the cloud cell.</summary>
+    public static Party PhilHealth { get; } = new() { Kind = PartyKind.ControlPlane, Service = InteropServices.Philhealth };
 
     /// <summary>Human readable, stable address used in logs and error messages.</summary>
     public string Address => Kind switch

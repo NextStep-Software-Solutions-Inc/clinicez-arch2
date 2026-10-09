@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using ClinicEz.Pharmacy.Domain.Common;
 using ClinicEz.Pharmacy.Domain.Interfaces;
@@ -24,7 +24,6 @@ public sealed class TestPharmacyScope : IPharmacyContext, IPharmacyScopeSetter
     public Guid PharmacyId { get; private set; }
     public Guid? StaffId => null;
     public IReadOnlyList<string> Permissions => Array.Empty<string>();
-    public bool IsInternalService => false;
     public bool HasPermission(string permission) => true;
 
     public void Enter(string tenantId, Guid pharmacyId)

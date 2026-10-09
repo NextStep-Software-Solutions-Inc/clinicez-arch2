@@ -5,6 +5,7 @@ using ClinicEz.Patient.Api.Tests.Infrastructure;
 using ClinicEz.Patient.Application.Features.Documents;
 using ClinicEz.Patient.Application.Features.Documents.Commands.MarkPrescriptionExternallyDispensed;
 using ClinicEz.Patient.Application.Features.Documents.Commands.UploadLabResult;
+using ClinicEz.Patient.Application.Features.Sharing.Commands.CreateShareCode;
 using ClinicEz.Patient.Application.Features.Sharing.Commands.CreateShareToken;
 using ClinicEz.Patient.Application.Features.Sharing.Commands.RevokeAccessGrant;
 using ClinicEz.Patient.Application.Features.Sync.Queries.GetSyncChanges;
@@ -35,6 +36,7 @@ public sealed class SharingAndDocumentEndpointTests : IAsyncLifetime
     public static TheoryData<string, string> Routes => new()
     {
         { "POST", "share-tokens" },
+        { "POST", "share-codes" },
         { "GET", "access-grants" },
         { "DELETE", "access-grants/{grant}" },
         { "GET", "access-log" },
@@ -55,7 +57,7 @@ public sealed class SharingAndDocumentEndpointTests : IAsyncLifetime
     private static HttpContent EmptyContentFor(string method, string route) =>
         route switch
         {
-            "share-tokens" => JsonContent.Create(new { scopes = new[] { "Allergies" } }),
+            "share-tokens" or "share-codes" => JsonContent.Create(new { scopes = new[] { "Allergies" } }),
             _ when method == "POST" => new MultipartFormDataContent { { new StringContent("x"), "notes" } },
             _ => null!
         };
@@ -90,6 +92,32 @@ public sealed class SharingAndDocumentEndpointTests : IAsyncLifetime
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         await _host.Sender.Received(1).Send(
             Arg.Is<CreateShareTokenCommand>(c => c.PatientId == _patientId && c.Scopes.SequenceEqual(new[] { "Allergies", "Vitals" })),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task The_owner_creating_a_share_token_passes_the_chosen_redemption_limit()
+    {
+        var content = JsonContent.Create(new { scopes = new[] { "Allergies" }, maxRedemptions = 3 });
+
+        var response = await _host.Client.SendAsync(Build("POST", "share-tokens", Owner, content));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        await _host.Sender.Received(1).Send(
+            Arg.Is<CreateShareTokenCommand>(c => c.PatientId == _patientId && c.MaxRedemptions == 3), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task The_owner_creating_a_share_code_reaches_the_command_with_the_requested_scopes()
+    {
+        var content = JsonContent.Create(new { scopes = new[] { "Allergies", "Vitals" }, purpose = "Consultation" });
+
+        var response = await _host.Client.SendAsync(Build("POST", "share-codes", Owner, content));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        await _host.Sender.Received(1).Send(
+            Arg.Is<CreateShareCodeCommand>(c =>
+                c.PatientId == _patientId && c.Purpose == "Consultation" && c.Scopes.SequenceEqual(new[] { "Allergies", "Vitals" })),
             Arg.Any<CancellationToken>());
     }
 

@@ -13,6 +13,7 @@ public sealed class DocumentNumbers
 {
     public const string Receipt = "OR";
     public const string Invoice = "INV";
+    public const string Refund = "RF";
 
     private readonly IBillingDbContext _db;
 

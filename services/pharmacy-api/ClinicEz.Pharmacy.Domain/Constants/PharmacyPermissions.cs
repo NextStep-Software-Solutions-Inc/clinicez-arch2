@@ -28,19 +28,6 @@ public static class PharmacyPermissions
     public const string StaffRead = "staff:read";
     public const string StaffManage = "staff:manage";
 
-    /// <summary>
-    /// Permission set granted to trusted internal services (authenticated by the shared internal key), e.g. clinic-api
-    /// server-side proxying GAMOT operations. Deliberately limited to GAMOT: never staff, auth, inventory or prescriptions.
-    /// </summary>
-    public static readonly IReadOnlyList<string> InternalService = new List<string>
-    {
-        GamotRead,
-        GamotValidate,
-        GamotGenerate,
-        GamotDispense,
-        GamotReverse
-    }.AsReadOnly();
-
     public static readonly IReadOnlyList<string> All = new List<string>
     {
         InventoryRead,

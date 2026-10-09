@@ -1,15 +1,20 @@
 import { Platform } from 'react-native';
 import { ensureApiPrefix } from '@shared/safe';
+import { getDeviceItem, setDeviceItem } from '../utils/deviceStorage';
+import { normalizeServerUrl } from './serverUrl';
 
 /**
- * Where the laboratory API lives. Resolution order:
+ * Where the laboratory API lives. Resolution order on the web:
  *  1. `/config.json` published next to the web build at run time (`EXPO_PUBLIC_LAB_API_URL`),
  *  2. the build-time `EXPO_PUBLIC_LAB_API_URL`,
  *  3. local development: the page's own host on the dev port 5245,
  *  4. otherwise the page's own origin (an ingress that proxies `/api`).
  * The value `/` explicitly means "same origin as the page".
+ * On a phone/tablet the server address is entered once on the connection screen and saved on the device
+ * (falling back to the build-time `EXPO_PUBLIC_LAB_API_URL`); there is no localhost fallback.
  */
 const LAB_API_URL_KEY = 'EXPO_PUBLIC_LAB_API_URL';
+const SERVER_URL_KEY = 'clinicez.lab.serverUrl';
 const DEV_PORT = 5245;
 
 let runtimeUrl: string | null = null;
@@ -54,11 +59,22 @@ export async function loadRuntimeConfig(): Promise<void> {
   }
 }
 
+/** The server a phone/tablet talks to: the address entered on the connection screen, else the build-time one. */
+function nativeServerUrl(): string | null {
+  return getStoredServerUrl() ?? normalizeServerUrl(runtimeUrl ?? readUrl(process.env.EXPO_PUBLIC_LAB_API_URL));
+}
+
 /** Base URL of the API including the `/api/v1` prefix. Resolved on every call, so it reflects `loadRuntimeConfig`. */
 export function getLabApiBaseUrl(): string {
+  if (isNative) {
+    // A phone/tablet has no page origin, so there is no localhost/same-origin fallback.
+    const server = nativeServerUrl();
+    if (!server) throw new Error('The laboratory server address is not configured.');
+    return ensureApiPrefix(server);
+  }
+
   const page = pageLocation();
   const configured = runtimeUrl ?? readUrl(process.env.EXPO_PUBLIC_LAB_API_URL);
-
   if (configured === '/') {
     return ensureApiPrefix(page?.origin ?? `http://localhost:${DEV_PORT}`);
   }
@@ -66,4 +82,18 @@ export function getLabApiBaseUrl(): string {
   if (page && isLocalHost(page.hostname)) return ensureApiPrefix(`${page.protocol}//${page.hostname}:${DEV_PORT}`);
   if (page) return ensureApiPrefix(page.origin);
   return ensureApiPrefix(`http://localhost:${DEV_PORT}`);
+}
+
+/** The server address saved on this device (native only), or `null` when none was entered yet. */
+export function getStoredServerUrl(): string | null {
+  return normalizeServerUrl(getDeviceItem(SERVER_URL_KEY));
+}
+
+export function setStoredServerUrl(url: string | null): void {
+  setDeviceItem(SERVER_URL_KEY, url);
+}
+
+/** Web always knows its server (config.json / same origin); a native device needs a saved or build-time address. */
+export function isServerConfigured(): boolean {
+  return !isNative || nativeServerUrl() !== null;
 }

@@ -28,6 +28,11 @@ import {
 import { createBookingDraft as apiCreateDraft, submitBookingDraft as apiSubmitDraft } from '../api/bookingApi';
 import { ApiError } from '../api/apiClient';
 import { localMembershipStatus } from './membershipStatus';
+import {
+    parseShareSections,
+    serializeShareSections,
+    type BookingShareSection,
+} from '../sharing/bookingSections';
 
 import {
     AppointmentLineupItem,
@@ -1251,6 +1256,7 @@ export async function getBookingDraft(patientId: string, clinicId: string): Prom
         reason: row.reason ?? null,
         notes: row.notes ?? null,
         shareFields: parseJsonArray<ShareableFieldKey>(String(row.shareFieldsJson ?? '[]'), []),
+        shareSections: parseShareSections(row.shareSectionsJson),
         attachedFileIds: parseJsonArray<string>(String(row.attachedFileIdsJson ?? '[]'), []),
         status: (row.status as 'draft' | 'ready') ?? 'draft',
     };
@@ -1282,6 +1288,7 @@ export async function saveBookingDraft(
         reason: input.reason,
         notes: input.notes ?? null,
         shareFieldsJson: serializeShareFields(input.shareFields),
+        shareSectionsJson: serializeShareSections(input.shareSections),
         attachedFileIdsJson: JSON.stringify(input.attachedFileIds ?? []),
         status: input.preferredDate && input.preferredTime && input.reason ? ('ready' as const) : ('draft' as const),
         createdAt: existing.length > 0 ? existing[0].createdAt : timestamp,
@@ -1300,6 +1307,7 @@ export async function saveBookingDraft(
         reason: row.reason,
         notes: row.notes,
         shareFields: input.shareFields,
+        shareSections: parseShareSections(row.shareSectionsJson),
         attachedFileIds: input.attachedFileIds || [],
         status: row.status,
     };
@@ -1332,6 +1340,7 @@ export async function listBookingDrafts(patientId: string): Promise<BookingDraft
         reason: row.reason ?? null,
         notes: row.notes ?? null,
         shareFields: parseJsonArray<ShareableFieldKey>(String(row.shareFieldsJson ?? '[]'), []),
+        shareSections: parseShareSections(row.shareSectionsJson),
         attachedFileIds: parseJsonArray<string>(String(row.attachedFileIdsJson ?? '[]'), []),
         status: (row.status as 'draft' | 'ready') ?? 'draft',
     }));
@@ -1450,6 +1459,7 @@ export async function createBookingDraftOnline(
         reason?: string | null;
         notes?: string | null;
         shareFieldsJson: string;
+        shareSections?: BookingShareSection[];
         attachedFileIdsJson?: string;
     },
 ): Promise<string> {

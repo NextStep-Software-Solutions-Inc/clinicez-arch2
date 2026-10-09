@@ -13,6 +13,7 @@ using ClinicEz.Portal.Application.Features.Billing;
 using ClinicEz.Portal.Application.Features.Entitlements;
 using ClinicEz.Portal.Application.Features.Finance;
 using ClinicEz.Portal.Application.Features.Licensing;
+using ClinicEz.Portal.Application.Features.PhilHealth;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using ClinicEz.Portal.Application.Features.Hub;
 using ClinicEz.Portal.Application.Features.Notifications;
@@ -151,7 +152,14 @@ public static class DependencyInjection
             .Handle<FacilityHeartbeatPayload, FacilityHeartbeatHandler>(InteropTypes.FacilityHeartbeat)
             .Handle<BillingInvoicePaidPayload, BillingInvoicePaidHandler>(InteropTypes.BillingInvoicePaid)
             .Handle<BillingInvoiceVoidedPayload, BillingInvoiceVoidedHandler>(InteropTypes.BillingInvoiceVoided)
-            .Handle<NotificationEmailRequestedPayload, NotificationEmailRequestedHandler>(InteropTypes.NotificationEmailRequested));
+            .Handle<NotificationEmailRequestedPayload, NotificationEmailRequestedHandler>(InteropTypes.NotificationEmailRequested)
+            .Respond<PhilHealthConfigRequestedPayload, PhilHealthConfigRespondedPayload, PhilHealthConfigRequestedResponder>(
+                InteropTypes.PhilHealthConfigRequested, InteropTypes.PhilHealthConfigResponded)
+            .Respond<PhilHealthConfigPayload, PhilHealthConfigUpsertRespondedPayload, PhilHealthConfigUpsertRequestedResponder>(
+                InteropTypes.PhilHealthConfigUpsertRequested, InteropTypes.PhilHealthConfigUpsertResponded));
+
+        // The PhilHealth proxy asks the portal for the credentials it holds; the key ring protects them at rest.
+        services.AddSingleton<IPhilHealthSecretProtector, ClinicEz.Portal.Infrastructure.PhilHealth.PhilHealthSecretProtector>();
 
         // Hub directory feed and onboarding
         services.AddOptions<HubOptions>().Bind(configuration.GetSection(HubOptions.Section));

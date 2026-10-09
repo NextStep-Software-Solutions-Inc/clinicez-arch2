@@ -1,284 +1,140 @@
 using System;
-using System.Collections.Generic;
-using System.Net.Http;
-using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
-using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Clinic.Infrastructure.Messaging;
 using ClinicEz.Shared.Common;
-using Microsoft.Extensions.Configuration;
+using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Requests;
+using ClinicEz.Shared.Interoperability;
 using Microsoft.Extensions.Logging;
 
 namespace ClinicEz.Clinic.Infrastructure.Services;
 
+/// <summary>
+/// Talks to the PhilHealth proxy through the interop hub (<c>philhealth.request</c>, answered with
+/// <c>philhealth.response</c>); there is no direct HTTP call to it. The proxy acts for the facility named in the signed
+/// envelope sender, so no tenant or facility id travels in the request. The proxy's endpoint result comes back as the
+/// <see cref="ApiResponse{T}"/> document it would have returned over HTTP; an unreachable or silent proxy becomes a failed
+/// response with a clear message.
+/// </summary>
 public sealed class PhilHealthProxyClient : IPhilHealthProxyClient
 {
-    private readonly HttpClient _httpClient;
-    private readonly ILogger<PhilHealthProxyClient> _logger;
-    private readonly IClinicContext? _clinicContext;
-    private readonly string _baseUrl;
+    /// <summary>SOAP calls to PhilHealth can be slow, so this is longer than the hub's default request timeout.</summary>
+    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(60);
+
     private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
     {
         PropertyNameCaseInsensitive = true
     }.UseStrictStringEnums();
 
+    private readonly IInteropRequestClient _requests;
+    private readonly IClinicIdentityProvider _identity;
+    private readonly ILogger<PhilHealthProxyClient> _logger;
+
     public PhilHealthProxyClient(
-        HttpClient httpClient,
-        IConfiguration configuration,
-        ILogger<PhilHealthProxyClient> logger,
-        IClinicContext? clinicContext = null)
+        IInteropRequestClient requests,
+        IClinicIdentityProvider identity,
+        ILogger<PhilHealthProxyClient> logger)
     {
-        _httpClient = httpClient;
+        _requests = requests;
+        _identity = identity;
         _logger = logger;
-        _clinicContext = clinicContext;
-        _baseUrl = (configuration["PhilHealthProxy:BaseUrl"] ?? "http://localhost:5025").TrimEnd('/');
     }
 
-    private HttpRequestMessage CreateRequest(HttpMethod method, string url, object? jsonBody = null)
+    private async Task<ApiResponse<T>> SendAsync<T>(string operation, object? body, string? argument, CancellationToken ct)
     {
-        var request = new HttpRequestMessage(method, url);
-        if (jsonBody != null)
+        var clinic = await _identity.GetAsync(ct);
+        if (clinic is null)
         {
-            request.Content = JsonContent.Create(jsonBody, options: JsonOptions);
+            return ApiResponse<T>.Fail("This clinic has not been provisioned on this server, so PhilHealth cannot be reached.");
         }
 
-        if (_clinicContext != null)
+        var request = new PhilHealthRequestPayload
         {
-            if (!string.IsNullOrWhiteSpace(_clinicContext.TenantId))
-            {
-                request.Headers.TryAddWithoutValidation("X-Tenant-Id", _clinicContext.TenantId);
-            }
-            if (_clinicContext.BranchId.HasValue && _clinicContext.BranchId.Value != Guid.Empty)
-            {
-                request.Headers.TryAddWithoutValidation("X-Branch-Id", _clinicContext.BranchId.Value.ToString());
-            }
-            if (_clinicContext.ClinicId != Guid.Empty)
-            {
-                request.Headers.TryAddWithoutValidation("X-Facility-Id", _clinicContext.ClinicId.ToString());
-            }
+            Operation = operation,
+            Argument = argument,
+            Body = body is null ? null : JsonSerializer.Serialize(body, JsonOptions)
+        };
+
+        try
+        {
+            var reply = await _requests.RequestAsync<PhilHealthRequestPayload, PhilHealthResponsePayload>(
+                InteropTypes.PhilHealthRequest,
+                InteropTypes.PhilHealthResponse,
+                ClinicParties.Clinic(clinic.TenantId, clinic.ClinicId.ToString()),
+                Party.PhilHealth,
+                request,
+                Timeout,
+                ct);
+
+            return string.IsNullOrWhiteSpace(reply.Body)
+                ? ApiResponse<T>.Fail($"Empty response from the PhilHealth service (HTTP {reply.StatusCode})")
+                : JsonSerializer.Deserialize<ApiResponse<T>>(reply.Body, JsonOptions)
+                  ?? ApiResponse<T>.Fail($"Empty response from the PhilHealth service (HTTP {reply.StatusCode})");
         }
-
-        return request;
+        catch (InteropRequestTimeoutException ex)
+        {
+            _logger.LogWarning(ex, "[PhilHealthProxy] {Operation} timed out.", operation);
+            return ApiResponse<T>.Fail("The PhilHealth service did not answer in time. Try again in a moment.");
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "[PhilHealthProxy] {Operation} returned an unreadable response.", operation);
+            return ApiResponse<T>.Fail("The PhilHealth service returned a response that could not be read.");
+        }
     }
 
-    private async Task<ApiResponse<T>> SendAsync<T>(HttpRequestMessage request, CancellationToken ct)
-    {
-        var response = await _httpClient.SendAsync(request, ct);
-        var content = await response.Content.ReadFromJsonAsync<ApiResponse<T>>(JsonOptions, ct);
-        return content ?? ApiResponse<T>.Fail($"Empty response from proxy (HTTP {(int)response.StatusCode})");
-    }
-
-    public async Task<ApiResponse<YakapValidationProxyResponse>> ValidateReportAsync(
+    public Task<ApiResponse<YakapValidationProxyResponse>> ValidateReportAsync(
         GenerateAndValidateReportProxyRequest request,
-        CancellationToken ct = default)
-    {
-        try
-        {
-            var url = $"{_baseUrl}/api/yakap/reports/validate";
-            _logger.LogInformation("[PhilHealthProxy] Calling validate report: {Url}", url);
+        CancellationToken ct = default) =>
+        SendAsync<YakapValidationProxyResponse>(PhilHealthOperations.YakapReportValidate, request, null, ct);
 
-            using var req = CreateRequest(HttpMethod.Post, url, request);
-            return await SendAsync<YakapValidationProxyResponse>(req, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "[PhilHealthProxy] Error calling ValidateReportAsync");
-            return ApiResponse<YakapValidationProxyResponse>.Fail(ex.Message);
-        }
-    }
-
-    public async Task<ApiResponse<YakapSubmissionProxyResponse>> SubmitReportAsync(
+    public Task<ApiResponse<YakapSubmissionProxyResponse>> SubmitReportAsync(
         GenerateAndSubmitReportProxyRequest request,
-        CancellationToken ct = default)
-    {
-        try
-        {
-            var url = $"{_baseUrl}/api/yakap/reports/submit";
-            _logger.LogInformation("[PhilHealthProxy] Calling submit report: {Url}", url);
+        CancellationToken ct = default) =>
+        SendAsync<YakapSubmissionProxyResponse>(PhilHealthOperations.YakapReportSubmit, request, null, ct);
 
-            using var req = CreateRequest(HttpMethod.Post, url, request);
-            return await SendAsync<YakapSubmissionProxyResponse>(req, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "[PhilHealthProxy] Error calling SubmitReportAsync");
-            return ApiResponse<YakapSubmissionProxyResponse>.Fail(ex.Message);
-        }
-    }
-
-    public async Task<ApiResponse<YakapMasterlistProxyResponse>> ExtractMasterlistAsync(
+    public Task<ApiResponse<YakapMasterlistProxyResponse>> ExtractMasterlistAsync(
         ExtractMasterlistProxyRequest request,
-        CancellationToken ct = default)
-    {
-        try
-        {
-            var url = $"{_baseUrl}/api/yakap/masterlist/extract";
-            _logger.LogInformation("[PhilHealthProxy] Calling extract masterlist: {Url}", url);
+        CancellationToken ct = default) =>
+        SendAsync<YakapMasterlistProxyResponse>(PhilHealthOperations.YakapMasterlistExtract, request, null, ct);
 
-            using var req = CreateRequest(HttpMethod.Post, url, request);
-            return await SendAsync<YakapMasterlistProxyResponse>(req, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "[PhilHealthProxy] Error calling ExtractMasterlistAsync");
-            return ApiResponse<YakapMasterlistProxyResponse>.Fail(ex.Message);
-        }
-    }
-
-    public async Task<ApiResponse<bool>> ValidatePinAsync(
+    public Task<ApiResponse<bool>> ValidatePinAsync(
         string pin,
-        CancellationToken ct = default)
-    {
-        try
-        {
-            var url = $"{_baseUrl}/api/yakap/pin/{Uri.EscapeDataString(pin)}/validate";
-            using var req = CreateRequest(HttpMethod.Get, url);
-            return await SendAsync<bool>(req, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "[PhilHealthProxy] Error calling ValidatePinAsync");
-            return ApiResponse<bool>.Fail(ex.Message);
-        }
-    }
+        CancellationToken ct = default) =>
+        SendAsync<bool>(PhilHealthOperations.YakapPinValidate, null, pin, ct);
 
-    public async Task<ApiResponse<SoapSimulationReportDto>> RunSoapSimulationAsync(
+    public Task<ApiResponse<SoapSimulationReportDto>> RunSoapSimulationAsync(
         RunSoapSimulationProxyRequest request,
-        CancellationToken ct = default)
-    {
-        try
-        {
-            var url = $"{_baseUrl}/api/soap-sandbox/run-e2e";
-            _logger.LogInformation("[PhilHealthProxy] Calling run SOAP sandbox simulation: {Url}", url);
+        CancellationToken ct = default) =>
+        SendAsync<SoapSimulationReportDto>(PhilHealthOperations.SoapSandboxRun, request, null, ct);
 
-            using var req = CreateRequest(HttpMethod.Post, url, request);
-            return await SendAsync<SoapSimulationReportDto>(req, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "[PhilHealthProxy] Error calling RunSoapSimulationAsync");
-            return ApiResponse<SoapSimulationReportDto>.Fail(ex.Message);
-        }
-    }
+    public Task<ApiResponse<SoapSandboxStatusDto>> GetSoapSandboxStatusAsync(
+        CancellationToken ct = default) =>
+        SendAsync<SoapSandboxStatusDto>(PhilHealthOperations.SoapSandboxStatus, null, null, ct);
 
-    public async Task<ApiResponse<SoapSandboxStatusDto>> GetSoapSandboxStatusAsync(
-        CancellationToken ct = default)
-    {
-        try
-        {
-            var url = $"{_baseUrl}/api/soap-sandbox/status";
-            using var req = CreateRequest(HttpMethod.Get, url);
-            return await SendAsync<SoapSandboxStatusDto>(req, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "[PhilHealthProxy] Error calling GetSoapSandboxStatusAsync");
-            return ApiResponse<SoapSandboxStatusDto>.Fail(ex.Message);
-        }
-    }
-
-    public async Task<ApiResponse<SoapSandboxStatusDto>> SetSoapSandboxScenarioAsync(
+    public Task<ApiResponse<SoapSandboxStatusDto>> SetSoapSandboxScenarioAsync(
         SetSimulationScenarioRequest request,
-        CancellationToken ct = default)
-    {
-        try
-        {
-            var url = $"{_baseUrl}/api/soap-sandbox/scenario";
-            using var req = CreateRequest(HttpMethod.Post, url, request);
-            return await SendAsync<SoapSandboxStatusDto>(req, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "[PhilHealthProxy] Error calling SetSoapSandboxScenarioAsync");
-            return ApiResponse<SoapSandboxStatusDto>.Fail(ex.Message);
-        }
-    }
+        CancellationToken ct = default) =>
+        SendAsync<SoapSandboxStatusDto>(PhilHealthOperations.SoapSandboxScenario, request, null, ct);
 
-    public async Task<ApiResponse<SoapSandboxStatusDto>> ResetSoapSandboxAsync(
-        CancellationToken ct = default)
-    {
-        try
-        {
-            var url = $"{_baseUrl}/api/soap-sandbox/reset";
-            using var req = CreateRequest(HttpMethod.Post, url);
-            return await SendAsync<SoapSandboxStatusDto>(req, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "[PhilHealthProxy] Error calling ResetSoapSandboxAsync");
-            return ApiResponse<SoapSandboxStatusDto>.Fail(ex.Message);
-        }
-    }
+    public Task<ApiResponse<SoapSandboxStatusDto>> ResetSoapSandboxAsync(
+        CancellationToken ct = default) =>
+        SendAsync<SoapSandboxStatusDto>(PhilHealthOperations.SoapSandboxReset, null, null, ct);
 
-    public async Task<ApiResponse<PhilHealthConfigStatusResponse>> ConfigureTenantCredentialsAsync(
+    public Task<ApiResponse<PhilHealthConfigStatusResponse>> ConfigureTenantCredentialsAsync(
         ConfigurePhilHealthCredentialsProxyRequest request,
-        CancellationToken ct = default)
-    {
-        try
-        {
-            var url = $"{_baseUrl}/api/tenants/configure";
-            _logger.LogInformation("[PhilHealthProxy] Calling configure tenant credentials: {Url}", url);
+        CancellationToken ct = default) =>
+        SendAsync<PhilHealthConfigStatusResponse>(PhilHealthOperations.TenantConfigure, request, null, ct);
 
-            using var req = CreateRequest(HttpMethod.Post, url, request);
-            return await SendAsync<PhilHealthConfigStatusResponse>(req, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "[PhilHealthProxy] Error calling ConfigureTenantCredentialsAsync");
-            return ApiResponse<PhilHealthConfigStatusResponse>.Fail(ex.Message);
-        }
-    }
+    public Task<ApiResponse<PhilHealthConfigStatusResponse>> GetTenantConfigurationStatusAsync(
+        CancellationToken ct = default) =>
+        SendAsync<PhilHealthConfigStatusResponse>(PhilHealthOperations.TenantStatus, null, null, ct);
 
-    public async Task<ApiResponse<PhilHealthConfigStatusResponse>> GetTenantConfigurationStatusAsync(
-        Guid? tenantId = null,
-        CancellationToken ct = default)
-    {
-        try
-        {
-            var effectiveTenantId = tenantId.HasValue && tenantId.Value != Guid.Empty
-                ? tenantId.Value.ToString()
-                : _clinicContext?.TenantId;
-
-            var url = !string.IsNullOrWhiteSpace(effectiveTenantId)
-                ? $"{_baseUrl}/api/tenants/status?tenantId={effectiveTenantId}"
-                : $"{_baseUrl}/api/tenants/status";
-
-            using var req = CreateRequest(HttpMethod.Get, url);
-            return await SendAsync<PhilHealthConfigStatusResponse>(req, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "[PhilHealthProxy] Error calling GetTenantConfigurationStatusAsync");
-            return ApiResponse<PhilHealthConfigStatusResponse>.Fail(ex.Message);
-        }
-    }
-
-    public async Task<ApiResponse<string>> TestTenantConnectionAsync(
-        Guid? tenantId = null,
-        CancellationToken ct = default)
-    {
-        try
-        {
-            var effectiveTenantId = tenantId.HasValue && tenantId.Value != Guid.Empty
-                ? tenantId.Value.ToString()
-                : _clinicContext?.TenantId;
-
-            var url = !string.IsNullOrWhiteSpace(effectiveTenantId)
-                ? $"{_baseUrl}/api/tenants/test-connection?tenantId={effectiveTenantId}"
-                : $"{_baseUrl}/api/tenants/test-connection";
-
-            using var req = CreateRequest(HttpMethod.Post, url);
-            return await SendAsync<string>(req, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "[PhilHealthProxy] Error calling TestTenantConnectionAsync");
-            return ApiResponse<string>.Fail(ex.Message);
-        }
-    }
+    public Task<ApiResponse<string>> TestTenantConnectionAsync(
+        CancellationToken ct = default) =>
+        SendAsync<string>(PhilHealthOperations.TenantTestConnection, null, null, ct);
 }
-
-

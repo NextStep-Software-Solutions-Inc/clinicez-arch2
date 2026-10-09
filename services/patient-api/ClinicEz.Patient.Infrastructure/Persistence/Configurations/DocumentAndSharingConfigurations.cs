@@ -68,7 +68,44 @@ public sealed class ShareTokenUseConfiguration : IEntityTypeConfiguration<ShareT
         builder.HasKey(u => u.Id);
         builder.ConfigureAudit();
         builder.Property(u => u.TokenId).HasMaxLength(64).IsRequired();
-        builder.HasIndex(u => u.TokenId).IsUnique();
+
+        // The unique (token, sequence) pair is what stops two concurrent redemptions from both taking the last slot.
+        builder.HasIndex(u => new { u.TokenId, u.Sequence }).IsUnique();
+        builder.HasIndex(u => new { u.TokenId, u.MessageId }).IsUnique();
+    }
+}
+
+public sealed class ShareCodeConfiguration : IEntityTypeConfiguration<ShareCode>
+{
+    public void Configure(EntityTypeBuilder<ShareCode> builder)
+    {
+        builder.HasKey(c => c.Id);
+        builder.ConfigureAudit();
+        builder.Property(c => c.TokenId).HasMaxLength(64).IsRequired();
+        builder.Property(c => c.CodeHash).HasMaxLength(64).IsRequired();
+        builder.Property(c => c.Purpose).HasMaxLength(200).IsRequired();
+        builder.Property(c => c.Scopes).HasConversion<string>().HasMaxLength(200);
+
+        builder.HasOne(c => c.Patient)
+            .WithMany()
+            .HasForeignKey(c => c.PatientId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasIndex(c => c.TokenId).IsUnique();
+        builder.HasIndex(c => new { c.PatientId, c.CodeHash }).IsUnique();
+    }
+}
+
+public sealed class ShareCodeFailureConfiguration : IEntityTypeConfiguration<ShareCodeFailure>
+{
+    public void Configure(EntityTypeBuilder<ShareCodeFailure> builder)
+    {
+        builder.HasKey(f => f.Id);
+        builder.ConfigureAudit();
+        builder.Property(f => f.Actor).HasMaxLength(300).IsRequired();
+
+        builder.HasIndex(f => new { f.Actor, f.CreatedAt });
+        builder.HasIndex(f => new { f.PatientId, f.CreatedAt });
     }
 }
 

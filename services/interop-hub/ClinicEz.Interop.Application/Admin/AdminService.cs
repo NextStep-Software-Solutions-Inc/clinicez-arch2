@@ -3,6 +3,7 @@ using ClinicEz.Interop.Application.Abstractions;
 using ClinicEz.Interop.Application.Directory;
 using ClinicEz.Interop.Application.Security;
 using ClinicEz.Interop.Domain.Entities;
+using ClinicEz.Shared.Interop;
 using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Security;
 using Microsoft.Extensions.Options;
@@ -11,7 +12,9 @@ namespace ClinicEz.Interop.Application.Admin;
 
 /// <summary>
 /// Backs <see cref="IHubAdminClient"/> (ControlPlane only): onboard cells and issue, rotate and revoke client credentials.
-/// Secrets are generated here, returned exactly once and stored only as a salted PBKDF2 hash. Each client also gets an ECDSA P-256\n/// signing key pair for envelope signatures: the hub keeps the public key and returns the private key exactly once (or registers a\n/// public key the caller supplies at creation).
+/// Secrets are generated here, returned exactly once and stored only as a salted PBKDF2 hash. Each client also gets an ECDSA P-256
+/// signing key pair for envelope signatures: the hub keeps the public key and returns the private key exactly once (or registers a
+/// public key the caller supplies at creation).
 /// </summary>
 public sealed class AdminService(
     IClientStore clients,
@@ -33,8 +36,14 @@ public sealed class AdminService(
         if (!MailboxNames.IsValidService(request.Service))
             throw HubRequestException.BadRequest("Service must be lowercase letters, digits or '-' (max 32) and not reserved.");
 
+        if ((request.Kind == HubClientKind.PlatformService) != InteropServices.IsPlatformService(request.Service))
+            throw HubRequestException.BadRequest("PlatformService clients serve exactly the platform services (" + string.Join(", ", InteropServices.PlatformServices) + "), and only they may use those names.");
+
         var cell = await directoryStore.GetCellAsync(cellId, ct) ?? throw HubRequestException.NotFound($"Cell '{cellId}' does not exist.");
         if (!cell.Active) throw HubRequestException.Conflict($"Cell '{cellId}' is inactive.");
+
+        if (request.Kind == HubClientKind.PlatformService && cell.Kind != CellKind.Cloud)
+            throw HubRequestException.BadRequest("Platform services belong to the cloud cell.");
 
         var edgeClient = request.Kind == HubClientKind.EdgeCell;
         if (edgeClient != (cell.Kind == CellKind.Edge))

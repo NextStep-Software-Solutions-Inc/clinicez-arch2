@@ -95,6 +95,7 @@ public sealed class HubApp : IAsyncDisposable
         new("pharmacy", "cloud", "pharmacy", HubClientKind.CloudService),
         new("billing", "cloud", "billing", HubClientKind.CloudService),
         new("patient", "cloud", "patient", HubClientKind.PatientPlane),
+        new("philhealth", "cloud", "philhealth", HubClientKind.PlatformService),
         new("edge-hub", W.EdgeCell, "cell", HubClientKind.EdgeCell)
     ];
 

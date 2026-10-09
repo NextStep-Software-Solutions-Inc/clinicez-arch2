@@ -35,6 +35,7 @@ Every endpoint except `/health*` needs `X-Hub-Client: <clientId>` and `X-Hub-Sec
 | `EdgeCell` | Facilities of its own (edge) cell. The local hub's upstream client has service `cell`. | Its own service mailbox; `/v1/cell-inbox` |
 | `ControlPlane` (portal-api) | The portal or the hub; may address the hub itself (`directory.*`) and call the admin API | Its service mailbox |
 | `PatientPlane` (patient-api) | Patients, or `ControlPlane` with service `patient` (it relays on their behalf) | Its service mailbox; sees only Public facilities in the directory |
+| `PlatformService` (philhealth-proxy, cloud cell only) | Only its own service party: `ControlPlane` with service `philhealth` (`Party.PhilHealth`) | Its service mailbox `{cloud}:philhealth`; no directory |
 
 Secrets are stored as salted PBKDF2-SHA256 hashes. A client secret is shown once, at creation or rotation.
 
@@ -69,6 +70,7 @@ The control plane keeps the directory current by sending envelopes addressed to 
 - Control-plane target (`Party{ControlPlane, Service}`): `portal` (the default) and `patient` may be addressed by every client (a facility asking the patient plane to redeem a share; the portal feeding patient-api) and land in `{cloud}:portal` / `{cloud}:patient`. `clinic`, `laboratory`, `pharmacy`, `organization` and `billing` (cloud-cell services) may be addressed only by `ControlPlane` and `PatientPlane` clients; facility clients are rejected. Any other service is rejected. `hub` is the directory feed (control plane only).
 - Same tenant: always allowed.
 - Cross-tenant: allowed as a reply on a correlation the target started (even if the link was revoked since), or when an `Active` link from the sender to the target covers the message kind and the target is not `Private`. Scopes: `lab.order.*` LabOrder, `rx.*` Prescription, `*referral*` Referral, `lab.result.*` Result (a result also flows back along the link the requester holds). Other types cross tenants only as a reply.
+- Platform service `philhealth` (the PhilHealth proxy) may be addressed by every client, but `PlatformMessageRules` limits what: `philhealth.request` only from a facility to it, `philhealth.response` only from it to a facility, `philhealth.config.requested` / `philhealth.config.upsert.requested` only from it to the portal, `philhealth.config.responded` / `philhealth.config.upsert.responded` only from the portal to it; nothing else may be addressed to it and it may send nothing else. Create its client with kind `PlatformService` (admin API, or `Hub__Bootstrap__Clients__N__Kind=PlatformService` with `Service=philhealth`). Details: [`docs/architecture/interop-hub.md`](../../docs/architecture/interop-hub.md#platform-services).
 - `ControlPlane` and `PatientPlane` senders are trusted relays and are not link-checked.
 - Limits: `Hub:MaxEnvelopeBytes` per envelope, expired envelopes rejected, delivery TTL `Hub:MessageTtlDays`.
 

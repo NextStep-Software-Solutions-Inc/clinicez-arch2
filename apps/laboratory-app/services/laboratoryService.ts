@@ -278,6 +278,10 @@ export interface IngestFeedResult {
   requisition?: LabRequisitionItem;
 }
 
+export interface AnalyzerCapabilities {
+  simulatorEnabled: boolean;
+}
+
 export interface SimulateAnalyzerResult {
   format: string;
   analyzerModel: string;
@@ -388,6 +392,11 @@ export const laboratoryService = {
       protocolHint,
       medTechName
     });
+  },
+
+  /** What the analyzer integration offers; the simulator is only available in development setups. */
+  async getAnalyzerCapabilities() {
+    return labApiClient.get<AnalyzerCapabilities>('/analyzers/capabilities');
   },
 
   async simulateAnalyzer(accessionNumber: string, analyzerModel = 'Mindray BC-5150', format = 'ASTM') {
