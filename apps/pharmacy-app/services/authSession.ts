@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { ApiError, extractApiError, resolveTenantContext, type ApiResponse } from '@shared/safe';
-import { PHARMACY_API_BASE_URL } from './apiBaseUrl';
+import { getPharmacyApiBaseUrl } from './runtimeConfig';
 
 /**
  * Facility-local pharmacy session (no identity provider, no internet requirement).
@@ -69,7 +69,7 @@ export function tenantHeaders(): Record<string, string> {
 
 async function postAuth<T>(path: string, body: unknown): Promise<AuthResult<T>> {
   try {
-    const response = await axios.post<ApiResponse<T>>(`${PHARMACY_API_BASE_URL}${path}`, body, {
+    const response = await axios.post<ApiResponse<T>>(`${getPharmacyApiBaseUrl()}${path}`, body, {
       timeout: 15000,
       headers: { 'Content-Type': 'application/json', ...tenantHeaders() },
     });

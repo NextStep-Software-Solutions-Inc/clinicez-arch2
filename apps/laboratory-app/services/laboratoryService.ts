@@ -1,5 +1,6 @@
 import { labApiClient } from './apiClient';
 import { joinApiUrl } from '@shared/safe';
+import { getLabApiBaseUrl } from './runtimeConfig';
 
 export interface SpecimenItem {
   id: string;
@@ -424,13 +425,11 @@ export const laboratoryService = {
   },
 
   getReportPdfDownloadUrl(requisitionId: string) {
-    const baseUrl = process.env.EXPO_PUBLIC_LAB_API_URL ?? 'http://localhost:5245';
-    return joinApiUrl(baseUrl, `/reports/${requisitionId}/pdf`);
+    return joinApiUrl(getLabApiBaseUrl(), `/reports/${requisitionId}/pdf`);
   },
 
   getReportHtmlPreviewUrl(requisitionId: string) {
-    const baseUrl = process.env.EXPO_PUBLIC_LAB_API_URL ?? 'http://localhost:5245';
-    return joinApiUrl(baseUrl, `/reports/${requisitionId}/preview-html`);
+    return joinApiUrl(getLabApiBaseUrl(), `/reports/${requisitionId}/preview-html`);
   },
 
   // Scope 5: Facility Licensing & On-Premise Staff Roster

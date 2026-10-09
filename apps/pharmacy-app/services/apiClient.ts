@@ -1,6 +1,6 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { safeAwait, ApiResponse, ApiError, extractApiError } from '@shared/safe';
-import { PHARMACY_API_BASE_URL } from './apiBaseUrl';
+import { getPharmacyApiBaseUrl } from './runtimeConfig';
 import { getValidAccessToken, tenantHeaders } from './authSession';
 
 const API_PREFIX = '/api/v1';
@@ -10,7 +10,6 @@ export class PharmacyApiClient {
 
   constructor() {
     this.client = axios.create({
-      baseURL: PHARMACY_API_BASE_URL,
       timeout: 15000,
       headers: {
         'Content-Type': 'application/json',
@@ -18,6 +17,7 @@ export class PharmacyApiClient {
     });
 
     this.client.interceptors.request.use(async (config) => {
+      config.baseURL = getPharmacyApiBaseUrl();
       const token = await getValidAccessToken();
       if (token) {
         config.headers.set('Authorization', `Bearer ${token}`);

@@ -284,7 +284,6 @@ services:
       - "${LABORATORY_WEB_PORT:-8081}:80"
     environment:
       LABORATORY_API_UPSTREAM: http://laboratory-api:8080
-      EXPO_PUBLIC_PORTAL_URL: ${EXPO_PUBLIC_PORTAL_URL:-}
 
   pharmacy-web:
     image: ghcr.io/${GHCR_OWNER_REPO:?GHCR_OWNER_REPO must be set}/pharmacy-web:${IMAGE_TAG:-latest}
@@ -295,7 +294,6 @@ services:
       - "${PHARMACY_WEB_PORT:-8082}:80"
     environment:
       PHARMACY_API_UPSTREAM: http://pharmacy-api:8080
-      EXPO_PUBLIC_PORTAL_URL: ${EXPO_PUBLIC_PORTAL_URL:-}
 
   # The cashier counter (one counter across clinic + lab + pharmacy) talks to billing-api through the same-origin /api proxy
   # (image: apps/cashier-app/deploy/Dockerfile.web; its /config.json publishes EXPO_PUBLIC_BILLING_API_URL, default "/").
@@ -308,7 +306,6 @@ services:
       - "${CASHIER_WEB_PORT:-8083}:80"
     environment:
       BILLING_API_UPSTREAM: http://billing-api:8080
-      EXPO_PUBLIC_PORTAL_URL: ${EXPO_PUBLIC_PORTAL_URL:-}
 
 volumes:
   postgres-data:

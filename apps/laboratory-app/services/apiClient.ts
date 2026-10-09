@@ -1,30 +1,7 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
-import { safeAwait, ApiResponse, ApiError, extractApiError, ensureApiPrefix } from '@shared/safe';
+import { safeAwait, ApiResponse, ApiError, extractApiError } from '@shared/safe';
+import { getLabApiBaseUrl } from './runtimeConfig';
 
-const resolveDefaultLabBaseUrl = (fallbackPort: number = 5245): string => {
-  if (typeof window !== 'undefined' && window.location?.hostname) {
-    const hostname = window.location.hostname.toLowerCase();
-    const protocol = window.location.protocol || 'http:';
-
-    if (
-      hostname === 'localhost' ||
-      hostname.endsWith('.localhost') ||
-      hostname.endsWith('.lvh.me') ||
-      /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)
-    ) {
-      return `${protocol}//${hostname}:${fallbackPort}`;
-    }
-
-    // Default to same-origin for ingress reverse-proxy routing
-    return `${protocol}//${hostname}`;
-  }
-  return `http://localhost:${fallbackPort}`;
-};
-
-const BASE_URL = (
-  process.env.EXPO_PUBLIC_LAB_API_URL ??
-  resolveDefaultLabBaseUrl(5245)
-).replace(/\/+$/, '');
 const API_PREFIX = '/api/v1';
 
 export class LaboratoryApiClient {
@@ -32,11 +9,15 @@ export class LaboratoryApiClient {
 
   constructor() {
     this.client = axios.create({
-      baseURL: ensureApiPrefix(BASE_URL),
       timeout: 15000,
       headers: {
         'Content-Type': 'application/json',
       },
+    });
+
+    this.client.interceptors.request.use((config) => {
+      config.baseURL = getLabApiBaseUrl();
+      return config;
     });
   }
 
