@@ -49,6 +49,9 @@ public sealed class HubOptions
 
     public bool IsLocal => Mode == HubMode.Local;
 
+    /// <summary>Local mode with a cloud connection: forwarding, cell-inbox pull and directory sync run.</summary>
+    public bool UpstreamActive => IsLocal && Upstream.Enabled;
+
     /// <summary>Cell id of the mailboxes this hub hosts for facilities.</summary>
     public string? OwnCellId => IsLocal ? LocalCellId : CloudCellId;
 }
@@ -82,6 +85,12 @@ public sealed class BackgroundOptions
 
 public sealed class UpstreamOptions
 {
+    /// <summary>
+    /// Local mode only. False runs the hub air-gapped: nothing is forwarded, pulled or synced, and messages addressed beyond
+    /// the edge cell are rejected with the <c>upstream_disabled</c> reason. Url and credentials are then not required.
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+
     public string Url { get; set; } = string.Empty;
     public string ClientId { get; set; } = string.Empty;
     public string ClientSecret { get; set; } = string.Empty;

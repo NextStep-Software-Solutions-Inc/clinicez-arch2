@@ -1,0 +1,123 @@
+name: Publish Images
+
+# Builds every deployable image (service APIs, the interop hub, billing and the web apps) for linux/amd64 and linux/arm64
+# and pushes it to GHCR as ghcr.io/<owner>/<repo>/<name>. This is the pull/update channel for on-premise edge cells
+# (deploy/edge). The images carry no environment-specific configuration: everything is read from the container's
+# environment at start.
+#
+# Tags: the git tag for a release (v1.4.2 -> 1.4.2 and 1.4), `latest` for a stable release tag or a run on the default branch,
+# the short commit sha, and an optional extra tag. Images whose Dockerfile does not exist yet (for example a service that has
+# not landed) are skipped with a notice instead of failing the run.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Extra image tag (optional)'
+        required: false
+        type: string
+  workflow_call:
+    inputs:
+      tag:
+        description: 'Extra image tag (optional)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-images-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: clinic-api, dockerfile: services/clinic-api/Dockerfile, title: "Clinic EZ Clinic API" }
+          - { name: laboratory-api, dockerfile: services/laboratory-api/Dockerfile, title: "Clinic EZ Laboratory API" }
+          - { name: pharmacy-api, dockerfile: services/pharmacy-api/Dockerfile, title: "Clinic EZ Pharmacy API" }
+          - { name: organization-api, dockerfile: services/organization-api/Dockerfile, title: "Clinic EZ Organization API" }
+          - { name: patient-api, dockerfile: services/patient-api/Dockerfile, title: "Clinic EZ Patient API" }
+          - { name: portal-api, dockerfile: services/portal-api/Dockerfile, title: "Clinic EZ Portal API" }
+          - { name: billing-api, dockerfile: services/billing-api/Dockerfile, title: "Clinic EZ Billing API" }
+          - { name: philhealth-proxy, dockerfile: services/philhealth-proxy/Dockerfile, title: "Clinic EZ PhilHealth proxy" }
+          - { name: interop-hub, dockerfile: services/interop-hub/Dockerfile, title: "Clinic EZ Interop Hub" }
+          - { name: clinic-web, dockerfile: apps/clinic-app/deploy/Dockerfile.web, title: "Clinic EZ Clinic web app" }
+          - { name: laboratory-web, dockerfile: apps/laboratory-app/deploy/Dockerfile.web, title: "Clinic EZ Laboratory web app" }
+          - { name: pharmacy-web, dockerfile: apps/pharmacy-app/deploy/Dockerfile.web, title: "Clinic EZ Pharmacy web app" }
+          - { name: cashier-web, dockerfile: apps/cashier-app/deploy/Dockerfile.web, title: "Clinic EZ Cashier web app" }
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check that the Dockerfile exists
+        id: dockerfile
+        run: |
+          if [ -f "${{ matrix.dockerfile }}" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping ${{ matrix.name }}: ${{ matrix.dockerfile }} does not exist."
+          fi
+
+      - name: Compute image name
+        if: steps.dockerfile.outputs.exists == 'true'
+        id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}/${{ matrix.name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        if: steps.dockerfile.outputs.exists == 'true'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/amd64,linux/arm64
+
+      - name: Set up Docker Buildx
+        if: steps.dockerfile.outputs.exists == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: steps.dockerfile.outputs.exists == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        if: steps.dockerfile.outputs.exists == 'true'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) || (startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-')) }}
+            type=raw,value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
+          labels: |
+            org.opencontainers.image.title=${{ matrix.title }}
+            org.opencontainers.image.vendor=Clinic EZ
+
+      - name: Build and push
+        if: steps.dockerfile.outputs.exists == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}

@@ -24,9 +24,12 @@ services:
       - Clerk__SecretKey=${CLERK_SECRET_KEY}
       - Xendit__SecretKey=${XENDIT_SECRET_KEY}
       - Xendit__CallbackToken=${XENDIT_CALLBACK_TOKEN}
-      - RabbitMq__Host=${RABBITMQ_HOST:-rabbitmq}
-      - RabbitMq__Username=${RABBITMQ_USERNAME:-rabbit_admin_node}
-      - RabbitMq__Password=${RABBITMQ_PASSWORD}
+      # Interop hub (the cell hub this service's outbox ships to and its inbox polls). No built-in fallback credentials.
+      - Messaging__Transport=Hub
+      - Messaging__Service=portal
+      - Messaging__HubUrl=${MESSAGING_HUB_URL:?MESSAGING_HUB_URL must be set}
+      - Messaging__ClientId=${MESSAGING_CLIENT_ID:?MESSAGING_CLIENT_ID must be set}
+      - Messaging__ClientSecret=${MESSAGING_CLIENT_SECRET:?MESSAGING_CLIENT_SECRET must be set}
       # Hangfire dashboard Basic Auth password. Empty denies the dashboard to everyone (there is no default).
       - Hangfire__DashboardPassword=${HANGFIRE_DASHBOARD_PASSWORD:-}
       - Facility__BaseDomain=${BASE_DOMAIN:?BASE_DOMAIN must be set}
@@ -36,5 +39,7 @@ services:
 networks:
   data-network:
     external: true
+    name: ${DATA_NETWORK:-data-network}
   npm-default:
     external: true
+    name: ${NPM_NETWORK:-npm-default}

@@ -96,14 +96,24 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.PATIENT_FIREBASE_JSON }}
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
           IMAGE_TAG: ${{ env.IMAGE_TAG }}
-          RABBITMQ_PASSWORD: ${{ secrets.RABBITMQ_PASSWORD }}
+          MESSAGING_HUB_URL: ${{ vars.MESSAGING_HUB_URL || secrets.MESSAGING_HUB_URL }}
+          MESSAGING_CLIENT_ID: ${{ secrets.PATIENT_MESSAGING_CLIENT_ID }}
+          MESSAGING_CLIENT_SECRET: ${{ secrets.PATIENT_MESSAGING_CLIENT_SECRET }}
+          DATA_NETWORK: ${{ vars.DATA_NETWORK || 'data-network' }}
+          NPM_NETWORK: ${{ vars.NPM_NETWORK || 'npm-default' }}
           BASE_DOMAIN: ${{ secrets.BASE_DOMAIN || vars.BASE_DOMAIN }}
         run: |
           if [ -z "$BASE_DOMAIN" ]; then
             echo "::error::BASE_DOMAIN is not configured. Set it as a GitHub secret or variable (Settings -> Secrets and variables -> Actions)."
             exit 1
           fi
-          for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING REDIS_CONNECTION_STRING CLERK_AUTHORITY CLERK_AUDIENCE CLERK_WEBHOOK_SECRET R2_ACCOUNT_ID R2_BUCKET_NAME R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_PUBLIC_URL HANGFIRE_DASHBOARD_PASSWORD FIREBASE_SERVICE_ACCOUNT_JSON IMAGE_NAME IMAGE_TAG RABBITMQ_PASSWORD BASE_DOMAIN; do
+          for var in MESSAGING_HUB_URL MESSAGING_CLIENT_ID MESSAGING_CLIENT_SECRET; do
+            if [ -z "$(printenv $var)" ]; then
+              echo "::error::$var is not configured. Set the matching GitHub secret or variable (Settings -> Secrets and variables -> Actions)."
+              exit 1
+            fi
+          done
+          for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING REDIS_CONNECTION_STRING CLERK_AUTHORITY CLERK_AUDIENCE CLERK_WEBHOOK_SECRET R2_ACCOUNT_ID R2_BUCKET_NAME R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_PUBLIC_URL HANGFIRE_DASHBOARD_PASSWORD FIREBASE_SERVICE_ACCOUNT_JSON IMAGE_NAME IMAGE_TAG DATA_NETWORK NPM_NETWORK BASE_DOMAIN MESSAGING_HUB_URL MESSAGING_CLIENT_ID MESSAGING_CLIENT_SECRET; do
             echo "$var=$(printenv $var)" >> deploy/patient-api/.env
           done
 
@@ -154,8 +164,10 @@ jobs:
             cd "${{ vars.DEPLOY_DIR || env.DEPLOY_DIR }}"
 
             echo "==> Ensuring networks exist..."
-            docker network inspect npm-default >/dev/null 2>&1 || docker network create npm-default
-            docker network inspect data-network >/dev/null 2>&1 || docker network create data-network
+            DATA_NET=$(grep -E '^DATA_NETWORK=' .env 2>/dev/null | cut -d= -f2- | tr -d '\r"')
+            PROXY_NET=$(grep -E '^NPM_NETWORK=' .env 2>/dev/null | cut -d= -f2- | tr -d '\r"')
+            docker network inspect "${PROXY_NET:-npm-default}" >/dev/null 2>&1 || docker network create "${PROXY_NET:-npm-default}"
+            docker network inspect "${DATA_NET:-data-network}" >/dev/null 2>&1 || docker network create "${DATA_NET:-data-network}"
 
             echo "==> Loading Docker image..."
             docker load < patient-api.tar.gz

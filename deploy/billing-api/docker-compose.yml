@@ -1,0 +1,50 @@
+# docker-compose.yml
+# Deploy compose for the Billing (cashiering) API on a cell's server (Dev environment).
+#
+# billing-api is a PER-CELL service: run one per cell, next to that cell's local interop hub. It reaches the hub through
+# the interop SDK only (Messaging__*); there is no message broker to deploy. All secrets are injected via .env written
+# at deploy time by GitHub Actions. No host ports exposed; routed via npm-default (NPM) and connected to data-network.
+
+name: billing-api
+
+services:
+  billing-api:
+    image: ${IMAGE_NAME:-billing-api}:${IMAGE_TAG:-dev}
+    container_name: ${CONTAINER_NAME:-billing-api}
+    labels:
+      - "project=clinicez"
+      - "environment=dev"
+    expose:
+      - "8080"
+    networks:
+      - data-network
+      - npm-default
+    environment:
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
+      - ConnectionStrings__DefaultConnection=${CONNECTION_STRING:?CONNECTION_STRING must be set}
+      - DbSchema=${DB_SCHEMA:-billing}
+      # Interop hub (the cell hub this service's outbox ships to and its inbox polls). No built-in fallback credentials.
+      - Messaging__Transport=Hub
+      - Messaging__Service=billing
+      - Messaging__HubUrl=${MESSAGING_HUB_URL:?MESSAGING_HUB_URL must be set}
+      - Messaging__ClientId=${MESSAGING_CLIENT_ID:?MESSAGING_CLIENT_ID must be set}
+      - Messaging__ClientSecret=${MESSAGING_CLIENT_SECRET:?MESSAGING_CLIENT_SECRET must be set}
+      - Facility__BaseDomain=${BASE_DOMAIN:?BASE_DOMAIN must be set}
+      # Provisioning key: lets the portal create the first cashier admin (POST /api/v1/staff). Empty disables it.
+      - Internal__ApiKey=${INTERNAL_API_KEY:-}
+      - Jwt__SigningKey=${BILLING_JWT_SIGNING_KEY:-}
+      - Jwt__KeyDirectory=/app/keys
+    volumes:
+      - billing-api-keys:/app/keys
+    restart: unless-stopped
+
+volumes:
+  billing-api-keys:
+
+networks:
+  data-network:
+    external: true
+    name: ${DATA_NETWORK:-data-network}
+  npm-default:
+    external: true
+    name: ${NPM_NETWORK:-npm-default}

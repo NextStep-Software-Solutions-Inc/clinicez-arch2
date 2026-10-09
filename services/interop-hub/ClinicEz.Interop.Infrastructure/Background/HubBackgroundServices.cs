@@ -55,7 +55,7 @@ public sealed class OutboundForwarderService(IServiceScopeFactory scopes, IMailb
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var opt = options.Value;
-        if (!opt.IsLocal || !opt.Background.Enabled) return;
+        if (!opt.UpstreamActive || !opt.Background.Enabled) return;
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -86,7 +86,7 @@ public sealed class CellInboxPullerService(IServiceScopeFactory scopes, IOptions
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var opt = options.Value;
-        if (!opt.IsLocal || !opt.Background.Enabled) return;
+        if (!opt.UpstreamActive || !opt.Background.Enabled) return;
 
         var failures = 0;
         while (!stoppingToken.IsCancellationRequested)
@@ -118,7 +118,7 @@ public sealed class DirectorySyncService(IServiceScopeFactory scopes, IOptions<H
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var opt = options.Value;
-        if (!opt.IsLocal || !opt.Background.Enabled) return;
+        if (!opt.UpstreamActive || !opt.Background.Enabled) return;
 
         while (!stoppingToken.IsCancellationRequested)
         {

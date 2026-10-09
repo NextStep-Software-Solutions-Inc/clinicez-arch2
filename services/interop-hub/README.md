@@ -1,6 +1,6 @@
 # Clinic EZ Interop Hub
 
-The hub is the only way anything crosses a service or cell boundary in Clinic EZ. It replaces RabbitMQ/MassTransit: services exchange **`InteropEnvelope`** messages (see `packages/shared-dotnet/Interop`) through HTTPS mailboxes. It is outbound-only for everybody who calls it, so an on-premise site needs no inbound port.
+The hub is the only way anything crosses a service or cell boundary in Clinic EZ. It replaces the former message broker: services exchange **`InteropEnvelope`** messages (see `packages/shared-dotnet/Interop`) through HTTPS mailboxes. It is outbound-only for everybody who calls it, so an on-premise site needs no inbound port.
 
 One binary, two modes (`Hub:Mode`):
 
@@ -60,7 +60,8 @@ The control plane keeps the directory current by sending envelopes addressed to 
 
 ### Routing and cross-tenant policy
 
-- Facility target: facility, cell, mailbox `{cell}:{service}`; the service is `To.Service`, otherwise the default of the facility type (`clinic`, `laboratory`, `pharmacy`, `organization`). Patient target: `{cloud}:patient`. Portal target: `{cloud}:portal`. A facility in an edge cell: `{cell}:cell-inbox`.
+- Facility target: facility, cell, mailbox `{cell}:{service}`; the service is `To.Service`, otherwise the default of the facility type (`clinic`, `laboratory`, `pharmacy`, `organization`). A facility whose type has no default service (a type this hub does not know yet) is routed by `To.Service` when present, otherwise rejected with a reason starting `unknown_facility_type` (never an error). Patient target: `{cloud}:patient`. A facility in an edge cell: `{cell}:cell-inbox`.
+- Control-plane target (`Party{ControlPlane, Service}`): `portal` (the default) and `patient` may be addressed by every client (a facility asking the patient plane to redeem a share; the portal feeding patient-api) and land in `{cloud}:portal` / `{cloud}:patient`. `clinic`, `laboratory`, `pharmacy`, `organization` and `billing` (cloud-cell services) may be addressed only by `ControlPlane` and `PatientPlane` clients; facility clients are rejected. Any other service is rejected. `hub` is the directory feed (control plane only).
 - Same tenant: always allowed.
 - Cross-tenant: allowed as a reply on a correlation the target started (even if the link was revoked since), or when an `Active` link from the sender to the target covers the message kind and the target is not `Private`. Scopes: `lab.order.*` LabOrder, `rx.*` Prescription, `*referral*` Referral, `lab.result.*` Result (a result also flows back along the link the requester holds). Other types cross tenants only as a reply.
 - `ControlPlane` and `PatientPlane` senders are trusted relays and are not link-checked.
@@ -95,7 +96,8 @@ Standard ASP.NET Core configuration: `appsettings*.json`, environment variables 
 | `Hub:Claims:DefaultTtlHours`, `MaxTtlHours` | 168, 720 | Claim lifetime. |
 | `Hub:Database:AutoMigrate` | `false` | Apply migrations at startup (always on in Development). Safe with several instances starting together. |
 | `Hub:Background:Enabled`, `MaintenanceIntervalSeconds` | `true`, 30 | Background jobs (maintenance, and in Local mode forwarder, puller, directory sync). |
-| `Hub:Upstream:Url`, `ClientId`, `ClientSecret` | empty | Local mode: the cloud hub and this site's `EdgeCell` credentials. Required in Local mode; the hub refuses to start without them. |
+| `Hub:Upstream:Enabled` | `true` | Local mode: `false` runs the hub air-gapped (single site, no internet). Nothing is forwarded, pulled or synced; messages addressed beyond the edge cell are rejected with a reason starting `upstream_disabled`, and claims answer `503`. Url and credentials are then not required. |
+| `Hub:Upstream:Url`, `ClientId`, `ClientSecret` | empty | Local mode: the cloud hub and this site's `EdgeCell` credentials (one client, service `cell`). Required in Local mode while `Hub:Upstream:Enabled` is `true`; the hub refuses to start without them. |
 | `Hub:Upstream:PollWaitSeconds`, `BatchSize`, `ForwardIntervalMs`, `MaxBackoffSeconds`, `DirectorySyncSeconds` | 20, 50, 1000, 300, 60 | Local mode tuning. |
 | `Hub:Bootstrap:Cells`, `Clients`, `Facilities` | empty | Declarative seed, see below. |
 
@@ -125,6 +127,8 @@ Standard ASP.NET Core configuration: `appsettings*.json`, environment variables 
 2. On the site server run the same image with `Hub__Mode=Local` (see `deploy/interop-hub/docker-compose.local-hub.yml`): `Hub__LocalCellId`, `Hub__Upstream__Url/ClientId/ClientSecret` (the credentials from step 1), its own PostgreSQL database, and a `Hub:Bootstrap` block with the cell, one `EdgeCell` client per facility service (`clinic`, `laboratory`, ...) and the site's facilities so it can route before its first sync.
 3. Point the facility services at the local hub (`Messaging:HubUrl` = the LAN address, with `Messaging:ClientId` / `Messaging:ClientSecret` of their local client). They keep working when the internet is down.
 
+Client model: the local hub holds exactly one upstream client (the portal-issued `EdgeCell` client, service `cell`); the facility services never see it. They use local clients declared in `Hub:Bootstrap` (generated per site), so cloud credentials stay on the hub. A single-facility site without a local hub instead connects its services straight to the cloud hub, each with its portal-issued per-service `EdgeCell` client.
+
 What the local hub does:
 
 - **Same-cell messages** are delivered on the LAN and never touch the cloud.
@@ -132,6 +136,7 @@ What the local hub does:
 - **Inbound** traffic is pulled from `GET /v1/cell-inbox` (long poll) and fanned out to the local service mailbox of the addressed facility; the cloud copy is acked only after the local copy is stored.
 - **Directory**: `GET /v1/directory/snapshot` is polled every `DirectorySyncSeconds` and replaces the local copy when the version changed.
 - **Claims** are proxied to the cloud and fail with `502` while it is unreachable.
+- **Air-gapped** (`Hub:Upstream:Enabled=false`): only same-cell traffic works. Anything else is rejected immediately with `upstream_disabled` (final: the SDK dead-letters it, nothing is queued), the background forwarder, puller and directory sync do not run (the directory is whatever `Hub:Bootstrap:Facilities` seeded), and claims answer `503`. Enable the upstream later by setting the flag and the credentials and restarting.
 
 ## Operations and high availability
 

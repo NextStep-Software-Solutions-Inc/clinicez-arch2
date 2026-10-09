@@ -21,9 +21,12 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
       - ConnectionStrings__DefaultConnection=${CONNECTION_STRING}
-      - RabbitMq__Host=${RABBITMQ_HOST:-rabbitmq}
-      - RabbitMq__Username=${RABBITMQ_USERNAME:-rabbit_admin_node}
-      - RabbitMq__Password=${RABBITMQ_PASSWORD}
+      # Interop hub (the cell hub this service's outbox ships to and its inbox polls). No built-in fallback credentials.
+      - Messaging__Transport=Hub
+      - Messaging__Service=laboratory
+      - Messaging__HubUrl=${MESSAGING_HUB_URL:?MESSAGING_HUB_URL must be set}
+      - Messaging__ClientId=${MESSAGING_CLIENT_ID:?MESSAGING_CLIENT_ID must be set}
+      - Messaging__ClientSecret=${MESSAGING_CLIENT_SECRET:?MESSAGING_CLIENT_SECRET must be set}
       # Hangfire dashboard Basic Auth password. Empty denies the dashboard to everyone (there is no default).
       - Hangfire__DashboardPassword=${HANGFIRE_DASHBOARD_PASSWORD:-}
       - Facility__BaseDomain=${BASE_DOMAIN:?BASE_DOMAIN must be set}
@@ -40,5 +43,7 @@ volumes:
 networks:
   data-network:
     external: true
+    name: ${DATA_NETWORK:-data-network}
   npm-default:
     external: true
+    name: ${NPM_NETWORK:-npm-default}

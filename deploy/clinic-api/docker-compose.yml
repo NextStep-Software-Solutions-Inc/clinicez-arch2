@@ -27,6 +27,8 @@ services:
       - Messaging__HubUrl=${MESSAGING_HUB_URL:?MESSAGING_HUB_URL must be set}
       - Messaging__ClientId=${MESSAGING_CLIENT_ID:?MESSAGING_CLIENT_ID must be set}
       - Messaging__ClientSecret=${MESSAGING_CLIENT_SECRET:?MESSAGING_CLIENT_SECRET must be set}
+      # Public, absolute base URL of the upload page printed on lab slips ({base}/{token}). Required to issue lab orders.
+      - Clinic__PublicUploadBaseUrl=${CLINIC_PUBLIC_UPLOAD_BASE_URL:?CLINIC_PUBLIC_UPLOAD_BASE_URL must be set}
       # Hangfire dashboard Basic Auth password. Empty denies the dashboard to everyone (there is no default).
       - Hangfire__DashboardPassword=${HANGFIRE_DASHBOARD_PASSWORD:-}
       - Facility__BaseDomain=${BASE_DOMAIN:?BASE_DOMAIN must be set}

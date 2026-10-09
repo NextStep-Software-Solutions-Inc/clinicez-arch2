@@ -83,7 +83,11 @@ jobs:
       env:
         ASPNETCORE_ENVIRONMENT: ${{ env.ENVIRONMENT }}
         CONNECTION_STRING: ${{ secrets.PHARMACY_DB_CONNECTION_STRING }}
-        RABBITMQ_PASSWORD: ${{ secrets.RABBITMQ_PASSWORD }}
+        MESSAGING_HUB_URL: ${{ vars.MESSAGING_HUB_URL || secrets.MESSAGING_HUB_URL }}
+        MESSAGING_CLIENT_ID: ${{ secrets.PHARMACY_MESSAGING_CLIENT_ID }}
+        MESSAGING_CLIENT_SECRET: ${{ secrets.PHARMACY_MESSAGING_CLIENT_SECRET }}
+        DATA_NETWORK: ${{ vars.DATA_NETWORK || 'data-network' }}
+        NPM_NETWORK: ${{ vars.NPM_NETWORK || 'npm-default' }}
         HANGFIRE_DASHBOARD_PASSWORD: ${{ secrets.PHARMACYAPP_HANGFIRE_PASSWORD || secrets.PHARMACY_HANGFIRE_PASSWORD || secrets.HANGFIRE_PASSWORD }}
         INTERNAL_API_KEY: ${{ secrets.PHARMACY_INTERNAL_API_KEY || secrets.INTERNAL_API_KEY }}
         INTERNAL_API_KEY_PREVIOUS: ${{ secrets.PHARMACY_INTERNAL_API_KEY_PREVIOUS }}
@@ -96,7 +100,13 @@ jobs:
           echo "::error::BASE_DOMAIN is not configured. Set it as a GitHub secret or variable (Settings -> Secrets and variables -> Actions)."
           exit 1
         fi
-        for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING RABBITMQ_PASSWORD HANGFIRE_DASHBOARD_PASSWORD INTERNAL_API_KEY INTERNAL_API_KEY_PREVIOUS PHARMACY_JWT_SIGNING_KEY IMAGE_NAME IMAGE_TAG BASE_DOMAIN; do
+        for var in MESSAGING_HUB_URL MESSAGING_CLIENT_ID MESSAGING_CLIENT_SECRET; do
+          if [ -z "$(printenv $var)" ]; then
+            echo "::error::$var is not configured. Set the matching GitHub secret or variable (Settings -> Secrets and variables -> Actions)."
+            exit 1
+          fi
+        done
+        for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING MESSAGING_HUB_URL MESSAGING_CLIENT_ID MESSAGING_CLIENT_SECRET HANGFIRE_DASHBOARD_PASSWORD INTERNAL_API_KEY INTERNAL_API_KEY_PREVIOUS PHARMACY_JWT_SIGNING_KEY IMAGE_NAME IMAGE_TAG BASE_DOMAIN DATA_NETWORK NPM_NETWORK; do
           echo "$var=$(printenv $var)" >> deploy/pharmacy-api/.env
         done
 
@@ -147,8 +157,10 @@ jobs:
           cd "${{ vars.DEPLOY_DIR || env.DEPLOY_DIR }}"
 
           echo "==> Ensuring networks exist..."
-          docker network inspect npm-default >/dev/null 2>&1 || docker network create npm-default
-          docker network inspect data-network >/dev/null 2>&1 || docker network create data-network
+          DATA_NET=$(grep -E '^DATA_NETWORK=' .env 2>/dev/null | cut -d= -f2- | tr -d '\r"')
+          PROXY_NET=$(grep -E '^NPM_NETWORK=' .env 2>/dev/null | cut -d= -f2- | tr -d '\r"')
+          docker network inspect "${PROXY_NET:-npm-default}" >/dev/null 2>&1 || docker network create "${PROXY_NET:-npm-default}"
+          docker network inspect "${DATA_NET:-data-network}" >/dev/null 2>&1 || docker network create "${DATA_NET:-data-network}"
 
           echo "==> Loading Docker image..."
           docker load < pharmacy-api.tar.gz

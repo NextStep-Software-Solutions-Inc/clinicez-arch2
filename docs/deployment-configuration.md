@@ -21,15 +21,19 @@ Set each value as a repository / environment **secret or variable** (Settings â†
 | `SERVICES_PORTAL_API_URL` | no | clinic-api | Portal API base URL. Defaults to `http://portal-api:8080` (internal Docker DNS). |
 | `PORTAL_API_BASE_URL` | no | philhealth-proxy | Same, for the PhilHealth proxy. |
 | `SERVICES_CLINIC_API_URL` | no | patient-api | Clinic API base URL. |
-| `RABBITMQ_HOST` / `RABBITMQ_USERNAME` / `RABBITMQ_PASSWORD` | yes | all APIs | Shared RabbitMQ broker. Default in-container host is `rabbitmq`. |
+| `MESSAGING_HUB_URL` | yes | all APIs | Base URL of the Interop Hub (`Messaging__HubUrl`). Variable or secret. |
+| `CLINIC_` / `LABORATORY_` / `PHARMACY_` / `ORGANIZATION_` / `PATIENT_` / `PORTAL_` + `MESSAGING_CLIENT_ID` / `MESSAGING_CLIENT_SECRET` | yes | matching API | Per-service hub credentials (`Messaging__ClientId` / `Messaging__ClientSecret`), e.g. `CLINIC_MESSAGING_CLIENT_SECRET`. Must match a client in the hub bootstrap. |
+| `DATA_NETWORK` / `NPM_NETWORK` | no | all APIs | Names of the external Docker networks (defaults `data-network` / `npm-default`). |
+| `INTEROP_HUB_DB_CONNECTION_STRING` / `INTEROP_HUB_PORTAL_CLIENT_SECRET` | yes | interop-hub | Hub database and the portal's bootstrap client secret. |
+| `INTEROP_HUB_PAYLOAD_ENCRYPTION_KEY` | no | interop-hub | Base64 of 32 random bytes; encrypts stored envelopes at rest (AES-256-GCM). Empty stores plain JSON. |
 | `FACILITY_SUBDOMAIN_CLINIC` / `_LABORATORY` / `_PHARMACY` / `_ORGANIZATION` | no | portal-api, patient-api | Service subdomain per facility type (defaults `clinic`, `lab`, `pharmacy`, `org`). |
 | `VERIFICATION_BASE_URL` | no | clinic-api, laboratory-api | Public URL embedded in QR codes. Defaults to `https://<BASE_DOMAIN>`. |
 
 ### Container & image names
 
 Containers, images and compose projects are named after the service only (`portal-api`, `clinic-api`, ...).
-Shared infrastructure such as RabbitMQ is **not** prefixed with a product name (`rabbitmq`, override with
-`RABBITMQ_CONTAINER_NAME`). Reverse-proxy hosts (Nginx Proxy Manager) must forward to the unprefixed names,
+Shared infrastructure such as PostgreSQL and the Interop Hub is **not** prefixed with a product name (`postgres`,
+`interop-hub`). Reverse-proxy hosts (Nginx Proxy Manager) must forward to the unprefixed names,
 e.g. `portal-api:8080`.
 
 ## 2. Vercel (UIs)

@@ -83,7 +83,9 @@ jobs:
       env:
         ASPNETCORE_ENVIRONMENT: ${{ env.ENVIRONMENT }}
         CONNECTION_STRING: ${{ secrets.CLINIC_DB_CONNECTION_STRING || secrets.CLINICAPP_DB_CONNECTION_STRING }}
-        RABBITMQ_PASSWORD: ${{ secrets.RABBITMQ_PASSWORD }}
+        MESSAGING_HUB_URL: ${{ vars.MESSAGING_HUB_URL || secrets.MESSAGING_HUB_URL }}
+        MESSAGING_CLIENT_ID: ${{ secrets.CLINIC_MESSAGING_CLIENT_ID }}
+        MESSAGING_CLIENT_SECRET: ${{ secrets.CLINIC_MESSAGING_CLIENT_SECRET }}
         HANGFIRE_DASHBOARD_PASSWORD: ${{ secrets.CLINICAPP_HANGFIRE_PASSWORD || secrets.CLINIC_HANGFIRE_PASSWORD || secrets.HANGFIRE_PASSWORD }}
         INTERNAL_API_KEY: ${{ secrets.INTERNAL_API_KEY }}
         INTERNAL_API_KEY_PREVIOUS: ${{ secrets.INTERNAL_API_KEY_PREVIOUS }}
@@ -94,7 +96,7 @@ jobs:
         IMAGE_TAG: ${{ env.IMAGE_TAG }}
         BASE_DOMAIN: ${{ secrets.BASE_DOMAIN || vars.BASE_DOMAIN }}
         CORS_ALLOWED_DOMAINS: ${{ vars.CORS_ALLOWED_DOMAINS || 'dev.clinicez.net,clinicez.net,dev.nextstep-software.com,nextstep-software.com' }}
-        RABBITMQ_NETWORK: ${{ vars.RABBITMQ_NETWORK || 'data-network' }}
+        DATA_NETWORK: ${{ vars.DATA_NETWORK || 'data-network' }}
         NPM_NETWORK: ${{ vars.NPM_NETWORK || 'npm-default' }}
       run: |
         if [ -z "$CONNECTION_STRING" ]; then
@@ -105,7 +107,13 @@ jobs:
           echo "::error::BASE_DOMAIN is not configured. Set it as a GitHub secret or variable (Settings -> Secrets and variables -> Actions)."
           exit 1
         fi
-        for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING RABBITMQ_PASSWORD HANGFIRE_DASHBOARD_PASSWORD INTERNAL_API_KEY INTERNAL_API_KEY_PREVIOUS PHARMACY_API_URL PHARMACY_API_KEY CLINIC_JWT_SIGNING_KEY IMAGE_NAME IMAGE_TAG BASE_DOMAIN CORS_ALLOWED_DOMAINS RABBITMQ_NETWORK NPM_NETWORK; do
+        for var in MESSAGING_HUB_URL MESSAGING_CLIENT_ID MESSAGING_CLIENT_SECRET; do
+          if [ -z "$(printenv $var)" ]; then
+            echo "::error::$var is not configured. Set the matching GitHub secret or variable (Settings -> Secrets and variables -> Actions)."
+            exit 1
+          fi
+        done
+        for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING MESSAGING_HUB_URL MESSAGING_CLIENT_ID MESSAGING_CLIENT_SECRET HANGFIRE_DASHBOARD_PASSWORD INTERNAL_API_KEY INTERNAL_API_KEY_PREVIOUS PHARMACY_API_URL PHARMACY_API_KEY CLINIC_JWT_SIGNING_KEY IMAGE_NAME IMAGE_TAG BASE_DOMAIN CORS_ALLOWED_DOMAINS DATA_NETWORK NPM_NETWORK; do
           echo "$var=$(printenv $var)" >> deploy/clinic-api/.env
         done
 
@@ -156,9 +164,9 @@ jobs:
           cd "${{ vars.DEPLOY_DIR || env.DEPLOY_DIR }}"
 
           echo "==> Ensuring networks exist..."
-          RABBIT_NET=$(grep -E '^RABBITMQ_NETWORK=' .env 2>/dev/null | cut -d= -f2- | tr -d '\r"')
+          DATA_NET=$(grep -E '^DATA_NETWORK=' .env 2>/dev/null | cut -d= -f2- | tr -d '\r"')
           PROXY_NET=$(grep -E '^NPM_NETWORK=' .env 2>/dev/null | cut -d= -f2- | tr -d '\r"')
-          docker network inspect "${RABBIT_NET:-data-network}" >/dev/null 2>&1 || docker network create "${RABBIT_NET:-data-network}"
+          docker network inspect "${DATA_NET:-data-network}" >/dev/null 2>&1 || docker network create "${DATA_NET:-data-network}"
           docker network inspect "${PROXY_NET:-npm-default}" >/dev/null 2>&1 || docker network create "${PROXY_NET:-npm-default}"
 
           echo "==> Loading Docker image..."

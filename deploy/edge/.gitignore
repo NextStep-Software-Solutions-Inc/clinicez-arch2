@@ -1,0 +1,5 @@
+# Secrets and state written by the installer: never commit.
+.env
+.env.bak.*
+hub-bootstrap.env
+backups/

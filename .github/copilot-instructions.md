@@ -15,20 +15,27 @@ clinicez/
 │   ├── patient-app/                       # Universal React Native Expo App (iOS, Android, Web)
 │   ├── clinic-app/                        # Operational Clinic App (Web, Desktop, Tablet)
 │   ├── laboratory-app/                    # Operational Laboratory App (LIS, Diagnostics)
-│   └── pharmacy-app/                      # Operational Pharmacy App (PMS, Inventory)
+│   ├── pharmacy-app/                      # Operational Pharmacy App (PMS, Inventory)
+│   └── cashier-app/                       # Cashier / Billing App (per-cell cashiering)
 │
 ├── services/                              # All backend microservices (.NET 10 / ASP.NET Core)
 │   ├── portal-api/                        # Central Control Plane (Tenants, Licensing, Xendit Billing)
+│   ├── interop-hub/                       # Interop Hub (store-and-forward mailboxes between services and cells)
 │   ├── patient-api/                       # Patient EHR, Sync Engine, Hangfire Background Queue
 │   ├── clinic-api/                        # Clinic EHR, Consultations, Triage
 │   ├── laboratory-api/                    # Laboratory Information System (LIS)
 │   ├── organization-api/                  # Healthcare Organization & Umbrella Network Management
 │   ├── pharmacy-api/                      # Pharmacy Inventory, Dispensary, Formulary
+│   ├── billing-api/                       # Per-cell cashiering, invoices, payments
 │   └── philhealth-proxy/                  # PhilHealth Konsulta Integration Gateway
 │
 ├── packages/                              # Shared cross-cutting libraries
-│   ├── shared-dotnet/                     # C# Shared Library (ClinicEz.Shared: ApiResponse, Events, Exceptions)
+│   ├── shared-dotnet/                     # C# Shared Library (ClinicEz.Shared: ApiResponse, Interop SDK, Exceptions)
 │   └── shared-ts/                         # TypeScript Shared Library (@shared/safe utilities)
+│
+├── deploy/                                # One docker-compose folder per stack (+ edge/ on-premise bundle)
+├── docs/                                  # Deployment configuration and architecture docs
+├── scripts/                               # Repository guard scripts (check-no-broker.ps1)
 │
 ├── CLINICEZ.sln                           # Master .NET Solution file (all services + shared-dotnet + tests)
 ├── Directory.Build.props                  # Centralized MSBuild configuration
@@ -68,7 +75,7 @@ clinicez/
   - `Infrastructure`: EF Core `ApplicationDbContext`, migrations, repositories, external API clients, message consumers.
 - **API Response Wrapper**: Always return responses using `ApiResponse<T>` from `ClinicEz.Shared`.
 - **Database & Migration Tooling**: Use EF Core 10 with PostgreSQL (`CLINICEZ_<SERVICE>_DB`).
-- **Event Mesh**: Use MassTransit over RabbitMQ for cross-service events.
+- **Cross-service messaging**: Use the interop SDK (`packages/shared-dotnet/Interop`) over the Interop Hub — see "Messaging & Interop Hub" below. Never call another service's API directly and never introduce a message broker.
 
 ### 2. Client & Mobile Applications (`apps/*`)
 - **Expo Router**: Route files in `app/` should only define routes. Keep screen and component logic in `screens/` and `components/`.
@@ -78,13 +85,31 @@ clinicez/
 
 ---
 
+## 🔗 Messaging & Interop Hub
+
+Services never call each other directly and **there is no message broker** (no broker client packages, no broker containers, no `amqp` URLs). Cross-service and cross-cell communication is a signed `InteropEnvelope` delivered through the **Interop Hub** (`services/interop-hub`, store-and-forward mailboxes `{cell}:{service}`). Each service embeds the SDK in `packages/shared-dotnet/Interop`: a transactional outbox, an idempotent inbox, a handler registry and relay/poller background services. Docs: `docs/architecture/{platform-contract,interop-hub,data-ownership,billing,edge-cell}.md` and `services/interop-hub/README.md`.
+
+- **Guard**: `scripts/check-no-broker.ps1` fails when a broker product name or URL appears anywhere outside `docs/architecture/**`. It runs in `backend-ci.yml`; run `pwsh ./scripts/check-no-broker.ps1` before pushing. Say "message broker" in prose, never a product name.
+- **Configuration** (section `Messaging`, env form `Messaging__*`): `Transport` (`Hub`, or `InProcess` in tests only), `Service` (mailbox: `clinic`, `laboratory`, `pharmacy`, `organization`, `patient`, `portal`, `billing`), `HubUrl`, `ClientId`, `ClientSecret`, `Enabled` (set `false` to skip the relay/poller). There are no default credentials; the host fails to start when a `Hub` transport is incomplete. Local development uses the hub in Development mode (`http://localhost:5290`, clients `dev-<service>` with secret `dev-<service>-secret`). Tests set `Messaging:Transport=InProcess` and/or `Messaging:Enabled=false`.
+- **Wiring a service**: the service `DbContext` implements `IInteropDbContext` and calls `modelBuilder.ApplyInteropModel()`; register with `services.AddInterop<TDbContext>(configuration, b => b.Handle<TPayload, THandler>(InteropTypes.X))`.
+
+### Adding a new message type
+1. Add the type-string constant to `packages/shared-dotnet/Interop/InteropTypes.cs` (the single place type strings are declared; never inline string literals).
+2. Add the payload `record` under `packages/shared-dotnet/Interoperability/`. Keep payloads additive-only; bump `schemaVersion` for breaking changes.
+3. In the receiving service, implement `IInteropHandler<TPayload>` in the **Application** layer and register it in `AddInterop` (`b.Handle<TPayload, THandler>(InteropTypes.X)`). Delivery is at-least-once, so handlers **must be idempotent**; a handler's own `SaveChanges` is its commit point.
+4. In the sending service, call `IInteropPublisher.Enqueue(type, from, to, correlationId, payload)` **before** the business `SaveChanges` so the outbox row commits in the same transaction. Never fire-and-forget after saving.
+5. Address with `Party.ForFacility(tenantId, facilityId, type)`, `Party.ForPatient(patientId)` or `Party.Portal`; use a GUID `correlationId` that ties a request to its reply.
+6. Add tests with the in-process transport, and add the type to the catalog table in `docs/architecture/platform-contract.md`.
+
+---
+
 ## 🐳 Containerization & Deployment Conventions
 
 - **Target Server Directory**: `/opt/docker-stack/clinicez-<service>/`.
 - **Compose Files**: All compose files live under `deploy/<stack>/docker-compose.yml` (no `.deploy.yml` suffix); see `deploy/README.md`.
 - **Networks**: Services connect to two external networks:
   - `npm-default`: Ingress via Nginx Proxy Manager (routes to container port `8080` without host port exposure).
-  - `data-network`: Internal access to `postgres`, `rabbitmq`, and `redis`.
+  - `data-network`: Internal access to `postgres` and `redis`. Names come from `DATA_NETWORK` / `NPM_NETWORK` (defaults `data-network` / `npm-default`).
 - **Container Names & Labels**:
   - `container_name: clinicez-<service>`
   - `labels: ["project=clinicez", "environment=dev"]`

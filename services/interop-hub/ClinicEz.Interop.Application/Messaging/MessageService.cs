@@ -101,7 +101,16 @@ public sealed class MessageService(
             throw new InvalidOperationException("Cell-inbox fan-out is only available in Local mode.");
         if (envelope.To.Kind != PartyKind.Facility) throw new InvalidOperationException($"Cell-inbox message {envelope.MessageId} is not addressed to a facility.");
 
-        var service = InteropServices.For(envelope.To);
+        string service;
+        try
+        {
+            service = InteropServices.For(envelope.To);
+        }
+        catch (Exception ex) when (ex is ArgumentOutOfRangeException or InvalidOperationException)
+        {
+            throw new InvalidOperationException($"{RoutingPolicy.UnknownFacilityType}: cell-inbox message {envelope.MessageId} has no target service; name it in To.Service.", ex);
+        }
+
         if (!MailboxNames.IsValidService(service)) throw new InvalidOperationException($"Cell-inbox message {envelope.MessageId} targets invalid service '{service}'.");
 
         var json = envelope.ToJson();

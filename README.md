@@ -15,26 +15,33 @@ clinicez/
 │   ├── patient-app/                       # Universal React Native Expo App (iOS, Android & Web)
 │   ├── clinic-app/                        # Cross-Platform Clinic Operational App (Web, Desktop, Tablet)
 │   ├── laboratory-app/                    # Cross-Platform Laboratory Operational App (LIS)
-│   └── pharmacy-app/                      # Cross-Platform Pharmacy Operational App (PMS)
+│   ├── pharmacy-app/                      # Cross-Platform Pharmacy Operational App (PMS)
+│   └── cashier-app/                       # Cashier / Billing App (per-cell cashiering)
 │
 ├── services/                              # All backend microservices & APIs (.NET 10 / ASP.NET Core)
 │   ├── portal-api/                        # Central Control Plane API (Tenants, Licensing, Xendit Billing)
+│   ├── interop-hub/                       # Interop Hub: store-and-forward mailboxes between services and cells
 │   ├── patient-api/                       # Patient API (EHR records, sync engine, Hangfire queue)
 │   ├── clinic-api/                        # Clinic Operational Microservice (Consultations, EHR, Triage)
 │   ├── laboratory-api/                    # Laboratory Operational Microservice (LIS, Diagnostics)
 │   ├── pharmacy-api/                      # Pharmacy Operational Microservice (PMS, Inventory)
+│   ├── billing-api/                       # Per-cell cashiering, invoices and payments
 │   ├── organization-api/                  # Healthcare Organization & Umbrella Network Management
 │   └── philhealth-proxy/                  # PhilHealth Konsulta Integration Gateway
 │
 ├── packages/                              # Shared cross-cutting libraries
-│   ├── shared-dotnet/                     # C# Shared Library (ClinicEz.Shared: ApiResponse, Events, Exceptions)
+│   ├── shared-dotnet/                     # C# Shared Library (ClinicEz.Shared: ApiResponse, Interop SDK, Exceptions)
 │   └── shared-ts/                         # TypeScript Shared Library (@shared/safe utilities)
 │
+├── deploy/                                # One docker-compose folder per stack (+ edge/ on-premise bundle)
+├── docs/                                  # Deployment configuration and architecture docs (docs/architecture/)
+├── scripts/                               # Repository guard scripts (check-no-broker.ps1)
+│
 ├── .github/
-│   ├── workflows/                         # Standardized CI & Server Deployment Workflows
+│   ├── workflows/                         # Standardized CI, Server Deployment & Image Publishing Workflows
 │   └── copilot-instructions.md            # AI & Copilot Developer Guidelines
 │
-├── CLINICEZ.sln                           # Master .NET Solution file (36 projects)
+├── CLINICEZ.sln                           # Master .NET Solution file
 ├── Directory.Build.props                  # Centralized MSBuild configuration
 └── package.json                           # Bun workspace root (apps/*, packages/*)
 ```
@@ -114,6 +121,23 @@ bun run web
 - **Compose Files**: All compose files live under [`deploy/`](deploy/README.md), one folder per stack, each a standard `docker-compose.yml`.
 - **Zero Exposed Host Ports**: Containers communicate through internal Docker networks:
   - `npm-default`: Incoming requests reverse-proxied by Nginx Proxy Manager (NPM).
-  - `data-network`: Internal communication with PostgreSQL (`postgres:5432`), RabbitMQ (`rabbitmq:5672`), and Redis (`redis:6379`).
+  - `data-network`: Internal communication with PostgreSQL (`postgres:5432`) and Redis (`redis:6379`).
 - **Database Naming Convention**: Standardized across services to `CLINICEZ_<SERVICE>_DB`.
 - **Automated CI/CD**: Powered by GitHub Actions in `.github/workflows/` with discrete workflows per service.
+- **Container Images**: [`publish-images.yml`](.github/workflows/publish-images.yml) builds multi-arch (amd64 + arm64) images for every service and web app and publishes them to GHCR (`ghcr.io/<owner>/<repo>/<image>`) on `v*` tags.
+
+---
+
+## 🔗 Messaging & Interop Hub
+
+Services never talk to each other directly and there is no message broker. Cross-service and cross-cell messages are signed envelopes delivered through the [Interop Hub](services/interop-hub/README.md) (store-and-forward mailboxes):
+
+- Every service embeds the interop SDK in [`packages/shared-dotnet/Interop`](packages/shared-dotnet/Interop) (transactional outbox, idempotent inbox, handler registry) and is configured through the `Messaging` section (`Messaging__Transport`, `Messaging__Service`, `Messaging__HubUrl`, `Messaging__ClientId`, `Messaging__ClientSecret`).
+- Message types are declared once in `InteropTypes`; see the message catalog in [`docs/architecture/platform-contract.md`](docs/architecture/platform-contract.md).
+- The no-broker rule is enforced by [`scripts/check-no-broker.ps1`](scripts/check-no-broker.ps1) (run in backend CI).
+
+Architecture docs: [`docs/architecture/`](docs/architecture) — [platform contract](docs/architecture/platform-contract.md), [interop hub](docs/architecture/interop-hub.md), [data ownership](docs/architecture/data-ownership.md), [billing](docs/architecture/billing.md), [edge cell](docs/architecture/edge-cell.md).
+
+## 🏥 On-Premise Edge Cell
+
+A facility that must keep working without internet runs a single-tenant **edge cell**: the facility APIs, web apps, PostgreSQL with backups and a local Interop Hub in Local mode that reaches the cloud over outbound HTTPS only. The bundle, installer and runbook are in [`deploy/edge/`](deploy/edge/README.md); the design is in [`docs/architecture/edge-cell.md`](docs/architecture/edge-cell.md).

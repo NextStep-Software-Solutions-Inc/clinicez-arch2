@@ -23,7 +23,7 @@ public static class HubEndpoints
         MapHealth(app);
         MapMessaging(app);
         MapDirectory(app, options);
-        if (options.IsLocal) MapLocalClaimProxy(app);
+        if (options.IsLocal) MapLocalClaimProxy(app, options);
         else
         {
             MapCellInbox(app);
@@ -146,8 +146,16 @@ public static class HubEndpoints
     /// Local mode: claims live at the cloud hub, so these calls are proxied with the local hub's upstream credentials
     /// (the cloud validates that the sending/redeeming facility belongs to this edge cell). They need the internet.
     /// </summary>
-    private static void MapLocalClaimProxy(WebApplication app)
+    private static void MapLocalClaimProxy(WebApplication app, HubOptions options)
     {
+        if (!options.Upstream.Enabled)
+        {
+            const string detail = "upstream_disabled: this edge hub runs without an upstream connection (Hub:Upstream:Enabled=false); claims live at the cloud hub.";
+            app.MapPost("/v1/claims", () => Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, detail: detail));
+            app.MapPost("/v1/claims/{token}/redeem", (string token) => Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, detail: detail));
+            return;
+        }
+
         app.MapPost("/v1/claims", (HttpContext ctx, IUpstreamHub upstream, CancellationToken ct) => ProxyAsync(ctx, upstream, "v1/claims", ct));
         app.MapPost("/v1/claims/{token}/redeem", (HttpContext ctx, string token, IUpstreamHub upstream, CancellationToken ct) =>
             ProxyAsync(ctx, upstream, $"v1/claims/{Uri.EscapeDataString(token)}/redeem", ct));
