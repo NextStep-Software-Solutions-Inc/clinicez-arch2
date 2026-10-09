@@ -14,6 +14,7 @@ import AppointmentsScreen from './screens/Appointments.screen';
 import BillingScreen from './screens/Billing.screen';
 import YakapScreen from './screens/Yakap.screen';
 import SettingsScreen from './screens/Settings.screen';
+import ProfileScreen from './screens/Profile.screen';
 
 /**
  * Bottom tab bar for phones only. Workstation widths use the sidebar instead.
@@ -107,6 +108,14 @@ const Tab = createBottomTabNavigator({
       options: {
         title: 'Settings',
         tabBarIcon: tabIcon('settings'),
+      },
+    },
+    Profile: {
+      screen: ProfileScreen,
+      linking: 'profile',
+      options: {
+        title: 'My Profile',
+        tabBarIcon: tabIcon('staff'),
       },
     },
   },

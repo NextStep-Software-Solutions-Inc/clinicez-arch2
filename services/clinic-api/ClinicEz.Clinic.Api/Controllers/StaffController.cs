@@ -12,6 +12,8 @@ using ClinicEz.Shared.Common;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
+using ClinicEz.Clinic.Domain.Interfaces;
+
 namespace ClinicEz.Clinic.Api.Controllers;
 
 [ApiController]
@@ -19,10 +21,50 @@ namespace ClinicEz.Clinic.Api.Controllers;
 public sealed class StaffController : ControllerBase
 {
     private readonly ISender _sender;
+    private readonly IClinicContext _clinicContext;
 
-    public StaffController(ISender sender)
+    public StaffController(ISender sender, IClinicContext clinicContext)
     {
         _sender = sender;
+        _clinicContext = clinicContext;
+    }
+
+    [HttpGet("me")]
+    public async Task<ActionResult<ApiResponse<StaffMemberDto>>> GetMyProfile(CancellationToken ct)
+    {
+        if (!_clinicContext.StaffId.HasValue)
+        {
+            return Unauthorized(ApiResponse<StaffMemberDto>.Fail("No authenticated staff member associated with the current session."));
+        }
+
+        var result = await _sender.Send(new GetStaffMemberByIdQuery(_clinicContext.StaffId.Value), ct);
+        return Ok(ApiResponse<StaffMemberDto>.Success(result));
+    }
+
+    [HttpPut("me")]
+    public async Task<ActionResult<ApiResponse<StaffMemberDto>>> UpdateMyProfile(
+        [FromBody] UpdateMyProfileRequest request,
+        CancellationToken ct)
+    {
+        if (!_clinicContext.StaffId.HasValue)
+        {
+            return Unauthorized(ApiResponse<StaffMemberDto>.Fail("No authenticated staff member associated with the current session."));
+        }
+
+        var command = new UpdateMyProfileCommand(
+            _clinicContext.StaffId.Value,
+            request.FirstName,
+            request.LastName,
+            request.MiddleName,
+            request.Title,
+            request.PhoneNumber,
+            request.PrcLicenseNumber,
+            request.PtrNumber,
+            request.S2LicenseNumber,
+            request.Specialty);
+
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<StaffMemberDto>.Success(result, "Profile updated successfully."));
     }
 
     [HttpGet]
@@ -55,12 +97,39 @@ public sealed class StaffController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    [HasPermission(ClinicPermissions.StaffManage)]
     public async Task<ActionResult<ApiResponse<StaffMemberDto>>> UpdateStaffMember(
         Guid id,
         [FromBody] UpdateStaffMemberRequest request,
         CancellationToken ct)
     {
+        bool isSelf = _clinicContext.StaffId.HasValue && _clinicContext.StaffId.Value == id;
+        bool hasManage = _clinicContext.HasPermission(ClinicPermissions.StaffManage);
+
+        if (!hasManage && !isSelf)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, ApiResponse<StaffMemberDto>.Fail(
+                $"Forbidden: Insufficient permissions. Required permission '{ClinicPermissions.StaffManage}' is not granted for this clinic role.",
+                new[] { new ApiFieldError("Permission", "FORBIDDEN", $"Missing required permission: {ClinicPermissions.StaffManage}") }));
+        }
+
+        if (!hasManage && isSelf)
+        {
+            var myCommand = new UpdateMyProfileCommand(
+                id,
+                request.FirstName,
+                request.LastName,
+                request.MiddleName,
+                request.Title,
+                request.PhoneNumber,
+                request.PrcLicenseNumber,
+                request.PtrNumber,
+                request.S2LicenseNumber,
+                request.Specialty);
+
+            var myResult = await _sender.Send(myCommand, ct);
+            return Ok(ApiResponse<StaffMemberDto>.Success(myResult, "Profile updated successfully."));
+        }
+
         var command = new UpdateStaffMemberCommand(
             id,
             request.FirstName,
@@ -78,7 +147,7 @@ public sealed class StaffController : ControllerBase
             request.IsActive);
 
         var result = await _sender.Send(command, ct);
-        return Ok(ApiResponse<StaffMemberDto>.Success(result));
+        return Ok(ApiResponse<StaffMemberDto>.Success(result, "Staff member updated successfully."));
     }
 
     [HttpPost("{id:guid}/reset-password")]
@@ -126,3 +195,14 @@ public sealed record UpdateStaffMemberRequest(
     string? S2LicenseNumber,
     string? Specialty,
     bool IsActive = true);
+
+public sealed record UpdateMyProfileRequest(
+    string FirstName,
+    string LastName,
+    string? MiddleName,
+    string? Title,
+    string? PhoneNumber,
+    string? PrcLicenseNumber,
+    string? PtrNumber,
+    string? S2LicenseNumber,
+    string? Specialty);

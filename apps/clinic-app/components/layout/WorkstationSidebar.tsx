@@ -110,7 +110,7 @@ export default function WorkstationSidebar({
 
       {/* Footer: facility + who is working */}
       <View style={styles.footer}>
-        <UserMenu variant="card" />
+        <UserMenu variant="card" onNavigate={onNavigate} currentRoute={currentRoute} />
 
         {facilityName ? (
           <View style={styles.facility}>

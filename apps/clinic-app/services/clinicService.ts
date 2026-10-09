@@ -65,6 +65,34 @@ export interface CreateStaffPayload {
   sendInviteEmail?: boolean;
 }
 
+export interface UpdateStaffPayload {
+  firstName: string;
+  lastName: string;
+  middleName?: string;
+  title?: string;
+  role: StaffRole;
+  clinicRoleId?: string;
+  email?: string;
+  phoneNumber?: string;
+  prcLicenseNumber?: string;
+  ptrNumber?: string;
+  s2LicenseNumber?: string;
+  specialty?: string;
+  isActive?: boolean;
+}
+
+export interface UpdateMyProfilePayload {
+  firstName: string;
+  lastName: string;
+  middleName?: string;
+  title?: string;
+  phoneNumber?: string;
+  prcLicenseNumber?: string;
+  ptrNumber?: string;
+  s2LicenseNumber?: string;
+  specialty?: string;
+}
+
 export interface ResetStaffPasswordResult {
   staffId: string;
   staffName: string;
@@ -1207,6 +1235,18 @@ export const clinicService = {
 
   async createStaff(payload: CreateStaffPayload) {
     return clinicApiClient.post<StaffMember>('/staff', payload);
+  },
+
+  async updateStaff(id: string, payload: UpdateStaffPayload) {
+    return clinicApiClient.put<StaffMember>(`/staff/${id}`, payload);
+  },
+
+  async getMyProfile() {
+    return clinicApiClient.get<StaffMember>('/staff/me');
+  },
+
+  async updateMyProfile(payload: UpdateMyProfilePayload) {
+    return clinicApiClient.put<StaffMember>('/staff/me', payload);
   },
 
   async deactivateStaff(id: string) {

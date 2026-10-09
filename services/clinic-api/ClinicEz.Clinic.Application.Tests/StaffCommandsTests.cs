@@ -723,4 +723,106 @@ public class StaffCommandsTests
         cache.Should().NotBeNull();
         invalidator.Should().NotBeNull();
     }
+
+    [Fact]
+    public async Task UpdateStaffMember_UpdatesFieldsAndInvalidatesCache()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var roleRepo = TestDbHelper.CreateRepository<ClinicRole>(context, sieve);
+        var cache = Substitute.For<IStaffAccessInvalidator>();
+
+        var staff = new StaffMember
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            FirstName = "Alice",
+            LastName = "Smith",
+            Role = StaffRole.Nurse,
+            IsActive = true
+        };
+        await context.StaffMembers.AddAsync(staff);
+        await context.SaveChangesAsync();
+
+        var handler = new UpdateStaffMemberCommandHandler(staffRepo, roleRepo, uow, clinicContext, cache);
+        var result = await handler.Handle(new UpdateStaffMemberCommand(
+            staff.Id,
+            "Alicia",
+            "Smith-Cruz",
+            "M.",
+            "RN",
+            StaffRole.Nurse,
+            null,
+            "alicia@clinic.com",
+            "09181234567",
+            null,
+            null,
+            null,
+            "Senior Triage Nurse",
+            true
+        ), CancellationToken.None);
+
+        result.FirstName.Should().Be("Alicia");
+        result.LastName.Should().Be("Smith-Cruz");
+        result.Specialty.Should().Be("Senior Triage Nurse");
+        cache.Received(1).Invalidate(staff.Id);
+    }
+
+    [Fact]
+    public async Task UpdateMyProfile_UpdatesOwnDetails_PreservingRole()
+    {
+        var clinicId = Guid.NewGuid();
+        var tenantId = "tenant_test";
+        var staffId = Guid.NewGuid();
+        var clinicContext = Substitute.For<IClinicContext>();
+        clinicContext.ClinicId.Returns(clinicId);
+        clinicContext.TenantId.Returns(tenantId);
+        clinicContext.StaffId.Returns(staffId);
+
+        var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
+        var staffRepo = TestDbHelper.CreateRepository<StaffMember>(context, sieve);
+        var cache = Substitute.For<IStaffAccessInvalidator>();
+
+        var doctor = new StaffMember
+        {
+            Id = staffId,
+            TenantId = tenantId,
+            ClinicId = clinicId,
+            FirstName = "Juan",
+            LastName = "Dela Cruz",
+            Role = StaffRole.Doctor,
+            Title = "Dr.",
+            PrcLicenseNumber = "PRC-001",
+            PtrNumber = "PTR-2025",
+            IsActive = true
+        };
+        await context.StaffMembers.AddAsync(doctor);
+        await context.SaveChangesAsync();
+
+        var handler = new UpdateMyProfileCommandHandler(staffRepo, uow, clinicContext, cache);
+        var result = await handler.Handle(new UpdateMyProfileCommand(
+            staffId,
+            "Juan",
+            "Dela Cruz",
+            "Santos",
+            "Dr.",
+            "09170001111",
+            "PRC-001",
+            "PTR-2026-NEW", // Updated PTR for new year
+            "S2-998877",
+            "Cardiology"
+        ), CancellationToken.None);
+
+        result.PtrNumber.Should().Be("PTR-2026-NEW");
+        result.Specialty.Should().Be("Cardiology");
+        result.Role.Should().Be(StaffRole.Doctor);
+        cache.Received(1).Invalidate(staffId);
+    }
 }

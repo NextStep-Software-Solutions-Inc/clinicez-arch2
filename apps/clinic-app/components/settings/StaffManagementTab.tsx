@@ -110,6 +110,14 @@ export default function StaffManagementTab({
   const [resettingPassword, setResettingPassword] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
 
+  // Edit Staff Modal State
+  const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
+  const [middleName, setMiddleName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [isActiveStaff, setIsActiveStaff] = useState(true);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
   const generateRandomPassword = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
     let res = 'Clinic#';
@@ -139,6 +147,7 @@ export default function StaffManagementTab({
   const handleOpenAddModal = () => {
     setFirstName('');
     setLastName('');
+    setMiddleName('');
     setTitle('Dr.');
     const defaultDoctor =
       systemRoleOptions.find((r) => r.staffRole === 'Doctor') ||
@@ -147,6 +156,7 @@ export default function StaffManagementTab({
     setSelectedRoleId(defaultDoctor.id);
     setRole(defaultDoctor.staffRole);
     setEmail('');
+    setPhone('');
     setPrc('');
     setPtr('');
     setS2('');
@@ -155,6 +165,80 @@ export default function StaffManagementTab({
     setTemporaryPassword(generateRandomPassword());
     setAddError(null);
     setShowAddModal(true);
+  };
+
+  const handleOpenEditModal = (s: StaffMember) => {
+    setEditingStaff(s);
+    setFirstName(s.firstName || '');
+    setLastName(s.lastName || '');
+    setMiddleName(s.middleName || '');
+    setTitle(s.title || '');
+    setEmail(s.email || '');
+    setPhone(s.phoneNumber || '');
+    setPrc(s.prcLicenseNumber || '');
+    setPtr(s.ptrNumber || '');
+    setS2(s.s2LicenseNumber || '');
+    setSpecialty(s.specialty || '');
+    setRole(s.role);
+    setIsActiveStaff(s.isActive);
+
+    const matchingRole =
+      (s.clinicRoleId ? allRoleOptions.find((r) => r.id === s.clinicRoleId) : null) ||
+      systemRoleOptions.find((r) => r.staffRole === s.role) ||
+      systemRoleOptions[0];
+
+    if (matchingRole) {
+      setSelectedRoleId(matchingRole.id);
+    }
+    setEditError(null);
+  };
+
+  const handleSaveEditStaff = async () => {
+    if (!editingStaff) return;
+
+    if (!firstName.trim() || !lastName.trim()) {
+      setEditError('First and last name are required.');
+      return;
+    }
+
+    if (role === 'Doctor' && !prc.trim()) {
+      setEditError('PRC License Number is mandatory for Doctors.');
+      return;
+    }
+
+    setSavingEdit(true);
+    setEditError(null);
+
+    const effectiveRoleId = selectedRoleId || selectedRoleOption.id;
+    const clinicRoleId = effectiveRoleId.startsWith('sys-') ? undefined : effectiveRoleId;
+
+    const [updated, err] = await clinicService.updateStaff(editingStaff.id, {
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      middleName: middleName.trim() || undefined,
+      title: title.trim() || undefined,
+      role,
+      clinicRoleId: clinicRoleId || undefined,
+      email: email.trim() || undefined,
+      phoneNumber: phone.trim() || undefined,
+      prcLicenseNumber: role === 'Doctor' ? prc.trim() : undefined,
+      ptrNumber: role === 'Doctor' ? ptr.trim() || undefined : undefined,
+      s2LicenseNumber: role === 'Doctor' ? s2.trim() || undefined : undefined,
+      specialty: specialty.trim() || undefined,
+      isActive: isActiveStaff,
+    });
+
+    setSavingEdit(false);
+
+    if (err || !updated) {
+      setEditError(err?.message || 'Failed to update staff member.');
+      return;
+    }
+
+    setStaff((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+    setEditingStaff(null);
+    notify.success(`Staff member ${updated.firstName} ${updated.lastName} updated.`);
+    await onRefreshStaff();
   };
 
   const handleCreateStaff = async () => {
@@ -188,10 +272,12 @@ export default function StaffManagementTab({
     const [created, err] = await clinicService.createStaff({
       firstName: firstName.trim(),
       lastName: lastName.trim(),
+      middleName: middleName.trim() || undefined,
       title: title.trim() || undefined,
       role,
       clinicRoleId: clinicRoleId || undefined,
       email: email.trim() || undefined,
+      phoneNumber: phone.trim() || undefined,
       prcLicenseNumber: role === 'Doctor' ? prc.trim() : undefined,
       ptrNumber: role === 'Doctor' ? ptr.trim() || undefined : undefined,
       s2LicenseNumber: role === 'Doctor' ? s2.trim() || undefined : undefined,
@@ -382,6 +468,13 @@ export default function StaffManagementTab({
                     </View>
 
                     <View style={styles.staffActionsCol}>
+                      <Button
+                        title="Edit"
+                        icon="edit"
+                        variant="ghost"
+                        size="sm"
+                        onPress={() => handleOpenEditModal(s)}
+                      />
                       {s.role === 'Doctor' ? (
                         <Button
                           title="View Stamp"
@@ -564,6 +657,13 @@ export default function StaffManagementTab({
           />
           <Input
             containerStyle={styles.flexWide}
+            label="Middle name"
+            value={middleName}
+            onChangeText={setMiddleName}
+            placeholder="Middle name"
+          />
+          <Input
+            containerStyle={styles.flexWide}
             label="Last name"
             required
             value={lastName}
@@ -571,6 +671,14 @@ export default function StaffManagementTab({
             placeholder="Last name"
           />
         </View>
+
+        <Input
+          label="Contact phone number"
+          value={phone}
+          onChangeText={setPhone}
+          placeholder="e.g. 0917-123-4567"
+          keyboardType="phone-pad"
+        />
 
         {role === 'Doctor' ? (
           <>
@@ -691,6 +799,285 @@ export default function StaffManagementTab({
           )}
         </View>
       </Modal>
+
+      {/* Edit Staff Modal */}
+      {editingStaff ? (
+        <Modal
+          visible
+          onClose={() => setEditingStaff(null)}
+          title="Edit staff member"
+          subtitle={`Update details and credentials for ${editingStaff.firstName} ${editingStaff.lastName}`}
+          maxWidth={540}
+          footer={
+            <View style={styles.modalFooter}>
+              <Button
+                title="Cancel"
+                variant="ghost"
+                onPress={() => setEditingStaff(null)}
+                disabled={savingEdit}
+              />
+              <Button
+                title="Save Changes"
+                onPress={handleSaveEditStaff}
+                loading={savingEdit}
+              />
+            </View>
+          }
+        >
+          {editError ? (
+            <View style={styles.errorBox}>
+              <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergency} />
+              <ThemedText variant="small" color={theme.colors.emergencyText} style={styles.flex1}>
+                {editError}
+              </ThemedText>
+            </View>
+          ) : null}
+
+          {/* Role Selection */}
+          <View style={styles.roleSelectionGroup}>
+            <FieldGroup label="Staff Role *">
+              <ThemedText variant="caption" color={theme.colors.textMuted}>
+                Select the system standard role or a clinic custom role.
+              </ThemedText>
+
+              {/* System Standard Roles */}
+              <View style={styles.roleSubgroup}>
+                <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                  System Standard Roles
+                </ThemedText>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  nestedScrollEnabled
+                  contentContainerStyle={styles.chipScrollRow}
+                >
+                  {systemRoleOptions.map((r) => (
+                    <Chip
+                      key={r.id}
+                      label={r.displayName}
+                      active={selectedRoleOption.id === r.id}
+                      onPress={() => handleSelectRole(r)}
+                    />
+                  ))}
+                </ScrollView>
+              </View>
+
+              {/* Clinic Custom Roles */}
+              {customRoleOptions.length > 0 ? (
+                <View style={styles.roleSubgroup}>
+                  <View style={styles.customRoleHeader}>
+                    <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                      Clinic Custom Roles
+                    </ThemedText>
+                    <Badge label={`${customRoleOptions.length} Custom`} variant="purple" size="sm" />
+                  </View>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    nestedScrollEnabled
+                    contentContainerStyle={styles.chipScrollRow}
+                  >
+                    {customRoleOptions.map((r) => (
+                      <Chip
+                        key={r.id}
+                        label={r.displayName}
+                        active={selectedRoleOption.id === r.id}
+                        onPress={() => handleSelectRole(r)}
+                      />
+                    ))}
+                  </ScrollView>
+                </View>
+              ) : null}
+
+              {/* Selected Role Description Banner */}
+              {selectedRoleOption.description ? (
+                <View style={styles.roleDescriptionBox}>
+                  <Icon name="info" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+                  <ThemedText variant="caption" color={theme.colors.textSecondary} style={styles.flex1}>
+                    {selectedRoleOption.description}
+                  </ThemedText>
+                </View>
+              ) : null}
+
+              {/* Clinical category override for custom roles only */}
+              {!selectedRoleOption.isSystem ? (
+                <View style={styles.customCategoryRow}>
+                  <ThemedText variant="caption" color={theme.colors.textMuted}>
+                    Clinical category:
+                  </ThemedText>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    nestedScrollEnabled
+                    contentContainerStyle={styles.categoryChips}
+                  >
+                    {(['Doctor', 'Nurse', 'Receptionist', 'Cashier', 'Admin'] as const).map((cat) => (
+                      <Pressable
+                        key={cat}
+                        onPress={() => {
+                          setRole(cat);
+                          if (cat === 'Doctor' && !title) setTitle('Dr.');
+                          if (cat === 'Nurse' && (!title || title === 'Dr.')) setTitle('RN');
+                        }}
+                        style={[
+                          styles.miniChip,
+                          role === cat && styles.miniChipActive,
+                        ]}
+                      >
+                        <ThemedText
+                          variant="captionBold"
+                          color={role === cat ? theme.colors.primary : theme.colors.textMuted}
+                        >
+                          {cat}
+                        </ThemedText>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </View>
+              ) : null}
+            </FieldGroup>
+          </View>
+
+          {/* Name Fields */}
+          <View style={styles.formRow}>
+            <Input
+              containerStyle={styles.flexNarrow}
+              label="Title"
+              value={title}
+              onChangeText={setTitle}
+              placeholder="Dr. / RN / Ms."
+            />
+            <Input
+              containerStyle={styles.flexWide}
+              label="First name"
+              required
+              value={firstName}
+              onChangeText={setFirstName}
+              placeholder="First name"
+            />
+            <Input
+              containerStyle={styles.flexWide}
+              label="Middle name"
+              value={middleName}
+              onChangeText={setMiddleName}
+              placeholder="Middle name"
+            />
+            <Input
+              containerStyle={styles.flexWide}
+              label="Last name"
+              required
+              value={lastName}
+              onChangeText={setLastName}
+              placeholder="Last name"
+            />
+          </View>
+
+          {/* Contact Fields */}
+          <View style={styles.formRow}>
+            <Input
+              containerStyle={styles.flexWide}
+              label="Email address"
+              value={email}
+              onChangeText={setEmail}
+              placeholder="doctor@clinic.com"
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+            <Input
+              containerStyle={styles.flexWide}
+              label="Phone number"
+              value={phone}
+              onChangeText={setPhone}
+              placeholder="0917-123-4567"
+              keyboardType="phone-pad"
+            />
+          </View>
+
+          {/* Active Status Row */}
+          <View style={styles.activeStatusRow}>
+            <View style={styles.flex1}>
+              <ThemedText variant="smallBold" color={theme.colors.text}>
+                Staff Account Status
+              </ThemedText>
+              <ThemedText variant="caption" color={theme.colors.textMuted}>
+                {isActiveStaff
+                  ? 'Active: staff member can be assigned consultations and access workstation.'
+                  : 'Deactivated: staff member cannot log in or be assigned.'}
+              </ThemedText>
+            </View>
+            <Button
+              title={isActiveStaff ? 'Active' : 'Deactivated'}
+              variant={isActiveStaff ? 'success' : 'danger'}
+              size="sm"
+              onPress={() => setIsActiveStaff((prev) => !prev)}
+            />
+          </View>
+
+          {role === 'Doctor' ? (
+            <>
+              <Input
+                label="PRC license number"
+                required
+                value={prc}
+                onChangeText={setPrc}
+                placeholder="e.g. 0108924 (Mandatory for doctors)"
+              />
+              <View style={styles.formRow}>
+                <Input
+                  containerStyle={styles.flexWide}
+                  label="Professional Tax Receipt (PTR)"
+                  value={ptr}
+                  onChangeText={setPtr}
+                  placeholder="e.g. PTR No. 8941203 / Taguig City"
+                />
+                <Input
+                  containerStyle={styles.flexWide}
+                  label="PDEA S2 dangerous drug license"
+                  value={s2}
+                  onChangeText={setS2}
+                  placeholder="e.g. S2 No. 0918-99214-A1 (Optional)"
+                />
+              </View>
+
+              {/* Official Doctor Stamp Live Specimen */}
+              <View style={styles.stampPreviewCard}>
+                <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
+                  Official Doctor Stamp Live Preview
+                </ThemedText>
+                <View style={styles.stampBox}>
+                  <ThemedText variant="smallBold" color={theme.colors.primary} style={styles.stampName}>
+                    {`${title ? `${title} ` : 'DR. '}${firstName || 'First'} ${lastName || 'Last'}`.toUpperCase()}
+                  </ThemedText>
+                  <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                    {specialty || 'General / Primary Care Medicine'}
+                  </ThemedText>
+                  <View style={styles.stampDivider} />
+                  <ThemedText variant="caption" color={theme.colors.text}>
+                    {prc ? `PRC No. ${prc}` : 'PRC No. [Required for Prescriptions]'}
+                  </ThemedText>
+                  {ptr ? (
+                    <ThemedText variant="caption" color={theme.colors.textMuted}>
+                      {ptr}
+                    </ThemedText>
+                  ) : null}
+                  {s2 ? (
+                    <ThemedText variant="captionBold" color={theme.colors.emergency}>
+                      {s2}
+                    </ThemedText>
+                  ) : null}
+                </View>
+              </View>
+            </>
+          ) : null}
+
+          <Input
+            label="Specialty or clinical designation"
+            value={specialty}
+            onChangeText={setSpecialty}
+            placeholder="e.g. Pediatrics, Triage Nursing, Billing Officer"
+          />
+        </Modal>
+      ) : null}
 
       {/* Password Reset Modal */}
       {resetModalStaff ? (
@@ -997,6 +1384,16 @@ const styles = StyleSheet.create({
   },
   credRow: {
     gap: 2,
+  },
+  activeStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: theme.spacing.sm,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderRadius: theme.radii.md,
+    marginVertical: theme.spacing.xs,
+    gap: theme.spacing.sm,
   },
   stampPreviewCard: {
     padding: theme.spacing.sm,

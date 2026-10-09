@@ -53,16 +53,20 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
+    private readonly IStaffAccessInvalidator? _accessCache;
+
     public UpdateStaffMemberCommandHandler(
         IRepository<StaffMember> staffRepository,
         IRepository<ClinicRole> roleRepository,
         IUnitOfWork unitOfWork,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IStaffAccessInvalidator? accessCache = null)
     {
         _staffRepository = staffRepository;
         _roleRepository = roleRepository;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _accessCache = accessCache;
     }
 
     public async Task<StaffMemberDto> Handle(UpdateStaffMemberCommand request, CancellationToken cancellationToken)
@@ -109,6 +113,8 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
         _staffRepository.Update(staff);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
+        _accessCache?.Invalidate(staff.Id);
+
         return new StaffMemberDto(
             staff.Id,
             staff.TenantId,
@@ -127,6 +133,8 @@ public sealed class UpdateStaffMemberCommandHandler : IRequestHandler<UpdateStaf
             staff.S2LicenseNumber,
             staff.Specialty,
             staff.IsActive,
-            staff.CreatedAt);
+            staff.CreatedAt,
+            HasCredentials: !string.IsNullOrEmpty(staff.PasswordHash),
+            MustChangePassword: staff.MustChangePassword);
     }
 }
