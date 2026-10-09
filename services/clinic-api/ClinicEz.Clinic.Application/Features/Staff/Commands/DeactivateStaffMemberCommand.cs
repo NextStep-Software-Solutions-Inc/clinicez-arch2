@@ -25,6 +25,7 @@ public sealed class DeactivateStaffMemberCommandValidator : AbstractValidator<De
 public sealed class DeactivateStaffMemberCommandHandler : IRequestHandler<DeactivateStaffMemberCommand, bool>
 {
     private readonly IRepository<StaffMember> _staffRepository;
+    private readonly IRepository<ClinicRefreshToken>? _refreshTokenRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly IStaffAccessInvalidator? _accessCache;
@@ -33,11 +34,13 @@ public sealed class DeactivateStaffMemberCommandHandler : IRequestHandler<Deacti
         IRepository<StaffMember> staffRepository,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
+        IRepository<ClinicRefreshToken>? refreshTokenRepository = null,
         IStaffAccessInvalidator? accessCache = null)
     {
         _staffRepository = staffRepository;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _refreshTokenRepository = refreshTokenRepository;
         _accessCache = accessCache;
     }
 
@@ -73,13 +76,33 @@ public sealed class DeactivateStaffMemberCommandHandler : IRequestHandler<Deacti
             }
         }
 
-        staff.IsActive = false;
-        staff.TokenVersion++;
-        staff.UpdatedAt = DateTime.UtcNow;
-        staff.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicAdmin";
+        await _unitOfWork.ExecuteInTransactionAsync(async ct =>
+        {
+            staff.IsActive = false;
+            staff.TokenVersion++;
+            staff.UpdatedAt = DateTime.UtcNow;
+            staff.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicAdmin";
 
-        _staffRepository.Update(staff);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+            _staffRepository.Update(staff);
+
+            if (_refreshTokenRepository != null)
+            {
+                var activeTokens = await _refreshTokenRepository.Query(t =>
+                    t.StaffMemberId == staff.Id &&
+                    t.ClinicId == _clinicContext.ClinicId &&
+                    t.RevokedAt == null)
+                    .ToListAsync(ct);
+
+                var now = DateTime.UtcNow;
+                foreach (var token in activeTokens)
+                {
+                    token.RevokedAt = now;
+                    token.UpdatedAt = now;
+                    token.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicAdmin";
+                    _refreshTokenRepository.Update(token);
+                }
+            }
+        }, cancellationToken);
 
         _accessCache?.Invalidate(staff.Id);
 

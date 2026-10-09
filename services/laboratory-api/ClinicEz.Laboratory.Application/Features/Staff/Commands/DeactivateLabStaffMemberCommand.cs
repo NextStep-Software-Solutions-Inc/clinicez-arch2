@@ -44,12 +44,14 @@ public sealed class DeactivateLabStaffMemberCommandHandler : IRequestHandler<Dea
             throw new NotFoundException($"Laboratory staff member '{request.StaffId}' was not found.");
         }
 
-        staff.IsActive = false;
-        staff.TokenVersion++;
-        staff.UpdatedAt = DateTime.UtcNow;
+        await _unitOfWork.ExecuteInTransactionAsync(async ct =>
+        {
+            staff.IsActive = false;
+            staff.TokenVersion++;
+            staff.UpdatedAt = DateTime.UtcNow;
 
-        _staffRepo.Update(staff);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+            _staffRepo.Update(staff);
+        }, cancellationToken);
 
         return true;
     }

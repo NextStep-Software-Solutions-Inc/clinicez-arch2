@@ -91,12 +91,14 @@ public sealed class ActivateStaffMemberCommandHandler : IRequestHandler<Activate
             throw new ValidationException($"Staff limit reached: Your facility license allows up to {maxStaffLimit} active staff members ({currentActiveStaff} currently active). Please upgrade your facility license to activate more staff.");
         }
 
-        staff.IsActive = true;
-        staff.UpdatedAt = DateTime.UtcNow;
-        staff.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicAdmin";
+        await _unitOfWork.ExecuteInTransactionAsync(async ct =>
+        {
+            staff.IsActive = true;
+            staff.UpdatedAt = DateTime.UtcNow;
+            staff.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "ClinicAdmin";
 
-        _staffRepository.Update(staff);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+            _staffRepository.Update(staff);
+        }, cancellationToken);
 
         return MapToDto(staff);
     }

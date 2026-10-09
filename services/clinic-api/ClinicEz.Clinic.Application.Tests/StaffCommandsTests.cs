@@ -7,6 +7,7 @@ using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Xunit;
 
@@ -448,8 +449,21 @@ public class StaffCommandsTests
         await context.StaffMembers.AddAsync(staff);
         await context.SaveChangesAsync();
 
+        var refreshTokenRepo = TestDbHelper.CreateRepository<ClinicRefreshToken>(context, sieve);
+        var token = new ClinicRefreshToken
+        {
+            Id = Guid.NewGuid(),
+            StaffMemberId = staff.Id,
+            ClinicId = clinicId,
+            TenantId = tenantId,
+            TokenHash = "test_hash",
+            ExpiresAt = DateTime.UtcNow.AddDays(7)
+        };
+        await context.RefreshTokens.AddAsync(token);
+        await context.SaveChangesAsync();
+
         var accessCache = Substitute.For<IStaffAccessInvalidator>();
-        var handler = new DeactivateStaffMemberCommandHandler(staffRepo, uow, clinicContext, accessCache);
+        var handler = new DeactivateStaffMemberCommandHandler(staffRepo, uow, clinicContext, refreshTokenRepo, accessCache);
 
         // Act
         var result = await handler.Handle(new DeactivateStaffMemberCommand(staff.Id), CancellationToken.None);
@@ -462,6 +476,10 @@ public class StaffCommandsTests
         updated.TokenVersion.Should().Be(2);
         updated.UpdatedBy.Should().Be(callerId.ToString());
         accessCache.Received(1).Invalidate(staff.Id);
+
+        var revokedToken = await context.RefreshTokens.FirstOrDefaultAsync(t => t.Id == token.Id);
+        revokedToken.Should().NotBeNull();
+        revokedToken!.RevokedAt.Should().NotBeNull();
     }
 
     [Fact]
@@ -683,5 +701,26 @@ public class StaffCommandsTests
         var act = () => handler.Handle(new ActivateStaffMemberCommand(inactiveStaff.Id), CancellationToken.None);
         await act.Should().ThrowAsync<ClinicEz.Shared.Exceptions.ValidationException>()
             .WithMessage("*Staff limit reached*");
+    }
+
+    [Fact]
+    public void StaffAccessCache_ResolvesCorrectly_WithMemoryCacheRegistered()
+    {
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        services.AddMemoryCache();
+        services.AddSingleton<ClinicEz.Clinic.Infrastructure.Auth.IStaffAccessCache, ClinicEz.Clinic.Infrastructure.Auth.StaffAccessCache>();
+        services.AddSingleton<ClinicEz.Clinic.Domain.Interfaces.IStaffAccessInvalidator>(sp => sp.GetRequiredService<ClinicEz.Clinic.Infrastructure.Auth.IStaffAccessCache>());
+
+        var provider = services.BuildServiceProvider(new Microsoft.Extensions.DependencyInjection.ServiceProviderOptions
+        {
+            ValidateOnBuild = true,
+            ValidateScopes = true
+        });
+
+        var cache = provider.GetService<ClinicEz.Clinic.Infrastructure.Auth.IStaffAccessCache>();
+        var invalidator = provider.GetService<ClinicEz.Clinic.Domain.Interfaces.IStaffAccessInvalidator>();
+
+        cache.Should().NotBeNull();
+        invalidator.Should().NotBeNull();
     }
 }
