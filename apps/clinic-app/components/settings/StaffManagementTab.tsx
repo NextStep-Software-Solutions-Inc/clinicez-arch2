@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import { View, StyleSheet, Pressable, ScrollView } from 'react-native';
 import ThemedText from '../ui/ThemedText';
 import Button from '../ui/Button';
 import Badge from '../ui/Badge';
@@ -453,7 +453,12 @@ export default function StaffManagementTab({
               <ThemedText variant="captionBold" color={theme.colors.textSecondary}>
                 System Standard Roles
               </ThemedText>
-              <View style={styles.chipRow}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                nestedScrollEnabled
+                contentContainerStyle={styles.chipScrollRow}
+              >
                 {systemRoleOptions.map((r) => (
                   <Chip
                     key={r.id}
@@ -462,7 +467,7 @@ export default function StaffManagementTab({
                     onPress={() => handleSelectRole(r)}
                   />
                 ))}
-              </View>
+              </ScrollView>
             </View>
 
             {/* Clinic Custom Roles */}
@@ -474,7 +479,12 @@ export default function StaffManagementTab({
                   </ThemedText>
                   <Badge label={`${customRoleOptions.length} Custom`} variant="purple" size="sm" />
                 </View>
-                <View style={styles.chipRow}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  nestedScrollEnabled
+                  contentContainerStyle={styles.chipScrollRow}
+                >
                   {customRoleOptions.map((r) => (
                     <Chip
                       key={r.id}
@@ -483,7 +493,7 @@ export default function StaffManagementTab({
                       onPress={() => handleSelectRole(r)}
                     />
                   ))}
-                </View>
+                </ScrollView>
               </View>
             ) : null}
 
@@ -503,7 +513,12 @@ export default function StaffManagementTab({
                 <ThemedText variant="caption" color={theme.colors.textMuted}>
                   Clinical category:
                 </ThemedText>
-                <View style={styles.categoryChips}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  nestedScrollEnabled
+                  contentContainerStyle={styles.categoryChips}
+                >
                   {(['Doctor', 'Nurse', 'Receptionist', 'Cashier', 'Admin'] as const).map((cat) => (
                     <Pressable
                       key={cat}
@@ -525,7 +540,7 @@ export default function StaffManagementTab({
                       </ThemedText>
                     </Pressable>
                   ))}
-                </View>
+                </ScrollView>
               </View>
             ) : null}
           </FieldGroup>
@@ -903,12 +918,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.sm,
     marginTop: theme.spacing.xs,
-    flexWrap: 'wrap',
   },
   categoryChips: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: theme.spacing.xs,
-    flexWrap: 'wrap',
+    paddingVertical: theme.spacing.xs,
   },
   miniChip: {
     paddingHorizontal: theme.spacing.sm,
@@ -917,15 +932,17 @@ const styles = StyleSheet.create({
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.borderDark,
     backgroundColor: theme.colors.surface,
+    flexShrink: 0,
   },
   miniChipActive: {
     borderColor: theme.colors.primary,
     backgroundColor: theme.colors.primaryLight,
   },
-  chipRow: {
+  chipScrollRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
     gap: theme.spacing.xs,
+    paddingVertical: theme.spacing.xs,
   },
   flex1: {
     flex: 1,

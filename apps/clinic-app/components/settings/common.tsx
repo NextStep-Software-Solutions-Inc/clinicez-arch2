@@ -26,6 +26,7 @@ export function Chip({
       <ThemedText
         variant={active ? 'smallBold' : 'small'}
         color={active ? theme.colors.primary : theme.colors.textSecondary}
+        numberOfLines={1}
       >
         {label}
       </ThemedText>
@@ -87,6 +88,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     borderWidth: theme.sizes.borderWidth,
     borderColor: theme.colors.borderDark,
+    flexShrink: 0,
   },
   chipActive: {
     backgroundColor: theme.colors.primaryLight,

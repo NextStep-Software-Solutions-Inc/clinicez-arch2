@@ -386,7 +386,7 @@ const styles = StyleSheet.create({
   checkbox: {
     width: 16,
     height: 16,
-    borderRadius: 3,
+    borderRadius: theme.radii.xs,
     borderWidth: 1.5,
     borderColor: theme.colors.border,
     alignItems: 'center',
@@ -399,7 +399,7 @@ const styles = StyleSheet.create({
   },
   permLabel: {
     fontFamily: theme.fonts.mono['500'],
-    fontSize: 11,
+    fontSize: theme.fontSizes.xs,
   },
   footer: {
     flexDirection: 'row',

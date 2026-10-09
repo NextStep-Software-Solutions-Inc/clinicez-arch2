@@ -715,7 +715,7 @@ export default function BillingScreen() {
               style={styles.overrideCheck}
             >
               <ThemedText variant="captionBold" color={allowDuplicate ? theme.colors.emergencyText : theme.colors.primary}>
-                {allowDuplicate ? '✓ Duplicate billing permitted' : 'Authorize additional / duplicate invoice'}
+                {allowDuplicate ? '[Authorized] Duplicate billing permitted' : 'Authorize additional / duplicate invoice'}
               </ThemedText>
             </Pressable>
           </View>
