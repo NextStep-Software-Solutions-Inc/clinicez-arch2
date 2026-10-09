@@ -34,6 +34,20 @@ services:
       - Hangfire__DashboardPassword=${HANGFIRE_DASHBOARD_PASSWORD:-}
       - Facility__BaseDomain=${BASE_DOMAIN:?BASE_DOMAIN must be set}
       - Internal__ApiKey=${INTERNAL_API_KEY:?INTERNAL_API_KEY must be set}
+      # Public base URL of the cloud hub, handed to on-premise sites with their credentials (Hub:PublicUrl).
+      - Hub__PublicUrl=${HUB_PUBLIC_URL:?HUB_PUBLIC_URL must be set}
+      # Outgoing mail (the host fails to start without Host and FromEmail). Empty User means no authentication.
+      - Smtp__Host=${SMTP_HOST:?SMTP_HOST must be set}
+      - Smtp__Port=${SMTP_PORT:-587}
+      - Smtp__Security=${SMTP_SECURITY:-Auto}
+      - Smtp__User=${SMTP_USER:-}
+      - Smtp__Password=${SMTP_PASSWORD:-}
+      - Smtp__FromEmail=${SMTP_FROM_EMAIL:?SMTP_FROM_EMAIL must be set}
+      - Smtp__FromName=${SMTP_FROM_NAME:-Clinic EZ}
+      # Recipient of the public contact form. Empty disables it.
+      - Notifications__ContactInbox=${NOTIFICATIONS_CONTACT_INBOX:-}
+      # Web portal base URL (billing redirects when the request carries no Origin/Referer).
+      - FrontendBaseUrl=${FRONTEND_BASE_URL:-}
     restart: unless-stopped
 
 networks:

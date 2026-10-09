@@ -38,11 +38,11 @@ The compose files refuse to start when a `MESSAGING_*` value is empty. The deplo
 | GitHub setting | Used by |
 |---|---|
 | `MESSAGING_HUB_URL` (variable, or secret as fallback) | all API deploy workflows |
-| `<SVC>_MESSAGING_CLIENT_ID`, `<SVC>_MESSAGING_CLIENT_SECRET` (secrets; `<SVC>` = `CLINIC`, `LABORATORY`, `PHARMACY`, `ORGANIZATION`, `PATIENT`, `PORTAL`) | the matching `deploy-<svc>-api-*.yml` |
+| `<SVC>_MESSAGING_CLIENT_ID`, `<SVC>_MESSAGING_CLIENT_SECRET` (secrets; `<SVC>` = `CLINIC`, `LABORATORY`, `PHARMACY`, `ORGANIZATION`, `PATIENT`, `PORTAL`, `BILLING`) | the matching `deploy-<svc>-api-*.yml` |
 | `DATA_NETWORK`, `NPM_NETWORK` (optional variables, default `data-network` / `npm-default`) | all API deploy workflows |
 | `INTEROP_HUB_DB_CONNECTION_STRING`, `INTEROP_HUB_PORTAL_CLIENT_SECRET` (secrets), optional `INTEROP_HUB_PAYLOAD_ENCRYPTION_KEY` | `deploy-interop-hub-dev.yml` |
 
-Each service's client id and secret must match a client in the hub's bootstrap configuration (see [`services/interop-hub/README.md`](../services/interop-hub/README.md)).
+Each service's client id and secret must match a client in the hub's bootstrap configuration (see [`services/interop-hub/README.md`](../services/interop-hub/README.md)). Service-specific settings (patient sharing key, portal SMTP and hub public URL, clinic public upload URL, billing keys) are listed in [`docs/deployment-configuration.md`](../docs/deployment-configuration.md).
 
 ## Container images
 

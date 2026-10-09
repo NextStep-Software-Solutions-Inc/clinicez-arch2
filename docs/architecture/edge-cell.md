@@ -65,6 +65,8 @@ flowchart LR
 
 Only the web ports (and optionally the hub, loopback by default) are published. Everything else is on the private compose network.
 
+`patient-api` is cloud-only: the bundle does not contain it, so a site needs neither its signing key (`Sharing__SigningKey`) nor its database. Patients reach the site through the hub (messages for the site's facilities arrive via the cell inbox).
+
 ## Data flow
 
 Every facility service has **one** hub address, `Messaging__HubUrl`, and with the local hub it always points at the cell's hub (`http://interop-hub:8080`; a single-facility site without a hub points it at the cloud hub, see below).
@@ -132,7 +134,9 @@ Two kinds of credentials exist and they must not be confused: the ones the **por
 | Local hub (default) | **Local clients**, one per service (`site-clinic`, `site-billing`, `site-laboratory`, ...) | **Installer**, generated on the host | Each facility service authenticating to the local hub | `.env`: `<SERVICE>_HUB_CLIENT_ID/SECRET` -> `Messaging__ClientId/ClientSecret`; the same values in `hub-bootstrap.env` -> `Hub__Bootstrap__Clients__N__*` |
 | No local hub (`--no-local-hub`) | **Per-service clients** for clinic and billing, plus the cloud hub URL | **Portal** (ids as returned; no `site-` prefix, never generated or defaulted by the installer) | `clinic-api` / `billing-api` authenticating to the cloud hub | `.env`: `MESSAGING_HUB_URL`, `CLINIC_HUB_CLIENT_ID/SECRET`, `BILLING_HUB_CLIENT_ID/SECRET` -> `Messaging__*`. No `UPSTREAM_*`; `hub-bootstrap.env` is comment-only |
 
-Also in `.env`: `TENANT_ID`, `EDGE_CELL_ID`, the facility ids, `PORTAL_API_URL`, the license (activation step), and generated `POSTGRES_PASSWORD`, `INTERNAL_API_KEY`, per-service `*_JWT_SIGNING_KEY`, `HANGFIRE_DASHBOARD_PASSWORD`, `HUB_PAYLOAD_ENCRYPTION_KEY`.
+Also in `.env`: `TENANT_ID`, `EDGE_CELL_ID`, the facility ids, `PORTAL_API_URL`, `CLINIC_PUBLIC_UPLOAD_BASE_URL`, the license (activation step), and generated `POSTGRES_PASSWORD`, `INTERNAL_API_KEY`, per-service `*_JWT_SIGNING_KEY`, `HANGFIRE_DASHBOARD_PASSWORD`, `HUB_PAYLOAD_ENCRYPTION_KEY`.
+
+`CLINIC_PUBLIC_UPLOAD_BASE_URL` (`--public-upload-url`) is the public URL of the lab-result upload page printed on lab slips (`Clinic__PublicUploadBaseUrl`, `{base}/{token}`). That page is a cloud page: the site only needs outbound access, and uploaded results are relayed back to the clinic through the hub. Lab orders cannot be issued without it, so the installer asks for it (it may stay empty only on an air-gapped site, with a warning).
 
 The hub applies `Hub:Bootstrap` at every start (idempotent): the cell, one `EdgeCell` client per enabled service and the site's facilities, so it can route before its first directory sync.
 
@@ -173,7 +177,7 @@ To connect the site later: `UPSTREAM_ENABLED=true`, the portal's `HubEdgeCredent
 
 ## Limits and open points
 
-- **`billing-api` and `cashier-web` images are not published yet** (`services/billing-api` and `apps/cashier-app` do not exist in the repository when this bundle was written); the compose file assumes `billing-api` follows the same configuration keys as the other APIs (`ConnectionStrings`, `Messaging`, `Jwt`, `Internal`, `Hangfire`, `Facility`). `docker compose pull` fails until the image exists.
+- **`billing-api` takes a smaller configuration than the other APIs**: only `ASPNETCORE_ENVIRONMENT`, the connection string, `Messaging__*`, `Facility__BaseDomain`, `Internal__ApiKey` (optional provisioning key) and `Jwt__*`. The compose file mirrors `deploy/billing-api/docker-compose.yml` (no Hangfire, no workspace-profile cache, no portal URL). `cashier-web` is built from `apps/cashier-app/deploy/Dockerfile.web` by the `publish-images` workflow; it reads `/config.json` (`EXPO_PUBLIC_BILLING_API_URL`, default `/`) through the app's `runtimeConfig` and nginx proxies `/api/` to `billing-api`.
 - **What the portal must issue**: for a cell with a local hub, ONE upstream `EdgeCell` client with service `cell` (the hub README's convention) as `HubEdgeCredentials`; for a single facility without a local hub, per-service clients for `clinic` **and** `billing`. `HubOnboardingService` currently creates a client per facility service (e.g. `clinic`); the bundle takes whatever the portal hands out (`UPSTREAM_CLIENT_*`, or `CLINIC_HUB_CLIENT_*` / `BILLING_HUB_CLIENT_*`) and never invents ids, so the portal has to agree with this model before go-live.
 - **Laboratory and pharmacy web apps** only honour `/config.json` (runtime API address) once they adopt clinic-app's `runtimeConfig`; their images already generate it and proxy `/api/` same-origin. Until then they use their build-time `EXPO_PUBLIC_LAB_API_URL` / `EXPO_PUBLIC_PHARMACY_API_URL` (and no `build:web` script exists yet; the Dockerfiles fall back to `expo export -p web`).
 - Single PostgreSQL instance and single host: no high availability; recovery is restore-from-backup.

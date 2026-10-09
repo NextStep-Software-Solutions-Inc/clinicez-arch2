@@ -43,6 +43,8 @@ services:
       - Messaging__ClientId=${MESSAGING_CLIENT_ID:?MESSAGING_CLIENT_ID must be set}
       - Messaging__ClientSecret=${MESSAGING_CLIENT_SECRET:?MESSAGING_CLIENT_SECRET must be set}
       - Facility__BaseDomain=${BASE_DOMAIN:?BASE_DOMAIN must be set}
+      # Signs the share tokens patients hand to facilities (at least 32 characters; the service refuses to start without it).
+      - Sharing__SigningKey=${SHARING_SIGNING_KEY:?SHARING_SIGNING_KEY must be set (at least 32 characters)}
     restart: unless-stopped
 
 networks:

@@ -22,10 +22,19 @@ Set each value as a repository / environment **secret or variable** (Settings â†
 | `PORTAL_API_BASE_URL` | no | philhealth-proxy | Same, for the PhilHealth proxy. |
 | `SERVICES_CLINIC_API_URL` | no | patient-api | Clinic API base URL. |
 | `MESSAGING_HUB_URL` | yes | all APIs | Base URL of the Interop Hub (`Messaging__HubUrl`). Variable or secret. |
-| `CLINIC_` / `LABORATORY_` / `PHARMACY_` / `ORGANIZATION_` / `PATIENT_` / `PORTAL_` + `MESSAGING_CLIENT_ID` / `MESSAGING_CLIENT_SECRET` | yes | matching API | Per-service hub credentials (`Messaging__ClientId` / `Messaging__ClientSecret`), e.g. `CLINIC_MESSAGING_CLIENT_SECRET`. Must match a client in the hub bootstrap. |
+| `CLINIC_` / `LABORATORY_` / `PHARMACY_` / `ORGANIZATION_` / `PATIENT_` / `PORTAL_` / `BILLING_` + `MESSAGING_CLIENT_ID` / `MESSAGING_CLIENT_SECRET` | yes | matching API | Per-service hub credentials (`Messaging__ClientId` / `Messaging__ClientSecret`), e.g. `CLINIC_MESSAGING_CLIENT_SECRET`. Must match a client in the hub bootstrap. |
 | `DATA_NETWORK` / `NPM_NETWORK` | no | all APIs | Names of the external Docker networks (defaults `data-network` / `npm-default`). |
 | `INTEROP_HUB_DB_CONNECTION_STRING` / `INTEROP_HUB_PORTAL_CLIENT_SECRET` | yes | interop-hub | Hub database and the portal's bootstrap client secret. |
 | `INTEROP_HUB_PAYLOAD_ENCRYPTION_KEY` | no | interop-hub | Base64 of 32 random bytes; encrypts stored envelopes at rest (AES-256-GCM). Empty stores plain JSON. |
+| `BILLING_DB_CONNECTION_STRING` / `BILLING_JWT_SIGNING_KEY` / `INTERNAL_API_KEY` | yes | billing-api | Database connection string, local JWT signing key (`Jwt__SigningKey`) and internal API key (`Internal__ApiKey`) of the per-cell billing service. Hub credentials use `BILLING_MESSAGING_CLIENT_ID` / `BILLING_MESSAGING_CLIENT_SECRET`. Secrets. |
+| `PATIENT_SHARING_SIGNING_KEY` | yes | patient-api | Signs the share tokens patients give to facilities (`Sharing__SigningKey`, at least 32 characters, the service refuses to start without it). Secret; the deploy fails when it is shorter. |
+| `CLINIC_PUBLIC_UPLOAD_BASE_URL` | yes | clinic-api | Public URL where labs upload results for a requisition (`Clinic__PublicUploadBaseUrl`). Variable or secret. |
+| `HUB_PUBLIC_URL` | yes | portal-api | Public base URL of the cloud hub, handed to on-premise sites with their credentials (`Hub__PublicUrl`). Variable or secret. |
+| `SMTP_HOST` / `SMTP_FROM_EMAIL` | yes | portal-api | Outgoing mail server and sender address (`Smtp__Host` / `Smtp__FromEmail`); the portal refuses to start without them. Variable or secret. |
+| `SMTP_PORT` / `SMTP_SECURITY` / `SMTP_FROM_NAME` | no | portal-api | Defaults `587` / `Auto` (`Auto`, `None`, `StartTls`, `SslOnConnect`) / `Clinic EZ`. Variables. |
+| `SMTP_USER` / `SMTP_PASSWORD` | no | portal-api | Mail server credentials (secrets). Empty user means no authentication. |
+| `NOTIFICATIONS_CONTACT_INBOX` | no | portal-api | Recipient of the public contact form (`Notifications__ContactInbox`). Empty disables it. |
+| `FRONTEND_BASE_URL` | no | portal-api | Web portal base URL, used for billing redirects when a request carries no `Origin` / `Referer` (`FrontendBaseUrl`). Variable. |
 | `FACILITY_SUBDOMAIN_CLINIC` / `_LABORATORY` / `_PHARMACY` / `_ORGANIZATION` | no | portal-api, patient-api | Service subdomain per facility type (defaults `clinic`, `lab`, `pharmacy`, `org`). |
 | `VERIFICATION_BASE_URL` | no | clinic-api, laboratory-api | Public URL embedded in QR codes. Defaults to `https://<BASE_DOMAIN>`. |
 

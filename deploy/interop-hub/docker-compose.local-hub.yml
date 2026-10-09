@@ -37,9 +37,12 @@ services:
       - Hub__Mode=Local
       - Hub__Database__AutoMigrate=true
       - Hub__LocalCellId=${LOCAL_CELL_ID:?LOCAL_CELL_ID must be set}
-      - Hub__Upstream__Url=${UPSTREAM_HUB_URL:?UPSTREAM_HUB_URL must be set}
-      - Hub__Upstream__ClientId=${UPSTREAM_CLIENT_ID:?UPSTREAM_CLIENT_ID must be set}
-      - Hub__Upstream__ClientSecret=${UPSTREAM_CLIENT_SECRET:?UPSTREAM_CLIENT_SECRET must be set}
+      # UPSTREAM_ENABLED=false runs the hub air-gapped (same-cell traffic only; the three values below are then not needed).
+      # With the default (true) the hub refuses to start when any of them is empty.
+      - Hub__Upstream__Enabled=${UPSTREAM_ENABLED:-true}
+      - Hub__Upstream__Url=${UPSTREAM_HUB_URL:-}
+      - Hub__Upstream__ClientId=${UPSTREAM_CLIENT_ID:-}
+      - Hub__Upstream__ClientSecret=${UPSTREAM_CLIENT_SECRET:-}
       - Hub__Bootstrap__Cells__0__CellId=${LOCAL_CELL_ID}
       - Hub__Bootstrap__Cells__0__Name=${LOCAL_CELL_NAME:-Edge site}
       - Hub__Bootstrap__Cells__0__Kind=Edge

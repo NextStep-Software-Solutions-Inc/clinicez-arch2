@@ -35,7 +35,7 @@ param(
   [string]$FacilityId = '', [string]$FacilityName = '',
   [string]$LabFacilityId = '', [string]$PharmacyFacilityId = '', [string]$OrgFacilityId = '',
   [string]$With = '',
-  [string]$CloudHubUrl = '', [string]$EdgeClientId = '', [string]$EdgeClientSecret = '', [string]$PortalApiUrl = '',
+  [string]$CloudHubUrl = '', [string]$EdgeClientId = '', [string]$EdgeClientSecret = '', [string]$PortalApiUrl = '', [string]$PublicUploadUrl = '',
   [string]$BaseDomain = '',
   [string]$ClinicHubClientId = '', [string]$ClinicHubClientSecret = '',
   [string]$BillingHubClientId = '', [string]$BillingHubClientSecret = '',
@@ -61,7 +61,7 @@ $Keys = @(
   'GHCR_OWNER_REPO', 'IMAGE_TAG', 'COMPOSE_PROFILES', 'TENANT_ID', 'EDGE_CELL_ID', 'EDGE_CELL_NAME',
   'CLINIC_FACILITY_ID', 'CLINIC_FACILITY_NAME', 'LABORATORY_FACILITY_ID', 'LABORATORY_FACILITY_NAME',
   'PHARMACY_FACILITY_ID', 'PHARMACY_FACILITY_NAME', 'ORGANIZATION_FACILITY_ID', 'ORGANIZATION_FACILITY_NAME', 'BASE_DOMAIN',
-  'UPSTREAM_ENABLED', 'UPSTREAM_HUB_URL', 'UPSTREAM_CLIENT_ID', 'UPSTREAM_CLIENT_SECRET', 'PORTAL_API_URL', 'MESSAGING_HUB_URL',
+  'UPSTREAM_ENABLED', 'UPSTREAM_HUB_URL', 'UPSTREAM_CLIENT_ID', 'UPSTREAM_CLIENT_SECRET', 'PORTAL_API_URL', 'CLINIC_PUBLIC_UPLOAD_BASE_URL', 'MESSAGING_HUB_URL',
   'CLINIC_HUB_CLIENT_ID', 'CLINIC_HUB_CLIENT_SECRET', 'BILLING_HUB_CLIENT_ID', 'BILLING_HUB_CLIENT_SECRET',
   'LABORATORY_HUB_CLIENT_ID', 'LABORATORY_HUB_CLIENT_SECRET', 'PHARMACY_HUB_CLIENT_ID', 'PHARMACY_HUB_CLIENT_SECRET',
   'ORGANIZATION_HUB_CLIENT_ID', 'ORGANIZATION_HUB_CLIENT_SECRET', 'HUB_PAYLOAD_ENCRYPTION_KEY', 'HUB_BIND', 'HUB_LAN_PORT',
@@ -207,7 +207,7 @@ $FromArgs = @{
   CLINIC_FACILITY_ID = $FacilityId; CLINIC_FACILITY_NAME = $FacilityName
   LABORATORY_FACILITY_ID = $LabFacilityId; PHARMACY_FACILITY_ID = $PharmacyFacilityId; ORGANIZATION_FACILITY_ID = $OrgFacilityId
   UPSTREAM_HUB_URL = $CloudHubUrl; UPSTREAM_CLIENT_ID = $EdgeClientId; UPSTREAM_CLIENT_SECRET = $EdgeClientSecret
-  PORTAL_API_URL = $PortalApiUrl; BASE_DOMAIN = $BaseDomain
+  PORTAL_API_URL = $PortalApiUrl; BASE_DOMAIN = $BaseDomain; CLINIC_PUBLIC_UPLOAD_BASE_URL = $PublicUploadUrl
   CLINIC_HUB_CLIENT_ID = $ClinicHubClientId; CLINIC_HUB_CLIENT_SECRET = $ClinicHubClientSecret
   BILLING_HUB_CLIENT_ID = $BillingHubClientId; BILLING_HUB_CLIENT_SECRET = $BillingHubClientSecret
   UPSTREAM_ENABLED = ''
@@ -365,6 +365,7 @@ function Get-Config([string]$Mode) {
       Read-Value 'BILLING_HUB_CLIENT_ID' 'Billing hub client id (portal-issued)'
       Read-Value 'BILLING_HUB_CLIENT_SECRET' 'Billing hub client secret (portal-issued)' -Secret
       Read-Value 'PORTAL_API_URL' 'Cloud portal API URL'
+      Read-Value 'CLINIC_PUBLIC_UPLOAD_BASE_URL' 'Public lab-upload page URL (cloud portal)'
     }
   } else {
     Set-Default 'MESSAGING_HUB_URL' 'http://interop-hub:8080'
@@ -373,7 +374,11 @@ function Get-Config([string]$Mode) {
       Read-Value 'UPSTREAM_CLIENT_ID' 'Upstream edge client id (portal HubEdgeCredentials.ClientId)'
       Read-Value 'UPSTREAM_CLIENT_SECRET' 'Upstream edge client secret (portal HubEdgeCredentials.ClientSecret)' -Secret
       Read-Value 'PORTAL_API_URL' 'Cloud portal API URL'
+      Read-Value 'CLINIC_PUBLIC_UPLOAD_BASE_URL' 'Public lab-upload page URL (cloud portal)'
     }
+  }
+  if (-not $Cfg['CLINIC_PUBLIC_UPLOAD_BASE_URL']) {
+    Write-Warn 'CLINIC_PUBLIC_UPLOAD_BASE_URL is empty: lab orders cannot be issued until it is set (public URL of the cloud lab-upload page; -PublicUploadUrl, or edit .env and run .\install.ps1 apply).'
   }
   if ($Mode -eq 'reuse' -and $AirGapped -and $old['UPSTREAM_ENABLED'] -ne 'false') {
     Write-Warn '-AirGapped is ignored on an existing .env: set UPSTREAM_ENABLED=false in .env and run .\install.ps1 apply (or re-run with -Force).'
@@ -393,7 +398,7 @@ function Get-Config([string]$Mode) {
   Set-GeneratedSecret 'HANGFIRE_DASHBOARD_PASSWORD' 24
   if ([string]::IsNullOrEmpty($Cfg['HUB_PAYLOAD_ENCRYPTION_KEY'])) { $Cfg['HUB_PAYLOAD_ENCRYPTION_KEY'] = New-Base64Key32 }
 
-  foreach ($k in 'UPSTREAM_HUB_URL', 'PORTAL_API_URL', 'MESSAGING_HUB_URL') { $Cfg[$k] = $Cfg[$k].TrimEnd('/') }
+  foreach ($k in 'UPSTREAM_HUB_URL', 'PORTAL_API_URL', 'CLINIC_PUBLIC_UPLOAD_BASE_URL', 'MESSAGING_HUB_URL') { $Cfg[$k] = $Cfg[$k].TrimEnd('/') }
   foreach ($k in $Keys) {
     if ($k -eq 'EDGE_CELL_NAME' -or $k -like '*_FACILITY_NAME') { Test-SafeValue $k -AllowSpaces } else { Test-SafeValue $k }
   }
@@ -426,6 +431,9 @@ function Write-EnvFile {
       '# UPSTREAM_ENABLED=false (-AirGapped): the hub runs without any upstream, same-cell traffic only. Empty values are fine then;',
       '# to connect later set it to true, fill the three UPSTREAM_* values and run .\install.ps1 apply. Not used with -NoLocalHub.',
       'UPSTREAM_ENABLED', 'UPSTREAM_HUB_URL', 'UPSTREAM_CLIENT_ID', 'UPSTREAM_CLIENT_SECRET', 'PORTAL_API_URL'),
+    @('# Public URL of the lab-result upload page printed on lab slips (a cloud page; the site only needs outbound access).',
+      '# Required to issue lab orders. May be empty when air-gapped.',
+      'CLINIC_PUBLIC_UPLOAD_BASE_URL'),
     @('# Messaging clients of the services.',
       '#   Local hub (default): MESSAGING_HUB_URL is the local hub; every <SVC>_HUB_CLIENT_ID/SECRET is a LOCAL client (site-<service>)',
       '#     generated here; the same values go into hub-bootstrap.env.',

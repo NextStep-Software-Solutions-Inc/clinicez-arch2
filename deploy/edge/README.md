@@ -26,6 +26,8 @@ profile fetch) to the ClinicEZ cloud.
 | `backup/backup.sh` | Loop run by the `backup` service (`pg_dump` + records/keys archive, retention). |
 | `hub-bootstrap.env` | **Generated** by the installer: the local hub's cell, clients and facilities (secret, git-ignored). |
 
+Not in this bundle: `patient-api` is cloud-only (patients reach the site through the hub), so a site needs neither its database nor its `Sharing__SigningKey`.
+
 ## Prerequisites
 
 - A server (Linux recommended; Windows with Docker Desktop works) with **Docker Engine 24+ and Docker Compose v2** (`docker compose`).
@@ -47,6 +49,7 @@ hub stores only a hash, so a lost secret can only be rotated. Together with the 
 | Edge cell id | `EDGE_CELL_ID` | The cell registered at the cloud hub. |
 | Facility id(s) | `CLINIC_FACILITY_ID`, `LABORATORY_FACILITY_ID`, `PHARMACY_FACILITY_ID`, `ORGANIZATION_FACILITY_ID` | Same id as inside each license. |
 | Portal API base URL | `PORTAL_API_URL` | Workspace profile (branding), cached on disk for offline use. May stay empty when air-gapped. |
+| Public lab-upload page URL | `CLINIC_PUBLIC_UPLOAD_BASE_URL` (`--public-upload-url` / `-PublicUploadUrl`) | A **cloud** page printed on lab slips as `{url}/{token}` (`Clinic__PublicUploadBaseUrl`). The site only needs outbound access; uploaded results are relayed back through the hub. Lab orders cannot be issued without it: asked at install, may stay empty only when air-gapped (the installer warns). |
 | License token or license file | `activate` step (not stored in `.env`) | One per facility; stored in each service's database. |
 
 ### Credentials the portal hands out (and the ones it does not)
@@ -82,7 +85,7 @@ cd deploy/edge
 # non-interactive:
 ./install.sh --yes --tenant-id <id> --cell-id <cell> --facility-id <guid> \
   --cloud-hub-url https://<hub> --edge-client-id <id> --edge-client-secret '<secret>' \
-  --portal-api-url https://<portal-api> --license-token '<token>'
+  --portal-api-url https://<portal-api> --public-upload-url https://<lab-upload-page> --license-token '<token>'
 ```
 
 Windows (PowerShell; run the script with a process-scoped bypass if scripts are blocked):
@@ -91,23 +94,23 @@ Windows (PowerShell; run the script with a process-scoped bypass if scripts are 
 cd deploy\edge
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -Yes -TenantId <id> -CellId <cell> -FacilityId <guid> `
-  -CloudHubUrl https://<hub> -EdgeClientId <id> -EdgeClientSecret '<secret>' -PortalApiUrl https://<portal-api> -LicenseToken '<token>'
+  -CloudHubUrl https://<hub> -EdgeClientId <id> -EdgeClientSecret '<secret>' -PortalApiUrl https://<portal-api> -PublicUploadUrl https://<lab-upload-page> -LicenseToken '<token>'
 ```
 
 The other two modes (see "Credentials the portal hands out"):
 
 ```bash
 # air-gapped: no upstream settings, UPSTREAM_ENABLED=false, same-cell traffic only
-./install.sh --yes --air-gapped --tenant-id <id> --cell-id <cell> --facility-id <guid> --license-file /media/usb/clinic.license
+./install.sh --yes --air-gapped --tenant-id <id> --cell-id <cell> --facility-id <guid> --license-file /media/usb/clinic.license   # lab-upload URL may stay empty: lab orders are blocked until it is set
 # single facility without a local hub: the portal's clinic and billing clients, the cloud hub URL
 ./install.sh --yes --no-local-hub --tenant-id <id> --cell-id <cell> --facility-id <guid> --cloud-hub-url https://<hub> \
   --clinic-hub-client-id <id> --clinic-hub-client-secret '<secret>' --billing-hub-client-id <id> --billing-hub-client-secret '<secret>' \
-  --portal-api-url https://<portal-api>
+  --portal-api-url https://<portal-api> --public-upload-url https://<lab-upload-page>
 ```
 ```powershell
 .\install.ps1 -Yes -AirGapped -TenantId <id> -CellId <cell> -FacilityId <guid>
 .\install.ps1 -Yes -NoLocalHub -TenantId <id> -CellId <cell> -FacilityId <guid> -CloudHubUrl https://<hub> `
-  -ClinicHubClientId <id> -ClinicHubClientSecret '<secret>' -BillingHubClientId <id> -BillingHubClientSecret '<secret>' -PortalApiUrl https://<portal-api>
+  -ClinicHubClientId <id> -ClinicHubClientSecret '<secret>' -BillingHubClientId <id> -BillingHubClientSecret '<secret>' -PortalApiUrl https://<portal-api> -PublicUploadUrl https://<lab-upload-page>
 ```
 
 The installer: checks docker, compose v2, disk and ports; writes `.env` (**never overwrites an existing one** without `--force`/`-Force`,
@@ -117,8 +120,8 @@ license(s)**; prints the URLs. Re-running it is safe: existing `.env` and secret
 
 Images come from `ghcr.io/<GHCR_OWNER_REPO>/<name>:<IMAGE_TAG>` where `<name>` is one of `clinic-api`, `laboratory-api`, `pharmacy-api`,
 `organization-api`, `billing-api`, `interop-hub`, `clinic-web`, `laboratory-web`, `pharmacy-web`, `cashier-web`. If the packages are private,
-export `GHCR_USER` and `GHCR_TOKEN` (a `read:packages` token) before running. `cashier-web` is published once `apps/cashier-app` lands:
-do not enable the `cashier` profile before that.
+export `GHCR_USER` and `GHCR_TOKEN` (a `read:packages` token) before running. `cashier-web` is built from `apps/cashier-app/deploy/Dockerfile.web`
+(same-origin `/api/` proxied to `billing-api`, runtime `config.json` with `EXPO_PUBLIC_BILLING_API_URL` defaulting to `/`).
 
 ### Compose profiles
 
@@ -239,7 +242,7 @@ Another tenant means another server (or at least another directory with its own 
 
 | Symptom | Check |
 |---|---|
-| `docker compose pull` fails | Network/DNS to `ghcr.io`; private packages need `GHCR_USER` / `GHCR_TOKEN`; `GHCR_OWNER_REPO` and `IMAGE_TAG` in `.env`; the image exists (billing-api / cashier-web may not be published yet). |
+| `docker compose pull` fails | Network/DNS to `ghcr.io`; private packages need `GHCR_USER` / `GHCR_TOKEN`; `GHCR_OWNER_REPO` and `IMAGE_TAG` in `.env`; the image exists (the `publish-images` workflow builds all of them). |
 | Installer: "port N already in use" | Another program owns it; change `CLINIC_WEB_PORT` etc. in `.env`, or `HUB_LAN_PORT`. |
 | Service not healthy | `docker compose ps`, `docker compose logs --tail 100 <service>`. APIs wait for postgres to be healthy; the first start runs migrations (can take a minute). |
 | `required variable ... is missing` | `.env` incomplete (hand-edited?). Re-run `./install.sh` (it appends missing values) or compare with `.env.example`. |

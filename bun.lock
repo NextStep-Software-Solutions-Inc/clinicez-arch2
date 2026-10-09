@@ -9,6 +9,7 @@
       "name": "@clinicez/cashier-app",
       "version": "1.0.0",
       "dependencies": {
+        "@expo/metro-runtime": "~56.0.21",
         "@react-navigation/bottom-tabs": "^8.0.0-alpha.33",
         "@react-navigation/core": "8.0.0-alpha.26",
         "@react-navigation/native": "^8.0.0-alpha.28",
@@ -21,6 +22,7 @@
         "react-native": "0.85.3",
         "react-native-safe-area-context": "~5.7.0",
         "react-native-screens": "4.25.2",
+        "react-native-web": "~0.21.3",
       },
       "devDependencies": {
         "@types/node": "^22.20.2",

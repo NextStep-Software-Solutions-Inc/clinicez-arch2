@@ -21,7 +21,7 @@ HUB_ENV_FILE=hub-bootstrap.env
 KEYS="GHCR_OWNER_REPO IMAGE_TAG COMPOSE_PROFILES TENANT_ID EDGE_CELL_ID EDGE_CELL_NAME
 CLINIC_FACILITY_ID CLINIC_FACILITY_NAME LABORATORY_FACILITY_ID LABORATORY_FACILITY_NAME
 PHARMACY_FACILITY_ID PHARMACY_FACILITY_NAME ORGANIZATION_FACILITY_ID ORGANIZATION_FACILITY_NAME BASE_DOMAIN
-UPSTREAM_ENABLED UPSTREAM_HUB_URL UPSTREAM_CLIENT_ID UPSTREAM_CLIENT_SECRET PORTAL_API_URL MESSAGING_HUB_URL
+UPSTREAM_ENABLED UPSTREAM_HUB_URL UPSTREAM_CLIENT_ID UPSTREAM_CLIENT_SECRET PORTAL_API_URL CLINIC_PUBLIC_UPLOAD_BASE_URL MESSAGING_HUB_URL
 CLINIC_HUB_CLIENT_ID CLINIC_HUB_CLIENT_SECRET BILLING_HUB_CLIENT_ID BILLING_HUB_CLIENT_SECRET
 LABORATORY_HUB_CLIENT_ID LABORATORY_HUB_CLIENT_SECRET PHARMACY_HUB_CLIENT_ID PHARMACY_HUB_CLIENT_SECRET
 ORGANIZATION_HUB_CLIENT_ID ORGANIZATION_HUB_CLIENT_SECRET HUB_PAYLOAD_ENCRYPTION_KEY HUB_BIND HUB_LAN_PORT
@@ -58,6 +58,8 @@ Install options (all optional: missing values are asked for, or taken from an ex
   --edge-client-id <id>            local hub only: the ONE upstream client the portal issued to the cell (HubEdgeCredentials.ClientId)
   --edge-client-secret <secret>    local hub only: its ClientSecret (prefer the prompt: it keeps it out of shell history)
   --portal-api-url <url>           cloud portal API (workspace profile fetches; may stay empty with --air-gapped)
+  --public-upload-url <url>        public lab-result upload page (a cloud page, printed on lab slips); may stay empty with
+                                   --air-gapped, but lab orders cannot be issued until it is set
   --air-gapped                     no cloud link: UPSTREAM_ENABLED=false, same-cell traffic only (cross-cell messages are
                                    rejected, not queued); license activation by file. Not combinable with --no-local-hub
   --no-local-hub                   single-facility site, no local hub: clinic and billing use the PORTAL-issued per-service
@@ -117,6 +119,7 @@ while [ "$#" -gt 0 ]; do
     --edge-client-id) need_arg "$@"; UPSTREAM_CLIENT_ID=$2; shift ;;
     --edge-client-secret) need_arg "$@"; UPSTREAM_CLIENT_SECRET=$2; shift ;;
     --portal-api-url) need_arg "$@"; PORTAL_API_URL=$2; shift ;;
+    --public-upload-url) need_arg "$@"; CLINIC_PUBLIC_UPLOAD_BASE_URL=$2; shift ;;
     --base-domain) need_arg "$@"; BASE_DOMAIN=$2; shift ;;
     --clinic-hub-client-id) need_arg "$@"; CLINIC_HUB_CLIENT_ID=$2; shift ;;
     --clinic-hub-client-secret) need_arg "$@"; CLINIC_HUB_CLIENT_SECRET=$2; shift ;;
@@ -364,6 +367,7 @@ collect_config() { # <new|reuse>
       ask BILLING_HUB_CLIENT_ID "Billing hub client id (portal-issued)"
       ask BILLING_HUB_CLIENT_SECRET "Billing hub client secret (portal-issued)" secret
       ask PORTAL_API_URL "Cloud portal API URL"
+      ask CLINIC_PUBLIC_UPLOAD_BASE_URL "Public lab-upload page URL (cloud portal)"
     fi
   else
     default MESSAGING_HUB_URL http://interop-hub:8080
@@ -372,7 +376,11 @@ collect_config() { # <new|reuse>
       ask UPSTREAM_CLIENT_ID "Upstream edge client id (portal HubEdgeCredentials.ClientId)"
       ask UPSTREAM_CLIENT_SECRET "Upstream edge client secret (portal HubEdgeCredentials.ClientSecret)" secret
       ask PORTAL_API_URL "Cloud portal API URL"
+      ask CLINIC_PUBLIC_UPLOAD_BASE_URL "Public lab-upload page URL (cloud portal)"
     fi
+  fi
+  if [ -z "$CLINIC_PUBLIC_UPLOAD_BASE_URL" ]; then
+    warn "CLINIC_PUBLIC_UPLOAD_BASE_URL is empty: lab orders cannot be issued until it is set (public URL of the cloud lab-upload page; --public-upload-url, or edit .env and run ./install.sh apply)."
   fi
   if [ "$mode" = reuse ] && [ "$AIR_GAPPED" = 1 ] && [ "$(env_get UPSTREAM_ENABLED "$ENV_FILE")" != false ]; then
     warn "--air-gapped is ignored on an existing .env: set UPSTREAM_ENABLED=false in .env and run ./install.sh apply (or re-run with --force)."
@@ -394,7 +402,7 @@ EOF
   gen_if_empty HANGFIRE_DASHBOARD_PASSWORD 24
   if [ -z "$HUB_PAYLOAD_ENCRYPTION_KEY" ]; then HUB_PAYLOAD_ENCRYPTION_KEY=$(rand_b64_32); fi
 
-  for k in UPSTREAM_HUB_URL PORTAL_API_URL MESSAGING_HUB_URL; do trim_url "$k"; done
+  for k in UPSTREAM_HUB_URL PORTAL_API_URL CLINIC_PUBLIC_UPLOAD_BASE_URL MESSAGING_HUB_URL; do trim_url "$k"; done
   for k in $KEYS; do
     case "$k" in
       EDGE_CELL_NAME|*_FACILITY_NAME) check_safe "$k" spaces ;;
@@ -449,6 +457,10 @@ UPSTREAM_HUB_URL=$UPSTREAM_HUB_URL
 UPSTREAM_CLIENT_ID=$UPSTREAM_CLIENT_ID
 UPSTREAM_CLIENT_SECRET=$UPSTREAM_CLIENT_SECRET
 PORTAL_API_URL=$PORTAL_API_URL
+
+# Public URL of the lab-result upload page printed on lab slips (a cloud page; the site only needs outbound access).
+# Required to issue lab orders. May be empty when air-gapped.
+CLINIC_PUBLIC_UPLOAD_BASE_URL=$CLINIC_PUBLIC_UPLOAD_BASE_URL
 
 # Messaging clients of the services.
 #   Local hub (default): MESSAGING_HUB_URL is the local hub; every <SVC>_HUB_CLIENT_ID/SECRET is a LOCAL client (site-<service>)
