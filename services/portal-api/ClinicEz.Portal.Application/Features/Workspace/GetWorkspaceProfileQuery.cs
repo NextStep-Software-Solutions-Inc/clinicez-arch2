@@ -34,7 +34,7 @@ public class GetWorkspaceProfileQueryHandler(IApplicationDbContext context)
         var key = request.TenantSlug.Trim().ToLowerInvariant();
         var tenant = await context.Tenants
             .AsNoTracking()
-            .FirstOrDefaultAsync(t => t.TenantSlug.ToLower() == key, cancellationToken);
+            .FirstOrDefaultAsync(t => t.TenantSlug.ToLower() == key || t.Id.ToString() == key, cancellationToken);
         if (tenant == null) return null;
 
         var settings = await context.WorkspaceSettings

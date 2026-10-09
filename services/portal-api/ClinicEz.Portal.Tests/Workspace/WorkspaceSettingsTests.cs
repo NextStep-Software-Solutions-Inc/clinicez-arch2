@@ -2,7 +2,9 @@ using ClinicEz.Portal.Application.Features.Admin.Queries;
 using ClinicEz.Portal.Application.Features.Workspace;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Portal.Infrastructure.Persistence;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using Moq;
 using System;
 using System.Linq;
 using System.Text.Json;
@@ -18,6 +20,7 @@ public class WorkspaceSettingsTests : IDisposable
     private const string OwnerId = "clerk_owner_111";
     private static readonly WorkspaceActor Actor = new(OwnerId, "Juan Dela Cruz", "Owner");
 
+    private readonly Mock<IPublishEndpoint> _publisher = new();
     private readonly ApplicationDbContext _context;
     private readonly Guid _tenantId = Guid.NewGuid();
 
@@ -105,7 +108,7 @@ public class WorkspaceSettingsTests : IDisposable
     [Fact]
     public async Task UpdateGeneral_PersistsTenantAndLocaleDefaults()
     {
-        var handler = new UpdateWorkspaceGeneralCommandHandler(_context);
+        var handler = new UpdateWorkspaceGeneralCommandHandler(_context, _publisher.Object);
 
         var result = await handler.Handle(Command(timeZone: "Asia/Singapore", locale: "en-US", currency: "USD"), CancellationToken.None);
 
@@ -135,7 +138,7 @@ public class WorkspaceSettingsTests : IDisposable
     [Fact]
     public async Task UpdateGeneral_BlankOptionalValues_AreCleared_NotIgnored()
     {
-        var handler = new UpdateWorkspaceGeneralCommandHandler(_context);
+        var handler = new UpdateWorkspaceGeneralCommandHandler(_context, _publisher.Object);
 
         await handler.Handle(Command(representative: "  ", phone: null), CancellationToken.None);
 
@@ -148,7 +151,7 @@ public class WorkspaceSettingsTests : IDisposable
     [Fact]
     public async Task UpdateGeneral_WritesAuditEntryWithOnlyChangedFields()
     {
-        var handler = new UpdateWorkspaceGeneralCommandHandler(_context);
+        var handler = new UpdateWorkspaceGeneralCommandHandler(_context, _publisher.Object);
 
         await handler.Handle(Command(name: "Metro Super Clinic"), CancellationToken.None);
 
@@ -172,7 +175,7 @@ public class WorkspaceSettingsTests : IDisposable
     [Fact]
     public async Task UpdateGeneral_NoEffectiveChange_WritesNoAuditEntry()
     {
-        var handler = new UpdateWorkspaceGeneralCommandHandler(_context);
+        var handler = new UpdateWorkspaceGeneralCommandHandler(_context, _publisher.Object);
 
         await handler.Handle(Command(
             name: "Metro Clinic",
@@ -187,7 +190,7 @@ public class WorkspaceSettingsTests : IDisposable
     [Fact]
     public async Task UpdateGeneral_UnknownWorkspace_Throws()
     {
-        var handler = new UpdateWorkspaceGeneralCommandHandler(_context);
+        var handler = new UpdateWorkspaceGeneralCommandHandler(_context, _publisher.Object);
         await Assert.ThrowsAsync<System.Collections.Generic.KeyNotFoundException>(() =>
             handler.Handle(Command() with { TenantSlug = "nope" }, CancellationToken.None));
     }

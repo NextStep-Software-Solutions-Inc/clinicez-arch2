@@ -2,6 +2,7 @@ using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
 using FluentValidation;
 using MediatR;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
@@ -52,7 +53,7 @@ public partial class UpdateWorkspaceBrandingCommandValidator : AbstractValidator
     }
 }
 
-public class UpdateWorkspaceBrandingCommandHandler(IApplicationDbContext context)
+public class UpdateWorkspaceBrandingCommandHandler(IApplicationDbContext context, IPublishEndpoint publishEndpoint)
     : IRequestHandler<UpdateWorkspaceBrandingCommand, WorkspaceBrandingDto>
 {
     public async Task<WorkspaceBrandingDto> Handle(UpdateWorkspaceBrandingCommand request, CancellationToken cancellationToken)
@@ -84,6 +85,9 @@ public class UpdateWorkspaceBrandingCommandHandler(IApplicationDbContext context
         }
 
         await context.SaveChangesAsync(cancellationToken);
+
+        if (changes.HasChanges) await WorkspaceProfileEvents.PublishUpdatedAsync(publishEndpoint, tenant, settings, cancellationToken);
+
         return WorkspaceSettingsMapper.ToBranding(settings);
     }
 

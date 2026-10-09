@@ -8,6 +8,7 @@ using ClinicEz.Shared.Documents;
 using ClinicEz.Shared.Documents.Components;
 using ClinicEz.Shared.Documents.Configuration;
 using ClinicEz.Shared.Documents.Security;
+using ClinicEz.Shared.Workspace;
 using Microsoft.Extensions.Configuration;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
@@ -20,12 +21,15 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
     private readonly IDocumentSecurityService _securityService;
     private readonly IQrCodeService _qrCodeService;
     private readonly string _verificationBaseUrl;
+    private readonly IWorkspaceProfileProvider? _workspaceProfiles;
 
     public ClinicDocumentPdfService(
         IDocumentSecurityService? securityService = null,
         IQrCodeService? qrCodeService = null,
-        IConfiguration? configuration = null)
+        IConfiguration? configuration = null,
+        IWorkspaceProfileProvider? workspaceProfiles = null)
     {
+        _workspaceProfiles = workspaceProfiles;
         QuestPdfInitializer.EnsureInitialized();
         _securityService = securityService ?? new DocumentSecurityService();
         _qrCodeService = qrCodeService ?? new QrCodeService();
@@ -733,7 +737,20 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
         return doc.GeneratePdf();
     }
 
-    private static TenantPrintoutConfig MapToTenantConfig(ClinicSettings settings)
+    // The default every clinic row was created with; a clinic still on it has not chosen its own accent.
+    private const string LegacyDefaultAccent = "#0284C7";
+
+    /// <summary>
+    /// Accent precedence: the clinic's own choice, then the workspace brand accent, then the product default.
+    /// Reads the cached workspace profile only (no network), so printing never waits on the portal.
+    /// </summary>
+    private string ResolveAccent(ClinicSettings settings)
+    {
+        var workspaceAccent = _workspaceProfiles?.TryGetCached(settings.TenantId.ToString())?.AccentColorHex;
+        return WorkspaceBrand.ResolveAccent(settings.PrimaryColorHex, workspaceAccent, LegacyDefaultAccent);
+    }
+
+    private TenantPrintoutConfig MapToTenantConfig(ClinicSettings settings)
     {
         return new TenantPrintoutConfig
         {
@@ -742,7 +759,7 @@ public class ClinicDocumentPdfService : IClinicDocumentPdfService
             PhysicalAddress = settings.LetterheadAddress ?? "Philippines",
             ContactNumbers = settings.LetterheadContact,
             PhilHealthAccreditationNumber = settings.AccreditationNumber,
-            PrimaryColorHex = settings.PrimaryColorHex ?? "#0284C7",
+            PrimaryColorHex = ResolveAccent(settings),
             PaperSize = settings.PaperSize?.ToLowerInvariant() switch
             {
                 "a4" => DocumentPaperSize.A4,

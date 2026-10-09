@@ -1,7 +1,9 @@
 using ClinicEz.Portal.Application.Features.Workspace;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Portal.Infrastructure.Persistence;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using Moq;
 using System;
 using System.Linq;
 using System.Threading;
@@ -15,6 +17,7 @@ public class WorkspaceBrandingTests : IDisposable
     private const string Slug = "metro-clinic";
     private static readonly WorkspaceActor Actor = new("clerk_owner_111", "Juan Dela Cruz", "Owner");
 
+    private readonly Mock<IPublishEndpoint> _publisher = new();
     private readonly ApplicationDbContext _context;
     private readonly Guid _tenantId = Guid.NewGuid();
 
@@ -47,7 +50,7 @@ public class WorkspaceBrandingTests : IDisposable
     [Fact]
     public async Task Update_PersistsBranding_NormalizesColor_BumpsVersion_AndAudits()
     {
-        var handler = new UpdateWorkspaceBrandingCommandHandler(_context);
+        var handler = new UpdateWorkspaceBrandingCommandHandler(_context, _publisher.Object);
 
         var result = await handler.Handle(Cmd(), CancellationToken.None);
 
@@ -66,7 +69,7 @@ public class WorkspaceBrandingTests : IDisposable
     [Fact]
     public async Task Update_Unchanged_DoesNotBumpVersionOrAudit()
     {
-        var handler = new UpdateWorkspaceBrandingCommandHandler(_context);
+        var handler = new UpdateWorkspaceBrandingCommandHandler(_context, _publisher.Object);
         await handler.Handle(Cmd(), CancellationToken.None);
 
         await handler.Handle(Cmd(), CancellationToken.None);
@@ -78,7 +81,7 @@ public class WorkspaceBrandingTests : IDisposable
     [Fact]
     public async Task Update_BlankValues_ClearOverrides()
     {
-        var handler = new UpdateWorkspaceBrandingCommandHandler(_context);
+        var handler = new UpdateWorkspaceBrandingCommandHandler(_context, _publisher.Object);
         await handler.Handle(Cmd(), CancellationToken.None);
 
         var result = await handler.Handle(Cmd(name: " ", logo: "", color: null), CancellationToken.None);
@@ -92,7 +95,7 @@ public class WorkspaceBrandingTests : IDisposable
     [Fact]
     public async Task Get_ReturnsBrandingSection()
     {
-        await new UpdateWorkspaceBrandingCommandHandler(_context).Handle(Cmd(), CancellationToken.None);
+        await new UpdateWorkspaceBrandingCommandHandler(_context, _publisher.Object).Handle(Cmd(), CancellationToken.None);
 
         var dto = await new GetWorkspaceSettingsQueryHandler(_context)
             .Handle(new GetWorkspaceSettingsQuery(Slug), CancellationToken.None);
@@ -103,11 +106,49 @@ public class WorkspaceBrandingTests : IDisposable
     [Fact]
     public async Task UpdateGeneral_BumpsProfileVersion()
     {
-        var handler = new UpdateWorkspaceGeneralCommandHandler(_context);
+        var handler = new UpdateWorkspaceGeneralCommandHandler(_context, _publisher.Object);
         await handler.Handle(new UpdateWorkspaceGeneralCommand(Slug, Actor, "Metro Renamed", null, "owner@metro.ph", null,
             "Asia/Manila", "en-PH", "MMM d, yyyy", "PHP"), CancellationToken.None);
 
         Assert.Equal(2, (await _context.WorkspaceSettings.SingleAsync()).ProfileVersion);
+    }
+
+    // ---------- propagation event ----------
+
+    [Fact]
+    public async Task Update_PublishesProfileUpdatedEvent_OnlyWhenSomethingChanged()
+    {
+        var handler = new UpdateWorkspaceBrandingCommandHandler(_context, _publisher.Object);
+
+        await handler.Handle(Cmd(), CancellationToken.None);
+        await handler.Handle(Cmd(), CancellationToken.None); // identical => no change => no event
+
+        _publisher.Verify(p => p.Publish(
+            It.Is<ClinicEz.Shared.Common.WorkspaceProfileUpdatedEvent>(e =>
+                e.TenantSlug == Slug && e.TenantId == _tenantId.ToString() && e.Version == 2),
+            It.IsAny<CancellationToken>()), Times.Once);
+        _publisher.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task UpdateGeneral_PublishesProfileUpdatedEvent()
+    {
+        await new UpdateWorkspaceGeneralCommandHandler(_context, _publisher.Object).Handle(
+            new UpdateWorkspaceGeneralCommand(Slug, Actor, "Metro Renamed", null, "owner@metro.ph", null,
+                "Asia/Manila", "en-PH", "MMM d, yyyy", "PHP"), CancellationToken.None);
+
+        _publisher.Verify(p => p.Publish(
+            It.IsAny<ClinicEz.Shared.Common.WorkspaceProfileUpdatedEvent>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Profile_CanBeResolvedByTenantId()
+    {
+        var profile = await new GetWorkspaceProfileQueryHandler(_context)
+            .Handle(new GetWorkspaceProfileQuery(_tenantId.ToString()), CancellationToken.None);
+
+        Assert.Equal(Slug, profile!.TenantSlug);
     }
 
     // ---------- workspace profile (facility-facing projection) ----------
@@ -129,7 +170,7 @@ public class WorkspaceBrandingTests : IDisposable
     [Fact]
     public async Task Profile_AfterBranding_UsesOverridesAndNewVersion_AndExposesNoContactDetails()
     {
-        await new UpdateWorkspaceBrandingCommandHandler(_context).Handle(Cmd(), CancellationToken.None);
+        await new UpdateWorkspaceBrandingCommandHandler(_context, _publisher.Object).Handle(Cmd(), CancellationToken.None);
 
         var profile = await new GetWorkspaceProfileQueryHandler(_context)
             .Handle(new GetWorkspaceProfileQuery(Slug), CancellationToken.None);

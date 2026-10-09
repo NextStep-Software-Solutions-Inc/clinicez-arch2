@@ -1,6 +1,7 @@
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Domain.Interfaces;
 using ClinicEz.Clinic.Infrastructure.Consumers;
+using ClinicEz.Shared.Workspace;
 using ClinicEz.Clinic.Infrastructure.Context;
 using ClinicEz.Clinic.Infrastructure.Persistence;
 using ClinicEz.Clinic.Infrastructure.Persistence.Repositories;
@@ -69,6 +70,9 @@ public static class DependencyInjection
         services.AddHostedService<ClinicEz.Clinic.Infrastructure.PhilHealth.Catalog.PhilHealthCatalogSeedHostedService>();
         services.AddHostedService<ClinicEz.Clinic.Infrastructure.Idempotency.IdempotencyCleanupHostedService>();
 
+        // Workspace brand/regional defaults, pulled from portal-api (works against a remote portal)
+        services.AddWorkspaceProfileClient();
+
         // Outbound patient webhook notifier
         services.AddHttpClient<IPatientWebhookNotifier, PatientWebhookNotifier>();
 
@@ -99,6 +103,7 @@ public static class DependencyInjection
         {
             x.SetEndpointNameFormatter(new KebabCaseEndpointNameFormatter("clinic", false));
             x.AddConsumer<FacilityCreatedConsumer>();
+            x.AddConsumer<ClinicEz.Shared.Workspace.WorkspaceProfileUpdatedConsumer>();
             x.AddConsumer<AppointmentBookedConsumer>();
             x.AddConsumer<DiagnosticReportFinalizedConsumer>();
             x.AddConsumer<PrescriptionDispensedConsumer>();

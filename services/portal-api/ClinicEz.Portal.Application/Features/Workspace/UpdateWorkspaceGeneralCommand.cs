@@ -2,6 +2,7 @@ using ClinicEz.Portal.Application.Interfaces;
 using ClinicEz.Portal.Domain.Entities;
 using FluentValidation;
 using MediatR;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Linq;
@@ -95,7 +96,7 @@ public partial class UpdateWorkspaceGeneralCommandValidator : AbstractValidator<
     }
 }
 
-public class UpdateWorkspaceGeneralCommandHandler(IApplicationDbContext context)
+public class UpdateWorkspaceGeneralCommandHandler(IApplicationDbContext context, IPublishEndpoint publishEndpoint)
     : IRequestHandler<UpdateWorkspaceGeneralCommand, WorkspaceGeneralDto>
 {
     public async Task<WorkspaceGeneralDto> Handle(UpdateWorkspaceGeneralCommand request, CancellationToken cancellationToken)
@@ -141,7 +142,8 @@ public class UpdateWorkspaceGeneralCommandHandler(IApplicationDbContext context)
         changes.Track("currencyCode", settings.CurrencyCode, request.CurrencyCode);
         settings.CurrencyCode = request.CurrencyCode;
 
-        if (changes.HasChanges)
+        var profileChanged = changes.HasChanges;
+        if (profileChanged)
         {
             tenant.UpdatedAt = DateTime.UtcNow;
             WorkspaceSettingsStore.BumpProfileVersion(settings);
@@ -149,6 +151,8 @@ public class UpdateWorkspaceGeneralCommandHandler(IApplicationDbContext context)
         }
 
         await context.SaveChangesAsync(cancellationToken);
+
+        if (profileChanged) await WorkspaceProfileEvents.PublishUpdatedAsync(publishEndpoint, tenant, settings, cancellationToken);
 
         return WorkspaceSettingsMapper.ToGeneral(tenant, settings);
     }
