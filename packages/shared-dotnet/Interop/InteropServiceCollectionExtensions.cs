@@ -33,6 +33,15 @@ public static class InteropServiceCollectionExtensions
 
         services.AddOptions<InteropOptions>()
             .Bind(configuration.GetSection(InteropOptions.Section))
+            .Configure(o =>
+            {
+                if (string.IsNullOrWhiteSpace(o.HubUrl) && configuration["MESSAGING_HUB_URL"] is { } hubUrl) o.HubUrl = hubUrl;
+                if (string.IsNullOrWhiteSpace(o.ClientId) && configuration["MESSAGING_CLIENT_ID"] is { } clientId) o.ClientId = clientId;
+                if (string.IsNullOrWhiteSpace(o.ClientSecret) && configuration["MESSAGING_CLIENT_SECRET"] is { } clientSecret) o.ClientSecret = clientSecret;
+                if (string.IsNullOrWhiteSpace(o.Service) && configuration["MESSAGING_SERVICE"] is { } service) o.Service = service;
+                if (string.IsNullOrWhiteSpace(o.SigningKey) && configuration["MESSAGING_SIGNING_KEY"] is { } signingKey) o.SigningKey = signingKey;
+                if ((string.IsNullOrWhiteSpace(o.Transport) || o.Transport == "Hub") && configuration["MESSAGING_TRANSPORT"] is { } transport) o.Transport = transport;
+            })
             .Validate(o =>
             {
                 o.Validate();

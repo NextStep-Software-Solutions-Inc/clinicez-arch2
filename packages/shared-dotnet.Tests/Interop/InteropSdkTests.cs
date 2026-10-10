@@ -288,4 +288,37 @@ public class InteropSdkTests
 
         act.Should().Throw<InvalidOperationException>();
     }
+
+    [Fact]
+    public void Single_underscore_environment_variables_bind_correctly()
+    {
+        using var ecdsa = System.Security.Cryptography.ECDsa.Create(System.Security.Cryptography.ECCurve.NamedCurves.nistP256);
+        var testKey = ecdsa.ExportECPrivateKeyPem();
+
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["MESSAGING_HUB_URL"] = "http://localhost:5290",
+            ["MESSAGING_CLIENT_ID"] = "dev-clinic",
+            ["MESSAGING_CLIENT_SECRET"] = "dev-clinic-secret",
+            ["MESSAGING_SERVICE"] = "clinic",
+            ["MESSAGING_SIGNING_KEY"] = testKey,
+            ["MESSAGING_TRANSPORT"] = "Hub"
+        }).Build();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddDbContext<TestDbContext>(o => o.UseInMemoryDatabase("single_underscore_test"));
+        services.AddInterop<TestDbContext>(config);
+        using var provider = services.BuildServiceProvider();
+
+        var options = provider.GetRequiredService<IOptions<InteropOptions>>().Value;
+        options.HubUrl.Should().Be("http://localhost:5290");
+        options.ClientId.Should().Be("dev-clinic");
+        options.ClientSecret.Should().Be("dev-clinic-secret");
+        options.Service.Should().Be("clinic");
+        options.SigningKey.Should().Be(testKey);
+        options.Transport.Should().Be("Hub");
+    }
 }
+
+
