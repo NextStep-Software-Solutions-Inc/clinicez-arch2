@@ -4,6 +4,9 @@
   "workspaces": {
     "": {
       "name": "clinicez-monorepo",
+      "devDependencies": {
+        "typescript": "~6.0.3",
+      },
     },
     "apps/cashier-app": {
       "name": "@clinicez/cashier-app",
