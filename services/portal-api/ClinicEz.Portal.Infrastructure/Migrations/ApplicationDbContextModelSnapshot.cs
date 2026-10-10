@@ -2042,6 +2042,25 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                     b.ToTable("interop_outbox", "main");
                 });
 
+            modelBuilder.Entity("Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("FriendlyName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Xml")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("DataProtectionKeys", "portal_dashboard");
+                });
+
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.AdminUser", b =>
                 {
                     b.HasOne("ClinicEz.Portal.Domain.Entities.AdminRole", "Role")

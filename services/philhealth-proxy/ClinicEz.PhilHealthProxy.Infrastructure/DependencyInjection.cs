@@ -1,5 +1,6 @@
 using ClinicEz.Shared.LocalAuth;
 using ClinicEz.Shared.Security;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -67,8 +68,8 @@ public static class DependencyInjection
         services.AddSingleton<IKonsultaMasterlistParser, KonsultaMasterlistParser>();
         services.AddSingleton<ISoapSandboxService, SoapSandboxService>();
 
-        // The key ring protects the tenant credentials cached from the portal, so it must outlive restarts (DataProtection:KeysPath).
-        services.AddPersistentDataProtection(configuration, env, "ClinicEz.PhilHealthProxy");
+        // The Data Protection provider protects tenant credentials in memory during local caching.
+        services.AddDataProtection().SetApplicationName("ClinicEz.PhilHealthProxy");
 
         return services;
     }

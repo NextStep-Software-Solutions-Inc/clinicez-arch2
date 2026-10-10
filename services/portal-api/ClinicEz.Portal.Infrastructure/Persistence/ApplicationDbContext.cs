@@ -3,6 +3,7 @@ using ClinicEz.Portal.Domain.Common;
 using ClinicEz.Portal.Domain.Entities;
 using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Interop.Persistence;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using System.Linq.Expressions;
@@ -10,7 +11,7 @@ using System.Linq.Expressions;
 namespace ClinicEz.Portal.Infrastructure.Persistence;
 
 public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
-    : DbContext(options), IApplicationDbContext, IInteropDbContext
+    : DbContext(options), IApplicationDbContext, IInteropDbContext, IDataProtectionKeyContext
 {
 
     public DbSet<ExampleEntity> ExampleEntities { get; set; }
@@ -42,6 +43,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<WebhookDelivery> WebhookDeliveries { get; set; }
     public DbSet<InteropOutboxMessage> InteropOutbox { get; set; }
     public DbSet<InteropInboxMessage> InteropInbox { get; set; }
+    public DbSet<DataProtectionKey> DataProtectionKeys { get; set; } = null!;
 
     /// <summary>Every enum is stored as its member name, never as a number (explicit mappings below only narrow the length).</summary>
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
@@ -478,6 +480,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         });
 
         modelBuilder.ApplyInteropModel();
+
+        modelBuilder.Entity<DataProtectionKey>(entity =>
+        {
+            entity.ToTable("DataProtectionKeys", "portal_dashboard");
+        });
 
         base.OnModelCreating(modelBuilder);
     }

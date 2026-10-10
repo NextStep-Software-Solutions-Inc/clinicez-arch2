@@ -83,7 +83,7 @@ a **PEM** (multi-line GitHub secret) or as **base64 of a PEM** is turned into on
 | `INTERNAL_API_KEY_PREVIOUS` | `Internal__PreviousApiKey` | portal-api, clinic-api, pharmacy-api | *Optional.* Old key still accepted during a rotation. |
 | `CLINIC_JWT_SIGNING_KEY` / `LAB_JWT_SIGNING_KEY` / `PHARMACY_JWT_SIGNING_KEY` / `BILLING_JWT_SIGNING_KEY` | `Jwt__SigningKey` | clinic-api / laboratory-api / pharmacy-api / billing-api | Signs the facility-local session tokens. At least 32 characters (base64 of 64 random bytes works). One key **per service**: every service has its own issuer/audience and does not accept another's tokens. Without it a key would be generated on the container's disk and sessions would not survive re-creation, so it is now required. |
 | `PORTAL_DB_CONNECTION_STRING`, `PORTAL_CLERK_SECRET_KEY`, `PORTAL_XENDIT_SECRET_KEY`, `PORTAL_XENDIT_CALLBACK_TOKEN` | `ConnectionStrings__DefaultConnection`, `Clerk__SecretKey`, `Xendit__SecretKey`, `Xendit__CallbackToken` | portal-api | All four required (no development fallbacks). |
-| `PORTAL_DATA_PROTECTION_CERT_BASE64` / `_PASSWORD`, `PHILHEALTH_DATA_PROTECTION_CERT_BASE64` / `_PASSWORD` | `DataProtection__CertificateBase64` / `__CertificatePassword` | portal-api, philhealth-proxy | *Optional.* Base64 of a `.pfx` that encrypts the ASP.NET Data Protection key ring at rest. The ring itself lives on the named volumes `portal-api-dpkeys` / `philhealth-proxy-dpkeys` (`/var/dpkeys`, required: keep them across redeploys; losing one invalidates what was protected with it). |
+| `PORTAL_DATA_PROTECTION_CERT_BASE64` / `_PASSWORD`, `PHILHEALTH_DATA_PROTECTION_CERT_BASE64` / `_PASSWORD` | `DataProtection__CertificateBase64` / `__CertificatePassword` | portal-api, philhealth-proxy | *Optional.* Base64 of a `.pfx` that encrypts the ASP.NET Data Protection key ring at rest. For `portal-api`, key ring XMLs are stored directly in PostgreSQL via EF Core (`portal_dashboard.DataProtectionKeys`). |
 | `CORS_ALLOWED_ORIGINS` / `CORS_ALLOWED_DOMAINS` | `Cors__AllowedOrigins` / `Cors__AllowedDomains` | see the table above | *Optional* when `BASE_DOMAIN` is set. |
 
 #### GitHub secrets checklist (cloud deploy)
@@ -118,7 +118,7 @@ Generate the plain secrets with `scripts/generate-secrets` and the key pairs wit
 - **`INTERNAL_API_KEY`:** put the new value in `INTERNAL_API_KEY` and the old one in `INTERNAL_API_KEY_PREVIOUS` on the receiving services (portal, clinic, pharmacy), switch the callers, then delete the previous value.
 - **Clinic master secret:** re-encrypting stored files under a new secret is **not supported yet**. A new `CLINIC_ENCRYPTION_MASTER_SECRET` only works for new files; keep every older value in `CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_0` / `_1` so the old files stay readable (two slots, so at most two retired secrets).
 - **Document signing and UPSC keys:** a new value invalidates codes/QR already issued; rotate only when that is acceptable.
-- **Data Protection:** the key ring rotates itself; keep the `*-dpkeys` volumes (and the certificate, if used) and do nothing else.
+- **Data Protection:** the key ring rotates itself inside PostgreSQL; keep the database (and certificate, if used) and do nothing else.
 - **JWT signing keys:** a new value signs everyone out of that service once.
 
 #### Migrating an existing deployment

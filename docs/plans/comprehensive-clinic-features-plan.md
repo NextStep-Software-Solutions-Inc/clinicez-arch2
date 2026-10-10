@@ -2559,6 +2559,92 @@ public void GenerateKonsultaXml_WithZeroImmunizations_EmitsStatutory999Fallback_
 
 ---
 
+## 9. Comprehensive PhilHealth Data Audit & Dual-Mode Clinical Ergonomics
+
+### 9.1 Exhaustive Audit of PhilHealth Identification Numbers & Transaction Keys
+The PhilHealth Konsulta Data specification (`KonsultaData_v1.14.dtd`) mandates a strict hierarchy of identification keys and transaction numbers. In Clinic EZ, every single identifier is accounted for, modeled, and automated:
+
+| Identifier | DTD Attribute | Scope & Entity Location | Requirement Level | Generation & Ingestion Strategy in Clinic EZ |
+| :--- | :--- | :--- | :--- | :--- |
+| **Facility Accreditation No** | `pHciAccreNo` | Root `<PCB>` | **Mandatory** | Sourced from `ClinicSettings.AccreditationNumber`. Configured once per facility tenant. |
+| **PMCC Number** | `pPMCCNo` | Root `<PCB>` | **Mandatory** | Sourced from `ClinicSettings.PmccNumber` (Philippine Medical Care Commission ID). |
+| **Transmittal Number** | `pHciTransmittalNumber` | Root `<PCB>` | **Mandatory** | Auto-generated batch submission ID (`T{AccreNo}{Timestamp}`). |
+| **EMR Certification ID** | `pCertificationId` | Root `<PCB>` | **Mandatory** | Clinic EZ EMR certification token issued by PhilHealth IT. Configured in `PhilHealthOptions`. |
+| **HCI Case Number** | `pHciCaseNo` | `<ENLISTMENT>`, `<PROFILE>`, `<SOAP>`, `<MEDICINE>`, `<DIAGNOSTICEXAMRESULT>` | **Mandatory** | Primary statutory encounter cycle anchor. Stored in `ClinicPatient.PhilHealthCaseNo` and `ConsultationEncounter.PhilHealthCaseNo`. Auto-derived if blank: `C{AccreNo}{EffYear}{PatientCode}`. |
+| **Enlistment Trans No** | `pHciTransNo` | `<ENLISTMENT>` | **Mandatory** | Unique registration transaction ID. Stored in `ClinicPatient.PhilHealthEnlistmentNo`. Auto-generated as `E{AccreNo}{EffYear}{PatientSeq}`. |
+| **Profiling Trans No** | `pHciTransNo` | `<PROFILE>` | **Mandatory** | First Patient Encounter (FPE) transaction ID. Stored in `ClinicPatient.PhilHealthProfilingTransNo`. Auto-generated as `P{AccreNo}{EffYear}{PatientSeq}`. |
+| **SOAP Transaction No** | `pHciTransNo` | `<SOAP>`, `<MEDICINE>`, `<DIAGNOSTICEXAMRESULT>` | **Mandatory** | Clinical consultation transaction ID. Stored in `ConsultationEncounter.PhilHealthSoapTransNo`. Auto-generated as `S{AccreNo}{EncounterDate:yyyyMMdd}{EncounterSeq}`. |
+| **Authorization Transaction Code (ATC)** | `pATC` | `<PROFILE>`, `<SOAP>` | **Mandatory for Claims** | Issued by PhilHealth e-Konsulta portal / API. Populated via check-in or quick-entry banner in `Consultations.screen.tsx`. |
+| **Member PIN** | `pMemPin` | `<ENLISTMENT>`, `<PROFILE>`, `<SOAP>`, `<DIAGNOSTICEXAMRESULT>` | **Mandatory** | 12-digit PhilHealth ID of Principal Member. Auto-formatted (dashes stripped). |
+| **Patient PIN** | `pPatientPin` | `<ENLISTMENT>`, `<PROFILE>`, `<SOAP>`, `<DIAGNOSTICEXAMRESULT>` | **Mandatory** | 12-digit PhilHealth ID of Patient. Equal to `pMemPin` if Principal (`MM`), distinct if Dependent (`DD`). |
+| **Doctor PAN** | `pPrescribingPhysician` | `<MEDICINE>` | **Mandatory for Rx** | Physician PhilHealth Accreditation Number. Auto-snapshotted from `DoctorProfile.PhilHealthPan` at encounter sign-off. |
+| **Dispensing Personnel ID** | `pDispensingPersonnel` | `<MEDICINE>` | **Mandatory for Dispense** | Pharmacist PhilHealth / PRC ID. Auto-snapshotted upon pharmacy dispensing in `pharmacy-app`. |
+
+### 9.2 Statutory Data Completeness: Required vs. Optional Elements & Fallbacks
+In `KonsultaData_v1.14.dtd`, DTD syntax defines almost all attributes as `CDATA #REQUIRED`. PhilHealth business rules accommodate negative, uncollected, or non-applicable medical findings via **Statutory Fallback Conventions**:
+
+1. **Surgical History (`<SURGHISTS>`)**:
+   - *Positive History*: Emits `<SURGHIST pSurgDesc="Appendectomy" pSurgDate="2018-05-12" pReportStatus="U" pDeficiencyRemarks="" />`.
+   - *Negative History*: Emits `<SURGHIST pSurgDesc="None" pSurgDate="1900-01-01" pReportStatus="U" pDeficiencyRemarks="" />`. Clinicians never have to invent dummy procedures.
+2. **Immunization (`<IMMUNIZATIONS>`)**:
+   - *Vaccines Administered*: Emits specific codes from `lib_immchild`, `lib_immyoungw`, `lib_immpregw`, `lib_immelderly`, or `OtherImm`.
+   - *No Vaccines Recorded*: Emits statutory non-given fallback code `999` across all categories, ensuring 100% valid `<IMMUNIZATION>` XML without dummy records.
+3. **Reproductive & Maternal History (`<MENSHIST>`, `<PREGHIST>`)**:
+   - *Female of Reproductive Age*: Fully captures menarche, LMP, duration, flow/pads per day, coitarche, contraception, menopause, G/P counts, and family planning counseling (`pIsApplicable="Y"`).
+   - *Male Patients or Pediatric Children*: Emits `pIsApplicable="N"` with zero counts and placeholder strings.
+4. **Physical Examination Remarks (`<PESPECIFIC>`)**:
+   - *Normal Organ Systems*: Emits `"Normal"` or `"None"` with zero error.
+   - *Abnormal Organ Systems*: Automatically captures the clinician's custom remark (e.g. `pHeartRem="Grade 3 systolic murmur"`).
+5. **Cardiometabolic Risk (PhilPEN Q1–Q24)**:
+   - Questions Q1–Q18: Discrete `"Y"` or `"N"` (or `"X"` for non-applicable).
+   - Questions Q19–Q22: If `"Y"`, captures specific test dates and laboratory values (FBS, Cholesterol, Urine Ketones, Urine Protein). If `"N"`, dates and values default to statutory placeholders.
+6. **Optional Elements in DTD**:
+   - `pOthMedDrugGrouping` in `<MEDICINE>` is `#IMPLIED` (optional, used only when a medicine is not in the standard formulary).
+   - `<DOCUMENTS>` (e-signatures, eKAS attachments, diagnostic scan PDFs) — all attributes are `#IMPLIED` (optional).
+   - `<DIAGNOSTICEXAMRESULTS>` is optional (`*`) — only emitted if diagnostic laboratory tests were actually performed and reported.
+
+### 9.3 The Dual-Mode Clinical Workstation Principle
+Clinicians must never be subjected to PhilHealth bureaucracy during standard healthcare encounters:
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                        PATIENT ENCOUNTER INTAKE                        │
+└────────────────────────────────────────────────────────────────────────┘
+                                    │
+                  Payer / Benefit Program Tagged?
+                  ┌─────────────────┴─────────────────┐
+                  ▼                                   ▼
+      [Cash / Private / HMO]               [PhilHealth Konsulta]
+                  │                                   │
+                  ▼                                   ▼
+┌───────────────────────────────────┐ ┌───────────────────────────────────┐
+│     STANDARD CLINICAL WORKSTATION │ │  PHILHEALTH OPTED-IN WORKSTATION  │
+│  • Clean SOAP Note                │ │  • Clean SOAP Note + Specialty    │
+│  • Standard Vitals                │ │  • Standard Vitals + Extended RR  │
+│  • Free-form or Quick PE          │ │  • 1-Click 9-System PE Checklist  │
+│  • Standard ICD-10 Search         │ │  • Searchable ICD-10 + ATC Banner │
+│  • E-Prescriptions & Lab Orders   │ │  • E-Prescriptions + Doctor PAN   │
+│  ───────────────────────────────  │ │  ───────────────────────────────  │
+│  ZERO Bureaucratic Overhead:      │ │  100% Automated Backend Keys:     │
+│  - NO ATC Prompts                 │ │  - Auto-generated Case Number     │
+│  - NO Case / Transaction Numbers  │ │  - Auto-generated Trans Numbers   │
+│  - NO Mandatory PhilPEN 24-Q      │ │  - Auto-linked PMCC / Accre No    │
+│  - NO Tranche Dropdowns           │ │  - Unobtrusive Readiness Chip     │
+└───────────────────────────────────┘ └───────────────────────────────────┘
+```
+
+1. **Standard Clinical Consultations (`IsYakapEligible = false`)**:
+   - When seeing cash, HMO, or private patients, the clinician is focused strictly on patient assessment and care.
+   - All PhilHealth-specific input fields (ATC, Case No, Enlistment No, Profiling No, PMCC No) are suppressed.
+   - The encounter saves to `ConsultationEncounters` as an ordinary medical record and is automatically bypassed by the PhilHealth claims engine.
+2. **PhilHealth Konsulta Opt-In (`IsYakapEligible = true`)**:
+   - Activated automatically when reception checks in a patient under the PhilHealth Konsulta program, or manually toggled via a single header switch `[✓ PhilHealth Konsulta]`.
+   - **Zero Technical Key Entry**: The doctor never inputs `pHciCaseNo`, `pHciTransNo`, `pHciAccreNo`, `pPMCCNo`, or transmittal numbers. The backend generates these transparently.
+   - **1-Click Physical Examination**: The 9-system physical exam features an **"All Essentially Normal"** button so the doctor completes the statutory requirement in one second unless an abnormal finding requires an inline note.
+   - **Doctor PAN Snapshotting**: When signing the consultation, the doctor's PhilHealth Accreditation Number (PAN) is automatically pulled from their credentials.
+
+---
+
 ## 10. Conclusion
 
-This Master Architectural Specification provides the complete, authoritative, and production-ready engineering plan to construct Clinic EZ's missing high-impact clinic features. By resolving the gaps in doctor scheduling concurrency, overnight shifts, relational immunization tracking, historical vaccinations, retroactive AEFI logging, structured problem lists, allergy cross-reactivity and DDI decision support, NCD risk scoring with BMI fallback and crisis overrides, clinical SOAP templating, WHO pediatric anthropometrics with posture corrections, and end-to-end Yakap transmittal pipeline orchestration, Clinic EZ establishes an unassailable foundation for Philippine primary care and seamless, rejection-free PhilHealth Konsulta / Yakap claims transmittal.
+This Master Architectural Specification provides the complete, authoritative, and production-ready engineering plan to construct Clinic EZ's missing high-impact clinic features. By resolving the gaps in doctor scheduling concurrency, overnight shifts, relational immunization tracking, historical vaccinations, retroactive AEFI logging, structured problem lists, allergy cross-reactivity and DDI decision support, NCD risk scoring with BMI fallback and crisis overrides, clinical SOAP templating, WHO pediatric anthropometrics with posture corrections, exhaustive PhilHealth identification and statutory completeness, dual-mode clinical ergonomics, and end-to-end Yakap transmittal pipeline orchestration, Clinic EZ establishes an unassailable foundation for Philippine primary care and seamless, rejection-free PhilHealth Konsulta / Yakap claims transmittal.

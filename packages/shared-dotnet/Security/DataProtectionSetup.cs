@@ -1,5 +1,7 @@
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -7,23 +9,23 @@ using Microsoft.Extensions.Hosting;
 namespace ClinicEz.Shared.Security;
 
 /// <summary>
-/// ASP.NET Data Protection for services that store protected values (tenant credentials, tokens). The key ring has to
-/// survive restarts and be shared by every replica, otherwise everything protected before a redeploy becomes unreadable.
+/// ASP.NET Data Protection for services that store protected values (tenant credentials, tokens).
+/// Key ring XMLs are persisted strictly in PostgreSQL via Entity Framework Core (PersistKeysToDbContext).
 /// </summary>
 /// <remarks>
-/// Settings (section <c>DataProtection</c>): <c>KeysPath</c> (required outside Development; mount a persistent volume
-/// there, <c>/var/dpkeys</c> in containers), optional <c>CertificateBase64</c> (+ <c>CertificatePassword</c>): a PKCS#12
+/// Settings (section <c>DataProtection</c>): optional <c>CertificateBase64</c> (+ <c>CertificatePassword</c>): a PKCS#12
 /// (.pfx) file as base64 that encrypts the key ring at rest.
 /// </remarks>
 public static class DataProtectionSetup
 {
     public const string SectionName = "DataProtection";
 
-    public static IDataProtectionBuilder AddPersistentDataProtection(
+    public static IDataProtectionBuilder AddPersistentDataProtection<TDbContext>(
         this IServiceCollection services,
         IConfiguration configuration,
         IHostEnvironment environment,
         string applicationName)
+        where TDbContext : DbContext, IDataProtectionKeyContext
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
@@ -31,24 +33,11 @@ public static class DataProtectionSetup
         ArgumentException.ThrowIfNullOrWhiteSpace(applicationName);
 
         var section = configuration.GetSection(SectionName);
-        var keysPath = section["KeysPath"];
         var certificateBase64 = section["CertificateBase64"];
 
-        var builder = services.AddDataProtection().SetApplicationName(applicationName);
-
-        if (string.IsNullOrWhiteSpace(keysPath))
-        {
-            if (!environment.IsDevelopment())
-            {
-                throw new InvalidOperationException(
-                    "DataProtection:KeysPath is not configured. Set it (environment variable DataProtection__KeysPath) to a persistent, " +
-                    "shared directory such as /var/dpkeys backed by a volume; an ephemeral key ring makes protected data unreadable after a restart.");
-            }
-        }
-        else
-        {
-            builder.PersistKeysToFileSystem(Directory.CreateDirectory(keysPath));
-        }
+        var builder = services.AddDataProtection()
+            .SetApplicationName(applicationName)
+            .PersistKeysToDbContext<TDbContext>();
 
         if (!string.IsNullOrWhiteSpace(certificateBase64))
         {

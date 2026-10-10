@@ -23,7 +23,6 @@ public sealed class KonsultaWebApplicationFactory : WebApplicationFactory<Progra
         builder.UseEnvironment("Testing");
 
         // Outside Development the proxy refuses to start without these; the tests give it throw-away values.
-        builder.UseSetting("DataProtection:KeysPath", Path.Combine(Path.GetTempPath(), "clinicez-proxy-tests-dpkeys"));
         builder.UseSetting("Internal:ApiKey", "test-internal-key");
 
         builder.ConfigureServices(services =>

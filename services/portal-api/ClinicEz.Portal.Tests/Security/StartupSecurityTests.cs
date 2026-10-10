@@ -1,9 +1,12 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using ClinicEz.Portal.Infrastructure.Persistence;
 using ClinicEz.Shared.Security;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.AspNetCore.DataProtection.Repositories;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
@@ -13,13 +16,11 @@ using Microsoft.Extensions.Options;
 namespace ClinicEz.Portal.Tests.Security;
 
 /// <summary>
-/// The Data Protection key ring protects the PhilHealth credentials stored per branch: it has to live on a persistent
-/// volume (DataProtection:KeysPath) and must never silently fall back to an ephemeral ring in production.
+/// The Data Protection key ring protects the PhilHealth credentials stored per branch: it is persisted
+/// directly inside PostgreSQL via EntityFrameworkCore (ApplicationDbContext).
 /// </summary>
-public sealed class DataProtectionSetupTests : IDisposable
+public sealed class DataProtectionSetupTests
 {
-    private readonly string _keysPath = Path.Combine(Path.GetTempPath(), "portal-dpkeys-" + Guid.NewGuid().ToString("N"));
-
     private sealed class FakeEnvironment(string name) : IHostEnvironment
     {
         public string EnvironmentName { get; set; } = name;
@@ -31,10 +32,25 @@ public sealed class DataProtectionSetupTests : IDisposable
     private static IConfiguration Config(params (string Key, string Value)[] values) =>
         new ConfigurationBuilder().AddInMemoryCollection(values.ToDictionary(v => v.Key, v => (string?)v.Value)).Build();
 
-    private ServiceProvider Build(IConfiguration configuration, string environment = "Production")
+    private ServiceProvider BuildDbContext(IConfiguration configuration, string environment = "Production")
+    {
+        var dbName = "dp_test_" + Guid.NewGuid();
+        var services = new ServiceCollection();
+        services.AddDbContext<ApplicationDbContext>(options =>
+            options.UseInMemoryDatabase(dbName));
+        services.AddPersistentDataProtection<ApplicationDbContext>(
+            configuration, new FakeEnvironment(environment), "ClinicEz.Portal");
+        return services.BuildServiceProvider();
+    }
+
+    private ServiceProvider BuildDbContextWithStore(DbContextOptions<ApplicationDbContext> dbOptions, IConfiguration configuration, string environment = "Production")
     {
         var services = new ServiceCollection();
-        services.AddPersistentDataProtection(configuration, new FakeEnvironment(environment), "ClinicEz.Portal");
+        services.AddDbContext<ApplicationDbContext>(options => options.UseInMemoryDatabase(dbOptions.ContextType.Name));
+        services.AddSingleton(dbOptions);
+        services.AddScoped<ApplicationDbContext>(sp => new ApplicationDbContext(sp.GetRequiredService<DbContextOptions<ApplicationDbContext>>()));
+        services.AddPersistentDataProtection<ApplicationDbContext>(
+            configuration, new FakeEnvironment(environment), "ClinicEz.Portal");
         return services.BuildServiceProvider();
     }
 
@@ -46,74 +62,64 @@ public sealed class DataProtectionSetupTests : IDisposable
         return Convert.ToBase64String(certificate.Export(X509ContentType.Pfx, password));
     }
 
-    public void Dispose()
-    {
-        if (Directory.Exists(_keysPath)) Directory.Delete(_keysPath, recursive: true);
-    }
-
     [Fact]
-    public void KeyRing_IsPersistedToTheConfiguredPath_AndNamedAfterTheService()
+    public void DbContext_KeyRing_IsPersistedToDbContext()
     {
-        using var provider = Build(Config(("DataProtection:KeysPath", _keysPath)));
+        using var provider = BuildDbContext(Config());
 
-        var repository = Assert.IsType<FileSystemXmlRepository>(provider.GetRequiredService<IOptions<KeyManagementOptions>>().Value.XmlRepository);
-        Assert.Equal(new DirectoryInfo(_keysPath).FullName, repository.Directory.FullName);
+        var repository = provider.GetRequiredService<IOptions<KeyManagementOptions>>().Value.XmlRepository;
+        Assert.IsType<EntityFrameworkCoreXmlRepository<ApplicationDbContext>>(repository);
         Assert.Equal("ClinicEz.Portal", provider.GetRequiredService<IOptions<DataProtectionOptions>>().Value.ApplicationDiscriminator);
     }
 
     [Fact]
-    public void ProtectedData_SurvivesARestart_BecauseTheRingIsReloadedFromDisk()
+    public void ProtectedData_SurvivesARestart_BecauseTheRingIsPersistedToDbContext()
     {
-        var configuration = Config(("DataProtection:KeysPath", _keysPath));
+        var dbOptions = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase("dp_test_" + Guid.NewGuid())
+            .Options;
+        var configuration = Config();
+
         string protectedValue;
-        using (var first = Build(configuration))
+        using (var first = BuildDbContextWithStore(dbOptions, configuration))
         {
             protectedValue = first.GetRequiredService<IDataProtectionProvider>().CreateProtector("purpose").Protect("branch-password");
         }
 
-        using var second = Build(configuration);
+        using (var db = new ApplicationDbContext(dbOptions))
+        {
+            Assert.NotEmpty(db.DataProtectionKeys.ToList());
+        }
 
+        using var second = BuildDbContextWithStore(dbOptions, configuration);
         Assert.Equal("branch-password", second.GetRequiredService<IDataProtectionProvider>().CreateProtector("purpose").Unprotect(protectedValue));
-        Assert.NotEmpty(Directory.GetFiles(_keysPath, "key-*.xml"));
-    }
-
-    [Fact]
-    public void WithoutAKeysPath_AProductionHostRefusesToStart()
-    {
-        var ex = Assert.Throws<InvalidOperationException>(() => Build(Config()));
-
-        Assert.Contains("DataProtection:KeysPath", ex.Message);
-        Assert.Contains("DataProtection__KeysPath", ex.Message);
-    }
-
-    [Fact]
-    public void WithoutAKeysPath_DevelopmentUsesTheDefaultKeyRing()
-    {
-        using var provider = Build(Config(), "Development");
-
-        Assert.IsNotType<FileSystemXmlRepository>(provider.GetRequiredService<IOptions<KeyManagementOptions>>().Value.XmlRepository);
     }
 
     [Fact]
     public void WithACertificate_TheKeysAreEncryptedAtRest_AndStillUsable()
     {
         const string password = "pfx-password";
+        var dbOptions = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase("dp_test_" + Guid.NewGuid())
+            .Options;
         var configuration = Config(
-            ("DataProtection:KeysPath", _keysPath),
             ("DataProtection:CertificateBase64", NewCertificateBase64(password)),
             ("DataProtection:CertificatePassword", password));
 
         string protectedValue;
-        using (var first = Build(configuration))
+        using (var first = BuildDbContextWithStore(dbOptions, configuration))
         {
             protectedValue = first.GetRequiredService<IDataProtectionProvider>().CreateProtector("purpose").Protect("secret");
         }
 
-        var keyXml = File.ReadAllText(Directory.GetFiles(_keysPath, "key-*.xml").Single());
-        Assert.DoesNotContain("<masterKey", keyXml);
-        Assert.Contains("encryptedKey", keyXml, StringComparison.OrdinalIgnoreCase);
+        using (var db = new ApplicationDbContext(dbOptions))
+        {
+            var keyXml = db.DataProtectionKeys.Single().Xml;
+            Assert.DoesNotContain("<masterKey", keyXml);
+            Assert.Contains("encryptedKey", keyXml, StringComparison.OrdinalIgnoreCase);
+        }
 
-        using var second = Build(configuration);
+        using var second = BuildDbContextWithStore(dbOptions, configuration);
         Assert.Equal("secret", second.GetRequiredService<IDataProtectionProvider>().CreateProtector("purpose").Unprotect(protectedValue));
     }
 
@@ -121,11 +127,10 @@ public sealed class DataProtectionSetupTests : IDisposable
     public void ACertificateThatCannotBeLoaded_FailsWithAClearMessage()
     {
         var configuration = Config(
-            ("DataProtection:KeysPath", _keysPath),
             ("DataProtection:CertificateBase64", NewCertificateBase64("right")),
             ("DataProtection:CertificatePassword", "wrong"));
 
-        var ex = Assert.Throws<InvalidOperationException>(() => Build(configuration));
+        var ex = Assert.Throws<InvalidOperationException>(() => BuildDbContext(configuration));
 
         Assert.Contains("DataProtection:CertificateBase64", ex.Message);
     }

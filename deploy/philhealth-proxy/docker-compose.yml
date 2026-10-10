@@ -24,18 +24,11 @@ services:
       # portal's INTERNAL_API_KEY. Both are required (no localhost fallback).
       - PortalApi__BaseUrl=${PORTAL_API_BASE_URL:?PORTAL_API_BASE_URL must be set}
       - Internal__ApiKey=${INTERNAL_API_KEY:?INTERNAL_API_KEY must be set}
-      # ASP.NET Data Protection key ring (protects stored per-tenant credentials). It is persisted on the
-      # philhealth-proxy-dpkeys volume: keep that volume, the ring rotates automatically. Optional: a PFX (base64) and its
+      # ASP.NET Data Protection key ring (protects stored per-tenant credentials in memory). Optional: a PFX (base64) and its
       # password encrypt the ring at rest.
-      - DataProtection__KeysPath=/var/dpkeys
       - DataProtection__CertificateBase64=${DATA_PROTECTION_CERT_BASE64:-}
       - DataProtection__CertificatePassword=${DATA_PROTECTION_CERT_PASSWORD:-}
-    volumes:
-      - philhealth-proxy-dpkeys:/var/dpkeys
     restart: unless-stopped
-
-volumes:
-  philhealth-proxy-dpkeys:
 
 networks:
   data-network:

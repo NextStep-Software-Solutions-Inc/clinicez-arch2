@@ -84,17 +84,11 @@ services:
       # Plan catalog (limits, features, prices) stays in appsettings; these select the default plan and trial length.
       - Billing__DefaultPlanSlug=${BILLING_DEFAULT_PLAN_SLUG:-starter}
       - Billing__TrialDays=${BILLING_TRIAL_DAYS:-14}
-      # ASP.NET Data Protection key ring (protects stored provider secrets). It is persisted on the portal-api-dpkeys volume: keep
-      # that volume, the ring rotates automatically. Optional: a PFX (base64) and its password encrypt the ring at rest.
-      - DataProtection__KeysPath=/var/dpkeys
+      # ASP.NET Data Protection key ring (protects stored provider secrets). Key ring XMLs are stored directly in PostgreSQL via EF Core.
+      # Optional: CertificateBase64 (+ password) encrypts the ring at rest.
       - DataProtection__CertificateBase64=${DATA_PROTECTION_CERT_BASE64:-}
       - DataProtection__CertificatePassword=${DATA_PROTECTION_CERT_PASSWORD:-}
-    volumes:
-      - portal-api-dpkeys:/var/dpkeys
     restart: unless-stopped
-
-volumes:
-  portal-api-dpkeys:
 
 networks:
   data-network:
