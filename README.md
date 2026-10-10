@@ -151,7 +151,13 @@ Managed in GitHub under **Settings ➔ Secrets and variables ➔ Actions**.
 | **Interop Hub** | `HUB_CLOUD_CELL_ID` | Variable | Cell ID of the Cloud cell | `cloud` | Constant `cloud` |
 | **Interop Hub** | `HUB_SIGNING_REQUIRED` | Variable | Enforces ECDSA signature validation | `true` | Set `true` |
 
+> 📌 **How Interop Hub Learns Client Public Keys**:
+> - **Portal ControlPlane (`PORTAL_HUB_PUBLIC_KEY`)**: Statically bootstrapped in `interop-hub` environment variables.
+> - **On-Premise Edge Cell Services**: Automatically written into `deploy/edge/hub-bootstrap.env` by the installer (`./install.ps1`), which `interop-hub` loads on startup.
+> - **Cloud Services & Edge Sites**: Dynamic client Public Keys are registered into `interop-hub`'s database via the **Hub Admin API** (`POST /v1/admin/cells/{cellId}/clients`).
+
 ---
+
 
 #### 3. Portal API Control Plane (`services/portal-api`)
 
