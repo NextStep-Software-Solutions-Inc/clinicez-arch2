@@ -41,7 +41,7 @@ services:
       - Hub__Bootstrap__Clients__0__Kind=ControlPlane
       # Public half (ECDSA P-256, PEM or base64 of PEM) of the portal's Messaging__SigningKey. Required. Every other client's
       # public key is registered through the hub admin API together with the client.
-      - Hub__Bootstrap__Clients__0__PublicKey=${HUB_PORTAL_PUBLIC_KEY:?HUB_PORTAL_PUBLIC_KEY must be set}
+      - Hub__Bootstrap__Clients__0__PublicKey=${PORTAL_HUB_SIGNING_PUBLIC_KEY:-${PORTAL_HUB_PUBLIC_KEY:-${HUB_PORTAL_PUBLIC_KEY:?PORTAL_HUB_SIGNING_PUBLIC_KEY must be set}}}
       # Verify envelope signatures on POST /v1/messages (default true outside Development). Only set false for a temporary
       # migration of clients that cannot sign yet.
       - Hub__Signing__Required=${HUB_SIGNING_REQUIRED:-true}

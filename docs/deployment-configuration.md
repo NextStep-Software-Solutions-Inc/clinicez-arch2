@@ -72,7 +72,7 @@ a **PEM** (multi-line GitHub secret) or as **base64 of a PEM** is turned into on
 | `FACILITY_LICENSE_PUBLIC_KEY` (variable or secret) | `FacilityLicense__PublicKeyPem` | portal-api, clinic-api, laboratory-api, pharmacy-api, organization-api, edge bundle | Must be the public half of the private key above. Hand the same value to every on-premise site (installer `--license-public-key`). |
 | `FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS` | `FacilityLicense__PreviousPublicKeyPem` | same | *Optional.* Only during a license-key rotation. |
 | `<SVC>_HUB_SIGNING_KEY` (`CLINIC_`, `LABORATORY_`, `PHARMACY_`, `ORGANIZATION_`, `PATIENT_`, `PORTAL_`, `BILLING_`) | `Messaging__SigningKey` (`HUB_SIGNING_KEY`) | matching API | P-256 **private** key that signs this client's hub envelopes. Its public half must be registered at the hub for this client id. |
-| `PORTAL_HUB_PUBLIC_KEY` (variable or secret) | `Hub__Bootstrap__Clients__0__PublicKey` (`HUB_PORTAL_PUBLIC_KEY`) | interop-hub | The **public** half of `PORTAL_HUB_SIGNING_KEY`. The cloud hub bootstraps only the portal client; register every other client's public key through the hub admin API (clients are created there with their id, secret and public key). |
+| `PORTAL_HUB_SIGNING_PUBLIC_KEY` (variable or secret) | `Hub__Bootstrap__Clients__0__PublicKey` (`PORTAL_HUB_SIGNING_PUBLIC_KEY`) | interop-hub | The **public** half of `PORTAL_HUB_SIGNING_KEY`. The cloud hub bootstraps only the portal client; register every other client's public key through the hub admin API (clients are created there with their id, secret and public key). |
 | `HUB_SIGNING_REQUIRED` (variable) | `Hub__Signing__Required` | interop-hub | Default `true`: unsigned or wrongly signed envelopes are rejected. Leave it unset. |
 | `CLINIC_DOCUMENT_SIGNING_KEY` / `LABORATORY_DOCUMENT_SIGNING_KEY` | `Documents__SigningKey` (`DOCUMENT_SIGNING_KEY`) | clinic-api / laboratory-api | HMAC key of the document digests behind verification QR codes. At least 32 characters; changing it stops previously printed QR codes from verifying. |
 | `PHARMACY_GAMOT_UPSC_SECRET_KEY` | `Gamot__UpscSecretKey` (`GAMOT_UPSC_SECRET_KEY`) | pharmacy-api | Key behind the GAMOT UPSC codes. At least 32 characters; changing it invalidates codes issued under the old one. |
@@ -90,8 +90,8 @@ Generate the plain secrets with `scripts/generate-secrets` and the key pairs wit
 `generate-signing-key`; every row must exist before the first deploy of that service.
 
 - [ ] Once: license pair (`FACILITY_LICENSE_PRIVATE_KEY` secret on the portal; `FACILITY_LICENSE_PUBLIC_KEY` for portal, clinic, laboratory, pharmacy, organization).
-- [ ] Once per service (7): `<SVC>_HUB_SIGNING_KEY` (private) + register its public key at the hub; `PORTAL_HUB_PUBLIC_KEY` is the portal's public key.
-- [ ] Hub: `INTEROP_HUB_DB_CONNECTION_STRING`, `INTEROP_HUB_PORTAL_CLIENT_SECRET`, `INTEROP_HUB_PAYLOAD_ENCRYPTION_KEY`, `PORTAL_HUB_PUBLIC_KEY`.
+- [ ] Once per service (7): `<SVC>_HUB_SIGNING_KEY` (private) + register its public key at the hub; `PORTAL_HUB_SIGNING_PUBLIC_KEY` is the portal's public key.
+- [ ] Hub: `INTEROP_HUB_DB_CONNECTION_STRING`, `INTEROP_HUB_PORTAL_CLIENT_SECRET`, `INTEROP_HUB_PAYLOAD_ENCRYPTION_KEY`, `PORTAL_HUB_SIGNING_PUBLIC_KEY`.
 - [ ] Hub client secrets: `<SVC>_HUB_CLIENT_ID` / `<SVC>_HUB_CLIENT_SECRET` for the 7 services.
 - [ ] portal-api: `PORTAL_DB_CONNECTION_STRING`, `PORTAL_CLERK_SECRET_KEY`, `PORTAL_XENDIT_SECRET_KEY`, `PORTAL_XENDIT_CALLBACK_TOKEN`, Hangfire password, `BASE_DOMAIN`.
 - [ ] clinic-api: `CLINIC_DB_CONNECTION_STRING`, `CLINIC_ENCRYPTION_MASTER_SECRET`, `CLINIC_DOCUMENT_SIGNING_KEY`, `CLINIC_JWT_SIGNING_KEY`, `CLINICAPP_HANGFIRE_PASSWORD` (or `HANGFIRE_PASSWORD`).

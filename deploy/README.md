@@ -42,7 +42,7 @@ The compose files refuse to start when a required `<SVC>_HUB_*` value is empty. 
 | `<SVC>_HUB_CLIENT_ID`, `<SVC>_HUB_CLIENT_SECRET` (secrets; `<SVC>` = `CLINIC`, `LABORATORY`, `PHARMACY`, `ORGANIZATION`, `PATIENT`, `PORTAL`, `BILLING`) | the matching `deploy-<svc>-api-*.yml` |
 | `<SVC>_HUB_SIGNING_KEY` (secrets, same `<SVC>` list; a private key, PEM or base64 of a PEM) | the matching `deploy-<svc>-api-*.yml` |
 | `DATA_NETWORK`, `NPM_NETWORK` (optional variables, default `data-network` / `npm-default`) | all API deploy workflows |
-| `INTEROP_HUB_DB_CONNECTION_STRING`, `INTEROP_HUB_PORTAL_CLIENT_SECRET` (secrets), `PORTAL_HUB_PUBLIC_KEY` (the public half of `PORTAL_HUB_SIGNING_KEY`), optional `INTEROP_HUB_PAYLOAD_ENCRYPTION_KEY` and variable `HUB_SIGNING_REQUIRED` (default `true`) | `deploy-interop-hub-dev.yml` |
+| `INTEROP_HUB_DB_CONNECTION_STRING`, `INTEROP_HUB_PORTAL_CLIENT_SECRET` (secrets), `PORTAL_HUB_SIGNING_PUBLIC_KEY` (the public half of `PORTAL_HUB_SIGNING_KEY`), optional `INTEROP_HUB_PAYLOAD_ENCRYPTION_KEY` and variable `HUB_SIGNING_REQUIRED` (default `true`) | `deploy-interop-hub-dev.yml` |
 
 Each service's client id and secret must match a client in the hub's bootstrap configuration (see [`services/interop-hub/README.md`](../services/interop-hub/README.md)). Service-specific settings (patient sharing key, portal SMTP and hub public URL, clinic public upload URL, billing keys) are listed in [`docs/deployment-configuration.md`](../docs/deployment-configuration.md).
 
