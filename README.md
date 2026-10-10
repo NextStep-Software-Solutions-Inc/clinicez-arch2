@@ -114,13 +114,12 @@ bun run web
 
 ---
 
-## 🔑 Environment Variables & Secrets Reference Guide
-
-Below is the complete, explicit reference of all **GitHub Action Secrets/Variables** (for Cloud CI/CD) and **Environment Variables** (for On-Premise Edge Cell deployments). Every key is listed by its exact name.
-
-> **Single-Underscore vs. Double-Underscore Environment Variables**: All .NET microservices accept single-underscore environment variable keys (`MESSAGING_HUB_URL`, `MESSAGING_CLIENT_ID`, `MESSAGING_CLIENT_SECRET`, `MESSAGING_SERVICE`, `MESSAGING_TRANSPORT`, `MESSAGING_SIGNING_KEY`) as direct fallbacks for standard ASP.NET Core double-underscore (`Messaging__*`) section configuration delimiters. Both single-underscore and double-underscore formats are 100% supported and fully interchangeable across all deployments.
+> 💡 **Standardized Naming Convention (`<SERVICE>_HUB_*` vs `HUB_*`)**:
+> - **Global Infrastructure Secrets (`<SERVICE>_HUB_*`)**: Used in `.env` files and GitHub Actions Secrets (e.g. `CLINIC_HUB_SIGNING_KEY`, `LABORATORY_HUB_SIGNING_KEY`, `CLINIC_HUB_CLIENT_ID`, `CLINIC_HUB_CLIENT_SECRET`). The `<SERVICE>_` prefix prevents naming collisions when multiple services run together on the same host server.
+> - **Container Environment Variables (`HUB_*`)**: Inside each microservice container, Docker Compose maps the global secret to generic container variables (`HUB_SIGNING_KEY`, `HUB_CLIENT_ID`, `HUB_CLIENT_SECRET`, `HUB_URL`, `HUB_SERVICE`, `HUB_TRANSPORT`) read directly by the Interop SDK.
 
 ---
+
 
 
 ### PART 1: Cloud CI/CD Deployment (GitHub Secrets & Variables)
@@ -148,7 +147,7 @@ Managed in GitHub under **Settings ➔ Secrets and variables ➔ Actions**.
 | **Interop Hub** | `INTEROP_HUB_PAYLOAD_ENCRYPTION_KEY` | Secret | Base64 AES-256 key encrypting DB queued envelopes | `8fK9xL2pQ1vR4mS7tW0zX3yA6bC9dE2f` (32 bytes b64) | `openssl rand -base64 32` |
 | **Interop Hub** | `INTEROP_HUB_PORTAL_CLIENT_SECRET` | Secret | Secret for Portal ControlPlane client | `k9M2vR7xL4pQ1wS8tY0zB3aC6dE9fG2h` (40 chars) | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 40` |
 | **Interop Hub** | `INTEROP_HUB_PORTAL_PUBLIC_KEY` | Secret | Base64 PEM ECDSA P-256 public key for Portal | `MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...` | `openssl ec -in portal_private.pem -pubout` |
-| **Interop Hub** | `MESSAGING_HUB_URL` | Variable | Public URL of Interop Hub | `https://hub.clinicez.com` | Public hub domain |
+| **Interop Hub** | `HUB_URL` | Variable | Public URL of Interop Hub | `https://hub.clinicez.com` | Public hub domain |
 | **Interop Hub** | `HUB_CLOUD_CELL_ID` | Variable | Cell ID of the Cloud cell | `cloud` | Constant `cloud` |
 | **Interop Hub** | `HUB_SIGNING_REQUIRED` | Variable | Enforces ECDSA signature validation | `true` | Set `true` |
 
@@ -169,9 +168,8 @@ Managed in GitHub under **Settings ➔ Secrets and variables ➔ Actions**.
 | **Portal API** | `PORTAL_HUB_SIGNING_KEY` | Secret | ECDSA P-256 private key for Portal messages | `-----BEGIN EC PRIVATE KEY-----\n...` | `openssl ecparam -genkey -name prime256v1 -noout` |
 | **Portal API** | `PORTAL_API_BASE_URL` | Variable | Public API domain for Portal API | `https://portal-api.clinicez.com` | Public domain |
 
-> *Note: `<SERVICE>_HUB_*` (e.g. `PORTAL_HUB_SIGNING_KEY`) and `<SERVICE>_MESSAGING_*` (e.g. `PORTAL_MESSAGING_SIGNING_KEY`) are 100% interchangeable aliases.*
-
 ---
+
 
 #### 4. Clinic Operational Microservice (`services/clinic-api`)
 
@@ -317,10 +315,8 @@ UPSTREAM_CLIENT_SECRET=k9M2vR7xL4pQ1wS8tY0zB3aC6dE9fG2h3j4k5l6m
 EDGE_HUB_SIGNING_KEY=-----BEGIN EC PRIVATE KEY-----\nMHcCAQEE...\n-----END EC PRIVATE KEY-----
 CLINIC_PUBLIC_UPLOAD_BASE_URL=https://portal.clinicez.com/upload/lab
 
-# ======================================================================================================================
-# 5. LOCAL INTEROP HUB & LOCAL SERVICE MESSAGING CLIENTS
-# ======================================================================================================================
-MESSAGING_HUB_URL=http://interop-hub:8080
+HUB_URL=http://interop-hub:8080
+
 
 # Generated locally by `./install.ps1` or `./install.sh` on first setup:
 CLINIC_HUB_CLIENT_ID=site-clinic
@@ -477,11 +473,12 @@ In Cloud SaaS, thousands of tenant clinics, laboratories, and pharmacies communi
 
 ##### Cloud Key Pair Configuration Example:
 - **Service Level Private Keys (Cloud CI/CD Secrets)**:
-  - `PORTAL_MESSAGING_SIGNING_KEY` ➔ Portal ControlPlane (directory feeds & workspace updates).
-  - `CLINIC_MESSAGING_SIGNING_KEY` ➔ Cloud `clinic-api` cluster.
-  - `LABORATORY_MESSAGING_SIGNING_KEY` ➔ Cloud `laboratory-api` cluster.
-  - `PHARMACY_MESSAGING_SIGNING_KEY` ➔ Cloud `pharmacy-api` cluster.
-  - `BILLING_MESSAGING_SIGNING_KEY` ➔ Cloud `billing-api` cluster.
+  - `PORTAL_HUB_SIGNING_KEY` ➔ Portal ControlPlane (directory feeds & workspace updates).
+  - `CLINIC_HUB_SIGNING_KEY` ➔ Cloud `clinic-api` cluster.
+  - `LABORATORY_HUB_SIGNING_KEY` ➔ Cloud `laboratory-api` cluster.
+  - `PHARMACY_HUB_SIGNING_KEY` ➔ Cloud `pharmacy-api` cluster.
+  - `BILLING_HUB_SIGNING_KEY` ➔ Cloud `billing-api` cluster.
+
 - **Cross-Tenant & Cross-Facility Isolation**:
   - When Tenant A Clinic sends a referral or lab order to Tenant B Lab:
     - If a **Hub Link** exists between Tenant A and Tenant B, the message is accepted and delivered.
