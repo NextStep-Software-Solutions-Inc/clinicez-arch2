@@ -38,11 +38,7 @@ services:
       - Hangfire__DashboardPassword=${HANGFIRE_DASHBOARD_PASSWORD:-}
       - Facility__BaseDomain=${BASE_DOMAIN:?BASE_DOMAIN must be set}
       # Extra exact CORS origins (comma separated, * wildcards allowed). Optional: https://<BASE_DOMAIN> and its subdomains are always allowed.
-      - Cors__AllowedOrigins=${CORS_ALLOWED_ORIGINS:-}
       - Cors__AllowedDomains=${CORS_ALLOWED_DOMAINS:-}
-      - Internal__ApiKey=${INTERNAL_API_KEY:?INTERNAL_API_KEY must be set}
-      # Only set during a key rotation: the old key stays accepted until callers are switched, then remove it.
-      - Internal__PreviousApiKey=${INTERNAL_API_KEY_PREVIOUS:-}
       # Signs this service's facility-local session tokens: a long random secret (at least 32 characters), required.
       - Jwt__SigningKey=${PHARMACY_JWT_SIGNING_KEY:?PHARMACY_JWT_SIGNING_KEY must be set (at least 32 characters)}
       - Jwt__KeyDirectory=/app/keys

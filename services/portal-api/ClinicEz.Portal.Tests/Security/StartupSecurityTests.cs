@@ -153,11 +153,11 @@ public sealed class RequiredSettingsTests
     public void OutsideDevelopment_EveryMissingKeyIsReportedWithItsEnvironmentVariable()
     {
         var ex = Assert.Throws<InvalidOperationException>(() => RequiredSettings.EnsureConfigured(
-            Config(("Internal:ApiKey", "  "), ("Xendit:SecretKey", "sk")),
+            Config(("Clerk:Authority", "  "), ("Xendit:SecretKey", "sk")),
             new FakeEnvironment("Production"),
-            "Internal:ApiKey", "Xendit:SecretKey", "Xendit:CallbackToken"));
+            "Clerk:Authority", "Xendit:SecretKey", "Xendit:CallbackToken"));
 
-        Assert.Contains("Internal:ApiKey (env Internal__ApiKey)", ex.Message);
+        Assert.Contains("Clerk:Authority (env Clerk__Authority)", ex.Message);
         Assert.Contains("Xendit:CallbackToken (env Xendit__CallbackToken)", ex.Message);
         Assert.DoesNotContain("Xendit:SecretKey", ex.Message);
     }
@@ -165,12 +165,12 @@ public sealed class RequiredSettingsTests
     [Fact]
     public void OutsideDevelopment_WithEverythingConfigured_Passes()
     {
-        RequiredSettings.EnsureConfigured(Config(("Internal:ApiKey", "k")), new FakeEnvironment("Production"), "Internal:ApiKey");
+        RequiredSettings.EnsureConfigured(Config(("Clerk:Authority", "k")), new FakeEnvironment("Production"), "Clerk:Authority");
     }
 
     [Fact]
     public void InDevelopment_MissingKeysAreTolerated()
     {
-        RequiredSettings.EnsureConfigured(Config(), new FakeEnvironment("Development"), "Internal:ApiKey", "Xendit:CallbackToken");
+        RequiredSettings.EnsureConfigured(Config(), new FakeEnvironment("Development"), "Clerk:Authority", "Xendit:CallbackToken");
     }
 }

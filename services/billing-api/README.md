@@ -50,17 +50,7 @@ Billing has its **own staff store** (`BillingStaff`), audience `clinicez-billing
 * Roles: **Cashier** (read invoices, create walk-in invoices, statutory discounts, take payments, shifts), **Supervisor** (+ promo discounts, void, refund, reports, audit), **Admin** (+ staff management).
 * `X-Facility-Id` that differs from the token's facility is a 403; `X-Tenant-Id`/permission headers are ignored for signed-in staff.
 * **CORS** is closed by default. `Cors:AllowAnyOrigin=true` exists only in `appsettings.Development.json`; outside Development the service refuses to start with it, and also without `Facility:BaseDomain` (`BASE_DOMAIN`) or `Cors:AllowedOrigins` (`CORS_ALLOWED_ORIGINS`). `Messaging:SigningKey` is likewise required outside Development.
-* **Bootstrap:** the internal service key (`X-Internal-Key` + `X-Tenant-Id`, `Internal:ApiKey`) may *only* manage staff. Use it to create the first admin:
-
-```http
-POST /api/v1/staff
-X-Internal-Key: <Internal__ApiKey>
-X-Tenant-Id: <tenant>
-
-{ "facilityId": "<counter>", "facilityType": "Clinic", "email": "admin@site.test", "fullName": "Site Admin", "password": "<10+ chars>", "role": "Admin" }
-```
-
-Every other endpoint refuses the internal principal (403). Every non-public action declares its permission (`[HasPermission]`, enforced by a reflection test).
+* Every non-public action declares its permission (`[HasPermission]`, enforced by a reflection test).
 
 ## Endpoints (`/api/v1`, `ApiResponse<T>`)
 

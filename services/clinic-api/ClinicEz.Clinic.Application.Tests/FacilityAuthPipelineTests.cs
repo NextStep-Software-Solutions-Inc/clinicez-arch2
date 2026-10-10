@@ -26,8 +26,6 @@ namespace ClinicEz.Clinic.Application.Tests;
 /// </summary>
 public class FacilityAuthPipelineTests
 {
-    private const string InternalKey = "internal-service-secret-key";
-
     private sealed class TestApp : IAsyncDisposable
     {
         public required WebApplication App { get; init; }
@@ -62,8 +60,7 @@ public class FacilityAuthPipelineTests
         {
             ["Jwt:SigningKey"] = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64)),
             ["Jwt:Audience"] = audience,
-            ["Jwt:Issuer"] = audience,
-            ["Internal:ApiKey"] = InternalKey
+            ["Jwt:Issuer"] = audience
         });
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddFacilityLocalAuth(builder.Configuration, audience);
@@ -166,17 +163,6 @@ public class FacilityAuthPipelineTests
     }
 
     [Fact]
-    public async Task InternalKey_AuthenticatesServices_AndWrongKeyIsRejected()
-    {
-        await using var app = await StartAsync("clinicez-clinic");
-
-        (await app.Client.SendAsync(Get("/secure", null, (FacilityAuthSchemes.InternalKeyHeader, InternalKey))))
-            .StatusCode.Should().Be(HttpStatusCode.OK);
-        (await app.Client.SendAsync(Get("/secure", null, (FacilityAuthSchemes.InternalKeyHeader, "wrong-key"))))
-            .StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-    }
-
-    [Fact]
     public async Task ClinicContext_IgnoresForgedHeaders_ForAuthenticatedStaff()
     {
         await using var app = await StartAsync("clinicez-clinic");
@@ -192,21 +178,6 @@ public class FacilityAuthPipelineTests
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         json.Should().Contain("tenant-a").And.Contain("11111111-aaaa-aaaa-aaaa-111111111111");
         json.Should().NotContain("victim-tenant").And.NotContain("22222222-bbbb");
-        json.Should().Contain("\"canRead\":true").And.Contain("\"canSign\":false");
-    }
-
-    [Fact]
-    public async Task ClinicContext_InternalService_GetsMinimalPermissions_AndTrustsTenantHeader()
-    {
-        await using var app = await StartAsync("clinicez-clinic");
-
-        var response = await app.Client.SendAsync(Get("/whoami", null,
-            (FacilityAuthSchemes.InternalKeyHeader, InternalKey),
-            ("X-Tenant-Id", "tenant-from-portal"),
-            ("X-Clinic-Id", "44444444-dddd-dddd-dddd-444444444444")));
-        var json = await response.Content.ReadAsStringAsync();
-
-        json.Should().Contain("tenant-from-portal").And.Contain("44444444-dddd");
         json.Should().Contain("\"canRead\":true").And.Contain("\"canSign\":false");
     }
 }

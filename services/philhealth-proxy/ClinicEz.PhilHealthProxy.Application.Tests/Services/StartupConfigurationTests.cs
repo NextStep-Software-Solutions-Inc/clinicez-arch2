@@ -19,24 +19,15 @@ public sealed class StartupConfigurationTests
         public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 
-    private static IConfiguration Config(bool internalKey = true, bool portalUrl = true)
+    private static IConfiguration Config(bool portalUrl = true)
     {
         var values = new Dictionary<string, string?>();
-        if (internalKey) values["Internal:ApiKey"] = "internal-key";
         if (portalUrl) values["PortalApi:BaseUrl"] = "http://portal-api:8080";
         return new ConfigurationBuilder().AddInMemoryCollection(values).Build();
     }
 
     private static IServiceCollection Register(IConfiguration configuration, string environment) =>
         new ServiceCollection().AddInfrastructureServices(configuration, new FakeEnvironment(environment));
-
-    [Fact]
-    public void MissingInternalKey_FailsOutsideDevelopment_AndNamesTheEnvironmentVariable()
-    {
-        var act = () => Register(Config(internalKey: false), "Production");
-
-        act.Should().Throw<InvalidOperationException>().WithMessage("*Internal:ApiKey*Internal__ApiKey*");
-    }
 
     [Fact]
     public void MissingPortalUrl_FailsInsteadOfFallingBackToLocalhost()

@@ -41,7 +41,6 @@ namespace ClinicEz.Billing.Tests;
 /// </summary>
 public class ApiTests
 {
-    private const string InternalKey = "internal-service-secret-key";
     private const string Password = "Str0ng-Passw0rd-2026";
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { Converters = { new JsonStringEnumConverter() } };
@@ -77,15 +76,44 @@ public class ApiTests
         public Task<Reply> PostAsync(string url, string? bearer, object? body, params (string Name, string Value)[] headers) =>
             SendAsync(HttpMethod.Post, url, bearer, body ?? new { }, headers);
 
-        /// <summary>Creates a staff member the way provisioning does: with the internal service key for a tenant.</summary>
+        /// <summary>Creates a staff member directly in database when bearer is null, or via API when bearer is present.</summary>
         public async Task<Guid> CreateStaffAsync(string tenantId, string facilityId, FacilityType type, string email, string role, string? bearer = null)
         {
-            var reply = bearer is null
-                ? await PostAsync("/api/v1/staff", null, new { facilityId, facilityType = type, email, fullName = $"{role} {email}", password = Password, role },
-                    (FacilityAuthSchemes.InternalKeyHeader, InternalKey), ("X-Tenant-Id", tenantId))
-                : await PostAsync("/api/v1/staff", bearer, new { facilityId, facilityType = type, email, fullName = $"{role} {email}", password = Password, role });
-            reply.Status.Should().Be(HttpStatusCode.Created, reply.Body.ToString());
-            return reply.Data.GetProperty("id").GetGuid();
+            if (bearer is not null)
+            {
+                var reply = await PostAsync("/api/v1/staff", bearer, new { facilityId, facilityType = type, email, fullName = $"{role} {email}", password = Password, role });
+                reply.Status.Should().Be(HttpStatusCode.Created, reply.Body.ToString());
+                return reply.Data.GetProperty("id").GetGuid();
+            }
+
+            await using var scope = App.Services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<ClinicEz.Billing.Infrastructure.Persistence.ApplicationDbContext>();
+            var hasher = scope.ServiceProvider.GetRequiredService<IFacilityPasswordHasher>();
+            var now = DateTime.UtcNow;
+            var facility = await db.BillingFacilities.FirstOrDefaultAsync(f => f.TenantId == tenantId && f.FacilityId == facilityId);
+            if (facility is null)
+            {
+                db.BillingFacilities.Add(new ClinicEz.Billing.Domain.Entities.BillingFacility
+                {
+                    Id = Guid.NewGuid(), TenantId = tenantId, FacilityId = facilityId, FacilityType = type, FirstSeenUtc = now, LastSeenUtc = now
+                });
+            }
+
+            var staff = new ClinicEz.Billing.Domain.Entities.BillingStaff
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                FacilityId = facilityId,
+                Email = email.ToLowerInvariant().Trim(),
+                FullName = $"{role} {email}",
+                PasswordHash = hasher.Hash(Password),
+                Role = Enum.Parse<ClinicEz.Billing.Domain.Enums.StaffRole>(role),
+                IsActive = true,
+                CreatedAtUtc = now
+            };
+            db.BillingStaff.Add(staff);
+            await db.SaveChangesAsync();
+            return staff.Id;
         }
 
         public async Task<string> LoginAsync(string tenantId, string facilityId, string email, string password = Password)
@@ -148,7 +176,6 @@ public class ApiTests
             ["Jwt:SigningKey"] = signingKey ?? Convert.ToBase64String(RandomNumberGenerator.GetBytes(64)),
             ["Jwt:Audience"] = audience,
             ["Jwt:Issuer"] = audience,
-            ["Internal:ApiKey"] = InternalKey,
             ["DbSchema"] = "billing",
             ["Messaging:Service"] = "billing",
             ["Messaging:Transport"] = "InProcess",
@@ -295,26 +322,6 @@ public class ApiTests
         (await app.GetAsync("/api/v1/auth/me", team.Cashier)).Status.Should().Be(HttpStatusCode.Unauthorized);
         (await app.PostAsync("/api/v1/auth/login", null, new { tenantId = BillingHost.TenantA, facilityId = BillingHost.Clinic, email = "cash@x.test", password = Password })).Status.Should().Be(HttpStatusCode.Unauthorized);
         (await app.PostAsync($"/api/v1/staff/{team.AdminId}/deactivate", team.Admin, null)).Status.Should().Be(HttpStatusCode.Conflict, "you cannot lock yourself out");
-    }
-
-    // ── internal service key ────────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task The_internal_key_may_only_manage_staff_and_needs_a_tenant()
-    {
-        await using var app = await StartAsync();
-        var headers = new[] { (FacilityAuthSchemes.InternalKeyHeader, InternalKey), ("X-Tenant-Id", BillingHost.TenantA) };
-
-        (await app.GetAsync("/api/v1/staff", null, headers)).Status.Should().Be(HttpStatusCode.OK);
-        (await app.GetAsync("/api/v1/staff", null, (FacilityAuthSchemes.InternalKeyHeader, InternalKey))).Status.Should().Be(HttpStatusCode.Forbidden, "no tenant");
-        (await app.GetAsync("/api/v1/staff", null, (FacilityAuthSchemes.InternalKeyHeader, "wrong-key"), ("X-Tenant-Id", BillingHost.TenantA))).Status.Should().Be(HttpStatusCode.Unauthorized);
-
-        foreach (var url in new[] { "/api/v1/invoices", "/api/v1/visit-bills", "/api/v1/shifts/current", "/api/v1/audit", "/api/v1/auth/me" })
-        {
-            (await app.GetAsync(url, null, headers)).Status.Should().Be(HttpStatusCode.Forbidden, url);
-        }
-
-        (await app.PostAsync("/api/v1/payments", null, new { method = "Cash", amount = 1m }, headers)).Status.Should().Be(HttpStatusCode.Forbidden);
     }
 
     // ── permissions ─────────────────────────────────────────────────────────────────

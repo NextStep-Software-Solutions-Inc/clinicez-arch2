@@ -1,4 +1,3 @@
-using ClinicEz.Shared.LocalAuth;
 using ClinicEz.Shared.Security;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Configuration;
@@ -16,9 +15,6 @@ public static class DependencyInjection
         IConfiguration configuration,
         IHostEnvironment env)
     {
-        // No built-in secrets or endpoints: outside Development a missing value stops the start-up.
-        RequiredSettings.EnsureConfigured(configuration, env, "Internal:ApiKey");
-
         // Pure Stateless Zero-DB Micro-Gateway:
         // Register in-memory cache for 1-hour statutory credentials caching
         services.AddMemoryCache();
@@ -38,13 +34,6 @@ public static class DependencyInjection
         {
             client.BaseAddress = new Uri(portalBaseUrl + "/");
             client.Timeout = TimeSpan.FromSeconds(10);
-
-            // The portal only serves the stored PhilHealth credentials to callers that present the shared internal key.
-            var internalKey = configuration["Internal:ApiKey"];
-            if (!string.IsNullOrWhiteSpace(internalKey))
-            {
-                client.DefaultRequestHeaders.TryAddWithoutValidation(FacilityAuthSchemes.InternalKeyHeader, internalKey);
-            }
         })
         .AddStandardResilienceHandler();
 

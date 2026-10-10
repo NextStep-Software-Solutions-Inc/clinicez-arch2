@@ -44,7 +44,7 @@ public static class DependencyInjection
     {
         // No built-in secrets or endpoints: outside Development a missing value stops the start-up.
         RequiredSettings.EnsureConfigured(configuration, env,
-            "ConnectionStrings:DefaultConnection", "Clerk:Authority", "Xendit:SecretKey", "Xendit:CallbackToken", "Internal:ApiKey");
+            "ConnectionStrings:DefaultConnection", "Clerk:Authority", "Xendit:SecretKey", "Xendit:CallbackToken");
 
         var connectionString = configuration.GetConnectionString("DefaultConnection");
 
@@ -113,12 +113,6 @@ public static class DependencyInjection
             }
             client.BaseAddress = new Uri($"{clinicUrl}/");
             client.Timeout = TimeSpan.FromSeconds(60);
-            // Trusted service-to-service credential: clinic-api rejects unauthenticated calls.
-            var internalKey = configuration["Internal:ApiKey"];
-            if (!string.IsNullOrWhiteSpace(internalKey))
-            {
-                client.DefaultRequestHeaders.TryAddWithoutValidation("X-Internal-Key", internalKey);
-            }
         })
         .AddStandardResilienceHandler();
 

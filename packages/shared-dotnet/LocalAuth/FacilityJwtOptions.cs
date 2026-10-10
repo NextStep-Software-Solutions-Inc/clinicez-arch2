@@ -37,18 +37,3 @@ public sealed class FacilityJwtOptions
 
     public int MinPasswordLength { get; set; } = 10;
 }
-
-/// <summary>Service-to-service credential settings (bound from the "Internal" configuration section).</summary>
-public sealed class InternalKeyOptions
-{
-    public const string SectionName = "Internal";
-
-    /// <summary>Shared secret presented in the <c>X-Internal-Key</c> header by trusted internal services.</summary>
-    public string? ApiKey { get; set; }
-
-    /// <summary>
-    /// Optional previous key accepted alongside <see cref="ApiKey"/> during a rotation window, so the receiver can be switched to the new key
-    /// before callers are, with no downtime. Leave empty outside a rotation.
-    /// </summary>
-    public string? PreviousApiKey { get; set; }
-}

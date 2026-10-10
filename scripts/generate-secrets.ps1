@@ -1,7 +1,7 @@
 # Prints random values for the shared secrets of the cloud deployment (GitHub secrets) as NAME=value lines.
 #
 #   scripts\generate-secrets.ps1                          every secret below
-#   scripts\generate-secrets.ps1 INTERNAL_API_KEY CLINIC_*    only the names/patterns given
+#   scripts\generate-secrets.ps1 CLINIC_*    only the names/patterns given
 #   scripts\generate-secrets.ps1 -List                    names and kinds, no values
 #
 # Values come from the operating system's cryptographic RNG and go to the output ONLY: copy each one into Settings ->
@@ -17,7 +17,6 @@ $ErrorActionPreference = 'Stop'
 
 # NAME, kind (alnum = random letters/digits, b64 = base64 of random bytes), size
 $Specs = @(
-  @('INTERNAL_API_KEY', 'alnum', 48),
   @('HANGFIRE_PASSWORD', 'alnum', 24),
   @('CLINIC_ENCRYPTION_MASTER_SECRET', 'alnum', 64),
   @('CLINIC_DOCUMENT_SIGNING_KEY', 'alnum', 64),

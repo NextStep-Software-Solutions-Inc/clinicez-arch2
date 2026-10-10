@@ -34,14 +34,12 @@ public static class FacilityLocalAuthExtensions
                 if (string.IsNullOrWhiteSpace(o.Audience)) o.Audience = audience;
                 if (string.IsNullOrWhiteSpace(o.Issuer)) o.Issuer = o.Audience;
             });
-        services.AddOptions<InternalKeyOptions>().Bind(configuration.GetSection(InternalKeyOptions.SectionName));
 
         services.AddSingleton<IFacilityTokenService, FacilityTokenService>();
         services.AddSingleton<IFacilityPasswordHasher, FacilityPasswordHasher>();
 
         services.AddAuthentication(FacilityAuthSchemes.Facility)
-            .AddJwtBearer(FacilityAuthSchemes.Facility, _ => { })
-            .AddScheme<AuthenticationSchemeOptions, InternalKeyAuthenticationHandler>(FacilityAuthSchemes.Internal, _ => { });
+            .AddJwtBearer(FacilityAuthSchemes.Facility, _ => { });
 
         services.AddOptions<JwtBearerOptions>(FacilityAuthSchemes.Facility)
             .Configure<IFacilityTokenService>((bearer, tokens) =>
@@ -72,7 +70,7 @@ public static class FacilityLocalAuthExtensions
 
         services.AddAuthorization(o =>
         {
-            o.FallbackPolicy = new AuthorizationPolicyBuilder(FacilityAuthSchemes.Facility, FacilityAuthSchemes.Internal)
+            o.FallbackPolicy = new AuthorizationPolicyBuilder(FacilityAuthSchemes.Facility)
                 .RequireAuthenticatedUser()
                 .Build();
         });

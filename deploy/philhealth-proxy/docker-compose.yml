@@ -20,10 +20,7 @@ services:
       - npm-default
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
-      # Portal API the proxy reads tenant credentials from, and the shared key it presents (X-Internal-Key): the SAME value as the
-      # portal's INTERNAL_API_KEY. Both are required (no localhost fallback).
       - PortalApi__BaseUrl=${PORTAL_API_BASE_URL:?PORTAL_API_BASE_URL must be set}
-      - Internal__ApiKey=${INTERNAL_API_KEY:?INTERNAL_API_KEY must be set}
       # ASP.NET Data Protection key ring (protects stored per-tenant credentials in memory). Optional: a PFX (base64) and its
       # password encrypt the ring at rest.
       - DataProtection__CertificateBase64=${DATA_PROTECTION_CERT_BASE64:-}

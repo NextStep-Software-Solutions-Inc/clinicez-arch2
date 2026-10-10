@@ -41,12 +41,7 @@ services:
       - Facility__BaseDomain=${BASE_DOMAIN:?BASE_DOMAIN must be set}
       # Extra exact CORS origins (comma separated, * wildcards allowed). Optional: https://<BASE_DOMAIN> and its subdomains are always allowed.
       - Cors__AllowedOrigins=${CORS_ALLOWED_ORIGINS:-}
-      - Internal__ApiKey=${INTERNAL_API_KEY:?INTERNAL_API_KEY must be set}
-      # Only set during a key rotation: the old key stays accepted until callers are switched, then remove it.
-      - Internal__PreviousApiKey=${INTERNAL_API_KEY_PREVIOUS:-}
       - Services__PharmacyApiUrl=${PHARMACY_API_URL:-http://pharmacy-api:8080}
-      # Pairwise key for the pharmacy server's Internal__ApiKey. Empty falls back to Internal__ApiKey.
-      - Services__PharmacyApiKey=${PHARMACY_API_KEY:-}
       # Signs this service's facility-local session tokens: a long random secret (at least 32 characters), required.
       - Jwt__SigningKey=${CLINIC_JWT_SIGNING_KEY:?CLINIC_JWT_SIGNING_KEY must be set (at least 32 characters)}
       - Jwt__KeyDirectory=/app/keys

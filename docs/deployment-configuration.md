@@ -25,7 +25,7 @@ Set each value as a repository / environment **secret or variable** (Settings â†
 | `DATA_NETWORK` / `NPM_NETWORK` | no | all APIs | Names of the external Docker networks (defaults `data-network` / `npm-default`). |
 | `INTEROP_HUB_DB_CONNECTION_STRING` / `INTEROP_HUB_PORTAL_CLIENT_SECRET` | yes | interop-hub | Hub database and the portal's bootstrap client secret. |
 | `INTEROP_HUB_PAYLOAD_ENCRYPTION_KEY` | recommended | interop-hub | Base64 of 32 random bytes; encrypts stored envelopes at rest (AES-256-GCM). Empty stores plain JSON; generate with `scripts/generate-secrets`. Secret. |
-| `BILLING_DB_CONNECTION_STRING` / `BILLING_JWT_SIGNING_KEY` / `INTERNAL_API_KEY` | yes | billing-api | Database connection string, local JWT signing key (`Jwt__SigningKey`, at least 32 characters) and internal API key (`Internal__ApiKey`) of the per-cell billing service. Hub credentials use `BILLING_MESSAGING_CLIENT_ID` / `BILLING_MESSAGING_CLIENT_SECRET`. Secrets. |
+| `BILLING_DB_CONNECTION_STRING` / `BILLING_JWT_SIGNING_KEY` | yes | billing-api | Database connection string and local JWT signing key (`Jwt__SigningKey`, at least 32 characters) of the per-cell billing service. Hub credentials use `BILLING_MESSAGING_CLIENT_ID` / `BILLING_MESSAGING_CLIENT_SECRET`. Secrets. |
 | `PATIENT_SHARING_SIGNING_KEY` (the plain name `SHARING_SIGNING_KEY` is also accepted) | yes | patient-api | Signs the share tokens patients give to facilities. Compose variable and config key: `SHARING_SIGNING_KEY` -> `Sharing__SigningKey`; at least 32 characters, the service refuses to start without it. Secret; the deploy fails when it is shorter. |
 | `PATIENT_ENCRYPTION_KEY` | yes | patient-api | Base64 of 32 random bytes for payload encryption (`Encryption__Base64Key`). Must decode to exactly 32 bytes (the deploy checks this; `openssl rand -base64 32` or `scripts/generate-secrets`). Required for any non-Development deployment (the compose file and the deploy fail without it); ignored in Development. Never change it once data exists. Secret. |
 | `CLINIC_PUBLIC_UPLOAD_BASE_URL` | yes | clinic-api | Public URL where labs upload results for a requisition (`Clinic__PublicUploadBaseUrl`). Variable or secret. |
@@ -79,8 +79,6 @@ a **PEM** (multi-line GitHub secret) or as **base64 of a PEM** is turned into on
 | `CLINIC_ENCRYPTION_MASTER_SECRET` | `ClinicEncryption__MasterSecret` | clinic-api | At least 32 characters. See the table above and Rotation. |
 | `CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_0` / `_1` | `ClinicEncryption__PreviousMasterSecrets__0` / `__1` | clinic-api | *Optional.* Older master secrets that stay readable. |
 | `CLINICAPP_HANGFIRE_PASSWORD` / `CLINIC_HANGFIRE_PASSWORD` / `HANGFIRE_PASSWORD` | `Hangfire__DashboardPassword` | clinic-api (required); other APIs (optional, empty = dashboard denied) | Basic-auth password of the Hangfire dashboard. The first name that is set wins (each API has its own prefixes, see its workflow). |
-| `INTERNAL_API_KEY` (pharmacy also `PHARMACY_INTERNAL_API_KEY`) | `Internal__ApiKey` | portal-api (required), clinic-api, pharmacy-api, billing-api, philhealth-proxy | One shared service key (`X-Internal-Key`). philhealth-proxy presents the SAME value to the portal; the portal presents it to the clinic. Use the same value everywhere. |
-| `INTERNAL_API_KEY_PREVIOUS` | `Internal__PreviousApiKey` | portal-api, clinic-api, pharmacy-api | *Optional.* Old key still accepted during a rotation. |
 | `CLINIC_JWT_SIGNING_KEY` / `LAB_JWT_SIGNING_KEY` / `PHARMACY_JWT_SIGNING_KEY` / `BILLING_JWT_SIGNING_KEY` | `Jwt__SigningKey` | clinic-api / laboratory-api / pharmacy-api / billing-api | Signs the facility-local session tokens. At least 32 characters (base64 of 64 random bytes works). One key **per service**: every service has its own issuer/audience and does not accept another's tokens. Without it a key would be generated on the container's disk and sessions would not survive re-creation, so it is now required. |
 | `PORTAL_DB_CONNECTION_STRING`, `PORTAL_CLERK_SECRET_KEY`, `PORTAL_XENDIT_SECRET_KEY`, `PORTAL_XENDIT_CALLBACK_TOKEN` | `ConnectionStrings__DefaultConnection`, `Clerk__SecretKey`, `Xendit__SecretKey`, `Xendit__CallbackToken` | portal-api | All four required (no development fallbacks). |
 | `PORTAL_DATA_PROTECTION_CERT_BASE64` / `_PASSWORD`, `PHILHEALTH_DATA_PROTECTION_CERT_BASE64` / `_PASSWORD` | `DataProtection__CertificateBase64` / `__CertificatePassword` | portal-api, philhealth-proxy | *Optional.* Base64 of a `.pfx` that encrypts the ASP.NET Data Protection key ring at rest. For `portal-api`, key ring XMLs are stored directly in PostgreSQL via EF Core (`portal_dashboard.DataProtectionKeys`). |
@@ -95,14 +93,14 @@ Generate the plain secrets with `scripts/generate-secrets` and the key pairs wit
 - [ ] Once per service (7): `<SVC>_MESSAGING_SIGNING_KEY` (private) + register its public key at the hub; `INTEROP_HUB_PORTAL_PUBLIC_KEY` is the portal's public key.
 - [ ] Hub: `INTEROP_HUB_DB_CONNECTION_STRING`, `INTEROP_HUB_PORTAL_CLIENT_SECRET`, `INTEROP_HUB_PAYLOAD_ENCRYPTION_KEY`, `INTEROP_HUB_PORTAL_PUBLIC_KEY`.
 - [ ] Hub client secrets: `<SVC>_MESSAGING_CLIENT_ID` / `<SVC>_MESSAGING_CLIENT_SECRET` for the 7 services.
-- [ ] portal-api: `PORTAL_DB_CONNECTION_STRING`, `PORTAL_CLERK_SECRET_KEY`, `PORTAL_XENDIT_SECRET_KEY`, `PORTAL_XENDIT_CALLBACK_TOKEN`, `INTERNAL_API_KEY`, Hangfire password, `BASE_DOMAIN`.
-- [ ] clinic-api: `CLINIC_DB_CONNECTION_STRING`, `CLINIC_ENCRYPTION_MASTER_SECRET`, `CLINIC_DOCUMENT_SIGNING_KEY`, `CLINIC_JWT_SIGNING_KEY`, `CLINICAPP_HANGFIRE_PASSWORD` (or `HANGFIRE_PASSWORD`), `INTERNAL_API_KEY`.
+- [ ] portal-api: `PORTAL_DB_CONNECTION_STRING`, `PORTAL_CLERK_SECRET_KEY`, `PORTAL_XENDIT_SECRET_KEY`, `PORTAL_XENDIT_CALLBACK_TOKEN`, Hangfire password, `BASE_DOMAIN`.
+- [ ] clinic-api: `CLINIC_DB_CONNECTION_STRING`, `CLINIC_ENCRYPTION_MASTER_SECRET`, `CLINIC_DOCUMENT_SIGNING_KEY`, `CLINIC_JWT_SIGNING_KEY`, `CLINICAPP_HANGFIRE_PASSWORD` (or `HANGFIRE_PASSWORD`).
 - [ ] laboratory-api: `LABORATORY_DB_CONNECTION_STRING`, `LABORATORY_DOCUMENT_SIGNING_KEY`, `LAB_JWT_SIGNING_KEY`.
-- [ ] pharmacy-api: `PHARMACY_DB_CONNECTION_STRING`, `PHARMACY_GAMOT_UPSC_SECRET_KEY`, `PHARMACY_JWT_SIGNING_KEY`, `INTERNAL_API_KEY`.
-- [ ] billing-api: `BILLING_DB_CONNECTION_STRING`, `BILLING_JWT_SIGNING_KEY`, `INTERNAL_API_KEY`.
+- [ ] pharmacy-api: `PHARMACY_DB_CONNECTION_STRING`, `PHARMACY_GAMOT_UPSC_SECRET_KEY`, `PHARMACY_JWT_SIGNING_KEY`.
+- [ ] billing-api: `BILLING_DB_CONNECTION_STRING`, `BILLING_JWT_SIGNING_KEY`.
 - [ ] patient-api (no Redis; the old `PATIENT_REDIS_CONNECTION_STRING` secret is gone): `PATIENT_DB_CONNECTION_STRING`, `PATIENT_CLERK_AUTHORITY` (secret or variable, required, no built-in default), optional `PATIENT_CLERK_AUDIENCE`, `PATIENT_CLERK_WEBHOOK_SECRET`, `PATIENT_ENCRYPTION_KEY` (32-byte base64), `PATIENT_SHARING_SIGNING_KEY` (>= 32 chars), `PATIENT_MESSAGING_CLIENT_ID` / `_CLIENT_SECRET` / `_SIGNING_KEY` + `MESSAGING_HUB_URL`, `PATIENT_R2_*` (or the shared `R2_*`), `PATIENT_FIREBASE_JSON`, Hangfire password (`PATIENTAPP_HANGFIRE_PASSWORD`, `PATIENT_HANGFIRE_PASSWORD` or `HANGFIRE_PASSWORD`; empty = dashboard denied), `BASE_DOMAIN`, optional `CORS_ALLOWED_*`.
 - [ ] organization-api: `ORGANIZATION_DB_CONNECTION_STRING`.
-- [ ] philhealth-proxy: `PORTAL_API_BASE_URL`, `INTERNAL_API_KEY` (same value as the portal's).
+- [ ] philhealth-proxy: `PORTAL_API_BASE_URL`.
 - [ ] Optional: the Data Protection certificates, `*_PREVIOUS` values, `CORS_ALLOWED_*`.
 
 #### Key pairs must match
@@ -115,7 +113,6 @@ Generate the plain secrets with `scripts/generate-secrets` and the key pairs wit
 
 - **License keys:** generate a new pair, set the OLD public key as `FACILITY_LICENSE_PUBLIC_KEY_PREVIOUS` and the new one as `FACILITY_LICENSE_PUBLIC_KEY`, deploy the portal with the new private key and the verifiers, hand sites the new public key. Remove `_PREVIOUS` once every license was renewed (licenses live at most 90 days).
 - **Hub signing keys:** generate a new pair, replace the public key at the hub (admin API / `INTEROP_HUB_PORTAL_PUBLIC_KEY` for the portal), then deploy the service with the new private key. Envelopes signed with the old key are rejected afterwards, so do both in one maintenance window.
-- **`INTERNAL_API_KEY`:** put the new value in `INTERNAL_API_KEY` and the old one in `INTERNAL_API_KEY_PREVIOUS` on the receiving services (portal, clinic, pharmacy), switch the callers, then delete the previous value.
 - **Clinic master secret:** re-encrypting stored files under a new secret is **not supported yet**. A new `CLINIC_ENCRYPTION_MASTER_SECRET` only works for new files; keep every older value in `CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_0` / `_1` so the old files stay readable (two slots, so at most two retired secrets).
 - **Document signing and UPSC keys:** a new value invalidates codes/QR already issued; rotate only when that is acceptable.
 - **Data Protection:** the key ring rotates itself inside PostgreSQL; keep the database (and certificate, if used) and do nothing else.

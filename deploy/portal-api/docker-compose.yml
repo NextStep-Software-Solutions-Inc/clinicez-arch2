@@ -41,11 +41,7 @@ services:
       - Hangfire__DashboardPassword=${HANGFIRE_DASHBOARD_PASSWORD:-}
       - Facility__BaseDomain=${BASE_DOMAIN:?BASE_DOMAIN must be set}
       # Extra exact CORS origins (comma separated, * wildcards allowed). Optional: https://<BASE_DOMAIN> and its subdomains are always allowed.
-      - Cors__AllowedOrigins=${CORS_ALLOWED_ORIGINS:-}
       - Cors__AllowedDomains=${CORS_ALLOWED_DOMAINS:-}
-      - Internal__ApiKey=${INTERNAL_API_KEY:?INTERNAL_API_KEY must be set}
-      # Only set during a key rotation: the old key stays accepted until callers are switched, then remove it.
-      - Internal__PreviousApiKey=${INTERNAL_API_KEY_PREVIOUS:-}
       # Public base URL of the cloud hub, handed to on-premise sites with their credentials (Hub:PublicUrl).
       - Hub__PublicUrl=${HUB_PUBLIC_URL:?HUB_PUBLIC_URL must be set}
       # Cell hosting every shared-cloud facility. Must equal the cloud hub's Hub__CloudCellId.
@@ -63,7 +59,7 @@ services:
       - Notifications__ContactInbox=${NOTIFICATIONS_CONTACT_INBOX:-}
       # Web portal base URL (billing redirects when the request carries no Origin/Referer).
       - FrontendBaseUrl=${FRONTEND_BASE_URL:-}
-      # Clinic API the portal calls with the internal key (provisioning, workspace-level reads).
+      # Clinic API the portal calls (provisioning, workspace-level reads).
       - Services__ClinicApiUrl=${SERVICES_CLINIC_API_URL:-http://clinic-api:8080}
       # Workspaces one user may own.
       - Workspace__MaxOwnedPerUser=${WORKSPACE_MAX_OWNED_PER_USER:-1}

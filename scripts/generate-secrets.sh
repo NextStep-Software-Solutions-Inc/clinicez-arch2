@@ -2,7 +2,7 @@
 # Prints random values for the shared secrets of the cloud deployment (GitHub secrets) as NAME=value lines.
 #
 #   scripts/generate-secrets.sh                     every secret below
-#   scripts/generate-secrets.sh INTERNAL_API_KEY CLINIC_*   only the names/patterns given
+#   scripts/generate-secrets.sh CLINIC_*           only the names/patterns given
 #   scripts/generate-secrets.sh --list              names and kinds, no values
 #
 # Values come from /dev/urandom (no openssl needed) and go to stdout ONLY: copy each one into Settings -> Secrets and
@@ -12,7 +12,6 @@ set -eu
 
 # NAME:kind  (alnum:N = N random letters/digits, b64:N = base64 of N random bytes)
 SPECS="
-INTERNAL_API_KEY:alnum:48
 HANGFIRE_PASSWORD:alnum:24
 CLINIC_ENCRYPTION_MASTER_SECRET:alnum:64
 CLINIC_DOCUMENT_SIGNING_KEY:alnum:64

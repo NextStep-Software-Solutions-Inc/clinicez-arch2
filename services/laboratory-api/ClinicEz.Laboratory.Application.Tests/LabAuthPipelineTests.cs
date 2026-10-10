@@ -47,7 +47,6 @@ namespace ClinicEz.Laboratory.Application.Tests;
 /// </summary>
 public class LabAuthPipelineTests
 {
-    private const string InternalKey = "internal-service-secret-key";
     private static readonly Guid LabId = Guid.Parse("11111111-aaaa-aaaa-aaaa-111111111111");
 
     private sealed class TestApp : IAsyncDisposable
@@ -95,8 +94,7 @@ public class LabAuthPipelineTests
         {
             ["Jwt:SigningKey"] = signingKey ?? Convert.ToBase64String(RandomNumberGenerator.GetBytes(64)),
             ["Jwt:Audience"] = audience,
-            ["Jwt:Issuer"] = audience,
-            ["Internal:ApiKey"] = InternalKey
+            ["Jwt:Issuer"] = audience
         });
 
         var accessCache = Substitute.For<IStaffAccessCache>();
@@ -251,15 +249,6 @@ public class LabAuthPipelineTests
         (await StatusAsync(app, Get("/secure", unknown))).Should().Be(HttpStatusCode.Unauthorized);
     }
 
-    [Fact]
-    public async Task InternalKey_AuthenticatesServices_AndWrongKeyIsRejected()
-    {
-        await using var app = await StartAsync();
-
-        (await StatusAsync(app, Get("/secure", null, (FacilityAuthSchemes.InternalKeyHeader, InternalKey)))).Should().Be(HttpStatusCode.OK);
-        (await StatusAsync(app, Get("/secure", null, (FacilityAuthSchemes.InternalKeyHeader, "wrong-key")))).Should().Be(HttpStatusCode.Unauthorized);
-    }
-
     // ── tenant / facility / permissions come from the token only ────────────────────
 
     [Fact]
@@ -311,23 +300,6 @@ public class LabAuthPipelineTests
         var token = app.Session(new[] { LabPermissions.ResultsRead }, extra: new Claim(LabClaimTypes.Permission, LabPermissions.AnalyzersFeed));
 
         (await StatusAsync(app, Request(HttpMethod.Post, "/api/v1/analyzers/simulate", token))).Should().Be(HttpStatusCode.Forbidden);
-    }
-
-    [Fact]
-    public async Task InternalService_GetsMinimalPermissions_AndTrustsTenantHeader()
-    {
-        await using var app = await StartAsync();
-
-        var who = await app.Client.SendAsync(Get("/whoami", null,
-            (FacilityAuthSchemes.InternalKeyHeader, InternalKey), ("X-Tenant-Id", "tenant-from-portal")));
-        var json = await who.Content.ReadAsStringAsync();
-        json.Should().Contain("tenant-from-portal").And.Contain("\"canVerify\":false");
-
-        // Internal callers may read requisitions but cannot write results or manage staff.
-        (await StatusAsync(app, Get("/api/v1/requisitions", null, (FacilityAuthSchemes.InternalKeyHeader, InternalKey)))).Should().Be(HttpStatusCode.OK);
-        (await StatusAsync(app, Request(HttpMethod.Post, "/api/v1/analyzers/simulate", null, (FacilityAuthSchemes.InternalKeyHeader, InternalKey))))
-            .Should().Be(HttpStatusCode.Forbidden);
-        (await StatusAsync(app, Get("/api/v1/staff", null, (FacilityAuthSchemes.InternalKeyHeader, InternalKey)))).Should().Be(HttpStatusCode.Forbidden);
     }
 
     // ── permission enforcement ──────────────────────────────────────────────────────
