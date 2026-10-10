@@ -118,7 +118,10 @@ bun run web
 
 Below is the complete, explicit reference of all **GitHub Action Secrets/Variables** (for Cloud CI/CD) and **Environment Variables** (for On-Premise Edge Cell deployments). Every key is listed by its exact name.
 
+> **Single-Underscore vs. Double-Underscore Environment Variables**: All .NET microservices accept single-underscore environment variable keys (`MESSAGING_HUB_URL`, `MESSAGING_CLIENT_ID`, `MESSAGING_CLIENT_SECRET`, `MESSAGING_SERVICE`, `MESSAGING_TRANSPORT`, `MESSAGING_SIGNING_KEY`) as direct fallbacks for standard ASP.NET Core double-underscore (`Messaging__*`) section configuration delimiters. Both single-underscore and double-underscore formats are 100% supported and fully interchangeable across all deployments.
+
 ---
+
 
 ### PART 1: Cloud CI/CD Deployment (GitHub Secrets & Variables)
 
@@ -252,11 +255,13 @@ Managed in GitHub under **Settings ➔ Secrets and variables ➔ Actions**.
 | Target Service | Exact Key Name | Type | Description & Purpose | Default / Example Value | How to Generate / Obtain Command |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **PhilHealth Proxy** | `PORTAL_API_BASE_URL` | Variable | Portal API URL for credentials lookup | `https://portal-api.clinicez.com` | Public Portal API domain |
-| **PhilHealth Proxy** | `MESSAGING__TRANSPORT` | Variable | Interop transport mechanism | `Hub` | Constant `Hub` |
-| **PhilHealth Proxy** | `MESSAGING__SERVICE` | Variable | Service name | `philhealth` | Constant `philhealth` |
-| **PhilHealth Proxy** | `MESSAGING__HUB_URL` | Variable | Interop Hub URL | `http://interop-hub:8080` | Internal Hub endpoint |
+| **PhilHealth Proxy** | `MESSAGING_TRANSPORT` | Variable | Interop transport mechanism | `Hub` | Constant `Hub` |
+| **PhilHealth Proxy** | `MESSAGING_SERVICE` | Variable | Service name | `philhealth` | Constant `philhealth` |
+| **PhilHealth Proxy** | `MESSAGING_HUB_URL` | Variable | Interop Hub URL | `http://interop-hub:8080` | Internal Hub endpoint |
 | **PhilHealth Proxy** | `PHILHEALTH_MESSAGING_CLIENT_ID` | Secret | Hub Client ID for PhilHealth Proxy | `dev-philhealth` | Set `dev-philhealth` |
 | **PhilHealth Proxy** | `PHILHEALTH_MESSAGING_CLIENT_SECRET` | Secret | Hub Client Secret for PhilHealth Proxy | `dev-philhealth-secret` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 40` |
+| **PhilHealth Proxy** | `PHILHEALTH_MESSAGING_SIGNING_KEY` | Secret | ECDSA P-256 private key for PhilHealth Proxy | `-----BEGIN EC PRIVATE KEY-----\n...` | `openssl ecparam -genkey -name prime256v1 -noout` |
+
 
 > **Note on PhilHealth Payload Encryption**: PhilHealth Konsulta XML payload encryption uses the tenant branch's **PhilHealth Cipher Key** directly via symmetric AES-256-CBC. No digital certificate (`.pfx`) environment variable is required.
 
