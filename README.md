@@ -106,7 +106,7 @@ bun run web
 
 ## 🔑 Environment Variables & Secrets Reference Guide
 
-Below is the complete, service-by-service reference of all **GitHub Action Secrets/Variables** (for Cloud CI/CD) and **Environment Variables** (for On-Premise Edge Cell deployments).
+Below is the complete, explicit reference of all **GitHub Action Secrets/Variables** (for Cloud CI/CD) and **Environment Variables** (for On-Premise Edge Cell deployments). Every key is listed by its exact name.
 
 ---
 
@@ -115,111 +115,146 @@ Below is the complete, service-by-service reference of all **GitHub Action Secre
 Managed in GitHub under **Settings ➔ Secrets and variables ➔ Actions**.
 
 #### 1. Deployment Infrastructure & CI Access
-| Target Service | Name | Description & Purpose | Default / Example Value | How to Generate / Obtain |
-| :--- | :--- | :--- | :--- | :--- |
-| **Global CI** | `SSH_HOST` *(Secret)* | Target deployment VPS IP or domain | `deploy.clinicez.com` | Hostname or IP of server |
-| **Global CI** | `SSH_USER` *(Secret)* | Deployment SSH Linux user | `deploy` | Linux user with Docker rights |
-| **Global CI** | `SSH_KEY` *(Secret)* | Private OpenSSH key for deployment | `-----BEGIN OPENSSH PRIVATE KEY-----` | `ssh-keygen -t ed25519 -C "github-actions"` |
-| **Global CI** | `SSH_PASSPHRASE` *(Secret)* | Passphrase for SSH private key | `Passphrase123!` | Specified during `ssh-keygen` |
-| **Vercel Apps** | `VERCEL_TOKEN` *(Secret)* | Vercel API deployment token | `vcp_1234567890abcdef...` | Vercel Account Settings ➔ Tokens |
-| **Mobile Apps** | `EXPO_TOKEN` *(Secret)* | Expo Application Services token | `eas_1234567890...` | Expo Account Settings ➔ Access Tokens |
+
+| Target Area | Exact Key Name | Type | Description & Purpose | Default / Example Value | How to Generate / Obtain Command |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Global CI** | `SSH_HOST` | Secret | Target deployment server IP or domain | `deploy.clinicez.com` | IP or DNS of target server |
+| **Global CI** | `SSH_USER` | Secret | Deployment SSH Linux user | `deploy` | Linux user account with Docker rights |
+| **Global CI** | `SSH_KEY` | Secret | Private OpenSSH key for SSH deployment | `-----BEGIN OPENSSH PRIVATE KEY-----` | `ssh-keygen -t ed25519 -C "github-actions"` |
+| **Global CI** | `SSH_PASSPHRASE` | Secret | Passphrase for SSH key | `Passphrase123!` | Specified during `ssh-keygen` |
+| **Vercel Apps** | `VERCEL_TOKEN` | Secret | Vercel API deployment token | `vcp_1234567890abcdef...` | Vercel Account Settings ➔ Tokens |
+| **Mobile Apps** | `EXPO_TOKEN` | Secret | Expo Application Services token | `eas_1234567890...` | Expo Account Settings ➔ Access Tokens |
 
 ---
 
 #### 2. Interop Hub (`services/interop-hub`)
-| Name | Type | Description & Purpose | Default / Example Value | How to Generate Command |
-| :--- | :--- | :--- | :--- | :--- |
-| `INTEROP_HUB_DB_CONNECTION_STRING` | Secret | PostgreSQL connection string | `Host=postgres;Port=5432;Database=CLINICEZ_INTEROP_HUB_DB;...` | Standard PostgreSQL connection string |
-| `INTEROP_HUB_PAYLOAD_ENCRYPTION_KEY` | Secret | Base64 AES-256 key encrypting DB queued envelopes | `8fK9xL2pQ1vR4mS7tW0zX3yA6bC9dE2f` (32 bytes b64) | `openssl rand -base64 32` |
-| `INTEROP_HUB_PORTAL_CLIENT_SECRET` | Secret | Secret for Portal ControlPlane client | `k9M2vR7xL4pQ1wS8tY0zB3aC6dE9fG2h` (40 chars) | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 40` |
-| `INTEROP_HUB_PORTAL_PUBLIC_KEY` | Secret | Base64 PEM ECDSA P-256 public key for Portal | `MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...` | `openssl ec -in portal_private.pem -pubout` |
-| `MESSAGING_HUB_URL` | Variable | Public URL of Interop Hub | `https://hub.clinicez.com` | Public hub domain |
-| `HUB_CLOUD_CELL_ID` | Variable | Cell ID of the Cloud cell | `cloud` | Constant `cloud` |
-| `HUB_SIGNING_REQUIRED` | Variable | Enforces ECDSA signature validation | `true` | Set `true` |
+
+| Target Service | Exact Key Name | Type | Description & Purpose | Default / Example Value | How to Generate / Obtain Command |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Interop Hub** | `INTEROP_HUB_DB_CONNECTION_STRING` | Secret | PostgreSQL connection string | `Host=postgres;Port=5432;Database=CLINICEZ_INTEROP_HUB_DB;...` | Standard connection string |
+| **Interop Hub** | `INTEROP_HUB_PAYLOAD_ENCRYPTION_KEY` | Secret | Base64 AES-256 key encrypting DB queued envelopes | `8fK9xL2pQ1vR4mS7tW0zX3yA6bC9dE2f` (32 bytes b64) | `openssl rand -base64 32` |
+| **Interop Hub** | `INTEROP_HUB_PORTAL_CLIENT_SECRET` | Secret | Secret for Portal ControlPlane client | `k9M2vR7xL4pQ1wS8tY0zB3aC6dE9fG2h` (40 chars) | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 40` |
+| **Interop Hub** | `INTEROP_HUB_PORTAL_PUBLIC_KEY` | Secret | Base64 PEM ECDSA P-256 public key for Portal | `MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...` | `openssl ec -in portal_private.pem -pubout` |
+| **Interop Hub** | `MESSAGING_HUB_URL` | Variable | Public URL of Interop Hub | `https://hub.clinicez.com` | Public hub domain |
+| **Interop Hub** | `HUB_CLOUD_CELL_ID` | Variable | Cell ID of the Cloud cell | `cloud` | Constant `cloud` |
+| **Interop Hub** | `HUB_SIGNING_REQUIRED` | Variable | Enforces ECDSA signature validation | `true` | Set `true` |
 
 ---
 
 #### 3. Portal API Control Plane (`services/portal-api`)
-| Name | Type | Description & Purpose | Default / Example Value | How to Generate Command |
-| :--- | :--- | :--- | :--- | :--- |
-| `PORTAL_DB_CONNECTION_STRING` | Secret | PostgreSQL connection string for Portal DB | `Host=postgres;Port=5432;Database=CLINICEZ_PORTAL_DB;...` | Standard connection string |
-| `FACILITY_LICENSE_PRIVATE_KEY` | Secret | ECDSA P-256 private key for signing licenses | `-----BEGIN EC PRIVATE KEY-----\n...` | `openssl ecparam -genkey -name prime256v1 -noout` |
-| `FACILITY_LICENSE_PUBLIC_KEY` | Secret | ECDSA P-256 public key for verifying licenses | `-----BEGIN PUBLIC KEY-----\n...` | `openssl ec -in private.pem -pubout` |
-| `PORTAL_CLERK_SECRET_KEY` | Secret | Clerk Backend API Secret Key | `sk_live_1234567890abcdef...` | Issued in Clerk Dashboard |
-| `PORTAL_XENDIT_SECRET_KEY` | Secret | Xendit Payment API Secret Key | `xnd_development_12345...` | Issued in Xendit Dashboard |
-| `PORTAL_XENDIT_CALLBACK_TOKEN` | Secret | Xendit Webhook Token | `xnd_callback_token_12345...` | Issued in Xendit Dashboard |
-| `PORTAL_MESSAGING_CLIENT_ID` / `_SECRET` | Secret | Hub client credentials for Portal | `dev-portal` / `dev-portal-secret` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 40` |
-| `PORTAL_MESSAGING_SIGNING_KEY` | Secret | ECDSA P-256 private key for Portal messages | `-----BEGIN EC PRIVATE KEY-----\n...` | `openssl ecparam -genkey -name prime256v1 -noout` |
-| `PORTAL_API_BASE_URL` | Variable | Public API domain for Portal API | `https://portal-api.clinicez.com` | Public domain |
+
+| Target Service | Exact Key Name | Type | Description & Purpose | Default / Example Value | How to Generate / Obtain Command |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Portal API** | `PORTAL_DB_CONNECTION_STRING` | Secret | PostgreSQL connection string for Portal DB | `Host=postgres;Port=5432;Database=CLINICEZ_PORTAL_DB;...` | Standard connection string |
+| **Portal API** | `FACILITY_LICENSE_PRIVATE_KEY` | Secret | ECDSA P-256 private key for signing licenses | `-----BEGIN EC PRIVATE KEY-----\n...` | `openssl ecparam -genkey -name prime256v1 -noout` |
+| **Portal API** | `FACILITY_LICENSE_PUBLIC_KEY` | Secret | ECDSA P-256 public key for verifying licenses | `-----BEGIN PUBLIC KEY-----\n...` | `openssl ec -in private.pem -pubout` |
+| **Portal API** | `PORTAL_CLERK_SECRET_KEY` | Secret | Clerk Backend API Secret Key | `sk_live_1234567890abcdef...` | Issued in Clerk Dashboard |
+| **Portal API** | `PORTAL_XENDIT_SECRET_KEY` | Secret | Xendit Payment API Secret Key | `xnd_development_12345...` | Issued in Xendit Dashboard |
+| **Portal API** | `PORTAL_XENDIT_CALLBACK_TOKEN` | Secret | Xendit Webhook Token | `xnd_callback_token_12345...` | Issued in Xendit Dashboard |
+| **Portal API** | `PORTAL_MESSAGING_CLIENT_ID` | Secret | Hub Client ID for Portal ControlPlane | `dev-portal` | Set `dev-portal` |
+| **Portal API** | `PORTAL_MESSAGING_CLIENT_SECRET` | Secret | Hub Client Secret for Portal ControlPlane | `dev-portal-secret` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 40` |
+| **Portal API** | `PORTAL_MESSAGING_SIGNING_KEY` | Secret | ECDSA P-256 private key for Portal messages | `-----BEGIN EC PRIVATE KEY-----\n...` | `openssl ecparam -genkey -name prime256v1 -noout` |
+| **Portal API** | `PORTAL_API_BASE_URL` | Variable | Public API domain for Portal API | `https://portal-api.clinicez.com` | Public domain |
 
 ---
 
 #### 4. Clinic Operational Microservice (`services/clinic-api`)
-| Name | Type | Description & Purpose | Default / Example Value | How to Generate Command |
-| :--- | :--- | :--- | :--- | :--- |
-| `CLINIC_DB_CONNECTION_STRING` | Secret | PostgreSQL connection string | `Host=postgres;Port=5432;Database=CLINICEZ_CLINIC_DB;...` | Standard connection string |
-| `CLINIC_JWT_SIGNING_KEY` | Secret | Key signing local staff JWT tokens | `base64_64_random_bytes...` | `openssl rand -base64 64` |
-| `CLINIC_ENCRYPTION_MASTER_SECRET` | Secret | Master key wrapping clinical attachments | `64_char_alphanumeric_secret...` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 64` |
-| `CLINIC_DOCUMENT_SIGNING_KEY` | Secret | HMAC key for QR code document signatures | `64_char_alphanumeric_secret...` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 64` |
-| `CLINIC_MESSAGING_CLIENT_ID` / `_SECRET` | Secret | Hub client credentials for Clinic service | `dev-clinic` / `dev-clinic-secret` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 40` |
-| `CLINIC_MESSAGING_SIGNING_KEY` | Secret | ECDSA P-256 private key for signing messages | `-----BEGIN EC PRIVATE KEY-----\n...` | `openssl ecparam -genkey -name prime256v1 -noout` |
+
+| Target Service | Exact Key Name | Type | Description & Purpose | Default / Example Value | How to Generate / Obtain Command |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Clinic API** | `CLINIC_DB_CONNECTION_STRING` | Secret | PostgreSQL connection string | `Host=postgres;Port=5432;Database=CLINICEZ_CLINIC_DB;...` | Standard connection string |
+| **Clinic API** | `CLINIC_JWT_SIGNING_KEY` | Secret | Key signing local staff JWT tokens | `base64_64_random_bytes...` | `openssl rand -base64 64` |
+| **Clinic API** | `CLINIC_ENCRYPTION_MASTER_SECRET` | Secret | Master key wrapping clinical attachments | `64_char_alphanumeric_secret...` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 64` |
+| **Clinic API** | `CLINIC_DOCUMENT_SIGNING_KEY` | Secret | HMAC key for QR code document signatures | `64_char_alphanumeric_secret...` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 64` |
+| **Clinic API** | `CLINIC_MESSAGING_CLIENT_ID` | Secret | Hub Client ID for Clinic Service | `dev-clinic` | Set `dev-clinic` |
+| **Clinic API** | `CLINIC_MESSAGING_CLIENT_SECRET` | Secret | Hub Client Secret for Clinic Service | `dev-clinic-secret` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 40` |
+| **Clinic API** | `CLINIC_MESSAGING_SIGNING_KEY` | Secret | ECDSA P-256 private key for Clinic messages | `-----BEGIN EC PRIVATE KEY-----\n...` | `openssl ecparam -genkey -name prime256v1 -noout` |
 
 ---
 
 #### 5. Laboratory Operational Microservice (`services/laboratory-api`)
-| Name | Type | Description & Purpose | Default / Example Value | How to Generate Command |
-| :--- | :--- | :--- | :--- | :--- |
-| `LABORATORY_DB_CONNECTION_STRING` | Secret | PostgreSQL connection string | `Host=postgres;Port=5432;Database=CLINICEZ_LAB_DB;...` | Standard connection string |
-| `LAB_JWT_SIGNING_KEY` | Secret | JWT signing key for lab staff | `base64_64_random_bytes...` | `openssl rand -base64 64` |
-| `LABORATORY_DOCUMENT_SIGNING_KEY` | Secret | HMAC key for lab report QR codes | `64_char_alphanumeric_secret...` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 64` |
-| `LABORATORY_MESSAGING_CLIENT_ID` / `_SECRET` / `_SIGNING_KEY` | Secret | Hub client credentials & ECDSA key | `dev-laboratory` / `dev-lab-secret` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 40` |
+
+| Target Service | Exact Key Name | Type | Description & Purpose | Default / Example Value | How to Generate / Obtain Command |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Laboratory API** | `LABORATORY_DB_CONNECTION_STRING` | Secret | PostgreSQL connection string | `Host=postgres;Port=5432;Database=CLINICEZ_LAB_DB;...` | Standard connection string |
+| **Laboratory API** | `LAB_JWT_SIGNING_KEY` | Secret | JWT signing key for lab staff | `base64_64_random_bytes...` | `openssl rand -base64 64` |
+| **Laboratory API** | `LABORATORY_DOCUMENT_SIGNING_KEY` | Secret | HMAC key for lab report QR codes | `64_char_alphanumeric_secret...` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 64` |
+| **Laboratory API** | `LABORATORY_MESSAGING_CLIENT_ID` | Secret | Hub Client ID for Laboratory Service | `dev-laboratory` | Set `dev-laboratory` |
+| **Laboratory API** | `LABORATORY_MESSAGING_CLIENT_SECRET` | Secret | Hub Client Secret for Laboratory Service | `dev-laboratory-secret` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 40` |
+| **Laboratory API** | `LABORATORY_MESSAGING_SIGNING_KEY` | Secret | ECDSA P-256 private key for Lab messages | `-----BEGIN EC PRIVATE KEY-----\n...` | `openssl ecparam -genkey -name prime256v1 -noout` |
 
 ---
 
 #### 6. Pharmacy Operational Microservice (`services/pharmacy-api`)
-| Name | Type | Description & Purpose | Default / Example Value | How to Generate Command |
-| :--- | :--- | :--- | :--- | :--- |
-| `PHARMACY_DB_CONNECTION_STRING` | Secret | PostgreSQL connection string | `Host=postgres;Port=5432;Database=CLINICEZ_PHARMACY_DB;...` | Standard connection string |
-| `PHARMACY_JWT_SIGNING_KEY` | Secret | JWT signing key for pharmacy staff | `base64_64_random_bytes...` | `openssl rand -base64 64` |
-| `PHARMACY_GAMOT_UPSC_SECRET_KEY` | Secret | HMAC key for GAMOT prescription code verification | `64_char_alphanumeric_secret...` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 64` |
-| `PHARMACY_MESSAGING_CLIENT_ID` / `_SECRET` / `_SIGNING_KEY` | Secret | Hub client credentials & ECDSA key | `dev-pharmacy` / `dev-pharmacy-secret` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 40` |
+
+| Target Service | Exact Key Name | Type | Description & Purpose | Default / Example Value | How to Generate / Obtain Command |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Pharmacy API** | `PHARMACY_DB_CONNECTION_STRING` | Secret | PostgreSQL connection string | `Host=postgres;Port=5432;Database=CLINICEZ_PHARMACY_DB;...` | Standard connection string |
+| **Pharmacy API** | `PHARMACY_JWT_SIGNING_KEY` | Secret | JWT signing key for pharmacy staff | `base64_64_random_bytes...` | `openssl rand -base64 64` |
+| **Pharmacy API** | `PHARMACY_GAMOT_UPSC_SECRET_KEY` | Secret | HMAC key for GAMOT prescription codes | `64_char_alphanumeric_secret...` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 64` |
+| **Pharmacy API** | `PHARMACY_MESSAGING_CLIENT_ID` | Secret | Hub Client ID for Pharmacy Service | `dev-pharmacy` | Set `dev-pharmacy` |
+| **Pharmacy API** | `PHARMACY_MESSAGING_CLIENT_SECRET` | Secret | Hub Client Secret for Pharmacy Service | `dev-pharmacy-secret` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 40` |
+| **Pharmacy API** | `PHARMACY_MESSAGING_SIGNING_KEY` | Secret | ECDSA P-256 private key for Pharmacy | `-----BEGIN EC PRIVATE KEY-----\n...` | `openssl ecparam -genkey -name prime256v1 -noout` |
 
 ---
 
 #### 7. Billing Microservice (`services/billing-api`)
-| Name | Type | Description & Purpose | Default / Example Value | How to Generate Command |
-| :--- | :--- | :--- | :--- | :--- |
-| `BILLING_DB_CONNECTION_STRING` | Secret | PostgreSQL connection string | `Host=postgres;Port=5432;Database=CLINICEZ_BILLING_DB;...` | Standard connection string |
-| `BILLING_JWT_SIGNING_KEY` | Secret | JWT signing key for cashier staff | `base64_64_random_bytes...` | `openssl rand -base64 64` |
-| `BILLING_MESSAGING_CLIENT_ID` / `_SECRET` / `_SIGNING_KEY` | Secret | Hub client credentials & ECDSA key | `dev-billing` / `dev-billing-secret` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 40` |
+
+| Target Service | Exact Key Name | Type | Description & Purpose | Default / Example Value | How to Generate / Obtain Command |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Billing API** | `BILLING_DB_CONNECTION_STRING` | Secret | PostgreSQL connection string | `Host=postgres;Port=5432;Database=CLINICEZ_BILLING_DB;...` | Standard connection string |
+| **Billing API** | `BILLING_JWT_SIGNING_KEY` | Secret | JWT signing key for cashier staff | `base64_64_random_bytes...` | `openssl rand -base64 64` |
+| **Billing API** | `BILLING_MESSAGING_CLIENT_ID` | Secret | Hub Client ID for Billing Service | `dev-billing` | Set `dev-billing` |
+| **Billing API** | `BILLING_MESSAGING_CLIENT_SECRET` | Secret | Hub Client Secret for Billing Service | `dev-billing-secret` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 40` |
+| **Billing API** | `BILLING_MESSAGING_SIGNING_KEY` | Secret | ECDSA P-256 private key for Billing | `-----BEGIN EC PRIVATE KEY-----\n...` | `openssl ecparam -genkey -name prime256v1 -noout` |
 
 ---
 
-#### 8. Patient Microservice (`services/patient-api`)
-| Name | Type | Description & Purpose | Default / Example Value | How to Generate Command |
-| :--- | :--- | :--- | :--- | :--- |
-| `PATIENT_DB_CONNECTION_STRING` | Secret | PostgreSQL connection string | `Host=postgres;Port=5432;Database=CLINICEZ_PATIENT_DB;...` | Standard connection string |
-| `PATIENT_ENCRYPTION_KEY` | Secret | Key encrypting patient health records | `base64_32_random_bytes...` | `openssl rand -base64 32` |
-| `PATIENT_SHARING_SIGNING_KEY` | Secret | HMAC key for QR patient share tokens | `64_char_alphanumeric_secret...` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 64` |
-| `PATIENT_CLERK_WEBHOOK_SECRET` | Secret | Clerk sync webhook verification secret | `whsec_1234567890abcdef...` | Issued in Clerk Webhooks |
-| `PATIENT_R2_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` | Secret | Cloudflare R2 object storage credentials | `r2_access_key` / `r2_secret_key` | Issued in Cloudflare Dashboard |
-| `PATIENT_MESSAGING_CLIENT_ID` / `_SECRET` / `_SIGNING_KEY` | Secret | Hub client credentials & ECDSA key | `dev-patient` / `dev-patient-secret` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 40` |
+#### 8. Organization Microservice (`services/organization-api`)
+
+| Target Service | Exact Key Name | Type | Description & Purpose | Default / Example Value | How to Generate / Obtain Command |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Organization API** | `ORGANIZATION_DB_CONNECTION_STRING` | Secret | PostgreSQL connection string | `Host=postgres;Port=5432;Database=CLINICEZ_ORG_DB;...` | Standard connection string |
+| **Organization API** | `ORGANIZATION_MESSAGING_CLIENT_ID` | Secret | Hub Client ID for Organization Service | `dev-organization` | Set `dev-organization` |
+| **Organization API** | `ORGANIZATION_MESSAGING_CLIENT_SECRET` | Secret | Hub Client Secret for Organization Service | `dev-organization-secret` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 40` |
+| **Organization API** | `ORGANIZATION_MESSAGING_SIGNING_KEY` | Secret | ECDSA P-256 private key for Organization | `-----BEGIN EC PRIVATE KEY-----\n...` | `openssl ecparam -genkey -name prime256v1 -noout` |
 
 ---
 
-#### 9. PhilHealth Proxy Gateway (`services/philhealth-proxy`)
-| Name | Type | Description & Purpose | Default / Example Value | How to Generate Command |
-| :--- | :--- | :--- | :--- | :--- |
-| `PortalApi__BaseUrl` | Variable | Portal API base URL for fetching tenant PhilHealth credentials | `https://portal-api.clinicez.com` | Public domain |
-| `Messaging__*` | Secret | Hub client credentials for `philhealth` service | `dev-philhealth` / `dev-philhealth-secret` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 40` |
+#### 9. Patient Microservice (`services/patient-api`)
 
-> **Note on PhilHealth Encryption**: PhilHealth Konsulta payload encryption uses the tenant branch's **PhilHealth Cipher Key** directly via symmetric AES-256-CBC. No digital certificate (`.pfx`) environment variable is required.
+| Target Service | Exact Key Name | Type | Description & Purpose | Default / Example Value | How to Generate / Obtain Command |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Patient API** | `PATIENT_DB_CONNECTION_STRING` | Secret | PostgreSQL connection string | `Host=postgres;Port=5432;Database=CLINICEZ_PATIENT_DB;...` | Standard connection string |
+| **Patient API** | `PATIENT_ENCRYPTION_KEY` | Secret | Key encrypting patient health records | `base64_32_random_bytes...` | `openssl rand -base64 32` |
+| **Patient API** | `PATIENT_SHARING_SIGNING_KEY` | Secret | HMAC key for QR patient share tokens | `64_char_alphanumeric_secret...` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 64` |
+| **Patient API** | `PATIENT_CLERK_WEBHOOK_SECRET` | Secret | Clerk user sync webhook secret | `whsec_1234567890abcdef...` | Issued in Clerk Webhooks Dashboard |
+| **Patient API** | `PATIENT_R2_ACCESS_KEY_ID` | Secret | Cloudflare R2 Access Key ID | `r2_access_key_12345` | Issued in Cloudflare R2 Dashboard |
+| **Patient API** | `PATIENT_R2_SECRET_ACCESS_KEY` | Secret | Cloudflare R2 Secret Access Key | `r2_secret_key_12345` | Issued in Cloudflare R2 Dashboard |
+| **Patient API** | `PATIENT_MESSAGING_CLIENT_ID` | Secret | Hub Client ID for Patient Service | `dev-patient` | Set `dev-patient` |
+| **Patient API** | `PATIENT_MESSAGING_CLIENT_SECRET` | Secret | Hub Client Secret for Patient Service | `dev-patient-secret` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 40` |
+| **Patient API** | `PATIENT_MESSAGING_SIGNING_KEY` | Secret | ECDSA P-256 private key for Patient Service | `-----BEGIN EC PRIVATE KEY-----\n...` | `openssl ecparam -genkey -name prime256v1 -noout` |
+
+---
+
+#### 10. PhilHealth Proxy Gateway (`services/philhealth-proxy`)
+
+| Target Service | Exact Key Name | Type | Description & Purpose | Default / Example Value | How to Generate / Obtain Command |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **PhilHealth Proxy** | `PortalApi__BaseUrl` | Variable | Portal API URL for credentials lookup | `https://portal-api.clinicez.com` | Public Portal API domain |
+| **PhilHealth Proxy** | `Messaging__Transport` | Variable | Interop transport mechanism | `Hub` | Constant `Hub` |
+| **PhilHealth Proxy** | `Messaging__Service` | Variable | Service name | `philhealth` | Constant `philhealth` |
+| **PhilHealth Proxy** | `Messaging__HubUrl` | Variable | Interop Hub URL | `http://interop-hub:8080` | Internal Hub endpoint |
+| **PhilHealth Proxy** | `Messaging__ClientId` | Secret | Hub Client ID for PhilHealth Proxy | `dev-philhealth` | Set `dev-philhealth` |
+| **PhilHealth Proxy** | `Messaging__ClientSecret` | Secret | Hub Client Secret for PhilHealth Proxy | `dev-philhealth-secret` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 40` |
+
+> **Note on PhilHealth Payload Encryption**: PhilHealth Konsulta XML payload encryption uses the tenant branch's **PhilHealth Cipher Key** directly via symmetric AES-256-CBC. No digital certificate (`.pfx`) environment variable is required.
 
 ---
 
 ### PART 2: On-Premise Deployment Environment Variables (`deploy/edge/.env`)
 
-For hospital or local clinic on-premise installations, copy `deploy/edge/.env.example` to `.env` or run `./install.ps1` / `./install.sh`.
+For hospital or local clinic on-premise installations, copy `deploy/edge/.env.example` to `.env` or run `./install.ps1` / `./install.sh`. Every exact variable name is listed below.
 
 ```env
 # ======================================================================================================================
@@ -231,7 +266,7 @@ IMAGE_TAG=latest
 COMPOSE_PROFILES=local-hub,laboratory,pharmacy,billing
 
 # ======================================================================================================================
-# 2. SITE IDENTITY & ACCREDITATION (Provided by Portal on Facility Creation)
+# 2. SITE IDENTITY & ACCREDITATION (Handed out by Portal on Facility Creation)
 # ======================================================================================================================
 TENANT_ID=11111111-2222-3333-4444-555555555555
 EDGE_CELL_ID=edge-st-jude-hospital
@@ -265,10 +300,11 @@ EDGE_HUB_SIGNING_KEY=-----BEGIN EC PRIVATE KEY-----\nMHcCAQEE...\n-----END EC PR
 CLINIC_PUBLIC_UPLOAD_BASE_URL=https://portal.clinicez.com/upload/lab
 
 # ======================================================================================================================
-# 5. LOCAL INTEROP HUB & LOCAL MESSAGING CLIENTS
+# 5. LOCAL INTEROP HUB & LOCAL SERVICE MESSAGING CLIENTS
 # ======================================================================================================================
 MESSAGING_HUB_URL=http://interop-hub:8080
 
+# Generated locally by `./install.ps1` or `./install.sh` on first setup:
 CLINIC_HUB_CLIENT_ID=site-clinic
 CLINIC_HUB_CLIENT_SECRET=a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6q7R8s9T0
 CLINIC_HUB_SIGNING_KEY=-----BEGIN EC PRIVATE KEY-----\n...
@@ -289,6 +325,11 @@ PHARMACY_HUB_CLIENT_SECRET=d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t0U1v2W3
 PHARMACY_HUB_SIGNING_KEY=-----BEGIN EC PRIVATE KEY-----\n...
 PHARMACY_HUB_PUBLIC_KEY=-----BEGIN PUBLIC KEY-----\n...
 
+ORGANIZATION_HUB_CLIENT_ID=site-organization
+ORGANIZATION_HUB_CLIENT_SECRET=
+ORGANIZATION_HUB_SIGNING_KEY=
+ORGANIZATION_HUB_PUBLIC_KEY=
+
 HUB_PAYLOAD_ENCRYPTION_KEY=8fK9xL2pQ1vR4mS7tW0zX3yA6bC9dE2f
 HUB_BIND=127.0.0.1
 HUB_LAN_PORT=8090
@@ -306,6 +347,7 @@ CLINIC_JWT_SIGNING_KEY=wK9xL2pQ1vR4mS7tW0zX3yA6bC9dE2fG
 BILLING_JWT_SIGNING_KEY=xL2pQ1vR4mS7tW0zX3yA6bC9dE2fG3hI
 LABORATORY_JWT_SIGNING_KEY=yP1vR4mS7tW0zX3yA6bC9dE2fG3hI4jK
 PHARMACY_JWT_SIGNING_KEY=zR4mS7tW0zX3yA6bC9dE2fG3hI4jK5lM
+ORGANIZATION_JWT_SIGNING_KEY=
 
 CLINIC_ENCRYPTION_MASTER_SECRET=r3M9vX2pL8wQ1tY4zB6aC0dE5fG7hI1j
 CLINIC_ENCRYPTION_PREVIOUS_MASTER_SECRET_0=
@@ -333,7 +375,7 @@ BACKUP_RETENTION_DAYS=14
 
 ---
 
-### PART 3: Portal Platform Administrator Settings (Managed Live via Database / Portal UI)
+### PART 3: Portal Platform Administrator Settings (Managed Live via Database / Portal UI `/admin/settings`)
 
 System feature rules and defaults are stored in PostgreSQL (`portal_dashboard.system_settings`) and managed by Super Administrators in the **Portal UI** (`/admin/settings`):
 
@@ -348,9 +390,13 @@ System feature rules and defaults are stored in PostgreSQL (`portal_dashboard.sy
 | **Storage** | `Storage:LabUploadMaxFileBytes` | Max public upload file size | `10485760` (10MB) |
 | **Storage** | `Storage:LabUploadRateLimitPermits` | Rate limit max permits | `5` permits |
 | **Storage** | `Storage:LabUploadRateLimitWindowMinutes` | Rate limit window duration | `1` minute |
-| **Mailer** | `Mailer:SmtpHost` / `Mailer:SmtpPort` / `Mailer:SmtpSecurity` | SMTP server host config | `smtp.mailgun.org` / `587` / `StartTls` |
-| **Mailer** | `Mailer:SmtpFromEmail` / `Mailer:SmtpFromName` | System notification email sender | `no-reply@clinicez.com` / `ClinicEZ Support` |
-| **Mailer** | `Mailer:SmtpReplyTo` / `Mailer:ContactInbox` | Notification reply & support inbox | `support@clinicez.com` / `contact@clinicez.com` |
+| **Mailer** | `Mailer:SmtpHost` | SMTP server host | `smtp.mailgun.org` |
+| **Mailer** | `Mailer:SmtpPort` | SMTP server port | `587` |
+| **Mailer** | `Mailer:SmtpSecurity` | SMTP security protocol (None, StartTls, Tls) | `StartTls` |
+| **Mailer** | `Mailer:SmtpFromEmail` | System notification email sender address | `no-reply@clinicez.com` |
+| **Mailer** | `Mailer:SmtpFromName` | System notification display name | `ClinicEZ Support` |
+| **Mailer** | `Mailer:SmtpReplyTo` | System email reply-to address | `support@clinicez.com` |
+| **Mailer** | `Mailer:ContactInbox` | Support contact form inbox | `contact@clinicez.com` |
 
 ---
 
