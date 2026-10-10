@@ -26,12 +26,13 @@ services:
       # Interop hub (the cell hub this service's outbox ships to and its inbox polls). No built-in fallback credentials.
       - Messaging__Transport=Hub
       - Messaging__Service=billing
-      - Messaging__HubUrl=${MESSAGING_HUB_URL:?MESSAGING_HUB_URL must be set}
-      - Messaging__ClientId=${MESSAGING_CLIENT_ID:?MESSAGING_CLIENT_ID must be set}
-      - Messaging__ClientSecret=${MESSAGING_CLIENT_SECRET:?MESSAGING_CLIENT_SECRET must be set}
+      - Messaging__HubUrl=${HUB_URL:?HUB_URL must be set}
+      - Messaging__ClientId=${BILLING_HUB_CLIENT_ID:?BILLING_HUB_CLIENT_ID must be set}
+      - Messaging__ClientSecret=${BILLING_HUB_CLIENT_SECRET:?BILLING_HUB_CLIENT_SECRET must be set}
       # Envelope signing (ECDSA P-256 private key, PEM or base64 of PEM; scripts/generate-signing-key.sh). Its public half must be
-      # the key registered at the hub for this client (Messaging__ClientId). One key pair per client; never shared.
-      - Messaging__SigningKey=${MESSAGING_SIGNING_KEY:?MESSAGING_SIGNING_KEY must be set}
+      # the key registered at the hub for this client. One key pair per client; never shared.
+      - Messaging__SigningKey=${BILLING_HUB_SIGNING_KEY:?BILLING_HUB_SIGNING_KEY must be set}
+
       - Facility__BaseDomain=${BASE_DOMAIN:?BASE_DOMAIN must be set}
       # Extra exact CORS origins (comma separated, * wildcards allowed). Optional: https://<BASE_DOMAIN> and its subdomains are always allowed.
       - Cors__AllowedOrigins=${CORS_ALLOWED_ORIGINS:-}

@@ -52,7 +52,8 @@ x-api-env: &api-env
   ASPNETCORE_ENVIRONMENT: Production
   Messaging__Transport: Hub
   # The cell hub (http://interop-hub:8080), or the cloud hub on a single-facility site without a local hub.
-  Messaging__HubUrl: ${MESSAGING_HUB_URL:-http://interop-hub:8080}
+  Messaging__HubUrl: ${HUB_URL:-http://interop-hub:8080}
+
   Facility__BaseDomain: ${BASE_DOMAIN:-clinic.local}
   # Extra exact CORS origins (comma separated). Optional: the facility web apps reach the APIs through their own nginx
   # (same origin), so this is only for another origin such as http://<lan-ip>:8080 opened directly.

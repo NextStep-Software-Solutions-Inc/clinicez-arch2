@@ -35,20 +35,21 @@ public static class InteropServiceCollectionExtensions
             .Bind(configuration.GetSection(InteropOptions.Section))
             .Configure(o =>
             {
-                if (string.IsNullOrWhiteSpace(o.HubUrl) && (configuration["MESSAGING_HUB_URL"] ?? configuration["HUB_URL"]) is { } hubUrl) o.HubUrl = hubUrl;
-                if (string.IsNullOrWhiteSpace(o.ClientId) && (configuration["MESSAGING_CLIENT_ID"] ?? configuration["HUB_CLIENT_ID"]) is { } clientId) o.ClientId = clientId;
-                if (string.IsNullOrWhiteSpace(o.ClientSecret) && (configuration["MESSAGING_CLIENT_SECRET"] ?? configuration["HUB_CLIENT_SECRET"]) is { } clientSecret) o.ClientSecret = clientSecret;
-                if (string.IsNullOrWhiteSpace(o.Service) && (configuration["MESSAGING_SERVICE"] ?? configuration["HUB_SERVICE"]) is { } service) o.Service = service;
-                if (string.IsNullOrWhiteSpace(o.SigningKey) && (configuration["MESSAGING_SIGNING_KEY"] ?? configuration["HUB_SIGNING_KEY"]) is { } signingKey) o.SigningKey = signingKey;
-                if ((string.IsNullOrWhiteSpace(o.Transport) || o.Transport == "Hub") && (configuration["MESSAGING_TRANSPORT"] ?? configuration["HUB_TRANSPORT"]) is { } transport) o.Transport = transport;
+                if (string.IsNullOrWhiteSpace(o.HubUrl) && configuration["HUB_URL"] is { } hubUrl) o.HubUrl = hubUrl;
+                if (string.IsNullOrWhiteSpace(o.ClientId) && configuration["HUB_CLIENT_ID"] is { } clientId) o.ClientId = clientId;
+                if (string.IsNullOrWhiteSpace(o.ClientSecret) && configuration["HUB_CLIENT_SECRET"] is { } clientSecret) o.ClientSecret = clientSecret;
+                if (string.IsNullOrWhiteSpace(o.Service) && configuration["HUB_SERVICE"] is { } service) o.Service = service;
+                if (string.IsNullOrWhiteSpace(o.SigningKey) && configuration["HUB_SIGNING_KEY"] is { } signingKey) o.SigningKey = signingKey;
+                if ((string.IsNullOrWhiteSpace(o.Transport) || o.Transport == "Hub") && configuration["HUB_TRANSPORT"] is { } transport) o.Transport = transport;
             })
             .Validate(o =>
             {
                 o.Validate();
                 return true;
             })
-
             .ValidateOnStart();
+
+
 
         var registry = new InteropHandlerRegistry();
         configureHandlers?.Invoke(new InteropHandlerBuilder(services, registry));
