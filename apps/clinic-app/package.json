@@ -53,7 +53,7 @@
     "build:web": "expo export -p web && node -e \"const fs = require('fs'); if(fs.existsSync('public')) fs.cpSync('public', 'dist', {recursive: true}); if(fs.existsSync('vercel.json')) fs.copyFileSync('vercel.json', 'dist/vercel.json');\"",
     "build:clinic-web": "bun run build:web",
     "build": "bun run build:web",
-    "typecheck": "bun run tsc --noEmit",
+    "typecheck": "tsc --noEmit",
     "lint:tokens": "node scripts/check-tokens.mjs",
     "lint:hosts": "node scripts/check-no-external-hosts.mjs",
     "assets": "python scripts/generate-assets.py",
