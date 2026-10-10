@@ -51,12 +51,15 @@ clinicez/
 ## 🚀 Getting Started
 
 ### Prerequisites
+
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 - [Bun](https://bun.sh/) (v1.2+)
 - [Docker & Docker Compose](https://www.docker.com/)
 
 ### 1. Build & Test .NET Backend Services
+
 Build all projects and run tests from the root solution:
+
 ```bash
 # Restore and build the entire backend solution:
 dotnet restore CLINICEZ.sln
@@ -67,7 +70,9 @@ dotnet test CLINICEZ.sln --no-build
 ```
 
 ### 2. Run TypeScript Verification Across All Apps
+
 Run typechecks and builds for all frontend applications from the repository root:
+
 ```bash
 # Type check all Expo applications:
 bun run typecheck:all
@@ -78,21 +83,26 @@ bun run build:portal
 ```
 
 ### 3. Run the Web Portal (Marketing, SuperAdmin & Tenant Console)
+
 ```bash
 cd apps/portal-web
 bun install
 bun run dev
 ```
+
 Navigate to `http://localhost:3000`.
 
 ### 4. Run the Central Control Plane API (`portal-api`)
+
 ```bash
 cd services/portal-api/ClinicEz.Portal.Api
 dotnet run
 ```
+
 Interactive OpenAPI documentation is available at `https://localhost:7xxx/scalar/v1`.
 
 ### 5. Run the Patient App (Mobile & Web)
+
 ```bash
 cd apps/patient-app
 bun install

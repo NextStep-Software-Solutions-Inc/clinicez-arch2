@@ -101,3 +101,4 @@ migration_reports/
 
 # .tmp files
 *.tmp
+configuration.txt
