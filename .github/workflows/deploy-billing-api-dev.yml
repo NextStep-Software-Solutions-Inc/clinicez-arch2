@@ -85,10 +85,10 @@ jobs:
       env:
         ASPNETCORE_ENVIRONMENT: ${{ env.ENVIRONMENT }}
         CONNECTION_STRING: ${{ secrets.BILLING_DB_CONNECTION_STRING }}
-        MESSAGING_HUB_URL: ${{ vars.MESSAGING_HUB_URL || secrets.MESSAGING_HUB_URL }}
-        MESSAGING_CLIENT_ID: ${{ secrets.BILLING_MESSAGING_CLIENT_ID }}
-        MESSAGING_CLIENT_SECRET: ${{ secrets.BILLING_MESSAGING_CLIENT_SECRET }}
-        MESSAGING_SIGNING_KEY: ${{ secrets.BILLING_MESSAGING_SIGNING_KEY }}
+        HUB_URL: ${{ vars.HUB_URL || vars.MESSAGING_HUB_URL || secrets.HUB_URL || secrets.MESSAGING_HUB_URL }}
+        BILLING_HUB_CLIENT_ID: ${{ secrets.BILLING_HUB_CLIENT_ID || secrets.BILLING_MESSAGING_CLIENT_ID }}
+        BILLING_HUB_CLIENT_SECRET: ${{ secrets.BILLING_HUB_CLIENT_SECRET || secrets.BILLING_MESSAGING_CLIENT_SECRET }}
+        BILLING_HUB_SIGNING_KEY: ${{ secrets.BILLING_HUB_SIGNING_KEY || secrets.BILLING_MESSAGING_SIGNING_KEY }}
         DATA_NETWORK: ${{ vars.DATA_NETWORK || 'data-network' }}
         NPM_NETWORK: ${{ vars.NPM_NETWORK || 'npm-default' }}
         BILLING_JWT_SIGNING_KEY: ${{ secrets.BILLING_JWT_SIGNING_KEY }}
@@ -99,19 +99,19 @@ jobs:
         CORS_ALLOWED_DOMAINS: ${{ vars.CORS_ALLOWED_DOMAINS }}
       run: |
         . scripts/ci/prepare-key-env.sh
-        prepare_key_env private MESSAGING_SIGNING_KEY
+        prepare_key_env private BILLING_HUB_SIGNING_KEY
         require_min_length BILLING_JWT_SIGNING_KEY 32
         if [ -z "$BASE_DOMAIN" ]; then
           echo "::error::BASE_DOMAIN is not configured. Set it as a GitHub secret or variable (Settings -> Secrets and variables -> Actions)."
           exit 1
         fi
-        for var in CONNECTION_STRING MESSAGING_HUB_URL MESSAGING_CLIENT_ID MESSAGING_CLIENT_SECRET; do
+        for var in CONNECTION_STRING HUB_URL BILLING_HUB_CLIENT_ID BILLING_HUB_CLIENT_SECRET; do
           if [ -z "$(printenv $var)" ]; then
             echo "::error::$var is not configured. Set the matching GitHub secret or variable (Settings -> Secrets and variables -> Actions)."
             exit 1
           fi
         done
-        for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING MESSAGING_HUB_URL MESSAGING_CLIENT_ID MESSAGING_CLIENT_SECRET BILLING_JWT_SIGNING_KEY IMAGE_NAME IMAGE_TAG BASE_DOMAIN DATA_NETWORK NPM_NETWORK MESSAGING_SIGNING_KEY CORS_ALLOWED_ORIGINS CORS_ALLOWED_DOMAINS; do
+        for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING HUB_URL BILLING_HUB_CLIENT_ID BILLING_HUB_CLIENT_SECRET BILLING_JWT_SIGNING_KEY IMAGE_NAME IMAGE_TAG BASE_DOMAIN DATA_NETWORK NPM_NETWORK BILLING_HUB_SIGNING_KEY CORS_ALLOWED_ORIGINS CORS_ALLOWED_DOMAINS; do
           echo "$var=$(printenv $var)" >> deploy/billing-api/.env
         done
 

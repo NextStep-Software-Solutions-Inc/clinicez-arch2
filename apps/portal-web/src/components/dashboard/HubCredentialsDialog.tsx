@@ -145,7 +145,7 @@ export function HubCredentialsProvider({ children }: { children: ReactNode }) {
         facilityName,
         hubUrl: credentials.hubUrl,
         rows,
-        envSnippet: toEnvSnippet(`${credentials.upstream ? "UPSTREAM_HUB_URL" : "MESSAGING_HUB_URL"}=${credentials.hubUrl}`, rows),
+        envSnippet: toEnvSnippet(`${credentials.upstream ? "UPSTREAM_HUB_URL" : "HUB_URL"}=${credentials.hubUrl}`, rows),
         envFileName: "hub-credentials.env",
       });
     },

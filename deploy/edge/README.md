@@ -65,13 +65,13 @@ There are two client models; the installer asks for exactly the credentials of t
 | ONE upstream EdgeCell client (Service `cell`) of this cell: `HubEdgeCredentials.HubUrl` / `ClientId` / `ClientSecret` | `UPSTREAM_HUB_URL` / `UPSTREAM_CLIENT_ID` / `UPSTREAM_CLIENT_SECRET` (prompted; `--cloud-hub-url`, `--edge-client-id`, `--edge-client-secret`) | **The portal.** Held by the local hub only. Not asked with `--air-gapped`. |
 | Local clients `site-clinic`, `site-billing`, `site-laboratory`, `site-pharmacy`, `site-organization` | `<SERVICE>_HUB_CLIENT_ID` / `<SERVICE>_HUB_CLIENT_SECRET` | **The installer**: generated once (40 chars), written to `.env` (the service's `Messaging__ClientSecret`) **and** to `hub-bootstrap.env` (`Hub__Bootstrap__Clients__N__*`, which declares the cell, these local clients and the facilities; the upstream client is not in it). They only exist on the LAN. |
 | Envelope signing key pair per local client | `<SERVICE>_HUB_SIGNING_KEY` (private, the service's `Messaging__SigningKey`) / `<SERVICE>_HUB_PUBLIC_KEY` | **The installer**: one ECDSA P-256 pair per service, generated once (`openssl` on Linux/macOS, CNG on Windows) and kept. The public halves go into `hub-bootstrap.env` (`Hub__Bootstrap__Clients__N__PublicKey`) so the local hub verifies every envelope (`Hub__Signing__Required=true`, `HUB_SIGNING_REQUIRED`). |
-| The hub's address for the services | `MESSAGING_HUB_URL=http://interop-hub:8080` | Default; leave as is. |
+| The hub's address for the services | `HUB_URL=http://interop-hub:8080` | Default; leave as is. |
 
 **Without a local hub** (`--no-local-hub`, single facility). There is no hub on the site, so the services use the **portal-issued per-service clients** against the cloud hub.
 
 | Credential | Variables in `.env` | Who creates it |
 |---|---|---|
-| Cloud hub URL (`HubEdgeCredentials.HubUrl`) | `MESSAGING_HUB_URL` (prompted; `--cloud-hub-url`) | The portal. |
+| Cloud hub URL (`HubEdgeCredentials.HubUrl`) | `HUB_URL` (prompted; `--cloud-hub-url`) | The portal. |
 | Clinic client | `CLINIC_HUB_CLIENT_ID` / `CLINIC_HUB_CLIENT_SECRET` (`--clinic-hub-client-id/-secret`) | **The portal.** The id is whatever the portal returns (not `site-...`); never generated or defaulted. |
 | Billing client | `BILLING_HUB_CLIENT_ID` / `BILLING_HUB_CLIENT_SECRET` (`--billing-hub-client-id/-secret`) | **The portal**, same rules. |
 | Clinic / billing signing keys | `CLINIC_HUB_SIGNING_KEY` / `BILLING_HUB_SIGNING_KEY` (`--clinic-hub-signing-key[-file]`, `--billing-hub-signing-key[-file]`) | **The portal**, with the client above: the private key whose public half is registered at the cloud hub. Never generated here. |
@@ -148,11 +148,11 @@ To add one later: edit `COMPOSE_PROFILES`, set the facility id (`LABORATORY_FACI
 ### Single-facility vs multi-facility cells
 
 - **Several facilities** (hospital: clinic + lab + pharmacy + cashier): keep `local-hub` on. Every facility service's `Messaging__HubUrl` is
-  `http://interop-hub:8080` (set once through `MESSAGING_HUB_URL`). Clinic -> lab -> pharmacy -> billing traffic stays on the LAN and works
+  `http://interop-hub:8080` (set once through `HUB_URL`). Clinic -> lab -> pharmacy -> billing traffic stays on the LAN and works
   with the internet down. When a site runs **several facility stacks** (separate compose projects/hosts), they share this one hub: point the
-  other stacks' `MESSAGING_HUB_URL` at `http://<this-server>:<HUB_LAN_PORT>` and set `HUB_BIND=0.0.0.0` (the hub port is loopback-only by default).
+  other stacks' `HUB_URL` at `http://<this-server>:<HUB_LAN_PORT>` and set `HUB_BIND=0.0.0.0` (the hub port is loopback-only by default).
   Add each stack's service clients to the hub the same way (profiles on this host).
-- **One facility, no local peers** (advanced): `--no-local-hub` / `-NoLocalHub`. There is no hub on the site: `MESSAGING_HUB_URL` is the **cloud hub** and
+- **One facility, no local peers** (advanced): `--no-local-hub` / `-NoLocalHub`. There is no hub on the site: `HUB_URL` is the **cloud hub** and
   `clinic-api` / `billing-api` sign in with the **portal-issued per-service clients** (`CLINIC_HUB_CLIENT_ID/SECRET`, `BILLING_HUB_CLIENT_ID/SECRET`; the
   ids are whatever the portal returns, not `site-...`). No `UPSTREAM_*` is asked or used; the clinic outbox buffers during outages. Only the clinic and
   billing services exist in this mode (`--with laboratory|pharmacy|organization` is refused), and it cannot be air-gapped. Switching on a second

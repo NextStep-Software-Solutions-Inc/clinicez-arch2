@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Generates an interop-hub client signing key pair (ECDSA P-256) and prints
-#   SIGNING_KEY=<base64 of PEM>          -> the client's Messaging__SigningKey (cloud: <SVC>_MESSAGING_SIGNING_KEY secret,
+#   SIGNING_KEY=<base64 of PEM>          -> the client's Messaging__SigningKey (cloud: <SVC>_HUB_SIGNING_KEY secret,
 #                                           edge: <SVC>_HUB_SIGNING_KEY / EDGE_HUB_SIGNING_KEY); stays with that client
-#   SIGNING_PUBLIC_KEY=<base64 of PEM>   -> registered at the hub for that client (cloud bootstrap: HUB_PORTAL_PUBLIC_KEY, other
+#   SIGNING_PUBLIC_KEY=<base64 of PEM>   -> registered at the hub for that client (cloud bootstrap: PORTAL_HUB_PUBLIC_KEY, other
 #                                           clients: hub admin API; edge: <SVC>_HUB_PUBLIC_KEY)
 # One pair per hub client; never share a key pair between clients.
 # Options: --out-dir <dir> (write files, mode 600, instead of printing), --force, --help. Windows: generate-signing-key.ps1.
