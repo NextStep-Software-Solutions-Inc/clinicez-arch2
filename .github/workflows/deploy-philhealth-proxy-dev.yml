@@ -87,18 +87,14 @@ jobs:
         IMAGE_NAME: ${{ env.IMAGE_NAME }}
         IMAGE_TAG: ${{ env.IMAGE_TAG }}
         PORTAL_API_BASE_URL: ${{ vars.PORTAL_API_BASE_URL || secrets.PORTAL_API_BASE_URL }}
-        DATA_PROTECTION_CERT_BASE64: ${{ secrets.PHILHEALTH_DATA_PROTECTION_CERT_BASE64 }}
-        DATA_PROTECTION_CERT_PASSWORD: ${{ secrets.PHILHEALTH_DATA_PROTECTION_CERT_PASSWORD }}
       run: |
-        . scripts/ci/prepare-key-env.sh
-        prepare_key_env optional-blob DATA_PROTECTION_CERT_BASE64
         for var in PORTAL_API_BASE_URL; do
           if [ -z "$(printenv $var)" ]; then
             echo "::error::$var is not configured. Set the matching GitHub secret or variable (Settings -> Secrets and variables -> Actions)."
             exit 1
           fi
         done
-        for var in ASPNETCORE_ENVIRONMENT IMAGE_NAME IMAGE_TAG PORTAL_API_BASE_URL DATA_PROTECTION_CERT_BASE64 DATA_PROTECTION_CERT_PASSWORD; do
+        for var in ASPNETCORE_ENVIRONMENT IMAGE_NAME IMAGE_TAG PORTAL_API_BASE_URL; do
           echo "$var=$(printenv $var)" >> deploy/philhealth-proxy/.env
         done
 

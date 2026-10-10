@@ -21,10 +21,6 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
       - PortalApi__BaseUrl=${PORTAL_API_BASE_URL:?PORTAL_API_BASE_URL must be set}
-      # ASP.NET Data Protection key ring (protects stored per-tenant credentials in memory). Optional: a PFX (base64) and its
-      # password encrypt the ring at rest.
-      - DataProtection__CertificateBase64=${DATA_PROTECTION_CERT_BASE64:-}
-      - DataProtection__CertificatePassword=${DATA_PROTECTION_CERT_PASSWORD:-}
     restart: unless-stopped
 
 networks:
