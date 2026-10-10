@@ -34,6 +34,7 @@ public interface IApplicationDbContext
     DbSet<WorkspaceApiKey> WorkspaceApiKeys { get; }
     DbSet<WebhookEndpoint> WebhookEndpoints { get; }
     DbSet<WebhookDelivery> WebhookDeliveries { get; }
+    DbSet<SystemSetting> SystemSettings { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }

@@ -333,6 +333,33 @@ public class AdminEndpoints : IEndpoint
         })
         .WithName("DeleteAdminUser")
         .WithTags("Admin");
+
+        // 9. SYSTEM SETTINGS CRUD
+        group.MapGet("/settings", async (HttpContext httpContext, ISender sender) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.ManageSettings, httpContext, sender)
+                        ?? await CheckPermissionAsync(Permissions.ManageTenants, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            var result = await sender.Send(new GetAdminSystemSettingsQuery());
+            return Results.Ok(result);
+        })
+        .WithName("GetAdminSettings")
+        .WithDescription("Retrieves platform-wide system settings categorized for admin configuration.")
+        .WithTags("Admin");
+
+        group.MapPut("/settings", async (Dictionary<string, string> input, HttpContext httpContext, ISender sender) =>
+        {
+            var admin = await CheckPermissionAsync(Permissions.ManageSettings, httpContext, sender)
+                        ?? await CheckPermissionAsync(Permissions.ManageTenants, httpContext, sender);
+            if (admin == null) return Results.Json(new { Message = "Access denied." }, statusCode: 403);
+
+            var result = await sender.Send(new UpdateAdminSystemSettingsCommand(input, admin.FullName));
+            return Results.Ok(result);
+        })
+        .WithName("UpdateAdminSettings")
+        .WithDescription("Updates platform-wide system settings and invalidates cache.")
+        .WithTags("Admin");
     }
 
     private static async Task<AdminMeResponse?> CheckPermissionAsync(

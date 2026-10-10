@@ -1400,6 +1400,39 @@ namespace ClinicEz.Portal.Infrastructure.Migrations
                     b.ToTable("Subscriptions", "main");
                 });
 
+            modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.SystemSetting", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.HasKey("Key");
+
+                    b.ToTable("SystemSettings", "portal_dashboard");
+                });
+
             modelBuilder.Entity("ClinicEz.Portal.Domain.Entities.Tenant", b =>
                 {
                     b.Property<Guid>("Id")

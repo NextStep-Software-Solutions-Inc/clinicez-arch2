@@ -41,6 +41,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<WorkspaceApiKey> WorkspaceApiKeys { get; set; }
     public DbSet<WebhookEndpoint> WebhookEndpoints { get; set; }
     public DbSet<WebhookDelivery> WebhookDeliveries { get; set; }
+    public DbSet<SystemSetting> SystemSettings { get; set; }
     public DbSet<InteropOutboxMessage> InteropOutbox { get; set; }
     public DbSet<InteropInboxMessage> InteropInbox { get; set; }
     public DbSet<DataProtectionKey> DataProtectionKeys { get; set; } = null!;
@@ -484,6 +485,17 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         modelBuilder.Entity<DataProtectionKey>(entity =>
         {
             entity.ToTable("DataProtectionKeys", "portal_dashboard");
+        });
+
+        modelBuilder.Entity<SystemSetting>(entity =>
+        {
+            entity.ToTable("SystemSettings", "portal_dashboard");
+            entity.HasKey(e => e.Key);
+            entity.Property(e => e.Key).HasMaxLength(128);
+            entity.Property(e => e.Value).HasMaxLength(2048);
+            entity.Property(e => e.Category).HasMaxLength(64);
+            entity.Property(e => e.Description).HasMaxLength(512);
+            entity.Property(e => e.UpdatedBy).HasMaxLength(256);
         });
 
         base.OnModelCreating(modelBuilder);

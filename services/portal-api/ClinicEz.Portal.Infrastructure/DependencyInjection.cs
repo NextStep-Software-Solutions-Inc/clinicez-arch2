@@ -70,12 +70,14 @@ public static class DependencyInjection
         services.AddScoped<ClinicEz.Portal.Domain.Interfaces.IBaseSeeder, ClinicEz.Portal.Infrastructure.Persistence.Seeders.BlogSeeder>();
 
         // Current user service backed by IHttpContextAccessor
+        services.AddMemoryCache();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<SoftDeleteInterceptor>();
         services.AddScoped<FacilityDirectoryInterceptor>();
 
         // Register repositories and Unit of Work
         services.AddScoped<IApplicationDbContext>(provider => provider.GetRequiredService<ApplicationDbContext>());
+        services.AddScoped<ISystemSettingsService, SystemSettingsService>();
         services.AddScoped<IExampleRepository, ExampleRepository>();
         services.AddScoped<ITenantRepository, TenantRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
