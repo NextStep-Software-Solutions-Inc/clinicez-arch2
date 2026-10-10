@@ -6,21 +6,21 @@
     "packages/*"
   ],
   "scripts": {
-    "lint:portal": "bun --cwd apps/portal-web lint",
-    "typecheck:patient": "tsc --noEmit -p apps/patient-app",
-    "lint:patient-tokens": "node apps/patient-app/scripts/check-tokens.mjs",
+    "lint:portal": "bun --filter @clinicez/portal-web lint",
+    "typecheck:patient": "bun --filter @clinicez/patient-app typecheck",
+    "lint:patient-tokens": "bun --filter @clinicez/patient-app lint:tokens",
     "test:tokens": "bun --cwd packages/design-tokens test",
-    "test:patient": "bun --cwd apps/patient-app test",
-    "typecheck:clinic": "tsc --noEmit -p apps/clinic-app",
-    "test:clinic": "bun --cwd apps/clinic-app test",
-    "lint:clinic": "node apps/clinic-app/scripts/check-tokens.mjs && node apps/clinic-app/scripts/check-no-external-hosts.mjs",
-    "typecheck:lab": "tsc --noEmit -p apps/laboratory-app",
-    "typecheck:pharmacy": "tsc --noEmit -p apps/pharmacy-app",
-    "typecheck:cashier": "tsc --noEmit -p apps/cashier-app",
-    "typecheck:all": "tsc --noEmit -p apps/patient-app && tsc --noEmit -p apps/clinic-app && tsc --noEmit -p apps/laboratory-app && tsc --noEmit -p apps/pharmacy-app && tsc --noEmit -p apps/cashier-app",
-    "build:portal": "bun --cwd apps/portal-web build",
-    "build:patient-web": "bun --cwd apps/patient-app build:web",
-    "build:clinic-web": "bun --cwd apps/clinic-app build:web"
+    "test:patient": "bun --filter @clinicez/patient-app test",
+    "typecheck:clinic": "bun --filter @clinicez/clinic-app typecheck",
+    "test:clinic": "bun --filter @clinicez/clinic-app test",
+    "lint:clinic": "bun --filter @clinicez/clinic-app lint:tokens && bun --filter @clinicez/clinic-app lint:hosts",
+    "typecheck:lab": "bun --filter @clinicez/laboratory-app typecheck",
+    "typecheck:pharmacy": "bun --filter @clinicez/pharmacy-app typecheck",
+    "typecheck:cashier": "bun --filter @clinicez/cashier-app typecheck",
+    "typecheck:all": "bun run typecheck:patient && bun run typecheck:clinic && bun run typecheck:lab && bun run typecheck:pharmacy && bun run typecheck:cashier",
+    "build:portal": "bun --filter @clinicez/portal-web build",
+    "build:patient-web": "bun --filter @clinicez/patient-app build:web",
+    "build:clinic-web": "bun --filter @clinicez/clinic-app build:web"
   },
   "devDependencies": {
     "typescript": "~6.0.3"
