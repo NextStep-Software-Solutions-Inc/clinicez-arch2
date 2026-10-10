@@ -415,6 +415,79 @@ System feature rules and defaults are stored in PostgreSQL (`portal_dashboard.sy
 
 ---
 
+### PART 4: Multi-Facility Topology & Configuration (Multiple Clinics, Labs & Pharmacies)
+
+In ClinicEZ, **Signing Key Pairs belong to Microservice Types** (`clinic-api`, `laboratory-api`, `pharmacy-api`, `billing-api`), **NOT** to individual clinic rooms or laboratory branches. A single service engine or Edge cell can host **N clinics** and **M laboratories** seamlessly using **1 shared service key pair**.
+
+---
+
+#### 1. On-Premise Multi-Facility Architecture (Hospital Campus / LAN Edge Cell)
+
+On an on-premise installation, **one Interop Hub container** serves all clinics, labs, pharmacies, and billing counters across the hospital network:
+
+```text
+ ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
+ │ Clinic A        │   │ Clinic B        │   │ Clinic C        │
+ │ (id: clinic-a)  │   │ (id: clinic-b)  │   │ (id: clinic-c)  │
+ └────────┬────────┘   └────────┬────────┘   └────────┬────────┘
+          │                     │                     │
+          └─────────────────────┼─────────────────────┘
+                                │
+                  Hosted by 1 `clinic-api` instance
+            (Uses 1 Private Key: CLINIC_HUB_SIGNING_KEY)
+                                │
+                                ▼
+                   ┌──────────────────────────┐
+                   │  1 Local Interop Hub     │
+                   │  (http://interop-hub:8080)│
+                   └────────────┬─────────────┘
+                                │
+          ┌─────────────────────┴─────────────────────┐
+          ▼                                           ▼
+┌──────────────────┐                        ┌──────────────────┐
+│ Lab 1            │                        │ Lab 2            │
+│ (id: lab-1)      │                        │ (id: lab-2)      │
+└──────────────────┘                        └──────────────────┘
+       Hosted by 1 `laboratory-api` (LABORATORY_HUB_SIGNING_KEY)
+```
+
+##### On-Premise Key & Routing Configuration Example:
+- **`deploy/edge/.env` Key Pairs**:
+  - `CLINIC_HUB_SIGNING_KEY` ➔ Signs all envelopes originating from Clinic A, Clinic B, or Clinic C.
+  - `LABORATORY_HUB_SIGNING_KEY` ➔ Signs all report & panic alert envelopes originating from Lab 1 or Lab 2.
+- **Envelope Routing**: When Clinic A issues a lab request to Lab 2:
+  ```json
+  {
+    "messageId": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+    "type": "lab.order.issued",
+    "from": { "kind": "Facility", "tenantId": "t-1", "facilityId": "clinic-a", "facilityType": "Clinic" },
+    "to": { "kind": "Facility", "tenantId": "t-1", "facilityId": "lab-2", "facilityType": "Laboratory" }
+  }
+  ```
+  The Interop Hub receives the envelope, verifies `CLINIC_HUB_SIGNING_KEY`, and routes it directly to **Lab 2**.
+
+---
+
+#### 2. Cloud SaaS Multi-Tenant Architecture
+
+In Cloud SaaS, thousands of tenant clinics, laboratories, and pharmacies communicate through **1 central Cloud Interop Hub**.
+
+##### Cloud Key Pair Configuration Example:
+- **Service Level Private Keys (Cloud CI/CD Secrets)**:
+  - `PORTAL_MESSAGING_SIGNING_KEY` ➔ Portal ControlPlane (directory feeds & workspace updates).
+  - `CLINIC_MESSAGING_SIGNING_KEY` ➔ Cloud `clinic-api` cluster.
+  - `LABORATORY_MESSAGING_SIGNING_KEY` ➔ Cloud `laboratory-api` cluster.
+  - `PHARMACY_MESSAGING_SIGNING_KEY` ➔ Cloud `pharmacy-api` cluster.
+  - `BILLING_MESSAGING_SIGNING_KEY` ➔ Cloud `billing-api` cluster.
+- **Cross-Tenant & Cross-Facility Isolation**:
+  - When Tenant A Clinic sends a referral or lab order to Tenant B Lab:
+    - If a **Hub Link** exists between Tenant A and Tenant B, the message is accepted and delivered.
+    - If no Hub Link exists and Lab B is `Private`, the Cloud Interop Hub rejects the envelope (`rejected`).
+
+---
+
+
+
 ## 🔒 Tenancy & Offline-First Strategy
 
 1. **Patient App Offline-First**:
