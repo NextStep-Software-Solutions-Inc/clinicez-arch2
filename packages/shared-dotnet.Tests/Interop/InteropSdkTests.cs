@@ -329,9 +329,9 @@ public class InteropSdkTests
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["HUB_URL"] = "http://localhost:5290",
-            ["HUB_CLIENT_ID"] = "dev-clinic",
-            ["HUB_CLIENT_SECRET"] = "dev-clinic-secret",
-            ["HUB_SERVICE"] = "clinic",
+            ["HUB_CLIENT_ID"] = "dev-laboratory",
+            ["HUB_CLIENT_SECRET"] = "dev-laboratory-secret",
+            ["HUB_SERVICE"] = "laboratory",
             ["HUB_SIGNING_KEY"] = testKey,
             ["HUB_TRANSPORT"] = "Hub"
         }).Build();
@@ -344,9 +344,9 @@ public class InteropSdkTests
 
         var options = provider.GetRequiredService<IOptions<InteropOptions>>().Value;
         options.HubUrl.Should().Be("http://localhost:5290");
-        options.ClientId.Should().Be("dev-clinic");
-        options.ClientSecret.Should().Be("dev-clinic-secret");
-        options.Service.Should().Be("clinic");
+        options.ClientId.Should().Be("dev-laboratory");
+        options.ClientSecret.Should().Be("dev-laboratory-secret");
+        options.Service.Should().Be("laboratory");
         options.SigningKey.Should().Be(testKey);
         options.Transport.Should().Be("Hub");
     }
