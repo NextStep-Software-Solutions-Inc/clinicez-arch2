@@ -83,6 +83,7 @@ export interface CreateFacilityPayload {
 const createFacilityResultSchema = z.object({
   success: z.boolean(),
   message: z.string().nullish().transform((v) => v ?? ""),
+  facilityId: z.string().nullish().transform((v) => v ?? null),
   hubCredentials: hubEdgeCredentialsSchema.nullish().transform((v) => v ?? null),
   hubOnboardingPending: z.boolean().nullish().transform((v) => v ?? false),
 });
@@ -90,6 +91,7 @@ const createFacilityResultSchema = z.object({
 export interface CreateFacilityResult {
   success: boolean;
   message: string;
+  facilityId: string | null;
   /** Only for the first on-premise facility of a workspace; never returned again. Null for cloud facilities and later on-premise ones. */
   hubCredentials: HubEdgeCredentials | null;
   /** The facility exists but the hub was unreachable: issue credentials from the facility's rotate action. */
