@@ -252,7 +252,6 @@ Managed in GitHub under **Settings ➔ Secrets and variables ➔ Actions**.
 | Target Service | Exact Key Name | Type | Description & Purpose | Default / Example Value | How to Generate / Obtain Command |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Patient API** | `PATIENT_DB_CONNECTION_STRING` | Secret | PostgreSQL connection string | `Host=postgres;Port=5432;Database=CLINICEZ_PATIENT_DB;...` | Standard connection string |
-| **Patient API** | `PATIENT_ENCRYPTION_KEY` | Secret | Key encrypting patient health records | `base64_32_random_bytes...` | `openssl rand -base64 32` |
 | **Patient API** | `PATIENT_SHARING_SIGNING_KEY` | Secret | HMAC key for QR patient share tokens | `64_char_alphanumeric_secret...` | `openssl rand -base64 48 \| tr -dc 'A-Za-z0-9' \| head -c 64` |
 | **Patient API** | `PATIENT_CLERK_WEBHOOK_SECRET` | Secret | Clerk user sync webhook secret | `whsec_1234567890abcdef...` | Issued in Clerk Webhooks Dashboard |
 | **Patient API** | `PATIENT_R2_ACCESS_KEY_ID` | Secret | Cloudflare R2 Access Key ID | `r2_access_key_12345` | Issued in Cloudflare R2 Dashboard |

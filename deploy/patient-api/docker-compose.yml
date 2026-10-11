@@ -50,9 +50,6 @@ services:
       # Extra exact CORS origins (comma separated, * wildcards allowed). Optional: https://<BASE_DOMAIN> and its subdomains are always allowed.
       - Cors__AllowedOrigins=${CORS_ALLOWED_ORIGINS:-}
       - Cors__AllowedDomains=${CORS_ALLOWED_DOMAINS:-}
-      # Payload encryption key (base64 of 32 random bytes). Required outside Development (encryption is on there and there is no
-      # built-in fallback key); ignored in Development.
-      - Encryption__Base64Key=${PATIENT_ENCRYPTION_KEY:?PATIENT_ENCRYPTION_KEY must be set (base64 of 32 random bytes)}
       # Signs the share tokens patients hand to facilities (at least 32 characters; the service refuses to start without it).
       - Sharing__SigningKey=${SHARING_SIGNING_KEY:?SHARING_SIGNING_KEY must be set (at least 32 characters)}
     restart: unless-stopped

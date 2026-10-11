@@ -51,12 +51,6 @@ app.UseExceptionHandler();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// E2E payload encryption — only active when Encryption:Enabled = true (Production).
-// Decrypts request bodies and encrypts response bodies using AES-256-GCM.
-// Bypassed entirely in Development (Encryption:Enabled = false in appsettings.Development.json).
-if (app.Configuration.GetValue<bool>("Encryption:Enabled"))
-    app.UseMiddleware<PayloadEncryptionMiddleware>();
-
 // Object-level authorisation: callers may only address their own patient record.
 // Runs after authentication/authorisation so the caller identity is known.
 app.UseMiddleware<PatientOwnershipMiddleware>();

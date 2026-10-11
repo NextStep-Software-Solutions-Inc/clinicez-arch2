@@ -1558,55 +1558,14 @@ Use the dashboard to inspect queued / failed sync jobs and trigger manual retrie
 
 ---
 
-## E2E Encryption (Production only)
-
-When `Encryption:Enabled=true`, every API payload is AES-256-GCM encrypted.
-
-Mobile sends an encrypted request:
-
-```
-X-Encrypted: 1
-Content-Type: application/json
-
-{ "payload": "<base64(nonce[12] + ciphertext[n] + tag[16])>" }
-```
-
-Server responds with an encrypted body:
-
-```json
-{ "payload": "<base64(nonce[12] + ciphertext[n] + tag[16])>" }
-```
-
-In Development (`Encryption:Enabled=false`), the middleware is not registered — plain JSON
-in and out for full debuggability with Scalar, curl, and React Native dev tools.
-
-```bash
-# Generate a production key (run once, store securely)
-openssl rand -base64 32
-# → set as: ENCRYPTION__BASE64KEY environment variable (deploy: PATIENT_ENCRYPTION_KEY)
-```
-
-There is no built-in or fallback key. With `Encryption:Enabled=true` (the default outside Development) the service
-**refuses to start** unless `Encryption:Base64Key` is base64 of exactly 32 bytes.
-
-**Rotating the key.** The key is shared with the mobile app, which encrypts every request with it, so a rotation is a
-coordinated release: (1) generate a new key; (2) ship an app build that uses it; (3) set the new `ENCRYPTION__BASE64KEY`
-and restart the service. Requests from clients still on the old key fail to decrypt (`400`) until they update, so force
-the app update first or schedule a short maintenance window. The key only protects transport payloads: nothing stored
-at rest is encrypted with it, so no data migration is needed. The same applies to `Sharing:SigningKey` (below):
-changing it only invalidates share tokens that are currently displayed (they live 120 seconds).
-
----
-
 ## Required configuration
 
-patient-api has **no default secrets**. The connection string, `Clerk__Authority`, `Encryption__Base64Key` and `Sharing__SigningKey` are validated at start-up (the service refuses to start without them); the others are required for the feature they serve:
+patient-api has **no default secrets**. The connection string, `Clerk__Authority`, and `Sharing__SigningKey` are validated at start-up (the service refuses to start without them); the others are required for the feature they serve:
 
 | Key (env var) | Purpose |
 |---|---|
 | `ConnectionStrings__DefaultConnection` | PostgreSQL (also used by Hangfire) |
 | `Clerk__Authority` | Clerk JWT issuer (`Clerk__Audience` optional) |
-| `Encryption__Base64Key` | Payload encryption key, 32 random bytes in base64 (see above) |
 | `Sharing__SigningKey` | HMAC key (≥ 32 characters) for share tokens and one-time codes |
 | `Facility__BaseDomain` and/or `Cors__AllowedDomains__0…`, `Cors__AllowedOrigins__0…` | Browser origins trusted for CORS. **Required outside Development** — the service refuses to start without at least one, and `Cors__AllowAnyOrigin=true` is refused. Native mobile clients do not use CORS. Development allows any origin. |
 | `Messaging__HubUrl`, `Messaging__ClientId`, `Messaging__ClientSecret` | Interop hub client credentials |

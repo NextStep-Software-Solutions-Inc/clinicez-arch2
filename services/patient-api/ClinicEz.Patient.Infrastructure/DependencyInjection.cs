@@ -46,10 +46,6 @@ public static class DependencyInjection
         // ── Options ──────────────────────────────────────────────────────────
         services.Configure<R2Options>(configuration.GetSection("R2"));
         services.Configure<ClerkOptions>(configuration.GetSection("Clerk"));
-        services.AddOptions<EncryptionOptions>()
-            .Bind(configuration.GetSection("Encryption"))
-            .ValidateOnStart();
-        services.AddSingleton<IValidateOptions<EncryptionOptions>, EncryptionOptionsValidator>();
         services.AddOptions<SharingOptions>()
             .Bind(configuration.GetSection(SharingOptions.SectionName))
             .Validate(

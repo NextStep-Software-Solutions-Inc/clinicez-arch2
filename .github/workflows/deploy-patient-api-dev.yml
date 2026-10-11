@@ -104,7 +104,6 @@ jobs:
           DATA_NETWORK: ${{ vars.DATA_NETWORK || 'data-network' }}
           NPM_NETWORK: ${{ vars.NPM_NETWORK || 'npm-default' }}
           SHARING_SIGNING_KEY: ${{ secrets.PATIENT_SHARING_SIGNING_KEY || secrets.SHARING_SIGNING_KEY }}
-          PATIENT_ENCRYPTION_KEY: ${{ secrets.PATIENT_ENCRYPTION_KEY }}
           BASE_DOMAIN: ${{ secrets.BASE_DOMAIN || vars.BASE_DOMAIN }}
           CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
           CORS_ALLOWED_DOMAINS: ${{ vars.CORS_ALLOWED_DOMAINS }}
@@ -115,7 +114,7 @@ jobs:
             echo "::error::BASE_DOMAIN is not configured. Set it as a GitHub secret or variable (Settings -> Secrets and variables -> Actions)."
             exit 1
           fi
-          for var in CONNECTION_STRING CLERK_AUTHORITY HUB_URL PATIENT_HUB_CLIENT_ID PATIENT_HUB_CLIENT_SECRET SHARING_SIGNING_KEY PATIENT_ENCRYPTION_KEY; do
+          for var in CONNECTION_STRING CLERK_AUTHORITY HUB_URL PATIENT_HUB_CLIENT_ID PATIENT_HUB_CLIENT_SECRET SHARING_SIGNING_KEY; do
             if [ -z "$(printenv $var)" ]; then
               echo "::error::$var is not configured. Set the matching GitHub secret or variable (Settings -> Secrets and variables -> Actions)."
               exit 1
@@ -125,13 +124,7 @@ jobs:
             echo "::error::PATIENT_SHARING_SIGNING_KEY must be at least 32 characters."
             exit 1
           fi
-          # Encryption__Base64Key must be base64 of exactly 32 bytes (AES-256).
-          ENC_BYTES=$(printf '%s' "$PATIENT_ENCRYPTION_KEY" | base64 -d 2>/dev/null | wc -c | tr -d ' ')
-          if [ "$ENC_BYTES" != "32" ]; then
-            echo "::error::PATIENT_ENCRYPTION_KEY must be base64 of exactly 32 random bytes (generate with: openssl rand -base64 32, or scripts/generate-secrets)."
-            exit 1
-          fi
-          for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING CLERK_AUTHORITY CLERK_AUDIENCE CLERK_WEBHOOK_SECRET R2_ACCOUNT_ID R2_BUCKET_NAME R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_PUBLIC_URL HANGFIRE_DASHBOARD_PASSWORD FIREBASE_SERVICE_ACCOUNT_JSON IMAGE_NAME IMAGE_TAG DATA_NETWORK NPM_NETWORK BASE_DOMAIN HUB_URL PATIENT_HUB_CLIENT_ID PATIENT_HUB_CLIENT_SECRET SHARING_SIGNING_KEY PATIENT_ENCRYPTION_KEY PATIENT_HUB_SIGNING_KEY CORS_ALLOWED_ORIGINS CORS_ALLOWED_DOMAINS; do
+          for var in ASPNETCORE_ENVIRONMENT CONNECTION_STRING CLERK_AUTHORITY CLERK_AUDIENCE CLERK_WEBHOOK_SECRET R2_ACCOUNT_ID R2_BUCKET_NAME R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_PUBLIC_URL HANGFIRE_DASHBOARD_PASSWORD FIREBASE_SERVICE_ACCOUNT_JSON IMAGE_NAME IMAGE_TAG DATA_NETWORK NPM_NETWORK BASE_DOMAIN HUB_URL PATIENT_HUB_CLIENT_ID PATIENT_HUB_CLIENT_SECRET SHARING_SIGNING_KEY PATIENT_HUB_SIGNING_KEY CORS_ALLOWED_ORIGINS CORS_ALLOWED_DOMAINS; do
             echo "$var=$(printenv $var)" >> deploy/patient-api/.env
           done
 
