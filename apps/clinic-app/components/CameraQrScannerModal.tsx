@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Animated,
   GestureResponderEvent,
+  LayoutChangeEvent,
   Linking,
   Modal,
   Platform,
@@ -44,6 +45,11 @@ export default function CameraQrScannerModal({
   const [zoom, setZoom] = useState<number>(0);
   const [focusCoord, setFocusCoord] = useState<{ x: number; y: number } | null>(null);
 
+  // Container measurement refs for accurate cross-platform tap-to-focus positioning
+  const cameraContainerRef = useRef<View>(null);
+  const containerSize = useRef<{ width: number; height: number }>({ width: 0, height: 0 });
+  const containerPageOffset = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
   // Focus ring animation
   const focusScale = useRef(new Animated.Value(1.5)).current;
   const focusOpacity = useRef(new Animated.Value(0)).current;
@@ -68,10 +74,26 @@ export default function CameraQrScannerModal({
     };
   }, []);
 
+  const handleContainerLayout = (e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    containerSize.current = { width, height };
+    cameraContainerRef.current?.measureInWindow?.((x, y) => {
+      if (typeof x === 'number' && !isNaN(x)) {
+        containerPageOffset.current = { x, y };
+      }
+    });
+  };
+
   const triggerFocusPulse = (coord?: { x: number; y: number }) => {
-    if (coord) {
-      setFocusCoord(coord);
-    }
+    const targetCoord =
+      coord ??
+      focusCoord ?? {
+        x: (containerSize.current.width || 300) / 2,
+        y: (containerSize.current.height || 400) / 2,
+      };
+
+    setFocusCoord(targetCoord);
+
     // Animate focus ring
     focusScale.setValue(1.5);
     focusOpacity.setValue(1);
@@ -103,8 +125,59 @@ export default function CameraQrScannerModal({
   };
 
   const handleTapToFocus = (e: GestureResponderEvent) => {
-    const { locationX, locationY } = e.nativeEvent;
-    triggerFocusPulse({ x: locationX, y: locationY });
+    const native = e.nativeEvent as any;
+    let x: number | undefined;
+    let y: number | undefined;
+
+    // 1. Check locationX/locationY from nativeEvent (typical for iOS/Android when tapping root surface)
+    if (typeof native.locationX === 'number' && !isNaN(native.locationX) && native.locationX > 0) {
+      x = native.locationX;
+      y = native.locationY;
+    }
+
+    // 2. On Web or when locationX is undefined/0, calculate relative to container bounding rect
+    const containerEl = cameraContainerRef.current as any;
+    const clientRect = containerEl?.getBoundingClientRect ? containerEl.getBoundingClientRect() : null;
+
+    if ((x === undefined || y === undefined) && clientRect) {
+      if (typeof native.clientX === 'number' && typeof native.clientY === 'number') {
+        x = native.clientX - clientRect.left;
+        y = native.clientY - clientRect.top;
+      } else if (typeof native.pageX === 'number' && typeof native.pageY === 'number') {
+        const scrollX = typeof window !== 'undefined' ? window.scrollX || 0 : 0;
+        const scrollY = typeof window !== 'undefined' ? window.scrollY || 0 : 0;
+        x = native.pageX - (clientRect.left + scrollX);
+        y = native.pageY - (clientRect.top + scrollY);
+      }
+    }
+
+    // 3. Fallback to pageX/pageY with measured container window offset on native platforms
+    if ((x === undefined || y === undefined) && typeof native.pageX === 'number' && typeof native.pageY === 'number') {
+      if (containerPageOffset.current && containerPageOffset.current.x > 0) {
+        x = native.pageX - containerPageOffset.current.x;
+        y = native.pageY - containerPageOffset.current.y;
+      }
+    }
+
+    // 4. Check native offsetX/offsetY
+    if ((x === undefined || y === undefined) && typeof native.offsetX === 'number' && typeof native.offsetY === 'number') {
+      x = native.offsetX;
+      y = native.offsetY;
+    }
+
+    // 5. Safe Fallback: if coordinates could not be resolved, default to the center of the camera viewport, NEVER (0,0)
+    const containerWidth = containerSize.current.width || 300;
+    const containerHeight = containerSize.current.height || 400;
+    if (typeof x !== 'number' || isNaN(x) || typeof y !== 'number' || isNaN(y)) {
+      x = containerWidth / 2;
+      y = containerHeight / 2;
+    }
+
+    // Clamp coordinates within container boundaries so the 60px ring is never clipped off-screen
+    x = Math.max(30, Math.min(x, containerWidth - 30));
+    y = Math.max(30, Math.min(y, containerHeight - 30));
+
+    triggerFocusPulse({ x, y });
   };
 
   const handleModeSwitch = (mode: 'auto' | 'manual') => {
@@ -172,7 +245,11 @@ export default function CameraQrScannerModal({
             </View>
           </View>
         ) : (
-          <View style={styles.cameraContainer}>
+          <View
+            ref={cameraContainerRef}
+            style={styles.cameraContainer}
+            onLayout={handleContainerLayout}
+          >
             <CameraView
               style={StyleSheet.absoluteFill}
               facing="back"
@@ -183,42 +260,42 @@ export default function CameraQrScannerModal({
               zoom={zoom}
             />
 
-            {/* Tap-to-focus interactive surface */}
+            {/* Tap-to-focus transparent touch surface (unobstructed full plane) */}
             <Pressable
               style={StyleSheet.absoluteFill}
-              onPress={handleTapToFocus}
+              onPressIn={handleTapToFocus}
               accessibilityLabel="Tap viewfinder to focus camera"
-            >
-              {/* Target Reticle Frame */}
-              <View style={styles.reticleOverlay} pointerEvents="none">
-                <View style={styles.reticleFrame} />
-                <View style={styles.hintBadge}>
-                  <ThemedText variant="captionBold" color={theme.colors.textInverted}>
-                    {focusMode === 'auto'
-                      ? 'Auto-focus active • Tap anywhere to focus on code'
-                      : 'Manual focus locked • Tap code to focus'}
-                  </ThemedText>
-                </View>
-              </View>
+            />
 
-              {/* Dynamic tap-to-focus indicator ring */}
-              {focusCoord && (
-                <Animated.View
-                  pointerEvents="none"
-                  style={[
-                    styles.focusRing,
-                    {
-                      left: focusCoord.x - 30,
-                      top: focusCoord.y - 30,
-                      transform: [{ scale: focusScale }],
-                      opacity: focusOpacity,
-                    },
-                  ]}
-                >
-                  <View style={styles.focusCenterDot} />
-                </Animated.View>
-              )}
-            </Pressable>
+            {/* Target Reticle Frame (passive visual overlay) */}
+            <View style={styles.reticleOverlay} pointerEvents="none">
+              <View style={styles.reticleFrame} />
+              <View style={styles.hintBadge}>
+                <ThemedText variant="captionBold" color={theme.colors.textInverted}>
+                  {focusMode === 'auto'
+                    ? 'Auto-focus active • Tap anywhere to focus on code'
+                    : 'Manual focus locked • Tap code to focus'}
+                </ThemedText>
+              </View>
+            </View>
+
+            {/* Dynamic tap-to-focus indicator ring */}
+            {focusCoord && (
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  styles.focusRing,
+                  {
+                    left: focusCoord.x - 30,
+                    top: focusCoord.y - 30,
+                    transform: [{ scale: focusScale }],
+                    opacity: focusOpacity,
+                  },
+                ]}
+              >
+                <View style={styles.focusCenterDot} />
+              </Animated.View>
+            )}
 
             {/* Quick Camera Tuning Controls Overlay */}
             <View style={styles.controlsStrip}>
