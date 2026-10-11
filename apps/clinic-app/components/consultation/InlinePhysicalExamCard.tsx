@@ -15,6 +15,7 @@ import {
   Icon,
   Badge,
 } from '@ui';
+import type { IconName } from '../ui/Icon';
 import { theme } from '../../constants/theme';
 
 export type SystemExamStatus = 'Normal' | 'Abnormal';
@@ -66,7 +67,7 @@ interface ExamSystemConfig {
   remarksKey: keyof PhysicalExamFindings;
   label: string;
   normalDescription: string;
-  icon: string;
+  icon: IconName;
   placeholder: string;
 }
 
@@ -76,7 +77,7 @@ const EXAM_SYSTEMS: ExamSystemConfig[] = [
     remarksKey: 'generalSurveyRemarks',
     label: 'General Survey',
     normalDescription: 'Conscious, coherent, oriented to person/place/time, not in acute distress',
-    icon: 'user',
+    icon: 'patient',
     placeholder: 'Describe distress, altered sensorium, posture, or orientation deficits...',
   },
   {
@@ -100,7 +101,7 @@ const EXAM_SYSTEMS: ExamSystemConfig[] = [
     remarksKey: 'chestRemarks',
     label: 'Chest & Lungs',
     normalDescription: 'Symmetrical chest expansion, clear breath sounds, no crackles, wheezes, or rales',
-    icon: 'wind',
+    icon: 'activity',
     placeholder: 'Describe wheezes, rhonchi, crackles, stridor, or retractions...',
   },
   {
@@ -108,7 +109,7 @@ const EXAM_SYSTEMS: ExamSystemConfig[] = [
     remarksKey: 'heartRemarks',
     label: 'Heart & CVS',
     normalDescription: 'Distinct heart sounds, normal rate, regular rhythm, no murmurs, thrills, or gallops',
-    icon: 'heart',
+    icon: 'heartPulse',
     placeholder: 'Describe murmurs (grade/location), irregular rhythm, rub, or tachycardia...',
   },
   {
@@ -116,7 +117,7 @@ const EXAM_SYSTEMS: ExamSystemConfig[] = [
     remarksKey: 'abdomenRemarks',
     label: 'Abdomen',
     normalDescription: 'Soft, non-tender, non-distended, normoactive bowel sounds, no palpable organomegaly',
-    icon: 'circle',
+    icon: 'dot',
     placeholder: 'Describe tenderness, guarding, rigidity, masses, or organomegaly...',
   },
   {
@@ -140,7 +141,7 @@ const EXAM_SYSTEMS: ExamSystemConfig[] = [
     remarksKey: 'guRemarks',
     label: 'Genitourinary',
     normalDescription: 'Essentially normal, no suprapubic tenderness, no flank tenderness, no discharge',
-    icon: 'check-circle',
+    icon: 'checkCircle',
     placeholder: 'Describe CVA tenderness, genital ulcers, urethral/vaginal discharge, hernia...',
   },
 ];
@@ -203,11 +204,11 @@ export const InlinePhysicalExamCard: React.FC<InlinePhysicalExamCardProps> = ({
             )}
             <Button
               title="All Essentially Normal"
-              size="small"
+              size="sm"
               variant={isAllNormal ? 'secondary' : 'primary'}
               disabled={disabled}
               onPress={handleSetAllNormal}
-              leftIcon="check"
+              icon="check"
             />
           </View>
         }
@@ -238,7 +239,7 @@ export const InlinePhysicalExamCard: React.FC<InlinePhysicalExamCardProps> = ({
                       size={18}
                       color={isAbnormal ? theme.colors.warning : theme.colors.primary}
                     />
-                    <ThemedText variant="bodyMedium" weight="semibold" style={styles.systemLabel}>
+                    <ThemedText variant="bodyBold" style={styles.systemLabel}>
                       {sys.label}
                     </ThemedText>
                     {isAbnormal ? (
@@ -257,8 +258,7 @@ export const InlinePhysicalExamCard: React.FC<InlinePhysicalExamCardProps> = ({
                     ]}
                   >
                     <ThemedText
-                      variant="small"
-                      weight="bold"
+                      variant="smallBold"
                       color={isAbnormal ? theme.colors.warning : theme.colors.primary}
                     >
                       {isAbnormal ? 'Flagged Abnormal' : 'Set Abnormal'}
@@ -275,7 +275,7 @@ export const InlinePhysicalExamCard: React.FC<InlinePhysicalExamCardProps> = ({
                       placeholder={sys.placeholder}
                       multiline
                       numberOfLines={2}
-                      disabled={disabled}
+                      editable={!disabled}
                     />
                   </View>
                 ) : (
@@ -320,7 +320,7 @@ const styles = StyleSheet.create({
   },
   systemRowNormal: {
     backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.borderSubtle || theme.colors.border,
+    borderColor: theme.colors.border,
   },
   systemRowAbnormal: {
     backgroundColor: theme.colors.warningBg || '#FFFBEB',

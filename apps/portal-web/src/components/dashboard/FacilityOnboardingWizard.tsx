@@ -49,7 +49,7 @@ interface FacilityOnboardingWizardProps {
   targetBranchId?: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onFacilityCreated?: () => void;
+  onFacilityCreated?: (facilityId?: string) => void;
 }
 
 export default function FacilityOnboardingWizard({
@@ -484,13 +484,17 @@ export default function FacilityOnboardingWizard({
       if (typeof window !== "undefined") {
         window.dispatchEvent(
           new CustomEvent("clinicez:facility-created", {
-            detail: { facilityName, branchId: selectedBranch?.id },
+            detail: { 
+              facilityId: result.facilityId,
+              facilityName, 
+              branchId: selectedBranch?.id 
+            },
           })
         );
       }
 
       if (onFacilityCreated) {
-        onFacilityCreated();
+        onFacilityCreated(result.facilityId ?? undefined);
       } else {
         router.refresh();
       }

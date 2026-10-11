@@ -27,6 +27,11 @@ import { theme } from '@constants/theme';
 import { LabOrderStageChip } from '../../components/interop/InteropBadges';
 import PrescriptionSlipModal from '../../components/PrescriptionSlipModal';
 import RecordExternalDispenseModal from '../../components/RecordExternalDispenseModal';
+import {
+  InlinePhysicalExamCard,
+  DEFAULT_PHYSICAL_EXAM_NORMAL,
+  PhysicalExamFindings,
+} from '../../components/consultation/InlinePhysicalExamCard';
 import { usePhilHealthCatalog, usePhilHealthCatalogSearch } from '@utils/usePhilHealthCatalog';
 import type { PhilHealthCatalogItem } from '@services/philHealthCatalogService';
 import { useClinic } from '../../context/ClinicContext';
@@ -382,11 +387,14 @@ export default function ConsultationsScreen() {
   const [doctorPrc, setDoctorPrc] = useState('');
   const [doctorPtr, setDoctorPtr] = useState('');
   const [doctorS2, setDoctorS2] = useState('');
+  const [doctorPan, setDoctorPan] = useState('');
+  const [physicalExamFindings, setPhysicalExamFindings] = useState<PhysicalExamFindings>({ ...DEFAULT_PHYSICAL_EXAM_NORMAL });
   const signerStaffId = signerStaff?.id;
   useEffect(() => {
     setDoctorPrc(signerStaff?.prcLicenseNumber ?? '');
     setDoctorPtr(signerStaff?.ptrNumber ?? '');
     setDoctorS2(signerStaff?.s2LicenseNumber ?? '');
+    setDoctorPan(signerStaff?.philHealthPan ?? '');
     // Only re-seed when the acting doctor changes, so manual edits are not overwritten.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signerStaffId]);
@@ -694,6 +702,7 @@ export default function ConsultationsScreen() {
     setLabOrders([]);
     setLabError(null);
     setIsYakapEligible(false);
+    setPhysicalExamFindings({ ...DEFAULT_PHYSICAL_EXAM_NORMAL });
   };
 
   const handleSelectPatient = (p: PatientQueueItem) => {
@@ -1069,6 +1078,11 @@ export default function ConsultationsScreen() {
         philHealthSignSympCode: selectedSymptomCodes.join(','),
         philHealthOtherComplaint: otherSymptomSelected ? symptomOtherDesc || subjective : undefined,
         philHealthPainSite: painSymptomSelected ? symptomPainSite : undefined,
+        doctorPhilHealthPan: isYakapEligible ? (doctorPan.trim() || signerStaff?.philHealthPan) : undefined,
+        philHealthAtc: isYakapEligible ? 'A' : undefined,
+        generalSurveyId: isYakapEligible ? (physicalExamFindings.generalSurvey === 'Normal' ? '1' : '2') : undefined,
+        generalSurveyRemarks: isYakapEligible ? physicalExamFindings.generalSurveyRemarks : undefined,
+        physicalExamFindingsJson: isYakapEligible ? JSON.stringify(physicalExamFindings) : undefined,
         diagnoses: selectedDiagnoses.map((d) => ({
           icd10Code: d.icd10Code,
           description: d.description,
@@ -1100,6 +1114,8 @@ export default function ConsultationsScreen() {
       prcLicenseNumber: doctorPrc,
       ptrNumber: doctorPtr,
       s2LicenseNumber: doctorS2,
+      philHealthPan: isYakapEligible ? (doctorPan.trim() || signerStaff?.philHealthPan) : undefined,
+      philHealthAtc: isYakapEligible ? 'A' : undefined,
     });
     if (signErr) {
       setIsSigning(false);
@@ -1619,6 +1635,23 @@ export default function ConsultationsScreen() {
                     ? 'Complaint, diagnosis and vitals are on record for the claim.'
                     : `Still needed for the claim: ${yakapMissing.join(', ')}.`}
               </ThemedText>
+              {isYakapEligible && (
+                <View style={{ marginTop: theme.spacing.sm, paddingTop: theme.spacing.sm, borderTopWidth: 1, borderTopColor: theme.colors.border }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                    <Badge label="ATC: A (Konsulta Encounter)" variant="info" />
+                    <ThemedText variant="smallBold" color={theme.colors.primary}>
+                      Case, Trans & SOAP Nos automated on save/sign
+                    </ThemedText>
+                  </View>
+                  <Input
+                    label="Attending Doctor PhilHealth PAN (Accreditation #)"
+                    value={doctorPan}
+                    onChangeText={setDoctorPan}
+                    placeholder="Enter or verify Doctor PhilHealth PAN"
+                    editable={!isSigned}
+                  />
+                </View>
+              )}
             </Card>
 
             {/* S - Subjective */}
@@ -1696,6 +1729,15 @@ export default function ConsultationsScreen() {
                 inputStyle={styles.textArea}
               />
             </Card>
+
+            {/* Inline Physical Examination (PhilHealth Konsulta 9-System Findings) */}
+            {isYakapEligible && (
+              <InlinePhysicalExamCard
+                findings={physicalExamFindings}
+                onChange={setPhysicalExamFindings}
+                disabled={isSigned}
+              />
+            )}
 
             {/* A - Assessment & ICD-10 */}
             <Card>
@@ -2172,6 +2214,16 @@ export default function ConsultationsScreen() {
                   editable={!isSigned}
                   containerStyle={styles.fieldGrow}
                 />
+                {isYakapEligible ? (
+                  <Input
+                    label="PhilHealth PAN"
+                    value={doctorPan}
+                    onChangeText={setDoctorPan}
+                    editable={!isSigned}
+                    containerStyle={styles.fieldGrow}
+                    placeholder="Doctor PAN"
+                  />
+                ) : null}
               </View>
             </Card>
 

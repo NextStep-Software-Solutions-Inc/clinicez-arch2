@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { apiClient } from "@/transport/apiClient";
 import { toast } from "sonner";
 import {
@@ -25,7 +26,11 @@ import {
   IconMapPin,
   IconPhone,
   IconMail,
-  IconExternalLink
+  IconExternalLink,
+  IconAlertTriangle,
+  IconTrash,
+  IconAlertCircle,
+  IconPower
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 
@@ -227,6 +232,58 @@ export default function FacilitySettingsHub({
     }
   };
 
+  // Danger Zone: Status & Deletion State
+  const [savingStatus, setSavingStatus] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteConfirmationText, setDeleteConfirmationText] = useState("");
+  const [deleteAcknowledged, setDeleteAcknowledged] = useState(false);
+
+  const handleToggleStatus = async (newStatus: "Active" | "Suspended") => {
+    if (!facility || !tenantSlug) return;
+    setSavingStatus(true);
+    try {
+      if (newStatus === "Active") {
+        await apiClient.post(`/facilities/${facility.id}/activate?tenantSlug=${tenantSlug}`);
+      } else {
+        await apiClient.put(`/facilities/${facility.id}`, {
+          tenantSlug,
+          name: facility.name,
+          status: newStatus,
+        });
+      }
+      setStatus(newStatus);
+      toast.success(`Facility status updated to ${newStatus}.`);
+      if (onSaved) onSaved();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to update facility status";
+      toast.error(msg);
+    } finally {
+      setSavingStatus(false);
+    }
+  };
+
+  const handleDeleteFacility = async () => {
+    if (!facility || !tenantSlug) return;
+    if (deleteConfirmationText.trim() !== facility.name.trim() || !deleteAcknowledged) {
+      toast.error("Please type the exact facility name and acknowledge operational impact.");
+      return;
+    }
+    setDeleting(true);
+    try {
+      await apiClient.delete(`/facilities/${facility.id}?tenantSlug=${tenantSlug}`);
+      toast.success(`"${facility.name}" permanently archived.`);
+      onOpenChange(false);
+      setDeleteConfirmationText("");
+      setDeleteAcknowledged(false);
+      if (onSaved) onSaved();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to delete facility";
+      toast.error(msg);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   if (!facility) return null;
 
   return (
@@ -289,6 +346,13 @@ export default function FacilitySettingsHub({
               >
                 <IconKey className="h-3.5 w-3.5" />
                 <span>License &amp; Hard Limits</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="danger"
+                className="rounded-lg px-3 py-1.5 text-xs font-semibold data-[state=active]:bg-rose-50 dark:data-[state=active]:bg-rose-950/40 data-[state=active]:text-rose-600 dark:data-[state=active]:text-rose-400 data-[state=active]:shadow-xs gap-1.5 shrink-0 whitespace-nowrap text-slate-600 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-all"
+              >
+                <IconAlertTriangle className="h-3.5 w-3.5 text-rose-500" />
+                <span>Danger Zone</span>
               </TabsTrigger>
             </TabsList>
           </div>
@@ -710,6 +774,145 @@ export default function FacilitySettingsHub({
                     </Button>
                   </div>
                 )}
+              </div>
+            </TabsContent>
+
+            {/* TAB 5: DANGER ZONE & LIFECYCLE */}
+            <TabsContent value="danger" className="m-0 space-y-6">
+              {/* Status Toggle Card */}
+              <div className="p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm font-bold text-slate-800 dark:text-slate-100">
+                    <IconPower className="h-4 w-4 text-amber-500" />
+                    <span>Operational Status</span>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-xs font-semibold px-2.5 py-0.5",
+                      status === "Active"
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                        : "border-amber-200 bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+                    )}
+                  >
+                    Current: {status}
+                  </Badge>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Suspending this facility temporarily stops patient encounters, queue check-ins, and PhilHealth claim submissions from connected terminals, while preserving all historical clinical records.
+                </p>
+                <div className="pt-1 flex items-center justify-end">
+                  {status === "Active" ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleToggleStatus("Suspended")}
+                      disabled={savingStatus}
+                      className="rounded-xl border-amber-300 text-amber-700 hover:bg-amber-50 hover:text-amber-800 dark:border-amber-800 dark:text-amber-400 dark:hover:bg-amber-950/50 text-xs font-semibold"
+                    >
+                      {savingStatus ? (
+                        <>
+                          <IconLoader className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                          <span>Updating Status...</span>
+                        </>
+                      ) : (
+                        <>
+                          <IconPower className="h-3.5 w-3.5 mr-1.5 text-amber-500" />
+                          <span>Suspend Facility Operations</span>
+                        </>
+                      )}
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleToggleStatus("Active")}
+                      disabled={savingStatus}
+                      className="rounded-xl border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950/50 text-xs font-semibold"
+                    >
+                      {savingStatus ? (
+                        <>
+                          <IconLoader className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                          <span>Activating...</span>
+                        </>
+                      ) : (
+                        <>
+                          <IconPower className="h-3.5 w-3.5 mr-1.5 text-emerald-600" />
+                          <span>Activate Facility Operations</span>
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Permanent Deletion / Archive Card */}
+              <div className="p-4 sm:p-5 rounded-2xl border border-rose-200 dark:border-rose-950/60 bg-rose-50/30 dark:bg-rose-950/10 space-y-4">
+                <div className="flex items-center gap-2 text-sm font-bold text-rose-700 dark:text-rose-400">
+                  <IconTrash className="h-4 w-4" />
+                  <span>Permanent Deletion &amp; Archival</span>
+                </div>
+
+                <div className="p-3 rounded-xl bg-rose-100/60 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 flex items-start gap-2.5 text-xs text-rose-800 dark:text-rose-300 leading-relaxed">
+                  <IconAlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-rose-600 dark:text-rose-400" />
+                  <div>
+                    <span className="font-bold">Caution:</span> Archiving or permanently deleting this facility will sever its connection from connected client terminals, workstations, and local edge synchronizers. This action requires intentional confirmation.
+                  </div>
+                </div>
+
+                <div className="space-y-3 pt-1">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                      To confirm, type the facility name <span className="font-mono font-bold select-all bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100">{facility.name}</span> below:
+                    </Label>
+                    <Input
+                      value={deleteConfirmationText}
+                      onChange={(e) => setDeleteConfirmationText(e.target.value)}
+                      placeholder={facility.name}
+                      className="rounded-xl text-xs h-9 bg-white dark:bg-slate-900 border-rose-200 dark:border-rose-900 focus-visible:ring-rose-500"
+                    />
+                  </div>
+
+                  <div className="flex items-start gap-2.5 pt-1">
+                    <Checkbox
+                      id="ack-delete-facility"
+                      checked={deleteAcknowledged}
+                      onCheckedChange={(checked) => setDeleteAcknowledged(checked === true)}
+                      className="mt-0.5 data-[state=checked]:bg-rose-600 data-[state=checked]:border-rose-600"
+                    />
+                    <label
+                      htmlFor="ack-delete-facility"
+                      className="text-xs text-slate-600 dark:text-slate-400 leading-tight cursor-pointer select-none"
+                    >
+                      I understand that archiving this facility will disable its terminals, workstations, and local synchronizers.
+                    </label>
+                  </div>
+                </div>
+
+                <div className="pt-2 flex items-center justify-end">
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleDeleteFacility}
+                    disabled={deleteConfirmationText.trim() !== facility.name.trim() || !deleteAcknowledged || deleting}
+                    className="rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white disabled:opacity-50"
+                  >
+                    {deleting ? (
+                      <>
+                        <IconLoader className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                        <span>Archiving Facility...</span>
+                      </>
+                    ) : (
+                      <>
+                        <IconTrash className="h-3.5 w-3.5 mr-1.5" />
+                        <span>Permanently Archive Facility</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             </TabsContent>
           </div>
