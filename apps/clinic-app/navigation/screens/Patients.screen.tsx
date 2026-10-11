@@ -12,7 +12,8 @@ import { TextInput } from '@ui/Text';
 import { Alert } from '@utils/feedback';
 import { useNavigation, type StaticScreenProps } from '@react-navigation/native';
 import { ThemedText, Badge, Button, Input, Card, Icon, EmptyState, ErrorState, SkeletonList } from '@ui';
-import SegmentedControl from '@ui/SegmentedControl';
+import SegmentedControl, { type SegmentedOption } from '@ui/SegmentedControl';
+import { ClinicalHistoryTab, LifestyleSocialTab, ReproductiveHealthTab, CardiometabolicRiskTab } from '../../components/chart';
 import { useClinic } from '@context/ClinicContext';
 import { useStaff } from '@context/StaffContext';
 import { openDocument } from '../../services/documentOpener';
@@ -25,6 +26,7 @@ import { LabOrderStageChip } from '../../components/interop/InteropBadges';
 import PrescriptionSlipModal from '../../components/PrescriptionSlipModal';
 import RecordExternalDispenseModal from '../../components/RecordExternalDispenseModal';
 import PhilHealthProfileModal from '../../components/PhilHealthProfileModal';
+import CameraQrScannerModal from '../../components/CameraQrScannerModal';
 import {
   clinicService,
   ClinicPatient,
@@ -47,6 +49,15 @@ const humanizeKey = (key: string) => {
 };
 
 type PatientFilter = 'ALL' | 'ALERTS' | 'SENIOR_PWD' | 'STUDENTS' | 'EMPLOYEES';
+type ChartTab = 'visits' | 'history' | 'lifestyle' | 'reproductive' | 'cardiometabolic';
+
+const CHART_TABS: SegmentedOption<ChartTab>[] = [
+  { value: 'visits', label: 'Clinical Visits' },
+  { value: 'history', label: 'Clinical History' },
+  { value: 'lifestyle', label: 'Lifestyle & Social' },
+  { value: 'reproductive', label: "Women's Health" },
+  { value: 'cardiometabolic', label: 'Cardiometabolic' },
+];
 
 export type PatientsScreenProps = StaticScreenProps<{ openPatientId?: string } | undefined>;
 
@@ -101,10 +112,12 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   const [patientChart, setPatientChart] = useState<PatientChart | null>(null);
   const [loadingChart, setLoadingChart] = useState(false);
   const [chartError, setChartError] = useState<string | null>(null);
+  const [activeChartTab, setActiveChartTab] = useState<ChartTab>('visits');
 
   // Standalone PhilHealth Profile Modal state
   const [philHealthProfileModalVisible, setPhilHealthProfileModalVisible] = useState(false);
   const [selectedPatientForProfile, setSelectedPatientForProfile] = useState<ClinicPatient | null>(null);
+  const [cameraScannerVisible, setCameraScannerVisible] = useState(false);
 
   // Lab Slip & External Results Interoperability state
   const [selectedSlip, setSelectedSlip] = useState<LabOrderSlipData | null>(null);
@@ -268,6 +281,7 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
 
   const handleOpenChart = async (patient: ClinicPatient) => {
     setSelectedPatient(patient);
+    setActiveChartTab('visits');
     setChartVisible(true);
     setLoadingChart(true);
     setLoadingAttachments(true);
@@ -534,6 +548,15 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       headerTitle="Patients"
       rightAction={
         <View style={styles.headerActions}>
+          {canImportPatient ? (
+            <Button
+              title="Camera Scan"
+              variant="outline"
+              size="sm"
+              icon="scan"
+              onPress={() => setCameraScannerVisible(true)}
+            />
+          ) : null}
           {canImportPatient ? (
             <Button
               title="Scan patient QR"
@@ -1031,19 +1054,19 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                 <ThemedText variant="small" color={theme.colors.textSecondary}>{selectedPatient?.fullName}</ThemedText>
               </View>
               <View style={styles.chartHeaderActions}>
-                {selectedPatient && (
-                  <Button
-                    title="PhilHealth profile"
-                    variant="outline"
-                    size="sm"
-                    icon="shield"
-                    onPress={() => handleOpenPhilHealthProfile(selectedPatient)}
-                  />
-                )}
                 <Pressable onPress={() => setChartVisible(false)}>
                   <Icon name="close" size={theme.sizes.iconMd} color={theme.colors.textSecondary} />
                 </Pressable>
               </View>
+            </View>
+
+            {/* Longitudinal Chart Tabs */}
+            <View style={{ marginHorizontal: theme.spacing.md, marginBottom: theme.spacing.sm }}>
+              <SegmentedControl
+                options={CHART_TABS}
+                value={activeChartTab}
+                onChange={setActiveChartTab}
+              />
             </View>
 
             {loadingChart ? (
@@ -1054,8 +1077,9 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                 message={chartError}
                 onRetry={() => selectedPatient && handleOpenChart(selectedPatient)}
               />
-            ) : patientChart ? (
-              <ScrollView contentContainerStyle={{ gap: 14 }}>
+            ) : patientChart && selectedPatient ? (
+              activeChartTab === 'visits' ? (
+                <ScrollView contentContainerStyle={{ gap: 14 }}>
                 <View style={styles.chartSummaryBar}>
                   <View style={styles.chartMetric}>
                     <ThemedText style={styles.chartMetricVal}>{patientChart.totalVisits}</ThemedText>
@@ -1452,8 +1476,33 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
                   )}
                 </View>
               </ScrollView>
-            ) : null}
-          </View>
+            ) : activeChartTab === 'history' ? (
+              <ClinicalHistoryTab
+                patient={selectedPatient}
+                initialSurgicalHistories={patientChart.surgicalHistories}
+                onRefreshChart={() => selectedPatient && handleOpenChart(selectedPatient)}
+              />
+            ) : activeChartTab === 'lifestyle' ? (
+              <LifestyleSocialTab
+                patient={selectedPatient}
+                initialSocialHistory={patientChart.socialHistory}
+                onRefreshChart={() => selectedPatient && handleOpenChart(selectedPatient)}
+              />
+            ) : activeChartTab === 'reproductive' ? (
+              <ReproductiveHealthTab
+                patient={selectedPatient}
+                initialReproductiveHistory={patientChart.reproductiveHistory}
+                onRefreshChart={() => selectedPatient && handleOpenChart(selectedPatient)}
+              />
+            ) : activeChartTab === 'cardiometabolic' ? (
+              <CardiometabolicRiskTab
+                patient={selectedPatient}
+                initialLatestAssessment={patientChart.latestNcdAssessment}
+                onRefreshChart={() => selectedPatient && handleOpenChart(selectedPatient)}
+              />
+            ) : null
+          ) : null}
+        </View>
         </View>
       </Modal>
 
@@ -1755,6 +1804,17 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         }}
         patient={selectedPatientForProfile}
         onSaved={handlePhilHealthProfileSaved}
+      />
+
+      {/* Camera QR Scanner Modal */}
+      <CameraQrScannerModal
+        visible={cameraScannerVisible}
+        title="Scan Patient QR Code"
+        subtitle="Align the patient's ClinicEZ ID or digital share token within the frame"
+        onScanned={(scannedCode) => {
+          navigation.navigate('ShareImport', { initialToken: scannedCode });
+        }}
+        onClose={() => setCameraScannerVisible(false)}
       />
     </ScrollView>
   </ResponsiveLayout>

@@ -18,9 +18,18 @@ import {
   scopeLabels,
 } from '../../services/shareImport';
 import { toneToVariant } from '../../components/interop/InteropBadges';
+import CameraQrScannerModal from '../../components/CameraQrScannerModal';
 
 type Phase = 'idle' | 'submitting' | 'polling' | 'timedOut' | 'done';
 type QueueChoice = 'yes' | 'no';
+
+interface ShareImportScreenProps {
+  route?: {
+    params?: {
+      initialToken?: string;
+    };
+  };
+}
 
 const QUEUE_OPTIONS: Array<{ value: QueueChoice; label: string }> = [
   { value: 'yes', label: 'Add to queue' },
@@ -38,15 +47,23 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-export default function ShareImportScreen() {
+export default function ShareImportScreen({ route }: ShareImportScreenProps = {}) {
   const navigation = useNavigation();
   const canImport = usePermission(PERMISSIONS.patientsWrite);
 
-  const [token, setToken] = useState('');
+  const [token, setToken] = useState(route?.params?.initialToken ?? '');
   const [purpose, setPurpose] = useState(DEFAULT_SHARE_PURPOSE);
   const [queueChoice, setQueueChoice] = useState<QueueChoice>('yes');
   const [chiefComplaint, setChiefComplaint] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+  const [cameraScannerVisible, setCameraScannerVisible] = useState(false);
+
+  useEffect(() => {
+    if (route?.params?.initialToken) {
+      setToken(route?.params?.initialToken);
+      setFormError(null);
+    }
+  }, [route?.params?.initialToken]);
 
   const [phase, setPhase] = useState<Phase>('idle');
   const [correlationId, setCorrelationId] = useState<string | null>(null);
@@ -265,7 +282,21 @@ export default function ShareImportScreen() {
         ) : (
           <>
             <Card style={styles.formCard}>
-              <CardHeader title="Share token" subtitle="Scan the patient's QR code or paste the token." icon="scan" />
+              <CardHeader
+                title="Share token"
+                subtitle="Scan the patient's QR code or paste the token."
+                icon="scan"
+                rightAction={
+                  <Button
+                    title="Camera Scanner"
+                    variant="outline"
+                    size="sm"
+                    icon="scan"
+                    disabled={busy}
+                    onPress={() => setCameraScannerVisible(true)}
+                  />
+                }
+              />
               <Input
                 label="Patient share token"
                 required
@@ -273,7 +304,7 @@ export default function ShareImportScreen() {
                 autoCapitalize="none"
                 autoCorrect={false}
                 placeholder="Scan or paste token"
-                helperText="A USB or keyboard scanner types the token here; it submits on Enter."
+                helperText="A USB or keyboard scanner types the token here; or tap Camera Scanner above."
                 value={token}
                 onChangeText={(value) => {
                   setToken(value);
@@ -321,6 +352,16 @@ export default function ShareImportScreen() {
           </>
         )}
       </ScrollView>
+      <CameraQrScannerModal
+        visible={cameraScannerVisible}
+        title="Scan Patient Share QR"
+        subtitle="Align the patient's digital share QR code within the frame"
+        onScanned={(scannedCode) => {
+          setToken(scannedCode);
+          setFormError(null);
+        }}
+        onClose={() => setCameraScannerVisible(false)}
+      />
     </ResponsiveLayout>
   );
 }

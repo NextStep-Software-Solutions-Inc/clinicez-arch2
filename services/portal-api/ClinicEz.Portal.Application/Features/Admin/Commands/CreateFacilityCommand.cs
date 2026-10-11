@@ -56,7 +56,8 @@ public record CreateFacilityCommand(
 public record CreateFacilityResult(
     bool Success,
     HubEdgeCredentials? HubCredentials = null,
-    bool HubOnboardingPending = false);
+    bool HubOnboardingPending = false,
+    Guid? FacilityId = null);
 
 public class CreateFacilityCommandHandler(
     IApplicationDbContext context,
@@ -225,18 +226,18 @@ public class CreateFacilityCommandHandler(
 
         await context.SaveChangesAsync(cancellationToken);
 
-        if (!onPremise) return new CreateFacilityResult(true);
+        if (!onPremise) return new CreateFacilityResult(true, FacilityId: resourceId);
 
         try
         {
             var credentials = await hubOnboarding.OnboardAsync(facility, tenant, cancellationToken);
-            return new CreateFacilityResult(true, credentials);
+            return new CreateFacilityResult(true, credentials, FacilityId: resourceId);
         }
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or TaskCanceledException)
         {
             // The facility is already committed. Credentials can be requested again, so don't fail the creation.
             logger.LogWarning(ex, "Hub onboarding of facility {FacilityId} is pending: {Reason}", facility.Id, ex.Message);
-            return new CreateFacilityResult(true, HubOnboardingPending: true);
+            return new CreateFacilityResult(true, HubOnboardingPending: true, FacilityId: resourceId);
         }
     }
 }

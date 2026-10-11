@@ -65,6 +65,7 @@ public class FacilityEndpoints : IEndpoint
                     {
                         Success = true,
                         Message = "Facility created and provisioning event published",
+                        result.FacilityId,
                         result.HubCredentials,
                         result.HubOnboardingPending
                     })

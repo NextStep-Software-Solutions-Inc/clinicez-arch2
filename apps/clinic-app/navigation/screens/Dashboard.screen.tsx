@@ -18,6 +18,7 @@ import {
   Skeleton,
   SkeletonList,
   SkeletonStat,
+  Icon,
 } from '@ui';
 import SegmentedControl from '@ui/SegmentedControl';
 import { ResponsiveLayout } from '@layout';
@@ -29,6 +30,8 @@ import { printReceiptDialog } from '@utils/printHelper';
 import {
   clinicService,
   PatientQueueItem,
+  ClinicPatient,
+  PediatricZScoreResult,
   QueueMetrics,
   QueueStatus,
   QueuePriority,
@@ -95,6 +98,17 @@ const statusBadge = (status: QueueStatus): { label: string; variant: BadgeVarian
   }
 };
 
+type MeasurementPosture = 'STANDING' | 'RECUMBENT';
+
+const getZScoreBadgeVariant = (category?: string): BadgeVariant => {
+  if (!category) return 'neutral';
+  const c = category.toLowerCase();
+  if (c.includes('severely') || c.includes('obese')) return 'emergency';
+  if (c.includes('moderately') || c.includes('overweight') || c.includes('stunted') || c.includes('wasted')) return 'warning';
+  if (c.includes('normal')) return 'success';
+  return 'info';
+};
+
 interface TriageForm {
   bpSys: string;
   bpDia: string;
@@ -105,6 +119,11 @@ interface TriageForm {
   height: string;
   weight: string;
   pain: string;
+  visualAcuityLeft: string;
+  visualAcuityRight: string;
+  headCircumference: string;
+  midUpperArmCircumference: string;
+  posture: MeasurementPosture;
   notes: string;
   priority: QueuePriority;
 }
@@ -119,6 +138,11 @@ const EMPTY_TRIAGE: TriageForm = {
   height: '',
   weight: '',
   pain: '',
+  visualAcuityLeft: '',
+  visualAcuityRight: '',
+  headCircumference: '',
+  midUpperArmCircumference: '',
+  posture: 'STANDING',
   notes: '',
   priority: 'Routine',
 };
@@ -162,6 +186,8 @@ export default function DashboardScreen() {
 
   // Nurse triage modal state
   const [triageItem, setTriageItem] = useState<PatientQueueItem | null>(null);
+  const [triagePatient, setTriagePatient] = useState<ClinicPatient | null>(null);
+  const [zScorePreview, setZScorePreview] = useState<PediatricZScoreResult | null>(null);
   const [triage, setTriage] = useState<TriageForm>(EMPTY_TRIAGE);
   const [savingTriage, setSavingTriage] = useState(false);
 
@@ -263,10 +289,65 @@ export default function DashboardScreen() {
     );
   };
 
-  const handleOpenTriage = (item: PatientQueueItem) => {
+  const handleOpenTriage = async (item: PatientQueueItem) => {
     setTriageItem(item);
     setTriage({ ...EMPTY_TRIAGE, priority: item.priority, notes: item.chiefComplaint ?? '' });
+    setZScorePreview(null);
+    setTriagePatient(null);
+    const [patientData] = await clinicService.getPatientById(item.patientId);
+    if (patientData) {
+      setTriagePatient(patientData);
+      if (typeof patientData.age === 'number' && patientData.age < 2) {
+        setTriage((prev) => ({ ...prev, posture: 'RECUMBENT' }));
+      }
+    }
   };
+
+  const isPediatric = useMemo(() => {
+    if (!triagePatient) return false;
+    if (typeof triagePatient.age === 'number') {
+      return triagePatient.age <= 5;
+    }
+    if (triagePatient.dateOfBirth) {
+      const dob = new Date(triagePatient.dateOfBirth);
+      const diffMs = Date.now() - dob.getTime();
+      const ageYears = diffMs / (1000 * 60 * 60 * 24 * 365.25);
+      return ageYears <= 5.1;
+    }
+    return false;
+  }, [triagePatient]);
+
+  useEffect(() => {
+    if (!triageItem || !triagePatient || !isPediatric) {
+      setZScorePreview(null);
+      return;
+    }
+    const heightCm = parseOptionalFloat(triage.height);
+    const weightKg = parseOptionalFloat(triage.weight);
+    if (!heightCm || !weightKg || !triagePatient.dateOfBirth || !triagePatient.gender) {
+      setZScorePreview(null);
+      return;
+    }
+
+    let active = true;
+    const timer = setTimeout(async () => {
+      const [res] = await clinicService.calculatePediatricZScore({
+        dateOfBirth: triagePatient.dateOfBirth,
+        gender: triagePatient.gender,
+        lengthOrHeightCm: heightCm,
+        weightKg,
+        isMeasuredRecumbent: triage.posture === 'RECUMBENT',
+      });
+      if (active) {
+        setZScorePreview(res ?? null);
+      }
+    }, 300);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [triage.height, triage.weight, triage.posture, triagePatient, isPediatric, triageItem]);
 
   const setTriageField = <K extends keyof TriageForm>(key: K, value: TriageForm[K]) =>
     setTriage((prev) => ({ ...prev, [key]: value }));
@@ -284,6 +365,10 @@ export default function DashboardScreen() {
     const heightCm = parseOptionalFloat(triage.height);
     const weightKg = parseOptionalFloat(triage.weight);
     const painScore = parseOptionalInt(triage.pain);
+    const visualAcuityLeft = triage.visualAcuityLeft.trim() || undefined;
+    const visualAcuityRight = triage.visualAcuityRight.trim() || undefined;
+    const headCircumferenceCm = parseOptionalFloat(triage.headCircumference);
+    const midUpperArmCircumferenceCm = parseOptionalFloat(triage.midUpperArmCircumference);
 
     const hasAnyVital = [
       systolicBp,
@@ -295,7 +380,9 @@ export default function DashboardScreen() {
       heightCm,
       weightKg,
       painScore,
-    ].some((v) => v !== undefined);
+      headCircumferenceCm,
+      midUpperArmCircumferenceCm,
+    ].some((v) => v !== undefined) || !!visualAcuityLeft || !!visualAcuityRight;
     if (!hasAnyVital) {
       Alert.alert('No vitals entered', 'Enter at least one vital sign before saving.');
       return;
@@ -317,6 +404,16 @@ export default function DashboardScreen() {
       weightKg,
       painScore,
       notes: triage.notes,
+      visualAcuityLeft,
+      visualAcuityRight,
+      headCircumferenceCm,
+      midUpperArmCircumferenceCm,
+      isMeasuredRecumbent: triage.posture === 'RECUMBENT',
+      zScoreWeightForAge: zScorePreview?.weightForAgeZScore,
+      zScoreLengthForAge: zScorePreview?.heightForAgeZScore,
+      zScoreWeightForLength: zScorePreview?.weightForHeightZScore,
+      philHealthZScoreCategory: zScorePreview?.philHealthZScoreCategory,
+      philHealthZScoreCode: zScorePreview?.philHealthZScoreCode,
     };
 
     setSavingTriage(true);
@@ -331,9 +428,11 @@ export default function DashboardScreen() {
     const summaryParts: string[] = [];
     if (systolicBp !== undefined && diastolicBp !== undefined) summaryParts.push(`BP ${systolicBp}/${diastolicBp}`);
     if (heartRateBpm !== undefined) summaryParts.push(`HR ${heartRateBpm}`);
+    if (respiratoryRateBreathsPerMin !== undefined) summaryParts.push(`RR ${respiratoryRateBreathsPerMin}/min`);
     if (temperatureCelsius !== undefined) summaryParts.push(`Temp ${temperatureCelsius}°C`);
     if (oxygenSaturationPercent !== undefined) summaryParts.push(`SpO2 ${oxygenSaturationPercent}%`);
     if (bmi !== undefined) summaryParts.push(`BMI ${bmi}`);
+    if (zScorePreview?.philHealthZScoreCategory) summaryParts.push(`Z: ${zScorePreview.philHealthZScoreCategory}`);
     const summary = summaryParts.join(' • ');
 
     setQueue((prev) =>
@@ -352,6 +451,8 @@ export default function DashboardScreen() {
     );
     notify.success('Vitals saved.');
     setTriageItem(null);
+    setTriagePatient(null);
+    setZScorePreview(null);
   };
 
   const queueCounts = useMemo(() => {
@@ -1062,17 +1163,43 @@ export default function DashboardScreen() {
       {/* Triage / vitals */}
       <Modal
         visible={!!triageItem}
-        onClose={() => setTriageItem(null)}
+        onClose={() => {
+          setTriageItem(null);
+          setTriagePatient(null);
+          setZScorePreview(null);
+        }}
         title="Record vitals"
-        subtitle={triageItem ? `${triageItem.queueNumber} • ${triageItem.patientName}` : undefined}
-        maxWidth={560}
+        subtitle={
+          triageItem
+            ? `${triageItem.queueNumber} • ${triageItem.patientName}${
+                triagePatient ? ` (${triagePatient.age}yo ${triagePatient.gender})` : ''
+              }`
+            : undefined
+        }
+        maxWidth={580}
         footer={
           <View style={styles.modalFooter}>
-            <Button title="Cancel" variant="outline" onPress={() => setTriageItem(null)} disabled={savingTriage} />
+            <Button
+              title="Cancel"
+              variant="outline"
+              onPress={() => {
+                setTriageItem(null);
+                setTriagePatient(null);
+                setZScorePreview(null);
+              }}
+              disabled={savingTriage}
+            />
             <Button title="Save vitals" variant="primary" onPress={handleSaveTriage} loading={savingTriage} />
           </View>
         }
       >
+        <View style={styles.triageSectionHeader}>
+          <Icon name="heartPulse" size={16} color={theme.colors.primary} />
+          <ThemedText variant="smallBold" color={theme.colors.text}>
+            Standard Vital Signs
+          </ThemedText>
+        </View>
+
         <View style={styles.formGrid}>
           {triageNumberField('Systolic BP (mmHg)', 'bpSys')}
           {triageNumberField('Diastolic BP (mmHg)', 'bpDia')}
@@ -1080,9 +1207,118 @@ export default function DashboardScreen() {
           {triageNumberField('Respiratory rate (/min)', 'rr')}
           {triageNumberField('Temperature (°C)', 'temp', { keyboardType: 'decimal-pad' })}
           {triageNumberField('SpO2 (%)', 'spo2')}
-          {triageNumberField('Height (cm)', 'height', { keyboardType: 'decimal-pad' })}
-          {triageNumberField('Weight (kg)', 'weight', { keyboardType: 'decimal-pad' })}
           {triageNumberField('Pain score (0-10)', 'pain')}
+        </View>
+
+        <View style={styles.triageSectionHeader}>
+          <Icon name="activity" size={16} color={theme.colors.primary} />
+          <ThemedText variant="smallBold" color={theme.colors.text}>
+            Anthropometrics & Growth
+          </ThemedText>
+        </View>
+
+        <View style={styles.formGrid}>
+          {triageNumberField('Height / Length (cm)', 'height', { keyboardType: 'decimal-pad' })}
+          {triageNumberField('Weight (kg)', 'weight', { keyboardType: 'decimal-pad' })}
+          {isPediatric ? (
+            <>
+              {triageNumberField('Head circumference (cm)', 'headCircumference', { keyboardType: 'decimal-pad' })}
+              {triageNumberField('MUAC (cm)', 'midUpperArmCircumference', { keyboardType: 'decimal-pad' })}
+            </>
+          ) : null}
+        </View>
+
+        {isPediatric ? (
+          <View style={styles.postureSection}>
+            <ThemedText variant="caption" color={theme.colors.textSecondary}>
+              Measurement Posture (WHO adjustment: +0.7cm standing under 24m, -0.7cm recumbent &ge;24m)
+            </ThemedText>
+            <SegmentedControl<MeasurementPosture>
+              value={triage.posture}
+              onChange={(val) => setTriageField('posture', val)}
+              options={[
+                { value: 'STANDING', label: 'Standing height' },
+                { value: 'RECUMBENT', label: 'Recumbent length (lying)' },
+              ]}
+            />
+          </View>
+        ) : null}
+
+        {/* Live WHO Z-score chip preview badge */}
+        {isPediatric && zScorePreview ? (
+          <View style={styles.zScoreCard}>
+            <View style={styles.zScoreHeader}>
+              <View style={styles.zScoreTitleRow}>
+                <Icon name="baby" size={16} color={theme.colors.primary} />
+                <ThemedText variant="smallBold" color={theme.colors.text}>
+                  Live WHO Pediatric Growth & Z-Score
+                </ThemedText>
+              </View>
+              {zScorePreview.philHealthZScoreCategory ? (
+                <Badge
+                  label={zScorePreview.philHealthZScoreCategory}
+                  variant={getZScoreBadgeVariant(zScorePreview.philHealthZScoreCategory)}
+                />
+              ) : null}
+            </View>
+            <View style={styles.zScorePillsRow}>
+              <View style={styles.zScorePill}>
+                <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                  Weight-for-Age (WAZ)
+                </ThemedText>
+                <ThemedText variant="bodyBold" color={theme.colors.text}>
+                  {zScorePreview.weightForAgeZScore !== undefined ? `${zScorePreview.weightForAgeZScore} SD` : '—'}
+                </ThemedText>
+              </View>
+              <View style={styles.zScorePill}>
+                <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                  Length/Height-for-Age (HAZ)
+                </ThemedText>
+                <ThemedText variant="bodyBold" color={theme.colors.text}>
+                  {zScorePreview.heightForAgeZScore !== undefined ? `${zScorePreview.heightForAgeZScore} SD` : '—'}
+                </ThemedText>
+              </View>
+              <View style={styles.zScorePill}>
+                <ThemedText variant="caption" color={theme.colors.textSecondary}>
+                  Weight-for-Length (WHZ)
+                </ThemedText>
+                <ThemedText variant="bodyBold" color={theme.colors.text}>
+                  {zScorePreview.weightForHeightZScore !== undefined ? `${zScorePreview.weightForHeightZScore} SD` : '—'}
+                </ThemedText>
+              </View>
+            </View>
+            {zScorePreview.interpretation ? (
+              <ThemedText variant="caption" color={theme.colors.textMuted}>
+                {zScorePreview.interpretation} • Age: {zScorePreview.ageInMonths} mo • Adj: {zScorePreview.adjustedLengthHeightCm} cm
+              </ThemedText>
+            ) : null}
+          </View>
+        ) : null}
+
+        <View style={styles.triageSectionHeader}>
+          <Icon name="eye" size={16} color={theme.colors.primary} />
+          <ThemedText variant="smallBold" color={theme.colors.text}>
+            Visual Acuity (Snellen)
+          </ThemedText>
+        </View>
+
+        <View style={styles.formGrid}>
+          <View style={styles.formCell}>
+            <Input
+              label="Left eye (OS)"
+              value={triage.visualAcuityLeft}
+              onChangeText={(text) => setTriageField('visualAcuityLeft', text)}
+              placeholder="e.g. 20/20"
+            />
+          </View>
+          <View style={styles.formCell}>
+            <Input
+              label="Right eye (OD)"
+              value={triage.visualAcuityRight}
+              onChangeText={(text) => setTriageField('visualAcuityRight', text)}
+              placeholder="e.g. 20/20"
+            />
+          </View>
         </View>
 
         <View style={styles.prioritySection}>
@@ -1268,6 +1504,53 @@ const styles = StyleSheet.create({
   formCell: {
     flexGrow: 1,
     flexBasis: 150,
+  },
+  triageSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.md,
+    marginBottom: theme.spacing.xs,
+  },
+  postureSection: {
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.sm,
+  },
+  zScoreCard: {
+    backgroundColor: theme.colors.primaryLight,
+    borderColor: theme.colors.border,
+    borderWidth: theme.sizes.borderWidth,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.md,
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.sm,
+  },
+  zScoreHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
+  zScoreTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  zScorePillsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
+  zScorePill: {
+    flexGrow: 1,
+    flexBasis: 100,
+    backgroundColor: theme.colors.surface,
+    padding: theme.spacing.sm,
+    borderRadius: theme.radii.sm,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    gap: theme.spacing.xs,
   },
   prioritySection: {
     gap: theme.spacing.sm,

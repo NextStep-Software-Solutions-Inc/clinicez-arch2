@@ -29,6 +29,8 @@ import {
   AppointmentStatus,
   ClinicPatient,
 } from '../../services/clinicService';
+import { SlotPicker } from '../../components/roster/SlotPicker';
+import { DoctorRosterCalendarModal } from '../../components/roster/DoctorRosterCalendarModal';
 
 const STATUS_FILTERS: Array<{ key: string; label: string }> = [
   { key: 'ALL', label: 'All' },
@@ -95,6 +97,7 @@ export default function AppointmentsScreen() {
 
   // Booking Modal State
   const [bookModalVisible, setBookModalVisible] = useState(false);
+  const [rosterModalVisible, setRosterModalVisible] = useState(false);
   const [booking, setBooking] = useState(false);
   const [patientSearch, setPatientSearch] = useState('');
   const [patientResults, setPatientResults] = useState<ClinicPatient[]>([]);
@@ -345,7 +348,18 @@ export default function AppointmentsScreen() {
   return (
     <ResponsiveLayout
       headerTitle="Appointments"
-      rightAction={<Button title="Book appointment" icon="plus" size="sm" onPress={openBookModal} />}
+      rightAction={
+        <View style={styles.headerActionRow}>
+          <Button
+            title="Doctor Rosters"
+            icon="calendar"
+            variant="outline"
+            size="sm"
+            onPress={() => setRosterModalVisible(true)}
+          />
+          <Button title="Book appointment" icon="plus" size="sm" onPress={openBookModal} />
+        </View>
+      }
     >
       <ScrollView
         style={styles.container}
@@ -466,12 +480,25 @@ export default function AppointmentsScreen() {
 
         <View style={styles.fieldRow}>
           <View style={styles.flexFill}>
-            <Input label="Date" placeholder="YYYY-MM-DD" value={formDate} onChangeText={setFormDate} />
+            <Input label="Appointment Date" placeholder="YYYY-MM-DD" value={formDate} onChangeText={setFormDate} />
           </View>
           <View style={styles.flexFill}>
-            <Input label="Time" placeholder="HH:MM" value={formTime} onChangeText={setFormTime} />
+            <Input label="Selected Time" placeholder="HH:MM" value={formTime} onChangeText={setFormTime} />
           </View>
         </View>
+
+        {formDoctorId ? (
+          <SlotPicker
+            doctorId={formDoctorId}
+            date={formDate}
+            selectedSlot={formTime}
+            onSelectSlot={(slot) => {
+              const parts = slot.startTime.split(':');
+              const hhmm = parts.length >= 2 ? `${parts[0]}:${parts[1]}` : slot.startTime;
+              setFormTime(hhmm);
+            }}
+          />
+        ) : null}
 
         <Input
           label="Service type"
@@ -495,6 +522,14 @@ export default function AppointmentsScreen() {
           multiline
         />
       </Modal>
+
+      {/* Doctor Roster & Schedule Modal */}
+      <DoctorRosterCalendarModal
+        visible={rosterModalVisible}
+        onClose={() => setRosterModalVisible(false)}
+        doctors={doctors}
+        initialDoctorId={formDoctorId || doctors[0]?.id}
+      />
     </ResponsiveLayout>
   );
 }
@@ -503,6 +538,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.surfaceMuted,
+  },
+  headerActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
   },
   content: {
     padding: theme.spacing.xl,

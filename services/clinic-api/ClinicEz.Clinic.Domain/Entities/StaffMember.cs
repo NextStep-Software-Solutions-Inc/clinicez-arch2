@@ -30,6 +30,7 @@ public sealed class StaffMember : BaseEntity
     public string? PtrNumber { get; set; }
     public string? S2LicenseNumber { get; set; }
     public string? Specialty { get; set; }
+    public string? PhilHealthPan { get; set; }
 
     public bool IsActive { get; set; } = true;
 

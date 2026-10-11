@@ -21,4 +21,14 @@ public sealed record TriageVitalsDto(
     decimal? WeightKg,
     decimal? Bmi,
     int? PainScore,
-    string? Notes);
+    string? Notes,
+    string? VisualAcuityLeft = null,
+    string? VisualAcuityRight = null,
+    decimal? HeadCircumferenceCm = null,
+    decimal? MidUpperArmCircumferenceCm = null,
+    bool IsMeasuredRecumbent = false,
+    decimal? ZScoreWeightForAge = null,
+    decimal? ZScoreLengthForAge = null,
+    decimal? ZScoreWeightForLength = null,
+    string? PhilHealthZScoreCategory = null,
+    string? PhilHealthZScoreCode = null);

@@ -26,6 +26,11 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
     private readonly IRepository<ClinicalProcedure> _procedureRepo;
     private readonly IRepository<ClinicLabOrder> _labOrderRepo;
     private readonly IRepository<Invoice> _invoiceRepo;
+    private readonly IRepository<PatientSurgicalHistory>? _surgicalRepo;
+    private readonly IRepository<PatientSocialHistory>? _socialRepo;
+    private readonly IRepository<PatientReproductiveHistory>? _reproductiveRepo;
+    private readonly IRepository<NcdRiskAssessment>? _ncdRepo;
+    private readonly Services.ILegacyPatientProfileIngestionService? _legacyIngestion;
     private readonly IClinicContext _clinicContext;
 
     public GetPatientChartQueryHandler(
@@ -34,7 +39,12 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
         IRepository<ClinicalProcedure> procedureRepo,
         IRepository<ClinicLabOrder> labOrderRepo,
         IRepository<Invoice> invoiceRepo,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IRepository<PatientSurgicalHistory>? surgicalRepo = null,
+        IRepository<PatientSocialHistory>? socialRepo = null,
+        IRepository<PatientReproductiveHistory>? reproductiveRepo = null,
+        IRepository<NcdRiskAssessment>? ncdRepo = null,
+        Services.ILegacyPatientProfileIngestionService? legacyIngestion = null)
     {
         _consultationRepo = consultationRepo;
         _triageRepo = triageRepo;
@@ -42,6 +52,11 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
         _labOrderRepo = labOrderRepo;
         _invoiceRepo = invoiceRepo;
         _clinicContext = clinicContext;
+        _surgicalRepo = surgicalRepo;
+        _socialRepo = socialRepo;
+        _reproductiveRepo = reproductiveRepo;
+        _ncdRepo = ncdRepo;
+        _legacyIngestion = legacyIngestion;
     }
 
     public async Task<PatientChartDto> Handle(GetPatientChartQuery request, CancellationToken cancellationToken)
@@ -221,6 +236,77 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
             )).ToList()
         )).ToList();
 
+        // Relational Patient Profile Histories
+        List<PatientSurgicalHistoryDto>? surgicalDtos = null;
+        PatientSocialHistoryDto? socialDto = null;
+        PatientReproductiveHistoryDto? reproductiveDto = null;
+        NcdRiskAssessmentDto? latestNcdDto = null;
+
+        if (_legacyIngestion != null)
+        {
+            await _legacyIngestion.EnsureIngestedAsync(request.PatientId, cancellationToken);
+        }
+
+        if (_surgicalRepo != null)
+        {
+            var surgeries = await _surgicalRepo.Query(s => s.PatientId == request.PatientId)
+                .OrderByDescending(s => s.SurgeryDate)
+                .ToListAsync(cancellationToken);
+            surgicalDtos = surgeries.Select(s => new PatientSurgicalHistoryDto(
+                s.Id, s.PatientId, s.ProcedureName, s.SurgeryDate, s.HospitalName, s.Findings, s.Complications, s.Remarks)).ToList();
+        }
+
+        if (_socialRepo != null)
+        {
+            var social = await _socialRepo.Query(s => s.PatientId == request.PatientId).FirstOrDefaultAsync(cancellationToken);
+            if (social != null)
+            {
+                socialDto = new PatientSocialHistoryDto(
+                    social.Id, social.PatientId, social.IsSmoker, social.PacksPerDay, social.CigarettesPerDay,
+                    social.YearsSmoking, social.SmokingPackYears, social.SmokingStoppedDate, social.IsAlcoholDrinker,
+                    social.AlcoholDrinksPerWeek, social.AlcoholBottlesPerDay, social.AlcoholFrequency, social.UsesIllicitDrugs,
+                    social.SubstanceUseHistory, social.DrugTypes, social.IsSexuallyActive, social.CoitarcheAge,
+                    social.PhysicalActivityFrequency, social.DietaryHabits, social.Remarks);
+            }
+        }
+
+        if (_reproductiveRepo != null)
+        {
+            var repro = await _reproductiveRepo.Query(r => r.PatientId == request.PatientId).FirstOrDefaultAsync(cancellationToken);
+            if (repro != null)
+            {
+                reproductiveDto = new PatientReproductiveHistoryDto(
+                    repro.Id, repro.PatientId, repro.IsApplicable, repro.MenarcheAge, repro.LastMenstrualPeriod,
+                    repro.PeriodDurationDays, repro.CycleIntervalDays, repro.PadsPerDay, repro.IsMenopausal, repro.MenopauseAge,
+                    repro.ContraceptiveMethod, repro.Gravidity, repro.Parity, repro.TermBirths, repro.PretermBirths,
+                    repro.Abortions, repro.LivingChildren, repro.DeliveryType, repro.HadPreEclampsiaHypertension,
+                    repro.ReceivedFamilyPlanningCounseling, repro.Remarks);
+            }
+        }
+
+        if (_ncdRepo != null)
+        {
+            var ncd = await _ncdRepo.Query(n => n.PatientId == request.PatientId)
+                .OrderByDescending(n => n.AssessmentDate)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (ncd != null)
+            {
+                latestNcdDto = new NcdRiskAssessmentDto(
+                    ncd.Id, ncd.PatientId, ncd.ConsultationEncounterId, ncd.AssessmentDate, ncd.AssessedByStaffId,
+                    ncd.AssessedByStaffName, ncd.EatsProcessedFoodWeekly, ncd.ThreeServingsVegetablesDaily,
+                    ncd.TwoToThreeServingsFruitDaily, ncd.PhysicalActivityAtLeast150MinsWeekly, ncd.DiagnosedDiabetes,
+                    ncd.HasPolyphagia, ncd.HasPolydipsia, ncd.HasPolyuria, ncd.DiabetesMedicationStatus,
+                    ncd.HasRaisedBloodGlucose, ncd.FastingBloodSugarMgDl, ncd.FastingBloodSugarMmolL,
+                    ncd.FastingBloodSugarDate, ncd.HasChestPain, ncd.PainInCenterOfChestOrLeftArm,
+                    ncd.PainWhenWalkingUphill, ncd.SlowsDownWhenPainOccurs, ncd.PainRelievedWithin10Mins,
+                    ncd.PainRelievedByNitrates, ncd.SevereChestPainOver30Mins, ncd.TransientNeurologicalDeficits,
+                    ncd.HasRaisedBloodLipids, ncd.TotalCholesterolMgDl, ncd.TotalCholesterolDate,
+                    ncd.HasHistoryAnginaHeartAttack, ncd.HasHistoryStrokeOrTia, ncd.UrineKetonesPresent,
+                    ncd.UrineKetonesValue, ncd.UrineKetonesDate, ncd.UrineProteinPresent, ncd.UrineProteinValue,
+                    ncd.UrineProteinDate, ncd.RiskBand, ncd.CalculatedRiskScorePercent, ncd.Remarks);
+            }
+        }
+
         return new PatientChartDto(
             request.PatientId,
             patientName,
@@ -229,7 +315,11 @@ public class GetPatientChartQueryHandler : IRequestHandler<GetPatientChartQuery,
             vitalsDtos,
             procedureDtos,
             labOrderDtos,
-            invoiceDtos
+            invoiceDtos,
+            surgicalDtos,
+            socialDto,
+            reproductiveDto,
+            latestNcdDto
         );
     }
 }

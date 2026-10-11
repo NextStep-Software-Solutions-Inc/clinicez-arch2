@@ -153,6 +153,238 @@ public sealed class PatientsController : ControllerBase
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<PublicStudentSelfEnrollResultDto>.Success(result, result.Message));
     }
+
+    // --- Surgical History Endpoints ---
+
+    [HttpGet("{patientId:guid}/surgical-history")]
+    [HasPermission(ClinicPermissions.PatientsRead)]
+    public async Task<ActionResult<ApiResponse<List<PatientSurgicalHistoryDto>>>> GetSurgicalHistories(
+        Guid patientId,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new GetPatientSurgicalHistoriesQuery(patientId), ct);
+        return Ok(ApiResponse<List<PatientSurgicalHistoryDto>>.Success(result));
+    }
+
+    [HttpPost("{patientId:guid}/surgical-history")]
+    [HasPermission(ClinicPermissions.PatientsWrite)]
+    public async Task<ActionResult<ApiResponse<PatientSurgicalHistoryDto>>> AddSurgicalHistory(
+        Guid patientId,
+        [FromBody] UpsertPatientSurgicalHistoryRequest request,
+        CancellationToken ct)
+    {
+        var command = new AddPatientSurgicalHistoryCommand(
+            patientId,
+            request.ProcedureName,
+            request.SurgeryDate,
+            request.HospitalName,
+            request.Findings,
+            request.Complications,
+            request.Remarks);
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<PatientSurgicalHistoryDto>.Success(result, "Surgical procedure recorded successfully."));
+    }
+
+    [HttpPut("{patientId:guid}/surgical-history/{id:guid}")]
+    [HasPermission(ClinicPermissions.PatientsWrite)]
+    public async Task<ActionResult<ApiResponse<PatientSurgicalHistoryDto>>> UpdateSurgicalHistory(
+        Guid patientId,
+        Guid id,
+        [FromBody] UpsertPatientSurgicalHistoryRequest request,
+        CancellationToken ct)
+    {
+        var command = new UpdatePatientSurgicalHistoryCommand(
+            id,
+            patientId,
+            request.ProcedureName,
+            request.SurgeryDate,
+            request.HospitalName,
+            request.Findings,
+            request.Complications,
+            request.Remarks);
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<PatientSurgicalHistoryDto>.Success(result, "Surgical procedure updated successfully."));
+    }
+
+    [HttpDelete("{patientId:guid}/surgical-history/{id:guid}")]
+    [HasPermission(ClinicPermissions.PatientsWrite)]
+    public async Task<ActionResult<ApiResponse<bool>>> DeleteSurgicalHistory(
+        Guid patientId,
+        Guid id,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new DeletePatientSurgicalHistoryCommand(id, patientId), ct);
+        return Ok(ApiResponse<bool>.Success(result, "Surgical procedure deleted."));
+    }
+
+    // --- Social History Endpoints ---
+
+    [HttpGet("{patientId:guid}/social-history")]
+    [HasPermission(ClinicPermissions.PatientsRead)]
+    public async Task<ActionResult<ApiResponse<PatientSocialHistoryDto?>>> GetSocialHistory(
+        Guid patientId,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new GetPatientSocialHistoryQuery(patientId), ct);
+        return Ok(ApiResponse<PatientSocialHistoryDto?>.Success(result));
+    }
+
+    [HttpPut("{patientId:guid}/social-history")]
+    [HasPermission(ClinicPermissions.PatientsWrite)]
+    public async Task<ActionResult<ApiResponse<PatientSocialHistoryDto>>> UpdateSocialHistory(
+        Guid patientId,
+        [FromBody] UpdatePatientSocialHistoryRequest request,
+        CancellationToken ct)
+    {
+        var command = new UpdatePatientSocialHistoryCommand(
+            patientId,
+            request.IsSmoker,
+            request.PacksPerDay,
+            request.CigarettesPerDay,
+            request.YearsSmoking,
+            request.SmokingPackYears,
+            request.SmokingStoppedDate,
+            request.IsAlcoholDrinker,
+            request.AlcoholDrinksPerWeek,
+            request.AlcoholBottlesPerDay,
+            request.AlcoholFrequency,
+            request.UsesIllicitDrugs,
+            request.SubstanceUseHistory,
+            request.DrugTypes,
+            request.IsSexuallyActive,
+            request.CoitarcheAge,
+            request.PhysicalActivityFrequency,
+            request.DietaryHabits,
+            request.Remarks);
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<PatientSocialHistoryDto>.Success(result, "Social history updated successfully."));
+    }
+
+    // --- Reproductive History Endpoints ---
+
+    [HttpGet("{patientId:guid}/reproductive-history")]
+    [HasPermission(ClinicPermissions.PatientsRead)]
+    public async Task<ActionResult<ApiResponse<PatientReproductiveHistoryDto?>>> GetReproductiveHistory(
+        Guid patientId,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new GetPatientReproductiveHistoryQuery(patientId), ct);
+        return Ok(ApiResponse<PatientReproductiveHistoryDto?>.Success(result));
+    }
+
+    [HttpPut("{patientId:guid}/reproductive-history")]
+    [HasPermission(ClinicPermissions.PatientsWrite)]
+    public async Task<ActionResult<ApiResponse<PatientReproductiveHistoryDto>>> UpdateReproductiveHistory(
+        Guid patientId,
+        [FromBody] UpdatePatientReproductiveHistoryRequest request,
+        CancellationToken ct)
+    {
+        var command = new UpdatePatientReproductiveHistoryCommand(
+            patientId,
+            request.IsApplicable,
+            request.MenarcheAge,
+            request.LastMenstrualPeriod,
+            request.PeriodDurationDays,
+            request.CycleIntervalDays,
+            request.PadsPerDay,
+            request.IsMenopausal,
+            request.MenopauseAge,
+            request.ContraceptiveMethod,
+            request.Gravidity,
+            request.Parity,
+            request.TermBirths,
+            request.PretermBirths,
+            request.Abortions,
+            request.LivingChildren,
+            request.DeliveryType,
+            request.HadPreEclampsiaHypertension,
+            request.ReceivedFamilyPlanningCounseling,
+            request.Remarks);
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<PatientReproductiveHistoryDto>.Success(result, "Reproductive health profile updated."));
+    }
+
+    // --- NCD Risk Assessment Endpoints ---
+
+    [HttpGet("{patientId:guid}/ncd-risk-assessment")]
+    [HasPermission(ClinicPermissions.PatientsRead)]
+    public async Task<ActionResult<ApiResponse<List<NcdRiskAssessmentDto>>>> GetNcdRiskAssessments(
+        Guid patientId,
+        CancellationToken ct)
+    {
+        var result = await _sender.Send(new GetPatientNcdRiskAssessmentsQuery(patientId), ct);
+        return Ok(ApiResponse<List<NcdRiskAssessmentDto>>.Success(result));
+    }
+
+    [HttpPost("{patientId:guid}/ncd-risk-assessment")]
+    [HasPermission(ClinicPermissions.PatientsWrite)]
+    public async Task<ActionResult<ApiResponse<NcdRiskAssessmentDto>>> SaveNcdRiskAssessment(
+        Guid patientId,
+        [FromBody] SaveNcdRiskAssessmentRequest request,
+        CancellationToken ct)
+    {
+        var command = new SaveNcdRiskAssessmentCommand(
+            patientId,
+            request.ConsultationEncounterId,
+            request.AssessedByStaffId,
+            request.AssessedByStaffName,
+            request.EatsProcessedFoodWeekly,
+            request.ThreeServingsVegetablesDaily,
+            request.TwoToThreeServingsFruitDaily,
+            request.PhysicalActivityAtLeast150MinsWeekly,
+            request.DiagnosedDiabetes,
+            request.HasPolyphagia,
+            request.HasPolydipsia,
+            request.HasPolyuria,
+            request.DiabetesMedicationStatus,
+            request.HasRaisedBloodGlucose,
+            request.FastingBloodSugarMgDl,
+            request.FastingBloodSugarMmolL,
+            request.FastingBloodSugarDate,
+            request.HasChestPain,
+            request.PainInCenterOfChestOrLeftArm,
+            request.PainWhenWalkingUphill,
+            request.SlowsDownWhenPainOccurs,
+            request.PainRelievedWithin10Mins,
+            request.PainRelievedByNitrates,
+            request.SevereChestPainOver30Mins,
+            request.TransientNeurologicalDeficits,
+            request.HasRaisedBloodLipids,
+            request.TotalCholesterolMgDl,
+            request.TotalCholesterolDate,
+            request.HasHistoryAnginaHeartAttack,
+            request.HasHistoryStrokeOrTia,
+            request.UrineKetonesPresent,
+            request.UrineKetonesValue,
+            request.UrineKetonesDate,
+            request.UrineProteinPresent,
+            request.UrineProteinValue,
+            request.UrineProteinDate,
+            request.RiskBand,
+            request.CalculatedRiskScorePercent,
+            request.Remarks);
+        var result = await _sender.Send(command, ct);
+        return Ok(ApiResponse<NcdRiskAssessmentDto>.Success(result, "NCD risk assessment recorded successfully."));
+    }
+
+    // --- Pediatric WHO Z-Score Calculation Endpoint ---
+
+    [HttpPost("calculate-zscore")]
+    [HasPermission(ClinicPermissions.PatientsRead)]
+    public async Task<ActionResult<ApiResponse<PediatricZScoreDto?>>> CalculateZScore(
+        [FromBody] CalculatePediatricZScoreRequest request,
+        CancellationToken ct)
+    {
+        var query = new CalculatePediatricZScoreQuery(
+            request.DateOfBirth,
+            request.Gender,
+            request.LengthOrHeightCm,
+            request.WeightKg,
+            request.IsMeasuredRecumbent,
+            request.AssessmentDate);
+        var result = await _sender.Send(query, ct);
+        return Ok(ApiResponse<PediatricZScoreDto?>.Success(result));
+    }
 }
 
 public sealed record UpdatePatientRequest(

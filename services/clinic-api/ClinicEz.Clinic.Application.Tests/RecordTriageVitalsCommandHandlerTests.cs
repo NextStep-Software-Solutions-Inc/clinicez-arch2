@@ -30,6 +30,7 @@ public class RecordTriageVitalsCommandHandlerTests
         var (context, uow, sieve) = TestDbHelper.CreateTestContext(clinicContext);
         var queueRepo = TestDbHelper.CreateRepository<QueueItem>(context, sieve);
         var vitalsRepo = TestDbHelper.CreateRepository<TriageVitals>(context, sieve);
+        var patientRepo = TestDbHelper.CreateRepository<ClinicPatient>(context, sieve);
 
         var queueItem = new QueueItem
         {
@@ -44,7 +45,7 @@ public class RecordTriageVitalsCommandHandlerTests
         await context.QueueItems.AddAsync(queueItem);
         await context.SaveChangesAsync();
 
-        var handler = new RecordTriageVitalsCommandHandler(queueRepo, vitalsRepo, uow, clinicContext);
+        var handler = new RecordTriageVitalsCommandHandler(queueRepo, vitalsRepo, patientRepo, uow, clinicContext);
 
         // Height 170 cm, Weight 68 kg => BMI = 68 / (1.70 * 1.70) = 23.53
         var command = new RecordTriageVitalsCommand(

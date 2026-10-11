@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ClinicEz.Clinic.Application.Features.Appointments;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Infrastructure.Messaging;
@@ -86,7 +87,7 @@ public class AppointmentBookedHandlerTests
 
         var appt = await db.Appointments.IgnoreQueryFilters().SingleAsync();
         appt.SharedScopes.Should().Be(SharingScopes.Demographics | SharingScopes.Allergies);
-        var dto = Features.Appointments.AppointmentDto.From(appt);
+        var dto = AppointmentDto.From(appt);
         dto.SharedScopes.Should().BeEquivalentTo("Demographics", "Allergies");
         dto.SharedItems.Should().ContainSingle()
             .Which.Should().Match<ShareItemDto>(i => i.Kind == "allergy" && i.Name == "Penicillin" && i.Detail == "Rash");
@@ -109,7 +110,7 @@ public class AppointmentBookedHandlerTests
 
         await CreateHandler(db).HandleAsync(booked, Delivered(booked, MessagingTestKit.ClinicParty(TenantId, clinicId)), CancellationToken.None);
 
-        var dto = Features.Appointments.AppointmentDto.From(await db.Appointments.IgnoreQueryFilters().SingleAsync());
+        var dto = AppointmentDto.From(await db.Appointments.IgnoreQueryFilters().SingleAsync());
         dto.SharedScopes.Should().BeEmpty();
         dto.SharedItems.Should().BeEmpty();
     }

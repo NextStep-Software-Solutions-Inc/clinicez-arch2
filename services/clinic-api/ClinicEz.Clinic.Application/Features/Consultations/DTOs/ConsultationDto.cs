@@ -52,4 +52,12 @@ public sealed record ConsultationEncounterDto(
     string? PhilHealthPainSite = null,
     string? PhilHealthCaseNo = null,
     string? PhilHealthSoapTransNo = null,
+    string? DoctorPhilHealthPan = null,
+    string? PhilHealthAtc = null,
+    string? HciCaseNo = null,
+    string? HciTransNo = null,
+    string? SoapTransNo = null,
+    string? GeneralSurveyId = null,
+    string? GeneralSurveyRemarks = null,
+    string? PhysicalExamFindingsJson = null,
     RxPharmacyStatusDto? RxStatus = null);

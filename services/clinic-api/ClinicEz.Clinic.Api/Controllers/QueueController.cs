@@ -79,7 +79,17 @@ public sealed class QueueController : ControllerBase
             request.HeightCm,
             request.WeightKg,
             request.PainScore,
-            request.Notes);
+            request.Notes,
+            request.VisualAcuityLeft,
+            request.VisualAcuityRight,
+            request.HeadCircumferenceCm,
+            request.MidUpperArmCircumferenceCm,
+            request.IsMeasuredRecumbent,
+            request.ZScoreWeightForAge,
+            request.ZScoreLengthForAge,
+            request.ZScoreWeightForLength,
+            request.PhilHealthZScoreCategory,
+            request.PhilHealthZScoreCode);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<TriageVitalsDto>.Success(result, "Triage vitals recorded successfully."));
@@ -133,6 +143,16 @@ public sealed record RecordTriageRequest(
     decimal? HeightCm,
     decimal? WeightKg,
     int? PainScore,
-    string? Notes);
+    string? Notes,
+    string? VisualAcuityLeft = null,
+    string? VisualAcuityRight = null,
+    decimal? HeadCircumferenceCm = null,
+    decimal? MidUpperArmCircumferenceCm = null,
+    bool IsMeasuredRecumbent = false,
+    decimal? ZScoreWeightForAge = null,
+    decimal? ZScoreLengthForAge = null,
+    decimal? ZScoreWeightForLength = null,
+    string? PhilHealthZScoreCategory = null,
+    string? PhilHealthZScoreCode = null);
 
 public sealed record CallQueueRequest(Guid? DoctorId, string? DoctorName);

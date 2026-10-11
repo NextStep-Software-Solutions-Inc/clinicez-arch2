@@ -18,6 +18,18 @@ public sealed class Appointment : BaseEntity
     public DateTime ScheduledAt { get; set; }
     public int DurationMinutes { get; set; } = 30;
 
+    private DateTime _endTimeUtc;
+    public DateTime EndTimeUtc
+    {
+        get => _endTimeUtc == default && ScheduledAt != default
+            ? ScheduledAt.AddMinutes(DurationMinutes > 0 ? DurationMinutes : 30)
+            : _endTimeUtc;
+        set => _endTimeUtc = value;
+    }
+
+    /// <summary>PostgreSQL xmin rowversion for optimistic concurrency checking.</summary>
+    public uint Version { get; set; }
+
     /// <summary>
     /// Stored as string in database: "Pending", "Confirmed", "CheckedIn", "InConsultation", "Completed", "Cancelled"
     /// </summary>

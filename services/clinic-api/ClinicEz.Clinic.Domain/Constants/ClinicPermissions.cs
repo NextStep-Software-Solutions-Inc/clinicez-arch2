@@ -8,6 +8,10 @@ public static class ClinicPermissions
     public const string AppointmentsRead = "appointments:read";
     public const string AppointmentsManage = "appointments:manage";
 
+    // Doctor Schedules & Rostering
+    public const string SchedulesRead = "schedules:read";
+    public const string SchedulesManage = "schedules:manage";
+
     // Queue
     public const string QueueRead = "queue:read";
     public const string QueueCheckIn = "queue:check-in";
@@ -131,6 +135,8 @@ public static class ClinicPermissions
         YakapRead,
         YakapWrite,
         YakapSubmit,
-        PhilHealthCatalogImport
+        PhilHealthCatalogImport,
+        SchedulesRead,
+        SchedulesManage
     }.AsReadOnly();
 }

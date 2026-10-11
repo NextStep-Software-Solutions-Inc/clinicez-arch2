@@ -4,7 +4,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Domain.Entities;
+using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Exceptions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -39,11 +41,33 @@ public sealed class RescheduleAppointmentCommandHandler : IRequestHandler<Resche
             throw new KeyNotFoundException($"Appointment with ID {request.Id} was not found.");
         }
 
-        appointment.ScheduledAt = request.NewScheduledAt.ToUniversalTime();
-        if (request.DurationMinutes.HasValue && request.DurationMinutes.Value > 0)
+        var duration = request.DurationMinutes.GetValueOrDefault(appointment.DurationMinutes);
+        if (duration <= 0) duration = 30;
+
+        var newStartUtc = request.NewScheduledAt.ToUniversalTime();
+        var newEndUtc = newStartUtc.AddMinutes(duration);
+
+        if (appointment.DoctorId.HasValue)
         {
-            appointment.DurationMinutes = request.DurationMinutes.Value;
+            var hasCollision = await _appointmentRepo.Query()
+                .AnyAsync(a =>
+                    a.ClinicId == appointment.ClinicId &&
+                    a.DoctorId == appointment.DoctorId &&
+                    a.Status != AppointmentStatus.Cancelled &&
+                    !a.IsDeleted &&
+                    a.Id != appointment.Id &&
+                    a.ScheduledAt < newEndUtc &&
+                    newStartUtc < a.EndTimeUtc, ct);
+
+            if (hasCollision)
+            {
+                throw new ConflictException("The selected doctor already has an appointment during this time window.");
+            }
         }
+
+        appointment.ScheduledAt = newStartUtc;
+        appointment.DurationMinutes = duration;
+        appointment.EndTimeUtc = newEndUtc;
 
         if (!string.IsNullOrWhiteSpace(request.Reason))
         {
@@ -55,7 +79,14 @@ public sealed class RescheduleAppointmentCommandHandler : IRequestHandler<Resche
         appointment.UpdatedAt = DateTime.UtcNow;
         appointment.UpdatedBy = "ClinicStaff";
 
-        await _unitOfWork.SaveChangesAsync(ct);
+        try
+        {
+            await _unitOfWork.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: "23P01" })
+        {
+            throw new ConflictException("The selected doctor already has an appointment during this time window.", ex);
+        }
 
         return AppointmentDto.From(appointment);
     }

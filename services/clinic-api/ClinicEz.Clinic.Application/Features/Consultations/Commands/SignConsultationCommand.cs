@@ -25,7 +25,9 @@ public sealed record SignConsultationCommand(
     string? PtrNumber = null,
     string? S2LicenseNumber = null,
     string? TargetPharmacyFacilityId = null,
-    string? TargetPharmacyTenantId = null) : IRequest<ConsultationEncounterDto>;
+    string? TargetPharmacyTenantId = null,
+    string? DoctorPhilHealthPan = null,
+    string? PhilHealthAtc = null) : IRequest<ConsultationEncounterDto>;
 
 public sealed class SignConsultationCommandValidator : AbstractValidator<SignConsultationCommand>
 {
@@ -105,6 +107,8 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
         encounter.DoctorPrcLicense = request.PrcLicenseNumber ?? doctor?.PrcLicenseNumber;
         encounter.DoctorPtr = request.PtrNumber ?? doctor?.PtrNumber;
         encounter.DoctorS2License = request.S2LicenseNumber ?? doctor?.S2LicenseNumber;
+        encounter.DoctorPhilHealthPan = request.DoctorPhilHealthPan ?? encounter.DoctorPhilHealthPan ?? doctor?.PhilHealthPan;
+        if (request.PhilHealthAtc != null) encounter.PhilHealthAtc = request.PhilHealthAtc;
 
         // PDEA Dangerous Drugs compliance: S2 license must be present if prescribing dangerous drugs
         var hasDangerousDrugs = encounter.Prescriptions.Any(p => p.IsDangerousDrug);
@@ -383,8 +387,16 @@ public sealed class SignConsultationCommandHandler : IRequestHandler<SignConsult
             encounter.PhilHealthSignSympCode,
             encounter.PhilHealthOtherComplaint,
             encounter.PhilHealthPainSite,
-            encounter.PhilHealthCaseNo,
-            encounter.PhilHealthSoapTransNo,
+            encounter.PhilHealthCaseNo ?? encounter.HciCaseNo,
+            encounter.PhilHealthSoapTransNo ?? encounter.SoapTransNo,
+            encounter.DoctorPhilHealthPan,
+            encounter.PhilHealthAtc,
+            encounter.HciCaseNo ?? encounter.PhilHealthCaseNo,
+            encounter.HciTransNo,
+            encounter.SoapTransNo ?? encounter.PhilHealthSoapTransNo,
+            encounter.GeneralSurveyId,
+            encounter.GeneralSurveyRemarks,
+            encounter.PhysicalExamFindingsJson,
             RxPharmacyStatusDto.From(encounter));
     }
 }

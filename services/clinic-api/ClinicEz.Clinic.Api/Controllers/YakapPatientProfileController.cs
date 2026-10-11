@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Api.Authorization;
 using ClinicEz.Clinic.Application.Common.Interfaces;
+using ClinicEz.Clinic.Application.Features.Patients.Services;
 using ClinicEz.Clinic.Application.Features.Yakap.DTOs;
 using ClinicEz.Clinic.Application.Features.Yakap.Services;
 using ClinicEz.Clinic.Domain.Constants;
@@ -26,19 +27,22 @@ public sealed class YakapPatientProfileController : ControllerBase
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
     private readonly PhilHealthCatalogResolver _catalogResolver;
+    private readonly ILegacyPatientProfileIngestionService _ingestionService;
 
     public YakapPatientProfileController(
         IRepository<ClinicPatient> patientRepo,
         IRepository<TriageVitals> vitalsRepo,
         IUnitOfWork unitOfWork,
         IClinicContext clinicContext,
-        IPhilHealthCatalogLookup catalog)
+        IPhilHealthCatalogLookup catalog,
+        ILegacyPatientProfileIngestionService ingestionService)
     {
         _catalogResolver = new PhilHealthCatalogResolver(catalog);
         _patientRepo = patientRepo;
         _vitalsRepo = vitalsRepo;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _ingestionService = ingestionService;
     }
 
     /// <summary>
@@ -59,6 +63,8 @@ public sealed class YakapPatientProfileController : ControllerBase
         {
             return NotFound(ApiResponse<PhilHealthPatientProfileDto>.Fail("Patient not found in this clinic."));
         }
+
+        await _ingestionService.EnsureIngestedAsync(patientId, ct);
 
         // Check if custom profile already exists in CustomFields
         if (patient.CustomFields != null && patient.CustomFields.TryGetValue("philhealth_profile", out var profObj) && profObj != null)
@@ -222,6 +228,8 @@ public sealed class YakapPatientProfileController : ControllerBase
         }
 
         await _unitOfWork.SaveChangesAsync(ct);
+
+        await _ingestionService.SyncFromProfileAsync(patientId, updatedProfile, ct);
 
         return Ok(ApiResponse<PhilHealthPatientProfileDto>.Success(updatedProfile));
     }

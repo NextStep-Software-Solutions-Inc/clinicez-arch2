@@ -25,7 +25,15 @@ public sealed record UpdateConsultationCommand(
     bool? IsYakapEligible = null,
     string? PhilHealthSignSympCode = null,
     string? PhilHealthOtherComplaint = null,
-    string? PhilHealthPainSite = null) : IRequest<ConsultationEncounterDto>;
+    string? PhilHealthPainSite = null,
+    string? DoctorPhilHealthPan = null,
+    string? PhilHealthAtc = null,
+    string? HciCaseNo = null,
+    string? HciTransNo = null,
+    string? SoapTransNo = null,
+    string? GeneralSurveyId = null,
+    string? GeneralSurveyRemarks = null,
+    string? PhysicalExamFindingsJson = null) : IRequest<ConsultationEncounterDto>;
 
 public sealed class UpdateConsultationCommandValidator : AbstractValidator<UpdateConsultationCommand>
 {
@@ -82,6 +90,14 @@ public sealed class UpdateConsultationCommandHandler : IRequestHandler<UpdateCon
         if (request.PhilHealthSignSympCode != null) encounter.PhilHealthSignSympCode = request.PhilHealthSignSympCode;
         if (request.PhilHealthOtherComplaint != null) encounter.PhilHealthOtherComplaint = request.PhilHealthOtherComplaint;
         if (request.PhilHealthPainSite != null) encounter.PhilHealthPainSite = request.PhilHealthPainSite;
+        if (request.DoctorPhilHealthPan != null) encounter.DoctorPhilHealthPan = request.DoctorPhilHealthPan;
+        if (request.PhilHealthAtc != null) encounter.PhilHealthAtc = request.PhilHealthAtc;
+        if (request.HciCaseNo != null) { encounter.HciCaseNo = request.HciCaseNo; encounter.PhilHealthCaseNo = request.HciCaseNo; }
+        if (request.HciTransNo != null) encounter.HciTransNo = request.HciTransNo;
+        if (request.SoapTransNo != null) { encounter.SoapTransNo = request.SoapTransNo; encounter.PhilHealthSoapTransNo = request.SoapTransNo; }
+        if (request.GeneralSurveyId != null) encounter.GeneralSurveyId = request.GeneralSurveyId;
+        if (request.GeneralSurveyRemarks != null) encounter.GeneralSurveyRemarks = request.GeneralSurveyRemarks;
+        if (request.PhysicalExamFindingsJson != null) encounter.PhysicalExamFindingsJson = request.PhysicalExamFindingsJson;
         encounter.UpdatedAt = DateTime.UtcNow;
         encounter.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "Doctor";
 
@@ -170,8 +186,16 @@ public sealed class UpdateConsultationCommandHandler : IRequestHandler<UpdateCon
             encounter.PhilHealthSignSympCode,
             encounter.PhilHealthOtherComplaint,
             encounter.PhilHealthPainSite,
-            encounter.PhilHealthCaseNo,
-            encounter.PhilHealthSoapTransNo,
+            encounter.PhilHealthCaseNo ?? encounter.HciCaseNo,
+            encounter.PhilHealthSoapTransNo ?? encounter.SoapTransNo,
+            encounter.DoctorPhilHealthPan,
+            encounter.PhilHealthAtc,
+            encounter.HciCaseNo ?? encounter.PhilHealthCaseNo,
+            encounter.HciTransNo,
+            encounter.SoapTransNo ?? encounter.PhilHealthSoapTransNo,
+            encounter.GeneralSurveyId,
+            encounter.GeneralSurveyRemarks,
+            encounter.PhysicalExamFindingsJson,
             RxPharmacyStatusDto.From(encounter));
     }
 }

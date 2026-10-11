@@ -40,6 +40,7 @@ export interface StaffMember {
   prcLicenseNumber?: string;
   ptrNumber?: string;
   s2LicenseNumber?: string;
+  philHealthPan?: string;
   specialty?: string;
   isActive: boolean;
   createdAt: string;
@@ -173,6 +174,16 @@ export interface TriageVitals {
   bmi?: number;
   painScore?: number;
   notes?: string;
+  visualAcuityLeft?: string;
+  visualAcuityRight?: string;
+  headCircumferenceCm?: number;
+  midUpperArmCircumferenceCm?: number;
+  isMeasuredRecumbent?: boolean;
+  zScoreWeightForAge?: number;
+  zScoreLengthForAge?: number;
+  zScoreWeightForLength?: number;
+  philHealthZScoreCategory?: string;
+  philHealthZScoreCode?: string;
 }
 
 export interface EncounterDiagnosis {
@@ -214,6 +225,14 @@ export interface ConsultationRecord {
   doctorPrcLicense?: string;
   doctorPtr?: string;
   doctorS2License?: string;
+  doctorPhilHealthPan?: string;
+  philHealthAtc?: string;
+  hciCaseNo?: string;
+  hciTransNo?: string;
+  soapTransNo?: string;
+  generalSurveyId?: string;
+  generalSurveyRemarks?: string;
+  physicalExamFindingsJson?: string;
   isSigned: boolean;
   signedAt?: string;
   diagnoses: EncounterDiagnosis[];
@@ -245,6 +264,64 @@ export interface AppointmentItem {
   serviceType?: string;
   reason?: string;
   notes?: string;
+  createdAt: string;
+}
+
+export interface DoctorBreakTimeItem {
+  id?: string;
+  description: string;
+  startTime: string;
+  endTime: string;
+}
+
+export interface DoctorScheduleTemplateItem {
+  id: string;
+  doctorId: string;
+  doctorName: string;
+  dayOfWeek: number | string;
+  startTime: string;
+  endTime: string;
+  isOvernightShift: boolean;
+  slotDurationMinutes: number;
+  maxPatientsPerSlot: number;
+  isActive: boolean;
+  effectiveStartDate: string;
+  effectiveEndDate?: string;
+  breaks: DoctorBreakTimeItem[];
+}
+
+export interface AvailableSlotItem {
+  startTime: string;
+  endTime: string;
+  slotStartUtc: string;
+  slotEndUtc: string;
+  isAvailable: boolean;
+  status: 'Available' | 'Booked' | 'Break' | 'Past' | 'OnLeave';
+  existingAppointmentId?: string;
+  patientName?: string;
+  notes?: string;
+}
+
+export interface DoctorAvailabilityData {
+  doctorId: string;
+  doctorName: string;
+  date: string;
+  isOnDuty: boolean;
+  nonAvailabilityReason?: string;
+  slots: AvailableSlotItem[];
+}
+
+export interface DoctorLeaveItem {
+  id: string;
+  doctorId?: string;
+  doctorName: string;
+  startDate: string;
+  endDate: string;
+  partialDayStartTime?: string;
+  partialDayEndTime?: string;
+  reason?: string;
+  status: string;
+  leaveType?: string;
   createdAt: string;
 }
 
@@ -728,6 +805,228 @@ export interface DoctorSharesReport {
   doctorShares: DoctorWorkloadDetail[];
 }
 
+export interface PatientSurgicalHistory {
+  id: string;
+  clinicId: string;
+  patientId: string;
+  procedureName: string;
+  surgeryDate: string;
+  hospitalName?: string;
+  findings?: string;
+  complications?: string;
+  remarks?: string;
+  createdAt: string;
+}
+
+export interface UpsertPatientSurgicalHistoryPayload {
+  procedureName: string;
+  surgeryDate: string;
+  hospitalName?: string;
+  findings?: string;
+  complications?: string;
+  remarks?: string;
+}
+
+export interface PatientSocialHistory {
+  id: string;
+  clinicId: string;
+  patientId: string;
+  isSmoker: boolean;
+  packsPerDay?: number;
+  cigarettesPerDay?: number;
+  yearsSmoking?: number;
+  smokingPackYears?: number;
+  smokingStoppedDate?: string;
+  isAlcoholDrinker: boolean;
+  alcoholDrinksPerWeek?: number;
+  alcoholBottlesPerDay?: number;
+  alcoholFrequency?: string;
+  usesIllicitDrugs: boolean;
+  substanceUseHistory?: string;
+  drugTypes?: string;
+  isSexuallyActive: boolean;
+  coitarcheAge?: number;
+  physicalActivityFrequency?: string;
+  dietaryHabits?: string;
+  remarks?: string;
+  createdAt: string;
+}
+
+export interface UpdatePatientSocialHistoryPayload {
+  isSmoker: boolean;
+  packsPerDay?: number;
+  cigarettesPerDay?: number;
+  yearsSmoking?: number;
+  smokingPackYears?: number;
+  smokingStoppedDate?: string;
+  isAlcoholDrinker: boolean;
+  alcoholDrinksPerWeek?: number;
+  alcoholBottlesPerDay?: number;
+  alcoholFrequency?: string;
+  usesIllicitDrugs: boolean;
+  substanceUseHistory?: string;
+  drugTypes?: string;
+  isSexuallyActive: boolean;
+  coitarcheAge?: number;
+  physicalActivityFrequency?: string;
+  dietaryHabits?: string;
+  remarks?: string;
+}
+
+export interface PatientReproductiveHistory {
+  id: string;
+  clinicId: string;
+  patientId: string;
+  isApplicable: boolean;
+  menarcheAge?: number;
+  lastMenstrualPeriod?: string;
+  periodDurationDays?: number;
+  cycleIntervalDays?: number;
+  padsPerDay?: number;
+  isMenopausal: boolean;
+  menopauseAge?: number;
+  contraceptiveMethod?: string;
+  gravidity?: number;
+  parity?: number;
+  termBirths?: number;
+  pretermBirths?: number;
+  abortions?: number;
+  livingChildren?: number;
+  deliveryType?: string;
+  hadPreEclampsiaHypertension: boolean;
+  receivedFamilyPlanningCounseling: boolean;
+  remarks?: string;
+  createdAt: string;
+}
+
+export interface UpdatePatientReproductiveHistoryPayload {
+  isApplicable: boolean;
+  menarcheAge?: number;
+  lastMenstrualPeriod?: string;
+  periodDurationDays?: number;
+  cycleIntervalDays?: number;
+  padsPerDay?: number;
+  isMenopausal: boolean;
+  menopauseAge?: number;
+  contraceptiveMethod?: string;
+  gravidity?: number;
+  parity?: number;
+  termBirths?: number;
+  pretermBirths?: number;
+  abortions?: number;
+  livingChildren?: number;
+  deliveryType?: string;
+  hadPreEclampsiaHypertension: boolean;
+  receivedFamilyPlanningCounseling: boolean;
+  remarks?: string;
+}
+
+export interface NcdRiskAssessment {
+  id: string;
+  clinicId: string;
+  patientId: string;
+  consultationEncounterId?: string;
+  assessedByStaffId?: string;
+  assessedByStaffName?: string;
+  eatsProcessedFoodWeekly?: boolean;
+  threeServingsVegetablesDaily?: boolean;
+  twoToThreeServingsFruitDaily?: boolean;
+  physicalActivityAtLeast150MinsWeekly?: boolean;
+  diagnosedDiabetes?: boolean;
+  hasPolyphagia?: boolean;
+  hasPolydipsia?: boolean;
+  hasPolyuria?: boolean;
+  diabetesMedicationStatus?: string;
+  hasRaisedBloodGlucose?: boolean;
+  fastingBloodSugarMgDl?: number;
+  fastingBloodSugarMmolL?: number;
+  fastingBloodSugarDate?: string;
+  hasChestPain?: boolean;
+  painInCenterOfChestOrLeftArm?: boolean;
+  painWhenWalkingUphill?: boolean;
+  slowsDownWhenPainOccurs?: boolean;
+  painRelievedWithin10Mins?: boolean;
+  painRelievedByNitrates?: boolean;
+  severeChestPainOver30Mins?: boolean;
+  transientNeurologicalDeficits?: boolean;
+  hasRaisedBloodLipids?: boolean;
+  totalCholesterolMgDl?: number;
+  totalCholesterolDate?: string;
+  hasHistoryAnginaHeartAttack?: boolean;
+  hasHistoryStrokeOrTia?: boolean;
+  urineKetonesPresent?: boolean;
+  urineKetonesValue?: string;
+  urineKetonesDate?: string;
+  urineProteinPresent?: boolean;
+  urineProteinValue?: string;
+  urineProteinDate?: string;
+  riskBand: 'BandA' | 'BandB' | 'BandC' | 'BandD' | 'BandE';
+  calculatedRiskScorePercent?: number;
+  remarks?: string;
+  createdAt: string;
+}
+
+export interface SaveNcdRiskAssessmentPayload {
+  consultationEncounterId?: string;
+  assessedByStaffId?: string;
+  assessedByStaffName?: string;
+  eatsProcessedFoodWeekly?: boolean;
+  threeServingsVegetablesDaily?: boolean;
+  twoToThreeServingsFruitDaily?: boolean;
+  physicalActivityAtLeast150MinsWeekly?: boolean;
+  diagnosedDiabetes?: boolean;
+  hasPolyphagia?: boolean;
+  hasPolydipsia?: boolean;
+  hasPolyuria?: boolean;
+  diabetesMedicationStatus?: string;
+  hasRaisedBloodGlucose?: boolean;
+  fastingBloodSugarMgDl?: number;
+  fastingBloodSugarMmolL?: number;
+  fastingBloodSugarDate?: string;
+  hasChestPain?: boolean;
+  painInCenterOfChestOrLeftArm?: boolean;
+  painWhenWalkingUphill?: boolean;
+  slowsDownWhenPainOccurs?: boolean;
+  painRelievedWithin10Mins?: boolean;
+  painRelievedByNitrates?: boolean;
+  severeChestPainOver30Mins?: boolean;
+  transientNeurologicalDeficits?: boolean;
+  hasRaisedBloodLipids?: boolean;
+  totalCholesterolMgDl?: number;
+  totalCholesterolDate?: string;
+  hasHistoryAnginaHeartAttack?: boolean;
+  hasHistoryStrokeOrTia?: boolean;
+  urineKetonesPresent?: boolean;
+  urineKetonesValue?: string;
+  urineKetonesDate?: string;
+  urineProteinPresent?: boolean;
+  urineProteinValue?: string;
+  urineProteinDate?: string;
+  riskBand?: string;
+  calculatedRiskScorePercent?: number;
+  remarks?: string;
+}
+
+export interface PediatricZScoreResult {
+  ageInMonths: number;
+  adjustedLengthHeightCm: number;
+  weightForAgeZScore?: number;
+  heightForAgeZScore?: number;
+  weightForHeightZScore?: number;
+  philHealthZScoreCategory?: string;
+  philHealthZScoreCode?: string;
+  interpretation?: string;
+}
+
+export interface CalculatePediatricZScorePayload {
+  dateOfBirth: string;
+  gender: string;
+  lengthOrHeightCm: number;
+  weightKg: number;
+  isMeasuredRecumbent?: boolean;
+  assessmentDate?: string;
+}
+
 export interface PatientChart {
   patientId: string;
   patientName: string;
@@ -737,6 +1036,10 @@ export interface PatientChart {
   proceduresHistory: ClinicalProcedureRecord[];
   labOrdersHistory: ClinicLabOrderRecord[];
   invoicesHistory: InvoiceRecord[];
+  surgicalHistories?: PatientSurgicalHistory[];
+  socialHistory?: PatientSocialHistory;
+  reproductiveHistory?: PatientReproductiveHistory;
+  latestNcdAssessment?: NcdRiskAssessment;
 }
 
 export interface ClinicPatient {
@@ -958,6 +1261,16 @@ export interface RecordTriageRequest {
   weightKg?: number;
   painScore?: number;
   notes?: string;
+  visualAcuityLeft?: string;
+  visualAcuityRight?: string;
+  headCircumferenceCm?: number;
+  midUpperArmCircumferenceCm?: number;
+  isMeasuredRecumbent?: boolean;
+  zScoreWeightForAge?: number;
+  zScoreLengthForAge?: number;
+  zScoreWeightForLength?: number;
+  philHealthZScoreCategory?: string;
+  philHealthZScoreCode?: string;
 }
 
 export interface CreateConsultationRequest {
@@ -989,6 +1302,14 @@ export interface CreateConsultationRequest {
   philHealthSignSympCode?: string;
   philHealthOtherComplaint?: string;
   philHealthPainSite?: string;
+  doctorPhilHealthPan?: string;
+  philHealthAtc?: string;
+  hciCaseNo?: string;
+  hciTransNo?: string;
+  soapTransNo?: string;
+  generalSurveyId?: string;
+  generalSurveyRemarks?: string;
+  physicalExamFindingsJson?: string;
 }
 
 export interface CreateInvoiceRequest {
@@ -1088,7 +1409,7 @@ export const clinicService = {
     return clinicApiClient.put<ConsultationRecord>(`/consultations/${id}`, payload);
   },
 
-  async signConsultation(id: string, credentials?: { prcLicenseNumber?: string; ptrNumber?: string; s2LicenseNumber?: string }) {
+  async signConsultation(id: string, credentials?: { prcLicenseNumber?: string; ptrNumber?: string; s2LicenseNumber?: string; philHealthPan?: string; philHealthAtc?: string }) {
     return clinicApiClient.post<ConsultationRecord>(`/consultations/${id}/sign`, credentials ?? {});
   },
 
@@ -1354,6 +1675,55 @@ export const clinicService = {
     return clinicApiClient.get<PatientChart>(`/patients/${patientId}/chart`);
   },
 
+  // Patient Surgical History
+  async getSurgicalHistories(patientId: string) {
+    return clinicApiClient.get<PatientSurgicalHistory[]>(`/patients/${patientId}/surgical-history`);
+  },
+
+  async addSurgicalHistory(patientId: string, payload: UpsertPatientSurgicalHistoryPayload) {
+    return clinicApiClient.post<PatientSurgicalHistory>(`/patients/${patientId}/surgical-history`, payload);
+  },
+
+  async updateSurgicalHistory(patientId: string, id: string, payload: UpsertPatientSurgicalHistoryPayload) {
+    return clinicApiClient.put<PatientSurgicalHistory>(`/patients/${patientId}/surgical-history/${id}`, payload);
+  },
+
+  async deleteSurgicalHistory(patientId: string, id: string) {
+    return clinicApiClient.delete<boolean>(`/patients/${patientId}/surgical-history/${id}`);
+  },
+
+  // Patient Social History
+  async getSocialHistory(patientId: string) {
+    return clinicApiClient.get<PatientSocialHistory | null>(`/patients/${patientId}/social-history`);
+  },
+
+  async updateSocialHistory(patientId: string, payload: UpdatePatientSocialHistoryPayload) {
+    return clinicApiClient.put<PatientSocialHistory>(`/patients/${patientId}/social-history`, payload);
+  },
+
+  // Patient Reproductive History
+  async getReproductiveHistory(patientId: string) {
+    return clinicApiClient.get<PatientReproductiveHistory | null>(`/patients/${patientId}/reproductive-history`);
+  },
+
+  async updateReproductiveHistory(patientId: string, payload: UpdatePatientReproductiveHistoryPayload) {
+    return clinicApiClient.put<PatientReproductiveHistory>(`/patients/${patientId}/reproductive-history`, payload);
+  },
+
+  // NCD Risk Assessment
+  async getNcdRiskAssessments(patientId: string) {
+    return clinicApiClient.get<NcdRiskAssessment[]>(`/patients/${patientId}/ncd-risk-assessment`);
+  },
+
+  async saveNcdRiskAssessment(patientId: string, payload: SaveNcdRiskAssessmentPayload) {
+    return clinicApiClient.post<NcdRiskAssessment>(`/patients/${patientId}/ncd-risk-assessment`, payload);
+  },
+
+  // Pediatric WHO Z-Score Calculation
+  async calculatePediatricZScore(payload: CalculatePediatricZScorePayload) {
+    return clinicApiClient.post<PediatricZScoreResult | null>('/patients/calculate-zscore', payload);
+  },
+
   // Staff & Roles
   async getStaff(role?: StaffRole, isActive?: boolean) {
     const params = new URLSearchParams();
@@ -1490,6 +1860,52 @@ export const clinicService = {
 
   async cancelAppointment(id: string, reason?: string) {
     return clinicApiClient.put<AppointmentItem>(`/appointments/${id}/cancel`, { reason });
+  },
+
+  // Doctor Schedules, Rosters & Availability
+  async getDoctorScheduleTemplates(doctorId: string) {
+    return clinicApiClient.get<DoctorScheduleTemplateItem[]>(`/doctors/${doctorId}/schedules/templates`);
+  },
+
+  async upsertDoctorScheduleTemplate(doctorId: string, payload: {
+    doctorName?: string;
+    dayOfWeek: number | string;
+    startTime: string;
+    endTime: string;
+    isOvernightShift?: boolean;
+    slotDurationMinutes?: number;
+    maxPatientsPerSlot?: number;
+    isActive?: boolean;
+    effectiveStartDate?: string;
+    effectiveEndDate?: string;
+    breaks?: DoctorBreakTimeItem[];
+  }) {
+    return clinicApiClient.post<DoctorScheduleTemplateItem>(`/doctors/${doctorId}/schedules/templates`, payload);
+  },
+
+  async getDoctorAvailableSlots(doctorId: string, date: string, interval?: number) {
+    const qs = interval ? `?date=${encodeURIComponent(date)}&interval=${interval}` : `?date=${encodeURIComponent(date)}`;
+    return clinicApiClient.get<DoctorAvailabilityData>(`/doctors/${doctorId}/schedules/availability${qs}`);
+  },
+
+  async getDoctorLeaves(doctorId: string) {
+    return clinicApiClient.get<DoctorLeaveItem[]>(`/doctors/${doctorId}/schedules/leaves`);
+  },
+
+  async createDoctorLeave(doctorId: string, payload: {
+    doctorName?: string;
+    startDate: string;
+    endDate: string;
+    partialDayStartTime?: string;
+    partialDayEndTime?: string;
+    reason?: string;
+    leaveType?: string;
+  }) {
+    return clinicApiClient.post<DoctorLeaveItem>(`/doctors/${doctorId}/schedules/leaves`, payload);
+  },
+
+  async deleteDoctorLeave(doctorId: string, leaveId: string) {
+    return clinicApiClient.delete<boolean>(`/doctors/${doctorId}/schedules/leaves/${leaveId}`);
   },
 
   // Document Issuance (Medical Certificates & Referrals)

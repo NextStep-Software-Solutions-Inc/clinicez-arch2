@@ -103,3 +103,4 @@ migration_reports/
 *.tmp
 configuration.txt
 keys/*
+.agents/teamwork/

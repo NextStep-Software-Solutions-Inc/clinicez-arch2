@@ -79,6 +79,9 @@ namespace ClinicEz.Billing.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("EntitlementVersion")
+                        .HasColumnType("integer");
+
                     b.Property<string>("FacilityId")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -94,6 +97,16 @@ namespace ClinicEz.Billing.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTime>("LastSeenUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LicenseExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LicenseToken")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PlanTier")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<string>("TenantId")
                         .IsRequired()

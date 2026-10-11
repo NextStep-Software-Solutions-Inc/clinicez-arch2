@@ -83,8 +83,16 @@ public sealed class GetConsultationsQueryHandler : IRequestHandler<GetConsultati
             encounter.PhilHealthSignSympCode,
             encounter.PhilHealthOtherComplaint,
             encounter.PhilHealthPainSite,
-            encounter.PhilHealthCaseNo,
-            encounter.PhilHealthSoapTransNo
+            encounter.PhilHealthCaseNo ?? encounter.HciCaseNo,
+            encounter.PhilHealthSoapTransNo ?? encounter.SoapTransNo,
+            encounter.DoctorPhilHealthPan,
+            encounter.PhilHealthAtc,
+            encounter.HciCaseNo ?? encounter.PhilHealthCaseNo,
+            encounter.HciTransNo,
+            encounter.SoapTransNo ?? encounter.PhilHealthSoapTransNo,
+            encounter.GeneralSurveyId,
+            encounter.GeneralSurveyRemarks,
+            encounter.PhysicalExamFindingsJson
         )).ToList();
     }
 }
@@ -142,8 +150,16 @@ public sealed class GetConsultationByIdQueryHandler : IRequestHandler<GetConsult
             encounter.PhilHealthSignSympCode,
             encounter.PhilHealthOtherComplaint,
             encounter.PhilHealthPainSite,
-            encounter.PhilHealthCaseNo,
-            encounter.PhilHealthSoapTransNo,
+            encounter.PhilHealthCaseNo ?? encounter.HciCaseNo,
+            encounter.PhilHealthSoapTransNo ?? encounter.SoapTransNo,
+            encounter.DoctorPhilHealthPan,
+            encounter.PhilHealthAtc,
+            encounter.HciCaseNo ?? encounter.PhilHealthCaseNo,
+            encounter.HciTransNo,
+            encounter.SoapTransNo ?? encounter.PhilHealthSoapTransNo,
+            encounter.GeneralSurveyId,
+            encounter.GeneralSurveyRemarks,
+            encounter.PhysicalExamFindingsJson,
             RxPharmacyStatusDto.From(encounter));
     }
 }

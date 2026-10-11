@@ -25,7 +25,17 @@ public sealed record RecordTriageVitalsCommand(
     decimal? HeightCm,
     decimal? WeightKg,
     int? PainScore,
-    string? Notes) : IRequest<TriageVitalsDto>;
+    string? Notes,
+    string? VisualAcuityLeft = null,
+    string? VisualAcuityRight = null,
+    decimal? HeadCircumferenceCm = null,
+    decimal? MidUpperArmCircumferenceCm = null,
+    bool IsMeasuredRecumbent = false,
+    decimal? ZScoreWeightForAge = null,
+    decimal? ZScoreLengthForAge = null,
+    decimal? ZScoreWeightForLength = null,
+    string? PhilHealthZScoreCategory = null,
+    string? PhilHealthZScoreCode = null) : IRequest<TriageVitalsDto>;
 
 public sealed class RecordTriageVitalsCommandValidator : AbstractValidator<RecordTriageVitalsCommand>
 {
@@ -45,19 +55,25 @@ public sealed class RecordTriageVitalsCommandHandler : IRequestHandler<RecordTri
 {
     private readonly IRepository<QueueItem> _queueRepository;
     private readonly IRepository<TriageVitals> _vitalsRepository;
+    private readonly IRepository<ClinicPatient> _patientRepository;
+    private readonly Application.Common.Interfaces.IWhoZScoreCalculator? _zScoreCalculator;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
 
     public RecordTriageVitalsCommandHandler(
         IRepository<QueueItem> queueRepository,
         IRepository<TriageVitals> vitalsRepository,
+        IRepository<ClinicPatient> patientRepository,
         IUnitOfWork unitOfWork,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        Application.Common.Interfaces.IWhoZScoreCalculator? zScoreCalculator = null)
     {
         _queueRepository = queueRepository;
         _vitalsRepository = vitalsRepository;
+        _patientRepository = patientRepository;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _zScoreCalculator = zScoreCalculator;
     }
 
     public async Task<TriageVitalsDto> Handle(RecordTriageVitalsCommand request, CancellationToken cancellationToken)
@@ -77,6 +93,37 @@ public sealed class RecordTriageVitalsCommandHandler : IRequestHandler<RecordTri
         {
             var heightInMeters = request.HeightCm.Value / 100m;
             calculatedBmi = Math.Round(request.WeightKg.Value / (heightInMeters * heightInMeters), 2);
+        }
+
+        // Optional WHO Z-score evaluation for pediatric patients
+        var zWeightForAge = request.ZScoreWeightForAge;
+        var zLengthForAge = request.ZScoreLengthForAge;
+        var zWeightForLength = request.ZScoreWeightForLength;
+        var zCategory = request.PhilHealthZScoreCategory;
+        var zCode = request.PhilHealthZScoreCode;
+
+        if (zWeightForAge == null && _zScoreCalculator != null && request.HeightCm is > 0 && request.WeightKg is > 0)
+        {
+            var patient = await _patientRepository.Query(p => p.Id == queueItem.PatientId && p.ClinicId == _clinicContext.ClinicId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (patient != null)
+            {
+                var evaluation = _zScoreCalculator.Calculate(
+                    patient.DateOfBirth,
+                    patient.Gender,
+                    request.HeightCm.Value,
+                    request.WeightKg.Value,
+                    request.IsMeasuredRecumbent);
+
+                if (evaluation != null)
+                {
+                    zWeightForAge = evaluation.WeightForAgeZScore;
+                    zLengthForAge = evaluation.HeightForAgeZScore;
+                    zWeightForLength = evaluation.WeightForHeightZScore;
+                    zCategory = evaluation.PhilHealthZScoreCategory;
+                    zCode = evaluation.PhilHealthZScoreCode;
+                }
+            }
         }
 
         var vitals = queueItem.TriageVitals;
@@ -103,6 +150,16 @@ public sealed class RecordTriageVitalsCommandHandler : IRequestHandler<RecordTri
                 Bmi = calculatedBmi,
                 PainScore = request.PainScore,
                 Notes = request.Notes?.Trim(),
+                VisualAcuityLeft = request.VisualAcuityLeft?.Trim(),
+                VisualAcuityRight = request.VisualAcuityRight?.Trim(),
+                HeadCircumferenceCm = request.HeadCircumferenceCm,
+                MidUpperArmCircumferenceCm = request.MidUpperArmCircumferenceCm,
+                IsMeasuredRecumbent = request.IsMeasuredRecumbent,
+                ZScoreWeightForAge = zWeightForAge,
+                ZScoreLengthForAge = zLengthForAge,
+                ZScoreWeightForLength = zWeightForLength,
+                PhilHealthZScoreCategory = zCategory,
+                PhilHealthZScoreCode = zCode,
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = _clinicContext.StaffId?.ToString() ?? "Nurse"
             };
@@ -125,6 +182,16 @@ public sealed class RecordTriageVitalsCommandHandler : IRequestHandler<RecordTri
             vitals.Bmi = calculatedBmi;
             vitals.PainScore = request.PainScore;
             vitals.Notes = request.Notes?.Trim();
+            vitals.VisualAcuityLeft = request.VisualAcuityLeft?.Trim() ?? vitals.VisualAcuityLeft;
+            vitals.VisualAcuityRight = request.VisualAcuityRight?.Trim() ?? vitals.VisualAcuityRight;
+            vitals.HeadCircumferenceCm = request.HeadCircumferenceCm ?? vitals.HeadCircumferenceCm;
+            vitals.MidUpperArmCircumferenceCm = request.MidUpperArmCircumferenceCm ?? vitals.MidUpperArmCircumferenceCm;
+            vitals.IsMeasuredRecumbent = request.IsMeasuredRecumbent;
+            vitals.ZScoreWeightForAge = zWeightForAge ?? vitals.ZScoreWeightForAge;
+            vitals.ZScoreLengthForAge = zLengthForAge ?? vitals.ZScoreLengthForAge;
+            vitals.ZScoreWeightForLength = zWeightForLength ?? vitals.ZScoreWeightForLength;
+            vitals.PhilHealthZScoreCategory = zCategory ?? vitals.PhilHealthZScoreCategory;
+            vitals.PhilHealthZScoreCode = zCode ?? vitals.PhilHealthZScoreCode;
             vitals.UpdatedAt = DateTime.UtcNow;
             vitals.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "Nurse";
 
@@ -160,6 +227,16 @@ public sealed class RecordTriageVitalsCommandHandler : IRequestHandler<RecordTri
             vitals.WeightKg,
             vitals.Bmi,
             vitals.PainScore,
-            vitals.Notes);
+            vitals.Notes,
+            vitals.VisualAcuityLeft,
+            vitals.VisualAcuityRight,
+            vitals.HeadCircumferenceCm,
+            vitals.MidUpperArmCircumferenceCm,
+            vitals.IsMeasuredRecumbent,
+            vitals.ZScoreWeightForAge,
+            vitals.ZScoreLengthForAge,
+            vitals.ZScoreWeightForLength,
+            vitals.PhilHealthZScoreCategory,
+            vitals.PhilHealthZScoreCode);
     }
 }

@@ -44,3 +44,132 @@ Compile the comprehensive research and design into a detailed technical design d
 ## 2026-10-09T16:33:09Z
 
 Server restarted. Please resume orchestrating the adversarial feedback integration into docs/plans/comprehensive-clinic-features-plan.md (incorporating Challenger 1 and Challenger 2 findings: PostgreSQL btree_gist exclusion constraints, overnight shift handling, PhilHealth DTD v1.14 element sequence, lib_zscore.json 7..9 sanitization & bracket cutoff lookup) and complete the mandatory Sentinel Victory Audit.
+
+## 2026-10-11T11:38:43Z
+
+Execute an autonomous live inter-service smoke test across the microservices stack on remote cloud host 38.54.16.240. Verify end-to-end ECDSA P-256 signed message delivery, routing via Interop Hub, downstream business entity persistence in PostgreSQL, and zero dead-lettering.
+
+Working directory: c:\Users\User\projects\nextstep\github\clinicez-arch2  
+Integrity mode: development  
+
+## Environment & Access Credentials
+- SSH Host: 38.54.16.240 (user: root)
+- SSH Key: C:\Users\User\.gemini\antigravity\brain\7592b2b1-a72e-43ec-8ded-7a41e670765b\scratch\ssh\id_rsa_nopass
+  Command example: ssh -i "C:\Users\User\.gemini\antigravity\brain\7592b2b1-a72e-43ec-8ded-7a41e670765b\scratch\ssh\id_rsa_nopass" -o StrictHostKeyChecking=no root@38.54.16.240 "<command>"
+- PostgreSQL: docker container postgres (user: db_admin_node)
+  Databases: CLINICEZ-INTEROP_DB, CLINICEZ_CLINIC_DB, CLINICEZ_LABORATORY_DB, CLINICEZ-BILLING_DB, CLINICEZ_PATIENT_DB
+- Test Tenant ID: 6db50468-e107-4007-b187-5a8d8a0bc525
+- Test Clinic Facility ID: 3c8cca56-0e4f-4494-aef0-18f89c736346
+- Test Laboratory Facility ID: 556a7871-d4c6-414f-a8b5-2f5dcad3a2fc
+
+## Requirements
+### R1. End-to-End Interop Transaction Flow
+Execute a synthetic clinical requisition transaction between Clinic (clinic-api) and Laboratory (laboratory-api) through the live cloud interop-hub. The envelope must be signed with the sender's ECDSA P-256 private key, verified by the Hub, routed to the target facility's service mailbox, retrieved by the laboratory inbox poller, and acknowledged with an ACK.
+
+### R2. Downstream Workflow Cascading (Laboratory to Billing)
+Upon laboratory requisition ingestion, verify that the subsequent billing invoice request is dispatched through the Hub to billing-api, resulting in a corresponding open invoice in the billing database.
+
+### R3. Safe Autonomous Verification & Zero Regressions
+All smoke test transactions must use isolated synthetic test identifiers (SMOKE-TEST-*) within the existing registered test tenant (6db50468-e107-4007-b187-5a8d8a0bc525). The test must run autonomously via SSH on 38.54.16.240 without manual intervention or disruption to existing services.
+
+## Acceptance Criteria
+- Interop Hub receives the signed envelope, passes signature verification, and logs 0 authentication or policy challenge errors.
+- Message row in interop_hub."Messages" transitions from queued to AckedAtUtc IS NOT NULL within 30 seconds.
+- Zero messages enter dead-letter state (DeadLetteredAtUtc IS NULL across all smoke test messages).
+- Record created in laboratory_dashboard."LabRequisitions" matching the test correlation GUID and ordering facility ID.
+- Record created in billing."Invoices" with status Open linked to the test correlation GUID.
+- Container logs for interop-hub, clinic-api, laboratory-api, and billing-api show successful HTTP 200 responses with zero unhandled exceptions.
+
+
+## 2026-10-11T11:44:17Z
+
+Implement the Comprehensive Clinic Features and PhilHealth-Case1 Yakap Alignment plan in Clinic EZ according to the specifications in docs/plans/comprehensive-clinic-features-plan.md and C:\Users\User\.gemini\antigravity\brain\92dda760-3f73-49db-a5af-e335896e08ab\comprehensive_clinic_features_implementation_plan.md.
+
+Working directory: c:\Users\User\projects\nextstep\github\clinicez-arch2
+Integrity mode: development
+
+## Requirements
+
+### R1. Doctor Schedule, Rostering & Availability Engine with Concurrency Guarding
+Implement doctor shift templates, working hours, shift breaks, slot intervals (15m, 30m, 60m), and blackout leaves in services/clinic-api. Enforce double-booking collision prevention at the database level using PostgreSQL btree_gist extension and GiST exclusion constraints (EXCLUDE USING gist) over tstzrange with &&. Implement MediatR commands/queries for schedule templates, slot calculation, and DoctorSchedulesController. Build the React Native Expo SlotPicker and DoctorRosterCalendarModal components in apps/clinic-app.
+
+### R2. Native Patient Ingestion & Relational Chart Profiling (Zero Disconnected Modals)
+Replace the unstructured JSON blob CustomFields["philhealth_profile"] and deprecate PhilHealthProfileModal.tsx in favor of Clean Architecture relational entities: PatientSurgicalHistory, PatientSocialHistory, PatientReproductiveHistory, and NcdRiskAssessment in ClinicEz.Clinic.Domain and EF Core migrations. Embed native full-width chart workspace tabs in apps/clinic-app/navigation/screens/Patients.screen.tsx (ClinicalHistoryTab, LifestyleSocialTab, ReproductiveHealthTab, and CardiometabolicRiskTab). Extend triage vitals in TriageVitals.cs and TriageModal.tsx to capture Respiratory Rate (pRr), Left/Right Snellen visual acuity, pediatric anthropometrics (Head Circ, MUAC), and WHO Z-score calculations.
+
+### R3. Dual-Mode Consultation Workstation & Inline Physical Exam
+Implement dual-mode consultation ergonomics in apps/clinic-app/navigation/screens/Consultations.screen.tsx:
+1. Standard clinical encounters (Cash, Private, HMO) must be 100% free of PhilHealth bureaucracy (no ATC prompts, no Case/Trans numbers, no forced statutory questionnaires).
+2. PhilHealth Konsulta encounters (IsYakapEligible = true) provide seamless statutory guidance: inline 1-click Physical Exam Checklist (InlinePhysicalExamCard.tsx) with "All Essentially Normal" button and expandable remarks for abnormal findings, encounter ATC header banner, and automated Doctor PAN snapshotting. Behind the scenes, automatically generate and link all statutory keys (pHciCaseNo, pHciTransNo, pSoapTransNo, pHciAccreNo, pPMCCNo).
+
+### R4. PhilHealth-Case1 Immunization Management & Interop Hub Synchronization
+Implement PatientImmunization entity with lot/batch tracking, expiry date guarding, dose sequence numbers, injection sites, adverse reactions, and cold-chain logging. Map vaccine administration 1:1 to PhilHealth statutory libraries (lib_immchild, lib_immyoungw, lib_immpregw, lib_immelderly, OtherImm) with statutory fallback 999 ("None / Not Given"). Publish clinical.immunization.administered event envelopes via Interop Hub transactional outbox and synchronize with patient-api.
+
+### R5. Structured Problem List, Allergies & CDS Decision Support
+Implement structured PatientProblem with active/resolved lifecycle and ICD-10 coding. Implement structured PatientAllergy (drug, food, environmental) with severity and reaction types. Enhance the Clinical Decision Support (CDS) evaluator with drug-allergy cross-reactivity (e.g. Penicillins to Cephalosporins) and drug-disease interaction (DDI) rules. Implement the PhilPEN 24-question cardiometabolic risk scorer with WHO/ISH cardiovascular risk bands (Bands A through E).
+
+### R6. Claims Transmittal Engine & DTD v1.14 Verification
+Update YakapClinicalMapper.cs to aggregate data directly from strongly-typed relational repositories rather than untyped JSON blobs. Validate that generated XML transmittals pass 100% against KonsultaData_v1.14.dtd using automated test suites in ClinicEz.PhilHealthProxy.Tests and ClinicEz.Clinic.Application.Tests.
+
+## Acceptance Criteria
+
+### Doctor Scheduling & Concurrency
+- [ ] PostgreSQL migration introduces DoctorScheduleTemplates, DoctorShiftBreaks, and DoctorLeaves with btree_gist GiST exclusion constraint on appointments.
+- [ ] Concurrent booking attempts for overlapping slots result in PostgreSQL exclusion violation 23P01, mapped cleanly to HTTP 409 Conflict.
+- [ ] React Native Expo SlotPicker dynamically reflects available time slots based on templates, breaks, and existing bookings.
+
+### Native Patient Profiling
+- [ ] Relational tables PatientSurgicalHistories, PatientSocialHistories, PatientReproductiveHistories, and NcdRiskAssessments are created with multi-tenant query filters (ClinicId == CurrentClinicId).
+- [ ] PhilHealthProfileModal.tsx is deprecated and replaced by native chart tabs (ClinicalHistoryTab, LifestyleSocialTab, ReproductiveHealthTab, CardiometabolicRiskTab) in Patients.screen.tsx.
+- [ ] Triage captures Respiratory Rate, Left/Right Snellen visual acuity, and pediatric Z-scores without crashing on missing data.
+
+### Dual-Mode Consultation & Ergonomics
+- [ ] Standard clinical consultations display zero PhilHealth fields (no ATC, no case numbers, no PMCC codes).
+- [ ] PhilHealth Konsulta consultations display ATC header, auto-snapshot doctor PAN upon signing, and provide a 1-click "All Essentially Normal" 9-system physical exam checklist.
+- [ ] Backend auto-generates pHciCaseNo, pHciTransNo, and pSoapTransNo without requiring clinician manual entry.
+
+### Immunization & Interop
+- [ ] PatientImmunization records support batch, lot, expiry date, dose sequence, and adverse reaction tracking.
+- [ ] Administering a vaccine enqueues a typed clinical.immunization.administered event in InteropOutboxMessages, and patient-api idempotently updates the patient's record.
+- [ ] Patients with zero recorded vaccines emit statutory fallback code 999 in <IMMUNIZATION+>, passing DTD validation.
+
+### Decision Support & Claims Verification
+- [ ] CDS evaluator blocks or warns on drug-allergy cross-reactivity and contraindications (e.g. non-selective beta-blockers in active asthma).
+- [ ] YakapClinicalMapper.cs successfully maps relational entities into KonsultaData_v1.14.dtd compliant XML, verified by automated test harness in ClinicEz.PhilHealthProxy.Tests.
+- [ ] All unit and integration test suites compile and pass with zero regressions.
+## 2026-10-11T13:39:20Z
+
+Execute comprehensive enhancements across the ClinicEZ monorepo covering database schema alignment (billing-api EF Core migration), frontend CI/CD pipelines (portal-web dev preview workflow and cashier-app), mobile clinical UX improvements (camera QR scanner in facility apps and LAN server switcher), and NuGet advisory remediation.
+
+Working directory: c:\Users\User\projects\nextstep\github\clinicez-arch2  
+Integrity mode: development  
+
+## Requirements
+
+### R1. Billing API Schema Alignment & Migration
+Generate and commit the official EF Core migration AddBillingFacilityLicenseColumns in services/billing-api/ClinicEz.Billing.Infrastructure adding EntitlementVersion, LicenseToken, PlanTier, and LicenseExpiresAt to billing.billing_facilities. Synchronize ApplicationDbContextModelSnapshot.cs and verify all billing unit tests pass.
+
+### R2. Frontend CI/CD & Preview Deployments
+Create .github/workflows/deploy-portal-web-dev.yml targeting Vercel preview deployments on push to development with strict typecheck and lint checks. Configure automated web build verification for apps/cashier-app.
+
+### R3. Mobile Clinical UX Enhancements
+- Implement a shared CameraQrScannerModal using expo-camera in apps/clinic-app for scanning patient ClinicEZ IDs and one-time share grant codes in Patients.screen.tsx and ShareImport.screen.tsx.
+- Add an Edge Server URL Switcher in the facility settings allowing staff to select between Cloud and Local Edge Cell LAN endpoints.
+
+### R4. Security & Build Integrity
+Resolve the NU1903 security advisory for System.Security.Cryptography.Xml. Verify that dotnet build CLINICEZ.sln, dotnet test CLINICEZ.sln, tests/ClinicEz.Interop.E2E, and bun run typecheck:all compile and pass with 0 errors.
+
+## Acceptance Criteria
+
+### Schema & Backend Tests
+- New migration file created under services/billing-api/ClinicEz.Billing.Infrastructure/Persistence/Migrations/ and listed in dotnet ef migrations list.
+- ApplicationDbContextModelSnapshot.cs contains the four license properties on BillingFacility.
+- dotnet test services/billing-api/ClinicEz.Billing.Tests passes with 100% green.
+
+### Workflows & Frontend
+- .github/workflows/deploy-portal-web-dev.yml is syntactically valid YAML and includes Vercel preview deployment steps.
+- bun run typecheck:all and bun --filter @clinicez/portal-web typecheck pass with 0 errors.
+- bun run build:portal succeeds.
+
+### Mobile Components
+- Camera QR scanner modal renders with permission handling and camera fallback in apps/clinic-app.
+- TypeScript typecheck passes for @clinicez/clinic-app (bun run typecheck:clinic).

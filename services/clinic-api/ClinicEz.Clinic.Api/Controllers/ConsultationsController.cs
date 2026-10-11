@@ -68,7 +68,19 @@ public sealed class ConsultationsController : ControllerBase
             request.Assessment,
             request.Plan,
             request.Diagnoses,
-            request.Prescriptions);
+            request.Prescriptions,
+            request.IsYakapEligible,
+            request.PhilHealthSignSympCode,
+            request.PhilHealthOtherComplaint,
+            request.PhilHealthPainSite,
+            request.DoctorPhilHealthPan,
+            request.PhilHealthAtc,
+            request.HciCaseNo,
+            request.HciTransNo,
+            request.SoapTransNo,
+            request.GeneralSurveyId,
+            request.GeneralSurveyRemarks,
+            request.PhysicalExamFindingsJson);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<ConsultationEncounterDto>.Success(result, "Consultation updated successfully."));
@@ -87,7 +99,9 @@ public sealed class ConsultationsController : ControllerBase
             request?.PtrNumber,
             request?.S2LicenseNumber,
             request?.TargetPharmacyFacilityId,
-            request?.TargetPharmacyTenantId);
+            request?.TargetPharmacyTenantId,
+            request?.DoctorPhilHealthPan,
+            request?.PhilHealthAtc);
 
         var result = await _sender.Send(command, ct);
         return Ok(ApiResponse<ConsultationEncounterDto>.Success(result, "Consultation signed and locked successfully."));
@@ -100,11 +114,25 @@ public sealed record UpdateConsultationRequest(
     string? Assessment,
     string? Plan,
     List<DiagnosisInput>? Diagnoses,
-    List<PrescriptionInput>? Prescriptions);
+    List<PrescriptionInput>? Prescriptions,
+    bool? IsYakapEligible = null,
+    string? PhilHealthSignSympCode = null,
+    string? PhilHealthOtherComplaint = null,
+    string? PhilHealthPainSite = null,
+    string? DoctorPhilHealthPan = null,
+    string? PhilHealthAtc = null,
+    string? HciCaseNo = null,
+    string? HciTransNo = null,
+    string? SoapTransNo = null,
+    string? GeneralSurveyId = null,
+    string? GeneralSurveyRemarks = null,
+    string? PhysicalExamFindingsJson = null);
 
 public sealed record SignConsultationRequest(
     string? PrcLicenseNumber,
     string? PtrNumber,
     string? S2LicenseNumber,
+    string? DoctorPhilHealthPan = null,
+    string? PhilHealthAtc = null,
     string? TargetPharmacyFacilityId = null,
     string? TargetPharmacyTenantId = null);

@@ -5,7 +5,9 @@ using ClinicEz.Clinic.Application.Common.Interfaces;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
+using ClinicEz.Shared.Exceptions;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace ClinicEz.Clinic.Application.Features.Appointments;
 
@@ -38,6 +40,27 @@ public sealed class CreateAppointmentCommandHandler : IRequestHandler<CreateAppo
 
     public async Task<AppointmentDto> Handle(CreateAppointmentCommand request, CancellationToken ct)
     {
+        var duration = request.DurationMinutes > 0 ? request.DurationMinutes : 30;
+        var scheduledStartUtc = request.ScheduledAt.ToUniversalTime();
+        var scheduledEndUtc = scheduledStartUtc.AddMinutes(duration);
+
+        if (request.DoctorId.HasValue)
+        {
+            var hasCollision = await _appointmentRepo.Query()
+                .AnyAsync(a =>
+                    a.ClinicId == _clinicContext.ClinicId &&
+                    a.DoctorId == request.DoctorId &&
+                    a.Status != AppointmentStatus.Cancelled &&
+                    !a.IsDeleted &&
+                    a.ScheduledAt < scheduledEndUtc &&
+                    scheduledStartUtc < a.EndTimeUtc, ct);
+
+            if (hasCollision)
+            {
+                throw new ConflictException("The selected doctor already has an appointment during this time window.");
+            }
+        }
+
         var appointment = new Appointment
         {
             Id = Guid.NewGuid(),
@@ -47,8 +70,9 @@ public sealed class CreateAppointmentCommandHandler : IRequestHandler<CreateAppo
             PatientName = request.PatientName.Trim(),
             DoctorId = request.DoctorId,
             DoctorName = request.DoctorName?.Trim(),
-            ScheduledAt = request.ScheduledAt.ToUniversalTime(),
-            DurationMinutes = request.DurationMinutes > 0 ? request.DurationMinutes : 30,
+            ScheduledAt = scheduledStartUtc,
+            DurationMinutes = duration,
+            EndTimeUtc = scheduledEndUtc,
             Status = AppointmentStatus.Confirmed,
             ServiceType = request.ServiceType?.Trim(),
             Reason = request.Reason?.Trim(),
@@ -57,8 +81,15 @@ public sealed class CreateAppointmentCommandHandler : IRequestHandler<CreateAppo
             CreatedBy = "ClinicStaff"
         };
 
-        await _appointmentRepo.AddAsync(appointment, ct);
-        await _unitOfWork.SaveChangesAsync(ct);
+        try
+        {
+            await _appointmentRepo.AddAsync(appointment, ct);
+            await _unitOfWork.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: "23P01" })
+        {
+            throw new ConflictException("The selected doctor already has an appointment during this time window.", ex);
+        }
 
         return AppointmentDto.From(appointment);
     }

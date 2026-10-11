@@ -16,5 +16,9 @@ public record PatientChartDto(
     List<TriageVitalsDto> VitalsHistory,
     List<ClinicalProcedureDto> ProceduresHistory,
     List<ClinicLabOrderDto> LabOrdersHistory,
-    List<InvoiceDto> InvoicesHistory
+    List<InvoiceDto> InvoicesHistory,
+    List<PatientSurgicalHistoryDto>? SurgicalHistories = null,
+    PatientSocialHistoryDto? SocialHistory = null,
+    PatientReproductiveHistoryDto? ReproductiveHistory = null,
+    NcdRiskAssessmentDto? LatestNcdAssessment = null
 );

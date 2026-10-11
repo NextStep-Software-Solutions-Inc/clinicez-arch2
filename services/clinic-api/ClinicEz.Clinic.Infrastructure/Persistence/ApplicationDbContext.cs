@@ -61,6 +61,14 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
     public DbSet<ShareImport> ShareImports { get; set; } = null!;
     public DbSet<InteropOutboxMessage> InteropOutbox { get; set; } = null!;
     public DbSet<InteropInboxMessage> InteropInbox { get; set; } = null!;
+    public DbSet<DoctorScheduleTemplate> DoctorScheduleTemplates { get; set; } = null!;
+    public DbSet<DoctorBreakTime> DoctorBreakTimes { get; set; } = null!;
+    public DbSet<DoctorLeave> DoctorLeaves { get; set; } = null!;
+    public DbSet<DoctorScheduleOverride> DoctorScheduleOverrides { get; set; } = null!;
+    public DbSet<PatientSurgicalHistory> PatientSurgicalHistories { get; set; } = null!;
+    public DbSet<PatientSocialHistory> PatientSocialHistories { get; set; } = null!;
+    public DbSet<PatientReproductiveHistory> PatientReproductiveHistories { get; set; } = null!;
+    public DbSet<NcdRiskAssessment> NcdRiskAssessments { get; set; } = null!;
     public DbSet<WorkspaceProfileRecord> WorkspaceProfiles => Set<WorkspaceProfileRecord>();
 
     public Guid CurrentClinicId => _clinicContext?.ClinicId ?? Guid.Empty;
@@ -75,6 +83,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
     {
         var schemaName = _configuration["DbSchema"] ?? "clinic_dashboard";
         modelBuilder.HasDefaultSchema(schemaName);
+        modelBuilder.HasPostgresExtension("btree_gist");
 
         // Auto Primary Keys & Defaults
         foreach (var entity in modelBuilder.Model.GetEntityTypes())
@@ -97,6 +106,10 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
         modelBuilder.Entity<ClinicRole>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<StaffMember>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<Appointment>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<DoctorScheduleTemplate>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<DoctorBreakTime>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<DoctorLeave>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<DoctorScheduleOverride>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<QueueItem>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<TriageVitals>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<ConsultationEncounter>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
@@ -115,6 +128,10 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
         modelBuilder.Entity<ClinicLabResult>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<UploadGrant>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<ShareImport>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientSurgicalHistory>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientSocialHistory>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientReproductiveHistory>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<NcdRiskAssessment>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
 
         modelBuilder.Entity<EncounterDiagnosis>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<PrescriptionItem>().HasQueryFilter(e => !e.IsDeleted);
@@ -164,6 +181,7 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.PtrNumber).HasMaxLength(50);
             entity.Property(e => e.S2LicenseNumber).HasMaxLength(50);
             entity.Property(e => e.Specialty).HasMaxLength(100);
+            entity.Property(e => e.PhilHealthPan).HasMaxLength(50);
 
             entity.HasOne(e => e.ClinicRole)
                 .WithMany(r => r.StaffMembers)
@@ -194,8 +212,50 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.PatientName).IsRequired().HasMaxLength(150);
             entity.Property(e => e.ServiceType).HasMaxLength(100);
             entity.Property(e => e.Reason).HasMaxLength(255);
+            entity.Property(e => e.EndTimeUtc).IsRequired();
+            entity.Property(e => e.Version).IsRowVersion();
             entity.HasIndex(e => new { e.TenantId, e.ClinicId });
             entity.HasIndex(e => e.ScheduledAt);
+            entity.HasIndex(e => new { e.ClinicId, e.DoctorId, e.ScheduledAt, e.EndTimeUtc });
+        });
+
+        modelBuilder.Entity<DoctorScheduleTemplate>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.DoctorName).IsRequired().HasMaxLength(150);
+            entity.HasIndex(e => new { e.ClinicId, e.DoctorId, e.DayOfWeek, e.IsActive });
+            entity.HasMany(e => e.BreakTimes)
+                .WithOne(b => b.Template)
+                .HasForeignKey(b => b.TemplateId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<DoctorBreakTime>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Description).IsRequired().HasMaxLength(150);
+            entity.HasIndex(e => e.TemplateId);
+        });
+
+        modelBuilder.Entity<DoctorLeave>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.DoctorName).IsRequired().HasMaxLength(150);
+            entity.Property(e => e.Reason).HasMaxLength(500);
+            entity.Property(e => e.Status).HasMaxLength(50);
+            entity.Property(e => e.LeaveType).HasMaxLength(50);
+            entity.HasIndex(e => new { e.ClinicId, e.DoctorId, e.StartDate, e.EndDate });
+        });
+
+        modelBuilder.Entity<DoctorScheduleOverride>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.DoctorName).IsRequired().HasMaxLength(150);
+            entity.Property(e => e.Reason).HasMaxLength(500);
+            entity.HasIndex(e => new { e.ClinicId, e.DoctorId, e.Date });
         });
 
         modelBuilder.Entity<QueueItem>(entity =>
@@ -235,6 +295,15 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.WeightKg).HasPrecision(6, 2);
             entity.Property(e => e.Bmi).HasPrecision(5, 2);
             entity.Property(e => e.RecordedByNurseName).HasMaxLength(150);
+            entity.Property(e => e.VisualAcuityLeft).HasMaxLength(50);
+            entity.Property(e => e.VisualAcuityRight).HasMaxLength(50);
+            entity.Property(e => e.HeadCircumferenceCm).HasPrecision(6, 2);
+            entity.Property(e => e.MidUpperArmCircumferenceCm).HasPrecision(6, 2);
+            entity.Property(e => e.ZScoreWeightForAge).HasPrecision(5, 2);
+            entity.Property(e => e.ZScoreLengthForAge).HasPrecision(5, 2);
+            entity.Property(e => e.ZScoreWeightForLength).HasPrecision(5, 2);
+            entity.Property(e => e.PhilHealthZScoreCategory).HasMaxLength(50);
+            entity.Property(e => e.PhilHealthZScoreCode).HasMaxLength(50);
         });
 
         modelBuilder.Entity<ConsultationEncounter>(entity =>
@@ -246,6 +315,12 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.Property(e => e.DoctorPrcLicense).HasMaxLength(50);
             entity.Property(e => e.DoctorPtr).HasMaxLength(50);
             entity.Property(e => e.DoctorS2License).HasMaxLength(50);
+            entity.Property(e => e.DoctorPhilHealthPan).HasMaxLength(50);
+            entity.Property(e => e.PhilHealthAtc).HasMaxLength(50);
+            entity.Property(e => e.HciCaseNo).HasMaxLength(50);
+            entity.Property(e => e.HciTransNo).HasMaxLength(50);
+            entity.Property(e => e.SoapTransNo).HasMaxLength(50);
+            entity.Property(e => e.GeneralSurveyId).HasMaxLength(50);
             entity.Property(e => e.RxClaimToken).HasMaxLength(200);
 
             entity.HasMany(e => e.Diagnoses)
@@ -459,6 +534,79 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.LastName, e.FirstName });
             entity.HasIndex(e => new { e.ClinicId, e.ClinicEzId });
             entity.HasIndex(e => new { e.ClinicId, e.SyncPatientId });
+        });
+
+        modelBuilder.Entity<PatientSurgicalHistory>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.ProcedureName).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.HospitalName).HasMaxLength(255);
+            entity.Property(e => e.Findings).HasMaxLength(1000);
+            entity.Property(e => e.Complications).HasMaxLength(1000);
+            entity.Property(e => e.Remarks).HasMaxLength(1000);
+            entity.HasOne(e => e.Patient)
+                .WithMany(p => p.SurgicalHistories)
+                .HasForeignKey(e => e.PatientId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
+            entity.HasIndex(e => new { e.PatientId, e.SurgeryDate });
+        });
+
+        modelBuilder.Entity<PatientSocialHistory>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.PacksPerDay).HasPrecision(5, 2);
+            entity.Property(e => e.SmokingPackYears).HasPrecision(5, 2);
+            entity.Property(e => e.AlcoholFrequency).HasMaxLength(50);
+            entity.Property(e => e.SubstanceUseHistory).HasMaxLength(500);
+            entity.Property(e => e.DrugTypes).HasMaxLength(255);
+            entity.Property(e => e.PhysicalActivityFrequency).HasMaxLength(100);
+            entity.Property(e => e.DietaryHabits).HasMaxLength(255);
+            entity.Property(e => e.Remarks).HasMaxLength(1000);
+            entity.HasOne(e => e.Patient)
+                .WithOne(p => p.SocialHistory)
+                .HasForeignKey<PatientSocialHistory>(e => e.PatientId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId }).IsUnique();
+        });
+
+        modelBuilder.Entity<PatientReproductiveHistory>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.ContraceptiveMethod).HasMaxLength(100);
+            entity.Property(e => e.DeliveryType).HasMaxLength(50);
+            entity.Property(e => e.Remarks).HasMaxLength(1000);
+            entity.HasOne(e => e.Patient)
+                .WithOne(p => p.ReproductiveHistory)
+                .HasForeignKey<PatientReproductiveHistory>(e => e.PatientId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId }).IsUnique();
+        });
+
+        modelBuilder.Entity<NcdRiskAssessment>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.DiagnosedDiabetes).IsRequired().HasMaxLength(10).HasDefaultValue("N");
+            entity.Property(e => e.DiabetesMedicationStatus).HasMaxLength(10);
+            entity.Property(e => e.FastingBloodSugarMgDl).HasPrecision(6, 2);
+            entity.Property(e => e.FastingBloodSugarMmolL).HasPrecision(6, 2);
+            entity.Property(e => e.TotalCholesterolMgDl).HasPrecision(6, 2);
+            entity.Property(e => e.UrineKetonesValue).HasMaxLength(50);
+            entity.Property(e => e.UrineProteinValue).HasMaxLength(50);
+            entity.Property(e => e.RiskBand).IsRequired().HasMaxLength(50).HasDefaultValue("BandA");
+            entity.Property(e => e.CalculatedRiskScorePercent).HasPrecision(5, 2);
+            entity.Property(e => e.AssessedByStaffName).HasMaxLength(150);
+            entity.Property(e => e.Remarks).HasMaxLength(1000);
+            entity.HasOne(e => e.Patient)
+                .WithMany(p => p.NcdRiskAssessments)
+                .HasForeignKey(e => e.PatientId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
+            entity.HasIndex(e => new { e.ClinicId, e.AssessmentDate });
         });
 
         modelBuilder.Entity<MedicalCertificate>(entity =>

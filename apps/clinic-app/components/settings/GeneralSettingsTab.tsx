@@ -9,6 +9,7 @@ import EmptyState from '../ui/EmptyState';
 import ErrorState from '../ui/ErrorState';
 import { SkeletonList } from '../ui/Skeleton';
 import SecuritySection from './SecuritySection';
+import EdgeServerSwitcherSection from './EdgeServerSwitcherSection';
 import { theme } from '../../constants/theme';
 import { DailyEodReport, ClinicSettingsRecord } from '../../services/clinicService';
 import { InfoRow } from './common';
@@ -238,6 +239,9 @@ export default function GeneralSettingsTab({
 
       {/* Security PIN for offline devices */}
       <SecuritySection />
+
+      {/* Edge & Server Connectivity */}
+      <EdgeServerSwitcherSection />
     </View>
   );
 }

@@ -72,4 +72,9 @@ public sealed class ClinicPatient : BaseEntity
     /// Verification status: Verified, PendingVerification, Rejected, None
     /// </summary>
     public string VerificationStatus { get; set; } = "Verified";
+
+    public System.Collections.Generic.ICollection<PatientSurgicalHistory> SurgicalHistories { get; set; } = new System.Collections.Generic.List<PatientSurgicalHistory>();
+    public PatientSocialHistory? SocialHistory { get; set; }
+    public PatientReproductiveHistory? ReproductiveHistory { get; set; }
+    public System.Collections.Generic.ICollection<NcdRiskAssessment> NcdRiskAssessments { get; set; } = new System.Collections.Generic.List<NcdRiskAssessment>();
 }

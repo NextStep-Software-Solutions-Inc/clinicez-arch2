@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ClinicEz.Clinic.Application.Features.Consultations.DTOs;
 using ClinicEz.Clinic.Application.Features.Prescriptions.DTOs;
+using ClinicEz.Clinic.Application.Features.Yakap.Services;
 using ClinicEz.Clinic.Domain.Entities;
 using ClinicEz.Clinic.Domain.Enums;
 using ClinicEz.Clinic.Domain.Interfaces;
@@ -45,7 +46,15 @@ public sealed record CreateConsultationCommand(
     bool IsYakapEligible = false,
     string? PhilHealthSignSympCode = null,
     string? PhilHealthOtherComplaint = null,
-    string? PhilHealthPainSite = null) : IRequest<ConsultationEncounterDto>;
+    string? PhilHealthPainSite = null,
+    string? DoctorPhilHealthPan = null,
+    string? PhilHealthAtc = null,
+    string? HciCaseNo = null,
+    string? HciTransNo = null,
+    string? SoapTransNo = null,
+    string? GeneralSurveyId = null,
+    string? GeneralSurveyRemarks = null,
+    string? PhysicalExamFindingsJson = null) : IRequest<ConsultationEncounterDto>;
 
 public sealed class CreateConsultationCommandValidator : AbstractValidator<CreateConsultationCommand>
 {
@@ -64,21 +73,48 @@ public sealed class CreateConsultationCommandHandler : IRequestHandler<CreateCon
     private readonly IRepository<QueueItem> _queueRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
+    private readonly IRepository<StaffMember>? _staffRepository;
+    private readonly IRepository<ClinicSettings>? _settingsRepository;
+    private readonly IPhilHealthSequenceGenerator? _sequenceGenerator;
 
     public CreateConsultationCommandHandler(
         IRepository<ConsultationEncounter> consultationRepository,
         IRepository<QueueItem> queueRepository,
         IUnitOfWork unitOfWork,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IRepository<StaffMember>? staffRepository = null,
+        IRepository<ClinicSettings>? settingsRepository = null,
+        IPhilHealthSequenceGenerator? sequenceGenerator = null)
     {
         _consultationRepository = consultationRepository;
         _queueRepository = queueRepository;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _staffRepository = staffRepository;
+        _settingsRepository = settingsRepository;
+        _sequenceGenerator = sequenceGenerator;
     }
 
     public async Task<ConsultationEncounterDto> Handle(CreateConsultationCommand request, CancellationToken cancellationToken)
     {
+        string? doctorPrc = null;
+        string? doctorPtr = null;
+        string? doctorS2 = null;
+        string? doctorPan = request.DoctorPhilHealthPan;
+
+        if (_staffRepository != null)
+        {
+            var doctor = await _staffRepository.Query(s => s.Id == request.DoctorId && s.ClinicId == _clinicContext.ClinicId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (doctor != null)
+            {
+                doctorPrc = doctor.PrcLicenseNumber;
+                doctorPtr = doctor.PtrNumber;
+                doctorS2 = doctor.S2LicenseNumber;
+                doctorPan ??= doctor.PhilHealthPan;
+            }
+        }
+
         var encounter = new ConsultationEncounter
         {
             Id = Guid.NewGuid(),
@@ -90,6 +126,17 @@ public sealed class CreateConsultationCommandHandler : IRequestHandler<CreateCon
             PatientName = request.PatientName.Trim(),
             DoctorId = request.DoctorId,
             DoctorName = request.DoctorName.Trim(),
+            DoctorPrcLicense = doctorPrc,
+            DoctorPtr = doctorPtr,
+            DoctorS2License = doctorS2,
+            DoctorPhilHealthPan = doctorPan,
+            PhilHealthAtc = request.PhilHealthAtc,
+            HciCaseNo = request.HciCaseNo,
+            HciTransNo = request.HciTransNo,
+            SoapTransNo = request.SoapTransNo,
+            GeneralSurveyId = request.GeneralSurveyId,
+            GeneralSurveyRemarks = request.GeneralSurveyRemarks,
+            PhysicalExamFindingsJson = request.PhysicalExamFindingsJson,
             EncounterDate = DateTime.UtcNow,
             Subjective = request.Subjective ?? string.Empty,
             Objective = request.Objective ?? string.Empty,
@@ -169,6 +216,38 @@ public sealed class CreateConsultationCommandHandler : IRequestHandler<CreateCon
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
+        if (encounter.IsYakapEligible && _sequenceGenerator != null && _settingsRepository != null)
+        {
+            try
+            {
+                var settings = await _settingsRepository.Query(s => s.ClinicId == _clinicContext.ClinicId)
+                    .FirstOrDefaultAsync(cancellationToken);
+                var accreditationNo = !string.IsNullOrWhiteSpace(settings?.AccreditationNumber)
+                    ? settings.AccreditationNumber
+                    : "000000000";
+                var year = encounter.EncounterDate.Year.ToString();
+                var journey = await _sequenceGenerator.AssignPatientJourneyNumbersAsync(
+                    _clinicContext.TenantId,
+                    _clinicContext.ClinicId,
+                    encounter.PatientId,
+                    encounter.Id,
+                    accreditationNo,
+                    year,
+                    cancellationToken);
+
+                encounter.HciCaseNo = journey.CaseNumber;
+                encounter.PhilHealthCaseNo = journey.CaseNumber;
+                encounter.SoapTransNo = journey.SoapTransactionNumber;
+                encounter.PhilHealthSoapTransNo = journey.SoapTransactionNumber;
+                _consultationRepository.Update(encounter);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+            }
+            catch
+            {
+                // Graceful fallback for offline sequence generation
+            }
+        }
+
         return new ConsultationEncounterDto(
             encounter.Id,
             encounter.TenantId,
@@ -195,8 +274,16 @@ public sealed class CreateConsultationCommandHandler : IRequestHandler<CreateCon
             encounter.PhilHealthSignSympCode,
             encounter.PhilHealthOtherComplaint,
             encounter.PhilHealthPainSite,
-            encounter.PhilHealthCaseNo,
-            encounter.PhilHealthSoapTransNo,
+            encounter.PhilHealthCaseNo ?? encounter.HciCaseNo,
+            encounter.PhilHealthSoapTransNo ?? encounter.SoapTransNo,
+            encounter.DoctorPhilHealthPan,
+            encounter.PhilHealthAtc,
+            encounter.HciCaseNo ?? encounter.PhilHealthCaseNo,
+            encounter.HciTransNo,
+            encounter.SoapTransNo ?? encounter.PhilHealthSoapTransNo,
+            encounter.GeneralSurveyId,
+            encounter.GeneralSurveyRemarks,
+            encounter.PhysicalExamFindingsJson,
             RxPharmacyStatusDto.From(encounter));
     }
 }

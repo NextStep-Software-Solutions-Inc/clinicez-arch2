@@ -46,6 +46,14 @@ public sealed class ConsultationEncounter : BaseEntity
     public string? PhilHealthPainSite { get; set; }
     public string? PhilHealthCaseNo { get; set; }
     public string? PhilHealthSoapTransNo { get; set; }
+    public string? DoctorPhilHealthPan { get; set; }
+    public string? PhilHealthAtc { get; set; }
+    public string? HciCaseNo { get; set; }
+    public string? HciTransNo { get; set; }
+    public string? SoapTransNo { get; set; }
+    public string? GeneralSurveyId { get; set; }
+    public string? GeneralSurveyRemarks { get; set; }
+    public string? PhysicalExamFindingsJson { get; set; }
 
     // E-Prescription Interoperability & External Verification
     public string? PrescriptionNumber { get; set; }
