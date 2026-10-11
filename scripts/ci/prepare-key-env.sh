@@ -33,7 +33,17 @@ prepare_key_env() {
         dec=$(printf '%s' "$v" | base64 -d 2>/dev/null || true)
         case "$kind" in
           private) printf '%s' "$dec" | openssl pkey -noout >/dev/null 2>&1 || { echo "::error::$var is not a valid private key (PEM or base64 of PEM)."; exit 1; } ;;
-          *)       printf '%s' "$dec" | openssl pkey -pubin -noout >/dev/null 2>&1 || { echo "::error::$var is not a valid public key (PEM or base64 of PEM)."; exit 1; } ;;
+          *)
+            if ! printf '%s' "$dec" | openssl pkey -pubin -noout >/dev/null 2>&1; then
+              if printf '%s' "$dec" | openssl pkey -noout >/dev/null 2>&1 || printf '%s' "$dec" | openssl ec -noout >/dev/null 2>&1; then
+                pub_pem=$(printf '%s' "$dec" | openssl ec -pubout 2>/dev/null || printf '%s' "$dec" | openssl pkey -pubout 2>/dev/null)
+                v=$(printf '%s\n' "$pub_pem" | tr -d '\r' | base64 | tr -d '\n')
+                dec=$(printf '%s' "$v" | base64 -d 2>/dev/null || true)
+              else
+                echo "::error::$var is not a valid public key (PEM or base64 of PEM)."; exit 1;
+              fi
+            fi
+            ;;
         esac
         txt=$(printf '%s' "$dec" | openssl pkey $([ "$kind" = private ] || echo -pubin) -noout -text 2>/dev/null || true)
         case "$txt" in *prime256v1*|*P-256*) ;; *) echo "::error::$var must be an ECDSA P-256 key."; exit 1 ;; esac
