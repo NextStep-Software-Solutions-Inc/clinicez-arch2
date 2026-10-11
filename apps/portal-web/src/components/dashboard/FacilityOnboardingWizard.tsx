@@ -12,6 +12,7 @@ import { useBillingInfo } from "@/hooks/useBilling";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { useHubCredentials } from "@/components/dashboard/HubCredentialsDialog";
 import { facilityService, type FacilityKind } from "@/services/facility.service";
+import { branchService, type BranchDto } from "@/services/branch.service";
 import { ENTITLEMENT_KEYS } from "@/services/entitlement.service";
 import type { FacilityDeploymentMode } from "@/services/tenant.service";
 import { toastApiError } from "@/lib/apiToast";
@@ -26,6 +27,7 @@ import {
 } from "@/constants/philippine-addresses";
 import {
   IconBuildingHospital,
+  IconBuilding,
   IconCheck,
   IconArrowRight,
   IconArrowLeft,
@@ -34,16 +36,17 @@ import {
   IconMapPin,
   IconShieldCheck,
   IconAlertTriangle,
-  IconClock,
-  IconPhone,
-  IconMail,
   IconInfoCircle,
+  IconChevronDown,
+  IconChevronUp,
 } from "@tabler/icons-react";
 import { getConsoleBaseDomain } from "@/utils/domain";
 import { APP_SUBDOMAINS } from "@/config/site";
 
 interface FacilityOnboardingWizardProps {
   initialType?: "clinic" | "laboratory" | "pharmacy" | "organization" | null;
+  targetBranch?: BranchDto | null;
+  targetBranchId?: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onFacilityCreated?: () => void;
@@ -51,6 +54,8 @@ interface FacilityOnboardingWizardProps {
 
 export default function FacilityOnboardingWizard({
   initialType,
+  targetBranch,
+  targetBranchId,
   open,
   onOpenChange,
   onFacilityCreated,
@@ -64,11 +69,17 @@ export default function FacilityOnboardingWizard({
   const resolvedType = (initialType || searchParams.get("create") || "clinic") as "clinic" | "laboratory" | "pharmacy" | "organization";
   const normalizedFacilityType = (resolvedType.charAt(0).toUpperCase() + resolvedType.slice(1)) as FacilityKind;
 
-  // Step Tracker: 1 to 4
+  // Branch foundation state
+  const [selectedBranch, setSelectedBranch] = useState<BranchDto | null>(targetBranch || null);
+  const [availableBranches, setAvailableBranches] = useState<BranchDto[]>([]);
+  const [loadingBranches, setLoadingBranches] = useState(false);
+  const [customizeLocation, setCustomizeLocation] = useState(false);
+
+  // Stepper state
   const [currentStep, setCurrentStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
 
-  // Deployment: shared cloud, or on-premise (needs the https address staff use on their network)
+  // Deployment
   const [deploymentMode, setDeploymentMode] = useState<FacilityDeploymentMode>("SharedCloud");
   const [consoleBaseUrl, setConsoleBaseUrl] = useState("");
   const { hasFeature } = useEntitlements(tenantSlug);
@@ -86,24 +97,13 @@ export default function FacilityOnboardingWizard({
   const [isCheckingSlug, setIsCheckingSlug] = useState(false);
   const slugCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const slugify = (text: string) => {
-    return text
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
-  };
-
-  const baseDomain = getConsoleBaseDomain();
-  const sub = APP_SUBDOMAINS[normalizedFacilityType] || "clinic";
-
-  // Step 2: Regulatory & Statutory Profile
+  // Regulatory & Statutory
   const [licenseToOperate, setLicenseToOperate] = useState("");
   const [philHealthAccreditationNumber, setPhilHealthAccreditationNumber] = useState("");
   const [taxIdentificationNumber, setTaxIdentificationNumber] = useState("");
   const [operatingHours, setOperatingHours] = useState("");
 
-  // Step 3: Geolocation & Address (No falsey assumptions - prompt user to select)
+  // Geolocation & Address
   const [selectedRegionCode, setSelectedRegionCode] = useState("");
   const [selectedProvinceName, setSelectedProvinceName] = useState("");
   const [selectedCityName, setSelectedCityName] = useState("");
@@ -125,6 +125,53 @@ export default function FacilityOnboardingWizard({
   const [existingFacilities, setExistingFacilities] = useState<Array<{ id: string; name: string; slug?: string }>>([]);
 
   useEffect(() => {
+    if (targetBranch) {
+      setSelectedBranch(targetBranch);
+    }
+  }, [targetBranch]);
+
+  // Fetch branches on open
+  useEffect(() => {
+    if (open && tenantSlug) {
+      setLoadingBranches(true);
+      branchService.getBranches(tenantSlug)
+        .then((bList) => {
+          setAvailableBranches(bList || []);
+          if (targetBranch) {
+            setSelectedBranch(targetBranch);
+          } else if (targetBranchId) {
+            const found = (bList || []).find((b) => b.id === targetBranchId);
+            if (found) setSelectedBranch(found);
+          } else if (bList && bList.length === 1) {
+            setSelectedBranch(bList[0]);
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to load branches for facility wizard", err);
+        })
+        .finally(() => {
+          setLoadingBranches(false);
+        });
+    }
+  }, [open, tenantSlug, targetBranch, targetBranchId]);
+
+  // Inherit details from branch whenever selectedBranch changes
+  useEffect(() => {
+    if (selectedBranch) {
+      setStreetAddress(selectedBranch.streetAddress || "");
+      setSelectedBarangay(selectedBranch.barangay || "");
+      setSelectedCityName(selectedBranch.city || "");
+      setSelectedProvinceName(selectedBranch.province || "");
+      setSelectedRegionCode(selectedBranch.region || "");
+      setZipCode(selectedBranch.zipCode || "");
+      setContactNumber(selectedBranch.contactNumber || "");
+      setContactEmail(selectedBranch.contactEmail || "");
+      setPhilHealthAccreditationNumber(selectedBranch.philHealthAccreditationNumber || "");
+    }
+  }, [selectedBranch]);
+
+  // Load existing facilities for validation
+  useEffect(() => {
     if (open && tenantSlug) {
       apiClient.get<Array<{ id: string; name: string; slug?: string }>>(`/facilities?tenantSlug=${tenantSlug}`)
         .then((res) => {
@@ -135,6 +182,17 @@ export default function FacilityOnboardingWizard({
         });
     }
   }, [open, tenantSlug]);
+
+  const slugify = (text: string) => {
+    return text
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  };
+
+  const baseDomain = getConsoleBaseDomain();
+  const sub = APP_SUBDOMAINS[normalizedFacilityType] || "clinic";
 
   const isDuplicateName = existingFacilities.some(
     (f) => f.name.trim().toLowerCase() === name.trim().toLowerCase()
@@ -214,7 +272,8 @@ export default function FacilityOnboardingWizard({
   // Reset or initialize default classification when type changes
   useEffect(() => {
     const list = FACILITY_CLASSIFICATIONS[normalizedFacilityType] || FACILITY_CLASSIFICATIONS.Clinic;
-    if (list.length > 0 && !classification) {
+    const isValid = list.some((item) => item.value === classification);
+    if (!isValid && list.length > 0) {
       setClassification(list[0].value);
     }
   }, [normalizedFacilityType, classification]);
@@ -274,23 +333,50 @@ export default function FacilityOnboardingWizard({
     billingInfo.planLimits.maxClinics < 9999 &&
     billingInfo.usage.facilitiesCount >= billingInfo.planLimits.maxClinics;
 
+  // Streamlined 2-step flow when selectedBranch is active
+  const totalSteps = selectedBranch ? 2 : 4;
+
   const handleClose = () => {
     onOpenChange(false);
-    // Remove query param if present
     const sp = new URLSearchParams(window.location.search);
+    let changed = false;
     if (sp.has("create")) {
       sp.delete("create");
-      window.history.replaceState({}, "", `${window.location.pathname}?${sp.toString()}`);
+      changed = true;
+    }
+    if (sp.has("branchId")) {
+      sp.delete("branchId");
+      changed = true;
+    }
+    if (changed) {
+      window.history.replaceState({}, "", `${window.location.pathname}${sp.toString() ? `?${sp.toString()}` : ""}`);
     }
     setCurrentStep(1);
     setName("");
     setSlug("");
     setIsSlugCustomized(false);
     setSlugError(null);
+    setCustomizeLocation(false);
+    setStreetAddress("");
+    setSelectedBarangay("");
+    setSelectedCityName("");
+    setSelectedProvinceName("");
+    setSelectedRegionCode("");
+    setZipCode("");
+    setContactNumber("");
+    setContactEmail("");
+    setPhilHealthAccreditationNumber("");
+    setLicenseToOperate("");
+    setTaxIdentificationNumber("");
+    setOperatingHours("");
   };
 
   const handleNext = () => {
     if (currentStep === 1) {
+      if (!selectedBranch && availableBranches.length > 0) {
+        toast.error("Please select a target physical branch for this facility.");
+        return;
+      }
       if (!name.trim()) {
         toast.error("Please provide the legal or official operating name of the facility.");
         return;
@@ -307,7 +393,18 @@ export default function FacilityOnboardingWizard({
         toast.error(slugError);
         return;
       }
+      if (isOnPremise && !isConsoleUrlValid) {
+        toast.error("Please provide a valid https console base URL for on-premise deployment.");
+        return;
+      }
+
+      // If branch is selected, jump directly to step 2 (Review)
+      if (selectedBranch) {
+        setCurrentStep(2);
+        return;
+      }
     }
+
     if (currentStep === 3) {
       if (!selectedRegionCode) {
         toast.error("Please select an Administrative Region.");
@@ -330,7 +427,7 @@ export default function FacilityOnboardingWizard({
         return;
       }
     }
-    setCurrentStep((prev) => Math.min(prev + 1, 4));
+    setCurrentStep((prev) => Math.min(prev + 1, totalSteps));
   };
 
   const handlePrev = () => {
@@ -351,28 +448,31 @@ export default function FacilityOnboardingWizard({
     try {
       const result = await facilityService.createFacility({
         tenantId: tenantSlug,
+        branchId: selectedBranch?.id,
         facilityType: normalizedFacilityType,
         name: name.trim(),
         slug: slug.trim() || undefined,
         classification: classification || undefined,
         licenseToOperate: licenseToOperate.trim() || undefined,
-        philHealthAccreditationNumber: philHealthAccreditationNumber.trim() || undefined,
+        philHealthAccreditationNumber: (philHealthAccreditationNumber || selectedBranch?.philHealthAccreditationNumber || "").trim() || undefined,
         taxIdentificationNumber: taxIdentificationNumber.trim() || undefined,
         operatingHours: operatingHours.trim() || undefined,
-        region: activeRegion?.name || selectedRegionCode,
-        province: selectedProvinceName,
-        city: selectedCityName,
-        barangay: selectedBarangay,
-        zipCode: zipCode.trim() || undefined,
-        streetAddress: streetAddress.trim() || undefined,
-        contactNumber: contactNumber.trim() || undefined,
-        contactEmail: contactEmail.trim() || undefined,
+        region: selectedRegionCode || selectedBranch?.region || undefined,
+        province: selectedProvinceName || selectedBranch?.province || undefined,
+        city: selectedCityName || selectedBranch?.city || undefined,
+        barangay: selectedBarangay || selectedBranch?.barangay || undefined,
+        zipCode: zipCode.trim() || selectedBranch?.zipCode || undefined,
+        streetAddress: streetAddress.trim() || selectedBranch?.streetAddress || undefined,
+        contactNumber: contactNumber.trim() || selectedBranch?.contactNumber || undefined,
+        contactEmail: contactEmail.trim() || selectedBranch?.contactEmail || undefined,
         deploymentMode,
         consoleBaseUrl: isOnPremise ? consoleBaseUrl.trim() : undefined,
       });
-      toast.success(`${normalizedFacilityType} "${name}" registered and provisioning event broadcasted!`);
+
+      toast.success(`${normalizedFacilityType} "${name}" registered and provisioned under ${selectedBranch?.name || "branch"}!`);
       const facilityName = name.trim();
       handleClose();
+
       if (result.hubCredentials) {
         showEdge(facilityName, result.hubCredentials);
       } else if (result.hubOnboardingPending) {
@@ -380,6 +480,15 @@ export default function FacilityOnboardingWizard({
           "The hub could not be reached, so no credentials were issued yet. Open Settings → Facilities and use \"Rotate hub credentials\" for this facility.",
         );
       }
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("clinicez:facility-created", {
+            detail: { facilityName, branchId: selectedBranch?.id },
+          })
+        );
+      }
+
       if (onFacilityCreated) {
         onFacilityCreated();
       } else {
@@ -393,6 +502,18 @@ export default function FacilityOnboardingWizard({
   };
 
   const classifications = FACILITY_CLASSIFICATIONS[normalizedFacilityType] || FACILITY_CLASSIFICATIONS.Clinic;
+
+  const stepsList = selectedBranch
+    ? [
+        { step: 1, title: "Identity" },
+        { step: 2, title: "Review" },
+      ]
+    : [
+        { step: 1, title: "Classification" },
+        { step: 2, title: "Statutory" },
+        { step: 3, title: "Location" },
+        { step: 4, title: "Review" },
+      ];
 
   return (
     <Dialog open={open} onOpenChange={(val) => !submitting && onOpenChange(val)}>
@@ -409,23 +530,20 @@ export default function FacilityOnboardingWizard({
                   Onboard New {normalizedFacilityType}
                 </DialogTitle>
                 <DialogDescription className="text-xs text-slate-500">
-                  Philippine regulatory registration &amp; branch provisioning wizard
+                  {selectedBranch
+                    ? `Branch-first provisioning under "${selectedBranch.name}"`
+                    : "Philippine regulatory registration & branch provisioning wizard"}
                 </DialogDescription>
               </div>
             </div>
             <Badge variant="outline" className="text-xs font-semibold px-2.5 py-0.5 border-primary/20 bg-primary/5 text-primary">
-              Step {currentStep} of 4
+              Step {currentStep} of {totalSteps}
             </Badge>
           </div>
 
           {/* Stepper Progress Bar */}
-          <div className="grid grid-cols-4 gap-2 pt-2">
-            {[
-              { step: 1, title: "Classification" },
-              { step: 2, title: "Statutory" },
-              { step: 3, title: "Location" },
-              { step: 4, title: "Review" },
-            ].map((s) => {
+          <div className={`grid grid-cols-${stepsList.length} gap-2 pt-2`}>
+            {stepsList.map((s) => {
               const isPast = currentStep > s.step;
               const isCurrent = currentStep === s.step;
               return (
@@ -456,17 +574,113 @@ export default function FacilityOnboardingWizard({
           </div>
         </div>
 
-        {/* Wizard Step Content (Scrollable) */}
+        {/* Wizard Step Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
-          {/* STEP 1: Classification & Facility Identity */}
+          {/* STEP 1: Facility Identity & Classification */}
           {currentStep === 1 && (
             <div className="space-y-4 animate-in fade-in-50 duration-200">
-              <div className="p-3.5 rounded-2xl bg-primary/5 border border-primary/10 flex items-start gap-3">
-                <IconInfoCircle className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-                <div className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                  Enter the registered trade or clinical brand name for this location and choose the corresponding health facility category.
+              {/* Inherited Branch Foundation Card */}
+              {selectedBranch ? (
+                <div className="p-3.5 rounded-2xl bg-primary/5 border border-primary/20 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <IconBuilding className="h-4 w-4 text-primary shrink-0" />
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                        Target Branch: {selectedBranch.name}
+                      </span>
+                      {selectedBranch.code && (
+                        <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 border-primary/30 text-primary">
+                          {selectedBranch.code}
+                        </Badge>
+                      )}
+                    </div>
+                    {!targetBranch && availableBranches.length > 1 && (
+                      <select
+                        value={selectedBranch.id}
+                        onChange={(e) => {
+                          const b = availableBranches.find((item) => item.id === e.target.value);
+                          if (b) setSelectedBranch(b);
+                        }}
+                        className="text-xs h-7 px-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-200 font-medium"
+                      >
+                        {availableBranches.map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+
+                  <div className="text-[11px] text-slate-600 dark:text-slate-400 flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <span className="flex items-center gap-1">
+                      <IconMapPin className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                      {[selectedBranch.streetAddress, selectedBranch.barangay, selectedBranch.city, selectedBranch.province]
+                        .filter(Boolean)
+                        .join(", ") || "Main Workspace Address"}
+                    </span>
+                    {selectedBranch.isPhilHealthAccredited ? (
+                      <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold">
+                        <IconShieldCheck className="h-3.5 w-3.5 shrink-0" />
+                        PhilHealth Accredited (PMCC: {selectedBranch.philHealthPmccNumber || selectedBranch.philHealthAccreditationNumber})
+                      </span>
+                    ) : (
+                      <span className="text-slate-400">Standard Accreditation</span>
+                    )}
+                  </div>
                 </div>
-              </div>
+              ) : loadingBranches ? (
+                <div className="flex items-center gap-2 p-3.5 rounded-2xl border text-muted-foreground text-xs">
+                  <IconLoader className="h-4 w-4 animate-spin text-primary" />
+                  <span>Loading branch details...</span>
+                </div>
+              ) : availableBranches.length > 0 ? (
+                <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 space-y-2">
+                  <div className="flex items-center gap-2 text-xs font-bold text-amber-900 dark:text-amber-200">
+                    <IconBuilding className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                    <span>Select Target Physical Branch *</span>
+                  </div>
+                  <p className="text-[11px] text-amber-800 dark:text-amber-300">
+                    Every facility belongs to a physical branch location. Address and statutory credentials will be inherited automatically.
+                  </p>
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      const b = availableBranches.find((item) => item.id === e.target.value);
+                      if (b) setSelectedBranch(b);
+                    }}
+                    className="w-full text-xs h-9 px-3 rounded-xl border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-950 font-medium text-slate-800 dark:text-slate-200"
+                  >
+                    <option value="">-- Choose Target Branch --</option>
+                    {availableBranches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name} ({b.city || "Main Location"})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 space-y-2">
+                  <div className="flex items-center gap-2 text-xs font-bold text-rose-900 dark:text-rose-200">
+                    <IconAlertTriangle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                    <span>Physical Branch Required</span>
+                  </div>
+                  <p className="text-xs text-rose-800 dark:text-rose-300">
+                    No physical branches exist in this workspace. Under ClinicEZ&apos;s branch-first workflow, facilities must be anchored to a physical branch.
+                  </p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      handleClose();
+                      router.push(`/${tenantSlug}/dashboard/branches?createBranch=true`);
+                    }}
+                    className="rounded-xl text-xs font-bold bg-primary text-primary-foreground"
+                  >
+                    Create Branch First
+                  </Button>
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <Label htmlFor="facility-name" className="text-xs font-bold text-slate-700 dark:text-slate-300">
@@ -533,9 +747,6 @@ export default function FacilityOnboardingWizard({
                     https://{slug || "facility-slug"}.{sub}.{baseDomain}
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-400">
-                  Each facility has its own unique subdomain. It is auto-suggested from the facility name, but you can choose your own.
-                </p>
               </div>
 
               <div className="space-y-2 pt-2">
@@ -568,14 +779,6 @@ export default function FacilityOnboardingWizard({
                     );
                   })}
                 </div>
-                {onPremAvailable === false && (
-                  <p className="text-[11px] text-amber-700 dark:text-amber-400">
-                    On-premise deployment is not part of your current plan.{" "}
-                    <Link href={`/${tenantSlug}/dashboard/plan`} className="font-semibold underline">
-                      View plans
-                    </Link>
-                  </p>
-                )}
                 {isOnPremise && (
                   <div className="space-y-1.5 pt-1">
                     <Label htmlFor="facility-console-base-url" className="text-xs font-bold text-slate-700 dark:text-slate-300">
@@ -592,10 +795,6 @@ export default function FacilityOnboardingWizard({
                         consoleBaseUrl && !isConsoleUrlValid ? "border-rose-500 focus-visible:ring-rose-500" : ""
                       }`}
                     />
-                    <p className="text-[11px] text-slate-400">
-                      The https address where staff open this facility on your network. The first on-premise facility also issues the
-                      hub credentials your server needs.
-                    </p>
                   </div>
                 )}
               </div>
@@ -631,16 +830,63 @@ export default function FacilityOnboardingWizard({
                   })}
                 </div>
               </div>
+
+              {/* Collapsible Location Override (when branch is selected) */}
+              {selectedBranch && (
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setCustomizeLocation(!customizeLocation)}
+                    className="text-xs font-semibold text-primary hover:underline flex items-center gap-1.5"
+                  >
+                    <IconMapPin className="h-3.5 w-3.5" />
+                    <span>{customizeLocation ? "Hide location & contact overrides" : "Customize specific suite or contact hotline (optional)"}</span>
+                    {customizeLocation ? <IconChevronUp className="h-3.5 w-3.5" /> : <IconChevronDown className="h-3.5 w-3.5" />}
+                  </button>
+
+                  {customizeLocation && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 animate-in fade-in-50">
+                      <div className="col-span-2 space-y-1">
+                        <Label className="text-xs font-medium">Specific Unit / Floor / Suite</Label>
+                        <Input
+                          value={streetAddress}
+                          onChange={(e) => setStreetAddress(e.target.value)}
+                          placeholder="e.g. Suite 402, 4th Floor"
+                          className="h-9 text-xs rounded-xl"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs font-medium">Facility Contact Hotline</Label>
+                        <Input
+                          value={contactNumber}
+                          onChange={(e) => setContactNumber(e.target.value)}
+                          placeholder="e.g. +63 917 123 4567"
+                          className="h-9 text-xs rounded-xl"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs font-medium">Facility Official Email</Label>
+                        <Input
+                          value={contactEmail}
+                          onChange={(e) => setContactEmail(e.target.value)}
+                          placeholder="e.g. lab@example.com"
+                          className="h-9 text-xs rounded-xl"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
-          {/* STEP 2: Regulatory & Statutory Profile */}
-          {currentStep === 2 && (
+          {/* STEP 2: Regulatory (only in 4-step mode when selectedBranch is null) */}
+          {!selectedBranch && currentStep === 2 && (
             <div className="space-y-4 animate-in fade-in-50 duration-200">
               <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-3">
                 <IconFileCertificate className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                 <div className="text-xs text-amber-900 dark:text-amber-300 leading-relaxed">
-                  Philippine Department of Health (DOH) &amp; PhilHealth statutory compliance details. These credentials authenticate issued e-prescriptions and external diagnostic orders.
+                  Philippine Department of Health (DOH) &amp; PhilHealth statutory compliance details.
                 </div>
               </div>
 
@@ -656,7 +902,6 @@ export default function FacilityOnboardingWizard({
                     onChange={(e) => setLicenseToOperate(e.target.value)}
                     className="h-9 text-xs rounded-xl font-mono uppercase"
                   />
-                  <p className="text-[10px] text-slate-400">Issued by DOH Health Facilities and Services Regulatory Bureau (HFSRB)</p>
                 </div>
 
                 <div className="space-y-1.5">
@@ -670,7 +915,6 @@ export default function FacilityOnboardingWizard({
                     onChange={(e) => setPhilHealthAccreditationNumber(e.target.value)}
                     className="h-9 text-xs rounded-xl font-mono uppercase"
                   />
-                  <p className="text-[10px] text-slate-400">Required for PhilHealth Konsulta electronic claims</p>
                 </div>
               </div>
 
@@ -686,40 +930,31 @@ export default function FacilityOnboardingWizard({
                     onChange={(e) => setTaxIdentificationNumber(e.target.value)}
                     className="h-9 text-xs rounded-xl font-mono"
                   />
-                  <p className="text-[10px] text-slate-400">Format: 9 or 12 digits for official BIR billing receipting</p>
                 </div>
 
                 <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="operating-hours" className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                      Official Operating Hours
-                    </Label>
-                    {!operatingHours && (
-                      <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
-                        Not specified yet
-                      </span>
-                    )}
-                  </div>
+                  <Label htmlFor="operating-hours" className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Official Operating Hours
+                  </Label>
                   <Input
                     id="operating-hours"
-                    placeholder="e.g. Mon-Fri 8:00 AM - 5:00 PM, Sat 8:00 AM - 12:00 PM"
+                    placeholder="e.g. Mon-Fri 8:00 AM - 5:00 PM"
                     value={operatingHours}
                     onChange={(e) => setOperatingHours(e.target.value)}
                     className="h-9 text-xs rounded-xl"
                   />
-                  <p className="text-[10px] text-slate-400">Specifies consultation and dispensing hours for patient scheduling</p>
                 </div>
               </div>
             </div>
           )}
 
-          {/* STEP 3: Geolocation & Address */}
-          {currentStep === 3 && (
+          {/* STEP 3: Location (only in 4-step mode when selectedBranch is null) */}
+          {!selectedBranch && currentStep === 3 && (
             <div className="space-y-4 animate-in fade-in-50 duration-200">
               <div className="p-3.5 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-start gap-3">
                 <IconMapPin className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
                 <div className="text-xs text-blue-900 dark:text-blue-300 leading-relaxed">
-                  Philippine Standard Geographic Code (PSGC) compliant location mapping for routing specimen pick-ups and prescription fulfillment.
+                  Philippine Standard Geographic Code (PSGC) compliant location mapping.
                 </div>
               </div>
 
@@ -825,56 +1060,27 @@ export default function FacilityOnboardingWizard({
                 </Label>
                 <Input
                   id="street-addr"
-                  placeholder="e.g. Unit 402, High Street South Corporate Plaza, 26th St."
+                  placeholder="e.g. Unit 402, High Street South Corporate Plaza"
                   value={streetAddress}
                   onChange={(e) => setStreetAddress(e.target.value)}
                   className="h-9 text-xs rounded-xl"
                   required
                 />
               </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
-                <div className="space-y-1.5">
-                  <Label htmlFor="contact-num" className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    Facility Contact Hotline
-                  </Label>
-                  <Input
-                    id="contact-num"
-                    placeholder="e.g. +63 (2) 8876-5432 / +63 917 123 4567"
-                    value={contactNumber}
-                    onChange={(e) => setContactNumber(e.target.value)}
-                    className="h-9 text-xs rounded-xl font-mono"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="contact-mail" className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    Facility Official Email
-                  </Label>
-                  <Input
-                    id="contact-mail"
-                    type="email"
-                    placeholder="e.g. clinic.bgc@example.com"
-                    value={contactEmail}
-                    onChange={(e) => setContactEmail(e.target.value)}
-                    className="h-9 text-xs rounded-xl"
-                  />
-                </div>
-              </div>
             </div>
           )}
 
-          {/* STEP 4: Plan Review & Confirmation */}
-          {currentStep === 4 && (
+          {/* FINAL REVIEW & CONFIRMATION (Step 2 when branch selected, Step 4 otherwise) */}
+          {((selectedBranch && currentStep === 2) || (!selectedBranch && currentStep === 4)) && (
             <div className="space-y-4 animate-in fade-in-50 duration-200">
-              {/* Quota Check Alert */}
+              {/* Quota Alert */}
               {!hasAllocations ? (
                 <div className="p-4 rounded-2xl border border-amber-200 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-950/20 flex items-start gap-3">
                   <IconAlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                   <div className="text-xs space-y-1">
                     <h4 className="font-bold text-amber-900 dark:text-amber-200">Active Subscription Required</h4>
                     <p className="text-amber-800 dark:text-amber-300">
-                      Your workspace is currently in setup mode. You can provision this facility now, but ensure you select a plan to unlock live clinical orders.
+                      Your workspace is in setup mode. You can provision this facility now, but ensure you select a plan to unlock live clinical orders.
                     </p>
                   </div>
                 </div>
@@ -884,7 +1090,7 @@ export default function FacilityOnboardingWizard({
                   <div className="text-xs space-y-1">
                     <h4 className="font-bold text-rose-900 dark:text-rose-200">Clinic Allocation Reached</h4>
                     <p className="text-rose-800 dark:text-rose-300">
-                      You have reached your limit of {billingInfo?.planLimits?.maxClinics} clinic location(s) on your current plan. Please upgrade before provisioning.
+                      You have reached your limit of {billingInfo?.planLimits?.maxClinics} clinic location(s). Please upgrade before provisioning.
                     </p>
                   </div>
                 </div>
@@ -902,6 +1108,18 @@ export default function FacilityOnboardingWizard({
 
               {/* Summary Card */}
               <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 space-y-3.5 text-xs">
+                {selectedBranch && (
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Anchor Branch
+                    </span>
+                    <div className="text-sm font-bold text-slate-900 dark:text-slate-100 mt-0.5 flex items-center gap-2">
+                      <IconBuilding className="h-4 w-4 text-primary" />
+                      <span>{selectedBranch.name}</span>
+                    </div>
+                  </div>
+                )}
+
                 <div>
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                     Facility Name &amp; Classification
@@ -917,47 +1135,29 @@ export default function FacilityOnboardingWizard({
                 <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200/60 dark:border-slate-800">
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      DOH LTO
-                    </span>
-                    <div className="font-mono text-slate-800 dark:text-slate-200 font-medium">
-                      {licenseToOperate || "Not Specified"}
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                       PhilHealth Accreditation
                     </span>
                     <div className="font-mono text-slate-800 dark:text-slate-200 font-medium">
-                      {philHealthAccreditationNumber || "Not Specified"}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200/60 dark:border-slate-800">
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      BIR TIN
-                    </span>
-                    <div className="font-mono text-slate-800 dark:text-slate-200 font-medium">
-                      {taxIdentificationNumber || "Not Specified"}
+                      {philHealthAccreditationNumber || selectedBranch?.philHealthAccreditationNumber || "Inherited / Standard"}
                     </div>
                   </div>
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      Operating Hours
+                      Deployment
                     </span>
                     <div className="text-slate-800 dark:text-slate-200 font-medium">
-                      {operatingHours}
+                      {isOnPremise ? "On-premise" : "Shared cloud"}
                     </div>
                   </div>
                 </div>
 
                 <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Registered Address
+                    Operating Address
                   </span>
                   <div className="text-slate-800 dark:text-slate-200 font-medium mt-0.5">
-                    {[streetAddress, selectedBarangay, selectedCityName, selectedProvinceName, zipCode].filter(Boolean).join(", ")}
+                    {[streetAddress, selectedBarangay, selectedCityName, selectedProvinceName, zipCode].filter(Boolean).join(", ") ||
+                      [selectedBranch?.streetAddress, selectedBranch?.barangay, selectedBranch?.city, selectedBranch?.province].filter(Boolean).join(", ")}
                   </div>
                   {(contactNumber || contactEmail) && (
                     <div className="text-slate-500 text-[11px] mt-1 flex items-center gap-3">
@@ -969,14 +1169,11 @@ export default function FacilityOnboardingWizard({
 
                 <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Deployment
+                    Subdomain URL
                   </span>
-                  <div className="text-slate-800 dark:text-slate-200 font-medium mt-0.5">
-                    {isOnPremise ? "On-premise" : "Shared cloud"}
+                  <div className="font-mono text-primary font-bold text-xs mt-0.5">
+                    https://{slug}.{sub}.{baseDomain}
                   </div>
-                  {isOnPremise && (
-                    <div className="font-mono text-[11px] text-slate-500 mt-0.5 truncate">{consoleBaseUrl.trim()}</div>
-                  )}
                 </div>
               </div>
             </div>
@@ -997,11 +1194,11 @@ export default function FacilityOnboardingWizard({
           </Button>
 
           <div className="flex items-center gap-2">
-            {currentStep < 4 ? (
+            {currentStep < totalSteps ? (
               <Button
                 type="button"
                 onClick={handleNext}
-                disabled={currentStep === 1 && (!name.trim() || isDuplicateName || !slug.trim() || !!slugError || isCheckingSlug || (isOnPremise && !isConsoleUrlValid))}
+                disabled={currentStep === 1 && (!name.trim() || isDuplicateName || !slug.trim() || !!slugError || isCheckingSlug || (isOnPremise && !isConsoleUrlValid) || (!selectedBranch && availableBranches.length === 0))}
                 className="rounded-xl text-xs font-bold px-5 h-9 bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5 shadow-sm"
               >
                 <span>Continue</span>

@@ -209,6 +209,55 @@ public class BranchEndpoints : IEndpoint
             if (!isOwner && !isStaff)
             {
                 return Results.Forbid();
+            // Auto-group legacy or unassigned facilities under a synthesized Main Branch
+            var unassignedFacilities = await context.Facilities
+                .Where(f => f.TenantId == tenant.Id && !f.IsDeleted && f.BranchId == null)
+                .ToListAsync();
+
+            if (unassignedFacilities.Count > 0)
+            {
+                var mainBranch = await context.Branches
+                    .FirstOrDefaultAsync(b => b.TenantId == tenant.Id && !b.IsDeleted && (b.Code == "MAIN" || b.Name == "Main Branch"));
+
+                if (mainBranch == null)
+                {
+                    mainBranch = new Branch
+                    {
+                        Id = Guid.NewGuid(),
+                        TenantId = tenant.Id,
+                        Name = string.IsNullOrWhiteSpace(tenant.Name) ? "Main Branch" : $"{tenant.Name} (Main Branch)",
+                        Code = "MAIN",
+                        StreetAddress = tenant.StreetLine1,
+                        City = tenant.City,
+                        Province = tenant.Province,
+                        ZipCode = tenant.PostalCode,
+                        ContactNumber = tenant.PhoneNumber,
+                        ContactEmail = tenant.Email,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow,
+                        CreatedBy = clerkUserId
+                    };
+                    context.Branches.Add(mainBranch);
+                    await context.SaveChangesAsync(CancellationToken.None);
+                }
+
+                var existingTypes = await context.Facilities
+                    .Where(f => f.BranchId == mainBranch.Id && !f.IsDeleted)
+                    .Select(f => f.FacilityType)
+                    .ToListAsync();
+
+                foreach (var fac in unassignedFacilities)
+                {
+                    if (!existingTypes.Contains(fac.FacilityType))
+                    {
+                        fac.BranchId = mainBranch.Id;
+                        fac.UpdatedAt = DateTime.UtcNow;
+                        fac.UpdatedBy = clerkUserId;
+                        existingTypes.Add(fac.FacilityType);
+                    }
+                }
+
+                await context.SaveChangesAsync(CancellationToken.None);
             }
 
             var list = await context.Branches

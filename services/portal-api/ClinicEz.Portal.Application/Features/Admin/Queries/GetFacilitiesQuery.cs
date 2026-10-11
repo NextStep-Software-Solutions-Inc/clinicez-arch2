@@ -38,7 +38,8 @@ public record FacilityDto(
     FacilityDeploymentMode DeploymentMode = FacilityDeploymentMode.SharedCloud,
     string? ConsoleBaseUrl = null,
     string Visibility = "Private",
-    bool AcceptsExternalRequests = false
+    bool AcceptsExternalRequests = false,
+    Guid? BranchId = null
 );
 
 public record GetFacilitiesQuery(string TenantSlug) : IRequest<List<FacilityDto>>;
@@ -59,7 +60,7 @@ public class GetFacilitiesQueryHandler(
         if (tenant == null) return [];
 
         var rawFacilities = await context.Facilities
-            .Where(f => f.TenantId == tenant.Id)
+            .Where(f => f.TenantId == tenant.Id && !f.IsDeleted)
             .OrderByDescending(f => f.CreatedAt)
             .ToListAsync(cancellationToken);
 
@@ -93,7 +94,8 @@ public class GetFacilitiesQueryHandler(
                 f.DeploymentMode,
                 f.ConsoleBaseUrl,
                 f.Visibility.ToString(),
-                f.AcceptsExternalRequests
+                f.AcceptsExternalRequests,
+                f.BranchId
             );
         }).ToList();
     }

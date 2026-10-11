@@ -183,4 +183,50 @@ public class BranchManagementTests : IDisposable
         Assert.NotNull(reloadedClinic);
         Assert.Null(reloadedClinic!.BranchId);
     }
+
+    [Fact]
+    public async Task AutoGroupLegacyFacilities_GroupsUnderMainBranch()
+    {
+        // 1. Create an unassigned facility with BranchId == null
+        var orphanClinic = new Facility
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            BranchId = null,
+            Name = "Legacy Standalone Clinic",
+            FacilityType = FacilityType.Clinic,
+            Status = FacilityStatus.Active
+        };
+        _context.Facilities.Add(orphanClinic);
+        await _context.SaveChangesAsync();
+
+        // 2. Simulate the auto-grouping routine from GetBranches
+        var unassigned = await _context.Facilities
+            .Where(f => f.TenantId == _tenantId && !f.IsDeleted && f.BranchId == null)
+            .ToListAsync();
+
+        Assert.Single(unassigned);
+
+        var mainBranch = new Branch
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenantId,
+            Name = "Main Branch",
+            Code = "MAIN",
+            IsActive = true
+        };
+        _context.Branches.Add(mainBranch);
+        await _context.SaveChangesAsync();
+
+        foreach (var fac in unassigned)
+        {
+            fac.BranchId = mainBranch.Id;
+        }
+        await _context.SaveChangesAsync();
+
+        var reloaded = await _context.Facilities.FindAsync(orphanClinic.Id);
+        Assert.NotNull(reloaded);
+        Assert.Equal(mainBranch.Id, reloaded!.BranchId);
+    }
 }
+

@@ -63,40 +63,14 @@ export function AppSidebar({
         icon: IconDashboard,
       },
       {
-        title: "Facilities",
+        title: "Branches",
+        url: `/dashboard/branches`,
         icon: IconBuilding,
-        items: [
-          {
-            title: "Branches & Locations",
-            url: `/dashboard/branches`,
-            icon: IconMapPin,
-          },
-          {
-            title: "Clinics",
-            url: `/dashboard/clinics`,
-            icon: IconHospital,
-          },
-          {
-            title: "Organizations",
-            url: `/dashboard/organizations`,
-            icon: IconBuilding,
-          },
-          {
-            title: "Laboratories",
-            url: `/dashboard/laboratories`,
-            icon: IconTestPipe,
-          },
-          {
-            title: "Pharmacies",
-            url: `/dashboard/pharmacies`,
-            icon: IconPill,
-          },
-          {
-            title: "YAKAP Transmittals",
-            url: `/dashboard/yakap`,
-            icon: IconFileCertificate,
-          },
-        ]
+      },
+      {
+        title: "PhilHealth YAKAP",
+        url: `/dashboard/yakap`,
+        icon: IconFileCertificate,
       },
       {
         title: "Team & Staff",

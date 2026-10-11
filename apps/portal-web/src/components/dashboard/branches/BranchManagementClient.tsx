@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
-import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import { 
   branchService, 
   BranchDto, 
@@ -9,7 +9,8 @@ import {
   UpdateBranchPayload, 
   ConfigureBranchPhilHealthPayload 
 } from "@/services/branch.service";
-import { apiClient } from "@/transport/apiClient";
+import { facilityService, WorkspaceFacility } from "@/services/facility.service";
+import FacilityOnboardingWizard from "@/components/dashboard/FacilityOnboardingWizard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,30 +28,92 @@ import {
   IconPlus, 
   IconEdit, 
   IconTrash, 
-  IconLink, 
   IconLoader, 
   IconCheck, 
   IconSearch, 
   IconExternalLink,
   IconKey,
-  IconRefresh
+  IconRefresh,
+  IconSettings
 } from "@tabler/icons-react";
+import FacilitySettingsHub, { FacilityData } from "@/components/dashboard/FacilitySettingsHub";
+import { getConsoleBaseDomain } from "@/utils/domain";
+import { APP_SUBDOMAINS } from "@/config/site";
 import { toast } from "sonner";
 
-interface TenantFacility {
-  id: string;
-  name: string;
-  facilityType: "Clinic" | "Laboratory" | "Pharmacy" | "Organization";
-  status: string;
-  branchId?: string | null;
+const DASHBOARD_PORTS: Record<string, number> = {
+  Clinic: 8081,
+  Laboratory: 8082,
+  Pharmacy: 8083,
+  Organization: 8084,
+};
+
+function resolveConsoleUrl(fac: WorkspaceFacility, tenantSlug: string): string | null {
+  if (fac.consoleUrl) return fac.consoleUrl;
+  const baseDomain = getConsoleBaseDomain();
+  if (baseDomain) {
+    const sub = APP_SUBDOMAINS[fac.facilityType] || "clinic";
+    const targetSlug = fac.slug || tenantSlug;
+    return `https://${targetSlug}.${sub}.${baseDomain}`;
+  }
+  const isLocal = typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+  if (isLocal) {
+    const port = DASHBOARD_PORTS[fac.facilityType] || 8081;
+    return `http://localhost:${port}`;
+  }
+  return null;
 }
+
+const FACILITY_SLOTS = [
+  {
+    type: "Clinic" as const,
+    key: "clinic" as const,
+    label: "Clinic",
+    description: "Outpatient consultations, EHR & medical records",
+    icon: IconHospital,
+    color: "text-blue-500 dark:text-blue-400",
+    bg: "bg-blue-500/10 dark:bg-blue-500/20",
+    border: "border-blue-200 dark:border-blue-800",
+  },
+  {
+    type: "Laboratory" as const,
+    key: "laboratory" as const,
+    label: "Laboratory",
+    description: "Diagnostic orders, specimen tracking & LIS",
+    icon: IconTestPipe,
+    color: "text-purple-500 dark:text-purple-400",
+    bg: "bg-purple-500/10 dark:bg-purple-500/20",
+    border: "border-purple-200 dark:border-purple-800",
+  },
+  {
+    type: "Pharmacy" as const,
+    key: "pharmacy" as const,
+    label: "Pharmacy",
+    description: "Drug dispensing, inventory & prescription fulfillment",
+    icon: IconPill,
+    color: "text-emerald-500 dark:text-emerald-400",
+    bg: "bg-emerald-500/10 dark:bg-emerald-500/20",
+    border: "border-emerald-200 dark:border-emerald-800",
+  },
+  {
+    type: "Organization" as const,
+    key: "organization" as const,
+    label: "Organization",
+    description: "Hospital networks, HMOs & provider administration",
+    icon: IconBuilding,
+    color: "text-amber-500 dark:text-amber-400",
+    bg: "bg-amber-500/10 dark:bg-amber-500/20",
+    border: "border-amber-200 dark:border-amber-800",
+  },
+];
 
 export default function BranchManagementClient() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const tenantSlug = (params?.tenant as string) || "demo-tenant";
 
   const [branches, setBranches] = useState<BranchDto[]>([]);
-  const [facilities, setFacilities] = useState<TenantFacility[]>([]);
+  const [facilities, setFacilities] = useState<WorkspaceFacility[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
@@ -58,8 +121,15 @@ export default function BranchManagementClient() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingBranch, setEditingBranch] = useState<BranchDto | null>(null);
   const [philhealthBranch, setPhilhealthBranch] = useState<BranchDto | null>(null);
-  const [linkBranch, setLinkBranch] = useState<BranchDto | null>(null);
   const [deletingBranch, setDeletingBranch] = useState<BranchDto | null>(null);
+
+  // Contextual facility onboarding wizard
+  const [wizardBranch, setWizardBranch] = useState<BranchDto | null>(null);
+  const [wizardType, setWizardType] = useState<"clinic" | "laboratory" | "pharmacy" | "organization">("clinic");
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
+
+  // Facility settings hub state
+  const [settingsFacility, setSettingsFacility] = useState<FacilityData | null>(null);
 
   // Form states
   const [formName, setFormName] = useState("");
@@ -84,23 +154,19 @@ export default function BranchManagementClient() {
   const [phEndpoint, setPhEndpoint] = useState("https://staging.philhealth.gov.ph/KONSULTA/SOAP");
   const [savingPh, setSavingPh] = useState(false);
 
-  // Link Facilities state
-  const [selectedFacilityIds, setSelectedFacilityIds] = useState<string[]>([]);
-  const [savingLink, setSavingLink] = useState(false);
-
   // Fetch branches and facilities
   const loadData = async () => {
     setLoading(true);
     try {
-      const [branchList, facResponse] = await Promise.all([
+      const [branchList, facList] = await Promise.all([
         branchService.getBranches(tenantSlug),
-        apiClient.get<TenantFacility[]>(`/facilities?tenantSlug=${encodeURIComponent(tenantSlug)}`)
+        facilityService.getFacilities(tenantSlug),
       ]);
-      setBranches(branchList);
-      setFacilities(facResponse.data || []);
-    } catch (err: any) {
+      setBranches(branchList || []);
+      setFacilities(facList || []);
+    } catch (err: unknown) {
       console.error("Failed to load branch data", err);
-      toast.error("Could not load branches: " + (err.response?.data?.message || err.message));
+      toast.error("Could not load branches. Please refresh the page.");
     } finally {
       setLoading(false);
     }
@@ -108,7 +174,25 @@ export default function BranchManagementClient() {
 
   useEffect(() => {
     loadData();
+
+    const handleFacilityCreated = () => {
+      loadData();
+    };
+    window.addEventListener("clinicez:facility-created", handleFacilityCreated);
+    return () => {
+      window.removeEventListener("clinicez:facility-created", handleFacilityCreated);
+    };
   }, [tenantSlug]);
+
+  // Open create branch modal if trigger param is present in URL
+  useEffect(() => {
+    if (searchParams.get("createBranch") === "true") {
+      handleOpenCreate();
+      const sp = new URLSearchParams(window.location.search);
+      sp.delete("createBranch");
+      window.history.replaceState({}, "", `${window.location.pathname}${sp.toString() ? `?${sp.toString()}` : ""}`);
+    }
+  }, [searchParams]);
 
   // Open Create Modal
   const handleOpenCreate = () => {
@@ -185,8 +269,9 @@ export default function BranchManagementClient() {
         setIsCreateOpen(false);
       }
       await loadData();
-    } catch (err: any) {
-      toast.error("Failed to save branch: " + (err.response?.data?.message || err.message));
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Unknown error";
+      toast.error("Failed to save branch: " + errorMsg);
     } finally {
       setSavingForm(false);
     }
@@ -228,41 +313,11 @@ export default function BranchManagementClient() {
       toast.success(`PhilHealth credentials configured for branch "${philhealthBranch.name}".`);
       setPhilhealthBranch(null);
       await loadData();
-    } catch (err: any) {
-      toast.error("Failed to configure PhilHealth: " + (err.response?.data?.message || err.message));
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Unknown error";
+      toast.error("Failed to configure PhilHealth: " + errorMsg);
     } finally {
       setSavingPh(false);
-    }
-  };
-
-  // Open Link Facilities Modal
-  const handleOpenLinkFacilities = (branch: BranchDto) => {
-    setLinkBranch(branch);
-    // Pre-select currently linked facilities
-    const currentLinkedIds = branch.facilities.map(f => f.id);
-    setSelectedFacilityIds(currentLinkedIds);
-  };
-
-  // Toggle facility selection
-  const toggleFacilitySelection = (facilityId: string) => {
-    setSelectedFacilityIds(prev =>
-      prev.includes(facilityId) ? prev.filter(id => id !== facilityId) : [...prev, facilityId]
-    );
-  };
-
-  // Save Facility Links
-  const handleSaveFacilityLinks = async () => {
-    if (!linkBranch) return;
-    setSavingLink(true);
-    try {
-      await branchService.assignFacilities(linkBranch.id, selectedFacilityIds);
-      toast.success(`Facilities assigned to branch "${linkBranch.name}".`);
-      setLinkBranch(null);
-      await loadData();
-    } catch (err: any) {
-      toast.error("Failed to link facilities: " + (err.response?.data?.message || err.message));
-    } finally {
-      setSavingLink(false);
     }
   };
 
@@ -274,21 +329,44 @@ export default function BranchManagementClient() {
       toast.success(`Branch "${deletingBranch.name}" removed.`);
       setDeletingBranch(null);
       await loadData();
-    } catch (err: any) {
-      toast.error("Failed to delete branch: " + (err.response?.data?.message || err.message));
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Unknown error";
+      toast.error("Failed to delete branch: " + errorMsg);
     }
   };
 
-  const filteredBranches = branches.filter(b => {
+  // Contextual Add Facility trigger
+  const handleOpenAddFacility = (branch: BranchDto, facilityType?: "clinic" | "laboratory" | "pharmacy" | "organization") => {
+    setWizardBranch(branch);
+    if (facilityType) {
+      setWizardType(facilityType);
+    } else {
+      // Find the first unfilled slot
+      const occupied = branch.facilities.map((f) => f.facilityType.toLowerCase());
+      const firstFree = FACILITY_SLOTS.find((s) => !occupied.includes(s.key));
+      setWizardType(firstFree ? firstFree.key : "clinic");
+    }
+    setIsWizardOpen(true);
+  };
+
+  const filteredBranches = branches.filter((b) => {
     if (!search) return true;
     const q = search.toLowerCase();
+    const facilityMatch = b.facilities.some((f) => f.name.toLowerCase().includes(q));
     return (
       b.name.toLowerCase().includes(q) ||
       (b.code && b.code.toLowerCase().includes(q)) ||
       (b.city && b.city.toLowerCase().includes(q)) ||
-      (b.philHealthPmccNumber && b.philHealthPmccNumber.toLowerCase().includes(q))
+      (b.philHealthPmccNumber && b.philHealthPmccNumber.toLowerCase().includes(q)) ||
+      facilityMatch
     );
   });
+
+  const totalFacilitiesAttached = branches.reduce((sum, b) => sum + (b.facilities?.length || 0), 0);
+  const totalAccreditedBranches = branches.filter((b) => b.isPhilHealthAccredited).length;
+  const unassignedFacilities = facilities.filter(
+    (f) => !f.branchId || !branches.some((b) => b.id === f.branchId)
+  );
 
   return (
     <div className="w-full flex-1 flex flex-col gap-6 sm:gap-8 p-4 sm:p-6 md:p-8 max-w-7xl mx-auto animate-in fade-in-50 duration-300">
@@ -296,13 +374,13 @@ export default function BranchManagementClient() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-6">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Branches & Locations</h1>
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Branches &amp; Locations</h1>
             <Badge variant="outline" className="font-mono text-xs border-primary/30 text-primary bg-primary/5">
-              Multi-Facility Architecture
+              Branch-First Architecture
             </Badge>
           </div>
           <p className="text-muted-foreground text-xs sm:text-sm mt-1">
-            Manage physical branches, statutory PhilHealth YAKAP accreditations, and link Clinics, Labs, and Pharmacies Under One Roof.
+            Physical branches serve as the regulatory foundation for provisioning Clinics, Laboratories, Pharmacies, and Organizations.
           </p>
         </div>
 
@@ -322,8 +400,41 @@ export default function BranchManagementClient() {
             className="rounded-xl font-bold text-xs px-5 h-9 bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm flex items-center justify-center gap-1.5"
           >
             <IconPlus className="h-4 w-4" />
-            Add New Branch
+            New Branch
           </Button>
+        </div>
+      </div>
+
+      {/* Stats Counters */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+        <div className="p-4 rounded-2xl border bg-card/60 flex items-center justify-between">
+          <div>
+            <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Total Branches</span>
+            <div className="text-2xl font-black text-foreground mt-0.5">{branches.length}</div>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+            <IconBuilding className="h-5 w-5" />
+          </div>
+        </div>
+
+        <div className="p-4 rounded-2xl border bg-card/60 flex items-center justify-between">
+          <div>
+            <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Facilities Attached</span>
+            <div className="text-2xl font-black text-foreground mt-0.5">{totalFacilitiesAttached}</div>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+            <IconHospital className="h-5 w-5" />
+          </div>
+        </div>
+
+        <div className="p-4 rounded-2xl border bg-card/60 flex items-center justify-between">
+          <div>
+            <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">YAKAP Accredited</span>
+            <div className="text-2xl font-black text-foreground mt-0.5">{totalAccreditedBranches}</div>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+            <IconShieldCheck className="h-5 w-5" />
+          </div>
         </div>
       </div>
 
@@ -332,9 +443,9 @@ export default function BranchManagementClient() {
         <div className="relative flex-1 max-w-md">
           <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search branches by name, PMCC, city, or code..."
+            placeholder="Search branches by name, code, PMCC, city, or facility..."
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={(e) => setSearch(e.target.value)}
             className="pl-9 h-10 rounded-xl bg-card text-xs sm:text-sm"
           />
         </div>
@@ -352,9 +463,9 @@ export default function BranchManagementClient() {
             <IconMapPin className="h-8 w-8" />
           </div>
           <div>
-            <h3 className="text-base font-bold">No branches configured yet</h3>
+            <h3 className="text-base font-bold">No physical branches found</h3>
             <p className="text-xs text-muted-foreground max-w-md mt-1">
-              Create your first physical branch to unify your Clinic, Laboratory, and Pharmacy under one roof with independent PhilHealth accreditation.
+              Create your first physical branch to anchor Clinics, Laboratories, and Pharmacies with independent Philippine regulatory credentials.
             </p>
           </div>
           <Button onClick={handleOpenCreate} size="sm" className="rounded-xl font-bold text-xs gap-1.5">
@@ -363,153 +474,273 @@ export default function BranchManagementClient() {
           </Button>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filteredBranches.map(branch => {
-            const clinics = branch.facilities.filter(f => f.facilityType === "Clinic");
-            const labs = branch.facilities.filter(f => f.facilityType === "Laboratory");
-            const pharmacies = branch.facilities.filter(f => f.facilityType === "Pharmacy");
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {filteredBranches.map((branch) => {
+            // Find facilities belonging to this branch
+            const branchFacilities = branch.facilities.map((bf): WorkspaceFacility => {
+              const full = facilities.find((f) => f.id === bf.id);
+              if (full) return full;
+              return {
+                id: bf.id,
+                name: bf.name,
+                facilityType: bf.facilityType,
+                status: bf.status,
+                slug: bf.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+                consoleUrl: null,
+                createdAt: "",
+                classification: null,
+                licenseToOperate: null,
+                philHealthAccreditationNumber: null,
+                taxIdentificationNumber: null,
+                operatingHours: null,
+                region: null,
+                province: null,
+                city: branch.city || null,
+                barangay: null,
+                zipCode: null,
+                streetAddress: null,
+                contactNumber: null,
+                contactEmail: null,
+                deploymentMode: "SharedCloud",
+                consoleBaseUrl: null,
+                visibility: "Private",
+                acceptsExternalRequests: false,
+                branchId: branch.id,
+              };
+            });
+
+            const occupiedCount = branchFacilities.length;
+            const hasAvailableSlots = occupiedCount < 4;
 
             return (
-              <Card key={branch.id} className="relative overflow-hidden rounded-2xl border bg-card shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <CardTitle className="text-base font-bold truncate">{branch.name}</CardTitle>
-                        {branch.code && (
-                          <Badge variant="secondary" className="text-[10px] font-mono px-1.5 py-0">
-                            {branch.code}
-                          </Badge>
-                        )}
-                      </div>
-                      <CardDescription className="text-xs mt-1 flex items-center gap-1">
-                        <IconMapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                        <span className="truncate">
-                          {[branch.streetAddress, branch.barangay, branch.city, branch.province]
-                            .filter(Boolean)
-                            .join(", ") || "No address specified"}
-                        </span>
-                      </CardDescription>
-                    </div>
-
-                    <Badge
-                      className={
-                        branch.isActive
-                          ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px] font-semibold"
-                          : "bg-muted text-muted-foreground text-[10px]"
-                      }
-                    >
-                      {branch.isActive ? "Active" : "Inactive"}
-                    </Badge>
-                  </div>
-                </CardHeader>
-
-                <CardContent className="space-y-4 text-xs flex-1">
-                  {/* PhilHealth YAKAP Accreditation Status */}
-                  <div className="p-3 rounded-xl border bg-muted/30 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5">
-                        <IconShieldCheck className="h-4 w-4 text-primary" />
-                        PhilHealth Accreditation
-                      </span>
-                      {branch.isPhilHealthAccredited ? (
-                        <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30 text-[10px] font-bold">
-                          Accredited
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 text-[10px] font-bold">
-                          Unconfigured
-                        </Badge>
-                      )}
-                    </div>
-
-                    {branch.isPhilHealthAccredited ? (
-                      <div className="grid grid-cols-2 gap-2 text-[11px]">
-                        <div>
-                          <span className="text-muted-foreground block text-[10px]">PMCC No.</span>
-                          <span className="font-mono font-medium">{branch.philHealthPmccNumber || "—"}</span>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground block text-[10px]">Software Cert ID</span>
-                          <span className="font-mono font-medium truncate block">{branch.philHealthSoftwareCertificateId || "—"}</span>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-[11px] text-muted-foreground">
-                        Not configured. Set up branch credentials to enable direct eClaims and YAKAP transmittal.
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Under One Roof Facility Links */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between text-[11px] font-medium text-muted-foreground">
-                      <span>Facilities Under One Roof</span>
-                      <span className="font-bold text-foreground">{branch.facilities.length} Attached</span>
-                    </div>
-
-                    <div className="flex flex-wrap gap-1.5 min-h-[32px] p-2 rounded-xl bg-muted/20 border border-border/50">
-                      {branch.facilities.length === 0 ? (
-                        <span className="text-[11px] text-muted-foreground italic">No facilities linked</span>
-                      ) : (
-                        branch.facilities.map(f => (
+              <Card
+                key={branch.id}
+                className="relative overflow-hidden rounded-2xl border bg-card shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between"
+              >
+                <div>
+                  {/* Branch Card Header */}
+                  <CardHeader className="pb-3 border-b bg-muted/10">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <CardTitle className="text-base font-bold truncate text-foreground">{branch.name}</CardTitle>
+                          {branch.code && (
+                            <Badge variant="secondary" className="text-[10px] font-mono px-1.5 py-0">
+                              {branch.code}
+                            </Badge>
+                          )}
                           <Badge
-                            key={f.id}
-                            variant="secondary"
-                            className="text-[10px] font-medium gap-1 px-2 py-0.5 rounded-lg"
+                            className={
+                              branch.isActive
+                                ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px] font-semibold"
+                                : "bg-muted text-muted-foreground text-[10px]"
+                            }
                           >
-                            {f.facilityType === "Clinic" && <IconHospital className="h-3 w-3 text-blue-500" />}
-                            {f.facilityType === "Laboratory" && <IconTestPipe className="h-3 w-3 text-purple-500" />}
-                            {f.facilityType === "Pharmacy" && <IconPill className="h-3 w-3 text-emerald-500" />}
-                            <span className="truncate max-w-[120px]">{f.name}</span>
+                            {branch.isActive ? "Active" : "Inactive"}
                           </Badge>
-                        ))
-                      )}
+                        </div>
+                        <CardDescription className="text-xs flex items-center gap-1.5">
+                          <IconMapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <span className="truncate">
+                            {[branch.streetAddress, branch.barangay, branch.city, branch.province]
+                              .filter(Boolean)
+                              .join(", ") || "No street address configured"}
+                          </span>
+                        </CardDescription>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleOpenEdit(branch)}
+                          className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground"
+                          title="Edit Branch"
+                        >
+                          <IconEdit className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setDeletingBranch(branch)}
+                          className="h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive"
+                          title="Delete Branch"
+                        >
+                          <IconTrash className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
+                  </CardHeader>
 
-                {/* Card Actions */}
-                <div className="p-3 border-t bg-muted/10 flex items-center justify-between gap-1.5">
-                  <div className="flex items-center gap-1.5">
+                  <CardContent className="space-y-4 pt-4 text-xs">
+                    {/* PhilHealth YAKAP Accreditation Status Bar */}
+                    <div className="p-3 rounded-xl border bg-muted/20 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 rounded-lg bg-card border text-primary">
+                          <IconShieldCheck className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <div className="font-semibold text-xs text-foreground">
+                            {branch.isPhilHealthAccredited ? "PhilHealth Accredited" : "PhilHealth Unconfigured"}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground font-mono">
+                            {branch.isPhilHealthAccredited
+                              ? `PMCC: ${branch.philHealthPmccNumber || "Configured"} | ACC: ${branch.philHealthAccreditationNumber || "—"}`
+                              : "No credentials bound yet"}
+                          </div>
+                        </div>
+                      </div>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleOpenPhilHealth(branch)}
+                        className="h-7 text-[11px] font-semibold rounded-lg gap-1 px-2.5"
+                      >
+                        <IconKey className="h-3 w-3 text-primary" />
+                        <span>{branch.isPhilHealthAccredited ? "Configure" : "Setup"}</span>
+                      </Button>
+                    </div>
+
+                    {/* Contained Facilities Grid & Empty Slots */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-[11px] font-semibold text-muted-foreground">
+                        <span className="uppercase tracking-wider">Facilities Under One Roof</span>
+                        <span className="font-mono">{occupiedCount} / 4 Slots Occupied</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {FACILITY_SLOTS.map((slot) => {
+                          const slotFacilities = branchFacilities.filter(
+                            (f) => f.facilityType.toLowerCase() === slot.key
+                          );
+                          const Icon = slot.icon;
+
+                          if (slotFacilities.length > 0) {
+                            return slotFacilities.map((activeFacility) => {
+                              const isProvisioning = activeFacility.status === "Provisioning";
+                              const resolvedUrl = resolveConsoleUrl(activeFacility, tenantSlug);
+
+                              return (
+                                <div
+                                  key={activeFacility.id}
+                                  className="p-3 rounded-xl border bg-card flex flex-col justify-between gap-2.5 transition-all shadow-2xs hover:border-slate-300 dark:hover:border-slate-700"
+                                >
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="flex items-center gap-2 truncate">
+                                      <div className={`p-1.5 rounded-lg shrink-0 ${slot.bg} ${slot.color}`}>
+                                        <Icon className="h-4 w-4" />
+                                      </div>
+                                      <div className="truncate">
+                                        <div className="font-bold text-xs truncate text-foreground" title={activeFacility.name}>
+                                          {activeFacility.name}
+                                        </div>
+                                        <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                          <span>{slot.label}</span>
+                                          <span>•</span>
+                                          <Badge
+                                            variant="secondary"
+                                            className={`text-[9px] px-1 py-0 ${
+                                              isProvisioning
+                                                ? "bg-amber-500/10 text-amber-600 border-amber-500/30"
+                                                : "bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
+                                            }`}
+                                          >
+                                            {activeFacility.status}
+                                          </Badge>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => setSettingsFacility(activeFacility as FacilityData)}
+                                      className="h-7 w-7 rounded-lg text-muted-foreground hover:text-foreground shrink-0"
+                                      title={`Settings & Hub for ${activeFacility.name}`}
+                                    >
+                                      <IconSettings className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
+
+                                  <div className="flex items-center justify-between pt-1 border-t border-border/40">
+                                    <span className="font-mono text-[10px] text-muted-foreground truncate">
+                                      {activeFacility.slug}.{slot.key}
+                                    </span>
+
+                                    {resolvedUrl ? (
+                                      <a
+                                        href={resolvedUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline"
+                                      >
+                                        <span>Launch Console</span>
+                                        <IconExternalLink className="h-3 w-3" />
+                                      </a>
+                                    ) : (
+                                      <span className="text-[10px] text-muted-foreground italic">
+                                        {isProvisioning ? "Provisioning..." : "Console inactive"}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            });
+                          }
+
+                          // Render Dashed Empty Slot Card
+                          return (
+                            <div
+                              key={slot.key}
+                              onClick={() => handleOpenAddFacility(branch, slot.key)}
+                              className="group border-2 border-dashed border-border/80 hover:border-primary/60 hover:bg-primary/5 p-3 rounded-xl flex items-center justify-between cursor-pointer transition-all duration-200"
+                            >
+                              <div className="flex items-center gap-2.5 truncate">
+                                <div className="p-1.5 rounded-lg bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+                                  <Icon className="h-4 w-4" />
+                                </div>
+                                <div className="truncate">
+                                  <div className="text-xs font-bold text-muted-foreground group-hover:text-primary transition-colors truncate">
+                                    + Add {slot.label}
+                                  </div>
+                                  <p className="text-[10px] text-muted-foreground/70 truncate">
+                                    Empty facility slot
+                                  </p>
+                                </div>
+                              </div>
+
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] font-mono border-dashed border-border group-hover:border-primary/40 group-hover:text-primary transition-colors shrink-0"
+                              >
+                                Empty
+                              </Badge>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </CardContent>
+                </div>
+
+                {/* Card Actions Footer */}
+                <div className="p-3 border-t bg-muted/10 flex items-center justify-between gap-2 mt-2">
+                  <span className="text-[11px] text-muted-foreground font-medium">
+                    {branch.contactNumber || branch.contactEmail || "No contact info"}
+                  </span>
+
+                  {hasAvailableSlots && (
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleOpenPhilHealth(branch)}
-                      className="h-8 text-[11px] font-semibold rounded-xl gap-1"
+                      onClick={() => handleOpenAddFacility(branch)}
+                      className="h-8 text-[11px] font-bold rounded-xl gap-1 text-primary border-primary/30 hover:bg-primary/5"
                     >
-                      <IconKey className="h-3.5 w-3.5 text-primary" />
-                      PhilHealth
+                      <IconPlus className="h-3.5 w-3.5" />
+                      <span>Add Facility</span>
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleOpenLinkFacilities(branch)}
-                      className="h-8 text-[11px] font-semibold rounded-xl gap-1"
-                    >
-                      <IconLink className="h-3.5 w-3.5 text-blue-500" />
-                      Link Facilities
-                    </Button>
-                  </div>
-
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleOpenEdit(branch)}
-                      className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground"
-                    >
-                      <IconEdit className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setDeletingBranch(branch)}
-                      className="h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive"
-                    >
-                      <IconTrash className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
+                  )}
                 </div>
               </Card>
             );
@@ -517,13 +748,110 @@ export default function BranchManagementClient() {
         </div>
       )}
 
+      {/* ── UNASSIGNED FACILITIES (LEGACY / ORPHANED) ── */}
+      {unassignedFacilities.length > 0 && (
+        <Card className="rounded-2xl border-amber-200 dark:border-amber-900 bg-amber-50/30 dark:bg-amber-950/10 p-5 space-y-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <IconAlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                <h3 className="text-sm font-bold text-foreground">Unassigned Facilities</h3>
+                <Badge variant="outline" className="text-[10px] font-mono border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-400">
+                  {unassignedFacilities.length} Not Linked
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                These facilities were created before the branch-first workflow or have not been linked to a physical branch location yet.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {unassignedFacilities.map((uf) => {
+              const slot = FACILITY_SLOTS.find((s) => s.key === uf.facilityType.toLowerCase()) || FACILITY_SLOTS[0];
+              const Icon = slot.icon;
+              const resolvedUrl = resolveConsoleUrl(uf, tenantSlug);
+
+              return (
+                <div
+                  key={uf.id}
+                  className="p-3 rounded-xl border bg-card shadow-2xs flex flex-col justify-between gap-2.5"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 truncate">
+                      <div className={`p-1.5 rounded-lg shrink-0 ${slot.bg} ${slot.color}`}>
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <div className="truncate">
+                        <div className="font-bold text-xs truncate" title={uf.name}>
+                          {uf.name}
+                        </div>
+                        <span className="text-[10px] text-muted-foreground">{slot.label}</span>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setSettingsFacility(uf as FacilityData)}
+                      className="h-6 w-6 rounded-md text-muted-foreground hover:text-foreground shrink-0"
+                      title={`Settings for ${uf.name}`}
+                    >
+                      <IconSettings className="h-3 w-3" />
+                    </Button>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1 border-t border-border/40 text-[10px]">
+                    <span className="font-mono text-muted-foreground truncate">{uf.slug}</span>
+                    {resolvedUrl && (
+                      <a
+                        href={resolvedUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 font-bold text-primary hover:underline"
+                      >
+                        <span>Launch</span>
+                        <IconExternalLink className="h-2.5 w-2.5" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {/* ── CONTEXTUAL FACILITY ONBOARDING WIZARD ── */}
+      {isWizardOpen && (
+        <FacilityOnboardingWizard
+          open={isWizardOpen}
+          onOpenChange={setIsWizardOpen}
+          initialType={wizardType}
+          targetBranch={wizardBranch}
+          onFacilityCreated={loadData}
+        />
+      )}
+
+      {/* ── FACILITY SETTINGS HUB MODAL ── */}
+      {settingsFacility && (
+        <FacilitySettingsHub
+          facility={settingsFacility}
+          open={!!settingsFacility}
+          onOpenChange={(open) => !open && setSettingsFacility(null)}
+          onSaved={loadData}
+        />
+      )}
+
       {/* ── CREATE / EDIT BRANCH MODAL ── */}
-      <Dialog open={isCreateOpen || !!editingBranch} onOpenChange={open => {
-        if (!open) {
-          setIsCreateOpen(false);
-          setEditingBranch(null);
-        }
-      }}>
+      <Dialog
+        open={isCreateOpen || !!editingBranch}
+        onOpenChange={(open) => {
+          if (!open) {
+            setIsCreateOpen(false);
+            setEditingBranch(null);
+          }
+        }}
+      >
         <DialogContent className="max-w-lg rounded-2xl">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold">
@@ -540,7 +868,7 @@ export default function BranchManagementClient() {
               <Input
                 placeholder="e.g. Quezon City Medical Hub"
                 value={formName}
-                onChange={e => setFormName(e.target.value)}
+                onChange={(e) => setFormName(e.target.value)}
                 className="h-9 rounded-xl text-xs"
               />
             </div>
@@ -550,7 +878,7 @@ export default function BranchManagementClient() {
               <Input
                 placeholder="e.g. QC-01"
                 value={formCode}
-                onChange={e => setFormCode(e.target.value)}
+                onChange={(e) => setFormCode(e.target.value)}
                 className="h-9 rounded-xl text-xs"
               />
             </div>
@@ -560,7 +888,7 @@ export default function BranchManagementClient() {
               <Input
                 placeholder="e.g. NCR / Region IV-A"
                 value={formRegion}
-                onChange={e => setFormRegion(e.target.value)}
+                onChange={(e) => setFormRegion(e.target.value)}
                 className="h-9 rounded-xl text-xs"
               />
             </div>
@@ -570,7 +898,7 @@ export default function BranchManagementClient() {
               <Input
                 placeholder="e.g. Unit 402, Medical Arts Tower, EDSA"
                 value={formStreet}
-                onChange={e => setFormStreet(e.target.value)}
+                onChange={(e) => setFormStreet(e.target.value)}
                 className="h-9 rounded-xl text-xs"
               />
             </div>
@@ -580,7 +908,7 @@ export default function BranchManagementClient() {
               <Input
                 placeholder="e.g. Brgy. Socorro"
                 value={formBarangay}
-                onChange={e => setFormBarangay(e.target.value)}
+                onChange={(e) => setFormBarangay(e.target.value)}
                 className="h-9 rounded-xl text-xs"
               />
             </div>
@@ -590,7 +918,7 @@ export default function BranchManagementClient() {
               <Input
                 placeholder="e.g. Quezon City"
                 value={formCity}
-                onChange={e => setFormCity(e.target.value)}
+                onChange={(e) => setFormCity(e.target.value)}
                 className="h-9 rounded-xl text-xs"
               />
             </div>
@@ -600,7 +928,7 @@ export default function BranchManagementClient() {
               <Input
                 placeholder="e.g. Metro Manila / Cavite"
                 value={formProvince}
-                onChange={e => setFormProvince(e.target.value)}
+                onChange={(e) => setFormProvince(e.target.value)}
                 className="h-9 rounded-xl text-xs"
               />
             </div>
@@ -610,7 +938,7 @@ export default function BranchManagementClient() {
               <Input
                 placeholder="e.g. 1109"
                 value={formZip}
-                onChange={e => setFormZip(e.target.value)}
+                onChange={(e) => setFormZip(e.target.value)}
                 className="h-9 rounded-xl text-xs"
               />
             </div>
@@ -620,7 +948,7 @@ export default function BranchManagementClient() {
               <Input
                 placeholder="e.g. +63 917 123 4567"
                 value={formContact}
-                onChange={e => setFormContact(e.target.value)}
+                onChange={(e) => setFormContact(e.target.value)}
                 className="h-9 rounded-xl text-xs"
               />
             </div>
@@ -630,7 +958,7 @@ export default function BranchManagementClient() {
               <Input
                 placeholder="e.g. qc.branch@example.com"
                 value={formEmail}
-                onChange={e => setFormEmail(e.target.value)}
+                onChange={(e) => setFormEmail(e.target.value)}
                 className="h-9 rounded-xl text-xs"
               />
             </div>
@@ -662,7 +990,7 @@ export default function BranchManagementClient() {
       </Dialog>
 
       {/* ── PHILHEALTH YAKAP CREDENTIALS MODAL ── */}
-      <Dialog open={!!philhealthBranch} onOpenChange={open => !open && setPhilhealthBranch(null)}>
+      <Dialog open={!!philhealthBranch} onOpenChange={(open) => !open && setPhilhealthBranch(null)}>
         <DialogContent className="max-w-md rounded-2xl">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold flex items-center gap-2">
@@ -681,7 +1009,7 @@ export default function BranchManagementClient() {
                 <Input
                   placeholder="e.g. ACC-2026-881"
                   value={phAccreditation}
-                  onChange={e => setPhAccreditation(e.target.value)}
+                  onChange={(e) => setPhAccreditation(e.target.value)}
                   className="h-9 rounded-xl text-xs font-mono"
                 />
               </div>
@@ -691,7 +1019,7 @@ export default function BranchManagementClient() {
                 <Input
                   placeholder="e.g. Z15445"
                   value={phPmcc}
-                  onChange={e => setPhPmcc(e.target.value)}
+                  onChange={(e) => setPhPmcc(e.target.value)}
                   className="h-9 rounded-xl text-xs font-mono"
                 />
               </div>
@@ -702,7 +1030,7 @@ export default function BranchManagementClient() {
               <Input
                 placeholder="e.g. CERT-YAKAP-2026"
                 value={phCertId}
-                onChange={e => setPhCertId(e.target.value)}
+                onChange={(e) => setPhCertId(e.target.value)}
                 className="h-9 rounded-xl text-xs font-mono"
               />
             </div>
@@ -713,7 +1041,7 @@ export default function BranchManagementClient() {
                 <Input
                   placeholder="Leave blank to keep existing"
                   value={phUsername}
-                  onChange={e => setPhUsername(e.target.value)}
+                  onChange={(e) => setPhUsername(e.target.value)}
                   className="h-9 rounded-xl text-xs"
                 />
               </div>
@@ -724,7 +1052,7 @@ export default function BranchManagementClient() {
                   type="password"
                   placeholder="Leave blank to keep existing"
                   value={phPassword}
-                  onChange={e => setPhPassword(e.target.value)}
+                  onChange={(e) => setPhPassword(e.target.value)}
                   className="h-9 rounded-xl text-xs"
                 />
               </div>
@@ -736,7 +1064,7 @@ export default function BranchManagementClient() {
                 type="password"
                 placeholder="Leave blank to keep existing"
                 value={phCipherKey}
-                onChange={e => setPhCipherKey(e.target.value)}
+                onChange={(e) => setPhCipherKey(e.target.value)}
                 className="h-9 rounded-xl text-xs font-mono"
               />
             </div>
@@ -745,7 +1073,7 @@ export default function BranchManagementClient() {
               <Label className="text-xs font-semibold">Konsulta SOAP Endpoint</Label>
               <Input
                 value={phEndpoint}
-                onChange={e => setPhEndpoint(e.target.value)}
+                onChange={(e) => setPhEndpoint(e.target.value)}
                 className="h-9 rounded-xl text-xs font-mono"
               />
             </div>
@@ -775,92 +1103,8 @@ export default function BranchManagementClient() {
         </DialogContent>
       </Dialog>
 
-      {/* ── LINK FACILITIES (UNDER ONE ROOF) MODAL ── */}
-      <Dialog open={!!linkBranch} onOpenChange={open => !open && setLinkBranch(null)}>
-        <DialogContent className="max-w-md rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-bold flex items-center gap-2">
-              <IconLink className="h-5 w-5 text-blue-500" />
-              Link Facilities Under One Roof
-            </DialogTitle>
-            <DialogDescription className="text-xs">
-              Attach Clinic, Laboratory, and Pharmacy facilities operating in this physical location ({linkBranch?.name}).
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-2 py-3 max-h-[300px] overflow-y-auto">
-            {facilities.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-4">
-                No facilities created yet in this workspace. Create Clinics, Labs, or Pharmacies in their respective tabs first.
-              </p>
-            ) : (
-              facilities.map(fac => {
-                const isSelected = selectedFacilityIds.includes(fac.id);
-                const isLinkedToAnother = fac.branchId && fac.branchId !== linkBranch?.id;
-
-                return (
-                  <div
-                    key={fac.id}
-                    onClick={() => toggleFacilitySelection(fac.id)}
-                    className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-colors ${
-                      isSelected
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:bg-muted/40"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <div className="p-2 rounded-lg bg-card border">
-                        {fac.facilityType === "Clinic" && <IconHospital className="h-4 w-4 text-blue-500" />}
-                        {fac.facilityType === "Laboratory" && <IconTestPipe className="h-4 w-4 text-purple-500" />}
-                        {fac.facilityType === "Pharmacy" && <IconPill className="h-4 w-4 text-emerald-500" />}
-                        {fac.facilityType === "Organization" && <IconBuilding className="h-4 w-4 text-orange-500" />}
-                      </div>
-                      <div>
-                        <div className="font-semibold text-xs text-foreground">{fac.name}</div>
-                        <div className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-                          <span>{fac.facilityType}</span>
-                          {isLinkedToAnother && (
-                            <span className="text-amber-500 font-medium">(Assigned to other branch)</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className={`h-5 w-5 rounded-md border flex items-center justify-center transition-colors ${
-                      isSelected ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/30"
-                    }`}>
-                      {isSelected && <IconCheck className="h-3.5 w-3.5 stroke-[3]" />}
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-
-          <DialogFooter className="gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setLinkBranch(null)}
-              className="rounded-xl text-xs"
-            >
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              onClick={handleSaveFacilityLinks}
-              disabled={savingLink}
-              className="rounded-xl text-xs font-bold gap-1.5"
-            >
-              {savingLink && <IconLoader className="h-3.5 w-3.5 animate-spin" />}
-              Save Linked Facilities
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* ── DELETE CONFIRMATION MODAL ── */}
-      <Dialog open={!!deletingBranch} onOpenChange={open => !open && setDeletingBranch(null)}>
+      <Dialog open={!!deletingBranch} onOpenChange={(open) => !open && setDeletingBranch(null)}>
         <DialogContent className="max-w-sm rounded-2xl">
           <DialogHeader>
             <DialogTitle className="text-base font-bold text-destructive flex items-center gap-2">
@@ -868,7 +1112,7 @@ export default function BranchManagementClient() {
               Delete Branch
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Are you sure you want to delete &quot;{deletingBranch?.name}&quot;? All linked facilities will be decoupled but preserved.
+              Are you sure you want to delete &quot;{deletingBranch?.name}&quot;? All linked facilities will be preserved.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">

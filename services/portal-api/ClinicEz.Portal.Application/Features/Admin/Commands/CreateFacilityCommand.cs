@@ -72,23 +72,25 @@ public class CreateFacilityCommandHandler(
 ) : IRequestHandler<CreateFacilityCommand, CreateFacilityResult>
 {
     /// <summary>A facility joins only a branch of its own workspace, and a branch holds at most one facility of each type.</summary>
-    private async Task ValidateBranchAsync(Guid tenantId, Guid? branchId, FacilityType facilityType, CancellationToken cancellationToken)
+    private async Task<Branch?> ValidateBranchAsync(Guid tenantId, Guid? branchId, FacilityType facilityType, CancellationToken cancellationToken)
     {
-        if (branchId is not { } branch) return;
+        if (branchId is not { } branch) return null;
 
-        var branchBelongs = await context.Branches.AnyAsync(b => b.Id == branch && b.TenantId == tenantId, cancellationToken);
-        if (!branchBelongs)
+        var branchEntity = await context.Branches.FirstOrDefaultAsync(b => b.Id == branch && b.TenantId == tenantId && !b.IsDeleted, cancellationToken);
+        if (branchEntity == null)
         {
             throw new InvalidOperationException("The selected branch does not belong to this workspace.");
         }
 
-        var typeTaken = await context.Facilities.AnyAsync(f => f.BranchId == branch && f.FacilityType == facilityType, cancellationToken);
+        var typeTaken = await context.Facilities.AnyAsync(f => f.BranchId == branch && f.FacilityType == facilityType && !f.IsDeleted, cancellationToken);
         if (typeTaken)
         {
             throw new CodedConflictException(
                 ConflictCodes.BranchFacilityTypeTaken,
                 $"This branch already has a {facilityType.ToString().ToLowerInvariant()}.");
         }
+
+        return branchEntity;
     }
 
     public async Task<CreateFacilityResult> Handle(CreateFacilityCommand request, CancellationToken cancellationToken)
@@ -129,7 +131,7 @@ public class CreateFacilityCommandHandler(
             throw new InvalidOperationException($"The facility slug '{candidateSlug}' is already taken. Please choose another unique subdomain slug.");
         }
 
-        await ValidateBranchAsync(tenant.Id, request.BranchId, request.FacilityType, cancellationToken);
+        var targetBranch = await ValidateBranchAsync(tenant.Id, request.BranchId, request.FacilityType, cancellationToken);
 
         // Verify workspace plan allocations and limits before provisioning
         await entitlementGuard.EnsureCanCreateFacilityAsync(tenant.Id, request.FacilityType, cancellationToken);
@@ -156,17 +158,19 @@ public class CreateFacilityCommandHandler(
             ConsoleBaseUrl = onPremise ? ConsoleBaseUrlRule.Normalize(request.ConsoleBaseUrl!) : null,
             Classification = request.Classification,
             LicenseToOperate = request.LicenseToOperate,
-            PhilHealthAccreditationNumber = request.PhilHealthAccreditationNumber,
+            PhilHealthAccreditationNumber = string.IsNullOrWhiteSpace(request.PhilHealthAccreditationNumber)
+                ? targetBranch?.PhilHealthAccreditationNumber
+                : request.PhilHealthAccreditationNumber,
             TaxIdentificationNumber = request.TaxIdentificationNumber,
             OperatingHours = string.IsNullOrWhiteSpace(request.OperatingHours) ? null : request.OperatingHours.Trim(),
-            Region = request.Region,
-            Province = request.Province,
-            City = request.City,
-            Barangay = request.Barangay,
-            ZipCode = request.ZipCode,
-            StreetAddress = request.StreetAddress,
-            ContactNumber = request.ContactNumber,
-            ContactEmail = request.ContactEmail
+            Region = string.IsNullOrWhiteSpace(request.Region) ? targetBranch?.Region : request.Region,
+            Province = string.IsNullOrWhiteSpace(request.Province) ? targetBranch?.Province : request.Province,
+            City = string.IsNullOrWhiteSpace(request.City) ? targetBranch?.City : request.City,
+            Barangay = string.IsNullOrWhiteSpace(request.Barangay) ? targetBranch?.Barangay : request.Barangay,
+            ZipCode = string.IsNullOrWhiteSpace(request.ZipCode) ? targetBranch?.ZipCode : request.ZipCode,
+            StreetAddress = string.IsNullOrWhiteSpace(request.StreetAddress) ? targetBranch?.StreetAddress : request.StreetAddress,
+            ContactNumber = string.IsNullOrWhiteSpace(request.ContactNumber) ? targetBranch?.ContactNumber : request.ContactNumber,
+            ContactEmail = string.IsNullOrWhiteSpace(request.ContactEmail) ? targetBranch?.ContactEmail : request.ContactEmail
         };
 
         // The license is derived from the workspace's entitlements and this facility's share of the pool, never from the request.

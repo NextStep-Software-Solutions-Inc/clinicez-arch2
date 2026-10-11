@@ -37,9 +37,7 @@ export function NavMain({
   const pathname = usePathname()
   
   // Track open state of expandable menus
-  const [openStates, setOpenStates] = useState<Record<string, boolean>>({
-    Facilities: true // default facilities section to open
-  })
+  const [openStates, setOpenStates] = useState<Record<string, boolean>>({})
 
   const toggleOpen = (title: string) => {
     setOpenStates((prev) => ({
@@ -117,7 +115,7 @@ export function NavMain({
             }
 
             const newPath = item.url ? `/${tenant}${item.url}` : ""
-            const isActive = pathname === newPath
+            const isActive = pathname === newPath || (!!item.url && item.url !== "/dashboard" && pathname?.startsWith(`${newPath}/`))
             
             return (
               <SidebarMenuItem key={item.title}>

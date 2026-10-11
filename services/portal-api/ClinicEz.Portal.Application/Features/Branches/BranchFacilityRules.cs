@@ -27,7 +27,7 @@ public static class BranchFacilityRules
 
         var linkingIds = facilitiesToLink.Select(f => f.Id).ToList();
         var occupiedTypes = await context.Facilities
-            .Where(f => f.BranchId == branch.Id && !linkingIds.Contains(f.Id))
+            .Where(f => f.BranchId == branch.Id && !linkingIds.Contains(f.Id) && !f.IsDeleted)
             .Select(f => f.FacilityType)
             .ToListAsync(cancellationToken);
 

@@ -122,4 +122,110 @@ public class BranchFacilityRulesTests : IDisposable
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             handler.Handle(new CreateFacilityCommand(_tenant.Id.ToString(), FacilityType.Clinic, "Sneaky", BranchId: foreignBranch.Id), CancellationToken.None));
     }
+
+    [Fact]
+    public async Task CreateFacility_InheritsAddressAndPhilHealthFromBranch_WhenNotProvided()
+    {
+        var branchWithDetails = new Branch
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenant.Id,
+            Name = "BGC Branch",
+            StreetAddress = "26th Street",
+            Barangay = "Fort Bonifacio",
+            City = "Taguig",
+            Province = "Metro Manila",
+            Region = "NCR",
+            ZipCode = "1634",
+            ContactNumber = "+63 917 111 2233",
+            ContactEmail = "bgc@metro.ph",
+            PhilHealthAccreditationNumber = "PHIC-BGC-001"
+        };
+        _context.Branches.Add(branchWithDetails);
+        await _context.SaveChangesAsync();
+        await TestSupport.SeedSubscriptionAsync(_context, _tenant.Id, planSlug: "pro");
+        var handler = TestSupport.CreateFacilityHandler(_context, new Mock<IEntitlementGuard>().Object);
+
+        var result = await handler.Handle(new CreateFacilityCommand(
+            _tenant.Id.ToString(),
+            FacilityType.Clinic,
+            "BGC Main Clinic",
+            BranchId: branchWithDetails.Id
+        ), CancellationToken.None);
+
+        Assert.True(result.Success);
+        var created = await _context.Facilities.SingleAsync(f => f.Name == "BGC Main Clinic");
+        Assert.Equal(branchWithDetails.Id, created.BranchId);
+        Assert.Equal("26th Street", created.StreetAddress);
+        Assert.Equal("Fort Bonifacio", created.Barangay);
+        Assert.Equal("Taguig", created.City);
+        Assert.Equal("Metro Manila", created.Province);
+        Assert.Equal("NCR", created.Region);
+        Assert.Equal("1634", created.ZipCode);
+        Assert.Equal("+63 917 111 2233", created.ContactNumber);
+        Assert.Equal("bgc@metro.ph", created.ContactEmail);
+        Assert.Equal("PHIC-BGC-001", created.PhilHealthAccreditationNumber);
+    }
+
+    [Fact]
+    public async Task CreateFacility_WithDeletedBranch_ThrowsException()
+    {
+        var deletedBranch = new Branch
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenant.Id,
+            Name = "Defunct Branch",
+            IsDeleted = true,
+            DeletedAt = DateTime.UtcNow
+        };
+        _context.Branches.Add(deletedBranch);
+        await _context.SaveChangesAsync();
+        await TestSupport.SeedSubscriptionAsync(_context, _tenant.Id, planSlug: "pro");
+        var handler = TestSupport.CreateFacilityHandler(_context, new Mock<IEntitlementGuard>().Object);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            handler.Handle(new CreateFacilityCommand(
+                _tenant.Id.ToString(),
+                FacilityType.Clinic,
+                "Ghost Clinic",
+                BranchId: deletedBranch.Id
+            ), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task EnsureCanLinkAsync_AllowsSameType_WhenPreviousFacilityIsDeleted()
+    {
+        var branch = new Branch
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenant.Id,
+            Name = "Active Branch"
+        };
+        _context.Branches.Add(branch);
+
+        var deletedClinic = new Facility
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenant.Id,
+            BranchId = branch.Id,
+            Name = "Old Clinic",
+            FacilityType = FacilityType.Clinic,
+            IsDeleted = true,
+            DeletedAt = DateTime.UtcNow
+        };
+        _context.Facilities.Add(deletedClinic);
+        await _context.SaveChangesAsync();
+
+        var newClinic = new Facility
+        {
+            Id = Guid.NewGuid(),
+            TenantId = _tenant.Id,
+            Name = "New Replacement Clinic",
+            FacilityType = FacilityType.Clinic
+        };
+
+        // Should not throw since the previous clinic is deleted
+        await BranchFacilityRules.EnsureCanLinkAsync(_context, branch, new[] { newClinic }, CancellationToken.None);
+    }
 }
+
