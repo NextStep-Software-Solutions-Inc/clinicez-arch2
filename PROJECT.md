@@ -47,7 +47,7 @@ Clinic EZ is a multi-tenant clinical workstation and healthcare platform compose
 |---|------|-------|-------------|--------|
 | M1 | Doctor Schedule, Rostering & Availability Engine | Features 1-6 (R1: Shift templates, breaks, leaves, btree_gist GiST exclusion, 23P01 mapping, SlotPicker UI) | none | DONE |
 | M2 | Native Patient Ingestion & Relational Chart Profiling | Features 7-13 (R2: Relational surgical/social/reproductive/NCD entities, chart tabs, extended triage vitals, WHO Z-scores) | none | DONE |
-| M3 | Dual-Mode Consultation Workstation & Inline Physical Exam | Features 14-17 (R3: Standard vs Konsulta ergonomics, 9-system physical exam card, Doctor PAN snapshot, statutory key auto-gen) | M2 | PLANNED |
+| M3 | Dual-Mode Consultation Workstation & Inline Physical Exam | Features 14-17 (R3: Standard vs Konsulta ergonomics, 9-system physical exam card, Doctor PAN snapshot, statutory key auto-gen) | M2 | DONE |
 | M4 | PhilHealth-Case1 Immunization Management & Interop Hub Synchronization | Features 18-21 (R4: PatientImmunization, statutory libraries, fallback 999, outbox event & patient-api sync) | none | PLANNED |
 | M5 | Structured Problem List, Allergies & CDS Decision Support | Features 22-25 (R5: PatientProblem, PatientAllergy, enhanced CDS evaluator with cross-reactivity & DDIs, PhilPEN risk scorer) | M2 | PLANNED |
 | M6 | Claims Transmittal Engine & DTD v1.14 Verification | Features 26-27 (R6: YakapClinicalMapper relational migration, 100% KonsultaData_v1.14.dtd compliance) | M2, M4, M5 | PLANNED |
