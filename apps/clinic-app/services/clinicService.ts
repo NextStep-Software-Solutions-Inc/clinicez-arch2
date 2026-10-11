@@ -237,6 +237,12 @@ export interface ConsultationRecord {
   signedAt?: string;
   diagnoses: EncounterDiagnosis[];
   prescriptions: PrescriptionItem[];
+  isYakapEligible?: boolean;
+  philHealthSignSympCode?: string;
+  philHealthOtherComplaint?: string;
+  philHealthPainSite?: string;
+  philHealthCaseNo?: string;
+  philHealthSoapTransNo?: string;
   syncStatus?: SyncStatus;
   prescriptionNumber?: string;
   rxPublicVerificationToken?: string;
@@ -803,6 +809,65 @@ export interface DoctorSharesReport {
   totalPhysicianShares: number;
   totalFacilityShares: number;
   doctorShares: DoctorWorkloadDetail[];
+}
+
+export interface PatientProblemRecord {
+  id: string;
+  clinicId: string;
+  patientId: string;
+  consultationEncounterId?: string;
+  icd10Code: string;
+  problemTitle: string;
+  philHealthMdiseaseCode?: string;
+  status: 'Active' | 'Resolved' | 'Inactive' | 'Relapsed';
+  severity: 'Mild' | 'Moderate' | 'Severe';
+  isChronicNcd: boolean;
+  onsetDate?: string;
+  resolvedDate?: string;
+  clinicalNotes?: string;
+  recordedByDoctorId: string;
+  recordedByDoctorName: string;
+  createdAt: string;
+}
+
+export interface CreatePatientProblemPayload {
+  consultationEncounterId?: string;
+  icd10Code: string;
+  problemTitle: string;
+  philHealthMdiseaseCode?: string;
+  status?: string;
+  severity?: string;
+  isChronicNcd?: boolean;
+  onsetDate?: string;
+  clinicalNotes?: string;
+  recordedByDoctorName?: string;
+}
+
+export interface PatientAllergyRecord {
+  id: string;
+  clinicId: string;
+  patientId: string;
+  category: 'Medication' | 'Food' | 'Environmental' | 'Biologic' | 'Other';
+  allergen: string;
+  allergenDrugCode?: string;
+  severity: 'Mild' | 'Moderate' | 'Severe' | 'LifeThreatening';
+  reactionManifestation?: string;
+  isAnaphylactic: boolean;
+  status: 'Active' | 'Inactive' | 'Refuted';
+  onsetDate?: string;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface CreatePatientAllergyPayload {
+  category?: string;
+  allergen: string;
+  allergenDrugCode?: string;
+  severity?: string;
+  reactionManifestation?: string;
+  isAnaphylactic?: boolean;
+  onsetDate?: string;
+  notes?: string;
 }
 
 export interface PatientSurgicalHistory {
@@ -1409,8 +1474,29 @@ export const clinicService = {
     return clinicApiClient.put<ConsultationRecord>(`/consultations/${id}`, payload);
   },
 
-  async signConsultation(id: string, credentials?: { prcLicenseNumber?: string; ptrNumber?: string; s2LicenseNumber?: string; philHealthPan?: string; philHealthAtc?: string }) {
-    return clinicApiClient.post<ConsultationRecord>(`/consultations/${id}/sign`, credentials ?? {});
+  async signConsultation(
+    id: string,
+    credentials?: {
+      prcLicenseNumber?: string;
+      ptrNumber?: string;
+      s2LicenseNumber?: string;
+      philHealthPan?: string;
+      doctorPhilHealthPan?: string;
+      philHealthAtc?: string;
+      targetPharmacyFacilityId?: string;
+      targetPharmacyTenantId?: string;
+    }
+  ) {
+    const payload = {
+      prcLicenseNumber: credentials?.prcLicenseNumber,
+      ptrNumber: credentials?.ptrNumber,
+      s2LicenseNumber: credentials?.s2LicenseNumber,
+      doctorPhilHealthPan: credentials?.doctorPhilHealthPan ?? credentials?.philHealthPan,
+      philHealthAtc: credentials?.philHealthAtc,
+      targetPharmacyFacilityId: credentials?.targetPharmacyFacilityId,
+      targetPharmacyTenantId: credentials?.targetPharmacyTenantId,
+    };
+    return clinicApiClient.post<ConsultationRecord>(`/consultations/${id}/sign`, payload);
   },
 
   // E-Prescriptions & Dual-Path Dispense
@@ -1673,6 +1759,37 @@ export const clinicService = {
   // Patient Chart
   async getPatientChart(patientId: string) {
     return clinicApiClient.get<PatientChart>(`/patients/${patientId}/chart`);
+  },
+
+  // Patient Structured Problems
+  async getPatientProblems(patientId: string, status?: string) {
+    const url = status ? `/patients/${patientId}/problems?status=${encodeURIComponent(status)}` : `/patients/${patientId}/problems`;
+    return clinicApiClient.get<PatientProblemRecord[]>(url);
+  },
+
+  async createPatientProblem(patientId: string, payload: CreatePatientProblemPayload) {
+    return clinicApiClient.post<PatientProblemRecord>(`/patients/${patientId}/problems`, payload);
+  },
+
+  async updatePatientProblemStatus(patientId: string, problemId: string, status: string, resolvedDate?: string, clinicalNotes?: string) {
+    return clinicApiClient.patch<PatientProblemRecord>(`/patients/${patientId}/problems/${problemId}/status`, {
+      status,
+      resolvedDate,
+      clinicalNotes,
+    });
+  },
+
+  // Patient Structured Allergies
+  async getPatientAllergies(patientId: string) {
+    return clinicApiClient.get<PatientAllergyRecord[]>(`/patients/${patientId}/allergies`);
+  },
+
+  async createPatientAllergy(patientId: string, payload: CreatePatientAllergyPayload) {
+    return clinicApiClient.post<PatientAllergyRecord>(`/patients/${patientId}/allergies`, payload);
+  },
+
+  async deletePatientAllergy(patientId: string, allergyId: string) {
+    return clinicApiClient.delete<boolean>(`/patients/${patientId}/allergies/${allergyId}`);
   },
 
   // Patient Surgical History

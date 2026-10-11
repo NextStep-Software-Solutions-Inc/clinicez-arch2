@@ -69,6 +69,9 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
     public DbSet<PatientSocialHistory> PatientSocialHistories { get; set; } = null!;
     public DbSet<PatientReproductiveHistory> PatientReproductiveHistories { get; set; } = null!;
     public DbSet<NcdRiskAssessment> NcdRiskAssessments { get; set; } = null!;
+    public DbSet<PatientImmunization> PatientImmunizations { get; set; } = null!;
+    public DbSet<PatientProblem> PatientProblems { get; set; } = null!;
+    public DbSet<PatientAllergy> PatientAllergies { get; set; } = null!;
     public DbSet<WorkspaceProfileRecord> WorkspaceProfiles => Set<WorkspaceProfileRecord>();
 
     public Guid CurrentClinicId => _clinicContext?.ClinicId ?? Guid.Empty;
@@ -132,6 +135,9 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
         modelBuilder.Entity<PatientSocialHistory>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<PatientReproductiveHistory>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
         modelBuilder.Entity<NcdRiskAssessment>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientImmunization>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientProblem>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
+        modelBuilder.Entity<PatientAllergy>().HasQueryFilter(e => !e.IsDeleted && e.ClinicId == CurrentClinicId);
 
         modelBuilder.Entity<EncounterDiagnosis>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<PrescriptionItem>().HasQueryFilter(e => !e.IsDeleted);
@@ -607,6 +613,59 @@ public class ApplicationDbContext : DbContext, IInteropDbContext, IWorkspaceProf
                 .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
             entity.HasIndex(e => new { e.ClinicId, e.AssessmentDate });
+        });
+
+        modelBuilder.Entity<PatientProblem>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Icd10Code).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.ProblemTitle).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.PhilHealthMdiseaseCode).HasMaxLength(20);
+            entity.Property(e => e.ClinicalNotes).HasMaxLength(1000);
+            entity.Property(e => e.RecordedByDoctorName).IsRequired().HasMaxLength(150);
+
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
+            entity.HasIndex(e => new { e.ClinicId, e.PatientId, e.Status });
+            entity.HasIndex(e => new { e.ClinicId, e.Icd10Code });
+        });
+
+        modelBuilder.Entity<PatientAllergy>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Allergen).IsRequired().HasMaxLength(150);
+            entity.Property(e => e.AllergenDrugCode).HasMaxLength(50);
+            entity.Property(e => e.ReactionManifestation).HasMaxLength(500);
+            entity.Property(e => e.Notes).HasMaxLength(1000);
+
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
+            entity.HasIndex(e => new { e.ClinicId, e.PatientId, e.Category });
+        });
+
+        modelBuilder.Entity<PatientImmunization>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.PatientName).IsRequired().HasMaxLength(150);
+            entity.Property(e => e.PhilHealthLibrary).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.PhilHealthCode).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.VaccineName).IsRequired().HasMaxLength(150);
+            entity.Property(e => e.BrandName).HasMaxLength(150);
+            entity.Property(e => e.Manufacturer).HasMaxLength(150);
+            entity.Property(e => e.LotBatchNumber).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Route).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.InjectionSite).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.AdministeredByStaffName).IsRequired().HasMaxLength(150);
+            entity.Property(e => e.AdministeredByPrcLicense).HasMaxLength(50);
+            entity.Property(e => e.AdverseReactionSeverity).IsRequired().HasMaxLength(50).HasDefaultValue("None");
+            entity.Property(e => e.AdverseReactionRemarks).HasMaxLength(1000);
+            entity.Property(e => e.HistoricalFacilityName).HasMaxLength(150);
+            entity.Property(e => e.Remarks).HasMaxLength(1000);
+
+            entity.HasIndex(e => new { e.TenantId, e.ClinicId, e.PatientId });
+            entity.HasIndex(e => new { e.ClinicId, e.AdministeredAtUtc });
+            entity.HasIndex(e => new { e.LotBatchNumber, e.ExpirationDate });
         });
 
         modelBuilder.Entity<MedicalCertificate>(entity =>

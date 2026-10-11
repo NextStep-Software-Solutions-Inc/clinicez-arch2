@@ -277,6 +277,7 @@ export default function ConsultationsScreen() {
 
   // PhilHealth Yakap Tagging & Statutory Mapping State
   const [isYakapEligible, setIsYakapEligible] = useState<boolean>(false);
+  const [philHealthAtc, setPhilHealthAtc] = useState<string>('ATC-2026-KON01');
   const [selectedSymptomCodes, setSelectedSymptomCodes] = useState<string[]>([]);
   const [symptomOtherDesc, setSymptomOtherDesc] = useState<string>('');
   const [symptomPainSite, setSymptomPainSite] = useState<string>('');
@@ -702,6 +703,7 @@ export default function ConsultationsScreen() {
     setLabOrders([]);
     setLabError(null);
     setIsYakapEligible(false);
+    setPhilHealthAtc('ATC-2026-KON01');
     setPhysicalExamFindings({ ...DEFAULT_PHYSICAL_EXAM_NORMAL });
   };
 
@@ -1075,11 +1077,11 @@ export default function ConsultationsScreen() {
         assessment,
         plan,
         isYakapEligible,
-        philHealthSignSympCode: selectedSymptomCodes.join(','),
-        philHealthOtherComplaint: otherSymptomSelected ? symptomOtherDesc || subjective : undefined,
-        philHealthPainSite: painSymptomSelected ? symptomPainSite : undefined,
+        philHealthSignSympCode: isYakapEligible ? selectedSymptomCodes.join(',') : undefined,
+        philHealthOtherComplaint: isYakapEligible && otherSymptomSelected ? symptomOtherDesc || subjective : undefined,
+        philHealthPainSite: isYakapEligible && painSymptomSelected ? symptomPainSite : undefined,
         doctorPhilHealthPan: isYakapEligible ? (doctorPan.trim() || signerStaff?.philHealthPan) : undefined,
-        philHealthAtc: isYakapEligible ? 'A' : undefined,
+        philHealthAtc: isYakapEligible ? (philHealthAtc.trim() || 'ATC-2026-KON01') : undefined,
         generalSurveyId: isYakapEligible ? (physicalExamFindings.generalSurvey === 'Normal' ? '1' : '2') : undefined,
         generalSurveyRemarks: isYakapEligible ? physicalExamFindings.generalSurveyRemarks : undefined,
         physicalExamFindingsJson: isYakapEligible ? JSON.stringify(physicalExamFindings) : undefined,
@@ -1108,14 +1110,44 @@ export default function ConsultationsScreen() {
       }
       consultationId = consultation.id;
       setSignedConsultationId(consultation.id);
+    } else {
+      await clinicService.updateConsultation(consultationId, {
+        subjective,
+        objective,
+        assessment,
+        plan,
+        isYakapEligible,
+        philHealthSignSympCode: isYakapEligible ? selectedSymptomCodes.join(',') : undefined,
+        philHealthOtherComplaint: isYakapEligible && otherSymptomSelected ? symptomOtherDesc || subjective : undefined,
+        philHealthPainSite: isYakapEligible && painSymptomSelected ? symptomPainSite : undefined,
+        doctorPhilHealthPan: isYakapEligible ? (doctorPan.trim() || signerStaff?.philHealthPan) : undefined,
+        philHealthAtc: isYakapEligible ? (philHealthAtc.trim() || 'ATC-2026-KON01') : undefined,
+        generalSurveyId: isYakapEligible ? (physicalExamFindings.generalSurvey === 'Normal' ? '1' : '2') : undefined,
+        generalSurveyRemarks: isYakapEligible ? physicalExamFindings.generalSurveyRemarks : undefined,
+        physicalExamFindingsJson: isYakapEligible ? JSON.stringify(physicalExamFindings) : undefined,
+        diagnoses: selectedDiagnoses.map((d) => ({
+          icd10Code: d.icd10Code,
+          description: d.description,
+          isPrimary: d.isPrimary,
+        })),
+        prescriptions: prescriptions.map((p) => ({
+          genericName: p.genericName,
+          dosage: p.dosage,
+          form: p.form,
+          sig: p.sig,
+          quantity: p.quantity,
+          isDangerousDrug: p.isDangerousDrug,
+          philHealthDrugCode: p.philHealthDrugCode,
+        })),
+      });
     }
 
     const [, signErr] = await clinicService.signConsultation(consultationId, {
       prcLicenseNumber: doctorPrc,
       ptrNumber: doctorPtr,
       s2LicenseNumber: doctorS2,
-      philHealthPan: isYakapEligible ? (doctorPan.trim() || signerStaff?.philHealthPan) : undefined,
-      philHealthAtc: isYakapEligible ? 'A' : undefined,
+      doctorPhilHealthPan: isYakapEligible ? (doctorPan.trim() || signerStaff?.philHealthPan) : undefined,
+      philHealthAtc: isYakapEligible ? (philHealthAtc.trim() || 'ATC-2026-KON01') : undefined,
     });
     if (signErr) {
       setIsSigning(false);
@@ -1611,48 +1643,92 @@ export default function ConsultationsScreen() {
               </View>
             ) : null}
 
-            {/* PhilHealth Yakap tagging */}
-            <Card>
-              <View style={styles.rowBetween}>
-                <View style={styles.flex}>
-                  <CheckRow
-                    checked={isYakapEligible}
-                    disabled={isSigned}
-                    onPress={() => setIsYakapEligible(!isYakapEligible)}
-                    label="PhilHealth Yakap / Konsulta consultation"
-                  />
-                </View>
-                {isYakapEligible ? (
-                  <Badge label={yakapReady ? 'Claim ready' : 'Incomplete'} variant={yakapReady ? 'success' : 'warning'} />
-                ) : (
-                  <Badge label="Not tagged" variant="neutral" />
-                )}
-              </View>
-              <ThemedText variant="small" color={theme.colors.textMuted}>
-                {!isYakapEligible
-                  ? 'Recorded in the internal EMR only. No PhilHealth claim data is generated.'
-                  : yakapReady
-                    ? 'Complaint, diagnosis and vitals are on record for the claim.'
-                    : `Still needed for the claim: ${yakapMissing.join(', ')}.`}
-              </ThemedText>
-              {isYakapEligible && (
-                <View style={{ marginTop: theme.spacing.sm, paddingTop: theme.spacing.sm, borderTopWidth: 1, borderTopColor: theme.colors.border }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                    <Badge label="ATC: A (Konsulta Encounter)" variant="info" />
-                    <ThemedText variant="smallBold" color={theme.colors.primary}>
-                      Case, Trans & SOAP Nos automated on save/sign
+            {/* Dual-Mode Consultation Workstation Header */}
+            {!isYakapEligible ? (
+              /* Standard Clinical Encounter: 100% Free of PhilHealth Bureaucracy */
+              <Card>
+                <View style={styles.dualModeSwitcher}>
+                  <View style={styles.flex}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
+                      <Icon name="activity" size={theme.sizes.iconSm} color={theme.colors.primary} />
+                      <ThemedText variant="bodyBold">Standard Clinical Encounter</ThemedText>
+                      <Badge label="Cash / Private / HMO" variant="neutral" size="sm" />
+                    </View>
+                    <ThemedText variant="small" color={theme.colors.textMuted} style={{ marginTop: theme.spacing.xs }}>
+                      Standard clinical documentation. Zero PhilHealth bureaucracy (no ATC prompts, Case/Trans numbers, or statutory questionnaires).
                     </ThemedText>
                   </View>
+                  {!isSigned ? (
+                    <Button
+                      title="Switch to PhilHealth Konsulta"
+                      size="sm"
+                      variant="outline"
+                      icon="shield"
+                      onPress={() => setIsYakapEligible(true)}
+                    />
+                  ) : null}
+                </View>
+              </Card>
+            ) : (
+              /* PhilHealth Konsulta Encounter: Guided Statutory Mode with Encounter ATC Header Banner */
+              <Card style={styles.atcBannerCard}>
+                <View style={styles.atcHeaderRow}>
+                  <View style={styles.atcTitleGroup}>
+                    <Icon name="shield" size={theme.sizes.iconMd} color={theme.colors.primary} />
+                    <View style={styles.flex}>
+                      <ThemedText variant="bodyBold" color={theme.colors.primaryDark}>
+                        PhilHealth Konsulta Encounter Active
+                      </ThemedText>
+                      <ThemedText variant="small" color={theme.colors.primary}>
+                        Statutory keys (pHciCaseNo, pHciTransNo, pSoapTransNo) auto-generated & linked on save/sign
+                      </ThemedText>
+                    </View>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
+                    <Badge label={yakapReady ? 'Claim Ready' : 'Incomplete'} variant={yakapReady ? 'success' : 'warning'} />
+                    {!isSigned ? (
+                      <Button
+                        title="Switch to Standard"
+                        size="sm"
+                        variant="ghost"
+                        onPress={() => setIsYakapEligible(false)}
+                      />
+                    ) : null}
+                  </View>
+                </View>
+
+                {/* Encounter ATC Header Banner Input */}
+                <View style={{ marginTop: theme.spacing.xs }}>
                   <Input
-                    label="Attending Doctor PhilHealth PAN (Accreditation #)"
-                    value={doctorPan}
-                    onChangeText={setDoctorPan}
-                    placeholder="Enter or verify Doctor PhilHealth PAN"
+                    label="Authorization Transaction Code (ATC)"
+                    placeholder="e.g. ATC-2026-99214"
+                    value={philHealthAtc}
+                    onChangeText={setPhilHealthAtc}
                     editable={!isSigned}
                   />
                 </View>
-              )}
-            </Card>
+
+                {/* Automated Doctor PAN Snapshotting Display */}
+                <View style={styles.panSnapshotCard}>
+                  <View style={styles.rowBetween}>
+                    <ThemedText variant="smallBold" color={theme.colors.text}>
+                      Attending Physician PhilHealth PAN (Accreditation #)
+                    </ThemedText>
+                    {doctorPan || signerStaff?.philHealthPan ? (
+                      <Badge label="PAN Auto-Snapshotted" variant="success" size="sm" />
+                    ) : (
+                      <Badge label="PAN Missing" variant="warning" size="sm" />
+                    )}
+                  </View>
+                  <Input
+                    placeholder="Doctor PhilHealth PAN (e.g. 123456789012)"
+                    value={doctorPan}
+                    onChangeText={setDoctorPan}
+                    editable={!isSigned}
+                  />
+                </View>
+              </Card>
+            )}
 
             {/* S - Subjective */}
             <Card>
@@ -3030,5 +3106,43 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.md,
     borderTopWidth: theme.sizes.borderWidth,
     borderTopColor: theme.colors.border,
+  },
+  atcBannerCard: {
+    backgroundColor: theme.colors.primarySubtle,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.primaryBorder,
+    borderRadius: theme.radii.lg,
+    padding: theme.spacing.md,
+    gap: theme.spacing.sm,
+  },
+  atcHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.sm,
+  },
+  atcTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    flex: 1,
+  },
+  panSnapshotCard: {
+    backgroundColor: theme.colors.surface,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radii.md,
+    padding: theme.spacing.sm,
+    gap: theme.spacing.xs,
+  },
+  dualModeSwitcher: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: theme.spacing.sm,
+    backgroundColor: theme.colors.surfaceSubtle,
+    borderRadius: theme.radii.md,
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.border,
   },
 });

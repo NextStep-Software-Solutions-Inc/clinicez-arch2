@@ -774,5 +774,172 @@ public class YakapClinicalMapperTests
         doc.Soaps[0].PatientType.Should().Be("MM");
         doc.Soaps[0].MemPin.Should().Be("030263078507");
     }
-}
+    [Fact]
+    public void MapToYakapReportDocument_WithRelationalHistoriesAndImmunizations_MapsEntitiesAndFallbacks()
+    {
+        // Arrange
+        var clinicId = Guid.NewGuid();
+        var patientId = Guid.NewGuid();
+        var encounterId = Guid.NewGuid();
 
+        var settings = new ClinicSettings
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "tenant_1",
+            ClinicId = clinicId,
+            ClinicName = "Manila Health Clinic",
+            AccreditationNumber = "09214"
+        };
+
+        var patient = new ClinicPatient
+        {
+            Id = patientId,
+            TenantId = "tenant_1",
+            ClinicId = clinicId,
+            PatientCode = "PAT-REL-001",
+            FirstName = "Maria",
+            LastName = "Santos",
+            DateOfBirth = new DateOnly(1990, 8, 20),
+            Gender = "Female",
+            ContactNumber = "09171234567",
+            PhilHealthNumber = "123456789012"
+        };
+
+        var encounter = new ConsultationEncounter
+        {
+            Id = encounterId,
+            TenantId = "tenant_1",
+            ClinicId = clinicId,
+            PatientId = patientId,
+            PatientName = "Maria Santos",
+            DoctorId = Guid.NewGuid(),
+            DoctorName = "Dr. Rizal",
+            EncounterDate = new DateTime(2026, 10, 5, 10, 0, 0, DateTimeKind.Utc),
+            Subjective = "First Patient Encounter"
+        };
+
+        var immunizations = new List<PatientImmunization>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                TenantId = "tenant_1",
+                ClinicId = clinicId,
+                PatientId = patientId,
+                PatientName = "Maria Santos",
+                PhilHealthLibrary = "lib_immchild",
+                PhilHealthCode = "C01",
+                VaccineName = "BCG",
+                LotBatchNumber = "LOT-01",
+                ExpirationDate = new DateOnly(2028, 1, 1),
+                DoseSequence = 1,
+                Route = "ID",
+                InjectionSite = "Right Deltoid",
+                AdministeredAtUtc = DateTime.UtcNow.AddYears(-1),
+                AdministeredByStaffId = Guid.NewGuid(),
+                AdministeredByStaffName = "Nurse"
+            }
+        };
+
+        var problems = new List<PatientProblem>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                TenantId = "tenant_1",
+                ClinicId = clinicId,
+                PatientId = patientId,
+                Icd10Code = "E11.9",
+                ProblemTitle = "Type 2 diabetes mellitus",
+                PhilHealthMdiseaseCode = "006",
+                Status = ProblemStatus.Active,
+                RecordedByDoctorId = Guid.NewGuid(),
+                RecordedByDoctorName = "Dr. Rizal"
+            }
+        };
+
+        var surgical = new List<PatientSurgicalHistory>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                TenantId = "tenant_1",
+                ClinicId = clinicId,
+                PatientId = patientId,
+                ProcedureName = "Appendectomy",
+                SurgeryDate = new DateOnly(2022, 4, 15)
+            }
+        };
+
+        var social = new PatientSocialHistory
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "tenant_1",
+            ClinicId = clinicId,
+            PatientId = patientId,
+            IsSmoker = true,
+            CigarettesPerDay = 5,
+            IsAlcoholDrinker = false,
+            UsesIllicitDrugs = false,
+            IsSexuallyActive = true
+        };
+
+        var reproductive = new PatientReproductiveHistory
+        {
+            Id = Guid.NewGuid(),
+            TenantId = "tenant_1",
+            ClinicId = clinicId,
+            PatientId = patientId,
+            IsApplicable = true,
+            MenarcheAge = 12,
+            LastMenstrualPeriod = new DateOnly(2026, 9, 20),
+            PeriodDurationDays = 5,
+            CycleIntervalDays = 28,
+            PadsPerDay = 3,
+            ContraceptiveMethod = "None",
+            IsMenopausal = false
+        };
+
+        // Act
+        var doc = _mapper.MapToYakapReportDocument(
+            reportTagging: "1",
+            effectiveYear: "2026",
+            settings: settings,
+            encounters: [encounter],
+            patients: new Dictionary<Guid, ClinicPatient> { [patientId] = patient },
+            vitalsMap: new Dictionary<Guid, TriageVitals>(),
+            transmittalNumber: "RHCI09214202610050001",
+            immunizationsMap: new Dictionary<Guid, List<PatientImmunization>> { [patientId] = immunizations },
+            problemsMap: new Dictionary<Guid, List<PatientProblem>> { [patientId] = problems },
+            socialHistoriesMap: new Dictionary<Guid, PatientSocialHistory> { [patientId] = social },
+            reproductiveHistoriesMap: new Dictionary<Guid, PatientReproductiveHistory> { [patientId] = reproductive },
+            surgicalHistoriesMap: new Dictionary<Guid, List<PatientSurgicalHistory>> { [patientId] = surgical });
+
+        // Assert
+        doc.Profiles.Should().HaveCount(1);
+        var prof = doc.Profiles[0];
+
+        // Immunization mapping
+        prof.Immunizations.Should().HaveCount(1);
+        prof.Immunizations[0].ChildImmcode.Should().Be("C01");
+
+        // Medical history mapping
+        prof.MedicalHistories.Should().Contain(m => m.MdiseaseCode == "006");
+        prof.MedicalSpecifics.Should().Contain(s => s.MdiseaseCode == "006" && s.SpecificDesc == "Type 2 diabetes mellitus");
+
+        // Surgical history mapping
+        prof.SurgicalHistories.Should().HaveCount(1);
+        prof.SurgicalHistories[0].SurgDesc.Should().Be("Appendectomy");
+        prof.SurgicalHistories[0].SurgDate.Should().Be("2022-04-15");
+
+        // Social history mapping
+        prof.SocialHistory.IsSmoker.Should().Be("Y");
+        prof.SocialHistory.NoCigpk.Should().Be("5");
+        prof.SocialHistory.IsAdrinker.Should().Be("N");
+
+        // Reproductive history mapping
+        prof.MenstrualHistory.IsApplicable.Should().Be("Y");
+        prof.MenstrualHistory.MenarchePeriod.Should().Be("12");
+        prof.MenstrualHistory.LastMensPeriod.Should().Be("2026-09-20");
+    }
+}

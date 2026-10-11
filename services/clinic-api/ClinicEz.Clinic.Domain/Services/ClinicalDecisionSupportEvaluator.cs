@@ -1,3 +1,4 @@
+using ClinicEz.Clinic.Domain.Entities;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,7 +16,9 @@ public enum CdsAlertSeverity
 public enum CdsAlertType
 {
     DrugAllergy,
+    CrossReactivity,
     DrugDrugInteraction,
+    DrugDiseaseInteraction,
     RenalDoseAdjustment,
     LabValueWarning
 }
@@ -31,6 +34,8 @@ public record CdsAlert
     public required string OffendingDrug { get; init; }
     public string? InteractingDrug { get; init; }
     public bool RequiresOverrideReason { get; init; }
+    public bool IsHardStop { get; init; } = false;
+    public string? RuleType { get; init; }
 }
 
 public record PrescriptionCandidate
@@ -89,6 +94,10 @@ public static class ClinicalDecisionSupportEvaluator
         {
             "Sertraline", "Fluoxetine", "Escitalopram", "Paroxetine", "Citalopram"
         },
+        ["BetaBlockers_NonSelective"] = new[]
+        {
+            "Propranolol", "Carvedilol", "Nadolol", "Sotalol", "Timolol"
+        },
     };
 
     public static List<CdsAlert> Evaluate(
@@ -97,7 +106,9 @@ public static class ClinicalDecisionSupportEvaluator
         IEnumerable<PrescriptionCandidate>? existingMedications = null,
         double? serumCreatinineMgDl = null,
         double? egfrMlMin = null,
-        double? serumPotassiumMmolL = null)
+        double? serumPotassiumMmolL = null,
+        IEnumerable<PatientAllergy>? structuredAllergies = null,
+        IEnumerable<PatientProblem>? activeProblems = null)
     {
         var alerts = new List<CdsAlert>();
         var candidateList = candidates.ToList();
@@ -182,6 +193,201 @@ public static class ClinicalDecisionSupportEvaluator
                             Recommendation = "Do not prescribe NSAIDs. Use Paracetamol/Acetaminophen for mild analgesia.",
                             OffendingDrug = drug.GenericName,
                             RequiresOverrideReason = true
+                        });
+                    }
+                }
+            }
+        }
+
+        // 1B. STRUCTURED DRUG-ALLERGY & CROSS-REACTIVITY CHECKING
+        if (structuredAllergies != null)
+        {
+            var activeDrugAllergies = structuredAllergies
+                .Where(a => a.Category == AllergyCategory.Medication && a.Status == AllergyStatus.Active)
+                .ToList();
+
+            foreach (var drug in candidateList)
+            {
+                var drugName = drug.GenericName.Trim();
+                var matchedDrugClasses = GetDrugClasses(drugName);
+
+                foreach (var allergy in activeDrugAllergies)
+                {
+                    var allergen = allergy.Allergen.Trim();
+                    bool isDirectMatch = allergen.Equals(drugName, StringComparison.OrdinalIgnoreCase) ||
+                        allergen.Contains(drugName, StringComparison.OrdinalIgnoreCase) ||
+                        drugName.Contains(allergen, StringComparison.OrdinalIgnoreCase);
+
+                    bool isPenicillinClassMatch = allergen.Contains("Penicillin", StringComparison.OrdinalIgnoreCase) &&
+                        (drugName.Equals("Amoxicillin", StringComparison.OrdinalIgnoreCase) ||
+                         drugName.Equals("Ampicillin", StringComparison.OrdinalIgnoreCase) ||
+                         drugName.Equals("Co-Amoxiclav", StringComparison.OrdinalIgnoreCase) ||
+                         drugName.Equals("Penicillin", StringComparison.OrdinalIgnoreCase));
+
+                    if (isDirectMatch || isPenicillinClassMatch)
+                    {
+                        bool isCritical = allergy.IsAnaphylactic || allergy.Severity == AllergySeverity.LifeThreatening;
+                        alerts.Add(new CdsAlert
+                        {
+                            AlertId = $"ALLERGY-STR-{Guid.NewGuid():N}",
+                            Type = CdsAlertType.DrugAllergy,
+                            Severity = CdsAlertSeverity.Critical,
+                            RuleType = "DrugAllergy",
+                            Title = $"🚨 CONTRAINDICATION: Patient has documented allergy to {allergen}",
+                            ClinicalMechanism = $"Patient has recorded allergy to '{allergen}' ({allergy.ReactionManifestation ?? "Severe reaction"}). Direct administration risks severe hypersensitivity (anaphylaxis).",
+                            Recommendation = "Do not prescribe this medication. Select an alternative non-cross-reactive drug class.",
+                            OffendingDrug = drugName,
+                            RequiresOverrideReason = true,
+                            IsHardStop = isCritical
+                        });
+                        continue;
+                    }
+
+                    // Penicillin -> Cephalosporin cross-reactivity
+                    bool hasPenicillinAllergy = allergen.Contains("Penicillin", StringComparison.OrdinalIgnoreCase);
+                    bool isCephalosporin = drugName.StartsWith("Cef", StringComparison.OrdinalIgnoreCase) ||
+                                           drugName.StartsWith("Ceph", StringComparison.OrdinalIgnoreCase) ||
+                                           matchedDrugClasses.Contains("Cephalosporin", StringComparer.OrdinalIgnoreCase);
+
+                    if (hasPenicillinAllergy && isCephalosporin)
+                    {
+                        alerts.Add(new CdsAlert
+                        {
+                            AlertId = $"ALLERGY-STR-CEPH-{Guid.NewGuid():N}",
+                            Type = CdsAlertType.CrossReactivity,
+                            Severity = CdsAlertSeverity.Major,
+                            RuleType = "CrossReactivity",
+                            Title = $"⚠️ CROSS-REACTIVITY WARNING: Cephalosporin in Penicillin-Allergic Patient",
+                            ClinicalMechanism = $"{drugName} shares beta-lactam homology with {allergen}. Cross-reactivity risk is approximately 2-10%.",
+                            Recommendation = "Assess severity of penicillin allergy history. If previous reaction was anaphylaxis, avoid cephalosporins.",
+                            OffendingDrug = drugName,
+                            RequiresOverrideReason = true,
+                            IsHardStop = false
+                        });
+                    }
+
+                    // Aspirin -> NSAID cross-sensitivity
+                    bool hasAspirinAllergy = allergen.Contains("Aspirin", StringComparison.OrdinalIgnoreCase);
+                    bool isNsaid = matchedDrugClasses.Contains("NSAID", StringComparer.OrdinalIgnoreCase) ||
+                        drugName.Equals("Ibuprofen", StringComparison.OrdinalIgnoreCase) ||
+                        drugName.Equals("Naproxen", StringComparison.OrdinalIgnoreCase) ||
+                        drugName.Equals("Mefenamic Acid", StringComparison.OrdinalIgnoreCase) ||
+                        drugName.Equals("Ketorolac", StringComparison.OrdinalIgnoreCase) ||
+                        drugName.Equals("Diclofenac", StringComparison.OrdinalIgnoreCase);
+
+                    if (hasAspirinAllergy && isNsaid)
+                    {
+                        alerts.Add(new CdsAlert
+                        {
+                            AlertId = $"ALLERGY-STR-NSAID-{Guid.NewGuid():N}",
+                            Type = CdsAlertType.CrossReactivity,
+                            Severity = CdsAlertSeverity.Critical,
+                            RuleType = "CrossReactivity",
+                            Title = $"🚨 CONTRAINDICATION: NSAID prescribed to Aspirin/NSAID-sensitive patient",
+                            ClinicalMechanism = $"{drugName} inhibits COX-1, triggering severe bronchospasm or cutaneous reactions in aspirin-sensitive patients.",
+                            Recommendation = "Do not prescribe NSAIDs. Use Paracetamol for mild analgesia.",
+                            OffendingDrug = drugName,
+                            RequiresOverrideReason = true,
+                            IsHardStop = true
+                        });
+                    }
+                }
+            }
+        }
+
+        // 1C. DRUG-DISEASE INTERACTIONS (DDI)
+        if (activeProblems != null)
+        {
+            var problemList = activeProblems
+                .Where(p => p.Status == ProblemStatus.Active || p.Status == ProblemStatus.Relapsed)
+                .ToList();
+
+            foreach (var drug in candidateList)
+            {
+                var drugName = drug.GenericName.Trim();
+                var matchedDrugClasses = GetDrugClasses(drugName);
+                bool isNsaid = matchedDrugClasses.Contains("NSAID", StringComparer.OrdinalIgnoreCase) ||
+                    drugName.Equals("Ibuprofen", StringComparison.OrdinalIgnoreCase) ||
+                    drugName.Equals("Naproxen", StringComparison.OrdinalIgnoreCase) ||
+                    drugName.Equals("Mefenamic Acid", StringComparison.OrdinalIgnoreCase) ||
+                    drugName.Equals("Ketorolac", StringComparison.OrdinalIgnoreCase) ||
+                    drugName.Equals("Diclofenac", StringComparison.OrdinalIgnoreCase);
+
+                bool isNonSelectiveBetaBlocker = matchedDrugClasses.Contains("BetaBlockers_NonSelective", StringComparer.OrdinalIgnoreCase) ||
+                    drugName.Equals("Propranolol", StringComparison.OrdinalIgnoreCase) ||
+                    drugName.Equals("Timolol", StringComparison.OrdinalIgnoreCase) ||
+                    drugName.Equals("Nadolol", StringComparison.OrdinalIgnoreCase) ||
+                    drugName.Equals("Carvedilol", StringComparison.OrdinalIgnoreCase);
+
+                if (isNsaid)
+                {
+                    // Peptic Ulcer Disease (K25-K28)
+                    var pud = problemList.FirstOrDefault(p =>
+                        p.Icd10Code.StartsWith("K25", StringComparison.OrdinalIgnoreCase) ||
+                        p.Icd10Code.StartsWith("K26", StringComparison.OrdinalIgnoreCase) ||
+                        p.Icd10Code.StartsWith("K27", StringComparison.OrdinalIgnoreCase) ||
+                        p.Icd10Code.StartsWith("K28", StringComparison.OrdinalIgnoreCase));
+
+                    if (pud != null)
+                    {
+                        alerts.Add(new CdsAlert
+                        {
+                            AlertId = $"DDI-PUD-{Guid.NewGuid():N}",
+                            Type = CdsAlertType.DrugDiseaseInteraction,
+                            Severity = CdsAlertSeverity.Critical,
+                            RuleType = "DrugDisease",
+                            Title = "Contraindication: NSAID in Active Peptic Ulcer Disease",
+                            ClinicalMechanism = $"{drugName} is contraindicated in patients with active peptic ulceration ({pud.Icd10Code}) due to severe gastrointestinal bleeding risk.",
+                            Recommendation = "Discontinue NSAID. Consider paracetamol for analgesia.",
+                            OffendingDrug = drugName,
+                            RequiresOverrideReason = true,
+                            IsHardStop = true
+                        });
+                    }
+
+                    // Chronic Kidney Disease (N18)
+                    var ckd = problemList.FirstOrDefault(p =>
+                        p.Icd10Code.StartsWith("N18", StringComparison.OrdinalIgnoreCase));
+
+                    if (ckd != null)
+                    {
+                        alerts.Add(new CdsAlert
+                        {
+                            AlertId = $"DDI-CKD-{Guid.NewGuid():N}",
+                            Type = CdsAlertType.DrugDiseaseInteraction,
+                            Severity = CdsAlertSeverity.Critical,
+                            RuleType = "DrugDisease",
+                            Title = "Contraindication: NSAID in Chronic Kidney Disease",
+                            ClinicalMechanism = $"{drugName} inhibits renal prostaglandin synthesis, exacerbating renal failure in CKD ({ckd.Icd10Code}).",
+                            Recommendation = "Avoid prolonged NSAID therapy. Monitor renal function and serum creatinine.",
+                            OffendingDrug = drugName,
+                            RequiresOverrideReason = true,
+                            IsHardStop = false
+                        });
+                    }
+                }
+
+                if (isNonSelectiveBetaBlocker)
+                {
+                    // Asthma (J45) or COPD (J44)
+                    var airway = problemList.FirstOrDefault(p =>
+                        p.Icd10Code.StartsWith("J45", StringComparison.OrdinalIgnoreCase) ||
+                        p.Icd10Code.StartsWith("J44", StringComparison.OrdinalIgnoreCase));
+
+                    if (airway != null)
+                    {
+                        alerts.Add(new CdsAlert
+                        {
+                            AlertId = $"DDI-AIRWAY-{Guid.NewGuid():N}",
+                            Type = CdsAlertType.DrugDiseaseInteraction,
+                            Severity = CdsAlertSeverity.Critical,
+                            RuleType = "DrugDisease",
+                            Title = "Contraindication: Beta-Blocker in Bronchospastic Disease",
+                            ClinicalMechanism = $"{drugName} causes beta-2 receptor blockade, triggering severe bronchospasm in asthma and COPD ({airway.Icd10Code} - {airway.ProblemTitle}).",
+                            Recommendation = "Discontinue non-selective beta-blocker. Switch to cardioselective beta-1 blocker with caution.",
+                            OffendingDrug = drugName,
+                            RequiresOverrideReason = true,
+                            IsHardStop = true
                         });
                     }
                 }

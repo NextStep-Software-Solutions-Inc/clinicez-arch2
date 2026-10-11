@@ -39,6 +39,8 @@ export interface PhysicalExamFindings {
   rectalRemarks?: string;
   gu: SystemExamStatus;
   guRemarks?: string;
+  musculoskeletal: SystemExamStatus;
+  musculoskeletalRemarks?: string;
 }
 
 export const DEFAULT_PHYSICAL_EXAM_NORMAL: PhysicalExamFindings = {
@@ -60,6 +62,8 @@ export const DEFAULT_PHYSICAL_EXAM_NORMAL: PhysicalExamFindings = {
   rectalRemarks: '',
   gu: 'Normal',
   guRemarks: '',
+  musculoskeletal: 'Normal',
+  musculoskeletalRemarks: '',
 };
 
 interface ExamSystemConfig {
@@ -143,6 +147,14 @@ const EXAM_SYSTEMS: ExamSystemConfig[] = [
     normalDescription: 'Essentially normal, no suprapubic tenderness, no flank tenderness, no discharge',
     icon: 'checkCircle',
     placeholder: 'Describe CVA tenderness, genital ulcers, urethral/vaginal discharge, hernia...',
+  },
+  {
+    key: 'musculoskeletal',
+    remarksKey: 'musculoskeletalRemarks',
+    label: 'Musculoskeletal',
+    normalDescription: 'Full range of motion in all joints, no deformities, no joint swelling or tenderness',
+    icon: 'activity',
+    placeholder: 'Describe joint swelling, erythema, deformity, limited range of motion, muscle atrophy...',
   },
 ];
 
@@ -323,8 +335,8 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
   },
   systemRowAbnormal: {
-    backgroundColor: theme.colors.warningBg || '#FFFBEB',
-    borderColor: theme.colors.warningBorder || '#FDE68A',
+    backgroundColor: theme.colors.warningBg,
+    borderColor: theme.colors.warningBorder,
   },
   systemHeader: {
     flexDirection: 'row',
@@ -342,7 +354,7 @@ const styles = StyleSheet.create({
   },
   toggleButton: {
     paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 4,
+    paddingVertical: theme.spacing.xs,
     borderRadius: theme.radii.sm,
     borderWidth: 1,
   },
@@ -352,10 +364,10 @@ const styles = StyleSheet.create({
   },
   toggleButtonAbnormal: {
     borderColor: theme.colors.warning,
-    backgroundColor: '#FEF3C7',
+    backgroundColor: theme.colors.warningBg,
   },
   normalNote: {
-    marginTop: 6,
+    marginTop: theme.spacing.xs,
     fontStyle: 'italic',
   },
   remarksContainer: {

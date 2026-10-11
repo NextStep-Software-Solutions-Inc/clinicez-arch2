@@ -92,6 +92,7 @@ public static class DependencyInjection
         services.AddScoped<IPatientAppointmentPublisher, PatientAppointmentPublisher>();
         services.AddScoped<ILabRequisitionPublisher, LabRequisitionPublisher>();
         services.AddScoped<IPrescriptionPublisher, PrescriptionPublisher>();
+        services.AddScoped<IImmunizationEventPublisher, ImmunizationEventPublisher>();
         services.AddHttpClient(PatientRecordSharedHandler.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(30))
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
         services.Configure<ClinicUploadOptions>(configuration.GetSection(ClinicUploadOptions.SectionName));

@@ -50,19 +50,28 @@ public sealed class UpdateConsultationCommandHandler : IRequestHandler<UpdateCon
     private readonly IRepository<PrescriptionItem> _prescriptionRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClinicContext _clinicContext;
+    private readonly IRepository<StaffMember>? _staffRepository;
+    private readonly IRepository<ClinicSettings>? _settingsRepository;
+    private readonly ClinicEz.Clinic.Application.Features.Yakap.Services.IPhilHealthSequenceGenerator? _sequenceGenerator;
 
     public UpdateConsultationCommandHandler(
         IRepository<ConsultationEncounter> consultationRepository,
         IRepository<EncounterDiagnosis> diagnosisRepository,
         IRepository<PrescriptionItem> prescriptionRepository,
         IUnitOfWork unitOfWork,
-        IClinicContext clinicContext)
+        IClinicContext clinicContext,
+        IRepository<StaffMember>? staffRepository = null,
+        IRepository<ClinicSettings>? settingsRepository = null,
+        ClinicEz.Clinic.Application.Features.Yakap.Services.IPhilHealthSequenceGenerator? sequenceGenerator = null)
     {
         _consultationRepository = consultationRepository;
         _diagnosisRepository = diagnosisRepository;
         _prescriptionRepository = prescriptionRepository;
         _unitOfWork = unitOfWork;
         _clinicContext = clinicContext;
+        _staffRepository = staffRepository;
+        _settingsRepository = settingsRepository;
+        _sequenceGenerator = sequenceGenerator;
     }
 
     public async Task<ConsultationEncounterDto> Handle(UpdateConsultationCommand request, CancellationToken cancellationToken)
@@ -98,6 +107,54 @@ public sealed class UpdateConsultationCommandHandler : IRequestHandler<UpdateCon
         if (request.GeneralSurveyId != null) encounter.GeneralSurveyId = request.GeneralSurveyId;
         if (request.GeneralSurveyRemarks != null) encounter.GeneralSurveyRemarks = request.GeneralSurveyRemarks;
         if (request.PhysicalExamFindingsJson != null) encounter.PhysicalExamFindingsJson = request.PhysicalExamFindingsJson;
+
+        if (encounter.IsYakapEligible)
+        {
+            // Auto-snapshot Doctor PhilHealth PAN if not yet set
+            if (string.IsNullOrWhiteSpace(encounter.DoctorPhilHealthPan) && _staffRepository != null)
+            {
+                var doctor = await _staffRepository.Query(s => s.Id == encounter.DoctorId && s.ClinicId == _clinicContext.ClinicId)
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (doctor != null && !string.IsNullOrWhiteSpace(doctor.PhilHealthPan))
+                {
+                    encounter.DoctorPhilHealthPan = doctor.PhilHealthPan;
+                }
+            }
+
+            // Automatically derive and link pHciCaseNo, pHciTransNo, and pSoapTransNo
+            if (_sequenceGenerator != null && _settingsRepository != null &&
+                (string.IsNullOrWhiteSpace(encounter.HciCaseNo) || string.IsNullOrWhiteSpace(encounter.HciTransNo) || string.IsNullOrWhiteSpace(encounter.SoapTransNo)))
+            {
+                try
+                {
+                    var settings = await _settingsRepository.Query(s => s.ClinicId == _clinicContext.ClinicId)
+                        .FirstOrDefaultAsync(cancellationToken);
+                    var accreditationNo = !string.IsNullOrWhiteSpace(settings?.AccreditationNumber)
+                        ? settings.AccreditationNumber
+                        : "000000000";
+                    var year = encounter.EncounterDate.Year.ToString();
+                    var journey = await _sequenceGenerator.AssignPatientJourneyNumbersAsync(
+                        _clinicContext.TenantId,
+                        _clinicContext.ClinicId,
+                        encounter.PatientId,
+                        encounter.Id,
+                        accreditationNo,
+                        year,
+                        cancellationToken);
+
+                    encounter.HciCaseNo = journey.CaseNumber;
+                    encounter.PhilHealthCaseNo = journey.CaseNumber;
+                    encounter.HciTransNo = journey.EnlistmentTransactionNumber;
+                    encounter.SoapTransNo = journey.SoapTransactionNumber;
+                    encounter.PhilHealthSoapTransNo = journey.SoapTransactionNumber;
+                }
+                catch
+                {
+                    // Graceful fallback for offline sequence generation
+                }
+            }
+        }
+
         encounter.UpdatedAt = DateTime.UtcNow;
         encounter.UpdatedBy = _clinicContext.StaffId?.ToString() ?? "Doctor";
 

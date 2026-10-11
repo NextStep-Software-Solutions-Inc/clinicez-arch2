@@ -237,6 +237,7 @@ public sealed class CreateConsultationCommandHandler : IRequestHandler<CreateCon
 
                 encounter.HciCaseNo = journey.CaseNumber;
                 encounter.PhilHealthCaseNo = journey.CaseNumber;
+                encounter.HciTransNo = journey.EnlistmentTransactionNumber;
                 encounter.SoapTransNo = journey.SoapTransactionNumber;
                 encounter.PhilHealthSoapTransNo = journey.SoapTransactionNumber;
                 _consultationRepository.Update(encounter);

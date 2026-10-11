@@ -84,5 +84,65 @@ public sealed class ConsultationEncounter : BaseEntity
     // Navigations
     public ICollection<EncounterDiagnosis> Diagnoses { get; set; } = new List<EncounterDiagnosis>();
     public ICollection<PrescriptionItem> Prescriptions { get; set; } = new List<PrescriptionItem>();
+
+    public NineSystemPhysicalExamFindings? GetPhysicalExamFindings()
+    {
+        if (string.IsNullOrWhiteSpace(PhysicalExamFindingsJson)) return null;
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<NineSystemPhysicalExamFindings>(PhysicalExamFindingsJson);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public void SetPhysicalExamFindings(NineSystemPhysicalExamFindings? findings)
+    {
+        PhysicalExamFindingsJson = findings != null
+            ? System.Text.Json.JsonSerializer.Serialize(findings)
+            : null;
+    }
+}
+
+public sealed class SystemExamFinding
+{
+    public SystemExamFinding()
+    {
+    }
+
+    public SystemExamFinding(bool isNormal, string? remarks = null)
+    {
+        IsNormal = isNormal;
+        Remarks = remarks;
+    }
+
+    public bool IsNormal { get; set; } = true;
+    public string? Remarks { get; set; }
+}
+
+public sealed class NineSystemPhysicalExamFindings
+{
+    public bool AllEssentiallyNormal =>
+        (Skin?.IsNormal ?? true) &&
+        (Heent?.IsNormal ?? true) &&
+        (Chest?.IsNormal ?? true) &&
+        (Heart?.IsNormal ?? true) &&
+        (Abdomen?.IsNormal ?? true) &&
+        (Neuro?.IsNormal ?? true) &&
+        (Rectal?.IsNormal ?? true) &&
+        (Gu?.IsNormal ?? true) &&
+        (Musculoskeletal?.IsNormal ?? true);
+
+    public SystemExamFinding Skin { get; set; } = new();
+    public SystemExamFinding Heent { get; set; } = new();
+    public SystemExamFinding Chest { get; set; } = new();
+    public SystemExamFinding Heart { get; set; } = new();
+    public SystemExamFinding Abdomen { get; set; } = new();
+    public SystemExamFinding Neuro { get; set; } = new();
+    public SystemExamFinding Rectal { get; set; } = new();
+    public SystemExamFinding Gu { get; set; } = new();
+    public SystemExamFinding Musculoskeletal { get; set; } = new();
 }
 

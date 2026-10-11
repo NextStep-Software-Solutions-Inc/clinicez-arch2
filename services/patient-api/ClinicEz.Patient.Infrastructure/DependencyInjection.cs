@@ -2,6 +2,7 @@ using System.Security.Claims;
 using ClinicEz.Shared.Common;
 using ClinicEz.Shared.Interfaces;
 using ClinicEz.Shared.Interop;
+using ClinicEz.Shared.Interop.Contracts;
 using ClinicEz.Shared.Interoperability;
 using ClinicEz.Patient.Application.Features.Appointments.Interop;
 using ClinicEz.Patient.Application.Features.Documents.Interop;
@@ -173,7 +174,8 @@ public static class DependencyInjection
             .Handle<PatientDocumentIssuedPayload, PatientDocumentIssuedInteropHandler>(InteropTypes.PatientDocumentIssued)
             .Handle<LabOrderStatusChangedPayload, LabOrderStatusChangedInteropHandler>(InteropTypes.LabOrderStatusChanged)
             .Handle<RxStatusChangedPayload, RxStatusChangedInteropHandler>(InteropTypes.RxStatusChanged)
-            .Handle<LabResultReviewedPayload, LabResultReviewedInteropHandler>(InteropTypes.LabResultReviewed));
+            .Handle<LabResultReviewedPayload, LabResultReviewedInteropHandler>(InteropTypes.LabResultReviewed)
+            .Handle<ClinicalImmunizationAdministeredPayload, ClinicalImmunizationAdministeredInteropHandler>(InteropTypes.ClinicalImmunizationAdministered));
 
     public static IServiceCollection AddClerkAuthentication(
         this IServiceCollection services,

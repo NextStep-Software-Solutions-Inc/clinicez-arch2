@@ -127,7 +127,7 @@ export default function EdgeServerSwitcherSection() {
                   setInputUrl(val);
                   setProbeResult(null);
                 }}
-                placeholder="192.168.1.20:5245 or https://clinic.example.com"
+                placeholder="192.168.1.20:5245 or clinic.example.com"
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType="url"

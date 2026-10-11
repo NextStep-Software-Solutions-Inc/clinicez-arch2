@@ -38,13 +38,19 @@ public class EvaluateClinicalDecisionSupportQueryHandler : IRequestHandler<Evalu
 {
     private readonly IRepository<ClinicPatient> _patientRepo;
     private readonly IRepository<ClinicLabOrder> _labOrderRepo;
+    private readonly IRepository<PatientAllergy> _allergyRepo;
+    private readonly IRepository<PatientProblem> _problemRepo;
 
     public EvaluateClinicalDecisionSupportQueryHandler(
         IRepository<ClinicPatient> patientRepo,
-        IRepository<ClinicLabOrder> labOrderRepo)
+        IRepository<ClinicLabOrder> labOrderRepo,
+        IRepository<PatientAllergy> allergyRepo,
+        IRepository<PatientProblem> problemRepo)
     {
         _patientRepo = patientRepo;
         _labOrderRepo = labOrderRepo;
+        _allergyRepo = allergyRepo;
+        _problemRepo = problemRepo;
     }
 
     public async Task<EvaluateCdsResponse> Handle(EvaluateClinicalDecisionSupportQuery query, CancellationToken cancellationToken)
@@ -114,13 +120,29 @@ public class EvaluateClinicalDecisionSupportQueryHandler : IRequestHandler<Evalu
             }
         }
 
+        List<PatientAllergy>? structuredAllergies = null;
+        List<PatientProblem>? activeProblems = null;
+
+        if (req.PatientId.HasValue && req.PatientId.Value != Guid.Empty)
+        {
+            structuredAllergies = await _allergyRepo.Query(a => a.PatientId == req.PatientId.Value && a.Status == AllergyStatus.Active)
+                .AsNoTracking()
+                .ToListAsync(cancellationToken);
+
+            activeProblems = await _problemRepo.Query(p => p.PatientId == req.PatientId.Value && (p.Status == ProblemStatus.Active || p.Status == ProblemStatus.Relapsed))
+                .AsNoTracking()
+                .ToListAsync(cancellationToken);
+        }
+
         var alerts = ClinicalDecisionSupportEvaluator.Evaluate(
             req.Prescriptions,
             allergies,
             req.ExistingMedications,
             creatinine,
             egfr,
-            potassium
+            potassium,
+            structuredAllergies,
+            activeProblems
         );
 
         var hasCritical = alerts.Any(a => a.Severity == CdsAlertSeverity.Critical);

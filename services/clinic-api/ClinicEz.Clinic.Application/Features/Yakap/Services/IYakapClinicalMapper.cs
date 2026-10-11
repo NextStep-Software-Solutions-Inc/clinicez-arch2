@@ -17,7 +17,13 @@ public interface IYakapClinicalMapper
         string transmittalNumber,
         IReadOnlyDictionary<Guid, YakapNcdAnswersDto>? ncdMap = null,
         IReadOnlyDictionary<Guid, List<ClinicLabOrder>>? labOrdersMap = null,
-        IReadOnlyDictionary<string, decimal>? feeScheduleMap = null);
+        IReadOnlyDictionary<string, decimal>? feeScheduleMap = null,
+        IReadOnlyDictionary<Guid, List<PatientImmunization>>? immunizationsMap = null,
+        IReadOnlyDictionary<Guid, List<PatientProblem>>? problemsMap = null,
+        IReadOnlyDictionary<Guid, List<PatientAllergy>>? allergiesMap = null,
+        IReadOnlyDictionary<Guid, PatientSocialHistory>? socialHistoriesMap = null,
+        IReadOnlyDictionary<Guid, PatientReproductiveHistory>? reproductiveHistoriesMap = null,
+        IReadOnlyDictionary<Guid, List<PatientSurgicalHistory>>? surgicalHistoriesMap = null);
 
     string FormatPhilHealthAge(DateOnly birthDate, DateTime asOfDate);
 

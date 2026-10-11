@@ -148,6 +148,8 @@ public sealed class PhilHealthSequenceGenerator : IPhilHealthSequenceGenerator
             if (encounter != null)
             {
                 encounter.PhilHealthCaseNo = patient.PhilHealthCaseNo;
+                encounter.HciCaseNo = patient.PhilHealthCaseNo;
+                encounter.HciTransNo = patient.PhilHealthEnlistmentNo;
                 if (string.IsNullOrWhiteSpace(encounter.PhilHealthSoapTransNo))
                 {
                     encounter.PhilHealthSoapTransNo = await GenerateTransactionNumberAsync(
@@ -157,8 +159,9 @@ public sealed class PhilHealthSequenceGenerator : IPhilHealthSequenceGenerator
                         accreditationNumber,
                         yearClean,
                         ct);
-                    await _dbContext.SaveChangesAsync(ct);
                 }
+                encounter.SoapTransNo = encounter.PhilHealthSoapTransNo;
+                await _dbContext.SaveChangesAsync(ct);
                 soapTransNo = encounter.PhilHealthSoapTransNo;
             }
         }

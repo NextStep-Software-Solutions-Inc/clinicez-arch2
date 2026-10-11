@@ -30,7 +30,13 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
         string transmittalNumber,
         IReadOnlyDictionary<Guid, YakapNcdAnswersDto>? ncdMap = null,
         IReadOnlyDictionary<Guid, List<ClinicLabOrder>>? labOrdersMap = null,
-        IReadOnlyDictionary<string, decimal>? feeScheduleMap = null)
+        IReadOnlyDictionary<string, decimal>? feeScheduleMap = null,
+        IReadOnlyDictionary<Guid, List<PatientImmunization>>? immunizationsMap = null,
+        IReadOnlyDictionary<Guid, List<PatientProblem>>? problemsMap = null,
+        IReadOnlyDictionary<Guid, List<PatientAllergy>>? allergiesMap = null,
+        IReadOnlyDictionary<Guid, PatientSocialHistory>? socialHistoriesMap = null,
+        IReadOnlyDictionary<Guid, PatientReproductiveHistory>? reproductiveHistoriesMap = null,
+        IReadOnlyDictionary<Guid, List<PatientSurgicalHistory>>? surgicalHistoriesMap = null)
     {
         var isFirstTranche = reportTagging == "1";
         var accreditationNo = !string.IsNullOrWhiteSpace(settings.AccreditationNumber)
@@ -149,26 +155,41 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
             // Physical exam pertinence (age-responsive: pediatric anthropometrics vs adult waist/hip)
             var pePertinent = MapPhysicalExam(vitals, customProfile, isPediatric);
 
+            List<PatientProblem>? relProblems = null;
+            problemsMap?.TryGetValue(patient.Id, out relProblems);
+
+            List<PatientSurgicalHistory>? relSurg = null;
+            surgicalHistoriesMap?.TryGetValue(patient.Id, out relSurg);
+
+            PatientSocialHistory? relSocial = null;
+            socialHistoriesMap?.TryGetValue(patient.Id, out relSocial);
+
+            List<PatientImmunization>? relImms = null;
+            immunizationsMap?.TryGetValue(patient.Id, out relImms);
+
+            PatientReproductiveHistory? relRepro = null;
+            reproductiveHistoriesMap?.TryGetValue(patient.Id, out relRepro);
+
             // Medical histories & specifics (chronic conditions with 3-digit codes or DTD '+' fallback)
-            var (medHistories, medSpecifics) = MapMedicalHistories(patient, customProfile);
+            var (medHistories, medSpecifics) = MapMedicalHistories(patient, customProfile, relProblems);
 
             // Surgical histories (DTD '+' fallback to 'None' if none recorded)
-            var surgHistories = MapSurgicalHistories(customProfile);
+            var surgHistories = MapSurgicalHistories(customProfile, relSurg);
 
             // Family histories & specifics (DTD '+' fallback)
             var (famHistories, famSpecifics) = MapFamilyHistories(customProfile);
 
             // Social history (pediatric zeroes vs adult responses)
-            var socHist = MapSocialHistory(customProfile, isPediatric);
+            var socHist = MapSocialHistory(customProfile, isPediatric, relSocial);
 
             // Immunizations (recorded vaccines or non-opinionated statutory code 999 under OtherImm)
-            var immunizations = MapImmunizations(customProfile);
+            var immunizations = MapImmunizations(customProfile, relImms);
 
             // Menstrual history (strictly N for male and pre-menarche female < 9)
-            var mensHist = MapMenstrualHistory(customProfile, isFemale, ageYears);
+            var mensHist = MapMenstrualHistory(customProfile, isFemale, ageYears, relRepro);
 
             // Pregnancy history (strictly N for male and non-pregnant female, overwritable for pregnant adolescents and adults)
-            var pregHist = MapPregnancyHistory(customProfile, isFemale);
+            var pregHist = MapPregnancyHistory(customProfile, isFemale, relRepro);
 
             // Physical exam miscs & specifics (DTD '+' fallback with normal systems '1')
             var peMiscs = MapPhysicalExamMiscs(customProfile);
@@ -526,17 +547,43 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
 
     private (List<YakapMedicalHistoryDto> Histories, List<YakapSpecificHistoryDto> Specifics) MapMedicalHistories(
         ClinicPatient patient,
-        PhilHealthPatientProfileDto? customProfile)
+        PhilHealthPatientProfileDto? customProfile,
+        List<PatientProblem>? relProblems = null)
     {
+        if (relProblems != null && relProblems.Count > 0)
+        {
+            var problemEntries = relProblems
+                .Where(p => p.Status == ProblemStatus.Active)
+                .Select(p => new PhilHealthConditionEntryDto(
+                    Code: !string.IsNullOrWhiteSpace(p.PhilHealthMdiseaseCode) ? p.PhilHealthMdiseaseCode : (_resolver.ResolveKnownConditions(p.ProblemTitle).FirstOrDefault()?.Code ?? (_catalog.FindByDescription(PhilHealthCatalogResolver.MedicalHistoryLibrary, "Others")?.Code ?? "099")),
+                    SpecificDesc: p.ProblemTitle))
+                .ToList();
+            if (problemEntries.Count > 0)
+            {
+                return _resolver.ResolveMedicalHistories(patient.ChronicConditions, problemEntries);
+            }
+        }
+
         return _resolver.ResolveMedicalHistories(
             patient.ChronicConditions,
             customProfile?.MedicalHistories);
     }
 
-    private static List<YakapSurgicalHistoryDto> MapSurgicalHistories(PhilHealthPatientProfileDto? customProfile)
+    private static List<YakapSurgicalHistoryDto> MapSurgicalHistories(
+        PhilHealthPatientProfileDto? customProfile,
+        List<PatientSurgicalHistory>? relSurg = null)
     {
         var list = new List<YakapSurgicalHistoryDto>();
-        if (customProfile?.SurgicalHistories?.Count > 0)
+        if (relSurg != null && relSurg.Count > 0)
+        {
+            foreach (var s in relSurg)
+            {
+                list.Add(new YakapSurgicalHistoryDto(
+                    s.ProcedureName,
+                    s.SurgeryDate.ToString("yyyy-MM-dd")));
+            }
+        }
+        else if (customProfile?.SurgicalHistories?.Count > 0)
         {
             foreach (var s in customProfile.SurgicalHistories)
             {
@@ -585,11 +632,25 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
         return (histories, specifics);
     }
 
-    private static YakapSocialHistoryDto MapSocialHistory(PhilHealthPatientProfileDto? customProfile, bool isPediatric)
+    private static YakapSocialHistoryDto MapSocialHistory(
+        PhilHealthPatientProfileDto? customProfile,
+        bool isPediatric,
+        PatientSocialHistory? relSocial = null)
     {
         if (isPediatric)
         {
             return new YakapSocialHistoryDto("N", string.Empty, "N", string.Empty, "N", "N");
+        }
+
+        if (relSocial != null)
+        {
+            return new YakapSocialHistoryDto(
+                IsSmoker: relSocial.IsSmoker ? "Y" : "N",
+                NoCigpk: relSocial.CigarettesPerDay?.ToString() ?? (relSocial.PacksPerDay?.ToString() ?? string.Empty),
+                IsAdrinker: relSocial.IsAlcoholDrinker ? "Y" : "N",
+                NoBottles: relSocial.AlcoholBottlesPerDay?.ToString() ?? string.Empty,
+                IllDrugUser: relSocial.UsesIllicitDrugs ? "Y" : "N",
+                IsSexuallyActive: relSocial.IsSexuallyActive ? "Y" : "N");
         }
 
         if (customProfile != null)
@@ -606,11 +667,42 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
         return new YakapSocialHistoryDto("N", string.Empty, "N", string.Empty, "N", "N");
     }
 
-    private List<YakapImmunizationDto> MapImmunizations(PhilHealthPatientProfileDto? customProfile)
+    private List<YakapImmunizationDto> MapImmunizations(
+        PhilHealthPatientProfileDto? customProfile,
+        List<PatientImmunization>? relImms = null)
     {
         var list = new List<YakapImmunizationDto>();
 
-        if (customProfile != null)
+        if (relImms != null && relImms.Count > 0)
+        {
+            foreach (var imm in relImms)
+            {
+                var lib = imm.PhilHealthLibrary?.ToLowerInvariant() ?? string.Empty;
+                var code = imm.PhilHealthCode ?? string.Empty;
+
+                if (lib.Contains("child"))
+                {
+                    list.Add(new YakapImmunizationDto(ChildImmcode: code, YoungwImmcode: "", PregwImmcode: "", ElderlyImmcode: "", OtherImm: ""));
+                }
+                else if (lib.Contains("young"))
+                {
+                    list.Add(new YakapImmunizationDto(ChildImmcode: "", YoungwImmcode: code, PregwImmcode: "", ElderlyImmcode: "", OtherImm: ""));
+                }
+                else if (lib.Contains("preg"))
+                {
+                    list.Add(new YakapImmunizationDto(ChildImmcode: "", YoungwImmcode: "", PregwImmcode: code, ElderlyImmcode: "", OtherImm: ""));
+                }
+                else if (lib.Contains("elderly"))
+                {
+                    list.Add(new YakapImmunizationDto(ChildImmcode: "", YoungwImmcode: "", PregwImmcode: "", ElderlyImmcode: code, OtherImm: ""));
+                }
+                else
+                {
+                    list.Add(new YakapImmunizationDto(ChildImmcode: "", YoungwImmcode: "", PregwImmcode: "", ElderlyImmcode: "", OtherImm: !string.IsNullOrWhiteSpace(code) ? code : imm.VaccineName));
+                }
+            }
+        }
+        else if (customProfile != null)
         {
             foreach (var imm in customProfile.ChildImmunizations)
                 list.Add(new YakapImmunizationDto(ChildImmcode: imm, YoungwImmcode: "", PregwImmcode: "", ElderlyImmcode: "", OtherImm: ""));
@@ -637,11 +729,33 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
     private static YakapMenstrualHistoryDto MapMenstrualHistory(
         PhilHealthPatientProfileDto? customProfile,
         bool isFemale,
-        int ageYears)
+        int ageYears,
+        PatientReproductiveHistory? relRepro = null)
     {
         // Strictly non-applicable for males or females < 9 yrs
         if (!isFemale || ageYears < 9)
         {
+            return new YakapMenstrualHistoryDto(string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, "N", string.Empty, "N");
+        }
+
+        if (relRepro != null)
+        {
+            if (relRepro.IsApplicable)
+            {
+                return new YakapMenstrualHistoryDto(
+                    MenarchePeriod: relRepro.MenarcheAge?.ToString() ?? string.Empty,
+                    LastMensPeriod: relRepro.LastMenstrualPeriod?.ToString("yyyy-MM-dd") ?? string.Empty,
+                    PeriodDuration: relRepro.PeriodDurationDays?.ToString() ?? string.Empty,
+                    MensInterval: relRepro.CycleIntervalDays?.ToString() ?? string.Empty,
+                    PadsPerDay: relRepro.PadsPerDay?.ToString() ?? string.Empty,
+                    OnsetSexIc: string.Empty,
+                    BirthCtrlMethod: relRepro.ContraceptiveMethod ?? string.Empty,
+                    IsMenopause: relRepro.IsMenopausal ? "Y" : "N",
+                    MenopauseAge: relRepro.MenopauseAge?.ToString() ?? string.Empty,
+                    IsApplicable: "Y");
+            }
+
+            // Explicitly set to not applicable -> blank fallback strings
             return new YakapMenstrualHistoryDto(string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, "N", string.Empty, "N");
         }
 
@@ -683,11 +797,27 @@ public sealed class YakapClinicalMapper : IYakapClinicalMapper
 
     private static YakapPregnancyHistoryDto MapPregnancyHistory(
         PhilHealthPatientProfileDto? customProfile,
-        bool isFemale)
+        bool isFemale,
+        PatientReproductiveHistory? relRepro = null)
     {
         if (!isFemale)
         {
             return new YakapPregnancyHistoryDto(string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, string.Empty, "N");
+        }
+
+        if (relRepro != null && relRepro.IsApplicable && relRepro.Gravidity > 0)
+        {
+            return new YakapPregnancyHistoryDto(
+                PregCnt: relRepro.Gravidity.ToString(),
+                DeliveryCnt: relRepro.Parity.ToString(),
+                DeliveryTyp: !string.IsNullOrWhiteSpace(relRepro.DeliveryType) ? (relRepro.DeliveryType.StartsWith("C", StringComparison.OrdinalIgnoreCase) ? "C" : "V") : "V",
+                FullTermCnt: relRepro.TermBirths.ToString(),
+                PrematureCnt: relRepro.PretermBirths.ToString(),
+                AbortionCnt: relRepro.Abortions.ToString(),
+                LivChildrenCnt: relRepro.LivingChildren.ToString(),
+                WPregIndhyp: relRepro.HadPreEclampsiaHypertension ? "Y" : "N",
+                WFamPlan: relRepro.ReceivedFamilyPlanningCounseling ? "Y" : "N",
+                IsApplicable: "Y");
         }
 
         // Adolescent females (age 10-17) or adults: if indicated in customProfile (overwritable by patient response)

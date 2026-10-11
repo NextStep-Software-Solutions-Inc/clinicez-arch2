@@ -9,6 +9,10 @@ import {
   ClinicPatient,
   PatientSurgicalHistory,
   UpsertPatientSurgicalHistoryPayload,
+  PatientProblemRecord,
+  CreatePatientProblemPayload,
+  PatientAllergyRecord,
+  CreatePatientAllergyPayload,
 } from '../../services/clinicService';
 
 interface ClinicalHistoryTabProps {
@@ -22,6 +26,7 @@ export default function ClinicalHistoryTab({
   initialSurgicalHistories,
   onRefreshChart,
 }: ClinicalHistoryTabProps) {
+  // Surgical History State
   const [surgicalHistories, setSurgicalHistories] = useState<PatientSurgicalHistory[]>(
     initialSurgicalHistories || []
   );
@@ -34,7 +39,7 @@ export default function ClinicalHistoryTab({
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // Form Fields
+  // Surgical Form Fields
   const [procedureName, setProcedureName] = useState('');
   const [surgeryDate, setSurgeryDate] = useState('');
   const [hospitalName, setHospitalName] = useState('');
@@ -43,8 +48,35 @@ export default function ClinicalHistoryTab({
   const [remarks, setRemarks] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Problems State
+  const [problems, setProblems] = useState<PatientProblemRecord[]>([]);
+  const [loadingProblems, setLoadingProblems] = useState(false);
+  const [problemModalVisible, setProblemModalVisible] = useState(false);
+  const [savingProblem, setSavingProblem] = useState(false);
+  const [problemIcd10, setProblemIcd10] = useState('');
+  const [problemTitle, setProblemTitle] = useState('');
+  const [problemStatus, setProblemStatus] = useState<'Active' | 'Resolved'>('Active');
+  const [problemSeverity, setProblemSeverity] = useState<'Mild' | 'Moderate' | 'Severe'>('Moderate');
+  const [problemIsChronic, setProblemIsChronic] = useState(false);
+  const [problemOnsetDate, setProblemOnsetDate] = useState(new Date().toISOString().split('T')[0]);
+  const [problemNotes, setProblemNotes] = useState('');
+  const [problemFormError, setProblemFormError] = useState<string | null>(null);
+
+  // Allergies State
+  const [allergies, setAllergies] = useState<PatientAllergyRecord[]>([]);
+  const [loadingAllergies, setLoadingAllergies] = useState(false);
+  const [allergyModalVisible, setAllergyModalVisible] = useState(false);
+  const [savingAllergy, setSavingAllergy] = useState(false);
+  const [allergyCategory, setAllergyCategory] = useState<'Medication' | 'Food' | 'Environmental'>('Medication');
+  const [allergen, setAllergen] = useState('');
+  const [allergySeverity, setAllergySeverity] = useState<'Mild' | 'Moderate' | 'Severe' | 'LifeThreatening'>('Moderate');
+  const [allergyReaction, setAllergyReaction] = useState('');
+  const [isAnaphylactic, setIsAnaphylactic] = useState(false);
+  const [allergyNotes, setAllergyNotes] = useState('');
+  const [allergyFormError, setAllergyFormError] = useState<string | null>(null);
+
   // Catalog for past medical conditions (lib_mdiseases)
-  const { items: diseaseCatalog, loading: catalogLoading } = usePhilHealthCatalog('lib_mdiseases');
+  const { items: diseaseCatalog } = usePhilHealthCatalog('lib_mdiseases');
 
   const fetchSurgicalHistories = useCallback(async () => {
     setLoading(true);
@@ -63,14 +95,41 @@ export default function ClinicalHistoryTab({
     }
   }, [patient.id]);
 
+  const fetchProblems = useCallback(async () => {
+    setLoadingProblems(true);
+    try {
+      const [data] = await clinicService.getPatientProblems(patient.id);
+      if (data) setProblems(data);
+    } catch {
+      // ignore
+    } finally {
+      setLoadingProblems(false);
+    }
+  }, [patient.id]);
+
+  const fetchAllergies = useCallback(async () => {
+    setLoadingAllergies(true);
+    try {
+      const [data] = await clinicService.getPatientAllergies(patient.id);
+      if (data) setAllergies(data);
+    } catch {
+      // ignore
+    } finally {
+      setLoadingAllergies(false);
+    }
+  }, [patient.id]);
+
   useEffect(() => {
     if (!initialSurgicalHistories || initialSurgicalHistories.length === 0) {
       fetchSurgicalHistories();
     } else {
       setSurgicalHistories(initialSurgicalHistories);
     }
-  }, [fetchSurgicalHistories, initialSurgicalHistories]);
+    fetchProblems();
+    fetchAllergies();
+  }, [fetchSurgicalHistories, fetchProblems, fetchAllergies, initialSurgicalHistories]);
 
+  // Surgical Modals
   const openAddModal = () => {
     setEditingItem(null);
     setProcedureName('');
@@ -145,7 +204,6 @@ export default function ClinicalHistoryTab({
           setSurgicalHistories((prev) => [created, ...prev]);
         }
       }
-
       setModalVisible(false);
       onRefreshChart?.();
     } catch (e: any) {
@@ -185,7 +243,130 @@ export default function ClinicalHistoryTab({
     );
   };
 
-  // Chronic conditions chips parsing from patient profile
+  // Problem Handling
+  const handleSaveProblem = async () => {
+    if (!problemIcd10.trim()) {
+      setProblemFormError('ICD-10 code is required (e.g. I10, E11.9).');
+      return;
+    }
+    if (!problemTitle.trim()) {
+      setProblemFormError('Problem diagnosis description is required.');
+      return;
+    }
+
+    setSavingProblem(true);
+    setProblemFormError(null);
+
+    const payload: CreatePatientProblemPayload = {
+      icd10Code: problemIcd10.trim().toUpperCase(),
+      problemTitle: problemTitle.trim(),
+      status: problemStatus,
+      severity: problemSeverity,
+      isChronicNcd: problemIsChronic,
+      onsetDate: problemOnsetDate ? problemOnsetDate.trim() : undefined,
+      clinicalNotes: problemNotes.trim() || undefined,
+    };
+
+    try {
+      const [created, err] = await clinicService.createPatientProblem(patient.id, payload);
+      if (err) {
+        setProblemFormError(err.message || 'Failed to record problem.');
+      } else if (created) {
+        setProblems((prev) => [created, ...prev]);
+        setProblemModalVisible(false);
+        onRefreshChart?.();
+      }
+    } catch (e: any) {
+      setProblemFormError(e.message || 'Error recording problem.');
+    } finally {
+      setSavingProblem(false);
+    }
+  };
+
+  const handleToggleProblemStatus = async (item: PatientProblemRecord) => {
+    const nextStatus = item.status === 'Active' ? 'Resolved' : 'Active';
+    const resolvedDate = nextStatus === 'Resolved' ? new Date().toISOString().split('T')[0] : undefined;
+
+    try {
+      const [updated, err] = await clinicService.updatePatientProblemStatus(
+        patient.id,
+        item.id,
+        nextStatus,
+        resolvedDate
+      );
+      if (err) {
+        Alert.alert('Error', err.message || 'Failed to update problem status.');
+      } else if (updated) {
+        setProblems((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+        onRefreshChart?.();
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Unexpected error.');
+    }
+  };
+
+  // Allergy Handling
+  const handleSaveAllergy = async () => {
+    if (!allergen.trim()) {
+      setAllergyFormError('Allergen name is required (e.g. Penicillin, Peanuts).');
+      return;
+    }
+
+    setSavingAllergy(true);
+    setAllergyFormError(null);
+
+    const payload: CreatePatientAllergyPayload = {
+      category: allergyCategory,
+      allergen: allergen.trim(),
+      severity: allergySeverity,
+      reactionManifestation: allergyReaction.trim() || undefined,
+      isAnaphylactic: isAnaphylactic || allergySeverity === 'LifeThreatening',
+      notes: allergyNotes.trim() || undefined,
+    };
+
+    try {
+      const [created, err] = await clinicService.createPatientAllergy(patient.id, payload);
+      if (err) {
+        setAllergyFormError(err.message || 'Failed to record allergy.');
+      } else if (created) {
+        setAllergies((prev) => [created, ...prev]);
+        setAllergyModalVisible(false);
+        onRefreshChart?.();
+      }
+    } catch (e: any) {
+      setAllergyFormError(e.message || 'Error recording allergy.');
+    } finally {
+      setSavingAllergy(false);
+    }
+  };
+
+  const handleDeleteAllergy = (item: PatientAllergyRecord) => {
+    Alert.alert(
+      'Remove Allergy',
+      `Are you sure you want to remove documented allergy "${item.allergen}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const [, err] = await clinicService.deletePatientAllergy(patient.id, item.id);
+              if (err) {
+                Alert.alert('Error', err.message || 'Failed to remove allergy.');
+              } else {
+                setAllergies((prev) => prev.filter((a) => a.id !== item.id));
+                onRefreshChart?.();
+              }
+            } catch (e: any) {
+              Alert.alert('Error', e.message || 'Unexpected error.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const knownConditions = (patient.chronicConditions || '')
     .split(',')
     .map((c) => c.trim())
@@ -193,12 +374,171 @@ export default function ClinicalHistoryTab({
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* SECTION 1: Chronic & Past Medical Conditions */}
+      {/* SECTION 1: Structured Problem List */}
       <View style={styles.sectionCard}>
         <View style={styles.sectionHeader}>
           <View style={styles.iconTitleRow}>
             <Icon name="activity" size={theme.sizes.iconMd} color={theme.colors.primary} />
-            <ThemedText variant="h3">Documented Medical Conditions</ThemedText>
+            <ThemedText variant="h3">Structured Problem List</ThemedText>
+          </View>
+          <Button
+            title="Add Problem"
+            variant="primary"
+            size="sm"
+            icon="plus"
+            onPress={() => {
+              setProblemIcd10('');
+              setProblemTitle('');
+              setProblemStatus('Active');
+              setProblemSeverity('Moderate');
+              setProblemIsChronic(false);
+              setProblemOnsetDate(new Date().toISOString().split('T')[0]);
+              setProblemNotes('');
+              setProblemFormError(null);
+              setProblemModalVisible(true);
+            }}
+          />
+        </View>
+
+        <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.sectionDescription}>
+          Active and resolved clinical problem list with ICD-10 coding and Drug-Disease Interaction (DDI) guardrails.
+        </ThemedText>
+
+        {loadingProblems ? (
+          <SkeletonList rows={2} />
+        ) : problems.length === 0 ? (
+          <View style={styles.emptyNoticeStrip}>
+            <Icon name="info" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
+            <ThemedText variant="small" color={theme.colors.textMuted}>
+              No structured problems documented yet.
+            </ThemedText>
+          </View>
+        ) : (
+          <View style={styles.proceduresList}>
+            {problems.map((prob) => (
+              <View key={prob.id} style={styles.procedureCard}>
+                <View style={styles.procedureHeader}>
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.badgeRow}>
+                      <Badge
+                        label={prob.status}
+                        variant={prob.status === 'Active' ? 'primary' : 'neutral'}
+                      />
+                      <ThemedText variant="code" color={theme.colors.primary}>
+                        {prob.icd10Code}
+                      </ThemedText>
+                      {prob.isChronicNcd ? (
+                        <Badge label="Chronic NCD" variant="warning" />
+                      ) : null}
+                    </View>
+                    <ThemedText variant="bodyBold" color={theme.colors.text} style={{ marginTop: theme.spacing.xs }}>
+                      {prob.problemTitle}
+                    </ThemedText>
+                    <ThemedText variant="small" color={theme.colors.textSecondary}>
+                      Onset: {prob.onsetDate || '—'} {prob.resolvedDate ? `• Resolved: ${prob.resolvedDate}` : ''}
+                    </ThemedText>
+                  </View>
+                  <Button
+                    title={prob.status === 'Active' ? 'Mark Resolved' : 'Reactivate'}
+                    variant="outline"
+                    size="sm"
+                    onPress={() => handleToggleProblemStatus(prob)}
+                  />
+                </View>
+                {prob.clinicalNotes ? (
+                  <ThemedText variant="small" color={theme.colors.textSecondary}>
+                    {prob.clinicalNotes}
+                  </ThemedText>
+                ) : null}
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+
+      {/* SECTION 2: Structured Allergies Registry */}
+      <View style={styles.sectionCard}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.iconTitleRow}>
+            <Icon name="alertCircle" size={theme.sizes.iconMd} color={theme.colors.emergencyText} />
+            <ThemedText variant="h3">Documented Allergies & Sensitivities</ThemedText>
+          </View>
+          <Button
+            title="Add Allergy"
+            variant="outline"
+            size="sm"
+            icon="plus"
+            onPress={() => {
+              setAllergen('');
+              setAllergyCategory('Medication');
+              setAllergySeverity('Moderate');
+              setAllergyReaction('');
+              setIsAnaphylactic(false);
+              setAllergyNotes('');
+              setAllergyFormError(null);
+              setAllergyModalVisible(true);
+            }}
+          />
+        </View>
+
+        <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.sectionDescription}>
+          Drug, food, and environmental allergies feeding real-time CDS cross-reactivity and contraindication alerts.
+        </ThemedText>
+
+        {loadingAllergies ? (
+          <SkeletonList rows={2} />
+        ) : allergies.length === 0 ? (
+          <View style={styles.emptyNoticeStrip}>
+            <Icon name="checkCircle" size={theme.sizes.iconSm} color={theme.colors.successText} />
+            <ThemedText variant="small" color={theme.colors.successText}>
+              No known allergies documented (NKDA).
+            </ThemedText>
+          </View>
+        ) : (
+          <View style={styles.proceduresList}>
+            {allergies.map((allergy) => (
+              <View key={allergy.id} style={styles.procedureCard}>
+                <View style={styles.procedureHeader}>
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.badgeRow}>
+                      <Badge label={allergy.category} variant="neutral" />
+                      <Badge
+                        label={allergy.severity}
+                        variant={allergy.isAnaphylactic ? 'emergency' : allergy.severity === 'Severe' ? 'warning' : 'info'}
+                      />
+                      {allergy.isAnaphylactic ? (
+                        <Badge label="Anaphylaxis Risk" variant="emergency" />
+                      ) : null}
+                    </View>
+                    <ThemedText variant="bodyBold" color={theme.colors.text} style={{ marginTop: theme.spacing.xs }}>
+                      {allergy.allergen}
+                    </ThemedText>
+                    {allergy.reactionManifestation ? (
+                      <ThemedText variant="small" color={theme.colors.textSecondary}>
+                        Reaction: {allergy.reactionManifestation}
+                      </ThemedText>
+                    ) : null}
+                  </View>
+                  <Pressable
+                    style={styles.actionIconBtn}
+                    onPress={() => handleDeleteAllergy(allergy)}
+                    accessibilityLabel="Delete allergy"
+                  >
+                    <Icon name="trash" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
+                  </Pressable>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+
+      {/* SECTION 3: Chronic & Statutory Past Medical Conditions */}
+      <View style={styles.sectionCard}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.iconTitleRow}>
+            <Icon name="check" size={theme.sizes.iconMd} color={theme.colors.primary} />
+            <ThemedText variant="h3">Statutory Medical Conditions (lib_mdiseases)</ThemedText>
           </View>
           <Badge
             label={`${knownConditions.length} Documented`}
@@ -207,7 +547,7 @@ export default function ClinicalHistoryTab({
         </View>
 
         <ThemedText variant="small" color={theme.colors.textSecondary} style={styles.sectionDescription}>
-          Conditions and non-communicable diseases referenced against PhilHealth statutory library (lib_mdiseases).
+          PhilHealth statutory conditions for 1:1 Yakap MEDHIST transmittal.
         </ThemedText>
 
         {knownConditions.length > 0 ? (
@@ -225,13 +565,13 @@ export default function ClinicalHistoryTab({
           <View style={styles.emptyNoticeStrip}>
             <Icon name="info" size={theme.sizes.iconSm} color={theme.colors.textMuted} />
             <ThemedText variant="small" color={theme.colors.textMuted}>
-              No chronic conditions recorded for this patient.
+              No chronic statutory conditions recorded for this patient.
             </ThemedText>
           </View>
         )}
       </View>
 
-      {/* SECTION 2: Relational Surgical Procedure History */}
+      {/* SECTION 4: Relational Surgical Procedure History */}
       <View style={styles.sectionCard}>
         <View style={styles.sectionHeader}>
           <View style={styles.iconTitleRow}>
@@ -301,9 +641,9 @@ export default function ClinicalHistoryTab({
                       accessibilityLabel="Delete procedure"
                     >
                       {deletingId === item.id ? (
-                        <ActivityIndicator size="small" color={theme.colors.emergency} />
+                        <ActivityIndicator size="small" color={theme.colors.emergencyText} />
                       ) : (
-                        <Icon name="trash" size={theme.sizes.iconSm} color={theme.colors.emergency} />
+                        <Icon name="trash" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
                       )}
                     </Pressable>
                   </View>
@@ -353,44 +693,48 @@ export default function ClinicalHistoryTab({
 
           <Input
             label="Procedure Name *"
-            placeholder="e.g. Appendectomy, Cesarean Section"
             value={procedureName}
             onChangeText={setProcedureName}
+            placeholder="e.g. Appendectomy, Cesarean Section"
           />
 
           <Input
             label="Surgery Date (YYYY-MM-DD) *"
-            placeholder="YYYY-MM-DD"
             value={surgeryDate}
             onChangeText={setSurgeryDate}
+            placeholder="YYYY-MM-DD"
           />
 
           <Input
-            label="Hospital / Surgical Facility"
-            placeholder="e.g. Philippine General Hospital"
+            label="Hospital / Medical Facility"
             value={hospitalName}
             onChangeText={setHospitalName}
+            placeholder="e.g. Philippine General Hospital"
           />
 
           <Input
             label="Intraoperative Findings"
-            placeholder="e.g. Suppurative appendicitis with localized peritonitis"
             value={findings}
             onChangeText={setFindings}
+            placeholder="Observations, pathology findings"
+            multiline
+            numberOfLines={2}
           />
 
           <Input
             label="Complications (if any)"
-            placeholder="e.g. None or Surgical site wound infection"
             value={complications}
             onChangeText={setComplications}
+            placeholder="Post-op infection, bleeding, etc."
           />
 
           <Input
-            label="Remarks / Notes"
-            placeholder="e.g. Elective procedure, full recovery"
+            label="Clinical Remarks"
             value={remarks}
             onChangeText={setRemarks}
+            placeholder="Additional notes"
+            multiline
+            numberOfLines={2}
           />
 
           <View style={styles.modalFooter}>
@@ -408,6 +752,132 @@ export default function ClinicalHistoryTab({
               loading={saving}
               disabled={saving}
               onPress={handleSave}
+            />
+          </View>
+        </ScrollView>
+      </Modal>
+
+      {/* Modal for Add Structured Problem */}
+      <Modal
+        visible={problemModalVisible}
+        onClose={() => !savingProblem && setProblemModalVisible(false)}
+        title="Record Clinical Problem"
+      >
+        <ScrollView contentContainerStyle={styles.modalFormContent}>
+          {problemFormError ? (
+            <View style={styles.formErrorBanner}>
+              <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
+              <ThemedText variant="small" color={theme.colors.emergencyText}>
+                {problemFormError}
+              </ThemedText>
+            </View>
+          ) : null}
+
+          <Input
+            label="ICD-10 Code *"
+            value={problemIcd10}
+            onChangeText={setProblemIcd10}
+            placeholder="e.g. I10, E11.9, J45.909"
+            autoCapitalize="characters"
+          />
+
+          <Input
+            label="Problem Title / Diagnosis Description *"
+            value={problemTitle}
+            onChangeText={setProblemTitle}
+            placeholder="e.g. Essential (primary) hypertension"
+          />
+
+          <Input
+            label="Onset Date (YYYY-MM-DD)"
+            value={problemOnsetDate}
+            onChangeText={setProblemOnsetDate}
+            placeholder="YYYY-MM-DD"
+          />
+
+          <Input
+            label="Clinical Notes / Findings"
+            value={problemNotes}
+            onChangeText={setProblemNotes}
+            placeholder="Pertinent findings, current management"
+            multiline
+            numberOfLines={2}
+          />
+
+          <View style={styles.modalFooter}>
+            <Button
+              title="Cancel"
+              variant="outline"
+              size="md"
+              disabled={savingProblem}
+              onPress={() => setProblemModalVisible(false)}
+            />
+            <Button
+              title={savingProblem ? 'Saving…' : 'Record Problem'}
+              variant="primary"
+              size="md"
+              loading={savingProblem}
+              disabled={savingProblem}
+              onPress={handleSaveProblem}
+            />
+          </View>
+        </ScrollView>
+      </Modal>
+
+      {/* Modal for Add Structured Allergy */}
+      <Modal
+        visible={allergyModalVisible}
+        onClose={() => !savingAllergy && setAllergyModalVisible(false)}
+        title="Document Allergy / Adverse Sensitivity"
+      >
+        <ScrollView contentContainerStyle={styles.modalFormContent}>
+          {allergyFormError ? (
+            <View style={styles.formErrorBanner}>
+              <Icon name="alertCircle" size={theme.sizes.iconSm} color={theme.colors.emergencyText} />
+              <ThemedText variant="small" color={theme.colors.emergencyText}>
+                {allergyFormError}
+              </ThemedText>
+            </View>
+          ) : null}
+
+          <Input
+            label="Allergen Name *"
+            value={allergen}
+            onChangeText={setAllergen}
+            placeholder="e.g. Penicillin, Amoxicillin, Peanuts"
+          />
+
+          <Input
+            label="Reaction Manifestation"
+            value={allergyReaction}
+            onChangeText={setAllergyReaction}
+            placeholder="e.g. Urticaria, Facial swelling, Anaphylaxis"
+          />
+
+          <Input
+            label="Clinical Notes"
+            value={allergyNotes}
+            onChangeText={setAllergyNotes}
+            placeholder="Prior reaction history, date of onset"
+            multiline
+            numberOfLines={2}
+          />
+
+          <View style={styles.modalFooter}>
+            <Button
+              title="Cancel"
+              variant="outline"
+              size="md"
+              disabled={savingAllergy}
+              onPress={() => setAllergyModalVisible(false)}
+            />
+            <Button
+              title={savingAllergy ? 'Saving…' : 'Document Allergy'}
+              variant="primary"
+              size="md"
+              loading={savingAllergy}
+              disabled={savingAllergy}
+              onPress={handleSaveAllergy}
             />
           </View>
         </ScrollView>
@@ -442,6 +912,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
   },
   sectionDescription: {
     marginBottom: theme.spacing.xs,

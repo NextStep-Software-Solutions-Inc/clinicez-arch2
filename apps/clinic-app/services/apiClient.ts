@@ -100,6 +100,12 @@ export class ClinicApiClient {
     return [response?.data?.data ?? null, null];
   }
 
+  async patch<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<[T | null, ApiError | null]> {
+    const [response, error] = await safeAwait(this.client.patch<ApiResponse<T>>(url, data, config));
+    if (error) return [null, ClinicApiClient.toError<T>(error)];
+    return [response?.data?.data ?? null, null];
+  }
+
   async delete<T>(url: string, config?: AxiosRequestConfig): Promise<[T | null, ApiError | null]> {
     const [response, error] = await safeAwait(this.client.delete<ApiResponse<T>>(url, config));
     if (error) return [null, ClinicApiClient.toError<T>(error)];
