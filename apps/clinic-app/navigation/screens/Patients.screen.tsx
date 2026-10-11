@@ -26,7 +26,6 @@ import { LabOrderStageChip } from '../../components/interop/InteropBadges';
 import PrescriptionSlipModal from '../../components/PrescriptionSlipModal';
 import RecordExternalDispenseModal from '../../components/RecordExternalDispenseModal';
 import PhilHealthProfileModal from '../../components/PhilHealthProfileModal';
-import CameraQrScannerModal from '../../components/CameraQrScannerModal';
 import {
   clinicService,
   ClinicPatient,
@@ -117,7 +116,6 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
   // Standalone PhilHealth Profile Modal state
   const [philHealthProfileModalVisible, setPhilHealthProfileModalVisible] = useState(false);
   const [selectedPatientForProfile, setSelectedPatientForProfile] = useState<ClinicPatient | null>(null);
-  const [cameraScannerVisible, setCameraScannerVisible] = useState(false);
 
   // Lab Slip & External Results Interoperability state
   const [selectedSlip, setSelectedSlip] = useState<LabOrderSlipData | null>(null);
@@ -548,15 +546,6 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
       headerTitle="Patients"
       rightAction={
         <View style={styles.headerActions}>
-          {canImportPatient ? (
-            <Button
-              title="Camera Scan"
-              variant="outline"
-              size="sm"
-              icon="scan"
-              onPress={() => setCameraScannerVisible(true)}
-            />
-          ) : null}
           {canImportPatient ? (
             <Button
               title="Scan patient QR"
@@ -1804,17 +1793,6 @@ export default function PatientsScreen({ route }: PatientsScreenProps) {
         }}
         patient={selectedPatientForProfile}
         onSaved={handlePhilHealthProfileSaved}
-      />
-
-      {/* Camera QR Scanner Modal */}
-      <CameraQrScannerModal
-        visible={cameraScannerVisible}
-        title="Scan Patient QR Code"
-        subtitle="Align the patient's ClinicEZ ID or digital share token within the frame"
-        onScanned={(scannedCode) => {
-          navigation.navigate('ShareImport', { initialToken: scannedCode });
-        }}
-        onClose={() => setCameraScannerVisible(false)}
       />
     </ScrollView>
   </ResponsiveLayout>
